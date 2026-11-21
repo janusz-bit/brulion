@@ -76,6 +76,12 @@ namespace brulion::shell {
 class Workspace;
 
 /// An agent the user set up on this device (AppSettings::acpAgents).
+/// An agent's session option as ChatAgentOptions shows it: id, name, description, category,
+/// boolean, current, currentName and its choices (value, name, description, group); a select of
+/// just "Off" and "On" (in any order, also true/false, enabled/disabled, yes/no) adds onOff, its
+/// onValue and offValue, and isOn.
+QVariantMap agentOptionRow(const acp::ConfigOption &option);
+
 struct AgentConfig
 {
     QString id;      ///< stable, in pages' `partner: acp:<id>`: letters, digits, "-"

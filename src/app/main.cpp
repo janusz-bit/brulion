@@ -10,6 +10,7 @@
 #include "ui/keyboardsources.h"
 #include "ui/smoothscroll.h" // the wheel and the scroll bars scroll like a web browser (SmoothScroll)
 #include "ui/uifonts.h" // the bundled text fonts (Inter, Literata, JetBrains Mono)
+#include "ui/uiscale.h" // the interface scale ("Interface size", "Automatic" by the screen)
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
@@ -37,6 +38,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QQmlApplicationEngine>
+#include <QScreen>
 #include <QQmlFileSelector>
 #include <QQuickStyle>
 #include <QStandardPaths>
@@ -575,6 +577,19 @@ int main(int argc, char *argv[])
         QT_WARNING_DISABLE_DEPRECATED
         delete QQmlFileSelector::get(&engine);
         QT_WARNING_POP
+#ifdef BRULION_DESKTOP_INTEGRATION
+        // The interface scale (Settings → Appearance → "Interface size", ui/uiscale.h): set before
+        // the first window, "Automatic" by the screen Brulion starts on. Not where the size is
+        // given already (QT_SCALE_FACTOR, --scale), nor for reproducible runs (--size, screenshots,
+        // a headless platform).
+        if (mainUi && !qEnvironmentVariableIsSet("QT_SCALE_FACTOR") && argValue(args, u"--size"_s).isEmpty()
+            && !devTools.screenshotMode() && QGuiApplication::platformName() != u"offscreen"
+            && QGuiApplication::platformName() != u"minimal") {
+            const QScreen *screen = QGuiApplication::primaryScreen();
+            controller->enableInterfaceScale(
+                    brulion::ui::autoInterfaceScale(screen ? screen->availableGeometry().size() : QSize()));
+        }
+#endif
         engine.loadFromModule("Brulion", devTools.rootComponent()); // "Main", "Gallery", …
         if (mainUi)
             controller->start(); // open the last vault or show onboarding

@@ -27,15 +27,19 @@ import Brulion
 // detailed mode, version, licence, source code; on the desktop "For developers": the switch
 // that lets AI agents drive the running app, AppController.remoteControl).
 //
-// One section at a time: wide windows list the sections on the left; narrow ones (phones) have
-// them as tabs at the top, a bar that scrolls sideways, the route's section scrolled into view.
-// Choosing one replaces the route's section (no history entry).
+// One section at a time: wide windows list the sections on the left, choosing one replaces the
+// route's section (no history entry). Narrow ones (phones) start on a list of the sections in
+// groups — the notebook's card on top, each section a row with its icon on a coloured tile (as
+// FluffyChat's or a phone's own settings); a row opens its section as a step of the history, so
+// Back returns to the list.
 Item {
     id: root
 
     property var route: ({})
     readonly property string title: qsTr("Settings")
     property string section: AppController.routeText(route, "section") !== "" ? AppController.routeText(route, "section") : "general"
+    /// Narrow windows without a section in the route: the list of the sections.
+    readonly property bool home: Theme.narrow && AppController.routeText(route, "section") === ""
     /// The route's section in `sections` (General for an unknown one, as sectionComponent()).
     readonly property int sectionIndex: indexOfSection(section)
     function indexOfSection(key: string): int {
@@ -51,6 +55,47 @@ Item {
     function openSection(key: string): void {
         if (key !== "" && key !== section)
             AppController.replaceRoute({ view: "settings", section: key })
+    }
+    /// From the list of sections (narrow windows): a step of the history.
+    function enterSection(key: string): void {
+        AppController.navigate({ view: "settings", section: key })
+    }
+    /// The list's groups of sections (narrow windows): their titles, and their sections' keys
+    /// (comma-separated, in the same order). Keyboard shortcuts only with a keyboard (not on
+    /// touch UIs).
+    readonly property list<string> homeGroupTitles: [qsTr("Look and writing"), qsTr("Notes"), qsTr("Your data"),
+                                                    qsTr("More", "settings group")]
+    readonly property list<string> homeGroupKeys: ["appearance,editor", "reminders,search,extensions", "sync,backups,privacy",
+                                                  Theme.touchUi ? "general,automation,app" : "general,shortcuts,automation,app"]
+    /// Section `i`'s `field` ("" for none).
+    function sectionField(i: int, field: string): string {
+        return i >= 0 && i < sections.length ? AppController.routeText(sections[i], field) : ""
+    }
+    /// A section's title by its key.
+    function sectionTitle(key: string): string {
+        return root.sectionField(root.indexOfSection(key), "title")
+    }
+    /// A section's icon by its key.
+    function sectionIcon(key: string): string {
+        return root.sectionField(root.indexOfSection(key), "iconName")
+    }
+    /// The colour of a section's icon tile in the list (white icons on it).
+    function sectionTint(key: string): color {
+        switch (key) {
+        case "appearance": return "#7c5cff"
+        case "editor": return "#2f80ed"
+        case "vault": return "#e8833a"
+        case "reminders": return "#d4890c"
+        case "search": return "#0e9f9f"
+        case "extensions": return "#e2574c"
+        case "sync": return "#22a06b"
+        case "backups": return "#0b86b0"
+        case "privacy": return "#5b6475"
+        case "automation": return "#9b59d0"
+        case "shortcuts": return "#6b7280"
+        case "app": return "#4b6cb7"
+        }
+        return "#6b7280"
     }
 
     /// The sections ({ key, title, iconName }).
@@ -560,14 +605,6 @@ Item {
             Layout.fillHeight: true
             spacing: 0
 
-            // Section tabs (narrow windows), made when the window becomes narrow: their
-            // currentIndex is bound from the route at their creation.
-            Loader {
-                Layout.fillWidth: true
-                active: Theme.narrow
-                visible: active
-                sourceComponent: sectionTabs
-            }
 
             Flickable {
                 id: flick
@@ -589,10 +626,10 @@ Item {
                     width: Math.min(flick.width - 2 * flick.margin, 760)
                     spacing: Theme.space8
 
-                    // The chosen section, from its top.
+                    // The chosen section (or, on narrow windows, the list of them), from its top.
                     Loader {
                         Layout.fillWidth: true
-                        sourceComponent: root.sectionComponent(root.section)
+                        sourceComponent: root.home ? settingsHome : root.sectionComponent(root.section)
                         onLoaded: flick.contentY = 0
                     }
                 }
@@ -600,36 +637,153 @@ Item {
         }
     }
 
+    // The list of sections (narrow windows): the notebook's card, then the sections in groups.
     Component {
-        id: sectionTabs
+        id: settingsHome
         ColumnLayout {
-            spacing: 0
-            BTabBar {
-                Layout.fillWidth: true
-                leftPadding: Theme.compact ? Theme.space1 : Theme.space6
-                fadeColor: Theme.bg
-                currentIndex: root.sectionIndex
-                onPicked: (index) => root.openSection(root.sectionKey(index))
+            objectName: "settingsHome"
+            spacing: Theme.space5
 
-                Repeater {
-                    model: root.sections
-                    delegate: BTabButton {
-                        required property int index
-                        required property string key
-                        required property string title
-                        objectName: "settingsTab-" + key
-                        text: title
-                        // Phones: the tabs without icons, as the sync center's (more of them fit).
-                        iconName: Theme.compact ? "" : AppController.routeText(root.sections[index], "iconName")
-                        leftPadding: Theme.compact ? 9 : (Theme.touchUi ? 14 : 12)
-                        rightPadding: leftPadding
+            // The notebook: its mark, name and folder; a tap opens its settings.
+            T.AbstractButton {
+                id: notebookCard
+                objectName: "settingsHomeRow-vault"
+                Layout.fillWidth: true
+                implicitHeight: notebookRow.implicitHeight + 2 * Theme.space4
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Notebook")
+                Accessible.description: Workspace.name
+                onClicked: root.enterSection("vault")
+                background: Rectangle {
+                    radius: Theme.radiusXl
+                    color: notebookCard.pressed ? Theme.bgPressed : Theme.bgElevated
+                    border.width: Theme.dark ? 0 : 1
+                    border.color: Theme.borderSubtle
+                }
+                contentItem: Item {
+                    RowLayout {
+                        id: notebookRow
+                        anchors.fill: parent
+                        anchors.leftMargin: Theme.space4
+                        anchors.rightMargin: Theme.space4
+                        spacing: Theme.space4
+                        BAvatar {
+                            size: 52
+                            name: Workspace.name
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            BText {
+                                Layout.fillWidth: true
+                                text: Workspace.name
+                                variant: "title"
+                                elide: Text.ElideRight
+                            }
+                            BText {
+                                Layout.fillWidth: true
+                                text: qsTr("%n page(s)", "", Workspace.pageCount)
+                                variant: "muted"
+                                font.pixelSize: Theme.textSm
+                                elide: Text.ElideRight
+                            }
+                        }
+                        BIcon {
+                            name: "chevron-right"
+                            size: Theme.iconSize
+                            color: Theme.fgFaint
+                        }
                     }
                 }
             }
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 1
-                color: Theme.borderSubtle
+
+            Repeater {
+                model: root.homeGroupTitles.length
+                delegate: ColumnLayout {
+                    id: homeGroup
+                    required property int index
+                    readonly property string title: root.homeGroupTitles[homeGroup.index]
+                    readonly property list<string> keys: Js.split(root.homeGroupKeys[homeGroup.index], ",")
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BText {
+                        Layout.leftMargin: Theme.space4
+                        text: homeGroup.title
+                        variant: "faint"
+                        font.pixelSize: Theme.textSm
+                        font.weight: Theme.weightSemiBold
+                        Accessible.role: Accessible.Heading
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: homeRows.implicitHeight
+                        radius: Theme.radiusXl
+                        color: Theme.bgElevated
+                        border.width: Theme.dark ? 0 : 1
+                        border.color: Theme.borderSubtle
+                        clip: true
+                        Column {
+                            id: homeRows
+                            width: parent.width
+                            Repeater {
+                                model: homeGroup.keys
+                                delegate: T.AbstractButton {
+                                    id: homeRow
+                                    required property string modelData
+                                    required property int index
+                                    objectName: "settingsHomeRow-" + modelData
+                                    width: homeRows.width
+                                    implicitHeight: Math.max(Theme.touchTarget + 8, 52)
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: root.sectionTitle(homeRow.modelData)
+                                    onClicked: root.enterSection(homeRow.modelData)
+                                    background: Rectangle {
+                                        color: homeRow.pressed ? Theme.bgPressed : homeRow.hovered ? Theme.bgHover : "transparent"
+                                        // The hairline between rows, from the text's edge.
+                                        Rectangle {
+                                            visible: homeRow.index > 0
+                                            x: Theme.space4 + 30 + Theme.space3
+                                            width: parent.width - x
+                                            height: 1
+                                            color: Theme.borderSubtle
+                                        }
+                                    }
+                                    contentItem: Item {
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: Theme.space4
+                                            anchors.rightMargin: Theme.space4
+                                            spacing: Theme.space3
+                                            Rectangle {
+                                                implicitWidth: 30
+                                                implicitHeight: 30
+                                                radius: 9
+                                                color: root.sectionTint(homeRow.modelData)
+                                                BIcon {
+                                                    anchors.centerIn: parent
+                                                    name: root.sectionIcon(homeRow.modelData)
+                                                    size: 17
+                                                    color: "#ffffff"
+                                                }
+                                            }
+                                            BText {
+                                                Layout.fillWidth: true
+                                                text: root.sectionTitle(homeRow.modelData)
+                                                font.pixelSize: Theme.textMd
+                                                elide: Text.ElideRight
+                                            }
+                                            BIcon {
+                                                name: "chevron-right"
+                                                size: Theme.iconSize
+                                                color: Theme.fgFaint
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -653,7 +807,7 @@ Item {
             }
             ShellSettingRow {
                 title: qsTr("Intro")
-                description: qsTr("Language, look, permissions and the settings of a new notebook, step by step. The notebook closes and is chosen again at the end.")
+                description: qsTr("Language, look and permissions, step by step. The notebook closes until the end.")
                 BButton {
                     objectName: "settingsRestartIntro"
                     size: "small"
@@ -751,11 +905,34 @@ Item {
                         objectName: "darkSurfaceSetting"
                         accessibleName: qsTr("Dark background")
                         model: [
+                            { value: "graphite", text: qsTr("Graphite", "dark background") },
                             { value: "slate", text: qsTr("Blue-grey") },
                             { value: "black", text: qsTr("Black", "background") }
                         ]
                         currentValue: Theme.darkSurface
                         onActivated: (value) => AppSettings.darkSurface = value
+                    }
+                }
+                ShellSettingRow {
+                    // Desktop windows only (AppController.interfaceScaleSupported, ui/uiscale.h):
+                    // the whole window larger or smaller; phones keep their sizes.
+                    visible: AppController.interfaceScaleSupported
+                    title: qsTr("Interface size")
+                    description: qsTr("Text, buttons and icons together. Also Ctrl+Alt+= and Ctrl+Alt+-.")
+                    BSegmented {
+                        objectName: "interfaceScaleSetting"
+                        accessibleName: qsTr("Interface size")
+                        model: [
+                            { value: 0, text: qsTr("Auto · %1 %").arg(Math.round(AppController.autoInterfaceScale * 100)) },
+                            { value: 0.9, text: qsTr("%1 %").arg(90) },
+                            { value: 1.0, text: qsTr("%1 %").arg(100) },
+                            { value: 1.15, text: qsTr("%1 %").arg(115) },
+                            { value: 1.25, text: qsTr("%1 %").arg(125) },
+                            { value: 1.5, text: qsTr("%1 %").arg(150) },
+                            { value: 1.75, text: qsTr("%1 %").arg(175) }
+                        ]
+                        currentValue: AppSettings.interfaceScale
+                        onActivated: (value) => AppSettings.interfaceScale = value
                     }
                 }
                 ShellSettingRow {
@@ -1070,7 +1247,7 @@ Item {
             SettingSwitch {
                 objectName: "settingsTaskStatusHistory"
                 text: qsTr("Log task status changes")
-                description: qsTr("Each change is written to the task's LOGBOOK with its time, and “In progress” starts and stops the task's timer, as in Logseq.")
+                description: qsTr("Each change is written with its time, and “In progress” runs the task's timer.")
                 checked: AppSettings.taskStatusHistory
                 onToggled: AppSettings.taskStatusHistory = checked
             }
@@ -1133,7 +1310,7 @@ Item {
             SettingSwitch {
                 objectName: "settingsReadingMode"
                 text: qsTr("Reading mode")
-                description: qsTr("Pages and the journal open for reading: a tap follows links and never starts editing, nothing changes a note. %1 or the book in a page's header switches it.")
+                description: qsTr("Pages open for reading: a tap follows links and never starts editing. %1 switches it.")
                              .arg(ShortcutMap.sequences["view.reading"] || qsTr("The command palette"))
                 checked: AppSettings.readingMode
                 onToggled: AppSettings.readingMode = checked
@@ -1148,14 +1325,14 @@ Item {
             SettingSwitch {
                 objectName: "settingsVimMode"
                 text: qsTr("Vim keys")
-                description: qsTr("Move and edit with Vim's keys in the blocks and in the Markdown source: Esc for normal mode, i to type, :w to save. For a hardware keyboard; on this device only.")
+                description: qsTr("Vim's normal, insert and visual modes, for a hardware keyboard. On this device only.")
                 checked: AppSettings.vimMode
                 onToggled: AppSettings.vimMode = checked
             }
             SettingSwitch {
                 objectName: "settingsWebPictures"
                 text: qsTr("Show pictures from the internet without asking")
-                description: qsTr("Off: a picture with a web address waits for “Show”, so opening a synced or imported note tells no site that you read it. Pictures saved to the notebook are always shown.")
+                description: qsTr("Off: a picture from a web address waits for “Show”, so no site learns that you opened the note.")
                 checked: AppSettings.webPicturesShown
                 onToggled: AppSettings.webPicturesShown = checked
             }
@@ -1196,7 +1373,7 @@ Item {
         id: vaultSection
         SettingsGroup {
             heading: qsTr("Notebook")
-            note: qsTr("These settings are saved in the notebook (.brulion/config.json) and shared by all your devices.")
+            note: qsTr("These settings travel with the notebook to all your devices.")
 
             ShellSettingRow {
                 title: Workspace.name
@@ -1213,7 +1390,7 @@ Item {
             SettingSwitch {
                 objectName: "settingsFollowOutsideLinks"
                 text: qsTr("Follow links to folders outside the notebook")
-                description: qsTr("On this device only. A synced or copied link can point to any folder of yours: its files would be listed, synced and editable here.")
+                description: qsTr("On this device only. The files of a linked folder are listed, synced and editable here.")
                 checked: AppSettings.followsOutsideLinks
                 onToggled: AppSettings.followsOutsideLinks = checked
             }
@@ -1410,7 +1587,7 @@ Item {
                 SettingSwitch {
                     objectName: "habitsSetting"
                     text: qsTr("Habits")
-                    description: qsTr("Recurring points of the day ticked in the journal, with streaks and a month grid of each (Habits in the sidebar).")
+                    description: qsTr("Daily points ticked in the journal, with streaks and a month grid.")
                     iconName: "flame"
                     checked: AppSettings.habitsEnabled
                     onToggled: AppSettings.habitsEnabled = checked
@@ -1426,7 +1603,7 @@ Item {
                 SettingSwitch {
                     objectName: "gymSetting"
                     text: qsTr("Gym")
-                    description: qsTr("Workouts written in the journal, plans that add weight when you are ready, a rest timer and the progress of every exercise (Gym in the sidebar).")
+                    description: qsTr("Workouts in the journal, plans that add weight, a rest timer and your progress.")
                     iconName: "dumbbell"
                     checked: AppSettings.gymEnabled
                     onToggled: AppSettings.gymEnabled = checked
@@ -1442,7 +1619,7 @@ Item {
                 SettingSwitch {
                     objectName: "flashcardsSetting"
                     text: qsTr("Flashcards")
-                    description: qsTr("Cards written in your notes — “Question::Answer”, a question with “?” and its answer, clozes ==like this== in a note tagged #flashcards, Logseq's #card blocks — repeated with FSRS just before you would forget them (Flashcards in the sidebar).")
+                    description: qsTr("Cards written in your notes (“Question::Answer”, clozes, #card), shown again just before you would forget them.")
                     iconName: "layers"
                     checked: AppSettings.flashcardsEnabled
                     onToggled: AppSettings.flashcardsEnabled = checked
@@ -1504,7 +1681,7 @@ Item {
                 id: aiGroup
                 objectName: "aiSettings"
                 heading: qsTr("AI")
-                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key, and neither does a model on this device, which sends nothing anywhere. What an extension sends goes to the provider chosen; the key stays on this device.") + (AppSettings.acpProgramsAvailable ? " " + qsTr("A subscription works with an AI agent on this computer: see “AI agents” below.") : AppSettings.acpAvailable ? " " + qsTr("A subscription works with an AI agent on a computer of yours: see “AI agents” below.") : "")
+                note: qsTr("Extensions with the “ai” permission can ask a model about your notes. An API key is billed by use; your own server or the model on this device needs none. The key stays on this device.") + (AppSettings.acpProgramsAvailable ? " " + qsTr("A subscription works with an AI agent on this computer: see “AI agents” below.") : AppSettings.acpAvailable ? " " + qsTr("A subscription works with an AI agent on a computer of yours: see “AI agents” below.") : "")
 
                 readonly property bool local: AppSettings.aiProvider === "local"
                 readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
@@ -1513,7 +1690,7 @@ Item {
                 SettingSwitch {
                     objectName: "assistantSetting"
                     text: qsTr("AI assistant")
-                    description: qsTr("The ✨ button on the top bar (and “AI: …” in the palette): ask about your notes — the AI searches and reads the whole notebook — or ask it to change them, each change with your yes; or sum up the page on screen. The answer goes into today's note.")
+                    description: qsTr("The ✨ button: ask about your notes or ask for changes, each with your yes. Answers go into today's note.")
                     iconName: "sparkles"
                     checked: AppSettings.assistantEnabled
                     onToggled: AppSettings.assistantEnabled = checked
@@ -1550,7 +1727,7 @@ Item {
                     // A model that reads text only: which one looks at pictures in its place.)
                     description: {
                         const about = AppController.localAi.modelAdapted
-                                    ? qsTr("%1 is %2 by %3, trained further for Brulion's assistant: the best one at working through the notebook with the assistant. It answers at once, without thinking, and reads text only. It uses %2's file, with a small one of its own on top.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelBaseMaker)
+                                    ? qsTr("%1 is %2 by %3, trained further for Brulion's assistant: the best at working through your notes. Answers at once and reads text only.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelBaseMaker)
                                     : AppController.localAi.modelSees
                                       ? qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weakest of these models at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
                                       : qsTr("%1 by %2 reads text only. It searches the notebook and changes notes better than a model that sees pictures, not as well as the one trained for Brulion's assistant.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
@@ -1638,8 +1815,8 @@ Item {
                     title: qsTr("Whose model")
                     // (An adapted model is its maker's model still, under its licence — not made by them.)
                     description: AppController.localAi.modelAdapted
-                                 ? qsTr("%1 made %2 and gives it under its own licence (%3), not Brulion's. Brulion trained it further for its assistant, under the same licence; %1 neither made nor endorses this version. Brulion only downloads it when you ask.").arg(AppController.localAi.modelBaseMaker).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelLicense)
-                                 : qsTr("%1 made it and gives it under its own licence (%2), not Brulion's. Brulion only downloads it when you ask.").arg(AppController.localAi.modelMaker).arg(AppController.localAi.modelLicense)
+                                 ? qsTr("%1 made %2 (licence: %3) and does not endorse this version, which Brulion trained further for its assistant. Downloaded only when you ask.").arg(AppController.localAi.modelBaseMaker).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelLicense)
+                                 : qsTr("%1 made it (licence: %2). Downloaded only when you ask.").arg(AppController.localAi.modelMaker).arg(AppController.localAi.modelLicense)
                     BButton {
                         size: "small"
                         variant: "ghost"
@@ -1766,7 +1943,7 @@ Item {
                     }
                 }
                 note: AppSettings.acpProgramsAvailable
-                      ? qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI, or any program that speaks the Agent Client Protocol) can answer in the AI chat: choose it as who answers a conversation. It runs in the notebook's folder and signs in by itself, so a Claude or ChatGPT subscription its own program uses works here too. Each change it makes to a file and each command it runs is shown in the conversation for your yes, as the agent asks for it. The presets start the agents with npx (Node.js); a command of your own may be any program. An agent on another computer of yours (brulion-cli acp serve) can answer too.")
+                      ? qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI …) can answer in the AI chat, with its own subscription. It asks before it changes a file or runs a command. An agent on another computer of yours (brulion-cli acp serve) can answer too.")
                       : qsTr("An AI agent on a computer of yours (Claude Code, Codex …) can answer in the AI chat here: the computer runs it with brulion-cli acp serve, in its copy of this notebook, and this device pairs with it once with a code of acp pair. It signs in there by itself, so a Claude or ChatGPT subscription works. Each change it makes to a file and each command it runs there is shown in the conversation for your yes, as the agent asks for it.")
 
                 Repeater {
@@ -1986,7 +2163,7 @@ Item {
 
             SettingsGroup {
                 heading: qsTr("In this notebook")
-                note: qsTr("Your own extensions are pages of the notebook tagged #rozszerzenie (or #extension): the code in their luau code blocks runs, and runs again whenever you save the page. Code that arrives from another device, a sync or an import runs here only after you approve it.")
+                note: qsTr("Your extensions are pages tagged #rozszerzenie (or #extension). Code from another device, a sync or an import runs only after you approve it.")
 
                 ShellSettingRow {
                     objectName: "extensionsTools"
@@ -2189,7 +2366,7 @@ Item {
                 Component.onCompleted: if (visible) last = Workspace.reminders.backgroundCheckStatus()
                 title: qsTr("Check notes in the background")
                 description: {
-                    const what = qsTr("While Brulion is closed, Android reads the notebook now and then (after a Nextcloud sync, if set up), so reminders added on another device ring too. Android may postpone it while the phone sleeps.")
+                    const what = qsTr("While Brulion is closed, Android checks the notebook now and then, so reminders added on your other devices ring too.")
                     const when = AppController.routeText(last, "when")
                     if (minutes <= 0 || when === "")
                         return what
@@ -2350,7 +2527,7 @@ Item {
                     objectName: "settingsCheckUpdates"
                     visible: AppController.updates.supported
                     text: qsTr("Check for new versions")
-                    description: qsTr("Once a day Brulion asks GitHub for the latest release and shows a message when there is a newer one. GitHub sees this device's address; nothing about your notes is sent.")
+                    description: qsTr("Once a day Brulion asks GitHub for a newer version. Nothing about your notes is sent.")
                     iconName: "download"
                     checked: AppController.updates.enabled
                     onToggled: AppController.updates.enabled = checked
@@ -2482,7 +2659,7 @@ Item {
                 SettingSwitch {
                     objectName: "settingsRemoteControl"
                     text: qsTr("Allow agents to control the app (local socket)")
-                    description: qsTr("AI agents and scripts of your user account can then see what Brulion shows, click, type and take screenshots (brulion-cli app …). Any program you run can then read your notes too — turn it on only while you need it.")
+                    description: qsTr("AI agents and scripts can then see and use Brulion (brulion-cli app). Any program you run could read your notes too: turn it on only while you need it.")
                     iconName: "terminal"
                     checked: AppController.remoteControl.setting === true
                     onToggled: AppSettings.setValue("devtools/remoteControl", checked)

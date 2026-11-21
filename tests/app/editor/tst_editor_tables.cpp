@@ -100,6 +100,32 @@ int inkOf(const QImage &img)
 class TestEditorTables : public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    /// `<br>` in a cell (GFM's line break, also `<br/>`, `<br />`, any case): a header's lines one
+    /// under the other — the header row as tall as its most, up to three —, a body cell's one after
+    /// another; the file keeps the tags.
+    void lineBreaksInCells()
+    {
+        const QString content = u"| Imię i<br>nazwisko | 1<br/>Nd | 2<BR />Pn<br>x<br>y |\n|---|---|---|\n"
+                                u"| Żółć<br>Gęś | x | 8 |\n"_s;
+        Fixture f(content);
+        const int row = f.rowOf(u"table"_s);
+        QVERIFY(row >= 0);
+        const QVariantMap table = f.role(row, "tableData").toMap();
+        QCOMPARE(table.value(u"headerLines"_s).toInt(), 3); // "2 / Pn / x / y": four lines, three shown
+        const QStringList headerHtml = table.value(u"headerHtml"_s).toStringList();
+        QVERIFY2(headerHtml.value(0).contains(u"Imię i<br/>nazwisko"_s), qPrintable(headerHtml.value(0)));
+        QVERIFY2(headerHtml.value(1).contains(u"1<br/>Nd"_s), qPrintable(headerHtml.value(1)));
+        QVERIFY(!headerHtml.value(0).contains(u"&lt;br"_s));
+        const QVariantMap body = table.value(u"rows"_s).toList().value(0).toList().value(0).toMap();
+        QCOMPARE(body.value(u"text"_s).toString(), u"Żółć<br>Gęś"_s);
+        QVERIFY2(!body.value(u"html"_s).toString().contains(u"br"_s), qPrintable(body.value(u"html"_s).toString()));
+        QCOMPARE(body.value(u"plain"_s).toString(), u"Żółć Gęś"_s);
+        QCOMPARE(f.page.text(), content);
+        // A table without one: a header of one line.
+        Fixture plain(u"| A | B |\n|---|---|\n| 1 | 2 |\n"_s);
+        QCOMPARE(plain.role(plain.rowOf(u"table"_s), "tableData").toMap().value(u"headerLines"_s).toInt(), 1);
+    }
+
     void sort()
     {
         Fixture f(Content);

@@ -76,7 +76,7 @@ ColumnLayout {
         Layout.fillWidth: true
         wrapMode: Text.Wrap
         variant: "muted"
-        text: qsTr("Brulion hides your notes behind a lock screen when it starts, after you leave it, or after a while without use. The lock is this device's; the notes themselves stay readable to anyone who has the notebook's folder — encrypt a page for that.")
+        text: qsTr("Brulion hides your notes behind a lock screen on this device. Anyone with the notebook's folder can still read them: encrypt pages for that.")
     }
 
     BCard {
@@ -241,7 +241,7 @@ ColumnLayout {
         Layout.fillWidth: true
         wrapMode: Text.Wrap
         variant: "muted"
-        text: qsTr("Pages and parts of pages encrypted with a password (AES-256-GCM), in the format of Obsidian's Meld Encrypt plugin: the same notes open in both apps. Encrypt a page from its menu, a selection from the text menu, or type /encrypt.")
+        text: qsTr("Pages and parts of pages locked with a password, readable in Obsidian too. Encrypt a page from its menu, or type /encrypt.")
     }
     BCard {
         Layout.fillWidth: true

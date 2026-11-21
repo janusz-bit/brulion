@@ -516,8 +516,8 @@ ListView {
                     x: runLine.contentX + (runLine.contentWidth - width) / 2
                     y: runLine.topPad
                     text: runLine.lineText
+                    // (No icon: "play" read as playing media — "Add habit" is no recording.)
                     variant: "primary"
-                    iconName: "play"
                     onClicked: list.lines.activate(runLine.index)
                 }
             }

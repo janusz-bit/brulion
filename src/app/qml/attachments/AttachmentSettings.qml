@@ -98,7 +98,7 @@ ColumnLayout {
         objectName: "attachmentSearchNote"
         wrapMode: Text.Wrap
         variant: "muted"
-        text: qsTr("The search finds words in notes and in the notebook's PDFs and pictures. Their text is read in the background, offline, and kept on this device only — never in the notebook.")
+        text: qsTr("Search also finds words in the notebook's PDFs and pictures. Their text is read offline and kept on this device.")
     }
 
     BCard {
@@ -130,7 +130,7 @@ ColumnLayout {
                 enabled: section.attachments.ocrAvailable
                 text: qsTr("Recognize text in pictures and scans (OCR)")
                 description: section.attachments.ocrAvailable
-                             ? qsTr("Photos of whiteboards and notes, screenshots and scanned PDF pages become searchable. It takes about a second of one processor core a page, at the lowest priority; off, nothing is recognized.")
+                             ? qsTr("Photos, screenshots and scanned pages become searchable. Read in the background, at low priority.")
                              : section.unavailableText
                 checked: AppSettings.attachmentOcr && section.attachments.ocrAvailable
                 onToggled: AppSettings.attachmentOcr = checked

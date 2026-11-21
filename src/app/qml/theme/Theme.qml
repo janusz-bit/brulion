@@ -5,8 +5,10 @@ import Brulion
 // Theme — Brulion's design tokens (singleton). Every component reads colours, fonts, sizes
 // and durations from here; nothing hard-codes them.
 //
-// Look ("Nocny" by default): a dense, IDE-like dark theme on true OLED black with a coral accent
-// (#ff7a66; #c4422f in light), and a calm, paper-like light theme — ink #1f2430, paper #fbf7ee,
+// Look: a layered dark theme by default — three clearly different greys ("graphite": side panes
+// darkest, the page above them, cards, menus and dialogs lighter still; surfaces part by shade, not
+// by hairlines) with a coral accent (#ff7a66; #c4422f in light) and soft, rounded shapes; true OLED
+// black ("Nocny") and blue-grey are the other dark backgrounds; and a calm, paper-like light theme — ink #1f2430, paper #fbf7ee,
 // margin red #e2574c (destructive; also an accent preset), amber #f2b33d (reminders, alarms —
 // whatever the accent), grid blue #9fc3e6 (links, focus, selection). All text colours meet WCAG AA (4.5:1)
 // on the backgrounds they are used on (fgFaint on bg/bgElevated/bgSunken included, chip text
@@ -17,7 +19,7 @@ import Brulion
 // Appearance settings (Settings → Appearance): the surfaces, the accent family and the text colours
 // come from ThemePalette (C++, src/app/ui/themepalette.h), which derives a readable accent from
 // any colour and whose tests check every accent on every surface (tst_themepalette); the
-// defaults are "paper" / "black" and "coral". The accent marks things
+// defaults are "paper" / "graphite" and "coral". The accent marks things
 // (today, the current tab, drop targets) — it never means "destructive": that is `danger*`,
 // red whatever the accent.
 //
@@ -29,7 +31,7 @@ import Brulion
 //   editorFont     "sans" | "serif";  fontScale  user font size factor
 //   editorFontSize the editor's base size in px (setting; touch UIs add one, fontScale applies)
 //   accentName     "coral" | "red" | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (+ customAccent "#rrggbb")
-//   lightSurface   "paper" | "white";  darkSurface  "black" (OLED) | "slate"
+//   lightSurface   "paper" | "white";  darkSurface  "graphite" (layered) | "black" (OLED) | "slate"
 //   uiFontFamily, editorFontFamily, monoFontFamily  installed families ("" or one missing on
 //                  this device: the default font)
 //   lineSpacing    "compact" | "normal" | "relaxed" (lineHeightLoose: editor prose)
@@ -53,7 +55,7 @@ QtObject {
     property string accentName: DevTools.accentName !== "" ? DevTools.accentName : "coral"
     property string customAccent: DevTools.customAccent
     property string lightSurface: DevTools.lightSurface !== "" ? DevTools.lightSurface : "paper"
-    property string darkSurface: DevTools.darkSurface !== "" ? DevTools.darkSurface : "black"
+    property string darkSurface: DevTools.darkSurface !== "" ? DevTools.darkSurface : "graphite"
     property string uiFontFamily: ""
     property string editorFontFamily: ""
     property string monoFontFamily: ""
@@ -99,8 +101,9 @@ QtObject {
     readonly property color _tagLightBase: "#7a4bb0"
 
     // ---- Surfaces ------------------------------------------------------------------------
-    // Defaults (paper / black): bg #fbf7ee / #000000, bgElevated #fffdf7 / #0d0f13, bgElevated2
-    // #fffefb / #1c2027, bgSunken #f3eee2 / #08090b (slate: #1c2130, #232a3b, #2b3245, #171b28).
+    // Defaults (paper / graphite): bg #fbf7ee / #1e1f24, bgElevated #fffdf7 / #27292f, bgElevated2
+    // #fffefb / #30323a, bgSunken #f3eee2 / #16171b (black: #000000, #0d0f13, #1c2027, #08090b;
+    // slate: #1c2130, #232a3b, #2b3245, #171b28).
     readonly property color bg: palette.bg                     // page / window
     readonly property color bgElevated: palette.bgElevated     // cards, dialogs, menus
     readonly property color bgElevated2: palette.bgElevated2   // popups over cards
@@ -130,6 +133,10 @@ QtObject {
     // ---- Lines ---------------------------------------------------------------------------
     // Defaults: border #e4dccb / #262a32, borderSubtle #ece6d8 / #1a1d23, borderStrong #cdc2ab /
     // #3a404d, borderControl #928775 / #6c7793.
+    /// Hairlines between the window's panes (the rail, the page panel, the side panel): drawn
+    /// where the panes' shades are too close to part them — not on the graphite background,
+    /// whose layers part by their shade (Discord's way).
+    readonly property bool paneLines: !(dark && darkSurface === "graphite")
     readonly property color border: palette.border
     readonly property color borderSubtle: palette.borderSubtle
     readonly property color borderStrong: palette.borderStrong
@@ -142,10 +149,17 @@ QtObject {
     readonly property color guideOnSunken: dark ? border : borderStrong
 
     // ---- Actions -------------------------------------------------------------------------
-    readonly property color primary: dark ? "#d3d8e2" : "#1f2430"        // primary buttons
+    // Ink fills: the selected day's disc (date pickers, the calendar), a selected neutral chip.
+    readonly property color primary: dark ? "#d3d8e2" : "#1f2430"
     readonly property color primaryHover: dark ? "#e6e9ef" : "#2d3445"
     readonly property color primaryPressed: dark ? "#bfc5d1" : "#151923"
     readonly property color primaryFg: dark ? "#1c2130" : "#fbf7ee"
+    /// The primary button (one per view: Save, Add, Create): the accent's solid fill under
+    /// fgOnAccent (≥ 4.5:1, ThemePalette), lighter (dark) or darker (light) under the mouse.
+    readonly property color buttonPrimary: accentSolid
+    readonly property color buttonPrimaryHover: dark ? accentSolid.lighter(1.08) : accentSolid.darker(1.1)
+    readonly property color buttonPrimaryPressed: dark ? accentSolid.darker(1.08) : accentSolid.darker(1.22)
+    readonly property color buttonPrimaryFg: fgOnAccent
     // The accent (default: coral, #c4422f / #ff7a66; its text and hover shades derived by
     // ThemePalette, its solid fill #c4422f under white / #ff7a66 under dark ink).
     readonly property color accent: palette.accent                         // marks (≥ 3:1)
@@ -331,11 +345,15 @@ QtObject {
     readonly property int space12: 48
     readonly property int space16: 64
 
-    readonly property int radiusXs: 3
-    readonly property int radiusSm: 5
-    readonly property int radius: 7
-    readonly property int radiusLg: 10
-    readonly property int radiusXl: 16
+    // Soft shapes (chat apps rather than an IDE): controls 10, cards and menus 14, dialogs 22,
+    // sheets from an edge 28 at their free corners; chips, search fields, the phone's navigation
+    // and toggles are capsules (radiusFull or height / 2).
+    readonly property int radiusXs: 4
+    readonly property int radiusSm: 7
+    readonly property int radius: 10
+    readonly property int radiusLg: 14
+    readonly property int radiusXl: 22
+    readonly property int radiusSheet: 28
     readonly property int radiusFull: 999
 
     /// Minimum hit area for anything interactive (44 px on touch UIs).
@@ -402,8 +420,10 @@ QtObject {
     // ---- Motion --------------------------------------------------------------------------
     readonly property int durationInstant: reducedMotion ? 0 : 70
     readonly property int durationFast: reducedMotion ? 0 : 120
-    readonly property int duration: reducedMotion ? 0 : 180
-    readonly property int durationSlow: reducedMotion ? 0 : 280
+    readonly property int duration: reducedMotion ? 0 : 200
+    readonly property int durationSlow: reducedMotion ? 0 : 320
+    /// A control pressed shrinks a little (buttons, the navigation's items) and springs back.
+    readonly property real pressScale: reducedMotion ? 1 : 0.96
     readonly property int easing: Easing.OutCubic
     readonly property int easingEnter: Easing.OutQuint
     readonly property int easingExit: Easing.InCubic

@@ -5,6 +5,7 @@
 #include "markdown/taskdeps.h"
 
 #include "blockrender_p.h"
+#include "blockviews.h"
 #include "editorhost.h"
 #include "queryhost.h"
 #include "renderedtextitem.h"
@@ -1241,9 +1242,23 @@ QVariantMap BlockListModel::computeTableData(int i) const
     QVariantList aligns;
     for (const calc::TableAlign a : model->aligns)
         aligns.append(alignName(a));
+    // A cell's `<br>` breaks its line (tableCellLines): a header shows its lines one under the
+    // other (the header row grows, up to three lines: `headerLines`), a body cell one after
+    // another on its one line.
+    const auto linesHtml = [&cellHtml](const QStringList &lines, const QString &separator) {
+        QStringList parts;
+        parts.reserve(lines.size());
+        for (const QString &line : lines)
+            parts.append(cellHtml(line));
+        return parts.join(separator);
+    };
     QVariantList headerHtml;
-    for (const QString &h : model->header)
-        headerHtml.append(cellHtml(h));
+    int headerLines = 1;
+    for (const QString &h : model->header) {
+        const QStringList lines = tableCellLines(h);
+        headerLines = std::max(headerLines, int(std::min<qsizetype>(lines.size(), 3)));
+        headerHtml.append(lines.size() > 1 ? linesHtml(lines, u"<br/>"_s) : cellHtml(h));
+    }
     QVariantList rows;
     rows.reserve(model->rows.size());
     for (qsizetype r = 0; r < model->rows.size(); ++r) {
@@ -1255,8 +1270,10 @@ QVariantMap BlockListModel::computeTableData(int i) const
             const QString display = formula ? eval.values.value(r).value(c, cell) : cell;
             const QString error = eval.errors.value(r).value(c);
             // Formula results (and errors) are values, not Markdown.
-            const QString html =
-                    formula || !error.isEmpty() ? markdown::InlineRenderer::escape(display) : cellHtml(cell);
+            const QStringList lines = formula || !error.isEmpty() ? QStringList{} : tableCellLines(cell);
+            const QString html = formula || !error.isEmpty() ? markdown::InlineRenderer::escape(display)
+                                 : lines.size() > 1           ? linesHtml(lines, u" "_s)
+                                                              : cellHtml(cell);
             cells.append(QVariantMap{{u"text"_s, cell},
                                      {u"display"_s, display},
                                      {u"html"_s, html},
@@ -1279,6 +1296,7 @@ QVariantMap BlockListModel::computeTableData(int i) const
         shown.append(passes);
     return {{u"header"_s, QVariant(QStringList(model->header))},
             {u"headerHtml"_s, headerHtml},
+            {u"headerLines"_s, headerLines},
             {u"aligns"_s, aligns},
             {u"rows"_s, rows},
             {u"filters"_s, filters},

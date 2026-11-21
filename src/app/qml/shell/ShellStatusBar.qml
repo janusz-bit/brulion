@@ -46,6 +46,7 @@ Rectangle {
         width: parent.width
         height: 1
         color: Theme.borderSubtle
+        visible: Theme.paneLines
     }
 
     RowLayout {

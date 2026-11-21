@@ -627,7 +627,12 @@ Rectangle {
                 leftPadding: sidebar.rowInset + sidebar.indent(depth)
                 // Daily notes by their date ("Wed, Oct 14"), not by their file name, in the language
                 // shown: DatesHelper.locale read for real (a method call alone is not tracked).
-                text: journalDate === "" ? title : DatesHelper.locale !== "" ? DatesHelper.formatShort(journalDate) : journalDate
+                // The notebook's own folders under their default names ("journals", "templates",
+                // as Logseq names them) in the interface's language; a name the person chose stays.
+                text: journalDate !== "" ? (DatesHelper.locale !== "" ? DatesHelper.formatShort(journalDate) : journalDate)
+                      : special === "journals" && title === "journals" ? qsTr("Journal")
+                      : isDir && depth === 0 && title === "templates" ? qsTr("Templates")
+                      : title
                 // An empty folder opens too (folder-open) and says why nothing appears under it.
                 subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
                 /// A page's own icon (docs/UI.md "Page icon and cover"), following its edits.

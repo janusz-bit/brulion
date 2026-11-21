@@ -13,6 +13,7 @@
 #include "text/text.h"
 #include "util/unicode.h"
 #include "vault/vault.h"
+#include "uiscale.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -43,6 +44,7 @@ constexpr auto kTheme = "ui/themeMode"_L1;
 constexpr auto kLanguage = "ui/language"_L1;
 constexpr auto kFontScale = "ui/fontScale"_L1;
 constexpr auto kReducedMotion = "ui/reducedMotion"_L1;
+constexpr auto kInterfaceScale = "ui/interfaceScale"_L1;
 constexpr auto kAccent = "ui/accent"_L1;
 constexpr auto kCustomAccent = "ui/customAccent"_L1;
 constexpr auto kLightSurface = "ui/lightSurface"_L1;
@@ -119,7 +121,7 @@ constexpr qsizetype kMaxRecentSearches = 8;
 constexpr std::array kThemeChoices{u"dark", u"light", u"system"};
 constexpr std::array kAccentChoices{u"coral", u"red", u"blue", u"green", u"teal", u"violet", u"graphite", u"custom"};
 constexpr std::array kLightSurfaceChoices{u"paper", u"white"};
-constexpr std::array kDarkSurfaceChoices{u"black", u"slate"};
+constexpr std::array kDarkSurfaceChoices{u"graphite", u"black", u"slate"};
 constexpr std::array kDensityChoices{u"comfortable", u"compact"};
 constexpr std::array kEditorFontChoices{u"sans", u"serif"};
 constexpr std::array kLineSpacingChoices{u"normal", u"compact", u"relaxed"};
@@ -341,7 +343,7 @@ bool AppSettings::store(QAnyStringView k, const T &value, const T &current)
 
 QString AppSettings::themeMode() const
 {
-    // Never chosen (or unknown): dark — with the black background (darkSurface()).
+    // Never chosen (or unknown): dark — with the graphite background (darkSurface()).
     return oneOf(m_settings->value(kTheme).toString(), kThemeChoices);
 }
 
@@ -374,6 +376,19 @@ void AppSettings::setFontScale(qreal scale)
 {
     if (store(kFontScale, cleanFontScale(scale), fontScale()))
         Q_EMIT fontScaleChanged();
+}
+
+qreal AppSettings::interfaceScale() const
+{
+    bool ok = false;
+    const qreal s = m_settings->value(kInterfaceScale).toReal(&ok);
+    return ok ? brulion::ui::cleanInterfaceScale(s) : 0.0;
+}
+
+void AppSettings::setInterfaceScale(qreal scale)
+{
+    if (store(kInterfaceScale, brulion::ui::cleanInterfaceScale(scale), interfaceScale()))
+        Q_EMIT interfaceScaleChanged();
 }
 
 bool AppSettings::reducedMotion() const
@@ -1050,10 +1065,11 @@ void AppSettings::resetAppearance()
 {
     setAccentColor(u"coral"_s);
     setLightSurface(u"paper"_s);
-    setDarkSurface(u"black"_s);
+    setDarkSurface(u"graphite"_s);
     setUiFontFamily(QString());
     setDensity(u"comfortable"_s);
     setFontScale(1.0);
+    setInterfaceScale(0.0);
     setEditorFont(u"sans"_s);
     setEditorFontFamily(QString());
     setEditorMonoFamily(QString());

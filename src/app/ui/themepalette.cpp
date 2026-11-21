@@ -185,10 +185,14 @@ Surface surface(QStringView name, bool dark)
         if (name == u"slate") // the logo's deep blue-grey
             return {hex(0x1c2130), hex(0x232a3b), hex(0x2b3245), hex(0x171b28),
                     hex(0x343c51), hex(0x2b3245), hex(0x48526b), hex(0x6c7793)};
-        // "black", the default ("Nocny", for OLED screens): true black, the side panes (bgSunken)
-        // and cards barely lifted
-        return {hex(0x000000), hex(0x0d0f13), hex(0x1c2027), hex(0x08090b),
-                hex(0x262a32), hex(0x1a1d23), hex(0x3a404d), hex(0x6c7793)};
+        if (name == u"black") // "Nocny", for OLED screens: true black, the side panes (bgSunken) and cards barely lifted
+            return {hex(0x000000), hex(0x0d0f13), hex(0x1c2027), hex(0x08090b),
+                    hex(0x262a32), hex(0x1a1d23), hex(0x3a404d), hex(0x6c7793)};
+        // "graphite", the default: three clearly different greys like a chat app's — the
+        // side panes (bgSunken) darkest, the page above them, cards, menus and dialogs lighter
+        // still; surfaces part by their shade, not by hairlines.
+        return {hex(0x1e1f24), hex(0x27292f), hex(0x30323a), hex(0x16171b),
+                hex(0x34363e), hex(0x2a2c33), hex(0x474a54), hex(0x6c7793)};
     }
     if (name == u"white") // neutral white, grey wells
         return {hex(0xffffff), hex(0xffffff), hex(0xffffff), hex(0xf4f5f7),
@@ -200,7 +204,7 @@ Surface surface(QStringView name, bool dark)
 
 QStringList surfaceNames(bool dark)
 {
-    return dark ? QStringList{u"black"_s, u"slate"_s} : QStringList{u"paper"_s, u"white"_s};
+    return dark ? QStringList{u"graphite"_s, u"black"_s, u"slate"_s} : QStringList{u"paper"_s, u"white"_s};
 }
 
 // ---- Accent ---------------------------------------------------------------------------------

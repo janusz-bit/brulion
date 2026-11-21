@@ -90,6 +90,17 @@ endif()
 qt_extract_metatypes(brulion_ui_files)
 brulion_set_warnings(brulion_ui_files)
 
+# brulion_ui_scale — the interface scale (uiscale.h): "Automatic" by the screen's height, the
+# zoom commands' steps, and Qt's global scale factor set before the first window and at run time
+# (QHighDpiScaling: Qt6::GuiPrivate). A static library so that tests/app/tst_uiscale checks the
+# choices without the app.
+qt_add_library(brulion_ui_scale STATIC
+    uiscale.h uiscale.cpp
+)
+target_include_directories(brulion_ui_scale PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_scale PUBLIC Qt6::Core Qt6::Gui PRIVATE Qt6::GuiPrivate)
+brulion_set_warnings(brulion_ui_scale)
+
 # brulion_ui_scroll — RowScroll (rowscroll.h): the scroll bar of long lists whose rows differ in
 # height, from the rows at the view's edges instead of ListView's estimate of its content height.
 # Qt Quick's public API only; a static library so that tests/app/scroll drives it with a ListView

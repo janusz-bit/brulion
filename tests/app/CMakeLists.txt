@@ -38,6 +38,11 @@ brulion_add_test(tst_ui_models
 brulion_add_test(tst_ui_themepalette
     SOURCES tst_themepalette.cpp
     LIBS brulion_ui_helpers)
+# The interface scale (brulion_ui_scale): "Automatic" by the screen, the settings' and the zoom
+# commands' steps, Qt's global factor.
+brulion_add_test(tst_ui_scale
+    SOURCES tst_uiscale.cpp
+    LIBS brulion_ui_scale Qt6::Gui)
 
 # Every binding and function of the app's QML is compiled to C++ (docs/UI.md "Compiled QML"):
 # qmlcachegen's statistics of the app's build, cmake/BrulionQmlCompiledCheck.cmake lists what is

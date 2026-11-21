@@ -1,6 +1,6 @@
 // ThemePalette — the colours of Theme.qml that the appearance settings change (Settings →
-// Appearance, docs/UI.md "Look & feel"): the surfaces (light "paper" | "white", dark "black" for
-// OLED screens — the default, the "Nocny" look — | "slate"), the accent colour (presets "coral" —
+// Appearance, docs/UI.md "Look & feel"): the surfaces (light "paper" | "white", dark "graphite" —
+// the default: layered greys — | "black" for OLED screens, the "Nocny" look | "slate"), the accent colour (presets "coral" —
 // the default, #ff7a66 in dark and #c4422f in light —, "red" — the logo's margin red —, "blue",
 // "green", "teal", "violet", "graphite", or "custom" with any "#rrggbb"),
 // and the text colours, kept here so the tests check every one of them on every surface.
@@ -54,7 +54,7 @@ struct Surface {
     Rgb bg, bgElevated, bgElevated2, bgSunken;
     Rgb border, borderSubtle, borderStrong, borderControl;
 };
-/// "paper" | "white" (light) or "black" | "slate" (dark); unknown → "paper" / "black".
+/// "paper" | "white" (light) or "graphite" | "black" | "slate" (dark); unknown → "paper" / "graphite".
 Surface surface(QStringView name, bool dark);
 /// Known names of the light (`dark` false) or dark surfaces, the default first.
 QStringList surfaceNames(bool dark);

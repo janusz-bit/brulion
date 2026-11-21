@@ -135,12 +135,36 @@ Rectangle {
         anchors.rightMargin: Theme.narrow ? 4 : Theme.space2
         spacing: Theme.narrow ? 0 : 2
 
-        BIconButton {
+        // Narrow windows: the notebook's mark opens the drawer (its views, pages and settings) —
+        // the place of ☰, as an account's picture in a chat app.
+        T.Button {
+            id: menuButton
             objectName: "topBarMenu"
             visible: Theme.narrow
-            iconName: "menu"
-            label: qsTr("Menu")
+            implicitWidth: Math.max(Theme.touchTarget, Theme.controlHeight)
+            implicitHeight: implicitWidth
+            hoverEnabled: !Theme.touchUi
+            focusPolicy: Qt.StrongFocus
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Menu")
+            Accessible.description: Workspace.name
             onClicked: bar.menuClicked()
+            background: Item {
+                BFocusRing {
+                    visible: menuButton.visualFocus
+                    targetRadius: menuButton.width / 2
+                }
+            }
+            contentItem: Item {
+                BAvatar {
+                    anchors.centerIn: parent
+                    size: 30
+                    name: Workspace.name
+                    active: menuButton.hovered || menuButton.down
+                    scale: menuButton.down ? Theme.pressScale : 1
+                    Behavior on scale { NumberAnimation { duration: Theme.durationFast; easing.type: Easing.OutBack } }
+                }
+            }
         }
         BIconButton {
             visible: !Theme.narrow
@@ -324,7 +348,8 @@ Rectangle {
         // journal's (the rail, the bottom navigation — on a phone both are on screen).
         BIconButton {
             objectName: "topBarReadingMode"
-            visible: bar.inNote
+            // (Narrow windows: in ⋮, the bar stays short.)
+            visible: bar.inNote && !Theme.narrow
             iconName: "eye"
             label: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
             shortcut: ShortcutMap.sequences["view.reading"] || ""
@@ -344,14 +369,6 @@ Rectangle {
             label: qsTr("Quick capture")
             shortcut: ShortcutMap.sequences["capture"] || ""
             onClicked: bar.captureRequested()
-        }
-        // Narrow windows: the side panel's drawer from the right edge (ShellContextDrawer).
-        BIconButton {
-            objectName: "topBarContext"
-            visible: Theme.narrow && bar.contextAvailable
-            iconName: "panel-right"
-            label: qsTr("Show side panel")
-            onClicked: bar.contextRequested()
         }
         BIconButton {
             visible: !Theme.narrow
@@ -583,6 +600,7 @@ Rectangle {
         sourceComponent: BMenu {
             id: moreMenu
             objectName: "topBarMoreMenu"
+            sheet: true
 
             // ---- The page: favourite, rename, move, history ------------------------------------
             Item {
@@ -746,6 +764,26 @@ Rectangle {
                 text: qsTr("Open in new tab")
                 iconName: "plus"
                 onTriggered: AppController.openTab(bar.route)
+            }
+            // Narrow windows keep the top bar to the notebook, the title, + and ⋮: reading mode and
+            // the side panel's drawer are here (the panel also from the right edge).
+            BMenuItem {
+                objectName: "menuReadingModeNarrow"
+                visible: Theme.narrow && bar.inNote
+                height: visible ? implicitHeight : 0
+                text: qsTr("Reading mode")
+                iconName: "eye"
+                checkable: true
+                checked: AppSettings.readingMode
+                onTriggered: AppSettings.readingMode = !AppSettings.readingMode
+            }
+            BMenuItem {
+                objectName: "menuSidePanelNarrow"
+                visible: Theme.narrow && bar.contextAvailable
+                height: visible ? implicitHeight : 0
+                text: qsTr("Show side panel")
+                iconName: "panel-right"
+                onTriggered: bar.contextRequested()
             }
             BMenuSeparator {}
 

@@ -62,6 +62,14 @@ constexpr int KeyRole = Qt::UserRole + 1;
 
 } // namespace
 
+QStringList tableCellLines(const QString &cell)
+{
+    if (!cell.contains(u"<br", Qt::CaseInsensitive))
+        return {cell};
+    static const QRegularExpression br(u"<br\\s*/?>"_s, QRegularExpression::CaseInsensitiveOption);
+    return cell.split(br);
+}
+
 QList<int> BlockViews::tableShownRows(const QVariantMap &table, int editRow) const
 {
     const QVariantList shown = table.value(u"shown"_s).toList();
@@ -99,7 +107,10 @@ QList<qreal> BlockViews::tableColumnWidths(const QVariantMap &table, const QFont
     out.reserve(header.size());
     qreal total = 0;
     for (qsizetype c = 0; c < header.size(); ++c) {
-        qreal w = headerMetrics.horizontalAdvance(header.at(c));
+        // A header of several lines (`<br>`) is as wide as its widest line.
+        qreal w = 0;
+        for (const QString &line : tableCellLines(header.at(c)))
+            w = std::max(w, headerMetrics.horizontalAdvance(line));
         for (const QVariant &row : rows) {
             const QVariantList cells = row.toList();
             if (c >= cells.size())
@@ -134,8 +145,9 @@ QVariantMap BlockViews::tableCell(const QVariantMap &table, int row, int column)
         const QVariantList headerHtml = table.value(u"headerHtml"_s).toList();
         if (column < header.size()) {
             out[u"text"_s] = header.at(column);
-            out[u"display"_s] = header.at(column);
-            out[u"plain"_s] = header.at(column);
+            // (Its lines one after another: the accessible name, the tooltip.)
+            out[u"display"_s] = tableCellLines(header.at(column)).join(u' ');
+            out[u"plain"_s] = out[u"display"_s];
         }
         if (column < headerHtml.size())
             out[u"html"_s] = headerHtml.at(column).toString();

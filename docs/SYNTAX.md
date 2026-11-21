@@ -2122,7 +2122,10 @@ Encrypt's `%%🔐γ … 🔐%%`), callouts `> [!note] Title`
 (`note`, `tip`, `warning`, `danger`, `info`, `todo`, `quote`), footnotes `[^1]`, GFM tables, task
 lists, strikethrough, autolinks, math formulas and Mermaid diagrams (below). Raw HTML in notes is
 rendered as escaped text (never executed) — apart from the `<mark>` tags of coloured highlights,
-which are read, never passed on.
+which are read, never passed on, and `<br>` (`<br/>`, `<br />`, any case) in a table cell: GFM's
+line break in a cell, as Obsidian draws it and the CSV import writes it (§9 "CSV") — the editor
+shows a header's lines one under the other and a body cell's one after another; the file keeps
+the tag.
 
 ### Coloured highlights
 

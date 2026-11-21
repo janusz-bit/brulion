@@ -7,10 +7,21 @@ components — no Material/Fusion look, so all targets look identical.
 
 ## Look & feel
 
-* **"Nocny"**, the default look: dark, dense and IDE-like — true OLED black (`#000`; side panes
-  `#08090b`, cards `#0d0f13`, hairlines `#1a1d23` / `#262a32`), cool text (`#d3d8e2`, muted
-  `#a9b0bf`), links `#8fb8ea`, tags violet `#c89bf0`, results and "synced" green `#7fd1a8`, and a
-  **coral accent** `#ff7a66` whose solid fill carries dark ink (`#2b0a05`, `Theme.fgOnAccent`).
+* **Graphite, the default look** (since the redesign after 0.27.0, modelled on chat apps the
+  person likes — Discord, FluffyChat, Instagram — rather than an IDE): **layers of grey instead of
+  black and hairlines** — the rail darkest (`bgSunken` darkened), side panes `#16171b`, the page
+  `#1e1f24`, cards, menus and dialogs `#27292f`, popups over them `#30323a`; the panes part by
+  their shade, so the split handles and the rail draw no line there (`Theme.paneLines` false) —,
+  **soft shapes** (`Theme.radius` 10 for controls, `radiusLg` 14 cards and menus, `radiusXl` 22
+  dialogs, `radiusSheet` 28 sheets, capsules for chips, search fields, toggles and the phone's
+  navigation), **the accent on the one primary button** of a view (`Theme.buttonPrimary*`: the
+  accent's solid fill under `fgOnAccent`; ink stays for selected discs and chips), a pressed button
+  shrinking a little (`Theme.pressScale` 0.96, springing back), the notebook as a round mark
+  (`BAvatar`: its first letter on the accent; a rounded square under the pointer, like Discord's
+  servers). Cool text (`#d3d8e2`, muted `#a9b0bf`), links `#8fb8ea`, tags violet `#c89bf0`, results
+  and "synced" green `#7fd1a8`, and a **coral accent** `#ff7a66` whose solid fill carries dark ink
+  (`#2b0a05`, `Theme.fgOnAccent`). **"Nocny"** — dark, dense, true OLED black (`#000`; side panes
+  `#08090b`, cards `#0d0f13`, hairlines `#1a1d23` / `#262a32`) — is the "Black" background.
   Its light counterpart: the paper surfaces with coral darkened to `#c4422f` (white text on its
   fill). **Reminders and alarms (⏰) are amber whatever the accent** (dark `#f2b33d` on amber at
   13 %, light `#8a5900` on amber at 22 % — a shade darker than the mockup's `#9a6400`, which
@@ -25,13 +36,26 @@ components — no Material/Fusion look, so all targets look identical.
   Red (the margin red, the default before "Nocny"), Blue, Green, Teal, Purple, Graphite, or
   **Custom…** (any
   `#rrggbb` from `BAccentDialog`: a 12 × 3 colour grid, a hex field, a live preview);
+  **Interface size** (desktop windows only, `AppController.interfaceScaleSupported`; device-local
+  `AppSettings.interfaceScale`, 0 = "Auto · n %"): the whole window drawn larger or smaller — text,
+  controls, icons and every size the QML writes as a number — through Qt's global scale factor
+  (`src/app/ui/uiscale.h`, `QHighDpiScaling`, multiplied with the system's own scaling), changed
+  live: the open windows keep their size in pixels and are laid out again. "Auto" picks by the
+  height of the screen Brulion starts on, in device-independent pixels: 1 up to 1300 px (laptops,
+  1080p and 1200p monitors), 1.15 (1440p), 1.25 (1600p), 1.35 (1800p), 1.5 (2160p: 4K at 100 %),
+  1.75 beyond — a 4K monitor the system already scales by 200 % stays at 1. The choices 90–175 %,
+  and the palette's "Larger interface" (Ctrl+Alt+=), "Smaller interface" (Ctrl+Alt+-) and
+  "Interface size: automatic" (Ctrl+Alt+0) on the steps 80, 90, 100, 110, 115, 125, 135, 150, 175,
+  200 % (a toast says the size; Ctrl+= and Ctrl+- zoom PDFs, drawings and canvases). Not with
+  `--scale` / `QT_SCALE_FACTOR`, `--size`, screenshots or a headless platform;
   `ThemePalette` (C++) derives readable shades by itself — the accent as a mark ≥ 3:1, as text
   ≥ 4.5:1 on every surface and on its own tint, the solid fill ≥ 4.5:1 under its text (white;
   dark ink on the dark mode's coral, `accentOn`). The
   accent marks things (today, the current tab, the selected row's bar, drop targets); it never
   means "destructive": danger callouts, danger cards, deleting stay red. The **light
   background** Paper (default) | White (neutral white, grey wells) and the **dark background**
-  Black (OLED, default: true black, barely lifted side panes and cards) | Blue-grey; both rows show while
+  Graphite (default: layers of grey) | Blue-grey | Black (OLED: true black, barely lifted side
+  panes and cards, "Nocny"); both rows show while
   the mode is "System". **Text size** (UI factor), the **interface font** (any installed family,
   `BFontPickerDialog`; "" = the system's), **density** Comfortable | Compact (desktop only: 24/30/36
   px controls, 28 px rows, 26 px sidebar rows, a 248 px sidebar, a smaller paragraph gap; touch
@@ -132,8 +156,9 @@ components — no Material/Fusion look, so all targets look identical.
   1-px hairline between them: the split handle's (`BSplitHandle`, which also highlights on hover
   and while dragging); the sidebar and the side panel draw no edge of their own there (the drawer
   keeps its edge), the rail its own line.
-  * Rail (`ShellRail`, also the drawer's left column on phones): at the top the notebook — its
-    first letter on the accent; a click opens the **Switch notebook** menu (the recent notebooks
+  * Rail (`ShellRail`, also the drawer's left column on phones; on the graphite background the
+    darkest layer, without its edge line): at the top the notebook — its round mark (`BAvatar`, a
+    rounded square under the pointer); a click opens the **Switch notebook** menu (the recent notebooks
     — the current one checked, one click switches — then "Brulion Documentation" and "Open another
     notebook…" (the start screen); a recent notebook whose folder is gone is not recreated: a
     warning, and it stays on the list, marked on the start screen until removed — one in a
@@ -141,7 +166,9 @@ components — no Material/Fusion look, so all targets look identical.
     in tooltips to the right: Journal, Calendar, Tasks, Habits, All pages, Tags, Graph,
     Search (the selected one tinted, the accent's bar at the rail's edge; the entries hidden in
     Settings → Appearance → Layout left out; in the drawer also Import notes; they scroll when the
-    window is too low); at the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
+    window is too low; in the drawer, where a phone has no tooltips, each with its short name under
+    the icon — Journal, Calendar, Tasks, …, Pages, Import, Settings —, the rail 76 px wide, as
+    Material 3's navigation rail); at the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
     its text in the tooltip; a click syncs now when there is a sync engine, otherwise or while a
     sync runs it opens the sync center, as do a right click and a long press) and Settings. The top bar's sidebar
     button hides only the page panel: the rail stays (not in focus mode).
@@ -214,24 +241,32 @@ components — no Material/Fusion look, so all targets look identical.
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back, title,
-  the reading mode's eye (pages and the journal), **+** (quick capture; off in Settings → Appearance → Layout, capture stays in the palette and
-  under Ctrl+Shift+N), Search only while the bottom navigation has no Search tab, and More.
-  ☰ always comes first, in the same place whatever the view, the history or the keyboard;
+  **+** (quick capture; off in Settings → Appearance → Layout, capture stays in the palette and
+  under Ctrl+Shift+N), Search only while the bottom navigation has no Search tab, and More (⋮, a
+  sheet: its "Reading mode" and "Show side panel" items are the narrow window's — the bar stays
+  to the notebook, the title, + and ⋮).
+  The drawer's button (`topBarMenu`, "Menu") is the notebook's round mark (`BAvatar`, its first
+  letter), as an account's picture in a chat app; it always comes first, in the same place whatever
+  the view, the history or the keyboard;
   back follows it while there is history, except on Android
   (`ShellTopBar.systemBack`), whose back key / gesture walks the same history — the browser on
   a phone and a narrow desktop window keep it;
-  a **bottom navigation** bar of views only: Journal, All pages ("Pages"), Search, Tasks,
+  a **bottom navigation** of views only: Journal, All pages ("Pages"), Search, Tasks,
   Calendar by default — five views chosen in Settings → Appearance → Layout. Every item
   switches the view and shows which one is current; actions stay on the top bar, so the two
   bars never repeat a button (up to 0.13 the bottom bar also had **+ Note** and **Menu** →
   drawer, which were the top bar's + and ☰ again and behaved unlike the tabs around them).
-  Every item is one `NavTab` (icon pill, label) of at least 48 px;
-  they share the width by their labels (`ShellBottomNav.widths`): evenly while every label fits
-  an even share, else a long label ("Calendar") gets what it needs (its semibold width and
-  4 px on each side, then 2 px) and the short ones ("Tasks") share the rest, so at the larger
-  text sizes (Large, Larger) and on 320-dp phones the names stay whole; only beyond that are
-  the widths scaled and the longest labels elide. The bar is the page's surface (`Theme.bg`)
-  with a subtle top edge, as the top bar. Nothing floats over a phone's content. The
+  It is a **floating capsule** (as Instagram's and Material 3's): 56 px high, held 14 px off the
+  screen's sides and 6 px above its bottom (the bar 64 px with its room, as before; its items
+  46 px high) (`bottomNavCapsule`: `bgElevated` — where the
+  accent's text keeps 4.5:1 on its tint —, a hairline edge and an elevation-2 shadow), the page's surface
+  (`Theme.bg`) around it — the bar's room is its own, nothing of a view lies under it. Every item
+  is one `NavTab`, at least 48 px wide, its view's name its accessible name and a tooltip on a
+  long press: the others are icons only, sharing the room evenly; the **current view's item grows
+  into an accent-tinted pill** with its name beside the icon (`accentBg`, `accentText`; the width
+  animated with a small overshoot), at most what the other items leave at their 48 px, so at the
+  larger text sizes the name stays whole and only an extreme one elides. A pressed item shrinks a
+  little (`Theme.pressScale`). The
   navigation makes way while the on-screen
   keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
   editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
@@ -406,14 +441,15 @@ dims (`Theme.scrim`); a header with the page's title and a close button over the
 opens from
 
 * the **handle**, always on the right edge while the view has a context panel (not in focus mode,
-  not while the left drawer is open): a small tab (18 × 56 px, drawn coming out of the edge; a
-  44 × 64 px target) at 38 % of the height with a chevron; a tap or a swipe to the left on it
+  not while the left drawer is open): a quiet grabber (a 5 × 44 px capsule in `fgFaint` at 40 %,
+  80 % while pressed, 4 px in from the edge; a 44 × 64 px target) at 38 % of the height; a tap or a
+  swipe to the left on it
   opens the drawer. The handle's rectangle is kept from the system's gestures
   (`GestureInsets.setExclusion()`; Android 10+: `View.setSystemGestureExclusionRects` through
   `AndroidBridge::setGestureExclusion`, so a swipe from the edge there is the handle's and gesture
   navigation's "back" keeps the rest of the edge);
-* the top bar's **panel button** (`topBarContext`, narrow windows with a context), Ctrl+\ and the
-  palette's "Toggle side panel";
+* the top bar's ⋮ → "Show side panel" (`menuSidePanelNarrow`, narrow windows with a context),
+  Ctrl+\ and the palette's "Toggle side panel";
 * a swipe to the left that starts in the 24-px strip beyond the system's gesture zone at the right
   edge (as the left drawer's, `GestureInsets.right`).
 
@@ -1306,9 +1342,16 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
 * **Its options** (`chatAgentOptions` under the conversation's row, `chatNewAgentOptions` before a
   new one's first message; `ChatAgentOptions.qml`): a chip per option of the session — its model,
   mode, effort … (`configOptions`; an agent's older `modes` and `models` as options of their own) —
-  showing its choice, whose menu (`chatAgentChoices`, `chatAgentChoice`: name, description or group,
-  ✓) sets another (`session/set_config_option`, `session/set_mode`, `session/set_model`); a bool a
-  chip that toggles. A choice is remembered for the agent (`AgentConfig::options`, with the options
+  that says what it sets and its choice now ("Model: Opus 5.5", "Effort: high", "Mode: auto"), with
+  an icon of its kind (`cpu`, `brain`, `shield-check`, `zap`; others `sliders-horizontal`) and a
+  tooltip on what it changes; the known kinds (ACP's `category`: model, mode, thought_level, speed)
+  and the common values (low … max, on, off, auto, default, Claude Code's permission modes) in the
+  interface's language, others as the agent wrote them. Its menu (`chatAgentChoices`, titled by the
+  option — `chatAgentChoicesTitle` —, `chatAgentChoice`: name, description or group, ✓) sets
+  another (`session/set_config_option`, `session/set_mode`, `session/set_model`). A bool, and a
+  select of just "Off" and "On" (any order; also true/false, enabled/disabled, yes/no:
+  `agentOptionRow()` gives `onOff`, `onValue`, `offValue`, `isOn`) — Claude Code's "Fast mode" —, is
+  a switch chip: the option's name, highlighted while on, a click toggles it (no bare "Off"). A choice is remembered for the agent (`AgentConfig::options`, with the options
   its last session offered, `known`) and set on every new session before its first prompt — so a
   model the account cannot use is chosen once (Codex on a ChatGPT Free plan). After them the
   session's usage (`chatAgentUsage`: "4.3 % of the context · 0.21 USD", the agent's `usage_update`).
@@ -1754,7 +1797,7 @@ panel keeps none.
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Replaced from the command line (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` — a row shows "Restore" (its icon on compact windows) and a "⋯" whose menu, also from a right-click or a long press on the row, has Restore and, after a separator in the danger colour, "Delete for good…" (asked first; no bare red × — the app's dismiss glyph — that deletes); the header's "Empty trash" is a secondary button with danger text, only the confirmations are solid red, and both say "This cannot be undone." | — |
 | `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
-| `settings` | `SettingsView` — one section at a time: on wide windows the list of sections on the left, on narrow ones (under 900 px, phones) the sections as tabs at the top — a bar that scrolls sideways, the route's section scrolled into view, icons from 600 px —; choosing one replaces the route's section (no history entry). General, Appearance (`appearance`), Editor, Notebook (also this device's "Follow links to folders outside the notebook", `AppSettings.followsOutsideLinks`, default off, never in `.brulion/config.json` — a sync peer must not switch it on —, pushed into `Workspace.setFollowsOutsideLinks` → `Vault::setFollowsOutsideLinks`, and read by brulion-cli and the background check: a toggle rescans, the linked files come or go as changes; off, a file opened from such a folder is offered as a copy, and neither its pictures nor its PDFs are shown. Devices that followed such links before it was a setting keep them: while the setting was never chosen, each notebook's first open checks once (`AppSettings::checkOutsideLinksOnce`, "vaults/outsideLinksChecked/<id>") and switches it on — before the index and sync see the notebook — only when this device knew the notebook before (state in its device folder, or a recent notebook) and it has such a link; a new device, or a link planted after the check, never does), Reminders, Sync, Backups (`backups`, "Backups" below), Automation (`automation`: brulion:// links and the notebook's key, "Automation (brulion:// links)" above), Application (on Android and Windows "Check for new versions" — `AppController.updates.enabled`, "Window layout"; on the desktop "Keep running in the system tray" and "Click on the tray icon" Window | Calendar — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Start when you sign in" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop "Browser extension (Web Clipper)": each browser's row with its state — Connected (the user's or the system's host manifest naming a program that is there), Not connected, Not installed for you, a broken one with the program it misses — and "Connect browsers" / "Connect again", "Disconnect" (only the user's own manifests), "How to install the extension" — `WebClipperSetup` (`src/app/shell/webclippersetup.h`, the same code as `brulion-cli clip install`: `clipper/hostinstall.h`), docs/CLIPPER.md; on the desktop with "For developers": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Reminders → sounds: on Windows the "Ringtone" menu lists Windows' notification sounds (Notification, Alarm 1–10, Call 1–10…) and "Sound file…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
+| `settings` | `SettingsView` — one section at a time: on wide windows the list of sections on the left, choosing one replaces the route's section (no history entry); on narrow ones (under 900 px, phones) a route without a section shows the **list of sections** (`settingsHome`, as FluffyChat's or a phone's own settings): the notebook's card (`settingsHomeRow-vault`: its round mark, name and page count — its Notebook section), then the sections in groups — Look and writing (Appearance, Editor), Notes (Reminders, Search, Extensions), Your data (Sync, Backups, Privacy), More (General, Keyboard shortcuts — not on touch UIs —, Automation, Application) — each a row with its icon white on a coloured tile (`settingsHomeRow-<key>`); a row opens its section as a step of the history (Back returns to the list), a route with a section shows it at once. General, Appearance (`appearance`), Editor, Notebook (also this device's "Follow links to folders outside the notebook", `AppSettings.followsOutsideLinks`, default off, never in `.brulion/config.json` — a sync peer must not switch it on —, pushed into `Workspace.setFollowsOutsideLinks` → `Vault::setFollowsOutsideLinks`, and read by brulion-cli and the background check: a toggle rescans, the linked files come or go as changes; off, a file opened from such a folder is offered as a copy, and neither its pictures nor its PDFs are shown. Devices that followed such links before it was a setting keep them: while the setting was never chosen, each notebook's first open checks once (`AppSettings::checkOutsideLinksOnce`, "vaults/outsideLinksChecked/<id>") and switches it on — before the index and sync see the notebook — only when this device knew the notebook before (state in its device folder, or a recent notebook) and it has such a link; a new device, or a link planted after the check, never does), Reminders, Sync, Backups (`backups`, "Backups" below), Automation (`automation`: brulion:// links and the notebook's key, "Automation (brulion:// links)" above), Application (on Android and Windows "Check for new versions" — `AppController.updates.enabled`, "Window layout"; on the desktop "Keep running in the system tray" and "Click on the tray icon" Window | Calendar — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Start when you sign in" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop "Browser extension (Web Clipper)": each browser's row with its state — Connected (the user's or the system's host manifest naming a program that is there), Not connected, Not installed for you, a broken one with the program it misses — and "Connect browsers" / "Connect again", "Disconnect" (only the user's own manifests), "How to install the extension" — `WebClipperSetup` (`src/app/shell/webclippersetup.h`, the same code as `brulion-cli clip install`: `clipper/hostinstall.h`), docs/CLIPPER.md; on the desktop with "For developers": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Reminders → sounds: on Windows the "Ringtone" menu lists Windows' notification sounds (Notification, Alarm 1–10, Call 1–10…) and "Sound file…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
 | `logs` | `LogsView` — "Event log" (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 | `chat` | `ChatView` — the AI chat ("AI chat" above): the conversations, one conversation, a new one | `path?`, `new?`, `page?`, `prompt?` |
 | `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
@@ -3014,7 +3057,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Special block delegates: code (monospace), `calc` (input lines with right-aligned results, in
   the note's font and size — results with tabular figures — on the sunken well with its
   "Calculation" caption; the 1-px frame shows only while editing),
-  table (grid editor with formula results; edits rewrite the Markdown table; a cell's block menu —
+  table (grid editor with formula results; a table wider than the page scrolls sideways — a
+  finger, Shift+wheel, a touchpad, and a horizontal `BScrollBar` along its last row's bottom edge
+  (`tableScrollBar`; always drawn with a mouse, so the table says it goes on) to drag; a cell's `<br>` (`<br/>`, `<br />`: GFM's line break,
+  `tableCellLines()`) breaks its line — a header's lines one under the other, the header row as
+  tall as its most (`headerLines`, at most three), a body cell's one after another on its one
+  line, the columns as wide as their widest line; edits rewrite the Markdown table; a cell's block menu —
   a right-click on it, also while it is edited, or the cell toolbar's More — has **Row** and
   **Column**: insert (the new cell or header opens for typing), move, delete, the column's
   alignment, each one undo step, the only column and the header row not deletable; in a cell
@@ -5914,6 +5962,11 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   `onLongPressed`); a right-click `TapHandler` also sets `acceptedDevices: PointerDevice.Mouse |
   PointerDevice.TouchPad | PointerDevice.Stylus` — Qt hands finger touches (no buttons) to a
   TapHandler whatever its `acceptedButtons`, so without it every tap opened the menu.
+  A long menu of a page (the top bar's ⋮, the page's ⋯) sets `BMenu.sheet`: on touch UIs it is a
+  sheet from the bottom edge instead of a popup at its button — the window's width, `radiusSheet`
+  at its top corners with a grabber, the page dimmed behind it (`Theme.scrim`), rising from the
+  edge, placed again as its items grow (`placeAsSheet()`), above the on-screen keyboard and the
+  navigation bar's inset —; with a mouse it stays a menu.
   Every menu is walked by keyboard the same way (`BMenu`, Qt's `T.Menu`): it opens with no item
   highlighted (the task status menu: at the task's status), ↓ starts at the first item shown,
   ↓ / ↑ move over the items shown (hidden and disabled ones skipped, no wrapping at the ends),

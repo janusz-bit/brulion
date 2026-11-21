@@ -1,19 +1,20 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
 // ShellBottomNav — the phone's bottom navigation: five views (AppSettings.bottomNavTabs, by
 // default Journal, Pages, Search, Tasks, Calendar; Settings → Appearance → Layout) and nothing
 // else: every item switches the view and shows which one is current. Actions live on the top
-// bar — ☰ opens the drawer, + quick capture —, so none of them repeats here. Every item is one
-// NavTab — a ≥ 48 px touch target with an icon in a pill and a label under it. The items share
-// the bar by their labels (`widths`): evenly when every label fits an even share, else a long
-// label ("Calendar") takes what it needs from the short ones ("Tasks"), so the names stay whole
-// at larger text sizes and on narrow phones.
-// Nothing floats over the content. The bar is the page's surface with a subtle top edge, as the
-// top bar (a raised surface stood out as a grey slab on the black background, down through the
-// system's gesture area). The bar extends under the Android navigation bar (`bottomInset`).
+// bar — the notebook's button opens the drawer, + quick capture —, so none of them repeats here.
+// A floating capsule (as in Instagram or Material 3's apps): a raised, rounded bar held off the
+// screen's edges, its items icons only; the current view's item grows into an accent-tinted pill
+// with its name beside the icon, so the bar says where you are without five labels. The others
+// share the rest evenly; each is a ≥ 48 px touch target with its name as the accessible name (and
+// a tooltip on a long press). The page's surface (Theme.bg) shows around the capsule; the bar's
+// room is its own, nothing of a view hides under it. The bar extends under the Android navigation
+// bar (`bottomInset`).
 Rectangle {
     id: nav
 
@@ -55,95 +56,22 @@ Rectangle {
         return ""
     }
 
-    // The items' geometry (one place for every item).
+    // The capsule's geometry (one place for every item).
+    /// Its height, its distance from the screen's sides and from what lies below it.
+    readonly property int capsuleHeight: 56
+    readonly property int sideMargin: 14
+    readonly property int topMargin: 2
+    readonly property int bottomMargin: 6
+    /// The items' room inside the capsule (the items 46 px high: touch targets).
+    readonly property int innerPadding: 5
     /// The smallest item: a touch target (Material's 48 px).
     readonly property int minItemWidth: 48
-    /// The icon's pill (the current view's tint).
-    readonly property int pillWidth: 56
-    readonly property int pillHeight: 28
-    /// Above the pill and between the pill and the label.
-    readonly property int pillTop: 9
-    readonly property int labelGap: 4
 
-    /// Each shown item's width by its id (0 for one not shown): the labels' needs (the label in
-    /// the semi-bold of the current view, 4 px on each side, at least minItemWidth) shared out over
-    /// the bar (`evenShare()`); when they do not fit, 2 px on each side; when even that does not
-    /// fit, the needs scaled to the bar (the longest labels elide).
-    function itemWidth(id: string): real {
-        const index = nav.shownIds.indexOf(id)
-        // (font.pixelSize read for real: the widths follow the text size and the UI font.)
-        if (index < 0 || nav.width <= 0 || labelMetrics.font.pixelSize <= 0)
-            return 0
-        const wide = nav.evenShare(8)
-        if (wide >= 0)
-            return Math.max(nav.need(index, 8), wide)
-        const narrow = nav.evenShare(4)
-        if (narrow >= 0)
-            return Math.max(nav.need(index, 4), narrow)
-        let sum = 0
-        for (let i = 0; i < nav.shownIds.length; ++i)
-            sum += nav.need(i, 4)
-        return nav.need(index, 4) * nav.width / sum
-    }
-    /// What item `index` needs with `pad` px around its label.
-    function need(index: int, pad: int): real {
-        return Math.max(nav.minItemWidth, Math.ceil(labelMetrics.advanceWidth(nav.titleOf(nav.shownIds[index]))) + pad)
-    }
-    /// The needs (`pad`) shared out over the bar: evenly, but an item that needs more than an even
-    /// share gets its need and the others share the rest evenly — that even share; -1 when the
-    /// needs do not fit. (The largest needs first, as sorted.)
-    function evenShare(pad: int): real {
-        const n = nav.shownIds.length
-        let fixedMask = 0
-        let fixed = 0
-        let k = 0
-        while (k < n) {
-            let largest = -1
-            for (let i = 0; i < n; ++i) {
-                if ((fixedMask & (1 << i)) === 0 && (largest < 0 || nav.need(i, pad) > nav.need(largest, pad)))
-                    largest = i
-            }
-            if (nav.need(largest, pad) <= (nav.width - fixed) / (n - k))
-                break
-            fixed += nav.need(largest, pad)
-            fixedMask |= 1 << largest
-            ++k
-        }
-        if (k === n)
-            return -1
-        return (nav.width - fixed) / (n - k)
-    }
-
-    implicitHeight: 64 + bottomInset
+    implicitHeight: topMargin + capsuleHeight + bottomMargin + bottomInset
     color: Theme.bg
 
     Accessible.role: Accessible.PageTabList
     Accessible.name: qsTr("Navigation")
-
-    FontMetrics {
-        id: labelMetrics
-        font.family: Theme.fontUi
-        font.pixelSize: Theme.textXs
-        font.weight: Theme.weightSemiBold
-    }
-
-    Rectangle {
-        width: parent.width
-        height: 1
-        color: Theme.borderSubtle
-    }
-
-    /// A label under an icon, elided only when it does not fit its item after all (the extreme
-    /// text sizes; 1 px kept on each side).
-    component NavLabel: BText {
-        required property Item item
-        // (Centred in its column.)
-        x: parent ? Math.round((parent.width - width) / 2) : 0
-        font.pixelSize: Theme.textXs
-        readonly property bool tooWide: implicitWidth > item.width - 2 && item.width > 2
-        width: tooWide ? item.width - 2 : implicitWidth
-        elide: tooWide ? Text.ElideRight : Text.ElideNone
-    }
 
     function openView(id: string, current: bool): void {
         if (id === "journals" && current)
@@ -161,80 +89,135 @@ Rectangle {
         readonly property bool current: itemId === currentView
                                         || (itemId === "journals" && currentView === "journal")
                                         || (itemId === "tags" && currentView === "tag")
+        /// The current item's width: its pill with the icon and the name — at most what the other
+        /// items leave at their smallest (a name too long even then elides).
+        /// (font.pixelSize read for real: a method's result is not followed — the width follows
+        /// the text size and the UI font, docs/UI.md "Design system in code".)
+        readonly property real pillWidth: nameMetrics.font.pixelSize <= 0 ? nav.minItemWidth
+                                          : Math.min(Math.ceil(nameMetrics.advanceWidth(tab.title)) + Theme.iconSize + 8 + 2 * 14,
+                                                   capsule.width - 2 * nav.innerPadding
+                                                   - (nav.shownIds.length - 1) * (nav.minItemWidth + 2))
 
         objectName: "bottomNav_" + itemId
-        width: nav.itemWidth(itemId)
-        height: parent ? parent.height : 0
         focusPolicy: Qt.StrongFocus
         hoverEnabled: !Theme.touchUi
+        Layout.fillHeight: true
+        Layout.fillWidth: !tab.current
+        Layout.minimumWidth: nav.minItemWidth
+        /// The width asked of the layout, animated: the pill grows and the others make room.
+        property real wantedWidth: tab.current ? tab.pillWidth : nav.minItemWidth
+        Behavior on wantedWidth { NumberAnimation { duration: Theme.duration; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+        Layout.preferredWidth: tab.wantedWidth
         Accessible.role: Accessible.PageTab
         Accessible.name: title
         Accessible.description: itemId === "flashcards" && Workspace.extensions.flashcardsDue > 0
                                 ? qsTr("%n to study now", "", Workspace.extensions.flashcardsDue) : ""
         Accessible.selected: current
+        scale: tab.pressed ? Theme.pressScale : 1
+        Behavior on scale { NumberAnimation { duration: Theme.durationFast; easing.type: Easing.OutBack } }
 
-        contentItem: Column {
-            spacing: nav.labelGap
-            topPadding: nav.pillTop
+        FontMetrics {
+            id: nameMetrics
+            font.family: Theme.fontUi
+            font.pixelSize: Theme.textSm
+            font.weight: Theme.weightSemiBold
+        }
 
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                // Never wider than the item: it would run into a neighbour on a narrow phone.
-                width: Math.min(nav.pillWidth, tab.width - 4)
-                height: nav.pillHeight
-                radius: height / 2
-                antialiasing: true
-                color: tab.current ? Theme.bgSelected
-                     : tab.pressed ? Theme.bgPressed : tab.hovered ? Theme.bgHover : "transparent"
-                Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+        contentItem: Item {
+            Row {
+                id: content
+                anchors.centerIn: parent
+                spacing: 8
                 BIcon {
-                    anchors.centerIn: parent
+                    anchors.verticalCenter: parent.verticalCenter
                     name: nav.iconOf(tab.itemId)
                     size: Theme.iconSize
-                    color: tab.current ? Theme.fg : Theme.fgMuted
+                    color: tab.current ? Theme.accentText : tab.pressed || tab.hovered ? Theme.fg : Theme.fgMuted
+                    // The flashcards to study now, at the icon's corner.
+                    BBadge {
+                        objectName: "bottomNavBadge"
+                        readonly property int due: tab.itemId === "flashcards" ? Workspace.extensions.flashcardsDue : 0
+                        visible: due > 0
+                        x: parent.width - 6
+                        y: -6
+                        count: due
+                        variant: "accent"
+                        Accessible.ignored: true
+                    }
                 }
-                // The flashcards to study now, at the icon's corner.
-                BBadge {
-                    objectName: "bottomNavBadge"
-                    readonly property int due: tab.itemId === "flashcards" ? Workspace.extensions.flashcardsDue : 0
-                    visible: due > 0
-                    x: parent.width / 2 + 4
-                    y: -2
-                    count: due
-                    variant: "accent"
-                    Accessible.ignored: true
+                BText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: tab.current
+                    width: Math.min(implicitWidth, Math.max(0, tab.width - Theme.iconSize - 8 - 2 * 12))
+                    elide: Text.ElideRight
+                    text: tab.title
+                    font.pixelSize: Theme.textSm
+                    font.weight: Theme.weightSemiBold
+                    color: Theme.accentText
                 }
-            }
-            NavLabel {
-                item: tab
-                text: tab.title
-                font.weight: tab.current ? Theme.weightSemiBold : Theme.weightMedium
-                color: tab.current ? Theme.fg : Theme.fgMuted
             }
         }
-        background: Item {
+        background: Rectangle {
+            radius: height / 2
+            antialiasing: true
+            color: tab.current ? Theme.accentBg
+                 : tab.pressed ? Theme.bgPressed : tab.hovered ? Theme.bgHover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
             BFocusRing {
                 target: tab
                 visible: tab.visualFocus
                 inset: true
-                targetRadius: Theme.radius
+                targetRadius: tab.height / 2
+            }
+        }
+
+        // The name on a long press (touch has no hover), as an icon button's.
+        property bool _touchTip: false
+        onPressAndHold: _touchTip = true
+        Loader {
+            active: tab._touchTip || (tab.hovered && !tab.current)
+            sourceComponent: BToolTip {
+                parent: tab
+                text: tab.title
+                visible: tab._touchTip || (tab.hovered && !tab.pressed)
+                onClosed: tab._touchTip = false
             }
         }
     }
 
-    Row {
-        width: parent.width
-        height: parent.height - nav.bottomInset
+    BShadow {
+        target: capsule
+        level: 2
+    }
+    Rectangle {
+        id: capsule
+        objectName: "bottomNavCapsule"
+        x: nav.sideMargin
+        y: nav.topMargin
+        width: nav.width - 2 * nav.sideMargin
+        height: nav.capsuleHeight
+        radius: height / 2
+        antialiasing: true
+        // (bgElevated: the accent's text keeps 4.5:1 on its tint there, ThemePalette.)
+        color: Theme.bgElevated
+        border.width: 1
+        border.color: Theme.borderSubtle
 
-        Repeater {
-            // (Known views only: AppSettings normalizes them.)
-            model: AppSettings.bottomNavTabs
-            delegate: NavTab {
-                id: viewTab
-                required property string modelData
-                itemId: modelData
-                currentView: nav.view
-                onClicked: nav.openView(viewTab.itemId, viewTab.current)
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: nav.innerPadding
+            spacing: 2
+
+            Repeater {
+                // (Known views only: AppSettings normalizes them.)
+                model: AppSettings.bottomNavTabs
+                delegate: NavTab {
+                    id: viewTab
+                    required property string modelData
+                    itemId: modelData
+                    currentView: nav.view
+                    onClicked: nav.openView(viewTab.itemId, viewTab.current)
+                }
             }
         }
     }

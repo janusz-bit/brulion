@@ -112,7 +112,8 @@ target_link_libraries(brulion_shell
     PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_github brulion_core_caldav brulion_core_clipper
             brulion_core_drawing brulion_notify brulion_background
-            brulion_ui_helpers) # folderchoices.cpp: TextHelper's fuzzy ranking
+            brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
+            brulion_ui_scale) # appsettings.cpp, appcontroller.cpp: the interface scale
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
 # src/app/pdf — its area is included before this one — and openexternal.h).

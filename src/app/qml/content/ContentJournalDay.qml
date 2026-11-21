@@ -355,7 +355,9 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     text: dayEditor.readOnly ? (day.isToday ? qsTr("Nothing written today yet.")
                                                             : qsTr("Nothing written on this day."))
-                          : day.isToday ? qsTr("What's on today? Click to start writing.")
+                          : day.isToday ? (Theme.touchUi ? qsTr("What's on today? Tap to start writing.")
+                                                         : qsTr("What's on today? Click to start writing."))
+                          : Theme.touchUi ? qsTr("Nothing written on this day. Tap to start writing.")
                           : qsTr("Nothing written on this day. Click to start writing.")
                     variant: "muted"
                     wrapMode: Text.Wrap

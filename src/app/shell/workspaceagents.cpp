@@ -23,6 +23,9 @@
 #include <QUrl>
 #include <QUuid>
 
+#include <algorithm>
+#include <initializer_list>
+
 #ifndef BRULION_VERSION
 #define BRULION_VERSION "0.0.0"
 #endif
@@ -127,24 +130,6 @@ QStringList resolved(QStringList parts, bool onWindows, const std::function<QStr
     return parts;
 }
 
-QVariantMap optionRow(const acp::ConfigOption &o)
-{
-    QVariantList choices;
-    for (const acp::Choice &c : o.choices)
-        choices.append(QVariantMap{{u"value"_s, c.value},
-                                   {u"name"_s, c.name},
-                                   {u"description"_s, c.description},
-                                   {u"group"_s, c.group}});
-    const QString current = o.boolean ? (o.current.toBool() ? u"true"_s : u"false"_s) : o.current.toString();
-    return {{u"id"_s, o.id},
-            {u"name"_s, o.name},
-            {u"description"_s, o.description},
-            {u"category"_s, o.category},
-            {u"boolean"_s, o.boolean},
-            {u"current"_s, current},
-            {u"currentName"_s, o.currentName()},
-            {u"choices"_s, choices}};
-}
 
 QList<acp::ConfigOption> optionsOf(const QJsonArray &known)
 {
@@ -157,6 +142,47 @@ QList<acp::ConfigOption> optionsOf(const QJsonArray &known)
 }
 
 } // namespace
+
+QVariantMap agentOptionRow(const acp::ConfigOption &o)
+{
+    QVariantList choices;
+    for (const acp::Choice &c : o.choices)
+        choices.append(QVariantMap{{u"value"_s, c.value},
+                                   {u"name"_s, c.name},
+                                   {u"description"_s, c.description},
+                                   {u"group"_s, c.group}});
+    const QString current = o.boolean ? (o.current.toBool() ? u"true"_s : u"false"_s) : o.current.toString();
+    QVariantMap row{{u"id"_s, o.id},
+                    {u"name"_s, o.name},
+                    {u"description"_s, o.description},
+                    {u"category"_s, o.category},
+                    {u"boolean"_s, o.boolean},
+                    {u"current"_s, current},
+                    {u"currentName"_s, o.currentName()},
+                    {u"choices"_s, choices}};
+    // A select of just "Off" and "On" (Claude Code's "Fast mode", "Ultracode") is a switch to the
+    // person choosing (ChatAgentOptions): the chip names the option and shows its state, instead
+    // of a bare "Off" no one can place. Its two values, and which one is on.
+    if (!o.boolean && o.choices.size() == 2) {
+        const auto isWord = [](const acp::Choice &c, std::initializer_list<QStringView> words) {
+            return std::ranges::any_of(words, [&c](QStringView w) {
+                return c.name.compare(w, Qt::CaseInsensitive) == 0 || c.value.compare(w, Qt::CaseInsensitive) == 0;
+            });
+        };
+        const std::initializer_list<QStringView> on{u"on", u"true", u"enabled", u"yes"};
+        const std::initializer_list<QStringView> off{u"off", u"false", u"disabled", u"no"};
+        const acp::Choice &a = o.choices.at(0), &b = o.choices.at(1);
+        const acp::Choice *onChoice = isWord(a, on) && isWord(b, off) ? &a : isWord(b, on) && isWord(a, off) ? &b : nullptr;
+        if (onChoice) {
+            const acp::Choice *offChoice = onChoice == &a ? &b : &a;
+            row.insert(u"onOff"_s, true);
+            row.insert(u"onValue"_s, onChoice->value);
+            row.insert(u"offValue"_s, offChoice->value);
+            row.insert(u"isOn"_s, current == onChoice->value);
+        }
+    }
+    return row;
+}
 
 WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
     : QObject(parent), m_workspace(workspace), m_activityTimer(new QTimer(this))
@@ -1278,7 +1304,7 @@ QVariantList WorkspaceAgents::options(const QString &path, const QString &partne
         }
     }
     for (const acp::ConfigOption &o : std::as_const(options))
-        out.append(optionRow(o));
+        out.append(agentOptionRow(o));
     return out;
 }
 

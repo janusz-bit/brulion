@@ -34,6 +34,7 @@ class TestThemePalette : public QObject {
 private Q_SLOTS:
     void defaultsAreNocny_data();
     void defaultsAreNocny();
+    void defaultDarkIsLayered();
     void redKeepsItsShades_data();
     void redKeepsItsShades();
     void unknownNamesGiveDefaults_data();
@@ -123,14 +124,40 @@ void TestThemePalette::defaultsAreNocny()
     const QVariantMap m = paletteMap(dark, u"paper", u"black", u"coral", u"");
     for (auto it = expected.cbegin(); it != expected.cend(); ++it)
         QCOMPARE(m.value(it.key()).toString() + u' ' + it.key(), it.value().toString() + u' ' + it.key());
-    // The settings' defaults (AppSettings, Theme.qml): the first names.
-    QCOMPARE(m, paletteMap(dark, surfaceNames(false).first(), surfaceNames(true).first(), accentNames().first(), u""));
+    // The settings' defaults (AppSettings, Theme.qml): the first names — the light ones are
+    // "Nocny"'s, the dark default is graphite (defaultDarkIsLayered), black stays a choice.
+    if (!dark)
+        QCOMPARE(m, paletteMap(dark, surfaceNames(false).first(), surfaceNames(true).first(), accentNames().first(), u""));
     QCOMPARE(accentNames().first(), u"coral"_s);
-    QCOMPARE(surfaceNames(true).first(), u"black"_s);
+    QVERIFY(surfaceNames(true).contains(u"black"_s));
     QCOMPARE(accentBgAlpha(dark), dark ? 0.18 : 0.12);
     // Light coral text: darker than the mark (its tint over the wells needs 4.5:1).
     if (!dark)
         QVERIFY(relativeLuminance(rgb(m.value(u"accentText"_s).toString())) < relativeLuminance(rgb(u"#c4422f"_s)));
+}
+
+void TestThemePalette::defaultDarkIsLayered()
+{
+    // The default dark background ("graphite", the settings' first name): three clearly different
+    // greys — the side panes darkest, the page, cards and menus lighter, popups over cards lighter
+    // still — so surfaces part by their shade, not by hairlines (black's steps are barely seen).
+    QCOMPARE(surfaceNames(true).first(), u"graphite"_s);
+    const QVariantMap m = paletteMap(true, u"paper", u"graphite", u"coral", u"");
+    QCOMPARE(m, paletteMap(true, surfaceNames(false).first(), surfaceNames(true).first(), accentNames().first(), u""));
+    QCOMPARE(m.value(u"bg"_s).toString(), u"#1e1f24"_s);
+    QCOMPARE(m.value(u"bgElevated"_s).toString(), u"#27292f"_s);
+    QCOMPARE(m.value(u"bgElevated2"_s).toString(), u"#30323a"_s);
+    QCOMPARE(m.value(u"bgSunken"_s).toString(), u"#16171b"_s);
+    QCOMPARE(m.value(u"accent"_s).toString(), u"#ff7a66"_s);
+    const Surface g = surface(u"graphite", true), b = surface(u"black", true);
+    const QList<Rgb> layers{g.bgSunken, g.bg, g.bgElevated, g.bgElevated2};
+    for (qsizetype i = 1; i < layers.size(); ++i) {
+        QVERIFY(relativeLuminance(layers[i]) > relativeLuminance(layers[i - 1]));
+        QVERIFY2(contrast(layers[i], layers[i - 1]) >= 1.08, qPrintable(describe("layer step", layers[i], layers[i - 1])));
+    }
+    QVERIFY(contrast(g.bg, g.bgElevated) > contrast(b.bg, b.bgElevated));
+    // Not black: the page is a grey (OLED black is the "black" background).
+    QVERIFY(relativeLuminance(g.bg) > 0.01);
 }
 
 void TestThemePalette::redKeepsItsShades_data()
@@ -184,9 +211,11 @@ void TestThemePalette::unknownNamesGiveDefaults()
     QFETCH(QString, darkSurface);
     QFETCH(QString, accentName);
     QFETCH(QString, custom);
+    // (A known dark background stays; an unknown one is the default, graphite.)
+    const QString knownDark = surfaceNames(true).contains(darkSurface) ? darkSurface : u"graphite"_s;
     for (const bool dark : {false, true})
         QCOMPARE(paletteMap(dark, lightSurface, darkSurface, accentName, custom),
-                 paletteMap(dark, u"paper", u"black", u"coral", u""));
+                 paletteMap(dark, u"paper", knownDark, u"coral", u""));
 }
 
 void TestThemePalette::contrastOnEverySurface_data()
@@ -459,7 +488,9 @@ void TestThemePalette::themeColorsFollowInputs()
     int changes = 0;
     connect(&c, &brulion::ui::ThemeColors::colorsChanged, this, [&changes] { ++changes; });
     c.setDark(true);
-    QCOMPARE(c.bg(), u"#000000"_s); // OLED black by default
+    QCOMPARE(c.bg(), u"#1e1f24"_s); // graphite by default
+    c.setDarkSurface(u"black"_s);
+    QCOMPARE(c.bg(), u"#000000"_s); // OLED black
     QCOMPARE(c.accentOn(), u"#2b0a05"_s);
     c.setDarkSurface(u"slate"_s);
     QCOMPARE(c.bg(), u"#1c2130"_s);

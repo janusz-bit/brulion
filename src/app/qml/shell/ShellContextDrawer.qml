@@ -9,11 +9,11 @@ import Brulion
 // ContentSidePanel), in a drawer that slides in from the right edge over about 85 % of the
 // window, the page dimmed behind it (Theme.scrim). It opens from
 //
-//   * the handle, a small tab always on the right edge while the view has a context (a tap, or a
+//   * the handle, a quiet grabber always on the right edge while the view has a context (a tap, or a
 //     swipe to the left on it); the window keeps its rectangle from Android's back gesture
 //     (GestureInsets.setExclusion: there a swipe from the edge is the handle's, everywhere else
 //     the system's "back");
-//   * the top bar's panel button (ShellTopBar.contextRequested), `open()`.
+//   * the top bar's ⋮ → "Show side panel" (ShellTopBar.contextRequested), `open()`.
 //
 // A tap on the dimmed page, a swipe to the right on the drawer, Escape or the Back key close it.
 // Every opening makes the panel anew: what was folded is not remembered. Wide windows (≥ 900 px)
@@ -67,33 +67,20 @@ Item {
         Accessible.name: qsTr("Context panel")
         Accessible.onPressAction: root.open()
 
+        // A quiet grabber at the edge (as a sheet's): a short capsule, no frame or arrow; the
+        // target around it stays finger-sized.
         Rectangle {
             id: tab
             anchors.right: parent.right
+            anchors.rightMargin: 4
             anchors.verticalCenter: parent.verticalCenter
-            width: 18
-            height: 56
-            // Rounded on the inner side only: it comes out of the edge.
-            radius: Theme.radiusSm
-            color: handleTap.pressed ? Theme.bgPressed : Theme.bgElevated
-            border.width: 1
-            border.color: Theme.border
-            Rectangle {
-                // Squares off the outer corners (the edge side).
-                anchors.right: parent.right
-                width: tab.radius
-                height: tab.height
-                color: tab.color
-                Rectangle { width: parent.width; height: 1; color: Theme.border }
-                Rectangle { y: parent.height - 1; width: parent.width; height: 1; color: Theme.border }
-            }
-            BIcon {
-                anchors.centerIn: parent
-                anchors.horizontalCenterOffset: -1
-                name: "chevron-left"
-                size: 12
-                color: Theme.fgMuted
-            }
+            width: 5
+            height: 44
+            radius: width / 2
+            antialiasing: true
+            color: Theme.fgFaint
+            opacity: handleTap.pressed ? 0.8 : 0.4
+            Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
         }
         TapHandler {
             id: handleTap

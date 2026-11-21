@@ -33,7 +33,7 @@ T.Button {
         if (!enabled)
             return Theme.fgMuted
         switch (variant) {
-        case "primary": return Theme.primaryFg
+        case "primary": return Theme.buttonPrimaryFg
         case "danger": return Theme.dangerFg
         default: return control.checked ? Theme.link : control.hovered || control.down ? Theme.fg : Theme.fgMuted
         }
@@ -75,7 +75,7 @@ T.Button {
         color: {
             switch (control.variant) {
             case "primary":
-                return control.down ? Theme.primaryPressed : control.hovered ? Theme.primaryHover : Theme.primary
+                return control.down ? Theme.buttonPrimaryPressed : control.hovered ? Theme.buttonPrimaryHover : Theme.buttonPrimary
             case "danger":
                 return control.hovered || control.down ? Theme.dangerHover : Theme.danger
             case "secondary":
