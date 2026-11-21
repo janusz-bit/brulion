@@ -67,6 +67,8 @@ namespace brulion::acp {
 
 /// The version of the protocol the client speaks.
 inline constexpr int ProtocolVersion = 1;
+/// The key of a turn's id in its prompt's `_meta` (TurnInput::turnId).
+inline constexpr QLatin1StringView TurnMetaKey{"brulion/turn"};
 /// The longest line read from the agent (a whole session's history replayed stays far below).
 inline constexpr qsizetype MaxLineBytes = 16 * 1024 * 1024;
 /// The longest details of a question shown to the user (a diff, a command's input).
@@ -132,6 +134,10 @@ struct TurnInput
     /// value: a choice's value, or a bool}); one the session does not offer, or set already, is
     /// left out.
     QHash<QString, QJsonValue> config;
+    /// This turn's own id ("" none), sent in the prompt's `_meta` as "brulion/turn": a computer
+    /// relaying the protocol (`brulion-cli acp serve`) names the turn it kept by it
+    /// (acp/remote.h RemoteTurn::id).
+    QString turnId;
 };
 
 /// A way to sign in that the agent offers (initialize's authMethods).

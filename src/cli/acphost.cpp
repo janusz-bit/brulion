@@ -94,9 +94,13 @@ QDateTime timeOf(const QJsonValue &v)
 QJsonObject HostTurn::toJson() const
 {
     const QString name = state == State::Running ? u"running"_s : state == State::Done ? u"done"_s : u"failed"_s;
-    QJsonObject o{{u"session"_s, session}, {u"state"_s, name},
-                  {u"text"_s, text},       {u"tools"_s, QJsonArray::fromStringList(tools)},
-                  {u"asking"_s, asking},   {u"started"_s, timeText(started)}};
+    QJsonObject o{{u"session"_s, session},
+                  {u"turn"_s, id},
+                  {u"state"_s, name},
+                  {u"text"_s, text},
+                  {u"tools"_s, QJsonArray::fromStringList(tools)},
+                  {u"asking"_s, asking},
+                  {u"started"_s, timeText(started)}};
     if (state == State::Done)
         o.insert(u"stopReason"_s, stopReason);
     if (state == State::Failed)
@@ -500,9 +504,11 @@ struct AcpHost::Stream {
     QTimer *waitTimer = nullptr;
     QDateTime lastSeen;
     QSet<QString> prompts;            // the ids of the device's session/prompt requests not answered yet
-    QHash<QString, QJsonValue> asked; // the agent's session/request_permission not answered yet
-    bool retired = false;             // nobody fetches from it: it ends after its turns
+    // The agent's session/request_permission not answered yet: their ids and sessions.
+    QHash<QString, std::pair<QJsonValue, QString>> asked;
+    bool retired = false; // nobody fetches from it: it ends after its turns
     QString retiredWhy;
+    QDateTime retiredAt;
     bool holding = false; // messages wait for the sync before a turn
     QList<QJsonObject> held;
     QTimer *holdTimer = nullptr;
@@ -868,7 +874,7 @@ void AcpHost::onRequest(const http::Request &request, const http::Reply &rawRepl
     }
     const QStringList parts = endpoint.split(u'/');
     if (parts.size() == 3 && parts.at(0) == u"sessions") {
-        sessionTurn(who, QUrl::fromPercentEncoding(parts.at(1).toUtf8()), request, reply);
+        sessionTurn(who, parts.at(1), request, reply); // (route() decoded it)
         return;
     }
     Stream *s = parts.size() >= 2 ? m_streams.value(parts.at(1)) : nullptr;
@@ -878,8 +884,9 @@ void AcpHost::onRequest(const http::Request &request, const http::Reply &rawRepl
     }
     s->lastSeen = now();
     if (parts.size() == 2) { // DELETE
-        closeStream(s, u"stopped by the device"_s);
-        removeStream(s);
+        // (A turn it runs is finished first and kept: the app was closed while the agent worked,
+        // and asks for the answer when it starts again.)
+        retire(s, u"stopped by the device"_s);
         reply.send(http::Response::empty(204));
     } else if (parts.at(2) == u"send") {
         reply.send(send(s, request));
@@ -984,8 +991,6 @@ http::Response AcpHost::openStream(const PairedDevice &device, const http::Reque
     int running = 0;
     int mine = 0;
     for (const Stream *s : std::as_const(m_streams)) {
-        if (s->retired)
-            continue; // (ending: its turn only)
         running += s->closed ? 0 : 1;
         mine += s->device == device.id && !s->closed ? 1 : 0;
     }
@@ -1142,10 +1147,11 @@ void AcpHost::retire(Stream *s, const QString &why)
     }
     s->retired = true;
     s->retiredWhy = why;
+    s->retiredAt = now();
     say(u"%1: %2; it ends after its turn"_s.arg(s->id, why));
     // The questions its agent waits on, and what nobody will fetch.
-    for (const QJsonValue &id : std::exchange(s->asked, {}))
-        respond(s, id, QJsonObject{{u"outcome"_s, QJsonObject{{u"outcome"_s, u"cancelled"_s}}}});
+    for (const auto &asked : std::exchange(s->asked, {}))
+        respond(s, asked.first, QJsonObject{{u"outcome"_s, QJsonObject{{u"outcome"_s, u"cancelled"_s}}}});
     s->out.clear();
     s->outSizes.clear();
     s->outBytes = 0;
@@ -1160,8 +1166,9 @@ const HostTurn *AcpHost::turn(const QString &device, const QString &session) con
     return it == m_turns.cend() ? nullptr : &*it;
 }
 
-void AcpHost::turnStarted(Stream *s, const QString &session, const QString &prompt)
+void AcpHost::turnStarted(Stream *s, const QJsonObject &params, const QString &prompt)
 {
+    const QString session = params.value(u"sessionId"_s).toString();
     if (session.isEmpty())
         return;
     HostTurn t;
@@ -1169,6 +1176,7 @@ void AcpHost::turnStarted(Stream *s, const QString &session, const QString &prom
     t.session = session;
     t.stream = s->id;
     t.prompt = prompt;
+    t.id = params.value(u"_meta"_s).toObject().value(acp::TurnMetaKey).toString().left(200);
     t.started = now();
     const QString key = turnKey(s->device, session);
     m_turns.insert(key, t);
@@ -1375,8 +1383,9 @@ void AcpHost::maintain()
         const qint64 quiet = s->lastSeen.msecsTo(t);
         const bool idle = s->closed ? quiet > std::min<qint64>(m_options.streamIdleMs, 5 * 60 * 1000)
                                     : quiet > m_options.streamIdleMs && s->prompts.isEmpty();
-        if (s->retired && !s->closed && s->prompts.isEmpty()) {
-            closeStream(s, s->retiredWhy);
+        if (s->retired && !s->closed && (s->prompts.isEmpty() || s->retiredAt.msecsTo(t) > m_options.retiredTurnMs)) {
+            // (A turn nobody waits for gets a while to end, not forever.)
+            closeStream(s, s->prompts.isEmpty() ? s->retiredWhy : u"its turn did not end in time"_s);
             removeStream(s);
         } else if (idle) {
             closeStream(s, u"no device fetched from it for %1 minutes"_s.arg(m_options.streamIdleMs / 60000));
@@ -1489,8 +1498,8 @@ void AcpHost::fromAgent(Stream *s, const QByteArray &line)
             respond(s, o.value(u"id"_s), QJsonObject{{u"outcome"_s, QJsonObject{{u"outcome"_s, u"cancelled"_s}}}});
             return;
         }
-        s->asked.insert(idKey(o.value(u"id"_s)), o.value(u"id"_s));
         const QString session = o.value(u"params"_s).toObject().value(u"sessionId"_s).toString();
+        s->asked.insert(idKey(o.value(u"id"_s)), {o.value(u"id"_s), session});
         if (const auto it = m_turns.find(turnKey(s->device, session)); it != m_turns.end() && it->stream == s->id) {
             it->asking = true;
             turnChanged(it.key());
@@ -1506,8 +1515,12 @@ void AcpHost::fromAgent(Stream *s, const QByteArray &line)
             return;
         }
     }
-    if (s->retired)
-        return; // (nobody fetches it)
+    if (s->retired) {
+        // Nobody fetches it; a request of the agent hears so at once instead of waiting forever.
+        if (!method.isEmpty() && o.contains(u"id"_s))
+            respondError(s, o.value(u"id"_s), -32603, u"The device is gone"_s);
+        return;
+    }
     const qint64 size = compact(o).size();
     s->out.append({s->nextSeq++, o});
     s->outSizes.append(size);
@@ -1527,19 +1540,19 @@ void AcpHost::toAgent(Stream *s, const QJsonObject &message)
     const QString method = rewritten->value(u"method"_s).toString();
     if (method.isEmpty() && rewritten->contains(u"id"_s)) {
         // The device's answer to a question of the agent.
-        if (s->asked.remove(idKey(rewritten->value(u"id"_s)))) {
-            for (auto it = m_turns.begin(); it != m_turns.end(); ++it) {
-                if (it->stream == s->id && it->asking) {
-                    it->asking = false;
-                    turnChanged(it.key());
-                }
+        if (const auto asked = s->asked.take(idKey(rewritten->value(u"id"_s))); !asked.second.isEmpty()) {
+            const bool still =
+                    std::ranges::any_of(s->asked, [&asked](const auto &a) { return a.second == asked.second; });
+            const auto it = m_turns.find(turnKey(s->device, asked.second));
+            if (!still && it != m_turns.end() && it->stream == s->id && it->asking) {
+                it->asking = false;
+                turnChanged(it.key());
             }
         }
     }
     if (method == u"session/prompt" && rewritten->contains(u"id"_s)) {
         s->prompts.insert(idKey(rewritten->value(u"id"_s)));
-        turnStarted(s, rewritten->value(u"params"_s).toObject().value(u"sessionId"_s).toString(),
-                    idKey(rewritten->value(u"id"_s)));
+        turnStarted(s, rewritten->value(u"params"_s).toObject(), idKey(rewritten->value(u"id"_s)));
         if (m_sync && !s->holding) {
             // The device's latest notes here before the agent reads them (a while at most).
             s->holding = true;

@@ -1034,7 +1034,10 @@ void Client::sendPrompt(const QString &key)
     QJsonArray prompt;
     for (const Block &b : blocks)
         prompt.append(b.toJson(m_images, m_embedded));
-    m_connection.request(u"session/prompt"_s, QJsonObject{{u"sessionId"_s, s.id}, {u"prompt"_s, prompt}},
+    QJsonObject params{{u"sessionId"_s, s.id}, {u"prompt"_s, prompt}};
+    if (!t.input.turnId.isEmpty())
+        params.insert(u"_meta"_s, QJsonObject{{TurnMetaKey, t.input.turnId}});
+    m_connection.request(u"session/prompt"_s, params,
                          [this, key](const QJsonValue &result, const Connection::Error &error) {
                              const auto it = m_sessions.find(key);
                              if (it == m_sessions.end() || !it->turn)

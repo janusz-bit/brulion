@@ -20,7 +20,7 @@
 //          messages after N (those up to N are dropped on the host), at once or within S seconds (a
 //          long poll)
 //   DELETE streams/<id>                       → the agent's process ends
-//   GET    sessions/<id>/turn?wait=S          → {state, text, tools, stopReason, error, asking} — the last
+//   GET    sessions/<id>/turn?wait=S          → {turn, state, text, tools, stopReason, error, asking} — the last
 //          turn of a session, for a device that lost the stream it ran in (RemoteTurn)
 //   DELETE sessions/<id>/turn                 → the agent stops that turn
 //
@@ -133,6 +133,7 @@ void fetchRemoteInfo(sync::HttpTransport *transport, const QUrl &base, const QSt
 struct RemoteTurn {
     enum class State { Running, Done, Failed };
     State state = State::Running;
+    QString id;         ///< the turn's own id (TurnInput::turnId), "" when its prompt had none
     QString text;       ///< what the agent said
     QStringList tools;  ///< the titles of its tool calls
     QString stopReason; ///< Done: the agent's ("end_turn", "cancelled" …)

@@ -812,11 +812,14 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   prompts and answers — goes through as it is.
 * **A stream** is one agent's process for one device (`POST streams`), at most 8 per device and
   16 in all; a new stream of a device for an agent ends its older one (the app keeps one process
-  per agent: it started again) — once that one's turn ended, when it runs one. What the agent says waits here until the device fetches it — a
+  per agent: it started again). What the agent says waits here until the device fetches it — a
   phone that sleeps or loses the network for a while misses nothing — up to 32 MiB (then the
   stream ends). A stream no device fetched from for 30 minutes, without a turn running, ends; so
-  does one the device ends (`DELETE`), or whose agent exits (its last line of standard error says
-  why — kept for the device to hear for 5 minutes).
+  does one the device ends (`DELETE`: the app closed the agent), or whose agent exits (its last
+  line of standard error says why — kept for the device to hear for 5 minutes). A stream ended by
+  its device that runs a turn — replaced, `DELETE`, or lost (below) — finishes that turn first,
+  an hour at most, the agent's questions in it answered `cancelled` and its other requests with
+  an error.
 * **Turns are kept**: the last turn of every session a device prompted — running, or how it ended:
   the agent's answer (its `agent_message_chunk` text, at most 1 Mi characters), the titles of its
   tool calls, its stop reason or why it failed — for 24 hours after its end, 64 sessions a device.
@@ -851,7 +854,7 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
 | `GET streams/<id>/receive` | `?after=N&wait=S` (S ≤ 30) | `{messages [{seq, message}], closed, why}` — the messages after `N` (those up to `N` are dropped here), at once or within S seconds; at most 4 MiB at a time |
 | `DELETE streams/<id>` | | 204: the agent's process ends |
-| `GET sessions/<id>/turn` | `?wait=S` (S ≤ 30) | `{session, state: running \| done \| failed, text, tools, stopReason, error, asking, started, ended}` — the last turn of the device's session, at once or when it ends within S seconds; 404 `no_turn` |
+| `GET sessions/<id>/turn` | `?wait=S` (S ≤ 30) | `{session, turn, state: running \| done \| failed, text, tools, stopReason, error, asking, started, ended}` (`turn`: the id the device gave the turn in its prompt's `_meta`, `brulion/turn`) — the last turn of the device's session, at once or when it ends within S seconds; 404 `no_turn` |
 | `DELETE sessions/<id>/turn` | | 204: the agent stops that turn (`session/cancel`) |
 
 Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a

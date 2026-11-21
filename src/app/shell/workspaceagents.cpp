@@ -21,6 +21,7 @@
 #include <QSysInfo>
 #include <QTimer>
 #include <QUrl>
+#include <QUuid>
 
 #ifndef BRULION_VERSION
 #define BRULION_VERSION "0.0.0"
@@ -526,9 +527,8 @@ void WorkspaceAgents::connectClient(Process *p)
     connect(client, &acp::Client::sessionStarted, this, [this, id](const QString &path, const QString &session, bool resumed) {
         // A new session saw the conversation up to its newest message (its first prompt).
         if (!resumed && m_turns.value(path) == id) {
-            const AgentConfig *a = config(id);
-            const int seen = m_seen.value(path);
-            store(path, Stored{id, session, seen - 2, a && a->isRemote() ? seen - 1 : 0});
+            const auto remote = m_remoteTurns.value(path);
+            store(path, Stored{id, session, m_seen.value(path) - 2, remote.first, remote.second});
         }
     });
     connect(client, &acp::Client::opened, this, [this, id, client, name](const QString &key) {
@@ -646,7 +646,8 @@ void WorkspaceAgents::connectClient(Process *p)
             m_seen.remove(path);
             m_activityPending.remove(path);
             clearQuestion(path);
-            m_recovering.insert(path, Recovery{id, record->session, record->pending});
+            m_recovering.insert(path, Recovery{id, record->session, record->seen, record->turn});
+            m_remoteTurns.remove(path);
             noteWorking();
             Q_EMIT status(path, tr("%1 is still working on %2…").arg(name(), p->config.host));
             pollRecovery(path);
@@ -896,20 +897,28 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         p->client->forget(path);
     else if (!p->client->hasSession(path))
         input.resume = record->session;
+    // A turn of an agent on another computer is recorded as running (its id in its prompt) until it
+    // ends here: the computer goes on with it when this device is gone, recover() asks later.
+    if (agent->isRemote()) {
+        bool ok = false;
+        const int messages = int(chat::parse(m_workspace->read(path, &ok)).messages.size());
+        input.turnId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        m_remoteTurns.insert(path, {ok ? messages : 0, input.turnId});
+    }
     m_turns.insert(path, id);
     m_seen.insert(path, int(history.size()) + 1);
     noteWorking();
     Q_EMIT status(path, tr("%1 is working…").arg(agent->name));
     if (!p->client->prompt(path, input)) {
         m_turns.remove(path);
+        m_remoteTurns.remove(path);
         noteWorking();
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
         return;
     }
-    // (An agent on another computer goes on when this device is gone: what it answers is fetched
-    // from that computer then — recover(). A new session is recorded when it starts.)
-    if (agent->isRemote() && current)
-        store(path, Stored{id, record->session, record->seen, int(history.size())});
+    // (A new session is recorded when it starts.)
+    if (const auto remote = m_remoteTurns.value(path); agent->isRemote() && current && remote.first > 0)
+        store(path, Stored{id, record->session, record->seen, remote.first, remote.second});
 }
 
 void WorkspaceAgents::noteWorking()
@@ -932,7 +941,7 @@ void WorkspaceAgents::stop(const QString &path)
         noteWorking();
         if (const AgentConfig *a = config(r.agent); a && a->isRemote())
             acp::cancelRemoteTurn(transport(), QUrl(a->url), a->token, r.session);
-        store(path, Stored{r.agent, r.session, r.pending - 1, 0});
+        store(path, Stored{r.agent, r.session, r.seen});
         return;
     }
     if (std::optional<Stored> record = stored(path); record && record->pending > 0) {
@@ -941,6 +950,7 @@ void WorkspaceAgents::stop(const QString &path)
     }
     m_released.removeIf([&path](const auto &entry) { return entry.value().first == path; });
     const QString id = m_turns.take(path);
+    m_remoteTurns.remove(path);
     noteWorking();
     m_activityPending.remove(path);
     clearQuestion(path);
@@ -987,7 +997,7 @@ void WorkspaceAgents::recover(const QString &path)
     const AgentConfig *agent = record ? config(record->agent) : nullptr;
     if (!record || record->pending <= 0 || !agent || !agent->isRemote() || running(path))
         return;
-    m_recovering.insert(path, Recovery{record->agent, record->session, record->pending});
+    m_recovering.insert(path, Recovery{record->agent, record->session, record->seen, record->turn});
     noteWorking();
     qCInfo(logging::lcApp, "AI agent %s: asking %s how the turn of %s went", qUtf8Printable(agent->name),
            qUtf8Printable(agent->host), qUtf8Printable(path));
@@ -1003,8 +1013,9 @@ void WorkspaceAgents::pollRecovery(const QString &path)
         return;
     const AgentConfig *agent = config(it->agent);
     if (!agent || !agent->isRemote()) {
-        m_recovering.remove(path);
+        const Recovery r = m_recovering.take(path);
         noteWorking();
+        store(path, Stored{r.agent, r.session, r.seen});
         Q_EMIT failed(path, tr("The AI agent is not set up on this device any more."));
         return;
     }
@@ -1051,11 +1062,12 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
             }
         }
         const Recovery done = r;
-        end(done, done.pending - 1);
+        end(done, done.seen);
         if (error.kind == acp::RemoteError::Kind::Refused && error.status == 404)
-            Q_EMIT failed(path, tr("The answer of %1 was lost: %2 no longer knows the turn (it was started again "
-                                   "meanwhile). Ask again.")
-                                        .arg(name, host));
+            Q_EMIT failed(path,
+                          tr("The answer of %1 was lost: %2 does not know the turn (it was started again meanwhile, or "
+                             "Brulion was ended before the question was sent). Ask again.")
+                                  .arg(name, host));
         else if (error.kind == acp::RemoteError::Kind::Unauthorized)
             Q_EMIT failed(path,
                           tr("The AI agent “%1” stopped: %2.")
@@ -1067,6 +1079,15 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
     }
     r.failures = 0;
     r.failingSince = -1;
+    if (!r.turn.isEmpty() && turn.id != r.turn) {
+        // The computer's last turn of the session is another one: the question never reached it
+        // (this device was gone before it was sent).
+        const Recovery done = r;
+        end(done, done.seen);
+        Q_EMIT failed(path, tr("%1 on %2 did not get the question: Brulion was ended before it was sent. Ask again.")
+                                    .arg(name, host));
+        return;
+    }
     if (turn.state == acp::RemoteTurn::State::Running) {
         Q_EMIT status(path, turn.asking ? tr("%1 is still working on %2 (a question it asked meanwhile is "
                                              "answered “cancelled”)…")
@@ -1077,13 +1098,13 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
     }
     const Recovery done = r;
     if (turn.state == acp::RemoteTurn::State::Failed) {
-        end(done, done.pending - 1);
+        end(done, done.seen);
         Q_EMIT failed(path, turn.error.isEmpty() ? tr("The AI agent “%1” stopped.").arg(name)
                                                  : tr("The AI agent “%1” stopped: %2.").arg(name, turn.error));
         return;
     }
     if (turn.stopReason == u"cancelled" && turn.text.trimmed().isEmpty()) {
-        end(done, done.pending - 1);
+        end(done, done.seen);
         Q_EMIT failed(path, tr("%1 stopped on %2 without an answer: a question it asked could not reach this "
                                "device. Ask again.")
                                     .arg(name, host));
@@ -1098,7 +1119,7 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
     }
     qCInfo(logging::lcApp, "AI agent %s: the answer of %s fetched from %s", qUtf8Printable(name), qUtf8Printable(path),
            qUtf8Printable(host));
-    end(done, done.pending + 1);
+    end(done, done.seen + 2);
     Q_EMIT answered(path, answer);
 }
 
@@ -1164,6 +1185,7 @@ void WorkspaceAgents::clearQuestion(const QString &path)
 
 void WorkspaceAgents::finish(const QString &path)
 {
+    m_remoteTurns.remove(path);
     m_released.removeIf([&path](const auto &entry) { return entry.value().first == path; });
     m_turns.remove(path);
     m_seen.remove(path);
@@ -1648,7 +1670,8 @@ std::optional<WorkspaceAgents::Stored> WorkspaceAgents::stored(const QString &pa
     if (entry.value(u"session"_s).toString().isEmpty())
         return std::nullopt;
     return Stored{entry.value(u"agent"_s).toString(), entry.value(u"session"_s).toString(),
-                  entry.value(u"seen"_s).toInt(-1), entry.value(u"pending"_s).toInt()};
+                  entry.value(u"seen"_s).toInt(-1), entry.value(u"pending"_s).toInt(),
+                  entry.value(u"turn"_s).toString()};
 }
 
 void WorkspaceAgents::store(const QString &path, const std::optional<Stored> &entry)
@@ -1659,8 +1682,10 @@ void WorkspaceAgents::store(const QString &path, const std::optional<Stored> &en
     QJsonObject all = local->get(StoreKey).toObject();
     if (entry && !entry->session.isEmpty()) {
         QJsonObject o{{u"agent"_s, entry->agent}, {u"session"_s, entry->session}, {u"seen"_s, entry->seen}};
-        if (entry->pending > 0)
+        if (entry->pending > 0) {
             o.insert(u"pending"_s, entry->pending);
+            o.insert(u"turn"_s, entry->turn);
+        }
         all.insert(path, o);
     } else
         all.remove(path);
@@ -1701,6 +1726,7 @@ void WorkspaceAgents::reset()
     m_released.clear();
     m_turns.clear();
     m_recovering.clear();
+    m_remoteTurns.clear();
     m_alive = std::make_shared<bool>(true); // (what is on its way is not heard)
     noteWorking();
     m_seen.clear();

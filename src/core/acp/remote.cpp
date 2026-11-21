@@ -213,6 +213,7 @@ std::optional<RemoteTurn> RemoteTurn::fromJson(const QJsonObject &o)
         t.state = State::Failed;
     else
         return std::nullopt;
+    t.id = o.value(u"turn"_s).toString();
     t.text = o.value(u"text"_s).toString();
     for (const QJsonValue &v : o.value(u"tools"_s).toArray()) {
         if (const QString title = v.toString().trimmed(); !title.isEmpty())
@@ -230,7 +231,9 @@ void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QSt
     // (The address encodes what a path cannot carry; the host decodes it.)
     const QString endpoint =
             u"sessions/%1/turn?wait=%2"_s.arg(session, QString::number(std::clamp(waitSeconds, 0, RemoteWaitSeconds)));
-    transport->send(apiRequest("GET", base, endpoint, token, nullptr), [done](const sync::HttpResponse &response) {
+    sync::HttpRequest request = apiRequest("GET", base, endpoint, token, nullptr);
+    request.timeoutMs += std::clamp(waitSeconds, 0, RemoteWaitSeconds) * 1000; // (the long poll's own wait)
+    transport->send(request, [done](const sync::HttpResponse &response) {
         QJsonObject o;
         RemoteError e = remoteErrorOf(response, &o);
         RemoteTurn turn;

@@ -286,7 +286,8 @@ private:
     struct Recovery {
         QString agent;
         QString session;
-        int pending = 0;
+        int seen = 0; ///< what the session had seen before the turn (Stored::seen)
+        QString turn; ///< the turn's id (acp::TurnInput::turnId)
         int failures = 0;
         qint64 failingSince = -1;
     };
@@ -299,8 +300,9 @@ private:
         QString session;
         int seen = 0;
         /// A turn of an agent on another computer runs: the conversation's messages when it began
-        /// (its answer is the next one), 0 none.
+        /// (its answer is the next one), 0 none; and the turn's id (acp::TurnInput::turnId).
         int pending = 0;
+        QString turn{};
     };
     std::optional<Stored> stored(const QString &path) const;
     void store(const QString &path, const std::optional<Stored> &entry);
@@ -322,6 +324,8 @@ private:
     int m_nextTerminal = 1;
     bool m_remoteWorking = false;
     QHash<QString, Recovery> m_recovering; // conversation → its turn recovered from another computer
+    /// The running turns of agents on another computer: conversation → its messages then, turn id.
+    QHash<QString, std::pair<int, QString>> m_remoteTurns;
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true); // (requests on their way after reset())
     sync::HttpTransport *m_transport = nullptr;
     std::unique_ptr<sync::HttpTransport> m_ownTransport;

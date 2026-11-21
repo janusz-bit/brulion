@@ -158,6 +158,7 @@ struct HostTurn {
     QString session;     ///< the agent's session id
     QString stream;      ///< the stream it runs in
     QString prompt;      ///< the key of its session/prompt request's id
+    QString id;          ///< the device's id of the turn (its prompt's _meta "brulion/turn"), "" none
     QString text;        ///< what the agent said (agent_message_chunk), at most kMaxTurnTextChars
     QStringList tools;   ///< the titles of its tool calls, at most kMaxTurnTools
     QString stopReason;  ///< Done: the agent's ("end_turn", "cancelled" …)
@@ -165,7 +166,7 @@ struct HostTurn {
     bool asking = false; ///< the agent waits on a question of it to the device
     QDateTime started;
     QDateTime ended;
-    /// {session, state: "running" | "done" | "failed", text, tools, stopReason, error, asking,
+    /// {session, turn, state: "running" | "done" | "failed", text, tools, stopReason, error, asking,
     /// started, ended}.
     QJsonObject toJson() const;
 };
@@ -192,6 +193,8 @@ struct AcpHostOptions {
     int maxStreams = 16;
     int maxStreamsPerDevice = 8;
     qint64 streamIdleMs = 30LL * 60 * 1000;
+    /// How long a turn of a stream nobody fetches from (retired) may still run.
+    qint64 retiredTurnMs = 60LL * 60 * 1000;
     qint64 maxBufferBytes = 32LL * 1024 * 1024;
     int maxWaitSeconds = 30;
     qint64 maxBodyBytes = 16LL * 1024 * 1024;
@@ -257,7 +260,7 @@ private:
     // The turns kept (HostTurn).
     void sessionTurn(const PairedDevice &device, const QString &session, const http::Request &request,
                      const http::Reply &reply);
-    void turnStarted(Stream *s, const QString &session, const QString &prompt);
+    void turnStarted(Stream *s, const QJsonObject &params, const QString &prompt);
     void turnUpdate(Stream *s, const QJsonObject &params);
     void turnEnded(Stream *s, const QString &prompt, const QJsonObject &response);
     /// Every running turn of `s` failed: `why`.

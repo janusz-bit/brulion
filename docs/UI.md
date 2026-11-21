@@ -1330,7 +1330,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
 * **A turn this device lost**: the computer goes on with a turn when the phone is gone and keeps
   how it ended (docs/CLI.md "Turns are kept"). The device's record of the conversation's session
   (LocalStore `acp/sessions`) marks a turn of an agent on another computer as running (`pending`:
-  the conversation's messages when it began) until it ends here. When the notebook is ready (or
+  the conversation's messages when it began; `turn`: the turn's id, sent in its prompt's `_meta` as
+  `brulion/turn`) until it ends here. When the notebook is ready (or
   the agents change), a conversation so marked whose newest message is still the one asked
   (`WorkspaceAgents::recoverable()` — Android ended the app meanwhile) runs again
   (`WorkspaceChats::recoverAgentTurns` → `WorkspaceAgents::recover`): "Claude Code is still working
@@ -1341,8 +1342,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   minutes, or it gave the stream up). Stop asks the computer to stop it (`acp::cancelRemoteTurn`).
   A question the agent asked meanwhile is answered "cancelled" there (nobody was here to say yes):
   "… stopped on raspberry-pi-4 without an answer: a question it asked could not reach this device.
-  Ask again."; a computer started meanwhile knows no turn: "The answer of Claude Code was lost …
-  Ask again.".
+  Ask again."; a computer whose last turn of the session has another id never got the question
+  ("… did not get the question: Brulion was ended before it was sent. Ask again."); one started
+  meanwhile knows no turn: "The answer of Claude Code was lost … Ask again.".
 * **Its program** (`shell/workspaceagents.h`, the protocol `src/core/acp/acp.h`): one process per
   agent, started for its first turn in the notebook's folder (the command split as a shell would,
   the app's environment; on Windows a batch file — `npx` is `npx.cmd` — through `cmd.exe /c`) and

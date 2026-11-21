@@ -691,7 +691,9 @@ private Q_SLOTS:
         const auto [token, device] = pairDevice();
         std::unique_ptr<Talk> t = talk(token);
         const QString key = u"AI/Długa rozmowa.md"_s;
-        QVERIFY(t->client->prompt(key, turn(u"powoli, proszę"_s)));
+        acp::TurnInput input = turn(u"powoli, proszę"_s);
+        input.turnId = u"tura-żółwia-1"_s; // (its prompt's _meta: the turn kept is named by it)
+        QVERIFY(t->client->prompt(key, input));
         QTRY_VERIFY_WITH_TIMEOUT(!t->client->sessionId(key).isEmpty(), kTimeoutMs);
         const QString session = t->client->sessionId(key);
         QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, session), kTimeoutMs);
@@ -703,6 +705,7 @@ private Q_SLOTS:
         const auto [done, error] = fetchTurn(token, session, 25);
         QVERIFY2(!error.failed(), qPrintable(error.detail));
         QCOMPARE(done.state, acp::RemoteTurn::State::Done);
+        QCOMPARE(done.id, u"tura-żółwia-1"_s);
         QCOMPARE(done.text, u"Powoli: gotowe."_s);
         QCOMPARE(done.stopReason, u"end_turn"_s);
         QCOMPARE(done.tools, QStringList{u"Read Dom.md"_s});
@@ -741,6 +744,15 @@ private Q_SLOTS:
         // (The fake agent numbers its sessions from s1 in every process: the old turn's record
         // is that session's until the new process prompts its own s1.)
         QCOMPARE(ask(*fresh, u"AI/Nowa.md"_s, u"Cześć"_s), u"Odpowiedź na: Cześć"_s);
+        // The app closed (the stream ended, DELETE) while a turn runs: the turn ends there all the same.
+        QVERIFY(fresh->client->prompt(u"AI/Zamknięta.md"_s, turn(u"powoli"_s)));
+        QTRY_VERIFY_WITH_TIMEOUT(!fresh->client->sessionId(u"AI/Zamknięta.md"_s).isEmpty(), kTimeoutMs);
+        const QString closed = fresh->client->sessionId(u"AI/Zamknięta.md"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, closed), kTimeoutMs);
+        fresh->stream->stop();
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->turn(device, closed)->state, HostTurn::State::Done, kTimeoutMs);
+        QCOMPARE(m_host->turn(device, closed)->text, u"Powoli: gotowe."_s);
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->streamCount(), 0, kTimeoutMs);
     }
 
     void turnQuestionsCancelled()
