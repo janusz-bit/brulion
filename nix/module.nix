@@ -366,6 +366,10 @@ let
       "--allowed-host"
       (lib.concatStringsSep "," acpCfg.allowedHosts)
     ]
+    ++ lib.optionals (acpCfg.allowedOrigins != [ ]) [
+      "--allowed-origin"
+      (lib.concatStringsSep "," acpCfg.allowedOrigins)
+    ]
     ++ lib.optional (!acpCfg.tools) "--no-tools"
     ++ lib.optionals (acpCfg.nextcloud != null) [
       "--nextcloud"
@@ -415,8 +419,9 @@ let
           XDG_CONFIG_HOME=${acpStateDir}/config XDG_DATA_HOME=${acpStateDir}/data \
           XDG_CACHE_HOME=/var/cache/brulion-acp PATH=${lib.makeBinPath acpCfg.path}:"$PATH" "$@"
       fi
+      # (text for a person: `pair` shows its link as a QR code for the phone's camera)
       exec runuser -u ${lib.escapeShellArg acpCfg.user} -- env HOME=${acpStateDir} \
-        ${lib.escapeShellArgs acpCommonArgs} acp "$command" --state-file ${acpStateFile} "$@"
+        ${lib.escapeShellArgs acpCommonArgs} --format text acp "$command" --state-file ${acpStateFile} "$@"
     '';
   };
 in
@@ -971,6 +976,13 @@ in
       type = types.listOf types.str;
       default = [ ];
       description = "More `Host` values it answers to (a proxy that rewrites `Host`).";
+    };
+
+    allowedOrigins = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = [ "https://notes.example.com" ];
+      description = "Sites of Brulion in a browser that may use the agents (CORS).";
     };
 
     user = mkOption {

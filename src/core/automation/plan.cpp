@@ -326,6 +326,7 @@ QStringList knownParameters(Action action)
         return keys;
     }
     case Action::Run: return {u"extension"_s, u"command"_s, u"args"_s, u"page"_s};
+    case Action::Pair: return {u"url"_s, u"address"_s, u"code"_s};
     }
     return {};
 }
@@ -397,6 +398,17 @@ Plan plan(const Request &request, Vault &vault, const VaultIndex &index, const C
     case Action::Search:
         out.route = {{u"view"_s, u"search"_s}, {u"query"_s, request.value({u"query", u"q", u"text"}).trimmed()}};
         return out;
+    case Action::Pair: {
+        // Only the dialog, filled in: the user pairs (a link never adds a computer by itself).
+        const QString url = request.value({u"url", u"address"}).trimmed();
+        if (url.isEmpty())
+            return failed(out, u"missing_parameter"_s, u"url"_s);
+        out.route = {{u"view"_s, u"settings"_s},
+                     {u"section"_s, u"extensions"_s},
+                     {u"pairUrl"_s, url.left(2000)},
+                     {u"pairCode"_s, request.value({u"code"}).trimmed().left(64)}};
+        return out;
+    }
     case Action::View: {
         const QString name = request.value({u"name", u"view"});
         if (name.trimmed().isEmpty())

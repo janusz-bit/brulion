@@ -2,6 +2,7 @@
 
 #include "workspace.h"
 
+#include "chat/chat.h"
 #include "log/categories.h"
 #include "markdown/encrypted.h"
 #include "sync/http.h"
@@ -9,6 +10,7 @@
 #include "vault/vault.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
@@ -35,7 +37,8 @@ struct WorkspaceAgents::Process
     QProcess *process = nullptr;         // a program of this device, or
     acp::RemoteStream *remote = nullptr; // an agent on another computer
     acp::Client *client = nullptr;
-    QString errors; // the end of what it wrote to its standard error
+    QString errors;    // the end of what it wrote to its standard error
+    bool lost = false; // its stream to another computer ended by itself (its turns are recovered)
 };
 
 /// A command an agent runs (terminal/create): its output as it comes, its end.
@@ -241,11 +244,8 @@ bool WorkspaceAgents::available()
 
 bool WorkspaceAgents::remoteAvailable()
 {
-#if defined(Q_OS_WASM)
-    return false;
-#else
+    // (Also the browser: the computer lets the app's site call it, --allowed-origin.)
     return true;
-#endif
 }
 
 QString WorkspaceAgents::deviceName()
@@ -525,8 +525,11 @@ void WorkspaceAgents::connectClient(Process *p)
     });
     connect(client, &acp::Client::sessionStarted, this, [this, id](const QString &path, const QString &session, bool resumed) {
         // A new session saw the conversation up to its newest message (its first prompt).
-        if (!resumed && m_turns.value(path) == id)
-            store(path, Stored{id, session, m_seen.value(path) - 2});
+        if (!resumed && m_turns.value(path) == id) {
+            const AgentConfig *a = config(id);
+            const int seen = m_seen.value(path);
+            store(path, Stored{id, session, seen - 2, a && a->isRemote() ? seen - 1 : 0});
+        }
     });
     connect(client, &acp::Client::opened, this, [this, id, client, name](const QString &key) {
         if (key != CheckKey || !m_checks.contains(id))
@@ -627,7 +630,7 @@ void WorkspaceAgents::connectClient(Process *p)
         finish(path);
         Q_EMIT answered(path, answer);
     });
-    connect(client, &acp::Client::failed, this, [this, id, name](const QString &path, const acp::Failure &failure) {
+    connect(client, &acp::Client::failed, this, [this, id, p, name](const QString &path, const acp::Failure &failure) {
         if (path == CheckKey) {
             if (m_checks.remove(id))
                 Q_EMIT checked(id, false, failureText(name(), failure));
@@ -635,6 +638,24 @@ void WorkspaceAgents::connectClient(Process *p)
         }
         if (!m_turns.contains(path))
             return;
+        std::optional<Stored> record = stored(path);
+        if (p->lost && failure.kind == acp::Failure::Kind::Closed && record && record->agent == id
+            && record->pending > 0) {
+            // The stream ended, the turn may not have: the computer keeps how it goes on.
+            m_turns.remove(path);
+            m_seen.remove(path);
+            m_activityPending.remove(path);
+            clearQuestion(path);
+            m_recovering.insert(path, Recovery{id, record->session, record->pending});
+            noteWorking();
+            Q_EMIT status(path, tr("%1 is still working on %2…").arg(name(), p->config.host));
+            pollRecovery(path);
+            return;
+        }
+        if (record && record->pending > 0) {
+            record->pending = 0;
+            store(path, record);
+        }
         finish(path);
         Q_EMIT failed(path, failureText(name(), failure));
     });
@@ -708,6 +729,7 @@ void WorkspaceAgents::ended(const QString &id, Process *p, const QString &why)
     m_processes.remove(id);
     qCInfo(logging::lcApp, "AI agent %s ended: %s", qUtf8Printable(p->config.name), qUtf8Printable(why));
     endTerminals(id);
+    p->lost = p->remote != nullptr;
     p->client->closed(why);
     p->client->deleteLater();
 #if QT_CONFIG(process)
@@ -816,7 +838,7 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         Q_EMIT failed(path, tr("The AI agent “%1” has no command: set it in Settings → Extensions → AI agents.").arg(agent->name));
         return;
     }
-    if (history.isEmpty() || m_turns.contains(path)) {
+    if (history.isEmpty() || m_turns.contains(path) || m_recovering.contains(path)) {
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
         return;
     }
@@ -882,12 +904,17 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         m_turns.remove(path);
         noteWorking();
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
+        return;
     }
+    // (An agent on another computer goes on when this device is gone: what it answers is fetched
+    // from that computer then — recover(). A new session is recorded when it starts.)
+    if (agent->isRemote() && current)
+        store(path, Stored{id, record->session, record->seen, int(history.size())});
 }
 
 void WorkspaceAgents::noteWorking()
 {
-    bool remote = false;
+    bool remote = !m_recovering.isEmpty();
     for (auto it = m_turns.cbegin(); it != m_turns.cend() && !remote; ++it) {
         const AgentConfig *a = config(it.value());
         remote = a && a->isRemote();
@@ -900,6 +927,18 @@ void WorkspaceAgents::noteWorking()
 
 void WorkspaceAgents::stop(const QString &path)
 {
+    if (m_recovering.contains(path)) {
+        const Recovery r = m_recovering.take(path);
+        noteWorking();
+        if (const AgentConfig *a = config(r.agent); a && a->isRemote())
+            acp::cancelRemoteTurn(transport(), QUrl(a->url), a->token, r.session);
+        store(path, Stored{r.agent, r.session, r.pending - 1, 0});
+        return;
+    }
+    if (std::optional<Stored> record = stored(path); record && record->pending > 0) {
+        record->pending = 0;
+        store(path, record);
+    }
     m_released.removeIf([&path](const auto &entry) { return entry.value().first == path; });
     const QString id = m_turns.take(path);
     noteWorking();
@@ -913,7 +952,153 @@ void WorkspaceAgents::stop(const QString &path)
 
 bool WorkspaceAgents::running(const QString &path) const
 {
-    return m_turns.contains(path);
+    return m_turns.contains(path) || m_recovering.contains(path);
+}
+
+// ---- a turn on another computer this device lost the stream of ------------------------------------------
+
+QStringList WorkspaceAgents::recoverable() const
+{
+    QStringList out;
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local)
+        return out;
+    const QJsonObject all = local->get(StoreKey).toObject();
+    for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+        const QString path = it.key();
+        const int pending = it.value().toObject().value(u"pending"_s).toInt();
+        if (pending <= 0 || running(path))
+            continue;
+        const AgentConfig *agent = config(it.value().toObject().value(u"agent"_s).toString());
+        if (!agent || !agent->isRemote() || !runs(*agent) || !m_workspace->exists(path))
+            continue;
+        // Only while the conversation still waits for that answer: nothing written after it.
+        bool ok = false;
+        const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
+        if (ok && c.messages.size() == pending && c.messages.last().role == chat::Role::User)
+            out << path;
+    }
+    return out;
+}
+
+void WorkspaceAgents::recover(const QString &path)
+{
+    const std::optional<Stored> record = stored(path);
+    const AgentConfig *agent = record ? config(record->agent) : nullptr;
+    if (!record || record->pending <= 0 || !agent || !agent->isRemote() || running(path))
+        return;
+    m_recovering.insert(path, Recovery{record->agent, record->session, record->pending});
+    noteWorking();
+    qCInfo(logging::lcApp, "AI agent %s: asking %s how the turn of %s went", qUtf8Printable(agent->name),
+           qUtf8Printable(agent->host), qUtf8Printable(path));
+    Q_EMIT recovering(path);
+    Q_EMIT status(path, tr("%1 is still working on %2…").arg(agent->name, agent->host));
+    pollRecovery(path);
+}
+
+void WorkspaceAgents::pollRecovery(const QString &path)
+{
+    const auto it = m_recovering.constFind(path);
+    if (it == m_recovering.cend())
+        return;
+    const AgentConfig *agent = config(it->agent);
+    if (!agent || !agent->isRemote()) {
+        m_recovering.remove(path);
+        noteWorking();
+        Q_EMIT failed(path, tr("The AI agent is not set up on this device any more."));
+        return;
+    }
+    const std::weak_ptr<bool> alive = m_alive;
+    const QString session = it->session;
+    acp::fetchRemoteTurn(transport(), QUrl(agent->url), agent->token, session, acp::RemoteWaitSeconds,
+                         [this, alive, path, session](const acp::RemoteTurn &turn, const acp::RemoteError &error) {
+                             if (alive.expired())
+                                 return;
+                             const auto found = m_recovering.constFind(path);
+                             if (found == m_recovering.cend() || found->session != session)
+                                 return; // (stopped meanwhile)
+                             recovered(path, turn, error);
+                         });
+}
+
+void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn, const acp::RemoteError &error)
+{
+    Recovery &r = m_recovering[path];
+    const AgentConfig *agent = config(r.agent);
+    const QString name = agent ? agent->name : r.agent;
+    const QString host = agent ? agent->host : QString();
+    const auto end = [this, &path](const Recovery &done, int seen) {
+        m_recovering.remove(path);
+        noteWorking();
+        store(path, Stored{done.agent, done.session, seen, 0});
+    };
+    if (error.failed()) {
+        if (error.kind == acp::RemoteError::Kind::Network || error.kind == acp::RemoteError::Kind::Server) {
+            // Tried again a while (as a stream is: 1, 2, 5, 10, 30 s …), 15 minutes at most.
+            const qint64 t = QDateTime::currentMSecsSinceEpoch();
+            if (r.failingSince < 0)
+                r.failingSince = t;
+            if (t - r.failingSince < 15 * 60 * 1000) {
+                static constexpr int Delays[] = {1000, 2000, 5000, 10000, 30000};
+                const int delay = Delays[std::min<int>(r.failures++, int(std::size(Delays)) - 1)];
+                const std::weak_ptr<bool> alive = m_alive;
+                const QString session = r.session;
+                QTimer::singleShot(delay, this, [this, alive, path, session] {
+                    if (!alive.expired() && m_recovering.value(path).session == session)
+                        pollRecovery(path);
+                });
+                return;
+            }
+        }
+        const Recovery done = r;
+        end(done, done.pending - 1);
+        if (error.kind == acp::RemoteError::Kind::Refused && error.status == 404)
+            Q_EMIT failed(path, tr("The answer of %1 was lost: %2 no longer knows the turn (it was started again "
+                                   "meanwhile). Ask again.")
+                                        .arg(name, host));
+        else if (error.kind == acp::RemoteError::Kind::Unauthorized)
+            Q_EMIT failed(path, tr("The AI agent “%1” stopped: %2.")
+                                        .arg(name, remoteEndText(host, acp::RemoteStream::End::Unauthorized, QString())));
+        else
+            Q_EMIT failed(path, tr("The answer of %1 could not be fetched from %2: %3")
+                                        .arg(name, host, remoteErrorText(agent ? agent->url : host, error)));
+        return;
+    }
+    r.failures = 0;
+    r.failingSince = -1;
+    if (turn.state == acp::RemoteTurn::State::Running) {
+        Q_EMIT status(path, turn.asking ? tr("%1 is still working on %2 (a question it asked meanwhile is "
+                                             "answered “cancelled”)…")
+                                                  .arg(name, host)
+                                        : tr("%1 is still working on %2…").arg(name, host));
+        pollRecovery(path);
+        return;
+    }
+    const Recovery done = r;
+    if (turn.state == acp::RemoteTurn::State::Failed) {
+        end(done, done.pending - 1);
+        Q_EMIT failed(path, turn.error.isEmpty() ? tr("The AI agent “%1” stopped.").arg(name)
+                                                 : tr("The AI agent “%1” stopped: %2.").arg(name, turn.error));
+        return;
+    }
+    if (turn.stopReason == u"cancelled" && turn.text.trimmed().isEmpty()) {
+        end(done, done.pending - 1);
+        Q_EMIT failed(path, tr("%1 stopped on %2 without an answer: a question it asked could not reach this "
+                               "device. Ask again.")
+                                    .arg(name, host));
+        return;
+    }
+    QString answer = turn.text;
+    if (answer.trimmed().isEmpty()) {
+        QStringList did;
+        for (const QString &t : turn.tools)
+            did << u"- "_s + t;
+        answer = did.isEmpty() ? tr("Done.") : tr("Done:") + u"\n\n"_s + did.join(u'\n');
+    }
+    qCInfo(logging::lcApp, "AI agent %s: the answer of %s fetched from %s", qUtf8Printable(name),
+           qUtf8Printable(path), qUtf8Printable(host));
+    end(done, done.pending + 1);
+    Q_EMIT answered(path, answer);
 }
 
 QString WorkspaceAgents::questionText(const QString &path) const
@@ -1461,7 +1646,8 @@ std::optional<WorkspaceAgents::Stored> WorkspaceAgents::stored(const QString &pa
     const QJsonObject entry = local->get(StoreKey).toObject().value(path).toObject();
     if (entry.value(u"session"_s).toString().isEmpty())
         return std::nullopt;
-    return Stored{entry.value(u"agent"_s).toString(), entry.value(u"session"_s).toString(), entry.value(u"seen"_s).toInt(-1)};
+    return Stored{entry.value(u"agent"_s).toString(), entry.value(u"session"_s).toString(), entry.value(u"seen"_s).toInt(-1),
+                  entry.value(u"pending"_s).toInt()};
 }
 
 void WorkspaceAgents::store(const QString &path, const std::optional<Stored> &entry)
@@ -1470,9 +1656,12 @@ void WorkspaceAgents::store(const QString &path, const std::optional<Stored> &en
     if (!local || path.isEmpty() || path == CheckKey)
         return;
     QJsonObject all = local->get(StoreKey).toObject();
-    if (entry && !entry->session.isEmpty())
-        all.insert(path, QJsonObject{{u"agent"_s, entry->agent}, {u"session"_s, entry->session}, {u"seen"_s, entry->seen}});
-    else
+    if (entry && !entry->session.isEmpty()) {
+        QJsonObject o{{u"agent"_s, entry->agent}, {u"session"_s, entry->session}, {u"seen"_s, entry->seen}};
+        if (entry->pending > 0)
+            o.insert(u"pending"_s, entry->pending);
+        all.insert(path, o);
+    } else
         all.remove(path);
     // (At most the newest 500 conversations are kept: the oldest go first, by their names' dates.)
     while (all.size() > 500)
@@ -1480,10 +1669,38 @@ void WorkspaceAgents::store(const QString &path, const std::optional<Stored> &en
     local->set(StoreKey, all);
 }
 
+void WorkspaceAgents::abandon()
+{
+    m_alive = std::make_shared<bool>(true);
+    m_recovering.clear();
+    m_turns.clear();
+    m_seen.clear();
+    for (Process *p : std::as_const(m_processes)) {
+        p->client->blockSignals(true);
+        p->client->deleteLater();
+        if (p->remote) {
+            p->remote->disconnect(this);
+            p->remote->deleteLater();
+        }
+#if QT_CONFIG(process)
+        if (p->process) {
+            p->process->disconnect(this);
+            p->process->kill();
+            p->process->deleteLater();
+        }
+#endif
+        delete p;
+    }
+    m_processes.clear();
+    noteWorking();
+}
+
 void WorkspaceAgents::reset()
 {
     m_released.clear();
     m_turns.clear();
+    m_recovering.clear();
+    m_alive = std::make_shared<bool>(true); // (what is on its way is not heard)
     noteWorking();
     m_seen.clear();
     m_activityPending.clear();

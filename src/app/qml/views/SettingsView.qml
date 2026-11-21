@@ -1739,6 +1739,25 @@ Item {
                 objectName: "acpAgentsSettings"
                 visible: AppSettings.acpAvailable
                 heading: qsTr("AI agents")
+
+                // A brulion://pair link (the QR code of acp pair, opened by the camera): the pairing
+                // dialog filled in, once — the user pairs.
+                function takePairing(): void {
+                    const url = AppController.routeText(root.route, "pairUrl")
+                    if (url === "" || !AppSettings.acpAvailable)
+                        return
+                    hostAddressField.text = url
+                    hostCodeField.text = AppController.routeText(root.route, "pairCode")
+                    AppController.replaceRoute({ view: "settings", section: "extensions" })
+                    hostDialog.open()
+                }
+                Component.onCompleted: agentsGroup.takePairing()
+                Connections {
+                    target: root
+                    function onRouteChanged(): void {
+                        agentsGroup.takePairing()
+                    }
+                }
                 note: AppSettings.acpProgramsAvailable
                       ? qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI, or any program that speaks the Agent Client Protocol) can answer in the AI chat: choose it as who answers a conversation. It runs in the notebook's folder and signs in by itself, so a Claude or ChatGPT subscription its own program uses works here too. Each change it makes to a file and each command it runs is shown in the conversation for your yes, as the agent asks for it. The presets start the agents with npx (Node.js); a command of your own may be any program. An agent on another computer of yours (brulion-cli acp serve) can answer too.")
                       : qsTr("An AI agent on a computer of yours (Claude Code, Codex …) can answer in the AI chat here: the computer runs it with brulion-cli acp serve, in its copy of this notebook, and this device pairs with it once with a code of acp pair. It signs in there by itself, so a Claude or ChatGPT subscription works. Each change it makes to a file and each command it runs there is shown in the conversation for your yes, as the agent asks for it.")

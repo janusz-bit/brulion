@@ -17,7 +17,7 @@ struct ActionName {
     QStringView name;
 };
 
-constexpr std::array<ActionName, 10> kActions{{{Action::Open, u"open"},
+constexpr std::array<ActionName, 11> kActions{{{Action::Open, u"open"},
                                                {Action::Daily, u"daily"},
                                                {Action::New, u"new"},
                                                {Action::Append, u"append"},
@@ -26,7 +26,8 @@ constexpr std::array<ActionName, 10> kActions{{{Action::Open, u"open"},
                                                {Action::Capture, u"capture"},
                                                {Action::Search, u"search"},
                                                {Action::View, u"view"},
-                                               {Action::Run, u"run"}}};
+                                               {Action::Run, u"run"},
+                                               {Action::Pair, u"pair"}}};
 
 constexpr std::array<ActionName, 4> kAliases{{{Action::Daily, u"journal"},
                                               {Action::Daily, u"today"},

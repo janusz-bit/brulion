@@ -9,16 +9,20 @@
 //
 // The host's API, JSON over HTTP (RemoteApiPrefix):
 //
-//   POST   pair {code, device}              → {token, device: {id, name}}   (no token: a pairing code)
-//   GET    info                             → {protocol, version, host, root, tools, agents: [{id, name, command}],
-//   sync} POST   streams {agent}                  → {stream, root}   — the agent's process started for this device POST
-//   streams/<id>/send {from, messages: [...]}   → {received}   — messages to the agent; `from` is the
-//          number of the first one among all this stream sent, so a batch sent again (its answer lost) is
-//          not delivered twice
-//   GET    streams/<id>/receive?after=N&wait=S          → {messages: [{seq, message}], closed, why}
-//          — the agent's messages after N (those up to N are dropped on the host), at once or within S
-//          seconds (a long poll)
-//   DELETE streams/<id>                     → the agent's process ends
+//   POST   pair {code, device}                → {token, device: {id, name}}   (no token: a pairing code)
+//   GET    info                               → {protocol, version, host, root, tools,
+//                                                agents: [{id, name, command}], sync}
+//   POST   streams {agent}                    → {stream, root} — the agent's process started for this device
+//   POST   streams/<id>/send {from, messages} → {received} — messages to the agent; `from` is the number
+//          of the first one among all this stream sent, so a batch sent again (its answer lost) is not
+//          delivered twice
+//   GET    streams/<id>/receive?after=N&wait=S → {messages: [{seq, message}], closed, why} — the agent's
+//          messages after N (those up to N are dropped on the host), at once or within S seconds (a
+//          long poll)
+//   DELETE streams/<id>                       → the agent's process ends
+//   GET    sessions/<id>/turn?wait=S          → {state, text, tools, stopReason, error, asking} — the last
+//          turn of a session, for a device that lost the stream it ran in (RemoteTurn)
+//   DELETE sessions/<id>/turn                 → the agent stops that turn
 //
 // Every request but pair carries "Authorization: Bearer <token>". A stream survives a phone that
 // sleeps or loses the network for a while: the host keeps what the agent says until it is fetched.
@@ -38,6 +42,7 @@
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 #include <functional>
@@ -122,6 +127,28 @@ void pairRemote(sync::HttpTransport *transport, const QUrl &base, const QString 
 /// GET info.
 void fetchRemoteInfo(sync::HttpTransport *transport, const QUrl &base, const QString &token,
                      std::function<void(const RemoteInfo &info, const RemoteError &error)> done);
+
+/// The last turn of a session on the host (GET sessions/<id>/turn): how a turn went on whose stream
+/// this device lost — Android ended the app meanwhile, the network was gone for long.
+struct RemoteTurn {
+    enum class State { Running, Done, Failed };
+    State state = State::Running;
+    QString text;       ///< what the agent said
+    QStringList tools;  ///< the titles of its tool calls
+    QString stopReason; ///< Done: the agent's ("end_turn", "cancelled" …)
+    QString error;      ///< Failed: why (the host's words)
+    bool asking = false;
+    static std::optional<RemoteTurn> fromJson(const QJsonObject &o);
+};
+
+/// GET sessions/<session>/turn, waiting up to `waitSeconds` (≤ RemoteWaitSeconds) while it runs. The
+/// host takes it that this device lost the stream of the turn: questions of the agent in it are
+/// answered "cancelled" from now on, and the stream ends with the turn. A turn the host does not
+/// know (it was started again, an old host): RemoteError::Kind::Refused, status 404.
+void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session,
+                     int waitSeconds, std::function<void(const RemoteTurn &turn, const RemoteError &error)> done);
+/// DELETE sessions/<session>/turn: the agent stops it.
+void cancelRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session);
 
 /// One agent's process on the host and the protocol's lines to and from it.
 class RemoteStream : public QObject {

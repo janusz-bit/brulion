@@ -201,6 +201,54 @@ void fetchRemoteInfo(sync::HttpTransport *transport, const QUrl &base, const QSt
     });
 }
 
+std::optional<RemoteTurn> RemoteTurn::fromJson(const QJsonObject &o)
+{
+    const QString state = o.value(u"state"_s).toString();
+    RemoteTurn t;
+    if (state == u"running")
+        t.state = State::Running;
+    else if (state == u"done")
+        t.state = State::Done;
+    else if (state == u"failed")
+        t.state = State::Failed;
+    else
+        return std::nullopt;
+    t.text = o.value(u"text"_s).toString();
+    for (const QJsonValue &v : o.value(u"tools"_s).toArray()) {
+        if (const QString title = v.toString().trimmed(); !title.isEmpty())
+            t.tools.append(title);
+    }
+    t.stopReason = o.value(u"stopReason"_s).toString();
+    t.error = o.value(u"error"_s).toString();
+    t.asking = o.value(u"asking"_s).toBool();
+    return t;
+}
+
+void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session,
+                     int waitSeconds, std::function<void(const RemoteTurn &, const RemoteError &)> done)
+{
+    // (The address encodes what a path cannot carry; the host decodes it.)
+    const QString endpoint = u"sessions/%1/turn?wait=%2"_s.arg(session, QString::number(std::clamp(waitSeconds, 0, RemoteWaitSeconds)));
+    transport->send(apiRequest("GET", base, endpoint, token, nullptr), [done](const sync::HttpResponse &response) {
+        QJsonObject o;
+        RemoteError e = remoteErrorOf(response, &o);
+        RemoteTurn turn;
+        if (!e.failed()) {
+            if (std::optional<RemoteTurn> read = RemoteTurn::fromJson(o))
+                turn = *read;
+            else
+                e = RemoteError{RemoteError::Kind::Malformed, response.status, QString(), u"no turn in the answer"_s};
+        }
+        done(turn, e);
+    });
+}
+
+void cancelRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session)
+{
+    const QString endpoint = u"sessions/%1/turn"_s.arg(session);
+    transport->send(apiRequest("DELETE", base, endpoint, token, nullptr), [](const sync::HttpResponse &) {});
+}
+
 // ---- RemoteStream ---------------------------------------------------------------------------------------
 
 RemoteStream::RemoteStream(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &agent,

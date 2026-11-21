@@ -528,6 +528,79 @@ private Q_SLOTS:
         qInfo() << "usage:" << chats->agentUsage(path);
     }
 
+    void realRemoteAgent()
+    {
+#ifndef BRULION_CLI
+        QSKIP("brulion-cli is not built here");
+#else
+        // A real agent on "another computer" (brulion-cli acp serve here, with the user's own sign-in:
+        // HOME as it is), when one is named: BRULION_REAL_ACP_AGENT="<…>/bin/claude-agent-acp". Paired,
+        // asked about the computer's copy of the notebook, then the app ended while it answers a
+        // second question and started again: the answer comes from the computer.
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        const QString computer = m_tmp.filePath(u"prawdziwy-komputer"_s);
+        writeRaw(computer + u"/Dom.md"_s, "- [ ] Naprawić kran w łazience 📅 2026-11-22\n");
+        const QString stateFile = m_tmp.filePath(u"prawdziwy-stan/acp-remote.json"_s);
+        const QStringList common{u"--vault"_s, computer, u"--state-dir"_s, m_tmp.filePath(u"prawdziwy-urzadzenie"_s)};
+        QProcess host;
+        host.setProcessChannelMode(QProcess::ForwardedErrorChannel);
+        host.start(QStringLiteral(BRULION_CLI),
+                   common + QStringList{u"acp"_s, u"serve"_s, u"--agent"_s, u"real:Prawdziwy="_s + command, u"--port"_s,
+                                        u"0"_s, u"--state-file"_s, stateFile});
+        QVERIFY(host.waitForStarted(10000));
+        QTRY_VERIFY_WITH_TIMEOUT(host.canReadLine(), 30000);
+        const QString url =
+                QJsonDocument::fromJson(host.readLine()).object().value(u"result"_s).toObject().value(u"url"_s).toString();
+        QProcess pair;
+        pair.start(QStringLiteral(BRULION_CLI), common + QStringList{u"acp"_s, u"pair"_s, u"--state-file"_s, stateFile});
+        QVERIFY(pair.waitForFinished(20000));
+        const QString code = QJsonDocument::fromJson(pair.readAllStandardOutput())
+                                     .object()
+                                     .value(u"result"_s)
+                                     .toObject()
+                                     .value(u"code"_s)
+                                     .toString();
+        auto ws = open({});
+        WorkspaceChats *chats = ws->chats();
+        QList<AgentConfig> paired;
+        connect(chats, &WorkspaceChats::agentsPaired, this,
+                [&paired](const QList<AgentConfig> &agents) { paired = agents; });
+        chats->pairAgentHost(url, code);
+        QTRY_COMPARE_WITH_TIMEOUT(paired.size(), 1, 30000);
+        AgentConfig agent = paired.first();
+        agent.id = u"komputer-real"_s;
+        chats->setAgents({agent});
+        const QString path = chats->send(QString(), u"Jakie zadanie jest w notatce Dom? Odpowiedz krótko, jednym zdaniem."_s,
+                                         QString(), {}, u"acp:komputer-real"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 300000);
+        qInfo().noquote() << ws->read(path);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QVERIFY(ws->read(path).contains(u"kran"_s, Qt::CaseInsensitive));
+        // The app ended while the agent answers; started again, it fetches the answer.
+        QCOMPARE(chats->send(path, u"Przeczytaj notatkę Dom jeszcze raz i napisz o tym zadaniu wiersz o ośmiu wersach; "
+                                   u"na końcu napisz słowo: gotowe"_s),
+                 path);
+        QTest::qWait(2000);
+        if (!chats->turn(path)->running())
+            QSKIP("the agent answered before the app could be ended");
+        const QString root = ws->rootPath();
+        chats->agents()->abandon();
+        ws.reset();
+        ws = open({agent}, root);
+        chats = ws->chats();
+        QVERIFY(chats->turn(path)->running());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 300000);
+        qInfo().noquote() << ws->read(path);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QVERIFY(ws->read(path).contains(u"gotowe"_s, Qt::CaseInsensitive));
+        ws.reset();
+        host.terminate();
+        QVERIFY(host.waitForFinished(10000));
+#endif
+    }
+
     void notSetUp()
     {
         auto ws = open({fake()});
@@ -793,6 +866,29 @@ private Q_SLOTS:
         QCOMPARE(chats->send(path, u"czytaj"_s), path);
         QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 30000);
         QVERIFY2(ws->read(path).contains(u"Przeczytano: - na komputerze: żółw błotny"_s), qPrintable(ws->read(path)));
+
+        // The app is ended by the system while the agent works there: started again, it fetches
+        // the answer that computer kept, and the conversation goes on in that session.
+        const QString slow = chats->send(QString(), u"powoli"_s, QString(), {}, u"acp:komputer-fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(logged(u"session/prompt"_s).size() == 3, 30000);
+        QVERIFY(chats->turn(slow)->running());
+        const QString root = ws->rootPath();
+        chats->agents()->abandon();
+        ws.reset();
+        ws = open({agent}, root);
+        chats = ws->chats();
+        shell::ChatTurn *again = chats->turn(slow);
+        QVERIFY(again->running());
+        QVERIFY2(again->status().contains(u"still working"_s), qPrintable(again->status()));
+        QVERIFY(chats->agents()->remoteWorking());
+        QTRY_VERIFY_WITH_TIMEOUT(!again->running(), 30000);
+        QCOMPARE(again->failure(), QString());
+        QVERIFY2(ws->read(slow).contains(u"- 🤖 Powoli: gotowe."_s), qPrintable(ws->read(slow)));
+        QVERIFY(chats->agents()->recoverable().isEmpty());
+        QCOMPARE(chats->send(slow, u"sesja"_s), slow);
+        QTRY_VERIFY_WITH_TIMEOUT(!again->running(), 30000);
+        QVERIFY2(ws->read(slow).contains(u"- 🤖 Sesja: s"_s), qPrintable(ws->read(slow)));
+        turn = chats->turn(path); // (the first conversation's, in the app started again)
 
         // Unpaired there: the next turn says so.
         QVERIFY(!cli({u"acp"_s, u"revoke"_s, u"--all"_s}).isEmpty());

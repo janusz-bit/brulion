@@ -1268,8 +1268,8 @@ CLI (`--acp`), OpenCode (`opencode acp`) or any program that speaks the
 on its standard input and output). The agent signs in by itself — the subscription its own program
 knows how to use, or a key of its own — so the app holds none of its credentials. A program runs
 only in the desktop app (`WorkspaceAgents::available()`): Android and the browser start none. An
-agent **on another computer** runs everywhere but the browser (`remoteAvailable()`): a computer of
-the user's runs it with `brulion-cli acp serve` (docs/CLI.md "AI agents for other devices"), this
+agent **on another computer** runs everywhere (`remoteAvailable()`; in the browser the computer
+names the app's site with `--allowed-origin`): a computer of the user's runs it with `brulion-cli acp serve` (docs/CLI.md "AI agents for other devices"), this
 device paired with it once; the protocol then goes over `acp::RemoteStream` (core `acp/remote.h`)
 instead of a program's standard input and output, and everything below works the same — the
 agent's files, terminals and Brulion's tools are that computer's. Tried with Claude Code 0.109,
@@ -1292,7 +1292,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   the computer not reached). Each agent of that computer becomes a row (`raspberry-pi-4-claude`:
   the computer's name and the agent's id there) whose line says "On raspberry-pi-4
   (https://agent.example.com) · with Brulion's tools"; pairing again keeps its name and options.
-  Edit… changes only its name there. Kept in the device's settings (`AppSettings::acpAgents`, key
+  Edit… changes only its name there. A `brulion://pair?url=…&code=…` address ("Automation" below:
+  the QR code `acp pair` shows, opened by the phone's camera) opens this section with
+  `acpHostDialog` filled in (the route's `pairUrl` and `pairCode`, taken once); the user pairs. Kept in the device's settings (`AppSettings::acpAgents`, key
   `ai/agents`: rows {id, name, command, tools, options, known} and, for an agent on another
   computer, {url, remote, host, root}; at most 20, malformed rows left out) — never in the
   notebook, which comes from anywhere: a page may only name an agent set up here. The token a
@@ -1325,6 +1327,22 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   network?"), the agent not started there, the agent's own end; a sign-in in a terminal is named
   as one on that computer (on NixOS `sudo brulion-acp login …`). The next turn starts a new
   stream.
+* **A turn this device lost**: the computer goes on with a turn when the phone is gone and keeps
+  how it ended (docs/CLI.md "Turns are kept"). The device's record of the conversation's session
+  (LocalStore `acp/sessions`) marks a turn of an agent on another computer as running (`pending`:
+  the conversation's messages when it began) until it ends here. When the notebook is ready (or
+  the agents change), a conversation so marked whose newest message is still the one asked
+  (`WorkspaceAgents::recoverable()` — Android ended the app meanwhile) runs again
+  (`WorkspaceChats::recoverAgentTurns` → `WorkspaceAgents::recover`): "Claude Code is still working
+  on raspberry-pi-4…" while `acp::fetchRemoteTurn` long-polls the computer, then the answer is
+  written as if the phone had been there (its text, else "Done:" and its tool calls), the
+  session's record goes on (the next message resumes it), and the screen stays on meanwhile as for
+  a turn. The same when the stream of a running turn ends (the computer not reached for 15
+  minutes, or it gave the stream up). Stop asks the computer to stop it (`acp::cancelRemoteTurn`).
+  A question the agent asked meanwhile is answered "cancelled" there (nobody was here to say yes):
+  "… stopped on raspberry-pi-4 without an answer: a question it asked could not reach this device.
+  Ask again."; a computer started meanwhile knows no turn: "The answer of Claude Code was lost …
+  Ask again.".
 * **Its program** (`shell/workspaceagents.h`, the protocol `src/core/acp/acp.h`): one process per
   agent, started for its first turn in the notebook's folder (the command split as a shell would,
   the app's environment; on Windows a batch file — `npx` is `npx.cmd` — through `cmd.exe /c`) and
@@ -1886,6 +1904,7 @@ brulion://<action>[/<page path>]?<parameter>=<value>&…
 | `search` | `query` (also `q`, `text`) | the search view with the query |
 | `view` | `name` (journals, calendar, tasks, habits, graph, search, allPages / pages, tags, sync, importExport, trash, cleanup, settings, logs, chat) and its parameters: `date` (journals, calendar), `mode` (calendar), `query` (tasks, search), `folder` (search, allPages), `tab` (sync, importExport), `section` (settings) | shows the view |
 | `run` (`command`) | `extension`, `command` (or `extension=silownia/rekord`), `args` (a JSON object: the command's `ctx.args`), `page` (its `ctx` page) | runs the command of an extension **approved on this device** (docs/EXTENSIONS.md); an extension waiting for approval, off or without that command is an error (`not_approved`) — an address never approves code |
+| `pair` | `url` (also `address`: a computer that runs `brulion-cli acp serve`), `code` (its `acp pair` code) | Settings → Extensions → AI agents with the pairing dialog filled in ("AI agents (ACP)"); the user pairs — a link never pairs by itself. `acp pair` shows it as a QR code the phone's camera opens |
 
 Common parameters: `vault` (also `notebook`: a notebook of this device by its name or its folder's,
 or its absolute folder; another one than the open is opened first; a name several notebooks share
@@ -1896,7 +1915,7 @@ link says), `id` (echoed in results), `x-success` / `x-error` / `x-cancel` (call
 
 Any web page, any app and any program of the device can fire an address, so (`policy.h`):
 
-* **Opening** — `open`, `daily`, `search`, `view`, `capture` without text — **runs at once**; it
+* **Opening** — `open`, `daily`, `search`, `view`, `capture` without text, `pair` — **runs at once**; it
   changes nothing.
 * **Writing** (`new`, `append`, `prepend`, `task`, `capture` with text) and **running an
   extension's command** need the notebook's **automation key** in the address (`key=…`) — or the

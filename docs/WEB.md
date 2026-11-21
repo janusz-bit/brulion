@@ -771,6 +771,18 @@ WebDAV by default, so sync from the browser version will not "just work". Option
 
 Use a Nextcloud app password (Settings → Security), not your main password.
 
+## AI agents on a computer of yours
+
+The browser starts no programs, but an AI agent on a computer of yours can answer in the AI chat
+as on the phone (docs/CLI.md "AI agents for other devices"): that computer runs `brulion-cli acp
+serve`, and names this site's origin, e.g. `--allowed-origin https://janusz-bit.github.io` for the
+hosted app (on NixOS `services.brulion-acp.allowedOrigins`) — otherwise it refuses every request
+with an `Origin`, as any web page's. Its address must be `https://` (a page served over HTTPS calls
+no `http://` address), and Chrome asks once whether the site may reach a device of your network
+(Private Network Access: the server answers its preflight). Then *Settings → Extensions → AI agents
+→ Add → An agent on another computer* pairs as in the app; the token is kept in the app data
+folder (IndexedDB) of this browser.
+
 ## Calendars in the browser
 
 Subscriptions and CalDAV accounts (docs/UI.md "Calendars") work in the browser only with servers

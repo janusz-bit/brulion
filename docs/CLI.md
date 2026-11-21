@@ -346,8 +346,8 @@ Never compute a hash yourself.
 | `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
 | `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
 | `mcp revoke [<connection>]` | `[--all] [--auth-file F]` | end a connection (`bgr_…`) or all of a client's (`bcl_…`, an https client ID); takes effect in a running server at once | |
-| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--no-tools] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
-| `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url}` — 10 minutes, one device, five wrong tries | |
+| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
+| `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url, link}` — 10 minutes, one device, five wrong tries; `--format text` shows the link as a QR code | |
 | `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
 | `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
 <!-- /commands -->
@@ -786,8 +786,13 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   (`[{id, name, command}]`). A device asks for an agent by its id: the commands are this
   computer's, never the device's.
 * **Pairing**: `acp pair` prints a code (`K7QM-2XRP`: 8 letters and digits none of which can be
-  mistaken for another) and the server's address; in the app *Settings → Extensions → AI agents →
-  Add → An agent on another computer*, the address and the code. The code is valid for 10 minutes,
+  mistaken for another), the server's address and a link that holds both
+  (`brulion://pair?url=https%3A%2F%2Fagent.example.com&code=K7QM-2XRP`, docs/UI.md "Automation") —
+  with `--format text` also as a QR code of block characters (its light modules drawn: right on a
+  dark terminal; phone cameras read it the other way round too). The phone's camera opens the link
+  in Brulion: *Settings → Extensions → AI agents* with the pairing dialog filled in, and **Pair**
+  pairs (a link never pairs by itself). Or in the app *Settings → Extensions → AI agents → Add → An
+  agent on another computer*, the address and the code typed. The code is valid for 10 minutes,
   for one device, and five wrong tries end it; at most 20 tries a minute reach the server at all.
   The device gets a token (`bat_…`, 256 random bits) that the state file keeps only as its SHA-256
   hash; `acp clients` lists the devices, `acp revoke` unpairs one — a running server reads the
@@ -807,11 +812,20 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   prompts and answers — goes through as it is.
 * **A stream** is one agent's process for one device (`POST streams`), at most 8 per device and
   16 in all; a new stream of a device for an agent ends its older one (the app keeps one process
-  per agent: it started again). What the agent says waits here until the device fetches it — a
+  per agent: it started again) — once that one's turn ended, when it runs one. What the agent says waits here until the device fetches it — a
   phone that sleeps or loses the network for a while misses nothing — up to 32 MiB (then the
   stream ends). A stream no device fetched from for 30 minutes, without a turn running, ends; so
   does one the device ends (`DELETE`), or whose agent exits (its last line of standard error says
   why — kept for the device to hear for 5 minutes).
+* **Turns are kept**: the last turn of every session a device prompted — running, or how it ended:
+  the agent's answer (its `agent_message_chunk` text, at most 1 Mi characters), the titles of its
+  tool calls, its stop reason or why it failed — for 24 hours after its end, 64 sessions a device.
+  A phone that lost the stream a turn runs in — Android ended the app while it waited, the network
+  was gone for longer than the app waits — asks for it (`GET sessions/<id>/turn`) and writes the
+  answer into the conversation as if it had been there. Asking so says the device lost that
+  stream: nobody fetches from it any more, questions its agent asks in that turn are answered
+  `cancelled` (nobody is there to say yes), and it ends with the turn. Only in memory: a server
+  started again knows no turns.
 * **Sync**: with `--nextcloud https://cloud.example.com --nextcloud-user jan --nextcloud-folder
   Brulion --nextcloud-password-file F` (a Nextcloud app password) the notebook here is one more
   device of a notebook synced through Nextcloud, with the app's sync engine (three-way merges,
@@ -821,6 +835,10 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   most, so the notes just written on the phone are here — and after every turn. It is the one place
   brulion-cli syncs; `info` says how the last run went. Without `--nextcloud` the notebook is
   synced however the computer keeps it (Syncthing).
+* **Brulion in a browser** (docs/WEB.md) calls the server only from an origin given with
+  `--allowed-origin https://notes.example.com` (comma-separated; CORS answers for it, also to
+  Chrome's Private Network Access preflight: a public page that calls an address of your own
+  network). Any other page is refused.
 * **Language**: English, as `mcp serve` — the app words the agent's ends and failures itself.
 
 The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side):
@@ -833,6 +851,8 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
 | `GET streams/<id>/receive` | `?after=N&wait=S` (S ≤ 30) | `{messages [{seq, message}], closed, why}` — the messages after `N` (those up to `N` are dropped here), at once or within S seconds; at most 4 MiB at a time |
 | `DELETE streams/<id>` | | 204: the agent's process ends |
+| `GET sessions/<id>/turn` | `?wait=S` (S ≤ 30) | `{session, state: running \| done \| failed, text, tools, stopReason, error, asking, started, ended}` — the last turn of the device's session, at once or when it ends within S seconds; 404 `no_turn` |
+| `DELETE sessions/<id>/turn` | | 204: the agent stops that turn (`session/cancel`) |
 
 Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a
 paired one). Errors are `{error: {code, message}}`. A stream of another device, or one that ended
@@ -851,9 +871,10 @@ brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agen
   in your own network — a tailnet (Tailscale, headscale) or a VPN — never from the open internet.
 * It listens on `127.0.0.1` by default, for a reverse proxy that adds HTTPS; without TLS it refuses
   a public URL that is not https. `Host` is checked on every request (DNS rebinding) and a request
-  with an `Origin` — a web page's — is refused: only the app talks to it.
+  with an `Origin` — a web page's — is refused unless `--allowed-origin` names it: only the app talks to it.
 * The HTTP limits are those of `mcp serve` ("Remote MCP server": connections, header fields,
   timeouts), a body of a send at most 16 MiB (pictures of a prompt).
+* The pairing link and its QR code carry the code: show them only to yourself, as the code.
 * Note text is untrusted data for the agent as for any model: a note can carry instructions. What
   an agent may do without asking is its own setting (its mode), as in the app.
 

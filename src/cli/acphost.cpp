@@ -4,10 +4,12 @@
 
 #include "acp/acp.h"
 #include "acp/remote.h"
+#include "automation/uri.h"
 #include "commands_p.h"
 #include "hostsync.h"
 #include "markdown/encrypted.h"
 #include "notebook/session.h"
+#include "qr/qrcode.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
@@ -87,6 +89,28 @@ QDateTime timeOf(const QJsonValue &v)
 }
 
 /// Equal without telling how much of them is (a token's hash against the ones kept).
+} // namespace
+
+QJsonObject HostTurn::toJson() const
+{
+    const QString name = state == State::Running ? u"running"_s : state == State::Done ? u"done"_s : u"failed"_s;
+    QJsonObject o{{u"session"_s, session},
+                  {u"state"_s, name},
+                  {u"text"_s, text},
+                  {u"tools"_s, QJsonArray::fromStringList(tools)},
+                  {u"asking"_s, asking},
+                  {u"started"_s, timeText(started)}};
+    if (state == State::Done)
+        o.insert(u"stopReason"_s, stopReason);
+    if (state == State::Failed)
+        o.insert(u"error"_s, error);
+    if (ended.isValid())
+        o.insert(u"ended"_s, timeText(ended));
+    return o;
+}
+
+namespace {
+
 bool sameSecret(const QString &a, const QString &b)
 {
     if (a.size() != b.size())
@@ -132,6 +156,11 @@ QString idKey(const QJsonValue &id)
 QByteArray compact(const QJsonObject &o)
 {
     return QJsonDocument(o).toJson(QJsonDocument::Compact);
+}
+
+QString turnKey(const QString &device, const QString &session)
+{
+    return device + u'\n' + session;
 }
 
 /// The last line of `errors` that says something ("" none).
@@ -345,6 +374,38 @@ QString newPairingCode()
     return randomString(kPairingCodeLength);
 }
 
+QString pairingLink(const QString &url, const QString &code)
+{
+    if (url.isEmpty())
+        return {};
+    automation::Request r;
+    r.action = automation::Action::Pair;
+    r.params = {{u"url"_s, url}, {u"code"_s, code}};
+    return automation::buildUri(r);
+}
+
+QString terminalQrCode(const QString &text)
+{
+    const qr::Code code = qr::encode(text);
+    if (code.isNull())
+        return {};
+    // Two modules a character (upper and lower half), the light ones drawn: right on a terminal's
+    // dark background — phone cameras read a code drawn the other way round too.
+    const int q = qr::QuietZone;
+    const int size = code.size + 2 * q;
+    const auto light = [&](int x, int y) { return y >= size || !code.dark(x - q, y - q); };
+    QString out;
+    for (int y = 0; y < size; y += 2) {
+        for (int x = 0; x < size; ++x) {
+            const bool top = light(x, y);
+            const bool bottom = light(x, y + 1);
+            out += top && bottom ? u'█' : top ? u'▀' : bottom ? u'▄' : u' ';
+        }
+        out += u'\n';
+    }
+    return out;
+}
+
 QString formatPairingCode(const QString &code)
 {
     return code.size() == kPairingCodeLength ? code.left(4) + u'-' + code.mid(4) : code;
@@ -442,6 +503,9 @@ struct AcpHost::Stream {
     QTimer *waitTimer = nullptr;
     QDateTime lastSeen;
     QSet<QString> prompts; // the ids of the device's session/prompt requests not answered yet
+    QHash<QString, QJsonValue> asked; // the agent's session/request_permission not answered yet
+    bool retired = false;             // nobody fetches from it: it ends after its turns
+    QString retiredWhy;
     bool holding = false;  // messages wait for the sync before a turn
     QList<QJsonObject> held;
     QTimer *holdTimer = nullptr;
@@ -553,7 +617,16 @@ bool AcpHost::start(QString *error)
     }
     m_http = std::make_unique<http::Server>(m_options.limits);
     m_http->onLog = [this](const QString &line) { say(line); };
-    m_http->onHeaders = [this](const http::Request &head, qint64 *maxBody) { return onHeaders(head, maxBody); };
+    m_http->onHeaders = [this](const http::Request &head, qint64 *maxBody) {
+        std::optional<http::Response> refusal = onHeaders(head, maxBody);
+        if (refusal && head.method != "OPTIONS") {
+            // (The app in a browser reads why: a refusal carries the CORS header fields too.)
+            const http::Headers cors = corsHeaders(head.headers.value("Origin"));
+            for (const auto &f : cors.fields())
+                refusal->headers.add(f.name, f.value);
+        }
+        return refusal;
+    };
     m_http->onRequest = [this](const http::Request &request, const http::Reply &reply) { onRequest(request, reply); };
     if (tls && !loadTls(error))
         return false;
@@ -598,6 +671,16 @@ bool AcpHost::start(QString *error)
     }
     for (const QString &h : std::as_const(m_options.allowedHosts))
         m_hosts.append(normalizedHost(h, https));
+    m_origins.clear();
+    for (const QString &o : std::as_const(m_options.allowedOrigins)) {
+        const QUrl origin(o.trimmed(), QUrl::StrictMode);
+        if (!origin.isValid() || origin.host().isEmpty()
+            || (origin.scheme() != u"https" && origin.scheme() != u"http")) {
+            *error = tr("--allowed-origin takes the address of a site (https://notes.example.com): %1").arg(o);
+            return false;
+        }
+        m_origins.append(http::originOf(origin));
+    }
 
     if (m_options.tools && !m_options.toolsProgram.isEmpty())
         m_mcpServers = QJsonArray{toolsServer(m_options.toolsProgram, m_root)};
@@ -660,11 +743,28 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
                                          QString::fromLatin1(head.headers.value("Host").left(100))));
         return http::Response::text(421, "This server does not answer for that host name"_ba);
     }
-    if (head.headers.has("Origin")) {
-        // A browser's page (another site, DNS rebinding): the app sends no Origin.
-        say(u"%1 refused: Origin %2"_s.arg(head.peer.toString(),
-                                           QString::fromLatin1(head.headers.value("Origin").left(100))));
+    const QByteArray origin = head.headers.value("Origin");
+    if (head.headers.has("Origin") && !originAllowed(origin)) {
+        // A browser's page (another site, DNS rebinding): the app sends no Origin, the app in a
+        // browser the origin it was allowed (--allowed-origin).
+        say(u"%1 refused: Origin %2"_s.arg(head.peer.toString(), QString::fromLatin1(origin.left(100))));
         return apiError(403, u"origin"_s, u"Requests from web pages are not allowed"_s);
+    }
+    if (head.method == "OPTIONS") {
+        // The CORS preflight of the app in a browser (an allowed origin: above).
+        if (!head.headers.has("Origin"))
+            return apiError(405, u"method"_s, u"Method not allowed"_s);
+        http::Response r204 = http::Response::empty(204);
+        r204.headers.set("Access-Control-Allow-Origin"_ba, origin);
+        r204.headers.set("Access-Control-Allow-Methods"_ba, "GET, POST, DELETE, OPTIONS"_ba);
+        r204.headers.set("Access-Control-Allow-Headers"_ba, "Authorization, Content-Type, Accept"_ba);
+        r204.headers.set("Access-Control-Max-Age"_ba, "600"_ba);
+        r204.headers.set("Vary"_ba, "Origin"_ba);
+        // (Chrome's Private Network Access: a public page asks before it calls an address of the
+        // user's own network — a tailnet's is one.)
+        if (head.headers.value("Access-Control-Request-Private-Network") == "true")
+            r204.headers.set("Access-Control-Allow-Private-Network"_ba, "true"_ba);
+        return r204;
     }
     const QString r = route(head.path);
     if (r == u"/" || r.isEmpty()) {
@@ -713,11 +813,37 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
             return apiError(405, u"method"_s, u"Method not allowed"_s);
         return std::nullopt;
     }
+    if (parts.size() == 3 && parts.at(0) == u"sessions" && parts.at(2) == u"turn") {
+        if (head.method != "GET" && head.method != "DELETE")
+            return apiError(405, u"method"_s, u"Method not allowed"_s);
+        return std::nullopt;
+    }
     return apiError(404, u"not_found"_s, u"Not found"_s);
 }
 
-void AcpHost::onRequest(const http::Request &request, const http::Reply &reply)
+bool AcpHost::originAllowed(const QByteArray &origin) const
 {
+    if (origin.isEmpty())
+        return true;
+    if (origin == "null")
+        return false;
+    return m_origins.contains(http::originOf(QUrl(QString::fromLatin1(origin))));
+}
+
+http::Headers AcpHost::corsHeaders(const QByteArray &origin) const
+{
+    http::Headers h;
+    if (origin.isEmpty() || !originAllowed(origin))
+        return h;
+    h.add("Access-Control-Allow-Origin"_ba, origin);
+    h.add("Access-Control-Expose-Headers"_ba, "WWW-Authenticate"_ba);
+    h.add("Vary"_ba, "Origin"_ba);
+    return h;
+}
+
+void AcpHost::onRequest(const http::Request &request, const http::Reply &rawReply)
+{
+    const http::Reply reply = rawReply.with(corsHeaders(request.headers.value("Origin")));
     const QString r = route(request.path);
     if (r == u"/" || r.isEmpty()) {
         reply.send(http::Response::text(200, "Brulion: AI agents of this computer (brulion-cli acp serve)\n"_ba));
@@ -744,6 +870,10 @@ void AcpHost::onRequest(const http::Request &request, const http::Reply &reply)
         return;
     }
     const QStringList parts = endpoint.split(u'/');
+    if (parts.size() == 3 && parts.at(0) == u"sessions") {
+        sessionTurn(who, QUrl::fromPercentEncoding(parts.at(1).toUtf8()), request, reply);
+        return;
+    }
     Stream *s = parts.size() >= 2 ? m_streams.value(parts.at(1)) : nullptr;
     if (!s || s->device != who.id) {
         reply.send(apiError(404, u"no_stream"_s, u"No such stream: the agent's process ended here"_s));
@@ -849,15 +979,16 @@ http::Response AcpHost::openStream(const PairedDevice &device, const http::Reque
     // The app keeps one process per agent: a new stream of the device for the same agent means
     // that it started again (or gave the old one up), and the old one's agent would only take
     // memory here until it idled out.
+    // (One that runs a turn finishes it first: its device hears how it ended through the turn kept.)
     for (Stream *old : m_streams.values()) {
-        if (old->device == device.id && old->agent.id == agent->id) {
-            closeStream(old, u"replaced by a new stream of the device"_s);
-            removeStream(old);
-        }
+        if (old->device == device.id && old->agent.id == agent->id && !old->retired)
+            retire(old, u"replaced by a new stream of the device"_s);
     }
     int running = 0;
     int mine = 0;
     for (const Stream *s : std::as_const(m_streams)) {
+        if (s->retired)
+            continue; // (ending: its turn only)
         running += s->closed ? 0 : 1;
         mine += s->device == device.id && !s->closed ? 1 : 0;
     }
@@ -917,7 +1048,7 @@ void AcpHost::receive(Stream *s, const http::Request &request, const http::Reply
     if (s->waiter.alive())
         answerWaiter(s); // (one receive at a time: an older one is answered at once)
     s->waiter = reply;
-    if (!s->out.isEmpty() || s->closed || wait == 0) {
+    if (!s->out.isEmpty() || s->closed || s->retired || wait == 0) {
         answerWaiter(s);
         return;
     }
@@ -949,9 +1080,10 @@ void AcpHost::answerWaiter(Stream *s)
         messages.append(QJsonObject{{u"seq"_s, s->out.at(i).first}, {u"message"_s, s->out.at(i).second}});
     }
     const bool all = messages.size() == s->out.size();
-    QJsonObject o{{u"messages"_s, messages}, {u"closed"_s, s->closed && all}};
-    if (s->closed && all)
-        o.insert(u"why"_s, s->why);
+    const bool over = (s->closed || s->retired) && all;
+    QJsonObject o{{u"messages"_s, messages}, {u"closed"_s, over}};
+    if (over)
+        o.insert(u"why"_s, s->closed ? s->why : s->retiredWhy);
     reply.send(http::Response::json(200, o));
 }
 
@@ -961,7 +1093,9 @@ void AcpHost::closeStream(Stream *s, const QString &why)
         return;
     s->closed = true;
     s->why = why;
+    turnsFailed(s, why);
     s->prompts.clear();
+    s->asked.clear();
     s->held.clear();
     s->holding = false;
     if (s->holdTimer)
@@ -989,6 +1123,218 @@ void AcpHost::removeStream(Stream *s)
     delete s->waitTimer;
     delete s->holdTimer;
     delete s;
+}
+
+void AcpHost::removeLater(Stream *s)
+{
+    const QString id = s->id;
+    QTimer::singleShot(0, this, [this, id] {
+        if (Stream *found = m_streams.value(id))
+            removeStream(found);
+    });
+}
+
+void AcpHost::retire(Stream *s, const QString &why)
+{
+    if (s->closed || s->retired)
+        return;
+    if (s->prompts.isEmpty()) {
+        closeStream(s, why);
+        removeStream(s);
+        return;
+    }
+    s->retired = true;
+    s->retiredWhy = why;
+    say(u"%1: %2; it ends after its turn"_s.arg(s->id, why));
+    // The questions its agent waits on, and what nobody will fetch.
+    for (const QJsonValue &id : std::exchange(s->asked, {}))
+        respond(s, id, QJsonObject{{u"outcome"_s, QJsonObject{{u"outcome"_s, u"cancelled"_s}}}});
+    s->out.clear();
+    s->outSizes.clear();
+    s->outBytes = 0;
+    answerWaiter(s);
+}
+
+// ---- The turns kept ------------------------------------------------------------------------------------
+
+const HostTurn *AcpHost::turn(const QString &device, const QString &session) const
+{
+    const auto it = m_turns.constFind(turnKey(device, session));
+    return it == m_turns.cend() ? nullptr : &*it;
+}
+
+void AcpHost::turnStarted(Stream *s, const QString &session, const QString &prompt)
+{
+    if (session.isEmpty())
+        return;
+    HostTurn t;
+    t.device = s->device;
+    t.session = session;
+    t.stream = s->id;
+    t.prompt = prompt;
+    t.started = now();
+    const QString key = turnKey(s->device, session);
+    m_turns.insert(key, t);
+    // At most kMaxTurnsPerDevice of a device: the ones that ended longest ago go.
+    QList<std::pair<QDateTime, QString>> ended;
+    for (auto it = m_turns.cbegin(); it != m_turns.cend(); ++it) {
+        if (it->device == s->device && it->state != HostTurn::State::Running)
+            ended.append({it->ended, it.key()});
+    }
+    const qsizetype mine = std::ranges::count_if(m_turns, [s](const HostTurn &x) { return x.device == s->device; });
+    std::ranges::sort(ended);
+    for (qsizetype i = 0; i < ended.size() && mine - i > kMaxTurnsPerDevice; ++i)
+        m_turns.remove(ended.at(i).second);
+    turnChanged(key);
+}
+
+void AcpHost::turnUpdate(Stream *s, const QJsonObject &params)
+{
+    const auto it = m_turns.find(turnKey(s->device, params.value(u"sessionId"_s).toString()));
+    if (it == m_turns.end() || it->stream != s->id || it->state != HostTurn::State::Running)
+        return;
+    const QJsonObject update = params.value(u"update"_s).toObject();
+    const QString kind = update.value(u"sessionUpdate"_s).toString();
+    if (kind == u"agent_message_chunk") {
+        const QJsonObject content = update.value(u"content"_s).toObject();
+        if (content.value(u"type"_s).toString() == u"text" && it->text.size() < kMaxTurnTextChars)
+            it->text += content.value(u"text"_s).toString().left(kMaxTurnTextChars - it->text.size());
+    } else if (kind == u"tool_call" && it->tools.size() < kMaxTurnTools) {
+        if (const QString title = update.value(u"title"_s).toString().trimmed(); !title.isEmpty())
+            it->tools.append(title.left(500));
+    }
+}
+
+void AcpHost::turnEnded(Stream *s, const QString &prompt, const QJsonObject &response)
+{
+    for (auto it = m_turns.begin(); it != m_turns.end(); ++it) {
+        if (it->stream != s->id || it->prompt != prompt || it->state != HostTurn::State::Running)
+            continue;
+        it->ended = now();
+        it->asking = false;
+        if (response.contains(u"error"_s)) {
+            const QJsonObject e = response.value(u"error"_s).toObject();
+            it->state = HostTurn::State::Failed;
+            it->error = e.value(u"message"_s).toString();
+            if (it->error.isEmpty())
+                it->error = u"error %1"_s.arg(e.value(u"code"_s).toInt());
+        } else {
+            it->state = HostTurn::State::Done;
+            it->stopReason = response.value(u"result"_s).toObject().value(u"stopReason"_s).toString();
+        }
+        turnChanged(it.key());
+        return;
+    }
+}
+
+void AcpHost::turnsFailed(Stream *s, const QString &why)
+{
+    for (auto it = m_turns.begin(); it != m_turns.end(); ++it) {
+        if (it->stream != s->id || it->state != HostTurn::State::Running)
+            continue;
+        it->state = HostTurn::State::Failed;
+        it->error = why;
+        it->ended = now();
+        it->asking = false;
+        turnChanged(it.key());
+    }
+}
+
+void AcpHost::turnChanged(const QString &key)
+{
+    const auto it = m_turns.constFind(key);
+    for (qsizetype i = m_turnWaiters.size() - 1; i >= 0; --i) {
+        if (m_turnWaiters.at(i).key != key)
+            continue;
+        const TurnWaiter w = m_turnWaiters.takeAt(i);
+        delete w.timer;
+        if (!w.reply.alive())
+            continue;
+        if (it == m_turns.cend())
+            w.reply.send(apiError(404, u"no_turn"_s, u"This computer knows no turn of that session"_s));
+        else
+            w.reply.send(http::Response::json(200, it->toJson()));
+    }
+}
+
+void AcpHost::answerTurnWaiter(QTimer *timer)
+{
+    for (qsizetype i = 0; i < m_turnWaiters.size(); ++i) {
+        if (m_turnWaiters.at(i).timer != timer)
+            continue;
+        const TurnWaiter w = m_turnWaiters.takeAt(i);
+        timer->deleteLater();
+        const auto it = m_turns.constFind(w.key);
+        if (!w.reply.alive())
+            return;
+        if (it == m_turns.cend())
+            w.reply.send(apiError(404, u"no_turn"_s, u"This computer knows no turn of that session"_s));
+        else
+            w.reply.send(http::Response::json(200, it->toJson()));
+        return;
+    }
+}
+
+void AcpHost::forgetTurns()
+{
+    const QDateTime t = now();
+    QStringList gone;
+    for (auto it = m_turns.cbegin(); it != m_turns.cend(); ++it) {
+        if (it->state != HostTurn::State::Running && it->ended.msecsTo(t) > kTurnKeptMs)
+            gone << it.key();
+    }
+    for (const QString &key : std::as_const(gone)) {
+        m_turns.remove(key);
+        turnChanged(key);
+    }
+    // (Waiters whose connection went: dropped.)
+    for (qsizetype i = m_turnWaiters.size() - 1; i >= 0; --i) {
+        if (!m_turnWaiters.at(i).reply.alive())
+            delete m_turnWaiters.takeAt(i).timer;
+    }
+}
+
+void AcpHost::sessionTurn(const PairedDevice &device, const QString &session, const http::Request &request,
+                          const http::Reply &reply)
+{
+    const QString key = turnKey(device.id, session);
+    const auto it = m_turns.find(key);
+    if (it == m_turns.end()) {
+        reply.send(apiError(404, u"no_turn"_s,
+                            u"This computer knows no turn of that session (it was started again, or the turn "
+                            "ended long ago)"_s));
+        return;
+    }
+    Stream *s = m_streams.value(it->stream);
+    if (request.method == "DELETE") {
+        // The device stops the turn.
+        if (it->state == HostTurn::State::Running && s && !s->closed) {
+            deliver(s, QJsonObject{{u"jsonrpc"_s, u"2.0"_s},
+                                   {u"method"_s, u"session/cancel"_s},
+                                   {u"params"_s, QJsonObject{{u"sessionId"_s, session}}}});
+            say(u"%1: the turn of session %2 stopped by the device"_s.arg(s->id, session.left(100)));
+        }
+        reply.send(http::Response::empty(204));
+        return;
+    }
+    // The device asks because it lost the stream that runs the turn: nobody fetches from it now.
+    if (s && it->state == HostTurn::State::Running)
+        retire(s, u"its device lost it"_s);
+    const QUrlQuery query(QString::fromLatin1(request.query));
+    const int wait = std::clamp(query.queryItemValue(u"wait"_s).toInt(), 0, m_options.maxWaitSeconds);
+    const auto found = m_turns.constFind(key); // (retire() may have changed it)
+    if (found == m_turns.cend() || found->state != HostTurn::State::Running || wait == 0) {
+        if (found == m_turns.cend())
+            reply.send(apiError(404, u"no_turn"_s, u"This computer knows no turn of that session"_s));
+        else
+            reply.send(http::Response::json(200, found->toJson()));
+        return;
+    }
+    auto *timer = new QTimer(this);
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, this, [this, timer] { answerTurnWaiter(timer); });
+    m_turnWaiters.append({key, reply, timer});
+    timer->start(wait * 1000);
 }
 
 void AcpHost::maintain()
@@ -1032,11 +1378,15 @@ void AcpHost::maintain()
         const qint64 quiet = s->lastSeen.msecsTo(t);
         const bool idle = s->closed ? quiet > std::min<qint64>(m_options.streamIdleMs, 5 * 60 * 1000)
                                     : quiet > m_options.streamIdleMs && s->prompts.isEmpty();
-        if (idle) {
+        if (s->retired && !s->closed && s->prompts.isEmpty()) {
+            closeStream(s, s->retiredWhy);
+            removeStream(s);
+        } else if (idle) {
             closeStream(s, u"no device fetched from it for %1 minutes"_s.arg(m_options.streamIdleMs / 60000));
             removeStream(s);
         }
     }
+    forgetTurns();
     if (!m_http || !m_http->tls())
         return;
     const QDateTime cert = QFileInfo(m_options.tlsCertificate).lastModified(QTimeZone::UTC);
@@ -1133,11 +1483,34 @@ void AcpHost::fromAgent(Stream *s, const QByteArray &line)
         serve(s, o);
         return;
     }
-    if (!o.contains(u"method"_s) && o.contains(u"id"_s) && s->prompts.remove(idKey(o.value(u"id"_s)))) {
+    const QString method = o.value(u"method"_s).toString();
+    if (method == u"session/update") {
+        turnUpdate(s, o.value(u"params"_s).toObject());
+    } else if (method == u"session/request_permission" && o.contains(u"id"_s)) {
+        if (s->retired) {
+            // Nobody is there to answer.
+            respond(s, o.value(u"id"_s), QJsonObject{{u"outcome"_s, QJsonObject{{u"outcome"_s, u"cancelled"_s}}}});
+            return;
+        }
+        s->asked.insert(idKey(o.value(u"id"_s)), o.value(u"id"_s));
+        const QString session = o.value(u"params"_s).toObject().value(u"sessionId"_s).toString();
+        if (const auto it = m_turns.find(turnKey(s->device, session)); it != m_turns.end() && it->stream == s->id) {
+            it->asking = true;
+            turnChanged(it.key());
+        }
+    } else if (method.isEmpty() && o.contains(u"id"_s) && s->prompts.remove(idKey(o.value(u"id"_s)))) {
         // A turn ended: what the agent changed goes to the other devices.
+        turnEnded(s, idKey(o.value(u"id"_s)), o);
         if (m_sync)
             m_sync->syncNow();
+        if (s->retired && s->prompts.isEmpty()) {
+            closeStream(s, s->retiredWhy);
+            removeLater(s);
+            return;
+        }
     }
+    if (s->retired)
+        return; // (nobody fetches it)
     const qint64 size = compact(o).size();
     s->out.append({s->nextSeq++, o});
     s->outSizes.append(size);
@@ -1155,8 +1528,21 @@ void AcpHost::toAgent(Stream *s, const QJsonObject &message)
         return;
     }
     const QString method = rewritten->value(u"method"_s).toString();
+    if (method.isEmpty() && rewritten->contains(u"id"_s)) {
+        // The device's answer to a question of the agent.
+        if (s->asked.remove(idKey(rewritten->value(u"id"_s)))) {
+            for (auto it = m_turns.begin(); it != m_turns.end(); ++it) {
+                if (it->stream == s->id && it->asking) {
+                    it->asking = false;
+                    turnChanged(it.key());
+                }
+            }
+        }
+    }
     if (method == u"session/prompt" && rewritten->contains(u"id"_s)) {
         s->prompts.insert(idKey(rewritten->value(u"id"_s)));
+        turnStarted(s, rewritten->value(u"params"_s).toObject().value(u"sessionId"_s).toString(),
+                    idKey(rewritten->value(u"id"_s)));
         if (m_sync && !s->holding) {
             // The device's latest notes here before the agent reads them (a while at most).
             s->holding = true;
@@ -1491,19 +1877,32 @@ Result acpPair(Call &call)
                          {{u"path"_s, file}});
     const QString shown = formatPairingCode(code);
     const QString url = store.state().publicUrl;
-    QString text = QCoreApplication::translate("brulion::cli", "Pairing code: %1 (valid for %2 minutes, once)")
-                           .arg(shown)
-                           .arg(kPairingMinutes)
-                   + u'\n';
+    const QString link = pairingLink(url, shown);
+    QString text;
+    if (!link.isEmpty()) {
+        text += terminalQrCode(link);
+        text += QCoreApplication::translate("brulion::cli",
+                                            "Scan it with the phone's camera (Brulion opens the pairing, filled in), "
+                                            "or open: %1")
+                        .arg(link)
+                + u"\n\n"_s;
+    }
+    text += QCoreApplication::translate("brulion::cli", "Pairing code: %1 (valid for %2 minutes, once)")
+                    .arg(shown)
+                    .arg(kPairingMinutes)
+            + u'\n';
     if (!url.isEmpty())
         text += QCoreApplication::translate("brulion::cli", "Address: %1").arg(url) + u'\n';
     text += QCoreApplication::translate("brulion::cli",
                                         "In Brulion on the device: Settings → Extensions → AI agents → Add → "
                                         "An agent on another computer.")
             + u'\n';
-    return call.ok(
-            QJsonObject{{u"stateFile"_s, file}, {u"code"_s, shown}, {u"expires"_s, timeText(expires)}, {u"url"_s, url}},
-            text);
+    return call.ok(QJsonObject{{u"stateFile"_s, file},
+                               {u"code"_s, shown},
+                               {u"expires"_s, timeText(expires)},
+                               {u"url"_s, url},
+                               {u"link"_s, link}},
+                   text);
 }
 
 Result acpClients(Call &call)
@@ -1716,7 +2115,10 @@ void addAcpHostCommands(QList<Command> &out)
              option(u"tlsKey"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "HTTPS: its private key (PEM)")),
              option(u"allowedHost"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli",
-                                      "More host names it answers to (a proxy that rewrites Host; comma-separated)"))},
+                                      "More host names it answers to (a proxy that rewrites Host; comma-separated)")),
+             option(u"allowedOrigin"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "Brulion in a browser at these sites may use it (origins, comma-separated)"))},
             QT_TRANSLATE_NOOP("brulion::cli",
                               "The app on a device pairs with a code of acp pair, then talks to an agent here over "
                               "the Agent Client Protocol: the agent works in this notebook (its files, commands and "
@@ -1783,6 +2185,7 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
     options.tlsCertificate = args.value(u"tlsCert"_s).toString();
     options.tlsKey = args.value(u"tlsKey"_s).toString();
     options.allowedHosts = listArgument(args, u"allowedHost"_s);
+    options.allowedOrigins = listArgument(args, u"allowedOrigin"_s);
     options.tools = !args.value(u"noTools"_s).toBool();
     options.toolsProgram = toolsProgram();
     QString agentError;

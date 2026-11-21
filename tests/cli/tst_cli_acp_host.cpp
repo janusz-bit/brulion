@@ -13,7 +13,9 @@
 
 #include "acp/acp.h"
 #include "acp/remote.h"
+#include "automation/uri.h"
 #include "fakewebdavserver.h"
+#include "qr/qrcode.h"
 #include "notebook/session.h"
 #include "sync/http.h"
 
@@ -166,12 +168,30 @@ class TestCliAcpHost : public QObject {
         return r.value.toObject().value(u"code"_s).toString();
     }
 
-    QString pair(const QString &device = u"Pixel 9 Pro Jana"_s)
+    QString pair(const QString &device = u"Pixel 9 Pro Jana"_s) { return pairDevice(device).first; }
+
+    /// A device paired: its token and id.
+    std::pair<QString, QString> pairDevice(const QString &device = u"Pixel 9 Pro Jana"_s)
     {
         const QString code = pairingCode();
         const HttpResult r =
                 http("POST", u"pair"_s, QJsonDocument(QJsonObject{{u"code"_s, code}, {u"device"_s, device}}).toJson());
-        return r.json.value(u"token"_s).toString();
+        return {r.json.value(u"token"_s).toString(), r.json.value(u"device"_s).toObject().value(u"id"_s).toString()};
+    }
+
+    /// The turn of `session` as the app asks for it (acp::fetchRemoteTurn).
+    std::pair<acp::RemoteTurn, acp::RemoteError> fetchTurn(const QString &token, const QString &session, int wait)
+    {
+        std::pair<acp::RemoteTurn, acp::RemoteError> out;
+        bool done = false;
+        acp::fetchRemoteTurn(m_transport.get(), QUrl(m_base), token, session, wait,
+                             [&](const acp::RemoteTurn &t, const acp::RemoteError &e) {
+                                 out = {t, e};
+                                 done = true;
+                             });
+        if (!QTest::qWaitFor([&done] { return done; }, kTimeoutMs))
+            out.second.kind = acp::RemoteError::Kind::Network;
+        return out;
     }
 
     std::unique_ptr<Talk> talk(const QString &token, const QString &agent = u"fake"_s)
@@ -661,6 +681,164 @@ private Q_SLOTS:
         QVERIFY(!r.json.value(u"closed"_s).toBool());
         QVERIFY(timer.elapsed() >= 900);
         QCOMPARE(agentRead(u"initialize"_s).size(), 1);
+    }
+
+    void turnKept()
+    {
+        // The app is ended (Android) while the agent works: the turn goes on here, and the app
+        // started again fetches its answer.
+        startHost(*m_ctx, options());
+        const auto [token, device] = pairDevice();
+        std::unique_ptr<Talk> t = talk(token);
+        const QString key = u"AI/Długa rozmowa.md"_s;
+        QVERIFY(t->client->prompt(key, turn(u"powoli, proszę"_s)));
+        QTRY_VERIFY_WITH_TIMEOUT(!t->client->sessionId(key).isEmpty(), kTimeoutMs);
+        const QString session = t->client->sessionId(key);
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, session), kTimeoutMs);
+        QCOMPARE(m_host->turn(device, session)->state, HostTurn::State::Running);
+        t.reset(); // (gone without a word, as an app Android ended)
+        // Another device knows nothing of it.
+        QCOMPARE(fetchTurn(pair(u"Tablet"_s), session, 0).second.status, 404);
+        // The device asks: the long poll answers once the turn ended.
+        const auto [done, error] = fetchTurn(token, session, 25);
+        QVERIFY2(!error.failed(), qPrintable(error.detail));
+        QCOMPARE(done.state, acp::RemoteTurn::State::Done);
+        QCOMPARE(done.text, u"Powoli: gotowe."_s);
+        QCOMPARE(done.stopReason, u"end_turn"_s);
+        QCOMPARE(done.tools, QStringList{u"Read Dom.md"_s});
+        // Nobody fetches from that stream now: it ended with the turn.
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->streamCount(), 0, kTimeoutMs);
+        QCOMPARE(fetchTurn(token, session, 0).first.text, u"Powoli: gotowe."_s);
+        // A session the computer knows no turn of.
+        const auto [none, lost] = fetchTurn(token, u"nieznana"_s, 0);
+        QCOMPARE(lost.kind, acp::RemoteError::Kind::Refused);
+        QCOMPARE(lost.status, 404);
+        QCOMPARE(lost.code, u"no_turn"_s);
+        // The computer started again: it knows nothing.
+        startHost(*m_ctx, options());
+        QCOMPARE(fetchTurn(pair(), session, 0).second.status, 404);
+    }
+
+    void turnOutlivesItsStream()
+    {
+        // The app started again opens a new stream for the agent while the old one still runs a
+        // turn: the old one ends after it, not before.
+        startHost(*m_ctx, options());
+        const auto [token, device] = pairDevice();
+        std::unique_ptr<Talk> t = talk(token);
+        const QString key = u"AI/Stara.md"_s;
+        QVERIFY(t->client->prompt(key, turn(u"powoli"_s)));
+        QTRY_VERIFY_WITH_TIMEOUT(!t->client->sessionId(key).isEmpty(), kTimeoutMs);
+        const QString session = t->client->sessionId(key);
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, session), kTimeoutMs);
+        t->stream.reset();
+        std::unique_ptr<Talk> fresh = talk(token);
+        QTRY_VERIFY_WITH_TIMEOUT(!fresh->root.isEmpty(), kTimeoutMs);
+        QCOMPARE(m_host->streamCount(), 2);
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->turn(device, session)->state, HostTurn::State::Done, kTimeoutMs);
+        QCOMPARE(m_host->turn(device, session)->text, u"Powoli: gotowe."_s);
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->streamCount(), 1, kTimeoutMs);
+        // (The fake agent numbers its sessions from s1 in every process: the old turn's record
+        // is that session's until the new process prompts its own s1.)
+        QCOMPARE(ask(*fresh, u"AI/Nowa.md"_s, u"Cześć"_s), u"Odpowiedź na: Cześć"_s);
+    }
+
+    void turnQuestionsCancelled()
+    {
+        // A question of the agent while the device is gone: answered "cancelled" once the device
+        // says it lost the stream; a turn the device stops from afar.
+        startHost(*m_ctx, options());
+        QFile::remove(m_vault + u"/Zgoda.md"_s);
+        const auto [token, device] = pairDevice();
+        std::unique_ptr<Talk> t = talk(token);
+        QVERIFY(t->client->prompt(u"AI/Pytanie.md"_s, turn(u"pozwolenie"_s)));
+        QTRY_VERIFY_WITH_TIMEOUT(!t->questions.isEmpty(), kTimeoutMs);
+        const QString session = t->client->sessionId(u"AI/Pytanie.md"_s);
+        QVERIFY(m_host->turn(device, session)->asking);
+        t.reset();
+        const auto [first, e1] = fetchTurn(token, session, 0);
+        QVERIFY(!e1.failed());
+        QCOMPARE(first.state, acp::RemoteTurn::State::Running);
+        QVERIFY(first.asking);
+        const auto [done, e2] = fetchTurn(token, session, 25);
+        QVERIFY(!e2.failed());
+        QCOMPARE(done.state, acp::RemoteTurn::State::Done);
+        QCOMPARE(done.stopReason, u"cancelled"_s);
+        QVERIFY(!QFile::exists(m_vault + u"/Zgoda.md"_s)); // (not allowed: not written)
+
+        std::unique_ptr<Talk> u = talk(token);
+        QVERIFY(u->client->prompt(u"AI/Czekam.md"_s, turn(u"czekaj"_s)));
+        QTRY_VERIFY_WITH_TIMEOUT(!u->client->sessionId(u"AI/Czekam.md"_s).isEmpty(), kTimeoutMs);
+        const QString waiting = u->client->sessionId(u"AI/Czekam.md"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, waiting), kTimeoutMs);
+        acp::cancelRemoteTurn(m_transport.get(), QUrl(m_base), token, waiting);
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->turn(device, waiting)->state, HostTurn::State::Done, kTimeoutMs);
+        QCOMPARE(m_host->turn(device, waiting)->stopReason, u"cancelled"_s);
+    }
+
+    void browserOrigin()
+    {
+        // Brulion in a browser at an origin named with --allowed-origin: CORS for it only.
+        AcpHostOptions o = options();
+        o.allowedOrigins = {u"https://notatki.example.pl/"_s};
+        startHost(*m_ctx, o);
+        const QString token = pair();
+        const QList<std::pair<QByteArray, QByteArray>> preflight{
+                {"Origin"_ba, "https://notatki.example.pl"_ba},
+                {"Access-Control-Request-Method"_ba, "POST"_ba},
+                {"Access-Control-Request-Headers"_ba, "authorization, content-type"_ba},
+                {"Access-Control-Request-Private-Network"_ba, "true"_ba}};
+        HttpResult r = http("OPTIONS", u"streams"_s, {}, preflight);
+        QCOMPARE(r.status, 204);
+        QCOMPARE(r.headers.value("access-control-allow-origin"), "https://notatki.example.pl"_ba);
+        QVERIFY(r.headers.value("access-control-allow-headers").contains("Authorization"));
+        QCOMPARE(r.headers.value("access-control-allow-private-network"), "true"_ba);
+        auto allowed = bearer(token);
+        allowed.append({"Origin"_ba, "https://notatki.example.pl"_ba});
+        r = http("GET", u"info"_s, {}, allowed);
+        QCOMPARE(r.status, 200);
+        QCOMPARE(r.headers.value("access-control-allow-origin"), "https://notatki.example.pl"_ba);
+        // A refusal says why to that page too.
+        r = http("GET", u"info"_s, {}, {{"Origin"_ba, "https://notatki.example.pl"_ba}});
+        QCOMPARE(r.status, 401);
+        QCOMPARE(r.headers.value("access-control-allow-origin"), "https://notatki.example.pl"_ba);
+        // Any other page: refused, its preflight too.
+        auto other = bearer(token);
+        other.append({"Origin"_ba, "https://notatki.example.pl.zla-strona.example"_ba});
+        QCOMPARE(http("GET", u"info"_s, {}, other).status, 403);
+        QCOMPARE(http("OPTIONS", u"info"_s, {}, {{"Origin"_ba, "null"_ba}}).status, 403);
+        // A bad origin given: the server does not start.
+        o.allowedOrigins = {u"notatki"_s};
+        std::optional<Error> error;
+        AcpHost host(*m_ctx, m_ctx->notebook(&error), o);
+        QString why;
+        QVERIFY(!host.start(&why));
+        QVERIFY(why.contains(u"--allowed-origin"_s));
+    }
+
+    void pairingByLink()
+    {
+        startHost(*m_ctx, options());
+        const Result r = run(u"acp.pair"_s);
+        QVERIFY(!r.error);
+        const QString link = r.value.toObject().value(u"link"_s).toString();
+        const automation::ParsedUri parsed = automation::parseUri(link);
+        QVERIFY2(parsed.request, qPrintable(link));
+        QCOMPARE(parsed.request->action, automation::Action::Pair);
+        QCOMPARE(parsed.request->value({u"url"}), m_base);
+        QCOMPARE(parsed.request->value({u"code"}), r.value.toObject().value(u"code"_s).toString());
+        // The text has it as a QR code: block characters, two rows of modules a line.
+        QVERIFY(r.text.contains(link));
+        const QString qr = terminalQrCode(link);
+        const QStringList lines = qr.split(u'\n', Qt::SkipEmptyParts);
+        const qr::Code code = qr::encode(link);
+        QCOMPARE(lines.size(), (code.size + 2 * qr::QuietZone + 1) / 2);
+        for (const QString &line : lines)
+            QCOMPARE(line.size(), code.size + 2 * qr::QuietZone);
+        QVERIFY(lines.first().count(u'█') == lines.first().size()); // (the quiet zone: light)
+        QVERIFY(r.text.contains(lines.at(4)));
+        QCOMPARE(pairingLink(QString(), u"K7QM-2XRP"_s), QString());
+        QVERIFY(terminalQrCode(QString(5000, u'x')).isEmpty());
     }
 
     void syncedWithNextcloud()

@@ -4,6 +4,7 @@
 //   "… pozwolenie …"  asks whether it may write Zgoda.md (session/request_permission); allowed: it
 //                     writes the file and says "Zapisano.", else "Nie zapisano."
 //   "… czekaj …"      answers nothing until the turn is cancelled (session/cancel)
+//   "… powoli …"      a tool call ("Read Dom.md"), "Powoli: ", 1.5 s later "gotowe."
 //   "… koniec …"      writes "fake agent: koniec" to its standard error and exits with code 3
 //   "… czytaj …"      reads the first line of Dom.md through the client (fs/read_text_file):
 //                     "Przeczytano: <it>"
@@ -233,6 +234,15 @@ int main(int argc, char **argv)
                 std::fputs("fake agent: koniec\n", stderr);
                 std::fflush(stderr);
                 return 3;
+            }
+            if (text.contains(u"powoli"_s)) {
+                // A long turn (the device may be gone meanwhile): a tool call, then the answer.
+                update(session, {{u"sessionUpdate"_s, u"tool_call"_s}, {u"toolCallId"_s, u"p1"_s},
+                                 {u"title"_s, u"Read Dom.md"_s}, {u"kind"_s, u"read"_s}, {u"status"_s, u"completed"_s}});
+                say(session, u"Powoli: "_s);
+                QThread::msleep(1500);
+                end(u"gotowe."_s);
+                continue;
             }
             if (text.contains(u"czekaj"_s)) {
                 waiting = id;

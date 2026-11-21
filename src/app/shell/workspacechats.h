@@ -277,6 +277,10 @@ public:
     /// `address` with a code of its `brulion-cli acp pair` — agentsPaired() (its agents, for
     /// AppSettings) and agentHostPaired(ok, what it says) follow.
     Q_INVOKABLE void pairAgentHost(const QString &address, const QString &code);
+    /// The answers of agents on another computer that went on with a turn while this device was
+    /// gone (Android ended the app): fetched from there (WorkspaceAgents::recover()). When the
+    /// notebook is ready and when the agents change.
+    void recoverAgentTurns();
     bool agentPairing() const { return m_agentPairing; }
     /// The conversation's partner (its page's `partner:`, "" the built-in assistant).
     Q_INVOKABLE QString partnerOf(const QString &path) const;

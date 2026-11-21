@@ -467,7 +467,7 @@ Then, once:
 
 ```sh
 sudo brulion-acp login claude    # the agent's own sign-in as the service's user: /login, a subscription
-sudo brulion-acp pair            # a code for the phone (10 minutes, one device)
+sudo brulion-acp pair            # a QR code for the phone's camera, and the code (10 minutes, one device)
 sudo brulion-acp clients         # the paired devices, later
 sudo brulion-acp revoke --all    # unpair (also: revoke <dev_…>): the token stops working at once
 ```
@@ -501,6 +501,7 @@ no system call filter or namespace restriction (the agents run programs and may 
 | `publicUrl` | `null` | the address the phone reaches (`https://…`) |
 | `tls` | `null` | `{ certFile; keyFile; }` — HTTPS without a proxy |
 | `allowedHosts` | `[ ]` | more `Host` names, for a proxy that rewrites it |
+| `allowedOrigins` | `[ ]` | sites of Brulion in a browser that may use the agents (CORS) |
 | `user`, `group` | `"brulion-acp"` | who it runs as (the default user and group are created) |
 | `openFirewall` | `false` | open `port` |
 | `extraArgs` | `[ ]` | more options of `acp serve` |

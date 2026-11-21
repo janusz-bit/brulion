@@ -117,8 +117,8 @@ public:
     static bool isAgent(const QString &partner);
     /// Programs can run here (the desktop app).
     static bool available();
-    /// Agents on another computer can be reached from here (the desktop app and Android; not the
-    /// browser, whose requests that computer refuses).
+    /// Agents on another computer can be reached from here: everywhere (the browser where that
+    /// computer allows the app's site, `acp serve --allowed-origin`).
     static bool remoteAvailable();
     /// `agent` can answer here.
     static bool runs(const AgentConfig &agent) { return agent.isRemote() ? remoteAvailable() : available(); }
@@ -167,6 +167,16 @@ public:
     /// Stops the turn of `path`: nothing more comes of it.
     void stop(const QString &path);
     bool running(const QString &path) const;
+
+    /// The conversations whose agent on another computer was working on an answer when this device
+    /// lost the stream it came in — Android ended the app meanwhile — and that still wait for that
+    /// answer (their newest message is the one it answers).
+    QStringList recoverable() const;
+    /// The answer of that turn from the computer, which kept it (GET sessions/<id>/turn): running()
+    /// meanwhile, status() "… is still working on …", then answered() or failed() as a turn's
+    /// (also after the stream of a turn that runs ended: the computer was not reached for long,
+    /// or it no longer knew the stream).
+    void recover(const QString &path);
     /// A turn of an agent on another computer runs: on Android the app keeps the screen on
     /// meanwhile (AppController), so that the system does not stop its network while it waits.
     bool remoteWorking() const { return m_remoteWorking; }
@@ -207,6 +217,9 @@ public:
     void pair(const QString &address, const QString &code);
     /// Tests: the transport to other computers (default one over the network of its own).
     void setTransport(sync::HttpTransport *transport) { m_transport = transport; }
+    /// Tests: every agent left as an app the system ended leaves them — no stream ended, no
+    /// process stopped, nothing said of the turns.
+    void abandon();
 
     /// The notebook closed: every agent stops, without a word of its turns.
     void reset();
@@ -226,6 +239,9 @@ Q_SIGNALS:
     void remembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     void checked(const QString &id, bool ok, const QString &text);
     void remoteWorkingChanged();
+    /// A turn of `path` is recovered (recover(), or its stream ended while it ran): the chat shows it
+    /// as running.
+    void recovering(const QString &path);
     void paired(bool ok, const QString &text, const QList<brulion::shell::AgentConfig> &agents);
 
 private:
@@ -266,12 +282,26 @@ private:
     void activityDue(const QString &path);
     /// remoteWorking() again after the turns changed.
     void noteWorking();
+    /// The turns recovered from another computer (recover()).
+    struct Recovery
+    {
+        QString agent;
+        QString session;
+        int pending = 0;
+        int failures = 0;
+        qint64 failingSince = -1;
+    };
+    void pollRecovery(const QString &path);
+    void recovered(const QString &path, const acp::RemoteTurn &turn, const acp::RemoteError &error);
     // The device's record of conversations' sessions (LocalStore "acp/sessions").
     struct Stored
     {
         QString agent;
         QString session;
         int seen = 0;
+        /// A turn of an agent on another computer runs: the conversation's messages when it began
+        /// (its answer is the next one), 0 none.
+        int pending = 0;
     };
     std::optional<Stored> stored(const QString &path) const;
     void store(const QString &path, const std::optional<Stored> &entry);
@@ -292,6 +322,8 @@ private:
     QTimer *m_activityTimer = nullptr;      // (a terminal's output: ten times a second at most)
     int m_nextTerminal = 1;
     bool m_remoteWorking = false;
+    QHash<QString, Recovery> m_recovering; // conversation → its turn recovered from another computer
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true); // (requests on their way after reset())
     sync::HttpTransport *m_transport = nullptr;
     std::unique_ptr<sync::HttpTransport> m_ownTransport;
 };

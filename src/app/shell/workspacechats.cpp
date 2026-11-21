@@ -124,6 +124,25 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
                 Q_EMIT agentHostPaired(ok, text);
             });
     connect(m_agents, &WorkspaceAgents::remembered, this, &WorkspaceChats::agentRemembered);
+    // A turn an agent on another computer went on with while this device was gone (Android ended
+    // the app): running here again until that computer says how it ended.
+    connect(m_agents, &WorkspaceAgents::recovering, this, [this](const QString &path) {
+        ChatTurn *t = turn(path);
+        if (t->m_running)
+            return;
+        t->m_key = path;
+        m_byKey.insert(path, t);
+        t->m_running = true;
+        t->m_queued = false;
+        t->m_place = 0;
+        t->m_omitted = 0;
+        t->m_status.clear();
+        t->m_failure.clear();
+        t->clearPartial();
+        Q_EMIT t->stateChanged();
+        Q_EMIT stateChanged();
+    });
+    connect(m_workspace, &Workspace::readyChanged, this, &WorkspaceChats::recoverAgentTurns);
     connect(m_extensions, &WorkspaceExtensions::aiSettingsChanged, this, [this] {
         Q_EMIT settingsChanged();
         startWaiting(); // (a provider on the network answers every conversation at once)
@@ -201,6 +220,15 @@ void WorkspaceChats::setAgents(const QList<AgentConfig> &agents)
         return;
     m_agents->setAgents(agents);
     Q_EMIT partnersChanged();
+    recoverAgentTurns();
+}
+
+void WorkspaceChats::recoverAgentTurns()
+{
+    if (!m_workspace->ready())
+        return;
+    for (const QString &path : m_agents->recoverable())
+        m_agents->recover(path);
 }
 
 bool WorkspaceChats::agentsAvailable() const

@@ -55,7 +55,7 @@ qt_add_executable(cli_fake_acp_agent ${PROJECT_SOURCE_DIR}/tests/app/shell/fakea
 target_link_libraries(cli_fake_acp_agent PRIVATE Qt6::Core)
 brulion_set_warnings(cli_fake_acp_agent)
 brulion_add_test(tst_cli_acp_host SOURCES tst_cli_acp_host.cpp
-    LIBS brulion_cli brulion_core_acp brulion_core_notebook brulion_sync_testsupport Qt6::Network Qt6::Core)
+    LIBS brulion_cli brulion_core_acp brulion_core_automation brulion_core_qr brulion_core_notebook brulion_sync_testsupport Qt6::Network Qt6::Core)
 target_compile_definitions(tst_cli_acp_host PRIVATE FAKE_ACP_AGENT="$<TARGET_FILE:cli_fake_acp_agent>")
 add_dependencies(tst_cli_acp_host cli_fake_acp_agent)
 math(EXPR _acp_host_timeout "300 * ${BRULION_TEST_SLOWDOWN}")

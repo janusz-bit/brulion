@@ -20,7 +20,8 @@ Access accessOf(const Request &request)
     case Action::Open:
     case Action::Daily:
     case Action::Search:
-    case Action::View: return Access::Open;
+    case Action::View:
+    case Action::Pair: return Access::Open;
     case Action::Capture: return request.value({u"text"}).trimmed().isEmpty() ? Access::Open : Access::Write;
     case Action::New:
     case Action::Append:

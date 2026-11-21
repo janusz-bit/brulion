@@ -16,12 +16,11 @@ done in the repository simply disappears from the list.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's, on
-  the phone (docs/CLI.md "AI agents for other devices", services.brulion-acp). Missing: a turn
-  whose app was ended by Android meanwhile (the computer has its answer, a new stream knows nothing
-  of it: a "results" request for the conversations' sessions), a foreground service instead of
-  the screen kept on while an agent on another computer works, pairing through a brulion://
-  link or a QR code `acp pair` prints, the browser (the computer refuses requests with an
-  Origin: CORS for an origin named on it), a try with a real agent from a real phone, a try with
+  the phone and in the browser (docs/CLI.md "AI agents for other devices", services.brulion-acp).
+  Missing: a foreground service instead of the screen kept on while an agent on another computer
+  works (a turn the app lost is fetched from the computer afterwards, but the answer comes only
+  when Brulion runs again), the agent's questions while the phone was gone (answered "cancelled"
+  there now: they could wait for the phone instead), a try with a real agent from a real phone, a try with
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
   /c`) and macOS; and the other direction — Brulion's assistant as an ACP agent for Zed and
   JetBrains (`brulion-cli acp agent`, which needs `b.ai` in brulion-cli).

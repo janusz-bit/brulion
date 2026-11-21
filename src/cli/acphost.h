@@ -20,10 +20,16 @@
 //   here, in the notebook's folder by default).
 // * With --nextcloud the notebook here is kept in sync with Nextcloud (hostsync.h): before a turn
 //   starts (the device's latest notes are here), after files are written and after a turn.
+// * The last turn of each session a device prompted is kept here (HostTurn: how it ended, the
+//   agent's answer): a device that lost its stream — Android ended the app, the network was gone
+//   for long — asks for it (GET sessions/<id>/turn) and writes the answer into the conversation. A
+//   stream that runs a turn is never cut off for a new one of its device: it ends after the turn,
+//   the agent's questions in it answered "cancelled" (nobody is there to answer them).
 //
 // Plain HTTP on 127.0.0.1 behind a reverse proxy that adds HTTPS (in the user's own network, a
 // tailnet — the agents can run commands here), or HTTPS itself with --tls-cert / --tls-key. Host
-// is checked (DNS rebinding); a request with an Origin (a browser's page) is refused.
+// is checked (DNS rebinding); a request with an Origin (a browser's page) is refused, unless that
+// origin is the app's own in a browser named with --allowed-origin (CORS).
 #pragma once
 
 #include "http.h"
@@ -121,6 +127,12 @@ inline constexpr int kPairingAttempts = 5;
 /// A new pairing code ("K7QM2XRP"; shown as "K7QM-2XRP").
 QString newPairingCode();
 QString formatPairingCode(const QString &code);
+/// The brulion:// address that opens the app's pairing filled in: brulion://pair?url=…&code=…
+/// ("" without a server address).
+QString pairingLink(const QString &url, const QString &code);
+/// `text` as a QR code of block characters for a terminal (two rows a line, the light modules
+/// drawn, its quiet zone around); "" when it does not fit one.
+QString terminalQrCode(const QString &text);
 /// A new device token ("bat_" + 43 characters) and the hash kept of tokens and codes (SHA-256 hex).
 QString newDeviceToken();
 QString secretHash(const QString &secret);
@@ -138,6 +150,32 @@ QJsonObject toolsServer(const QString &program, const QString &root);
 /// A request of the agent this server answers itself (fs/*, terminal/*).
 bool servedHere(const QJsonObject &message);
 
+/// The last turn of a session a device prompted (GET sessions/<id>/turn).
+struct HostTurn {
+    enum class State { Running, Done, Failed };
+    State state = State::Running;
+    QString device;  ///< "dev_…"
+    QString session; ///< the agent's session id
+    QString stream;  ///< the stream it runs in
+    QString prompt;  ///< the key of its session/prompt request's id
+    QString text;    ///< what the agent said (agent_message_chunk), at most kMaxTurnTextChars
+    QStringList tools; ///< the titles of its tool calls, at most kMaxTurnTools
+    QString stopReason; ///< Done: the agent's ("end_turn", "cancelled" …)
+    QString error;      ///< Failed: why
+    bool asking = false; ///< the agent waits on a question of it to the device
+    QDateTime started;
+    QDateTime ended;
+    /// {session, state: "running" | "done" | "failed", text, tools, stopReason, error, asking,
+    /// started, ended}.
+    QJsonObject toJson() const;
+};
+/// The most of an answer and of its tool calls a turn keeps; the turns kept for one device (the
+/// oldest ended go first); how long an ended one is kept.
+inline constexpr qsizetype kMaxTurnTextChars = 1024 * 1024;
+inline constexpr int kMaxTurnTools = 100;
+inline constexpr int kMaxTurnsPerDevice = 64;
+inline constexpr qint64 kTurnKeptMs = 24LL * 60 * 60 * 1000;
+
 struct AcpHostOptions {
     QHostAddress address = QHostAddress(QHostAddress::LocalHost);
     quint16 port = 8790;
@@ -149,6 +187,8 @@ struct AcpHostOptions {
     QString tlsCertificate;
     QString tlsKey;
     QStringList allowedHosts;
+    /// The app in a browser at these origins may call it (CORS): "https://notes.example.com".
+    QStringList allowedOrigins;
     int maxStreams = 16;
     int maxStreamsPerDevice = 8;
     qint64 streamIdleMs = 30LL * 60 * 1000;
@@ -178,6 +218,8 @@ public:
     QString publicUrl() const { return m_publicUrl; }
     http::Server *server() { return m_http.get(); }
     int streamCount() const { return int(m_streams.size()); }
+    /// The turn kept of `device`'s session `session` (nullptr none).
+    const HostTurn *turn(const QString &device, const QString &session) const;
     std::function<void(const QString &line)> log;
 
     /// Tests: the time now (default the system's).
@@ -206,6 +248,25 @@ private:
     void answerWaiter(Stream *s);
     void closeStream(Stream *s, const QString &why);
     void removeStream(Stream *s);
+    /// Nobody fetches from `s` any more (a new stream of its device for the agent, or its device
+    /// lost it): it ends now, or after its turns — its agent's questions answered "cancelled".
+    void retire(Stream *s, const QString &why);
+    /// Removes `s` once the event loop goes on (not while its process's output is read).
+    void removeLater(Stream *s);
+
+    // The turns kept (HostTurn).
+    void sessionTurn(const PairedDevice &device, const QString &session, const http::Request &request,
+                     const http::Reply &reply);
+    void turnStarted(Stream *s, const QString &session, const QString &prompt);
+    void turnUpdate(Stream *s, const QJsonObject &params);
+    void turnEnded(Stream *s, const QString &prompt, const QJsonObject &response);
+    /// Every running turn of `s` failed: `why`.
+    void turnsFailed(Stream *s, const QString &why);
+    void turnChanged(const QString &key);
+    void answerTurnWaiter(QTimer *timer);
+    void forgetTurns();
+    bool originAllowed(const QByteArray &origin) const;
+    http::Headers corsHeaders(const QByteArray &origin) const;
 
     void startAgent(Stream *s);
     void fromAgent(Stream *s, const QByteArray &line);
@@ -234,6 +295,14 @@ private:
     QStringList m_hosts;
     QJsonArray m_mcpServers;
     QHash<QString, Stream *> m_streams;
+    QHash<QString, HostTurn> m_turns; ///< by device + "\n" + session
+    struct TurnWaiter {
+        QString key;
+        http::Reply reply;
+        QTimer *timer = nullptr;
+    };
+    QList<TurnWaiter> m_turnWaiters;
+    QStringList m_origins; ///< allowed Origin values (--allowed-origin)
     QTimer *m_maintenance = nullptr;
     QDateTime m_certModified;
     QDateTime m_keyModified;
