@@ -652,8 +652,11 @@ private Q_SLOTS:
         {
             QSettings raw(file, QSettings::IniFormat);
             raw.setValue(u"ai/agents"_s,
-                         uR"([{"id":"zly-adres","name":"x","url":"ftp://agent.example.pl","remote":"claude"},
-                             {"id":"bez-agenta","name":"y","url":"https://agent.example.pl"}])"_s);
+                         QString::fromUtf8(QJsonDocument(QJsonArray{
+                                 QJsonObject{{u"id"_s, u"zly-adres"_s}, {u"name"_s, u"x"_s},
+                                             {u"url"_s, u"ftp://agent.example.pl"_s}, {u"remote"_s, u"claude"_s}},
+                                 QJsonObject{{u"id"_s, u"bez-agenta"_s}, {u"name"_s, u"y"_s},
+                                             {u"url"_s, u"https://agent.example.pl"_s}}}).toJson()));
         }
         shell::AppSettings settings(file, data);
         QCOMPARE(settings.acpAgents().size(), 0); // (malformed: left out)
