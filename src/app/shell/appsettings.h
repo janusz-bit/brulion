@@ -43,7 +43,7 @@ class AppSettings : public QObject {
     Q_OBJECT
 
     // ---- General ------------------------------------------------------------------------
-    /// "dark" (default, with the black background: darkSurface) | "light" | "system" (Theme.mode).
+    /// "dark" (default, with the graphite background: darkSurface) | "light" | "system" (Theme.mode).
     Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged FINAL)
     /// UI language "en" | "pl". Default: English (whatever the system's locale); the intro's
     /// first step and Settings → General choose Polish.
@@ -52,6 +52,9 @@ class AppSettings : public QObject {
     Q_PROPERTY(qreal fontScale READ fontScale WRITE setFontScale NOTIFY fontScaleChanged FINAL)
     /// Reduce animations (Theme.reducedMotion).
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged FINAL)
+    /// The interface's size on this device (desktop; ui/uiscale.h): 0 "Automatic" (default: by the
+    /// screen, AppController.autoInterfaceScale), else a factor 0.8 … 2 on 5 % steps.
+    Q_PROPERTY(qreal interfaceScale READ interfaceScale WRITE setInterfaceScale NOTIFY interfaceScaleChanged FINAL)
 
     // ---- Appearance (Settings → Appearance; Theme inputs, ThemePalette) -------------------
     /// "coral" (default) | "red" | "blue" | "green" | "teal" | "violet" | "graphite" | "custom"
@@ -61,7 +64,7 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString customAccent READ customAccent WRITE setCustomAccent NOTIFY accentChanged FINAL)
     /// Light background "paper" (default) | "white".
     Q_PROPERTY(QString lightSurface READ lightSurface WRITE setLightSurface NOTIFY surfacesChanged FINAL)
-    /// Dark background "black" (OLED, default) | "slate".
+    /// Dark background "graphite" (layered greys, default) | "black" (OLED) | "slate".
     Q_PROPERTY(QString darkSurface READ darkSurface WRITE setDarkSurface NOTIFY surfacesChanged FINAL)
     /// Font family of the interface ("" = the system's).
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily WRITE setUiFontFamily NOTIFY fontFamiliesChanged FINAL)
@@ -266,6 +269,8 @@ public:
     void setFontScale(qreal scale);
     bool reducedMotion() const;
     void setReducedMotion(bool on);
+    qreal interfaceScale() const;
+    void setInterfaceScale(qreal scale);
 
     /// Ids for sidebarHidden: the navigation entries, then the sections.
     static QStringList sidebarItems();
@@ -543,6 +548,7 @@ Q_SIGNALS:
     void languageChanged();
     void fontScaleChanged();
     void reducedMotionChanged();
+    void interfaceScaleChanged();
     void accentChanged();
     void surfacesChanged();
     void fontFamiliesChanged();

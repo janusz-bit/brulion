@@ -1318,6 +1318,7 @@ FocusScope {
 
     BMenu {
         id: pageMenu
+        sheet: true
         onAboutToShow: root.countNow()
 
         // The page's counts (and the selection's), for reading only.

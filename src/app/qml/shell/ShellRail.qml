@@ -25,37 +25,44 @@ Rectangle {
     readonly property string routeView: AppController.currentView
     /// The views offered (the ones hidden in the settings are not shown: AppSettings.sidebarHidden).
     readonly property list<var> entries: [
-        { entryView: "journals", entryAlso: "journal", entryTitle: qsTr("Journals"), entryIcon: "book-open" },
-        { entryView: "calendar", entryAlso: "", entryTitle: qsTr("Calendar"), entryIcon: "calendar" },
-        { entryView: "tasks", entryAlso: "", entryTitle: qsTr("Tasks"), entryIcon: "list-todo" },
-        { entryView: "habits", entryAlso: "", entryTitle: qsTr("Habits"), entryIcon: "flame" },
-        { entryView: "gym", entryAlso: "", entryTitle: qsTr("Gym"), entryIcon: "dumbbell" },
-        { entryView: "flashcards", entryAlso: "", entryTitle: qsTr("Flashcards"), entryIcon: "layers" },
-        { entryView: "allPages", entryAlso: "", entryTitle: qsTr("All pages"), entryIcon: "files" },
-        { entryView: "tags", entryAlso: "tag", entryTitle: qsTr("Tags"), entryIcon: "tags" },
-        { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryIcon: "waypoints" },
-        { entryView: "search", entryAlso: "", entryTitle: qsTr("Search"), entryIcon: "search" }
+        { entryView: "journals", entryAlso: "journal", entryTitle: qsTr("Journals"), entryShort: qsTr("Journal"), entryIcon: "book-open" },
+        { entryView: "calendar", entryAlso: "", entryTitle: qsTr("Calendar"), entryShort: qsTr("Calendar"), entryIcon: "calendar" },
+        { entryView: "tasks", entryAlso: "", entryTitle: qsTr("Tasks"), entryShort: qsTr("Tasks"), entryIcon: "list-todo" },
+        { entryView: "habits", entryAlso: "", entryTitle: qsTr("Habits"), entryShort: qsTr("Habits"), entryIcon: "flame" },
+        { entryView: "gym", entryAlso: "", entryTitle: qsTr("Gym"), entryShort: qsTr("Gym"), entryIcon: "dumbbell" },
+        { entryView: "flashcards", entryAlso: "", entryTitle: qsTr("Flashcards"), entryShort: qsTr("Flashcards"), entryIcon: "layers" },
+        { entryView: "allPages", entryAlso: "", entryTitle: qsTr("All pages"), entryShort: qsTr("Pages"), entryIcon: "files" },
+        { entryView: "tags", entryAlso: "tag", entryTitle: qsTr("Tags"), entryShort: qsTr("Tags"), entryIcon: "tags" },
+        { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryShort: qsTr("Graph"), entryIcon: "waypoints" },
+        { entryView: "search", entryAlso: "", entryTitle: qsTr("Search"), entryShort: qsTr("Search"), entryIcon: "search" }
     ]
     readonly property list<var> noRows: []
     /// The extensions' entries as text: made again only when they change.
     readonly property string itemsKey: Workspace.extensions !== null
                                        ? Workspace.extensions.contributionsKey("sidebar", Workspace.extensions.appRevision) : ""
+    /// The drawer (narrow windows): each view's short name under its icon, as a navigation rail of
+    /// Material 3 — a phone has no tooltips to tell the icons apart.
+    readonly property bool labelled: Theme.narrow
     /// The buttons' squares and the room on both sides of them.
     readonly property int buttonSize: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight
     readonly property int sidePadding: Theme.space2
+    /// A short name's line under its button (labelled).
+    readonly property int labelHeight: labelled ? Theme.textXs + 6 : 0
 
     function go(route: var): void {
         AppController.navigate(route)
         rail.navigated()
     }
 
-    implicitWidth: buttonSize + 2 * sidePadding
-    color: Theme.bgSunken
+    implicitWidth: labelled ? 76 : buttonSize + 2 * sidePadding
+    // The darkest layer on the graphite background (Discord's column of servers).
+    color: Theme.paneLines ? Theme.bgSunken : Theme.bgSunken.darker(1.25)
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Views")
 
     // The line between the rail and the page panel (or the page, the panel hidden).
     Rectangle {
+        visible: Theme.paneLines
         anchors.right: parent.right
         width: 1
         height: parent.height
@@ -68,9 +75,13 @@ Rectangle {
         property bool selected: false
         /// A count at the icon's corner (the flashcards to study now); 0: none.
         property int badge: 0
+        /// The name under the icon in the drawer ("" none).
+        property string shortName
         checked: selected
         toolTipBeside: true
+        showToolTip: !rail.labelled
         Layout.alignment: Qt.AlignHCenter
+        Layout.bottomMargin: rail.labelHeight
         iconColor: selected || hovered || down ? Theme.fg : Theme.fgMuted
         Accessible.checked: selected
         Rectangle {
@@ -93,6 +104,23 @@ Rectangle {
             Accessible.ignored: true
         }
         Accessible.description: button.badge > 0 ? qsTr("%n to study now", "", button.badge) : ""
+        // The short name (the drawer): a tap on it is a tap on the button.
+        BText {
+            visible: rail.labelled && button.shortName !== ""
+            x: Math.round((button.width - width) / 2)
+            y: button.height
+            width: Math.min(implicitWidth, rail.width - 6)
+            elide: Text.ElideRight
+            horizontalAlignment: Text.AlignHCenter
+            text: button.shortName
+            font.pixelSize: Theme.textXs
+            font.weight: button.selected ? Theme.weightSemiBold : Theme.weightMedium
+            color: button.selected ? Theme.fg : Theme.fgMuted
+            Accessible.ignored: true
+            TapHandler {
+                onTapped: button.clicked()
+            }
+        }
     }
 
     ColumnLayout {
@@ -119,29 +147,19 @@ Rectangle {
             Accessible.description: Workspace.name
             onClicked: rail.notebookMenuNow().popup(notebookButton, notebookButton.width + Theme.space1, 0)
 
-            background: Rectangle {
-                radius: Theme.radius
-                color: notebookButton.down ? Theme.bgPressed : notebookButton.hovered ? Theme.bgHover : "transparent"
+            background: Item {
                 BFocusRing {
                     visible: notebookButton.visualFocus
                     targetRadius: Theme.radius
                 }
             }
             contentItem: Item {
-                Rectangle {
+                // A circle that squares its corners under the pointer, as Discord's servers.
+                BAvatar {
                     anchors.centerIn: parent
-                    width: Math.round(rail.buttonSize * 0.72)
-                    height: width
-                    radius: Theme.radius
-                    color: Theme.accentSolid
-                    BText {
-                        anchors.centerIn: parent
-                        text: Js.toUpperCase(Js.charAt(Js.trim(Workspace.name !== "" ? Workspace.name : "B"), 0))
-                        color: Theme.fgOnAccent
-                        font.weight: Theme.weightSemiBold
-                        font.pixelSize: Math.round(parent.height * 0.52)
-                        Accessible.ignored: true
-                    }
+                    size: Math.round(rail.buttonSize * 0.8)
+                    name: Workspace.name
+                    active: notebookButton.hovered || notebookButton.down
                 }
             }
             // No tooltip: the panel beside it names the notebook, and the window's corner is where
@@ -171,7 +189,9 @@ Rectangle {
                         required property string entryAlso
                         required property string entryTitle
                         required property string entryIcon
+                        required property string entryShort
                         objectName: "sidebarNav_" + entryView
+                        shortName: entryShort
                         // Hidden in the settings: not shown (the layout leaves no gap); the gym and
                         // habits only while they are switched on (Settings → Extensions).
                         visible: AppSettings.sidebarHidden.indexOf(entryView) < 0 && (entryView !== "gym" || AppSettings.gymEnabled)
@@ -190,6 +210,7 @@ Rectangle {
                     objectName: "drawerImportNotes"
                     visible: Theme.narrow
                     label: qsTr("Import notes")
+                    shortName: qsTr("Import", "the drawer's short name of Import notes")
                     iconName: "download"
                     selected: rail.routeView === "importExport"
                     onClicked: rail.go({ view: "importExport", tab: "import" })
@@ -209,6 +230,8 @@ Rectangle {
                         iconName: UiModels.stringField(extensionEntry.modelData, "icon") !== ""
                                   ? UiModels.stringField(extensionEntry.modelData, "icon") : "puzzle"
                         toolTip: extensionEntry.tooltip
+                        // (The drawer: its tooltip under the icon, elided.)
+                        shortName: extensionEntry.tooltip
                         selected: extensionEntry.view !== "" && rail.routeView === "extension"
                                   && AppController.routeText(AppController.currentRoute, "extension") === extensionEntry.extension
                                   && AppController.routeText(AppController.currentRoute, "name") === extensionEntry.view
@@ -247,6 +270,7 @@ Rectangle {
         RailButton {
             objectName: "railSettings"
             label: qsTr("Settings")
+            shortName: qsTr("Settings")
             iconName: "settings"
             shortcut: ShortcutMap.sequences["go.settings"] || ""
             selected: rail.routeView === "settings"

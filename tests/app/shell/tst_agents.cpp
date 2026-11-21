@@ -129,6 +129,57 @@ private Q_SLOTS:
             QSKIP("AI agents run only in the desktop app");
     }
 
+    /// An option's row for the chat's chips: a select of just "Off" and "On" (Claude Code's "Fast
+    /// mode") is a switch — its values and state —, other selects and bools are not.
+    void optionRows_data()
+    {
+        QTest::addColumn<QJsonObject>("option");
+        QTest::addColumn<bool>("onOff");
+        QTest::addColumn<QString>("onValue");
+        QTest::addColumn<QString>("offValue");
+        QTest::addColumn<bool>("isOn");
+        const auto select = [](const QString &current, const QJsonArray &choices) {
+            return QJsonObject{{u"id"_s, u"fast"_s}, {u"name"_s, u"Fast mode"_s}, {u"category"_s, u"speed"_s},
+                               {u"type"_s, u"select"_s}, {u"currentValue"_s, current}, {u"options"_s, choices}};
+        };
+        const auto choice = [](const QString &value, const QString &name) {
+            return QJsonObject{{u"value"_s, value}, {u"name"_s, name}};
+        };
+        QTest::newRow("off, on (off)") << select(u"off"_s, {choice(u"off"_s, u"Off"_s), choice(u"on"_s, u"On"_s)})
+                                       << true << u"on"_s << u"off"_s << false;
+        QTest::newRow("on first (on)") << select(u"fast-on"_s, {choice(u"fast-on"_s, u"On"_s), choice(u"fast-off"_s, u"Off"_s)})
+                                       << true << u"fast-on"_s << u"fast-off"_s << true;
+        QTest::newRow("words in the values") << select(u"disabled"_s, {choice(u"enabled"_s, u"Szybko"_s),
+                                                                       choice(u"disabled"_s, u"Wolno"_s)})
+                                             << true << u"enabled"_s << u"disabled"_s << false;
+        QTest::newRow("two models") << select(u"opus"_s, {choice(u"opus"_s, u"Opus"_s), choice(u"sonnet"_s, u"Sonnet"_s)})
+                                    << false << QString() << QString() << false;
+        QTest::newRow("on, on") << select(u"a"_s, {choice(u"a"_s, u"On"_s), choice(u"b"_s, u"On"_s)})
+                                << false << QString() << QString() << false;
+        QTest::newRow("three choices") << select(u"off"_s, {choice(u"off"_s, u"Off"_s), choice(u"on"_s, u"On"_s),
+                                                             choice(u"max"_s, u"Max"_s)})
+                                       << false << QString() << QString() << false;
+        QTest::newRow("a bool") << QJsonObject{{u"id"_s, u"fast"_s}, {u"name"_s, u"Fast"_s}, {u"type"_s, u"boolean"_s},
+                                               {u"currentValue"_s, true}}
+                                << false << QString() << QString() << false;
+    }
+    void optionRows()
+    {
+        QFETCH(QJsonObject, option);
+        QFETCH(bool, onOff);
+        QFETCH(QString, onValue);
+        QFETCH(QString, offValue);
+        QFETCH(bool, isOn);
+        const std::optional<acp::ConfigOption> o = acp::ConfigOption::fromJson(option);
+        QVERIFY(o);
+        const QVariantMap row = shell::agentOptionRow(*o);
+        QCOMPARE(row.value(u"id"_s).toString(), option.value(u"id"_s).toString());
+        QCOMPARE(row.value(u"onOff"_s).toBool(), onOff);
+        QCOMPARE(row.value(u"onValue"_s).toString(), onValue);
+        QCOMPARE(row.value(u"offValue"_s).toString(), offValue);
+        QCOMPARE(row.value(u"isOn"_s).toBool(), isOn);
+    }
+
     void aConversation()
     {
         auto ws = open({fake()});

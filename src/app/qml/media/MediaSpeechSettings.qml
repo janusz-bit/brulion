@@ -33,7 +33,7 @@ ColumnLayout {
     }
     BText {
         Layout.fillWidth: true
-        text: qsTr("Voice notes and other recordings in your notes become text on this device: OpenAI's Whisper runs here, in Polish too, and no sound leaves the device. The text goes under the recording, as a block you can edit.")
+        text: qsTr("Voice notes become text on this device with OpenAI's Whisper, Polish included. No sound leaves the device.")
         variant: "muted"
         wrapMode: Text.Wrap
     }
@@ -144,7 +144,7 @@ ColumnLayout {
                 objectName: "speechLicense"
                 Layout.fillWidth: true
                 title: qsTr("Whose model")
-                description: qsTr("OpenAI made Whisper and gives it under the %1 licence; whisper.cpp's authors converted it for this device. Brulion only downloads it when you ask.").arg(AppController.speech.modelLicense)
+                description: qsTr("Whisper by OpenAI (licence: %1), prepared by whisper.cpp. Downloaded only when you ask.").arg(AppController.speech.modelLicense)
                 BButton {
                     size: "small"
                     variant: "ghost"

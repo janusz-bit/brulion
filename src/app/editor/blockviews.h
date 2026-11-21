@@ -24,6 +24,11 @@
 
 namespace brulion::editor {
 
+/// A table cell's lines: its text split at `<br>` (also `<br/>`, `<br />`, any case) — the line
+/// break of GFM tables, which Obsidian draws and Brulion's CSV import writes (docs/SYNTAX.md §9).
+/// A cell without one is its one line.
+QStringList tableCellLines(const QString &cell);
+
 /// Pure helpers of the block views (singleton `BlockViews`): the roles' maps and lists shaped
 /// for typed QML. Every function takes what the view has and returns plain values.
 class BlockViews : public QObject {

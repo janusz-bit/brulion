@@ -77,6 +77,7 @@ private Q_SLOTS:
         QVERIFY(!s.introDone());
         QVERIFY(s.newNotebookConfig().isEmpty());
         QCOMPARE(s.fontScale(), 1.0);
+        QCOMPARE(s.interfaceScale(), 0.0); // "Automatic"
         QCOMPARE(s.editorFont(), u"sans"_s);
         QCOMPARE(s.editorFontSize(), 16);
         QCOMPARE(s.editorWidth(), 680);
@@ -98,7 +99,7 @@ private Q_SLOTS:
         QCOMPARE(s.accentColor(), u"coral"_s);
         QCOMPARE(s.customAccent(), QString());
         QCOMPARE(s.lightSurface(), u"paper"_s);
-        QCOMPARE(s.darkSurface(), u"black"_s);
+        QCOMPARE(s.darkSurface(), u"graphite"_s);
         QCOMPARE(s.uiFontFamily(), QString());
         QCOMPARE(s.editorFontFamily(), QString());
         QCOMPARE(s.editorMonoFamily(), QString());
@@ -365,8 +366,15 @@ private Q_SLOTS:
         QTest::newRow("light black") << "lightSurface" << QVariant(u"black"_s) << QVariant(u"paper"_s);
         QTest::newRow("dark black") << "darkSurface" << QVariant(u"black"_s) << QVariant(u"black"_s);
         QTest::newRow("dark slate") << "darkSurface" << QVariant(u"slate"_s) << QVariant(u"slate"_s);
-        QTest::newRow("dark white") << "darkSurface" << QVariant(u"white"_s) << QVariant(u"black"_s);
-        QTest::newRow("dark Polish") << "darkSurface" << QVariant(u"granatowe"_s) << QVariant(u"black"_s);
+        QTest::newRow("dark graphite") << "darkSurface" << QVariant(u"graphite"_s) << QVariant(u"graphite"_s);
+        QTest::newRow("dark white") << "darkSurface" << QVariant(u"white"_s) << QVariant(u"graphite"_s);
+        QTest::newRow("dark Polish") << "darkSurface" << QVariant(u"grafitowe"_s) << QVariant(u"graphite"_s);
+        QTest::newRow("scale automatic") << "interfaceScale" << QVariant(0.0) << QVariant(0.0);
+        QTest::newRow("scale 125 %") << "interfaceScale" << QVariant(1.25) << QVariant(1.25);
+        QTest::newRow("scale between steps") << "interfaceScale" << QVariant(1.23) << QVariant(1.25);
+        QTest::newRow("scale too small") << "interfaceScale" << QVariant(0.3) << QVariant(0.8);
+        QTest::newRow("scale too large") << "interfaceScale" << QVariant(9.0) << QVariant(2.0);
+        QTest::newRow("scale negative") << "interfaceScale" << QVariant(-1.0) << QVariant(0.0);
         QTest::newRow("font trimmed") << "uiFontFamily" << QVariant(u"  DejaVu Serif  "_s) << QVariant(u"DejaVu Serif"_s);
         QTest::newRow("font diacritics") << "editorFontFamily" << QVariant(u"Źródło Serif Pro"_s)
                                          << QVariant(u"Źródło Serif Pro"_s);
@@ -430,6 +438,7 @@ private Q_SLOTS:
                                                {u"editorMonoFamily"_s, u"editor/monoFamily"_s},
                                                {u"editorLineSpacing"_s, u"editor/lineSpacing"_s},
                                                {u"density"_s, u"ui/density"_s},
+                                               {u"interfaceScale"_s, u"ui/interfaceScale"_s},
                                                {u"sidebarHidden"_s, u"ui/sidebar/hidden"_s},
                                                {u"sidebarSections"_s, u"ui/sidebar/sections"_s},
                                                {u"bottomNavTabs"_s, u"ui/bottomNav/tabs"_s}};
@@ -640,6 +649,7 @@ private Q_SLOTS:
         s.setEditorLineSpacing(u"compact"_s);
         s.setDensity(u"compact"_s);
         s.setFontScale(1.3);
+        s.setInterfaceScale(1.5);
         s.setEditorFont(u"serif"_s);
         s.setEditorFontSize(20);
         s.setCaptureButtonShown(false);
@@ -649,13 +659,14 @@ private Q_SLOTS:
         QCOMPARE(s.accentColor(), u"coral"_s);
         QCOMPARE(s.customAccent(), u"#123456"_s); // kept for "Custom…"
         QCOMPARE(s.lightSurface(), u"paper"_s);
-        QCOMPARE(s.darkSurface(), u"black"_s);
+        QCOMPARE(s.darkSurface(), u"graphite"_s);
         QCOMPARE(s.uiFontFamily(), QString());
         QCOMPARE(s.editorFontFamily(), QString());
         QCOMPARE(s.editorMonoFamily(), QString());
         QCOMPARE(s.editorLineSpacing(), u"normal"_s);
         QCOMPARE(s.density(), u"comfortable"_s);
         QCOMPARE(s.fontScale(), 1.0);
+        QCOMPARE(s.interfaceScale(), 0.0); // "Automatic"
         QCOMPARE(s.editorFont(), u"sans"_s);
         QCOMPARE(s.editorFontSize(), 16);
         QVERIFY(!s.captureButtonShown());

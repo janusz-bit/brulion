@@ -5220,69 +5220,45 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     app->goHome();
 }
 
-/// Narrow windows: the settings' sections as tabs at the top — the route's one checked and
-/// scrolled into the bar's view, a tap on another shows it (the route's section replaced, no
-/// history entry), a route from elsewhere moves the tabs along.
-void checkSettingsTabs(QQuickWindow *window, AppController *app, const Check &check)
+/// Narrow windows: the settings start on the list of their sections (the notebook's card, the
+/// sections in groups); a tap on a row opens its section as a step of the history — Back returns
+/// to the list, and Back again leaves the settings; a route to a section shows it at once.
+void checkSettingsHome(QQuickWindow *window, AppController *app, const Check &check)
 {
-    const auto tab = [window](const QString &key) {
-        return shownNamed(window->contentItem(), u"settingsTab-"_s + key);
-    };
+    const auto named = [window](const QString &name) { return shownNamed(window->contentItem(), name); };
     const auto section = [app] { return app->currentRoute().value(u"section"_s).toString(); };
-    const auto current = [&](const QString &key) {
-        QQuickItem *t = tab(key);
-        return t && t->property("checked").toBool() && uidriver::onScreen(window, t);
-    };
     app->goHome();
     waitFor([app] { return app->currentView() == u"journals"; });
-    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"backups"_s}});
+    app->navigate({{u"view"_s, u"settings"_s}});
+    QQuickItem *backups = nullptr;
     check(waitFor([&] {
-              return current(u"backups"_s)
-                     && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) == nullptr;
+              backups = named(u"settingsHomeRow-backups"_s);
+              return backups && named(u"settingsHomeRow-vault"_s) && named(u"settingsHomeRow-appearance"_s)
+                     && named(u"defaultReminderTimeField"_s) == nullptr;
           }),
-          "a phone's settings: the route's section is the checked tab, scrolled into view, alone on the screen");
-    // The tabs do not fit the phone: the bar is scrolled from its start (a list's content starts at
-    // originX, not 0) and its first tab in view, as the list itself says (indexAt), is not General.
-    // (Not General's own place: a tab the list scrolled away is only culled, and keeps the place it
-    // had — on a slow machine one it never got, inside the window.)
-    QQuickItem *list = tab(u"backups"_s);
-    while (list && !isA(list, "QQuickListView"))
-        list = list->parentItem();
-    const qreal tabsWidth = list ? list->property("contentWidth").toReal() : 0;
-    const qreal contentX = list ? list->property("contentX").toReal() : 0;
-    const qreal scrolled = list ? contentX - list->property("originX").toReal() : 0;
-    // The first tab from the bar's left edge on: the edge itself may fall into the spacing between
-    // two tabs (indexAt -1 there), so a few points further in are asked too.
-    int firstShown = -1;
-    for (qreal dx = 1; list && firstShown < 0 && dx < 48; dx += 4)
-        QMetaObject::invokeMethod(list, "indexAt", qReturnArg(firstShown), contentX + dx, list->height() / 2);
-    std::fprintf(stderr,
-                 "selftest: the settings' tabs: %.0f px in a bar of %.0f px, scrolled %.0f px, the first in view %d\n",
-                 tabsWidth, list ? list->width() : 0.0, scrolled, firstShown);
-    check(list && tabsWidth > list->width() + 1 && scrolled > 1 && firstShown > 0,
-          "the section tabs scroll sideways (General is out of view beside Backups)");
-    QQuickItem *sync = tab(u"sync"_s);
-    if (!sync || !uidriver::onScreen(window, sync)) {
-        check(false, "the Sync tab is in view beside Backups");
+          "a phone's settings start on the list of their sections, no section's rows yet");
+    check(named(u"settingsHomeRow-shortcuts"_s) == nullptr, "a touch screen's list has no keyboard shortcuts");
+    QQuickItem *vault = named(u"settingsHomeRow-vault"_s);
+    if (!vault || !uidriver::onScreen(window, vault)) {
+        check(false, "the notebook's card is on screen");
         return;
     }
     settle(200);
-    touchTap(window, pointIn(sync));
+    touchTap(window, pointIn(vault));
     check(waitFor([&] {
-              return section() == u"sync" && current(u"sync"_s) && !tab(u"backups"_s)->property("checked").toBool();
+              return section() == u"vault" && named(u"defaultReminderTimeField"_s) != nullptr
+                     && named(u"settingsHome"_s) == nullptr;
           }),
-          "a tap on a section's tab shows that section");
+          "a tap on the notebook's card opens its section, alone on the screen");
+    app->back();
+    check(waitFor([&] { return app->currentView() == u"settings" && section().isEmpty() && named(u"settingsHome"_s); }),
+          "Back returns to the list of sections");
+    app->back();
+    check(waitFor([app] { return app->currentView() == u"journals"; }), "Back again leaves the settings");
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
-    check(waitFor([&] {
-              return current(u"vault"_s) && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) != nullptr;
-          }),
-          "a route to another section, after a tap, checks its tab and shows it");
-    app->back();
-    check(waitFor([&] { return app->currentView() == u"settings" && section() == u"sync"; }),
-          "Back returns to the section shown before the route");
-    app->back();
-    check(waitFor([app] { return app->currentView() == u"journals"; }),
-          "a tab's choice made no history entry of its own: Back leaves the settings");
+    check(waitFor([&] { return named(u"defaultReminderTimeField"_s) != nullptr && named(u"settingsHome"_s) == nullptr; }),
+          "a route to a section shows that section at once");
+    app->goHome();
 }
 
 /// The page editor shown under `root` with its controller (a loaded page), else {nullptr, nullptr}.
@@ -9474,8 +9450,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     const bool dark = theme->property("dark").toBool();
     check(color("accent") == (dark ? u"#ff7a66"_s : u"#c4422f"_s)
                   && color("fgOnAccent") == (dark ? u"#2b0a05"_s : u"#ffffff"_s)
-                  && color("bg") == (dark ? u"#000000"_s : u"#fbf7ee"_s),
-          "the default look is \"Nocny\" (coral on paper / OLED black)");
+                  && color("bg") == (dark ? u"#1e1f24"_s : u"#fbf7ee"_s),
+          "the default look: coral on paper / graphite");
     // Visible, maybe scrolled out of the view (activate() scrolls it in).
     const auto shownItem = [window](const QString &name) {
         QQuickItem *found = nullptr;
@@ -9552,8 +9528,9 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                                                     {u"fontScaleSetting"_s, compact ? 1 : 0}};
             if (settings->themeMode() != u"dark")
                 expected.append({u"lightSurfaceSetting"_s, compact && !roomy ? -1 : 0});
+            // (Three backgrounds: under its text on a phone.)
             if (settings->themeMode() != u"light")
-                expected.append({u"darkSurfaceSetting"_s, compact && !roomy ? -1 : 0});
+                expected.append({u"darkSurfaceSetting"_s, compact ? (roomy ? 1 : -1) : 0});
             for (const auto &[name, stacked] : expected) {
                 *problem = shapeProblem(name, stacked);
                 if (!problem->isEmpty())
@@ -9566,7 +9543,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         const bool shaped = waitFor([&] { return rowsShaped(compact, true, &problem); });
         if (!shaped)
             std::fprintf(stderr, "selftest: settings rows: %s\n", qPrintable(problem));
-        check(shaped, compact ? "phone settings: the background rows beside their text, Motyw and Rozmiar tekstu under it, filled"
+        check(shaped, compact ? "phone settings: the light background beside its text; the dark background, Motyw and Rozmiar tekstu under it, filled"
                               : "settings rows: every control beside its text, at the row's right edge");
         if (compact) {
             const QSize phone = window->size();
@@ -9832,8 +9809,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                                     <= topBar->mapToScene(QPointF(0, topBar->height())).y() + 1;
               }),
               "switched on again, it is back on the top bar");
-        // Larger text (Appearance → Text size: Larger): the five labels stay whole — a long one
-        // ("Kalendarz") takes room from the short ones.
+        // Larger text (Appearance → Text size: Larger): the current view's name in its pill stays
+        // whole (the other items are icons; the pill takes the room they leave).
         QQuickItem *bar = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
         const qreal scale = settings->fontScale();
         settings->setFontScale(1.3);
@@ -9848,15 +9825,15 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                 if (!item->inherits("QQuickText") || !shown(item))
                     continue;
                 ++labels;
-                scaled = scaled && item->property("font").value<QFont>().pixelSize() == qRound(12 * 1.3);
+                scaled = scaled && item->property("font").value<QFont>().pixelSize() == qRound(13 * 1.3);
                 if (item->property("truncated").toBool())
                     cut += item->property("text").toString() + u' ';
             }
-            return labels == 5 && scaled && cut.isEmpty();
+            return labels == 1 && scaled && cut.isEmpty();
         });
         if (!whole)
             std::fprintf(stderr, "selftest: bottom bar labels %d, cut: %s\n", labels, qPrintable(cut));
-        check(whole, "at a larger text size the bottom bar's five labels stay whole");
+        check(whole, "at a larger text size the current view's name in the bottom bar stays whole");
         settings->setFontScale(scale);
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
     }
@@ -11034,10 +11011,10 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         checkDrawing(window, app, check);
         // 5j. A drawing another program wrote: its embed's frame never moves.
         checkDrawingFrame(window, app, check);
-        // 5e. The default reminder time set on a clock in the settings; phones: the sections' tabs.
+        // 5e. The default reminder time set on a clock in the settings; phones: the list of sections.
         checkSettingsClock(window, app, check);
         if (window->width() < 900)
-            checkSettingsTabs(window, app, check);
+            checkSettingsHome(window, app, check);
         // 5f. The on-screen keyboard (phones).
         if (window->width() < 900)
             checkKeyboard(engine, window, app, check);

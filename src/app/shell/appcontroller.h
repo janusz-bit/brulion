@@ -181,6 +181,12 @@ class AppController : public QObject {
     Q_PROPERTY(bool trayAvailable READ trayAvailable NOTIFY trayAvailableChanged FINAL)
     /// Started with --hidden and a tray exists: the window starts hidden.
     Q_PROPERTY(bool startHidden READ startHidden NOTIFY trayAvailableChanged FINAL)
+    /// The interface scale (ui/uiscale.h; Settings → Appearance → "Interface size"): whether this
+    /// run can change it (desktop windows; not with --scale, --size or a headless platform), the
+    /// factor "Automatic" picks for the screen Brulion started on, and the factor in effect.
+    Q_PROPERTY(bool interfaceScaleSupported READ interfaceScaleSupported NOTIFY interfaceScaleChanged FINAL)
+    Q_PROPERTY(qreal autoInterfaceScale READ autoInterfaceScale NOTIFY interfaceScaleChanged FINAL)
+    Q_PROPERTY(qreal interfaceScale READ interfaceScale NOTIFY interfaceScaleChanged FINAL)
     /// quit() was called (the window must not veto closing any more).
     Q_PROPERTY(bool quitting READ quitting NOTIFY quittingChanged FINAL)
     /// "Start when you sign in" (src/platform/autostart.h): "available" (Windows), "profile"
@@ -422,6 +428,16 @@ public:
     /// main(): whether the desktop integration created a tray icon.
     void setTrayAvailable(bool available);
     bool startHidden() const { return m_startHidden && m_trayAvailable; }
+    bool interfaceScaleSupported() const { return m_interfaceScaleSupported; }
+    qreal autoInterfaceScale() const { return m_autoInterfaceScale; }
+    /// The factor in effect: the setting's, or "Automatic"'s (1 where unsupported).
+    qreal interfaceScale() const;
+    /// main(), before the first window: this run scales the interface, "Automatic" being
+    /// `automatic` (the screen's choice); applies the setting now and whenever it changes.
+    void enableInterfaceScale(qreal automatic);
+    /// The zoom commands: `steps` larger (> 0) or smaller (< 0) on the settings' steps, 0 back
+    /// to "Automatic"; a toast says the new size.
+    Q_INVOKABLE void zoomInterface(int steps);
     bool quitting() const { return m_quitting; }
     QString autostartAvailability() const;
     bool startAtLogin() const;
@@ -747,6 +763,7 @@ Q_SIGNALS:
     /// saveTabs(): the panes set the view states of the tabs they show (setTabViewState()) now.
     void tabViewStatesRequested();
     void trayAvailableChanged();
+    void interfaceScaleChanged();
     void quittingChanged();
     void startAtLoginChanged();
     void pendingVaultPathChanged();
@@ -873,6 +890,8 @@ private:
     bool m_statusBarShown = false;
     bool m_sourceModeShown = false;
     bool m_trayAvailable = false;
+    bool m_interfaceScaleSupported = false;
+    qreal m_autoInterfaceScale = 1.0;
     QRect m_trayIcon;                  ///< showTrayCalendar()'s anchor
     std::optional<QPoint> m_trayCursor;
     QElapsedTimer m_trayPopupHidden;   ///< since trayPopupHidItself() (invalid: not since the last click)

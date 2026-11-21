@@ -514,7 +514,7 @@ Rectangle {
                     StepHeader {
                         icon: "palette"
                         title: qsTr("Choose your look")
-                        text: qsTr("Black is easy on the eyes and saves power on OLED screens.")
+                        text: qsTr("Graphite is soft on the eyes; black saves power on OLED screens.")
                     }
                     GridLayout {
                         Layout.fillWidth: true
@@ -523,20 +523,20 @@ Rectangle {
                         rowSpacing: Theme.space3
 
                         ThemeTile {
+                            objectName: "introTheme_graphite"
+                            mode: "dark"
+                            surface: "graphite"
+                            title: qsTr("Graphite", "theme")
+                            chosen: AppSettings.themeMode === "dark" && AppSettings.darkSurface === "graphite"
+                            onClicked: { AppSettings.themeMode = "dark"; AppSettings.darkSurface = "graphite" }
+                        }
+                        ThemeTile {
                             objectName: "introTheme_black"
                             mode: "dark"
                             surface: "black"
                             title: qsTr("Black")
                             chosen: AppSettings.themeMode === "dark" && AppSettings.darkSurface === "black"
                             onClicked: { AppSettings.themeMode = "dark"; AppSettings.darkSurface = "black" }
-                        }
-                        ThemeTile {
-                            objectName: "introTheme_dark"
-                            mode: "dark"
-                            surface: "slate"
-                            title: qsTr("Dark")
-                            chosen: AppSettings.themeMode === "dark" && AppSettings.darkSurface === "slate"
-                            onClicked: { AppSettings.themeMode = "dark"; AppSettings.darkSurface = "slate" }
                         }
                         ThemeTile {
                             objectName: "introTheme_light"

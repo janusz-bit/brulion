@@ -34,6 +34,7 @@
 #include "vault/localstore.h"
 #include "vault/vault.h"
 #include "vault/vaultconfig.h"
+#include "uiscale.h"
 
 #include <QCoreApplication>
 #include <QCursor>
@@ -1288,6 +1289,40 @@ void AppController::setTrayAvailable(bool available)
 {
     if (assignIfChanged(m_trayAvailable, available))
         Q_EMIT trayAvailableChanged();
+}
+
+qreal AppController::interfaceScale() const
+{
+    return m_interfaceScaleSupported
+            ? ui::effectiveInterfaceScale(m_settings->interfaceScale(), m_autoInterfaceScale)
+            : 1.0;
+}
+
+void AppController::enableInterfaceScale(qreal automatic)
+{
+    const bool first = !m_interfaceScaleSupported;
+    m_interfaceScaleSupported = true;
+    m_autoInterfaceScale = automatic > 0 ? automatic : 1.0;
+    if (first) {
+        connect(m_settings.get(), &AppSettings::interfaceScaleChanged, this, [this] {
+            ui::applyInterfaceScale(interfaceScale());
+            Q_EMIT interfaceScaleChanged();
+        });
+    }
+    ui::applyInterfaceScale(interfaceScale());
+    Q_EMIT interfaceScaleChanged();
+}
+
+void AppController::zoomInterface(int steps)
+{
+    if (!m_interfaceScaleSupported)
+        return;
+    const qreal next = steps == 0 ? 0.0 : ui::steppedInterfaceScale(interfaceScale(), steps);
+    // A step that lands on what "Automatic" picks is "Automatic" again.
+    m_settings->setInterfaceScale(qFuzzyCompare(next, m_autoInterfaceScale) ? 0.0 : next);
+    const int percent = int(std::lround(interfaceScale() * 100));
+    toast(m_settings->interfaceScale() > 0 ? tr("Interface size: %1 %").arg(percent)
+                                           : tr("Interface size: automatic (%1 %)").arg(percent));
 }
 
 // ---- Vaults -----------------------------------------------------------------------------------

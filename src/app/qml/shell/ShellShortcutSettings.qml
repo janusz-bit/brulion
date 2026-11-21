@@ -86,7 +86,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space2
         text: qsTr("Vim keys")
-        description: qsTr("Normal, insert and visual mode in the blocks and the Markdown source. In normal mode Ctrl+R is redo and Esc does not select the block (V does); the shortcuts below keep working.")
+        description: qsTr("Normal, insert and visual mode. Ctrl+R redoes, V selects the block; the shortcuts below keep working.")
         checked: AppSettings.vimMode
         onToggled: AppSettings.vimMode = checked
     }

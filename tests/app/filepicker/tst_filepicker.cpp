@@ -215,7 +215,7 @@ private Q_SLOTS:
         // Defaults: paper and OLED black ("Nocny"), coral.
         QTest::newRow("jasny, domyślne") << false << QVariantMap() << QColor(0xfbf7ee) << QColor(0xfffdf7)
                                          << themeColor(light, u"fg"_s) << themeColor(light, u"accentSolid"_s);
-        QTest::newRow("ciemny, domyślne") << true << QVariantMap() << QColor(0, 0, 0) << QColor(0x0d0f13)
+        QTest::newRow("ciemny, domyślne") << true << QVariantMap() << QColor(0x1e1f24) << QColor(0x27292f)
                                           << themeColor(dark, u"fg"_s) << themeColor(dark, u"accentSolid"_s);
         const QVariantMap oled = brulion::ui::paletteMap(true, {}, u"black", u"custom", u"#13958b");
         QTest::newRow("ciemny OLED, własny akcent") << true << oled << QColor(0, 0, 0) << QColor(0x0d0f13)
@@ -516,7 +516,7 @@ FilePicker {
         picker.setTitle(u"Wybierz plik dźwiękowy"_s);
         picker.setNameFilters({u"Pliki dźwiękowe (*.oga *.ogg *.wav)"_s, u"Wszystkie pliki (*)"_s});
         picker.setCurrentFolder(QUrl::fromLocalFile(dir.path()));
-        picker.setDark(true); // no colours given: Brulion's dark defaults (slate)
+        picker.setDark(true); // no colours given: Brulion's dark defaults (graphite)
         QSignalSpy accepted(&picker, &FilePicker::accepted);
         // The event log says which picker the user got.
         QTest::ignoreMessage(QtInfoMsg, "File picker: \"QFileDialog\"");
@@ -530,8 +530,8 @@ FilePicker {
         QVERIFY(dialog->testOption(QFileDialog::DontUseNativeDialog));
         QCOMPARE(dialog->nameFilters().size(), 2);
         QCOMPARE(dialog->directory().canonicalPath(), QDir(dir.path()).canonicalPath());
-        QCOMPARE(dialog->palette().color(QPalette::Window), QColor(0, 0, 0));
-        QCOMPARE(dialog->palette().color(QPalette::Base), QColor(0x0d0f13));
+        QCOMPARE(dialog->palette().color(QPalette::Window), QColor(0x1e1f24));
+        QCOMPARE(dialog->palette().color(QPalette::Base), QColor(0x27292f));
         // Fusion for the dialog and the widgets in it (the desktop's style may ignore palettes).
         QVERIFY(dialog->style());
         QCOMPARE(dialog->style()->name().toLower(), u"fusion"_s);
@@ -539,7 +539,7 @@ FilePicker {
         QVERIFY(!edits.isEmpty());
         for (QLineEdit *edit : edits) {
             QCOMPARE(edit->style(), dialog->style());
-            QCOMPARE(edit->palette().color(QPalette::Base), QColor(0x0d0f13));
+            QCOMPARE(edit->palette().color(QPalette::Base), QColor(0x27292f));
         }
         dialog->selectFile(file);
         static_cast<QDialog *>(dialog)->accept(); // QFileDialog::accept() is protected

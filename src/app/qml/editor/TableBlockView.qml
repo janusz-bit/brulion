@@ -55,6 +55,9 @@ Item {
     readonly property real filterHeight: filtering ? (Theme.touchUi ? 48 : 36) : 0
     readonly property int cellPadding: Theme.space3
     readonly property int rowHeight: Theme.touchUi ? 40 : 32
+    /// The header's lines (`<br>` in a header cell: up to three) and its row's height.
+    readonly property int headerLines: Math.max(1, Math.min(3, root.block.rowData.tableData.headerLines))
+    readonly property int headerHeight: rowHeight + (headerLines - 1) * Theme.lineHeightPx(Theme.textBase, 1.4)
     readonly property real firstLineCenter: rowHeight / 2
     property int editRow: -2   // -2 none, -1 header
     property int editColumn: -1
@@ -173,7 +176,7 @@ Item {
         if (r < 0)
             return 0
         const shown = shownRows.indexOf(r)
-        return rowHeight + filterHeight + (shown >= 0 ? shown : shownRows.length) * rowHeight
+        return headerHeight + filterHeight + (shown >= 0 ? shown : shownRows.length) * rowHeight
     }
     /// The shown row after (`step` 1) or before (-1) row `r` (-1 the header): rows.length after the
     /// last, -1 before the first.
@@ -327,11 +330,21 @@ Item {
         interactive: root.gridWidth > width
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
+        // A table wider than the page: a scroll bar under it to drag with the mouse (the wheel
+        // with Shift, a touchpad sideways or a finger move it too).
+        T.ScrollBar.horizontal: BScrollBar {
+            objectName: "tableScrollBar"
+            visible: root.gridWidth > frame.width
+            // Always drawn with a mouse: it says that the table goes on to the right.
+            policy: Theme.touchUi ? T.ScrollBar.AsNeeded : T.ScrollBar.AlwaysOn
+            // (Just under the grid's last row, inside its frame.)
+            y: frame.height - height
+        }
 
         Rectangle {
             id: grid
             width: root.gridWidth
-            height: (root.shownRows.length + 1) * root.rowHeight + root.filterHeight
+            height: root.headerHeight + root.shownRows.length * root.rowHeight + root.filterHeight
             radius: Theme.radius
             color: Theme.bgElevated
             border.width: 1
@@ -342,7 +355,7 @@ Item {
                 x: 1
                 y: 1
                 width: parent.width - 2
-                height: root.rowHeight - 1
+                height: root.headerHeight - 1
                 topLeftRadius: Theme.radius - 1
                 topRightRadius: Theme.radius - 1
                 color: Theme.bgSunken
@@ -351,7 +364,7 @@ Item {
             // The filter fields under the header (only while filtering).
             Item {
                 visible: root.filtering
-                y: root.rowHeight
+                y: root.headerHeight
                 width: parent.width
                 height: root.filterHeight
                 Rectangle {
@@ -397,9 +410,9 @@ Item {
                     id: rowItem
                     required property int index
                     readonly property int r: index === 0 || index - 1 >= root.shownRows.length ? -1 : root.shownRows[index - 1]  // -1 = header
-                    y: index === 0 ? 0 : index * root.rowHeight + root.filterHeight
+                    y: index === 0 ? 0 : root.headerHeight + (index - 1) * root.rowHeight + root.filterHeight
                     width: grid.width
-                    height: root.rowHeight
+                    height: index === 0 ? root.headerHeight : root.rowHeight
 
                     Rectangle {
                         visible: rowItem.index > 0
@@ -438,7 +451,7 @@ Item {
                             onEditingCellChanged: cell.hoveredLink = ""
                             x: root.columnX(cell.c)
                             width: root.columnWidth(cell.c)
-                            height: root.rowHeight
+                            height: rowItem.height
                             Accessible.role: cell.headerCell ? Accessible.ColumnHeader : Accessible.Cell
                             Accessible.name: cell.shown
 
@@ -462,10 +475,11 @@ Item {
                                 width: parent.width - 2 * root.cellPadding
                                 horizontalAlignment: cell.align === "right" || (cell.formula && cell.align === "") ? Text.AlignRight
                                                    : cell.align === "center" ? Text.AlignHCenter : Text.AlignLeft
-                                // One line: a longer text ends with "…" (its tooltip shows it all).
+                                // One line (a header: its `<br>` lines): a longer text ends with "…"
+                                // (its tooltip shows it all).
                                 html: cell.shownHtml
                                 hoveredLink: cell.hoveredLink
-                                maximumLineCount: 1
+                                maximumLineCount: cell.headerCell ? root.headerLines : 1
                                 lineHeight: Theme.lineHeightPx(Theme.textBase, 1.4)
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textBase

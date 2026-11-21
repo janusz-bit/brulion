@@ -131,7 +131,7 @@ ApplicationWindow {
                 visible: !Theme.narrow
                 size: "small"
                 accessibleName: "Tło"
-                model: Theme.dark ? ["slate", "black"] : ["paper", "white"]
+                model: Theme.dark ? ["graphite", "slate", "black"] : ["paper", "white"]
                 currentValue: Theme.dark ? Theme.darkSurface : Theme.lightSurface
                 onActivated: (value) => {
                     if (Theme.dark)

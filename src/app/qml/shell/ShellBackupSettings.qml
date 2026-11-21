@@ -68,7 +68,7 @@ ColumnLayout {
               ? qsTr("The documentation needs no backups.")
               : section.backups.browser
                 ? qsTr("Copies of this notebook as ZIP archives. They live in this browser: clearing its data removes them together with the notes. Download one to keep it elsewhere.")
-                : qsTr("Copies of this notebook as ZIP archives. Sync does not spread them, so a copy in this device's own folder does not protect against losing the device.")
+                : qsTr("ZIP copies of this notebook. Sync does not carry them to your other devices.")
     }
 
     BCard {

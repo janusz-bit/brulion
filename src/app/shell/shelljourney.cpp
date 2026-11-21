@@ -310,7 +310,7 @@ void Journey::intro()
     if (!findName(u"introStep_look"_s))
         fail(u"the intro's look step shows"_s);
     const bool light = m_app->settings()->themeMode() == u"light";
-    if (!clickName(light ? u"introTheme_light"_s : u"introTheme_black"_s))
+    if (!clickName(light ? u"introTheme_light"_s : u"introTheme_graphite"_s))
         fail(u"the intro's theme tiles"_s);
     shot(u"intro-look"_s, 900);
     next(u"look"_s);
@@ -624,15 +624,23 @@ void Journey::settings()
     }
     shot(u"settings"_s, 1000);
     const bool dark = m_app->settings()->themeMode() == u"dark";
+    // A phone starts on the list of sections: the language is in General.
+    if (narrow() && !clickName(u"settingsHomeRow-general"_s))
+        fail(u"the settings' General section"_s);
     if (!clickText(u"English"_s, "SettingsView"))
         fail(u"the language switch"_s);
     if (!waitFor([this] { return m_app->settings()->language() == u"en"; }))
         fail(u"switching to English"_s);
     shot(u"settings-english"_s, 900);
     // Now in English: the theme the run did not start with, in the Appearance section (wide
-    // windows list the sections on the left, narrow ones have them as tabs at the top).
-    if (!clickText(u"Appearance"_s, "SettingsView"))
+    // windows list the sections on the left; a phone goes back to its list of sections).
+    if (narrow()) {
+        m_app->back();
+        if (!clickName(u"settingsHomeRow-appearance"_s))
+            fail(u"the Appearance section"_s);
+    } else if (!clickText(u"Appearance"_s, "SettingsView")) {
         fail(u"the Appearance section"_s);
+    }
     if (!clickText(dark ? u"Light"_s : u"Dark"_s, "SettingsView"))
         fail(u"the theme switch"_s);
     shot(u"settings-theme"_s, 900);

@@ -130,6 +130,7 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app->workspace()->extensions(), &WorkspaceExtensions::commandsChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::focusModeChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::readingModeChanged, this, &CommandModel::commandsChanged);
+    connect(app, &AppController::interfaceScaleChanged, this, &CommandModel::commandsChanged);
     connect(app->workspace()->encryption(), &WorkspaceEncryption::unlockedChanged, this,
             &CommandModel::commandsChanged);
     connect(app->appLock(), &AppLockController::changed, this, &CommandModel::commandsChanged);
@@ -322,6 +323,15 @@ static QList<Command> buildCommands(const AppController *app)
              u"keyboard"_s,
              {},
              true},
+            // The interface's size (docs/UI.md "Look & feel"; desktop): like a browser's zoom, on
+            // Ctrl+Alt (Ctrl+= / Ctrl+- zoom PDFs, drawings and canvases).
+            {u"view.zoomIn"_s, CommandModel::tr("Larger interface"), CommandModel::tr("Text, buttons and icons"),
+             u"zoom-in"_s, u"Ctrl+Alt+="_s, app->interfaceScaleSupported()},
+            {u"view.zoomOut"_s, CommandModel::tr("Smaller interface"), CommandModel::tr("Text, buttons and icons"),
+             u"zoom-out"_s, u"Ctrl+Alt+-"_s, app->interfaceScaleSupported()},
+            {u"view.zoomReset"_s, CommandModel::tr("Interface size: automatic"),
+             CommandModel::tr("As the screen suggests"), u"monitor"_s, u"Ctrl+Alt+0"_s,
+             app->interfaceScaleSupported()},
             {u"sync.now"_s,
              CommandModel::tr("Sync now"),
              CommandModel::tr("Nextcloud"),
@@ -932,6 +942,12 @@ bool CommandModel::run(const QString &id)
         m_app->settings()->setTypewriterScrolling(!m_app->settings()->typewriterScrolling());
     else if (id == u"view.vim")
         m_app->settings()->setVimMode(!m_app->settings()->vimMode());
+    else if (id == u"view.zoomIn")
+        m_app->zoomInterface(1);
+    else if (id == u"view.zoomOut")
+        m_app->zoomInterface(-1);
+    else if (id == u"view.zoomReset")
+        m_app->zoomInterface(0);
     else if (id == u"settings.shortcuts")
         m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"shortcuts"_s}});
     else if (id == u"task.stopClocks")

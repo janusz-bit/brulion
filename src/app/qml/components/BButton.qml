@@ -9,7 +9,7 @@ import Brulion
 //   BButton { text: qsTr("Save"); variant: "primary"; onClicked: save() }
 //   BButton { text: qsTr("Delete"); variant: "danger"; iconName: "trash-2"; busy: deleting }
 //
-// variant: "primary" (ink; one per view) | "secondary" (default, outlined) | "ghost"
+// variant: "primary" (the accent's solid fill; one per view) | "secondary" (default, outlined) | "ghost"
 //          (toolbar/text button) | "danger" (destructive confirmation)
 // size:    "small" | "normal" (default) | "large"
 // iconName: Lucide icon before the text (after it with `iconRight`, e.g. "chevron-down")
@@ -30,7 +30,7 @@ T.Button {
     property bool fill: false
     property color textColor: {
         switch (variant) {
-        case "primary": return Theme.primaryFg
+        case "primary": return Theme.buttonPrimaryFg
         case "danger": return Theme.dangerFg
         default: return Theme.fg
         }
@@ -141,7 +141,7 @@ T.Button {
         color: {
             switch (control.variant) {
             case "primary":
-                return control.down ? Theme.primaryPressed : control.hovered ? Theme.primaryHover : Theme.primary
+                return control.down ? Theme.buttonPrimaryPressed : control.hovered ? Theme.buttonPrimaryHover : Theme.buttonPrimary
             case "danger":
                 return control.down ? Theme.dangerHover.darker(1.08) : control.hovered ? Theme.dangerHover : Theme.danger
             case "ghost":
@@ -171,4 +171,6 @@ T.Button {
     }
 
     opacity: enabled ? 1 : Theme.disabledOpacity
+    scale: control.down ? Theme.pressScale : 1
+    Behavior on scale { NumberAnimation { duration: Theme.durationFast; easing.type: Easing.OutBack } }
 }

@@ -139,6 +139,45 @@ private Q_SLOTS:
         QCOMPARE(views.tableColumnWidths({}, headerFont, cellFont, 500, 12), QList<qreal>{});
     }
 
+    void tableCellLines_data()
+    {
+        QTest::addColumn<QString>("cell");
+        QTest::addColumn<QStringList>("lines");
+        QTest::newRow("none") << u"Żółw"_s << QStringList{u"Żółw"_s};
+        QTest::newRow("empty") << QString() << QStringList{QString()};
+        QTest::newRow("br") << u"1<br>Nd"_s << QStringList{u"1"_s, u"Nd"_s};
+        QTest::newRow("self-closing") << u"a<br/>b<br />c"_s << QStringList{u"a"_s, u"b"_s, u"c"_s};
+        QTest::newRow("upper case") << u"Gęś<BR>Łoś"_s << QStringList{u"Gęś"_s, u"Łoś"_s};
+        QTest::newRow("at the ends") << u"<br>x<br>"_s << QStringList{QString(), u"x"_s, QString()};
+        QTest::newRow("not a break") << u"<brx> <b>"_s << QStringList{u"<brx> <b>"_s};
+    }
+    void tableCellLines()
+    {
+        QFETCH(QString, cell);
+        QFETCH(QStringList, lines);
+        QCOMPARE(brulion::editor::tableCellLines(cell), lines);
+    }
+
+    /// A header of several lines is as wide as its widest line; its display is the lines in a row.
+    void tableHeaderLines()
+    {
+        QFont headerFont;
+        headerFont.setPixelSize(15);
+        headerFont.setWeight(QFont::DemiBold);
+        QFont cellFont;
+        cellFont.setPixelSize(15);
+        const QFontMetricsF header(headerFont);
+        QVariantMap t = table();
+        t.insert(u"header"_s, QStringList{u"Imię i<br>nazwisko"_s, u"Cena"_s});
+        const BlockViews views;
+        const qreal widest = std::max(header.horizontalAdvance(u"Imię i"_s), header.horizontalAdvance(u"nazwisko"_s));
+        const qreal w = views.tableColumnWidths(t, headerFont, cellFont, 0, 12).at(0);
+        QVERIFY2(w < std::ceil(header.horizontalAdvance(u"Imię i<br>nazwisko"_s)) + 24, qPrintable(QString::number(w)));
+        QVERIFY(w >= std::ceil(widest) + 24);
+        QCOMPARE(views.tableCell(t, -1, 0).value(u"display"_s).toString(), u"Imię i nazwisko"_s);
+        QCOMPARE(views.tableCell(t, -1, 0).value(u"text"_s).toString(), u"Imię i<br>nazwisko"_s);
+    }
+
     void tableCell()
     {
         const BlockViews views;

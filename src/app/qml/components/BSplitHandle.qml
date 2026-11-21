@@ -34,7 +34,8 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.border
+        // (No line where the panes part by their shade: Theme.paneLines.)
+        color: Theme.paneLines ? Theme.border : "transparent"
     }
 
     Rectangle {
