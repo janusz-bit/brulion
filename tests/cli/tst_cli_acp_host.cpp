@@ -426,8 +426,10 @@ private Q_SLOTS:
         QCOMPARE(r.status, 403);
         QVERIFY(!fileText(m_stateFile).contains(token));
         QVERIFY(fileText(m_stateFile).contains(secretHash(token)));
+#ifndef Q_OS_WIN // (Windows: the profile's ACLs keep it the user's; Qt reports no such bits there)
         QCOMPARE(QFileInfo(m_stateFile).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
                  QFileDevice::Permissions());
+#endif
         // `acp clients` lists it.
         const Result clients = run(u"acp.clients"_s);
         QVERIFY(!clients.error);

@@ -603,7 +603,7 @@ private Q_SLOTS:
         QCOMPARE(chats->turn(path)->failure(), QString());
         QVERIFY(ws->read(path).contains(u"gotowe"_s, Qt::CaseInsensitive));
         ws.reset();
-        host.terminate();
+        host.kill(); // (terminate() does not end a console program on Windows)
         QVERIFY(host.waitForFinished(10000));
 #endif
     }
@@ -907,7 +907,7 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 30000);
         QVERIFY2(turn->failure().contains(u"no longer paired"_s), qPrintable(turn->failure()));
         ws.reset();
-        host.terminate();
+        host.kill(); // (terminate() does not end a console program on Windows)
         QVERIFY(host.waitForFinished(10000));
 #endif
     }
