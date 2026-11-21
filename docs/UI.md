@@ -1317,7 +1317,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   agent, the computer ends an older one of this device), its client offering no files or
   terminals (the computer serves them), the session's `cwd` and the context naming that computer's
   folder (`AgentConfig::root`, from its info), no MCP server from here (the computer gives its own).
-  What the agent says waits there while the phone sleeps. Its ends in words, after "The AI agent
+  What the agent says waits there while the phone sleeps; while a turn of it runs, Android keeps the
+  screen on (`WorkspaceAgents::remoteWorking()`, as for the model on the device), so that the system
+  does not stop the app's network meanwhile. Its ends in words, after "The AI agent
   “…” stopped: " (`WorkspaceAgents::remoteEndText`): unpaired ("pair it again"), the computer
   started again ("try again"), not reached for 15 minutes ("is it on, and is this device in its
   network?"), the agent not started there, the agent's own end; a sign-in in a terminal is named

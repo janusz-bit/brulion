@@ -770,10 +770,14 @@ private Q_SLOTS:
         agent.id = u"komputer-fake"_s;
         chats->setAgents({agent});
         QCOMPARE(chats->partnerLabel(u"acp:komputer-fake"_s), u"Fałszywy"_s);
+        QSignalSpy working(chats->agents(), &WorkspaceAgents::remoteWorkingChanged);
         const QString path = chats->send(QString(), u"Cześć z telefonu"_s, QString(), {}, u"acp:komputer-fake"_s);
         shell::ChatTurn *turn = chats->turn(path);
+        QVERIFY(chats->agents()->remoteWorking()); // (the screen stays on meanwhile)
         QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 30000);
         QCOMPARE(turn->failure(), QString());
+        QVERIFY(!chats->agents()->remoteWorking());
+        QCOMPARE(working.size(), 2);
         QVERIFY2(ws->read(path).contains(u"- 🤖 Odpowiedź na: Cześć z telefonu"_s), qPrintable(ws->read(path)));
         // The agent works on that computer: its folder as the cwd and in the context, its files.
         const QList<QJsonObject> created = logged(u"session/new"_s);

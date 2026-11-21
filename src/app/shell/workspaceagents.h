@@ -167,6 +167,9 @@ public:
     /// Stops the turn of `path`: nothing more comes of it.
     void stop(const QString &path);
     bool running(const QString &path) const;
+    /// A turn of an agent on another computer runs: on Android the app keeps the screen on
+    /// meanwhile (AppController), so that the system does not stop its network while it waits.
+    bool remoteWorking() const { return m_remoteWorking; }
 
     /// The question the turn of `path` waits on: its text (a line of title, then what it would
     /// do) and options; "" / {} none.
@@ -222,6 +225,7 @@ Q_SIGNALS:
     /// The options of agent `id` were chosen or learnt: AppSettings keeps them.
     void remembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     void checked(const QString &id, bool ok, const QString &text);
+    void remoteWorkingChanged();
     void paired(bool ok, const QString &text, const QList<brulion::shell::AgentConfig> &agents);
 
 private:
@@ -260,6 +264,8 @@ private:
     QString notebookPath(const QString &file) const;
     void learn(const QString &agent, const QString &key);
     void activityDue(const QString &path);
+    /// remoteWorking() again after the turns changed.
+    void noteWorking();
     // The device's record of conversations' sessions (LocalStore "acp/sessions").
     struct Stored
     {
@@ -285,6 +291,7 @@ private:
     QSet<QString> m_activityPending;        // conversations whose activityChanged() is due
     QTimer *m_activityTimer = nullptr;      // (a terminal's output: ten times a second at most)
     int m_nextTerminal = 1;
+    bool m_remoteWorking = false;
     sync::HttpTransport *m_transport = nullptr;
     std::unique_ptr<sync::HttpTransport> m_ownTransport;
 };

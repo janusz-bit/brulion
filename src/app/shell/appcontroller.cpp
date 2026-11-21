@@ -348,9 +348,15 @@ AppController::AppController(const Options &options, QObject *parent)
     // app is on screen, and many phones turn the screen off after 30 seconds without a touch.
     setUpSpeech();
     // (… and while a recording is transcribed.)
-    const auto keepScreenOn = [this] { platform::keepScreenOn(m_localAi->working() || m_speech->busy()); };
+    // (An agent on another computer works there, but the phone waits for what it says: a screen
+    // that stays on keeps the system from stopping the app's network meanwhile.)
+    const auto keepScreenOn = [this] {
+        platform::keepScreenOn(m_localAi->working() || m_speech->busy()
+                               || m_workspace->chats()->agents()->remoteWorking());
+    };
     connect(m_localAi.get(), &LocalAi::workingChanged, this, keepScreenOn);
     connect(m_speech.get(), &media::Transcriber::jobsChanged, this, keepScreenOn);
+    connect(m_workspace->chats()->agents(), &WorkspaceAgents::remoteWorkingChanged, this, keepScreenOn);
     connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
             [this](const QString &text, const QString &kind) { toast(text, kind); });
     // A result with a button (the habits' Undo, "Open"): a toast whose button the extensions press.

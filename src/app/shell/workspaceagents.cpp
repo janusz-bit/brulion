@@ -874,17 +874,33 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         input.resume = record->session;
     m_turns.insert(path, id);
     m_seen.insert(path, int(history.size()) + 1);
+    noteWorking();
     Q_EMIT status(path, tr("%1 is working…").arg(agent->name));
     if (!p->client->prompt(path, input)) {
         m_turns.remove(path);
+        noteWorking();
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
     }
+}
+
+void WorkspaceAgents::noteWorking()
+{
+    bool remote = false;
+    for (auto it = m_turns.cbegin(); it != m_turns.cend() && !remote; ++it) {
+        const AgentConfig *a = config(it.value());
+        remote = a && a->isRemote();
+    }
+    if (remote == m_remoteWorking)
+        return;
+    m_remoteWorking = remote;
+    Q_EMIT remoteWorkingChanged();
 }
 
 void WorkspaceAgents::stop(const QString &path)
 {
     m_released.removeIf([&path](const auto &entry) { return entry.value().first == path; });
     const QString id = m_turns.take(path);
+    noteWorking();
     m_activityPending.remove(path);
     clearQuestion(path);
     if (Process *p = m_processes.value(id)) {
@@ -963,6 +979,7 @@ void WorkspaceAgents::finish(const QString &path)
     m_released.removeIf([&path](const auto &entry) { return entry.value().first == path; });
     m_turns.remove(path);
     m_seen.remove(path);
+    noteWorking();
     m_activityPending.remove(path);
     clearQuestion(path);
 }
@@ -1465,6 +1482,7 @@ void WorkspaceAgents::reset()
 {
     m_released.clear();
     m_turns.clear();
+    noteWorking();
     m_seen.clear();
     m_activityPending.clear();
     m_checks.clear();

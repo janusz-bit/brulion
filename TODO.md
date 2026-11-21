@@ -18,8 +18,8 @@ done in the repository simply disappears from the list.
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's, on
   the phone (docs/CLI.md "AI agents for other devices", services.brulion-acp). Missing: a turn
   whose app was ended by Android meanwhile (the computer has its answer, a new stream knows nothing
-  of it: a "results" request for the conversations' sessions), the screen kept on — or a
-  foreground service — while an agent on another computer works, pairing through a brulion://
+  of it: a "results" request for the conversations' sessions), a foreground service instead of
+  the screen kept on while an agent on another computer works, pairing through a brulion://
   link or a QR code `acp pair` prints, the browser (the computer refuses requests with an
   Origin: CORS for an origin named on it), a try with a real agent from a real phone, a try with
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
