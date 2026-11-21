@@ -19525,151 +19525,176 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellExtensionView</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="67"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="79"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="68"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="80"/>
         <source>done</source>
         <translation>zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="68"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="80"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="69"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="81"/>
         <source>skipped</source>
         <translation>pominięte</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="69"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="70"/>
         <source>missed</source>
         <translation>opuszczone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="70"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="71"/>
         <source>due</source>
         <translation>do zrobienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="71"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="72"/>
         <source>future</source>
         <translation>przyszły dzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="72"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="73"/>
         <source>before the start</source>
         <translation>przed początkiem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="74"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="75"/>
         <source>nothing due</source>
         <translation>nic zaplanowanego</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="82"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="83"/>
         <source>not done</source>
         <translation>niezrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="159"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="160"/>
         <source>Space</source>
         <translation>Spacja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="160"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="161"/>
         <source>Enter</source>
         <translation>Enter</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="161"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="162"/>
         <source>Esc</source>
         <translation>Esc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="162"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="163"/>
         <source>Backspace</source>
         <translation>Backspace</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="163"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="164"/>
         <source>Ctrl+Z</source>
         <translation>Ctrl+Z</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="223"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="224"/>
         <source>Pick a day</source>
         <translation>Wybierz dzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="225"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="226"/>
         <source>Choose</source>
         <translation>Wybierz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="231"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1425"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="232"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1551"/>
         <source>No date</source>
         <translation>Bez daty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="318"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="319"/>
         <source>%1, %2</source>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="319"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="320"/>
         <source>Shortcut: %1</source>
         <translation>Skrót: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="741"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="985"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="800"/>
+        <source>No picture “%1” in the notebook</source>
+        <translation>Nie ma obrazu „%1” w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="802"/>
+        <source>Picture from %1</source>
+        <translation>Obraz z %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="806"/>
+        <source>The picture could not be loaded</source>
+        <translation>Nie udało się wczytać obrazu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="833"/>
+        <source>Try again</source>
+        <translation>Spróbuj ponownie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="833"/>
+        <source>Show the pictures</source>
+        <translation>Pokaż obrazy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="867"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1111"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1302"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1428"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1336"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1462"/>
         <source>Choose…</source>
         <translation>Wybierz…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="689"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="824"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="962"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1341"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1429"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1646"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="690"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="950"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1088"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1467"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1555"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1772"/>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="963"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1089"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="964"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1090"/>
         <source>Right-click or press and hold for more</source>
         <translation>Kliknij prawym przyciskiem lub przytrzymaj, by zobaczyć więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1157"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1283"/>
         <source>Less: %1</source>
         <translation>Mniej: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1176"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1302"/>
         <source>Number (%1)</source>
         <translation>Liczba (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1177"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1303"/>
         <source>Number</source>
         <translation>Liczba</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1203"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1329"/>
         <source>More: %1</source>
         <translation>Więcej: %1</translation>
     </message>
@@ -34205,52 +34230,52 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="762"/>
+        <location filename="../src/app/shell/workspace.cpp" line="763"/>
         <source>“%1” is an encrypted page: it is changed only while it is unlocked.</source>
         <translation>„%1” to zaszyfrowana strona: można ją zmieniać tylko, gdy jest odblokowana.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="778"/>
-        <location filename="../src/app/shell/workspace.cpp" line="796"/>
-        <location filename="../src/app/shell/workspace.cpp" line="830"/>
+        <location filename="../src/app/shell/workspace.cpp" line="779"/>
+        <location filename="../src/app/shell/workspace.cpp" line="797"/>
+        <location filename="../src/app/shell/workspace.cpp" line="831"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1032"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1044"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1033"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1045"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1053"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1054"/>
         <source>Untitled canvas</source>
         <translation>Tablica bez tytułu</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1058"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1059"/>
         <source>Could not create the canvas %1: %2</source>
         <translation>Nie udało się utworzyć tablicy %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1412"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1413"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1558"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1579"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1559"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1580"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="355"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1729"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1730"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1732"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1733"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -34381,17 +34406,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1747"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1748"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1762"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1763"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1860"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1861"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>

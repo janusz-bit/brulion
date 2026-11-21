@@ -1269,8 +1269,13 @@ are **exercise lines**. A tagged line without children is a workout of one exerc
   `scripts/gym-catalog.py`), with Polish names for the common ones — 879 exercises, about 220
   translated. Its data are resources of the app: `exercises.json` (239 KB, 33 KB compressed) and
   `exercise-instructions.json` (607 KB, 130 KB compressed; read one exercise at a time), so the app,
-  the APK and the browser's download grow by about 165 KB (rcc's zlib; measured 2026-11-20); the
-  exercises' pictures (about 70 MB) are not bundled. "Exercise from the catalog" writes a page:
+  the APK and the browser's download grow by about 165 KB (rcc's zlib; measured 2026-11-20). The
+  exercises' pictures (two of 873 exercises each — where the movement starts and where it ends —,
+  about 70 MB) are not bundled: an exercise says how many it has (`pictures`) and the catalog's
+  `source.pictures` is the address they are under at the pinned commit
+  (`https://raw.githubusercontent.com/yuhonas/free-exercise-db/<commit>/exercises/<source>/0.jpg`);
+  the exercise view shows them as pictures from the internet (§2: from the device's cache, fetched
+  once allowed), and nothing writes them into notes. "Exercise from the catalog" writes a page:
 
   ```markdown
   katalog:: back-squat

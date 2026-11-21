@@ -2,7 +2,7 @@
 // ExtensionViewModel — an extension's view as a list for QML (QML type `ExtensionView`, docs/UI.md
 // "Extension views"): the node tree of b.view's render function (b.ui: column, row, card, heading,
 // text, markdown, link, button, check, stepper, input, select, slider, date, toggle, progress,
-// stats, divider, menu, month, chart, table, empty, open, run) flattened into lines, a row's controls in a model of
+// stats, divider, menu, month, chart, table, heatmap, pictures, empty, open, run) flattened into lines, a row's controls in a model of
 // their own. A card's lines stay lines of the flat list, each with its part of the card (lineCard: "first", "middle",
 // "last", "only"; "" outside cards). It renders again when its extension, view or params change, after
 // Workspace.extensions.changed() (a command or an action finished) and when the index changed (a note written anywhere:
@@ -22,12 +22,17 @@
 // slider, date, toggle or progress bar is a row of its own, `lineBare`: no card), month
 // (lineMonth "2026-11", lineDays — a map per day of the month { date, day, state, tappable, menu } —
 // and lineTitle its label; activateDay(), a day's menu), chart (chartData + chartSource for
-// ChartView), tableHead / tableRow (cells).
+// ChartView), tableHead / tableRow (cells), pictures (lineItems: { src, alt, caption, web, host,
+// state — "ready" (url) | "loading" | "ask" (a picture from the internet that waits for
+// showPictures()) | "failed" (error) | "missing" (no such picture in the notebook) —; lineTitle its
+// label, lineHint "ask" | "failed" | "" — what its pictures from the internet wait for).
 //
 // Menus (a menu node's items, a check's menu, a day's menu) are lists of { label, action, args } (a
 // view action), { label, page, line? } (a page at its 1-based line), { label, view, params? }
 // (another view of the extension: viewRequested) or { label, journal = date } (a day's journal),
 // each with an optional icon.
+
+#include "editorhost.h"
 
 #include <QAbstractListModel>
 #include <QPointer>
@@ -258,6 +263,9 @@ public:
     /// That menu's item `item` chosen: its view action, its page (pageRequested) or its day's
     /// journal (journalRequested).
     Q_INVOKABLE void activateMenuItem(int row, int control, const QString &date, int item);
+    /// The pictures from the internet of a pictures line that wait ("ask") or failed: the user
+    /// wants to see them — fetched as a note's "Show" fetches its picture. How many were asked for.
+    Q_INVOKABLE int showPictures(int row);
 
 Q_SIGNALS:
     void extensionsChanged();
@@ -308,8 +316,16 @@ private:
     static QVariantList daysOf(const QVariantMap &node, QString *month);
     static QVariantMap chartDataOf(const QVariantMap &node);
     static QList<int> changedRoles(const Line &before, const Line &after);
+    /// A pictures line's items with where each is shown from now (state, url, error).
+    QVariantList resolvePictures(const QVariantList &items) const;
+    /// What a pictures line's pictures from the internet wait for (its lineHint): "ask" — one
+    /// waits to be allowed —, "failed" — none waits, one could not be fetched —, else "".
+    static QString picturesWaiting(const QVariantList &items);
+    /// A picture from the internet changed state ("" any): the lines that show it, in place.
+    void webPictureChanged(const QString &url);
 
     QPointer<WorkspaceExtensions> m_extensions;
+    QPointer<EditorHost> m_pictureHost; // the extensions' (WorkspaceExtensions::pictureHost())
     QString m_extension, m_view, m_paramKey;
     QVariantMap m_params;
     /// What the shown lines are a drawing of: only the same view is changed in place.

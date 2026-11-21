@@ -841,7 +841,11 @@ phone they keep their labels, their icons go first), the rest timer's banner.
   Create the exercise's page, Details) and its muscles and equipment under it —, 30 at a time
   (**Show more**). Brulion's own 51 come first, then names translated to the interface's language.
 * **Exercise** (view `exercise`, `id`): its name in the notes' language and the other one, its
-  primary and secondary muscles, equipment, kind and level; **To today's workout** (an open line
+  primary and secondary muscles, equipment, kind and level; its two pictures from free-exercise-db
+  side by side — "Start" and "Finish" under them, "Pictures from free-exercise-db" above —
+  (`b.ui.pictures`: from the device's cache; until they may be fetched "Picture from
+  raw.githubusercontent.com" in each box and **Show the pictures** under them, as a note's picture
+  from the internet waits for "Show"; docs/SYNTAX.md §2, §5 "Gym"); **To today's workout** (an open line
   under today's workout, else a new one: `- [ ] [[Wiosłowanie sztangą]] 3×10`, cardio `20 min`,
   stretching `2×30 s`), **Create the exercise's page** (the catalog's properties and instructions:
   docs/SYNTAX.md §5) or the link to it, its sessions (to Progress), the instructions (English: "Opis
@@ -915,7 +919,16 @@ done") —; month grids; charts and tables (the second column widest, numbers ri
 cell per column of at most 22 px (26 on touch UIs) with a gap of 3, tinted by its level 0–4 in
 `bgSunken` or the accent at 22, 45, 70 and 100 %, the note column right after the cells; the head
 writes every so many columns' names when the cells are narrow, the last always; a cell's text in
-a `BToolTip` on hover or a tap, its accessible name).
+a `BToolTip` on hover or a tap, its accessible name); **pictures** (`pictures`: `lineItems` — src,
+alt, caption, web, host, state, url, error —, `lineTitle` a caption above them) side by side, two
+to a line on a phone and up to four on a wider one, each a 3:2 box in `bgSunken` the picture fits
+in (the line keeps its height while they load), its caption under it, `alt` its accessible name: a
+notebook's picture from its file (`Workspace.assetUrl`: only a picture file the index knows, else
+"No picture “…” in the notebook"), one from the internet as a note's (`Workspace.webPicture`, the
+model following `webPictureChanged`): ready from the cache, a spinner while it loads, "Picture
+from <host>" while it waits, the error when it failed — and one **Show the pictures** (**Try
+again** after a failure) under the line for them all (`ExtensionView.showPictures(row)` →
+`loadWebPicture`).
 **Cards** are no item of their own: the lines of a `card` node stay lines of the flat list (a
 delegate each, recycled as any), each drawing its part — `lineCard` "first", "middle", "last" or
 "only": the top with its corners, the sides, the bottom — so a card of a hundred lines scrolls like

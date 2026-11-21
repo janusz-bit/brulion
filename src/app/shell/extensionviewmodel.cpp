@@ -4,6 +4,8 @@
 
 #include "index/vaultindex.h"
 #include "markdown/blockdocument.h"
+#include "util/paths.h"
+#include "webpicture/webpicture.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/macros.h"
 
@@ -27,6 +29,7 @@ namespace {
 constexpr int kMaxLines = 2000; // a view showing more is cut (notes come from sync)
 constexpr int kMaxControls = 24;
 constexpr int kMaxHeatColumns = 104; // a heat map's columns (two years of weeks)
+constexpr int kMaxPictures = 8; // a pictures line's pictures
 
 /// A select's options as { label, value } (texts, or tables with a label and a value), at most 200.
 QList<std::pair<QString, QVariant>> optionsOf(const QVariantMap &node)
@@ -583,6 +586,11 @@ void ExtensionViewModel::setExtensions(WorkspaceExtensions *extensions)
         connect(m_extensions, &WorkspaceExtensions::changed, this, &ExtensionViewModel::scheduleRefresh);
         connect(m_extensions, &WorkspaceExtensions::questionChanged, this, &ExtensionViewModel::scheduleRefresh);
     }
+    if (m_pictureHost)
+        disconnect(m_pictureHost, nullptr, this, nullptr);
+    m_pictureHost = m_extensions ? m_extensions->pictureHost() : nullptr;
+    if (m_pictureHost)
+        connect(m_pictureHost, &EditorHost::webPictureChanged, this, &ExtensionViewModel::webPictureChanged);
     Q_EMIT extensionsChanged();
     scheduleRefresh();
 }
@@ -775,6 +783,12 @@ void ExtensionViewModel::render(bool reshape)
         l.html = markdownHtml(l.text, *context);
         l.title = QTextDocumentFragment::fromHtml(l.html).toPlainText().simplified(); // for screen readers
     }
+    for (Line &l : lines) {
+        if (l.type == u"pictures") {
+            l.items = resolvePictures(l.items);
+            l.hint = picturesWaiting(l.items);
+        }
+    }
 
     // The same view drawn again, its lines of the same kinds: changed in place. Another view (or
     // params: another exercise) starts afresh, at its top.
@@ -822,6 +836,100 @@ void ExtensionViewModel::render(bool reshape)
     m_error = error;
     ++m_revision;
     Q_EMIT renderedChanged();
+}
+
+QVariantList ExtensionViewModel::resolvePictures(const QVariantList &items) const
+{
+    const VaultIndex *index = m_extensions ? m_extensions->index() : nullptr;
+    QVariantList out;
+    out.reserve(items.size());
+    for (const QVariant &v : items) {
+        QVariantMap item = v.toMap();
+        const QString src = item.value(u"src"_s).toString();
+        QVariantMap shown;
+        if (item.value(u"web"_s).toBool()) {
+            // As a note's picture from the internet: from the cache, fetched once it may be.
+            shown = m_pictureHost ? m_pictureHost->webPicture(src) : QVariantMap{{u"state"_s, u"ask"_s}};
+        } else {
+            // A picture of the notebook — only a file the index knows, as b.attachments() names it
+            // (never a path out of the notebook, a hidden folder, a note).
+            const VaultPath path = paths::normalize(src);
+            const QUrl url = m_pictureHost && index && paths::isPicturePath(path) && index->contains(path)
+                                     ? m_pictureHost->assetUrl(path)
+                                     : QUrl();
+            shown = url.isEmpty() ? QVariantMap{{u"state"_s, u"missing"_s}}
+                                  : QVariantMap{{u"state"_s, u"ready"_s}, {u"url"_s, url}};
+        }
+        item.insert(u"state"_s, shown.value(u"state"_s).toString());
+        item.insert(u"url"_s, shown.value(u"url"_s).toUrl().toString());
+        item.insert(u"error"_s, shown.value(u"error"_s).toString());
+        out << item;
+    }
+    return out;
+}
+
+QString ExtensionViewModel::picturesWaiting(const QVariantList &items)
+{
+    bool failed = false;
+    for (const QVariant &v : items) {
+        const QVariantMap item = v.toMap();
+        if (!item.value(u"web"_s).toBool())
+            continue;
+        const QString state = item.value(u"state"_s).toString();
+        if (state == u"ask")
+            return u"ask"_s;
+        failed = failed || state == u"failed";
+    }
+    return failed ? u"failed"_s : QString();
+}
+
+void ExtensionViewModel::webPictureChanged(const QString &url)
+{
+    if (m_updating)
+        return;
+    for (qsizetype i = 0; i < m_lines.size(); ++i) {
+        Line &l = m_lines[i];
+        if (l.type != u"pictures")
+            continue;
+        const bool names = url.isEmpty() || std::any_of(l.items.cbegin(), l.items.cend(), [&url](const QVariant &item) {
+                               return item.toMap().value(u"src"_s).toString() == url;
+                           });
+        if (!names)
+            continue;
+        QVariantList items = resolvePictures(l.items);
+        if (items == l.items)
+            continue;
+        l.items = std::move(items);
+        const QString hint = picturesWaiting(l.items);
+        QList<int> roles{ItemsRole};
+        if (hint != l.hint) {
+            l.hint = hint;
+            roles << HintRole;
+        }
+        Q_EMIT dataChanged(index(int(i)), index(int(i)), roles);
+    }
+}
+
+int ExtensionViewModel::showPictures(int row)
+{
+    if (row < 0 || row >= m_lines.size() || m_lines[row].type != u"pictures" || !m_pictureHost)
+        return 0;
+    // The addresses first: the host may tell of a change at once (webPictureChanged() replaces
+    // the line's items).
+    QStringList urls;
+    for (const QVariant &v : std::as_const(m_lines[row].items)) {
+        const QVariantMap item = v.toMap();
+        const QString state = item.value(u"state"_s).toString();
+        if (item.value(u"web"_s).toBool() && (state == u"ask" || state == u"failed"))
+            urls << item.value(u"src"_s).toString();
+    }
+    for (const QString &url : std::as_const(urls)) {
+        if (m_pictureHost)
+            m_pictureHost->loadWebPicture(url);
+    }
+    if (!urls.isEmpty())
+        webPictureChanged(QString()); // "loading" now
+    return int(urls.size());
 }
 
 QList<int> ExtensionViewModel::changedRoles(const Line &before, const Line &after)
@@ -1035,6 +1143,27 @@ void ExtensionViewModel::addLine(const QVariantMap &node, QList<Line> *lines)
             lines->append(cells);
         }
         return;
+    } else if (type == u"pictures") {
+        // Each picture's source and words; where it is shown from comes in render()
+        // (resolvePictures(): the notebook's file, the device's cache).
+        for (const QVariant &v : itemsOfList(node.value(u"items"_s))) {
+            const QVariantMap item = v.metaType().id() == QMetaType::QVariantMap ? v.toMap()
+                                                                                 : QVariantMap{{u"src"_s, v.toString()}};
+            const QString src = item.value(u"src"_s).toString().trimmed();
+            if (src.isEmpty())
+                continue;
+            const bool web = webpicture::isWebUrl(src);
+            line.items << QVariantMap{{u"src"_s, src},
+                                      {u"alt"_s, item.value(u"alt"_s).toString()},
+                                      {u"caption"_s, item.value(u"caption"_s).toString()},
+                                      {u"web"_s, web},
+                                      {u"host"_s, web ? webpicture::webUrl(src).host() : QString()}};
+            if (line.items.size() >= kMaxPictures)
+                break;
+        }
+        if (line.items.isEmpty())
+            return;
+        line.title = node.value(u"label"_s).toString();
     } else if (type == u"markdown") {
         const QString size = node.value(u"size"_s).toString();
         line.size = size == u"large" || size == u"small" ? size : QString();

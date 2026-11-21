@@ -42,6 +42,8 @@
 
 #include "extensionmodels.h"
 
+#include "editorhost.h"
+
 #include "ai/ai.h"
 #include "extensions/engine.h"
 #include "extensions/events.h"
@@ -56,6 +58,7 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QStringList>
 #include <QTimer>
@@ -199,6 +202,11 @@ public:
     ai::LocalBackend *localAi() const { return m_localAi; }
     /// Loads the pictures a request names (b.ai's `images`): Workspace's, from the notebook.
     void setAiPictures(ai::ImageLoader loader);
+    /// What shows the views' pictures (b.ui.pictures; ExtensionViewModel): the notebook's by
+    /// EditorHost::assetUrl(), those from the internet as notes show them (webPicture(),
+    /// loadWebPicture(), webPictureChanged()) — the Workspace; nullptr (tests): none is shown.
+    void setPictureHost(EditorHost *host) { m_pictureHost = host; }
+    EditorHost *pictureHost() const { return m_pictureHost; }
     /// The engine's limits: extensions::Limits{} (the app's), unless a test whose subject is not the
     /// time limit gives its calls more time (a wall clock, which a stalled CI runner runs out).
     void setLimits(const extensions::Limits &limits);
@@ -649,6 +657,7 @@ private:
     ai::Settings m_aiSettings;
     ai::LocalBackend *m_localAi = nullptr;
     ai::ImageLoader m_aiPictures;
+    QPointer<EditorHost> m_pictureHost;
     ai::Client *aiClient();
     std::unique_ptr<sync::NetworkHttpTransport> m_transport;
     std::unique_ptr<ai::Client> m_aiClient;

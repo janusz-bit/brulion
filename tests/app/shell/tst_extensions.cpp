@@ -197,6 +197,46 @@ QString controlRole(const ExtensionControlsModel *controls, int i, int role)
     return controls ? controls->data(controls->index(i), role).toString() : QString();
 }
 
+/// What shows a view's pictures (b.ui.pictures) in place of the Workspace: the notebook's files
+/// under `dir`, the pictures from the internet as `web` says (an address it has not: "ask"); a
+/// "Show" (loadWebPicture) is remembered in `asked` and makes it "loading".
+class PictureHost : public brulion::EditorHost {
+public:
+    QString dir;
+    QHash<QString, QVariantMap> web;
+    QStringList asked;
+
+    QVariantMap webPicture(const QString &url) const override
+    {
+        return web.value(url, {{u"state"_s, u"ask"_s}});
+    }
+    void loadWebPicture(const QString &url, bool) override
+    {
+        asked << url;
+        web.insert(url, {{u"state"_s, u"loading"_s}});
+        Q_EMIT webPictureChanged(url); // at once, as the Workspace does
+    }
+    QUrl assetUrl(const QString &path) const override { return QUrl::fromLocalFile(dir + u'/' + path); }
+    QString read(const QString &, bool *ok) override
+    {
+        if (ok)
+            *ok = false;
+        return {};
+    }
+    bool write(const QString &, const QString &) override { return false; }
+    QVariantList suggestPages(const QString &, int) const override { return {}; }
+    QVariantList suggestBlocks(const QString &, int) const override { return {}; }
+    QVariantList suggestTags(const QString &, int) const override { return {}; }
+    QString resolveLink(const QString &, const QString &) const override { return {}; }
+    QString blockText(const QString &) const override { return {}; }
+    QString ensureBlockId(const QString &, int) override { return {}; }
+    QVariantList templates() const override { return {}; }
+    QString saveAttachment(const QString &, const QByteArray &) override { return {}; }
+    QVariantMap vaultConfig() const override { return {}; }
+    void navigate(const QVariantMap &, bool) override { }
+    void openUrl(const QUrl &) override { }
+};
+
 /// The rows of a model's dataChanged signals, sorted.
 QList<int> changedRows(const QSignalSpy &spy)
 {
@@ -1171,6 +1211,99 @@ private Q_SLOTS:
         QCOMPARE(line(0, ExtensionViewModel::IconRole).toString(), u"flame"_s);
         QCOMPARE(line(0, ExtensionViewModel::TitleRole).toString(), u"Pusto"_s);
         QCOMPARE(line(0, ExtensionViewModel::CardRole).toString(), QString());
+    }
+
+    void picturesInTheViewModel()
+    {
+        // b.ui.pictures as the app draws it: a picture of the notebook from its file, one from the
+        // internet waiting for "Show" (then loading, then from the cache), and what is no picture
+        // of the notebook — a missing file, a note, a path out of it, another scheme — said so;
+        // nothing for an empty one, at most eight.
+        QFile png(m_dir + u"/assets/kot.png"_s);
+        QVERIFY(QDir().mkpath(m_dir + u"/assets"_s));
+        QVERIFY(png.open(QIODevice::WriteOnly));
+        png.write(QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="));
+        png.close();
+        m_index->update(u"assets/kot.png"_s, QString());
+        addExtension(u"Obrazki"_s,
+                     u"b.view(\"obrazki\", function(params)\n"
+                     "    if params.wiele then\n"
+                     "        local many = {}\n"
+                     "        for i = 1, 12 do table.insert(many, `https://example.com/{i}.jpg`) end\n"
+                     "        return b.ui.pictures(many)\n"
+                     "    end\n"
+                     "    return b.ui.column({\n"
+                     "        b.ui.pictures({ \"assets/kot.png\",\n"
+                     "            { src = \"https://example.com/pies.jpg\", alt = \"Pies na łące\", caption = \"Burek\" },\n"
+                     "            \"assets/brak.png\", \"Nawyki.md\", \"../poza.png\", \"ftp://example.com/ż.png\", \"\" },\n"
+                     "            { label = \"Zwierzęta\" }),\n"
+                     "        b.ui.pictures({}),\n"
+                     "    })\n"
+                     "end)"_s);
+        PictureHost host;
+        host.dir = m_dir;
+        m_ext->setPictureHost(&host);
+        ExtensionViewModel model;
+        model.setExtensions(m_ext.get());
+        model.setExtension(u"obrazki"_s);
+        model.setView(u"obrazki"_s);
+        model.refresh();
+        QVERIFY2(model.error().isEmpty(), qPrintable(model.error()));
+        QCOMPARE(lineKinds(model), QStringList{u"pictures"_s});
+        QCOMPARE(model.data(model.index(0), ExtensionViewModel::TitleRole).toString(), u"Zwierzęta"_s);
+        const auto items = [&model] { return model.data(model.index(0), ExtensionViewModel::ItemsRole).toList(); };
+        const auto item = [&items](int i, const QString &key) { return items().value(i).toMap().value(key).toString(); };
+        QCOMPARE(items().size(), 6);
+        QStringList states;
+        for (int i = 0; i < 6; ++i)
+            states << item(i, u"state"_s);
+        QCOMPARE(states, (QStringList{u"ready"_s, u"ask"_s, u"missing"_s, u"missing"_s, u"missing"_s, u"missing"_s}));
+        QCOMPARE(item(0, u"url"_s), QUrl::fromLocalFile(m_dir + u"/assets/kot.png"_s).toString());
+        QCOMPARE(item(1, u"host"_s), u"example.com"_s);
+        QCOMPARE(item(1, u"alt"_s), u"Pies na łące"_s);
+        QCOMPARE(item(1, u"caption"_s), u"Burek"_s);
+        QVERIFY(item(1, u"url"_s).isEmpty());
+        QCOMPARE(model.data(model.index(0), ExtensionViewModel::HintRole).toString(), u"ask"_s);
+        QCOMPARE(item(5, u"src"_s), u"ftp://example.com/ż.png"_s);
+        // "Show": the one from the internet is fetched (loading), then ready from the cache.
+        QSignalSpy changes(&model, &QAbstractItemModel::dataChanged);
+        QCOMPARE(model.showPictures(0), 1);
+        QCOMPARE(host.asked, QStringList{u"https://example.com/pies.jpg"_s});
+        QCOMPARE(item(1, u"state"_s), u"loading"_s);
+        QCOMPARE(changes.count(), 1);
+        QCOMPARE(changes.first().at(2).value<QList<int>>(), (QList<int>{ExtensionViewModel::ItemsRole, ExtensionViewModel::HintRole}));
+        host.web.insert(u"https://example.com/pies.jpg"_s,
+                        {{u"state"_s, u"ready"_s}, {u"url"_s, QUrl(u"file:///cache/pies.jpg"_s)}});
+        Q_EMIT host.webPictureChanged(u"https://example.com/inny.jpg"_s); // another picture: nothing
+        QCOMPARE(changes.count(), 1);
+        Q_EMIT host.webPictureChanged(u"https://example.com/pies.jpg"_s);
+        QCOMPARE(changes.count(), 2);
+        QCOMPARE(item(1, u"state"_s), u"ready"_s);
+        QCOMPARE(item(1, u"url"_s), u"file:///cache/pies.jpg"_s);
+        QCOMPARE(model.data(model.index(0), ExtensionViewModel::HintRole).toString(), QString());
+        QCOMPARE(model.showPictures(0), 0); // nothing waits
+        QCOMPARE(model.showPictures(7), 0);
+        // A failure: "Try again" asks for it once more.
+        host.web.insert(u"https://example.com/pies.jpg"_s, {{u"state"_s, u"failed"_s}, {u"error"_s, u"Błąd 404"_s}});
+        Q_EMIT host.webPictureChanged(QString());
+        QCOMPARE(item(1, u"error"_s), u"Błąd 404"_s);
+        QCOMPARE(model.data(model.index(0), ExtensionViewModel::HintRole).toString(), u"failed"_s);
+        QCOMPARE(model.showPictures(0), 1);
+        QCOMPARE(host.asked.size(), 2);
+        // At most eight.
+        model.setParam(u"wiele"_s, u"tak"_s);
+        QTRY_COMPARE(items().size(), 8);
+        // Without a host the notebook's are not shown, those of the internet wait.
+        m_ext->setPictureHost(nullptr);
+        ExtensionViewModel bare;
+        bare.setExtensions(m_ext.get());
+        bare.setExtension(u"obrazki"_s);
+        bare.setView(u"obrazki"_s);
+        bare.refresh();
+        const QVariantList none = bare.data(bare.index(0), ExtensionViewModel::ItemsRole).toList();
+        QCOMPARE(none.value(0).toMap().value(u"state"_s).toString(), u"missing"_s);
+        QCOMPARE(none.value(1).toMap().value(u"state"_s).toString(), u"ask"_s);
+        QCOMPARE(bare.showPictures(0), 0);
     }
 
     // ---- what the samples met as walls, and the extension's own corner ----------------------------

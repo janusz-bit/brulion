@@ -56,7 +56,7 @@ Pomiar to zwykły punkt dziennika z tagiem `#waga` (albo `#weight`):
 Masa z `kg` albo `lb` (sama liczba: jednostka z ustawień), opcjonalnie tkanka tłuszczowa w procentach, a pozostałe słowa to notatka. Kilka pomiarów jednego dnia: liczy się ostatni. Szybko zapiszesz go też z palety (**Siłownia: zapisz masę ciała**), a `{{ext:silownia/waga}}` w dowolnej notatce pokaże ostatni pomiar i trend.
 
 ## Katalog ćwiczeń
-**Katalog ćwiczeń** (przycisk w widoku Dziś albo paleta) to ponad 870 ćwiczeń: 51 Brulionu i cała baza free-exercise-db (domena publiczna), popularne z polskimi nazwami. Szukaj po nazwie w dowolnym języku, bez polskich znaków też (`wioslowanie`), i zawężaj mięśniem, sprzętem albo rodzajem. Ćwiczenie pokazuje swoje mięśnie i opis wykonania (po angielsku); możesz dopisać je do dzisiejszego treningu albo założyć jego stronę:
+**Katalog ćwiczeń** (przycisk w widoku Dziś albo paleta) to ponad 870 ćwiczeń: 51 Brulionu i cała baza free-exercise-db (domena publiczna), popularne z polskimi nazwami. Szukaj po nazwie w dowolnym języku, bez polskich znaków też (`wioslowanie`), i zawężaj mięśniem, sprzętem albo rodzajem. Ćwiczenie pokazuje swoje mięśnie, dwa zdjęcia ruchu (początek i koniec) i opis wykonania (po angielsku); możesz dopisać je do dzisiejszego treningu albo założyć jego stronę:
 
 ```markdown
 katalog:: back-squat
@@ -64,6 +64,8 @@ miesnie:: czworogłowe uda
 miesnie-pomocnicze:: łydki, pośladki, dwugłowe uda, dolna część pleców
 sprzet:: sztanga
 ```
+
+Zdjęć nie ma w aplikacji: pochodzą z internetu (free-exercise-db na GitHubie) i po pokazaniu zostają w pamięci podręcznej urządzenia. Jak obrazy z internetu w notatkach pobierają się dopiero po stuknięciu **Pokaż obrazy** — albo same, gdy w Ustawieniach → Edytor jest włączone **Pokazuj obrazy z internetu bez pytania**.
 
 Mięśnie ze strony ćwiczenia (`miesnie::`, `miesnie-pomocnicze::`) liczą się w objętości przed katalogiem — tak przypiszesz mięśnie własnemu ćwiczeniu. **Siłownia: ćwiczenie z katalogu** w palecie pyta o nazwę i od razu zakłada stronę.
 
