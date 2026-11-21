@@ -17,7 +17,7 @@ Open **Settings → Extensions → AI** and choose:
 Press **Check**: the model answers "OK", or you see what is wrong.
 
 > [!note] Subscriptions
-> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent. With a subscription, let those apps reach your notes instead: [[Command line and AI agents#Your notes in claude.ai and ChatGPT]] — or, on the computer, let their own agent answer in the AI chat: [[#An AI agent of your own (ACP)]].
+> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent. With a subscription, let those apps reach your notes instead: [[Command line and AI agents#Your notes in claude.ai and ChatGPT]] — or let their own agent answer in the AI chat, on the computer or, through a computer of yours, on the phone: [[#An AI agent of your own (ACP)]].
 
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 
@@ -102,7 +102,15 @@ The agent works in the notebook's folder: it reads and changes your notes throug
 Above the conversation, its **model**, **mode** (how much it may do without asking), **effort** and the rest are chips: tap one to choose — the agent remembers it for its next conversations, also before their first message. Next to them, how much of its memory the conversation uses and what it cost. Type `/` in the field for the agent's own commands (`/review`, `/compact` …). A conversation goes on in the same session of the agent even after Brulion is started again; one that changed meanwhile (written on the phone, answered by the assistant) starts a new session that gets all of it.
 
 > [!warning] An agent is a program of yours
-> It runs with your rights on this computer, and what it may do without asking is its own setting (its mode). Agents run only in the desktop app; on the phone and in the browser a conversation with one says that it cannot be started there.
+> It runs with your rights on this computer, and what it may do without asking is its own setting (its mode). The desktop app starts agents itself; on the phone an agent on another computer of yours answers instead (below), and in the browser a conversation with one says that it cannot be started there.
+
+### An agent on another computer
+A phone starts no programs, but a computer of yours — a home server, a laptop — can run the agent for it: **`brulion-cli acp serve`** there runs Claude Code (or another agent) in that computer's copy of this notebook, and Brulion on the phone talks to it. Your subscription works the same way: the agent signs in on that computer.
+
+1. On the computer: `brulion-cli acp serve --agent claude` (on NixOS the service `services.brulion-acp`), reachable from the phone only in your own network — a tailnet such as Tailscale or headscale, or a VPN. Then `brulion-cli acp pair` shows a code (valid for 10 minutes, once).
+2. On the phone: **Settings → Extensions → AI agents → Add → An agent on another computer…**, the computer's address (e.g. `https://agent.example.com`) and the code, then **Pair**. Its agents appear in the list ("On raspberry-pi-4 …"), and in the AI chat as **who answers**.
+
+Everything above works the same — its plan and steps, the diffs, its questions, the chips — but the files it reads and changes, the commands it runs and Brulion's tools are that **computer's**: keep its copy of the notebook in sync with the phone (Syncthing, or Nextcloud: `acp serve --nextcloud …` syncs it before and after every turn). The phone may sleep while the agent works: what it says waits on the computer. `brulion-cli acp revoke` unpairs the phone at once ([[Command line and AI agents#Your agent for the phone]]).
 
 ## In your own extensions
 An extension page with `ai` among its permissions can ask a model:

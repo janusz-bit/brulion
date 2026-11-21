@@ -36,7 +36,14 @@
 // conversation's question (questionText(), answer()); Stop cancels the turn (session/cancel) and
 // answers a question waiting "cancelled".
 //
-// The desktop app only (available()): Android and the browser start no programs.
+// A program runs only in the desktop app (available()): Android and the browser start no programs.
+// An agent on another computer does run there (remoteAvailable(): Android and the desktop): the
+// user's computer runs it with `brulion-cli acp serve` (docs/CLI.md "AI agents for other
+// devices"), the device paired once with a code of that computer (pair()); its "process" is then
+// an acp::RemoteStream to that computer (core acp/remote.h) — the protocol and everything above it
+// as for a program of this device, only the agent's files, terminals and Brulion's tools are that
+// computer's, so this side offers none and names that computer's notebook folder (AgentConfig::root)
+// to the agent.
 //
 //   agents->setAgents({{u"claude"_s, u"Claude Code"_s, u"npx -y @agentclientprotocol/claude-agent-acp"_s}});
 //   agents->run(path, u"acp:claude"_s, history, u"Dom"_s);  // → answered / failed / status / partial
@@ -44,6 +51,7 @@
 // Single-threaded (the GUI thread).
 
 #include "acp/acp.h"
+#include "acp/remote.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -57,6 +65,7 @@
 #include <QVariantList>
 
 #include <functional>
+#include <memory>
 #include <optional>
 
 class QProcess;
@@ -78,9 +87,22 @@ struct AgentConfig
     /// The options its last session offered (acp::ConfigOption::toJson()), for the chat before a
     /// session is there.
     QJsonArray known{};
+    /// An agent on another computer (`brulion-cli acp serve` there): its address ("" a program of
+    /// this device), the agent's id there, the computer's name and notebook folder, and this
+    /// device's token for it (from the app's secrets, never in the settings or the notebook).
+    QString url{};
+    QString remote{};
+    QString host{};
+    QString root{};
+    QString token{};
     friend bool operator==(const AgentConfig &, const AgentConfig &) = default;
+    bool isRemote() const { return !url.isEmpty(); }
     /// The same program: what it runs is not changed (its name and remembered options may be).
-    bool sameProgram(const AgentConfig &o) const { return id == o.id && command == o.command && tools == o.tools; }
+    bool sameProgram(const AgentConfig &o) const
+    {
+        return id == o.id && command == o.command && tools == o.tools && url == o.url && remote == o.remote
+               && token == o.token;
+    }
 };
 
 class WorkspaceAgents : public QObject
@@ -93,8 +115,19 @@ public:
     /// The prefix of an agent's partner id ("acp:claude").
     static constexpr QLatin1StringView Prefix{"acp:"};
     static bool isAgent(const QString &partner);
-    /// Agents can run here (the desktop app).
+    /// Programs can run here (the desktop app).
     static bool available();
+    /// Agents on another computer can be reached from here (the desktop app and Android; not the
+    /// browser, whose requests that computer refuses).
+    static bool remoteAvailable();
+    /// `agent` can answer here.
+    static bool runs(const AgentConfig &agent) { return agent.isRemote() ? remoteAvailable() : available(); }
+    /// This device's name as a computer lists it among its paired devices.
+    static QString deviceName();
+    /// Why a stream to `host` ended, as it follows "The AI agent “…” stopped: ".
+    static QString remoteEndText(const QString &host, acp::RemoteStream::End why, const QString &detail);
+    /// The error of a pairing or of the computer's info in words.
+    static QString remoteErrorText(const QString &address, const acp::RemoteError &error);
     /// The agents offered when one is added: {id, name, command} of Claude Code, Codex, Gemini CLI,
     /// OpenCode.
     static QList<AgentConfig> presets();
@@ -165,6 +198,13 @@ public:
     /// checked(id, ok, what it says — its name and version, or why it failed).
     void check(const QString &id);
 
+    /// Pairs this device with a computer that runs `brulion-cli acp serve` at `address`, with a
+    /// code of its `acp pair`: paired(true, what it says, its agents — each an AgentConfig with
+    /// url, remote, host, root, token and a name; no id yet) or paired(false, why, {}).
+    void pair(const QString &address, const QString &code);
+    /// Tests: the transport to other computers (default one over the network of its own).
+    void setTransport(sync::HttpTransport *transport) { m_transport = transport; }
+
     /// The notebook closed: every agent stops, without a word of its turns.
     void reset();
 
@@ -182,6 +222,7 @@ Q_SIGNALS:
     /// The options of agent `id` were chosen or learnt: AppSettings keeps them.
     void remembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     void checked(const QString &id, bool ok, const QString &text);
+    void paired(bool ok, const QString &text, const QList<brulion::shell::AgentConfig> &agents);
 
 private:
     struct Process;
@@ -196,7 +237,13 @@ private:
     };
 
     Process *processFor(const AgentConfig &config);
+    void connectClient(Process *p);
+    void startProgram(Process *p);
+    void startRemote(Process *p);
+    /// The agent's program or stream is gone (`why` for the user): its turns fail.
+    void ended(const QString &id, Process *p, const QString &why);
     void stopProcess(const QString &id);
+    sync::HttpTransport *transport();
     QString failureText(const QString &name, const acp::Failure &failure) const;
     void setQuestion(const QString &path, const Question &question);
     void clearQuestion(const QString &path);
@@ -238,6 +285,8 @@ private:
     QSet<QString> m_activityPending;        // conversations whose activityChanged() is due
     QTimer *m_activityTimer = nullptr;      // (a terminal's output: ten times a second at most)
     int m_nextTerminal = 1;
+    sync::HttpTransport *m_transport = nullptr;
+    std::unique_ptr<sync::HttpTransport> m_ownTransport;
 };
 
 } // namespace brulion::shell

@@ -329,6 +329,12 @@ AppController::AppController(const Options &options, QObject *parent)
             });
     connect(m_workspace->chats(), &WorkspaceChats::agentChecked, this,
             [this](const QString &, bool ok, const QString &text) { toast(text, ok ? u"success"_s : u"error"_s); });
+    // The agents of a computer this device was paired with (Settings → AI agents → Add → An agent
+    // on another computer): kept in the settings, their token in the app's secrets.
+    connect(m_workspace->chats(), &WorkspaceChats::agentsPaired, this,
+            [this](const QList<AgentConfig> &agents) { m_settings->addRemoteAcpAgents(agents); });
+    connect(m_workspace->chats(), &WorkspaceChats::agentHostPaired, this,
+            [this](bool ok, const QString &text) { toast(text, ok ? u"success"_s : u"error"_s); });
     // An agent's question in a conversation no chat view shows: a toast whose Open shows it.
     connect(m_workspace->chats(), &WorkspaceChats::questionWaiting, this, [this](const QString &path, const QString &text) {
         const int id = toastWithAction(text, u"info"_s, tr("Open"));

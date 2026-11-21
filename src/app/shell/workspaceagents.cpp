@@ -4,6 +4,7 @@
 
 #include "log/categories.h"
 #include "markdown/encrypted.h"
+#include "sync/http.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
 
@@ -15,6 +16,7 @@
 #include <QProcess>
 #endif
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QTimer>
 #include <QUrl>
 
@@ -30,7 +32,8 @@ namespace brulion::shell {
 struct WorkspaceAgents::Process
 {
     AgentConfig config;
-    QProcess *process = nullptr;
+    QProcess *process = nullptr;         // a program of this device, or
+    acp::RemoteStream *remote = nullptr; // an agent on another computer
     acp::Client *client = nullptr;
     QString errors; // the end of what it wrote to its standard error
 };
@@ -187,6 +190,20 @@ WorkspaceAgents::~WorkspaceAgents()
     for (Terminal *t : std::as_const(m_terminals))
         delete t; // (their programs: below)
     m_terminals.clear();
+    for (auto it = m_processes.begin(); it != m_processes.end();) {
+        Process *p = it.value();
+        if (!p->remote) {
+            ++it;
+            continue;
+        }
+        p->client->blockSignals(true);
+        p->remote->disconnect(this);
+        p->remote->stop(); // (the agent's process ends on that computer)
+        delete p->remote;
+        delete p->client;
+        delete p;
+        it = m_processes.erase(it);
+    }
 #if QT_CONFIG(process)
     for (Process *p : std::as_const(m_processes)) {
         p->client->blockSignals(true);
@@ -220,6 +237,72 @@ bool WorkspaceAgents::available()
 #else
     return true;
 #endif
+}
+
+bool WorkspaceAgents::remoteAvailable()
+{
+#if defined(Q_OS_WASM)
+    return false;
+#else
+    return true;
+#endif
+}
+
+QString WorkspaceAgents::deviceName()
+{
+    const QString host = QSysInfo::machineHostName().trimmed();
+    if (!host.isEmpty() && host != u"localhost")
+        return host;
+    return QSysInfo::prettyProductName();
+}
+
+QString WorkspaceAgents::remoteEndText(const QString &host, acp::RemoteStream::End why, const QString &detail)
+{
+    using End = acp::RemoteStream::End;
+    switch (why) {
+    case End::AgentEnded: return detail.isEmpty() ? tr("it ended on %1").arg(host) : tr("%1 (on %2)").arg(detail, host);
+    case End::Unauthorized:
+        return tr("this device is no longer paired with %1 — pair it again in Settings → Extensions → AI agents")
+                .arg(host);
+    case End::Gone:
+        return tr("%1 no longer knows this conversation's agent (it was started again) — try again").arg(host);
+    case End::Unreachable:
+        return tr("%1 could not be reached for a while (%2) — is it on, and is this device in its network?")
+                .arg(host, detail);
+    case End::Refused:
+        return detail.isEmpty() ? tr("%1 did not start it").arg(host) : tr("%1 did not start it: %2").arg(host, detail);
+    case End::Version:
+        return tr("%1 runs another version of Brulion's agent server — update Brulion there and here").arg(host);
+    }
+    return detail;
+}
+
+QString WorkspaceAgents::remoteErrorText(const QString &address, const acp::RemoteError &error)
+{
+    using Kind = acp::RemoteError::Kind;
+    switch (error.kind) {
+    case Kind::None: return {};
+    case Kind::Network:
+        return tr("%1 could not be reached (%2): is the computer on, and is this device in its network?")
+                .arg(address, error.detail);
+    case Kind::Unauthorized: return tr("%1 does not know this device: pair it again with a new code.").arg(address);
+    case Kind::Refused:
+        if (error.code == u"bad_code")
+            return tr("That is not the code: run acp pair on the computer again and type the new one.");
+        if (error.code == u"no_code")
+            return tr("No pairing code is valid now: run acp pair on the computer (a code is valid for 10 minutes, "
+                      "once).");
+        if (error.code == u"too_many_tries")
+            return tr("Too many tries: wait a minute, then pair with a new code.");
+        return tr("%1 refused: %2").arg(address, error.detail);
+    case Kind::Server: return tr("%1 failed: %2").arg(address, error.detail);
+    case Kind::Malformed:
+        return tr("%1 answered in a way Brulion does not understand (%2): is it the address of brulion-cli acp serve?")
+                .arg(address, error.detail);
+    case Kind::Version:
+        return tr("%1 runs another version of Brulion's agent server: update Brulion there and here.").arg(address);
+    }
+    return error.detail;
 }
 
 QList<AgentConfig> WorkspaceAgents::presets()
@@ -356,10 +439,13 @@ const AgentConfig *WorkspaceAgents::config(const QString &id) const
 QVariantList WorkspaceAgents::partners() const
 {
     QVariantList out;
-    if (!available())
-        return out;
-    for (const AgentConfig &a : m_agents)
-        out.append(QVariantMap{{u"id"_s, QString(Prefix + a.id)}, {u"label"_s, a.name}, {u"extension"_s, tr("AI agent")}});
+    for (const AgentConfig &a : m_agents) {
+        if (!runs(a))
+            continue;
+        out.append(QVariantMap{{u"id"_s, QString(Prefix + a.id)},
+                               {u"label"_s, a.name},
+                               {u"extension"_s, a.isRemote() ? tr("AI agent on %1").arg(a.host) : tr("AI agent")}});
+    }
     return out;
 }
 
@@ -371,28 +457,53 @@ QString WorkspaceAgents::label(const QString &partner) const
 
 WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
 {
-#if !QT_CONFIG(process)
-    Q_UNUSED(config)
-    return nullptr;
-#else
     if (Process *p = m_processes.value(config.id))
         return p;
+    if (!runs(config))
+        return nullptr;
     auto *p = new Process;
     p->config = config;
-    p->process = new QProcess(this);
-    QPointer<QProcess> process = p->process;
-    p->client = new acp::Client(
-            [process](const QByteArray &line) {
-                if (process && process->state() != QProcess::NotRunning)
-                    process->write(line);
-            },
-            QStringLiteral(BRULION_VERSION), this);
-    p->client->setCapabilities({true, true});
-    p->client->setHandler([this, p](const QString &key, const QJsonValue &id, const QString &method,
-                                    const QJsonObject &params) { handle(p, key, id, method, params); });
+    if (config.isRemote()) {
+        p->remote = new acp::RemoteStream(transport(), QUrl(config.url), config.token, config.remote, this);
+        QPointer<acp::RemoteStream> stream = p->remote;
+        p->client = new acp::Client(
+                [stream](const QByteArray &line) {
+                    if (stream)
+                        stream->write(line);
+                },
+                QStringLiteral(BRULION_VERSION), this);
+        // (The other computer serves the agent its files and terminals: none from here.)
+        p->client->setCapabilities({false, false});
+        p->client->setHandler([p](const QString &, const QJsonValue &id, const QString &method, const QJsonObject &) {
+            p->client->respondError(id, acp::MethodNotFound, u"Method not found: %1"_s.arg(method));
+        });
+    } else {
+#if QT_CONFIG(process)
+        p->process = new QProcess(this);
+        QPointer<QProcess> process = p->process;
+        p->client = new acp::Client(
+                [process](const QByteArray &line) {
+                    if (process && process->state() != QProcess::NotRunning)
+                        process->write(line);
+                },
+                QStringLiteral(BRULION_VERSION), this);
+        p->client->setCapabilities({true, true});
+        p->client->setHandler([this, p](const QString &key, const QJsonValue &id, const QString &method,
+                                        const QJsonObject &params) { handle(p, key, id, method, params); });
+#endif
+    }
     m_processes.insert(config.id, p);
+    connectClient(p);
+    if (p->remote)
+        startRemote(p);
+    else
+        startProgram(p);
+    return p;
+}
 
-    const QString id = config.id;
+void WorkspaceAgents::connectClient(Process *p)
+{
+    const QString id = p->config.id;
     acp::Client *client = p->client;
     const auto name = [p] { return p->config.name; };
     connect(client, &acp::Client::progress, this,
@@ -467,10 +578,18 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
                     if (!m.description.isEmpty())
                         details << m.name + u": "_s + m.description;
                 }
-                const QString why = terminal.isEmpty()
-                                            ? tr("%1 asks you to sign in: sign in with its own program, then try again.").arg(name())
-                                            : tr("%1 asks you to sign in: run %2 in a terminal, then try again.")
-                                                      .arg(name(), terminal.join(tr(" or ")));
+                QString why = terminal.isEmpty()
+                                      ? tr("%1 asks you to sign in: sign in with its own program, then try again.")
+                                                .arg(name())
+                                      : tr("%1 asks you to sign in: run %2 in a terminal, then try again.")
+                                                .arg(name(), terminal.join(tr(" or ")));
+                if (p->config.isRemote())
+                    why = terminal.isEmpty() ? tr("%1 asks you to sign in on %2: sign in with its own program there, "
+                                                  "then try again.")
+                                                       .arg(name(), p->config.host)
+                                             : tr("%1 asks you to sign in on %2: run %3 in a terminal there (on NixOS: "
+                                                  "sudo brulion-acp login …), then try again.")
+                                                       .arg(name(), p->config.host, terminal.join(tr(" or ")));
                 if (path == CheckKey) {
                     p->client->cancel(path);
                     m_checks.remove(id);
@@ -519,9 +638,17 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
         finish(path);
         Q_EMIT failed(path, failureText(name(), failure));
     });
+}
 
+void WorkspaceAgents::startProgram(Process *p)
+{
+#if !QT_CONFIG(process)
+    Q_UNUSED(p)
+#else
     QProcess *proc = p->process;
-    const QStringList parts = commandLine(config.command, windows(), findProgram);
+    const QString id = p->config.id;
+    acp::Client *client = p->client;
+    const QStringList parts = commandLine(p->config.command, windows(), findProgram);
     proc->setProgram(parts.value(0));
     proc->setArguments(parts.mid(1));
     proc->setWorkingDirectory(m_workspace->rootPath());
@@ -533,18 +660,7 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
         for (const QString &line : text.split(u'\n', Qt::SkipEmptyParts))
             qCInfo(logging::lcApp, "AI agent %s: %s", qUtf8Printable(p->config.name), qUtf8Printable(line.left(500)));
     });
-    // The program is gone: every turn of it fails, and the next turn starts it again.
-    const auto gone = [this, id, p](const QString &why) {
-        if (m_processes.value(id) != p)
-            return; // (stopped meanwhile: stopProcess())
-        m_processes.remove(id);
-        qCInfo(logging::lcApp, "AI agent %s ended: %s", qUtf8Printable(p->config.name), qUtf8Printable(why));
-        endTerminals(id);
-        p->client->closed(why);
-        p->client->deleteLater();
-        p->process->deleteLater();
-        delete p;
-    };
+    const auto gone = [this, id, p](const QString &why) { ended(id, p, why); };
     // (A program that cannot start may say so within start(): heard from the event loop, once this
     // function has returned the process and its turn is known.)
     connect(proc, &QProcess::errorOccurred, this, [this, proc, gone](QProcess::ProcessError error) {
@@ -558,10 +674,57 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
         const QString why = exit == QProcess::CrashExit ? tr("it crashed") : tr("it ended with code %1").arg(code);
         gone(line.isEmpty() ? why : why + u": "_s + line);
     });
-    qCInfo(logging::lcApp, "AI agent %s: starting %s", qUtf8Printable(config.name), qUtf8Printable(config.command));
+    qCInfo(logging::lcApp, "AI agent %s: starting %s", qUtf8Printable(p->config.name),
+           qUtf8Printable(p->config.command));
     proc->start();
-    return p;
 #endif
+}
+
+void WorkspaceAgents::startRemote(Process *p)
+{
+    const QString id = p->config.id;
+    acp::RemoteStream *stream = p->remote;
+    connect(stream, &acp::RemoteStream::received, p->client, &acp::Client::received);
+    connect(stream, &acp::RemoteStream::started, this, [p](const QString &root) {
+        if (!root.isEmpty())
+            p->config.root = root; // (the computer's notebook folder as it says now)
+    });
+    connect(stream, &acp::RemoteStream::ended, this,
+            [this, id, p](acp::RemoteStream::End why, const QString &detail, const QString &) {
+                ended(id, p,
+                      remoteEndText(p->config.host.isEmpty() ? QUrl(p->config.url).host() : p->config.host, why,
+                                    detail));
+            });
+    qCInfo(logging::lcApp, "AI agent %s: connecting to %s (%s there)", qUtf8Printable(p->config.name),
+           qUtf8Printable(p->config.url), qUtf8Printable(p->config.remote));
+    stream->start();
+}
+
+void WorkspaceAgents::ended(const QString &id, Process *p, const QString &why)
+{
+    // The program or the stream is gone: every turn of it fails, and the next turn starts it again.
+    if (m_processes.value(id) != p)
+        return; // (stopped meanwhile: stopProcess())
+    m_processes.remove(id);
+    qCInfo(logging::lcApp, "AI agent %s ended: %s", qUtf8Printable(p->config.name), qUtf8Printable(why));
+    endTerminals(id);
+    p->client->closed(why);
+    p->client->deleteLater();
+    if (p->process)
+        p->process->deleteLater();
+    if (p->remote)
+        p->remote->deleteLater();
+    delete p;
+}
+
+sync::HttpTransport *WorkspaceAgents::transport()
+{
+    if (!m_transport) {
+        auto *network = new sync::NetworkHttpTransport;
+        m_ownTransport.reset(network);
+        m_transport = network;
+    }
+    return m_transport;
 }
 
 void WorkspaceAgents::activityDue(const QString &path)
@@ -577,16 +740,23 @@ void WorkspaceAgents::activityDue(const QString &path)
 
 void WorkspaceAgents::stopProcess(const QString &id)
 {
-#if !QT_CONFIG(process)
-    Q_UNUSED(id)
-#else
     Process *p = m_processes.take(id);
     if (!p)
         return;
     endTerminals(id);
+    // Its turns fail: the agent was stopped (a notebook closed says nothing: reset()).
+    if (p->remote) {
+        p->remote->disconnect(this);
+        p->client->closed(tr("it was stopped"));
+        p->client->deleteLater();
+        p->remote->stop(); // (its process ends on that computer)
+        p->remote->deleteLater();
+        delete p;
+        return;
+    }
+#if QT_CONFIG(process)
     QProcess *proc = p->process;
     proc->disconnect(this);
-    // Its turns fail: the agent was stopped (a notebook closed says nothing: reset()).
     p->client->closed(tr("it was stopped"));
     p->client->deleteLater();
     // Asked to end (its input closed, then a signal), made to after a while.
@@ -594,13 +764,20 @@ void WorkspaceAgents::stopProcess(const QString &id)
     proc->closeWriteChannel();
     proc->terminate();
     QTimer::singleShot(3000, proc, [proc] { proc->kill(); });
-    delete p;
 #endif
+    delete p;
 }
 
 acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config) const
 {
     acp::TurnInput input;
+    if (config.isRemote()) {
+        // That computer's notebook folder; its server gives the session Brulion's tools there.
+        input.cwd = config.root;
+        for (auto it = config.options.constBegin(); it != config.options.constEnd(); ++it)
+            input.config.insert(it.key(), it.value());
+        return input;
+    }
     input.cwd = QDir(m_workspace->rootPath()).absolutePath();
     const QString program = config.tools ? toolsProgram() : QString();
     if (!program.isEmpty())
@@ -613,18 +790,27 @@ acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config) const
 void WorkspaceAgents::run(const QString &path, const QString &partner, const QVariantList &history, const QString &page)
 {
     const QString id = partner.trimmed().mid(Prefix.size());
-    if (!available()) {
+    const AgentConfig *agent = config(id);
+    if (!agent && !available() && !remoteAvailable()) {
         Q_EMIT failed(path, tr("AI agents run only in the desktop app: choose another partner for this conversation."));
         return;
     }
-    const AgentConfig *agent = config(id);
     if (!agent) {
         Q_EMIT failed(path, tr("The AI agent “%1” is not set up on this device: add it in Settings → Extensions → AI "
                                "agents, or choose another partner.")
                                     .arg(id));
         return;
     }
-    if (splitCommand(agent->command).isEmpty()) {
+    if (!runs(*agent)) {
+        Q_EMIT failed(path,
+                      agent->isRemote()
+                              ? tr("An AI agent on another computer cannot be reached from here: choose another "
+                                   "partner for this conversation.")
+                              : tr("AI agents run only in the desktop app: on this device an agent on another computer "
+                                   "can answer (Settings → Extensions → AI agents), or choose another partner."));
+        return;
+    }
+    if (!agent->isRemote() && splitCommand(agent->command).isEmpty()) {
         Q_EMIT failed(path, tr("The AI agent “%1” has no command: set it in Settings → Extensions → AI agents.").arg(agent->name));
         return;
     }
@@ -632,7 +818,8 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
         return;
     }
-    const QString root = m_workspace->rootPath();
+    // The notebook's folder as the agent sees it: this device's, or that computer's copy of it.
+    const QString root = agent->isRemote() ? agent->root : m_workspace->rootPath();
     const QString conversation = path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path;
     acp::TurnInput input = baseInput(*agent);
 
@@ -653,8 +840,11 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // A new session: what the agent needs to know first, the page (its text where the agent takes
     // it), the conversation so far.
     const QString pagePath = page.isEmpty() ? QString() : m_workspace->resolveLink(page, path);
-    input.firstPrompt << acp::Block::textBlock(context(input.cwd, conversation, pagePath.isEmpty() ? QString() : page,
-                                                       !input.mcpServers.isEmpty()));
+    // (That computer's server gives each session Brulion's tools there, unless it was started
+    // without them: its info said so at pairing.)
+    const bool tools = agent->isRemote() ? agent->tools : !input.mcpServers.isEmpty();
+    input.firstPrompt << acp::Block::textBlock(
+            context(root, conversation, pagePath.isEmpty() ? QString() : page, tools));
     if (!pagePath.isEmpty()) {
         bool ok = false;
         const QString text = markdown::isEncryptedNotePath(pagePath) ? QString() : m_workspace->read(pagePath, &ok);
@@ -669,6 +859,10 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     input.firstPrompt << input.prompt;
 
     Process *p = processFor(*agent);
+    if (!p) {
+        Q_EMIT failed(path, tr("AI agents run only in the desktop app: choose another partner for this conversation."));
+        return;
+    }
     // The session goes on only if it has seen the conversation up to this message — else (another
     // partner answered meanwhile, a message written on another device) a new one gets it all.
     const int seenNow = int(history.size()) - 1;
@@ -930,22 +1124,97 @@ void WorkspaceAgents::learn(const QString &agent, const QString &key)
 void WorkspaceAgents::check(const QString &id)
 {
     const AgentConfig *agent = config(id);
-    if (!available() || !agent || splitCommand(agent->command).isEmpty()) {
+    if (!agent || !runs(*agent) || (!agent->isRemote() && splitCommand(agent->command).isEmpty())) {
         Q_EMIT checked(id, false, tr("The AI agent “%1” has no command: set it in Settings → Extensions → AI agents.")
                                           .arg(agent ? agent->name : id));
         return;
     }
-    if (m_workspace->rootPath().isEmpty()) {
+    if (!agent->isRemote() && m_workspace->rootPath().isEmpty()) {
         Q_EMIT checked(id, false, tr("Open a notebook first: the agent works in its folder."));
         return;
     }
     Process *p = processFor(*agent);
+    if (!p) {
+        Q_EMIT checked(id, false, tr("The AI agent “%1” stopped.").arg(agent->name));
+        return;
+    }
     m_checks.insert(id, CheckKey);
     p->client->forget(CheckKey);
     if (!p->client->open(CheckKey, baseInput(*agent))) {
         m_checks.remove(id);
         Q_EMIT checked(id, false, tr("The AI agent “%1” stopped.").arg(agent->name));
     }
+}
+
+// ---- an agent on another computer: pairing ---------------------------------------------------------------
+
+void WorkspaceAgents::pair(const QString &address, const QString &code)
+{
+    const QUrl base = acp::normalizeRemoteBase(address);
+    if (!base.isValid() || base.isEmpty()) {
+        Q_EMIT paired(
+                false,
+                tr("“%1” is no address of a computer: type it as the computer shows it (https://agent.example.com).")
+                        .arg(address.trimmed()),
+                {});
+        return;
+    }
+    if (acp::normalizePairingCode(code).isEmpty()) {
+        Q_EMIT paired(false, tr("Type the code that acp pair shows on the computer."), {});
+        return;
+    }
+    if (!remoteAvailable()) {
+        Q_EMIT paired(false, tr("An AI agent on another computer cannot be reached from here."), {});
+        return;
+    }
+    const QString shown = base.toString();
+    QPointer<WorkspaceAgents> self(this);
+    acp::pairRemote(
+            transport(), base, code, deviceName(),
+            [self, base, shown](const acp::RemotePairing &pairing, const acp::RemoteError &error) {
+                if (!self)
+                    return;
+                if (error.failed()) {
+                    Q_EMIT self->paired(false, remoteErrorText(shown, error), {});
+                    return;
+                }
+                const QString token = pairing.token;
+                acp::fetchRemoteInfo(
+                        self->transport(), base, token,
+                        [self, base, shown, token](const acp::RemoteInfo &info, const acp::RemoteError &e) {
+                            if (!self)
+                                return;
+                            if (e.failed()) {
+                                Q_EMIT self->paired(false, remoteErrorText(shown, e), {});
+                                return;
+                            }
+                            if (info.agents.isEmpty()) {
+                                Q_EMIT self->paired(
+                                        false, tr("%1 offers no agent: start acp serve there with --agent.").arg(shown),
+                                        {});
+                                return;
+                            }
+                            const QString host = info.host.isEmpty() ? base.host() : info.host;
+                            QList<AgentConfig> agents;
+                            QStringList names;
+                            for (const acp::RemoteAgent &a : info.agents) {
+                                AgentConfig c;
+                                c.name = a.name;
+                                c.command = a.command;
+                                c.tools = info.tools;
+                                c.url = base.toString();
+                                c.remote = a.id;
+                                c.host = host;
+                                c.root = info.root;
+                                c.token = token;
+                                agents << c;
+                                names << a.name;
+                            }
+                            qCInfo(logging::lcApp, "AI agents: paired with %s (%s): %s", qUtf8Printable(host),
+                                   qUtf8Printable(shown), qUtf8Printable(names.join(u", "_s)));
+                            Q_EMIT self->paired(true, tr("Paired with %1: %2.").arg(host, names.join(u", "_s)), agents);
+                        });
+            });
 }
 
 // ---- what the agent asks of the app: files, terminals ----------------------------------------------------

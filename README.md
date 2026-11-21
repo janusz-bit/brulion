@@ -202,7 +202,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   `--allow-destructive`; help and messages in Polish under a Polish locale, else English), and
   `brulion-cli mcp` serves the same commands as MCP tools — and `brulion-cli mcp serve` over HTTPS
   with sign-in, so that claude.ai, the Claude app on the phone and ChatGPT reach the notebook on
-  your own computer as a custom connector, reading only or also writing as you allow; see
+  your own computer as a custom connector, reading only or also writing as you allow; and
+  `brulion-cli acp serve` runs an AI agent of the computer (Claude Code with your subscription)
+  for the app on your phone, paired once with a code and reached in your own network; see
   [docs/CLI.md](docs/CLI.md). With remote control allowed (off by default: Settings → Application
   → For developers, or `brulion --remote-control`), agents can also drive the running desktop
   app — its state, clicks, typing, shortcuts, screenshots (`brulion-cli app …`,
@@ -555,7 +557,9 @@ przykładowym notatnikiem.
   i przypomnienia, szuka i przenosi strony z terminala albo skryptu — dokładnie tak jak
   aplikacja — a `brulion-cli mcp` udostępnia to samo agentom AI (MCP), także przez HTTPS
   z logowaniem (`brulion-cli mcp serve`): claude.ai, aplikacja Claude na telefonie i ChatGPT
-  dostają wtedy notatnik z Twojego komputera jako własny łącznik. Na komputerze agent może
+  dostają wtedy notatnik z Twojego komputera jako własny łącznik, a `brulion-cli acp serve`
+  uruchamia agenta AI komputera (Claude Code z Twoją subskrypcją) dla aplikacji na telefonie,
+  sparowanej raz kodem i łączącej się w Twojej własnej sieci. Na komputerze agent może
   też — gdy mu na to pozwolisz w ustawieniach — sterować działającą aplikacją: zobaczyć, co
   pokazuje, kliknąć, pisać i zrobić zrzut ekranu. Więcej niżej i w [docs/CLI.md](docs/CLI.md).
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::

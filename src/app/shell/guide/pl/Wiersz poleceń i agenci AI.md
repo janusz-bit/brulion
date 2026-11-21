@@ -68,6 +68,15 @@ Same aplikacje AI — claude.ai, aplikacja Claude na telefonie, ChatGPT — też
 
 Szczegóły oraz konfiguracja proxy albo tunelu: „Remote MCP server” w `docs/CLI.md` w repozytorium; usługa NixOS w `docs/NIXOS.md`.
 
+## Twój agent dla telefonu
+`brulion-cli acp serve` uruchamia agenta AI tego komputera — Claude Code, Codex, OpenCode — dla Brulionu na Twoim telefonie, który sam go nie uruchomi ([[AI#Agent na innym komputerze]]). Agent pracuje tutaj, w kopii notatnika na tym komputerze: jego pliki, polecenia i narzędzia Brulionu są tego komputera, a loguje się tutaj (Twoja subskrypcja).
+
+1. Uruchom go: `brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agent.example.com` — na NixOS usługa `services.brulion-acp`. Nasłuchuje na `127.0.0.1:8790`, dla odwrotnego proxy, które dodaje HTTPS **tylko w Twojej własnej sieci** (tailnet, VPN): sparowany telefon steruje agentem, który wykonuje tu polecenia.
+2. `brulion-cli acp pair` pokazuje kod dla telefonu — 10 minut, jedno urządzenie, pięć błędnych prób; w Brulionie na telefonie: **Ustawienia → Rozszerzenia → Agenci AI → Dodaj → Agent na innym komputerze…**.
+3. `brulion-cli acp clients` pokazuje sparowane urządzenia, `brulion-cli acp revoke <dev_…>` (albo `--all`) od razu odłącza urządzenie, a jego agenci się zatrzymują.
+
+Z `--nextcloud https://cloud.example.com --nextcloud-user jan --nextcloud-folder Brulion --nextcloud-password-file F` (hasło aplikacji) komputer synchronizuje swoją kopię notatnika z Twoim Nextcloudem przed każdą turą — tura na to czeka, więc notatki, które przed chwilą zapisałeś na telefonie, już tam są — i po niej. Szczegóły: „AI agents for other devices” w `docs/CLI.md` w repozytorium.
+
 ## Rozszerzenia pisane przez agenta
 Agent może też pisać [[Rozszerzenia|rozszerzenia]] — polecenia, widoki i reakcje w Luau — i wypróbować je, zanim je zobaczysz:
 

@@ -164,8 +164,11 @@ class WorkspaceChats : public QObject {
     /// Changes whenever an AI agent's session options, commands or usage change (agentOptions()
     /// and the rest ask again).
     Q_PROPERTY(int agentSerial READ agentSerial NOTIFY agentsChanged FINAL)
-    /// AI agents run here (the desktop app).
+    /// AI agents answer here: programs of this device (the desktop app), or agents on another
+    /// computer (also Android).
     Q_PROPERTY(bool agentsAvailable READ agentsAvailable CONSTANT FINAL)
+    /// A pairing with another computer is on its way (pairAgentHost()).
+    Q_PROPERTY(bool agentPairing READ agentPairing NOTIFY agentPairingChanged FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -270,6 +273,11 @@ public:
     Q_INVOKABLE QString agentUsage(const QString &path, int serial = 0) const;
     /// Settings → AI agents → Check: agentChecked(id, ok, text) follows.
     Q_INVOKABLE void checkAgent(const QString &id);
+    /// Settings → AI agents → Add → An agent on another computer: pairs with the computer at
+    /// `address` with a code of its `brulion-cli acp pair` — agentsPaired() (its agents, for
+    /// AppSettings) and agentHostPaired(ok, what it says) follow.
+    Q_INVOKABLE void pairAgentHost(const QString &address, const QString &code);
+    bool agentPairing() const { return m_agentPairing; }
     /// The conversation's partner (its page's `partner:`, "" the built-in assistant).
     Q_INVOKABLE QString partnerOf(const QString &path) const;
     /// Sets who answers the conversation from now on (its page's frontmatter; "" the assistant).
@@ -341,6 +349,11 @@ Q_SIGNALS:
     /// says who asks what (AppController shows it as a toast with Open).
     void questionWaiting(const QString &path, const QString &text);
     void agentChecked(const QString &id, bool ok, const QString &text);
+    /// A pairing ended: `text` says with whom and which agents, or why not.
+    void agentHostPaired(bool ok, const QString &text);
+    /// The agents of a computer this device was just paired with (AppSettings::addRemoteAcpAgents).
+    void agentsPaired(const QList<brulion::shell::AgentConfig> &agents);
+    void agentPairingChanged();
     /// The options of agent `id` were chosen or learnt (AppSettings keeps them).
     void agentRemembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     /// addPictures() got files that are no pictures (or could not be stored).
@@ -374,6 +387,7 @@ private:
     WorkspaceAgents *m_agents = nullptr;
     int m_questionSerial = 0;
     int m_agentSerial = 0;
+    bool m_agentPairing = false;
     QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
     QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order

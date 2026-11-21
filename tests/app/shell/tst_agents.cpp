@@ -12,7 +12,12 @@
 // plan, a turn of tool calls only, usage and slash commands; a session's options learnt, chosen in
 // the chat, remembered for the agent's next sessions and set before their first prompt; a session
 // resumed after a restart, a new one when the conversation changed meanwhile; Check; a question no
-// chat view shows; Windows' batch files, fs/read_text_file's lines, a terminal's output kept.
+// chat view shows; Windows' batch files, fs/read_text_file's lines, a terminal's output kept. An
+// agent on another computer: the real brulion-cli acp serve with the same fake agent — paired with
+// a code of its acp pair, a conversation answered there (its folder as the agent's cwd and in the
+// context, that computer's files read), unpaired there (the turn says so); the settings' remote
+// agents (their token in the app's secrets, never in the settings; paired again: the same agent);
+// the words for a stream's ends and a pairing's errors.
 #include "appsettings.h"
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -26,6 +31,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QProcess>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -598,6 +604,198 @@ private Q_SLOTS:
         QCOMPARE(WorkspaceAgents::usageText({}), QString());
         QCOMPARE(WorkspaceAgents::usageText({42552, 1000000, 0.2096, u"USD"_s}), u"4.3 % of the context · 0.21 USD"_s);
         QCOMPARE(WorkspaceAgents::usageText({40000, 200000, -1, QString()}), u"20 % of the context"_s);
+    }
+
+    void remoteParts()
+    {
+        using End = acp::RemoteStream::End;
+        QCOMPARE(
+                WorkspaceAgents::remoteEndText(u"raspberry-pi-4"_s, End::AgentEnded, u"it ended with code 3: koniec"_s),
+                u"it ended with code 3: koniec (on raspberry-pi-4)"_s);
+        QVERIFY(WorkspaceAgents::remoteEndText(u"raspberry-pi-4"_s, End::Unauthorized, QString())
+                        .contains(u"no longer paired"_s));
+        QVERIFY(WorkspaceAgents::remoteEndText(u"pi"_s, End::Unreachable, u"Network unreachable"_s)
+                        .contains(u"pi could not be reached for a while (Network unreachable)"_s));
+        QVERIFY(WorkspaceAgents::remoteEndText(u"pi"_s, End::Refused, u"This computer has no agent x"_s)
+                        .endsWith(u"This computer has no agent x"_s));
+        QVERIFY(WorkspaceAgents::remoteEndText(u"pi"_s, End::Gone, QString()).contains(u"try again"_s));
+        QVERIFY(WorkspaceAgents::remoteEndText(u"pi"_s, End::Version, QString()).contains(u"update Brulion"_s));
+        const QString address = u"https://agent.example.pl"_s;
+        QVERIFY(WorkspaceAgents::remoteErrorText(address,
+                                                 {acp::RemoteError::Kind::Refused, 403, u"bad_code"_s, QString()})
+                        .startsWith(u"That is not the code"_s));
+        QVERIFY(WorkspaceAgents::remoteErrorText(address,
+                                                 {acp::RemoteError::Kind::Refused, 403, u"no_code"_s, QString()})
+                        .contains(u"acp pair"_s));
+        QVERIFY(WorkspaceAgents::remoteErrorText(address,
+                                                 {acp::RemoteError::Kind::Network, 0, QString(), u"Host not found"_s})
+                        .contains(u"Host not found"_s));
+        QCOMPARE(WorkspaceAgents::remoteErrorText(address, {}), QString());
+        QVERIFY(!WorkspaceAgents::deviceName().isEmpty());
+        QVERIFY(WorkspaceAgents::remoteAvailable());
+        // An agent on another computer runs wherever that computer can be reached.
+        AgentConfig remote{u"pi-claude"_s, u"Claude Code"_s, u"claude-agent-acp"_s, true};
+        remote.url = address;
+        remote.remote = u"claude"_s;
+        QVERIFY(WorkspaceAgents::runs(remote));
+        QVERIFY(!remote.sameProgram([&] {
+            AgentConfig again = remote;
+            again.token = u"bat_nowy"_s;
+            return again;
+        }()));
+    }
+
+    void remoteSettings()
+    {
+        const QString file = m_tmp.filePath(u"remote-settings.ini"_s);
+        const QString data = m_tmp.filePath(u"remote-data"_s);
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"ai/agents"_s,
+                         uR"([{"id":"zly-adres","name":"x","url":"ftp://agent.example.pl","remote":"claude"},
+                             {"id":"bez-agenta","name":"y","url":"https://agent.example.pl"}])"_s);
+        }
+        shell::AppSettings settings(file, data);
+        QCOMPARE(settings.acpAgents().size(), 0); // (malformed: left out)
+        AgentConfig r;
+        r.name = u"Claude Code"_s;
+        r.command = u"/run/current-system/sw/bin/claude-agent-acp"_s;
+        r.tools = true;
+        r.url = u"https://agent.example.pl"_s;
+        r.remote = u"claude"_s;
+        r.host = u"raspberry-pi-4"_s;
+        r.root = u"/var/lib/brulion-acp/notebook"_s;
+        r.token = u"bat_sekretny-token-żółwia"_s;
+        QSignalSpy changed(&settings, &shell::AppSettings::acpAgentsChanged);
+        QCOMPARE(settings.addRemoteAcpAgents({r}), QStringList{u"raspberry-pi-4-claude"_s});
+        QCOMPARE(changed.size(), 1);
+        // The token is in the app's secrets, never in the settings.
+        QVERIFY(!QSettings(file, QSettings::IniFormat).value(u"ai/agents"_s).toString().contains(u"bat_"_s));
+        QFile secret(data + u"/secrets/acp-raspberry-pi-4-claude"_s);
+        QVERIFY(secret.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(secret.readAll()).trimmed(), r.token);
+        secret.close();
+        QList<AgentConfig> agents = settings.acpAgents();
+        QCOMPARE(agents.size(), 1);
+        QCOMPARE(agents.at(0).url, r.url);
+        QCOMPARE(agents.at(0).remote, u"claude"_s);
+        QCOMPARE(agents.at(0).host, u"raspberry-pi-4"_s);
+        QCOMPARE(agents.at(0).root, r.root);
+        QCOMPARE(agents.at(0).token, r.token);
+        const QVariantMap row = settings.acpAgentRows().at(0).toMap();
+        QVERIFY(row.value(u"remote"_s).toBool());
+        QCOMPARE(row.value(u"summary"_s).toString(),
+                 u"On raspberry-pi-4 (https://agent.example.pl) · with Brulion's tools"_s);
+        // Paired again: the same agent, a new token; its own name stays.
+        settings.setAcpAgentName(u"raspberry-pi-4-claude"_s, u"Claude na Pi"_s);
+        r.token = u"bat_nowy-token"_s;
+        QCOMPARE(settings.addRemoteAcpAgents({r}), QStringList{u"raspberry-pi-4-claude"_s});
+        agents = settings.acpAgents();
+        QCOMPARE(agents.size(), 1);
+        QCOMPARE(agents.at(0).name, u"Claude na Pi"_s);
+        QCOMPARE(agents.at(0).token, u"bat_nowy-token"_s);
+        // Another computer of the same name: an agent of its own.
+        AgentConfig other = r;
+        other.url = u"https://laptop.example.pl"_s;
+        other.host = u"Mój Laptop"_s;
+        QCOMPARE(settings.addRemoteAcpAgents({other}), QStringList{u"m-j-laptop-claude"_s});
+        // Removed: its token goes too.
+        settings.removeAcpAgent(u"raspberry-pi-4-claude"_s);
+        QVERIFY(!QFileInfo::exists(data + u"/secrets/acp-raspberry-pi-4-claude"_s));
+        QCOMPARE(settings.acpAgents().size(), 1);
+        // A token the device no longer has: the row says to pair again.
+        QFile::remove(data + u"/secrets/acp-m-j-laptop-claude"_s);
+        QVERIFY(settings.acpAgentRows().at(0).toMap().value(u"summary"_s).toString().contains(u"not paired"_s));
+    }
+
+    void remoteAgent()
+    {
+#ifndef BRULION_CLI
+        QSKIP("brulion-cli is not built here");
+#else
+        // The computer, with its own copy of the notebook (another Dom.md than this device's).
+        const QString computer = m_tmp.filePath(u"komputer"_s);
+        writeRaw(computer + u"/Dom.md"_s, "- na komputerze: żółw błotny\n");
+        const QString stateFile = m_tmp.filePath(u"komputer-stan/acp-remote.json"_s);
+        auto ws = open({}); // (FAKE_ACP_LOG for the agent the computer starts)
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const char *name : {"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"})
+            env.insert(QString::fromLatin1(name), m_tmp.filePath(u"komputer-dom/"_s + QString::fromLatin1(name)));
+        const QStringList common{u"--vault"_s, computer, u"--state-dir"_s, m_tmp.filePath(u"komputer-urzadzenie"_s)};
+        QProcess host;
+        host.setProcessEnvironment(env);
+        host.setProgram(QStringLiteral(BRULION_CLI));
+        host.setArguments(common
+                          + QStringList{u"acp"_s, u"serve"_s, u"--agent"_s, u"fake:Fałszywy="_s + command(),
+                                        u"--port"_s, u"0"_s, u"--state-file"_s, stateFile});
+        host.start();
+        QVERIFY(host.waitForStarted(10000));
+        QTRY_VERIFY_WITH_TIMEOUT(host.canReadLine(), 20000);
+        const QJsonObject started = QJsonDocument::fromJson(host.readLine()).object();
+        const QString url = started.value(u"result"_s).toObject().value(u"url"_s).toString();
+        QVERIFY2(url.startsWith(u"http://127.0.0.1:"_s),
+                 qPrintable(QString::fromUtf8(QJsonDocument(started).toJson())));
+        const auto cli = [&](const QStringList &args) {
+            QProcess p;
+            p.setProcessEnvironment(env);
+            p.start(QStringLiteral(BRULION_CLI), common + args + QStringList{u"--state-file"_s, stateFile});
+            p.waitForFinished(20000);
+            return QJsonDocument::fromJson(p.readAllStandardOutput()).object().value(u"result"_s).toObject();
+        };
+        const QString code = cli({u"acp"_s, u"pair"_s}).value(u"code"_s).toString();
+        QCOMPARE(code.size(), 9);
+
+        // Paired from this device, the code typed in lower case.
+        WorkspaceChats *chats = ws->chats();
+        QList<AgentConfig> paired;
+        connect(chats, &WorkspaceChats::agentsPaired, this,
+                [&paired](const QList<AgentConfig> &agents) { paired = agents; });
+        QSignalSpy pairedSpy(chats, &WorkspaceChats::agentHostPaired);
+        chats->pairAgentHost(url, code.toLower());
+        QVERIFY(chats->agentPairing());
+        QTRY_COMPARE_WITH_TIMEOUT(pairedSpy.size(), 1, 20000);
+        QVERIFY2(pairedSpy.first().at(0).toBool(), qPrintable(pairedSpy.first().at(1).toString()));
+        QVERIFY(!chats->agentPairing());
+        QCOMPARE(paired.size(), 1);
+        AgentConfig agent = paired.first();
+        QCOMPARE(agent.remote, u"fake"_s);
+        QCOMPARE(agent.name, u"Fałszywy"_s);
+        QCOMPARE(agent.root, QDir::cleanPath(computer));
+        QVERIFY(agent.token.startsWith(u"bat_"_s));
+        // The code is no good twice.
+        chats->pairAgentHost(url, code);
+        QTRY_COMPARE_WITH_TIMEOUT(pairedSpy.size(), 2, 20000);
+        QVERIFY(!pairedSpy.last().at(0).toBool());
+
+        agent.id = u"komputer-fake"_s;
+        chats->setAgents({agent});
+        QCOMPARE(chats->partnerLabel(u"acp:komputer-fake"_s), u"Fałszywy"_s);
+        const QString path = chats->send(QString(), u"Cześć z telefonu"_s, QString(), {}, u"acp:komputer-fake"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 30000);
+        QCOMPARE(turn->failure(), QString());
+        QVERIFY2(ws->read(path).contains(u"- 🤖 Odpowiedź na: Cześć z telefonu"_s), qPrintable(ws->read(path)));
+        // The agent works on that computer: its folder as the cwd and in the context, its files.
+        const QList<QJsonObject> created = logged(u"session/new"_s);
+        QCOMPARE(created.size(), 1);
+        QCOMPARE(created.first().value(u"params"_s).toObject().value(u"cwd"_s).toString(), QDir::cleanPath(computer));
+        const QString context =
+                promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString();
+        QVERIFY2(context.contains(QDir::cleanPath(computer)), qPrintable(context));
+        QVERIFY(!context.contains(ws->rootPath()));
+        QCOMPARE(chats->send(path, u"czytaj"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 30000);
+        QVERIFY2(ws->read(path).contains(u"Przeczytano: - na komputerze: żółw błotny"_s), qPrintable(ws->read(path)));
+
+        // Unpaired there: the next turn says so.
+        QVERIFY(!cli({u"acp"_s, u"revoke"_s, u"--all"_s}).isEmpty());
+        QCOMPARE(chats->send(path, u"jeszcze raz"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 30000);
+        QVERIFY2(turn->failure().contains(u"no longer paired"_s), qPrintable(turn->failure()));
+        ws.reset();
+        host.terminate();
+        QVERIFY(host.waitForFinished(10000));
+#endif
     }
 
     void settings()

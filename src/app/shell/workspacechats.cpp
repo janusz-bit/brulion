@@ -115,6 +115,14 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         Q_EMIT agentsChanged();
     });
     connect(m_agents, &WorkspaceAgents::checked, this, &WorkspaceChats::agentChecked);
+    connect(m_agents, &WorkspaceAgents::paired, this,
+            [this](bool ok, const QString &text, const QList<AgentConfig> &agents) {
+                m_agentPairing = false;
+                if (ok)
+                    Q_EMIT agentsPaired(agents);
+                Q_EMIT agentPairingChanged();
+                Q_EMIT agentHostPaired(ok, text);
+            });
     connect(m_agents, &WorkspaceAgents::remembered, this, &WorkspaceChats::agentRemembered);
     connect(m_extensions, &WorkspaceExtensions::aiSettingsChanged, this, [this] {
         Q_EMIT settingsChanged();
@@ -197,7 +205,7 @@ void WorkspaceChats::setAgents(const QList<AgentConfig> &agents)
 
 bool WorkspaceChats::agentsAvailable() const
 {
-    return WorkspaceAgents::available();
+    return WorkspaceAgents::available() || WorkspaceAgents::remoteAvailable();
 }
 
 bool WorkspaceChats::isAgent(const QString &partner) const
@@ -251,6 +259,15 @@ QString WorkspaceChats::agentUsage(const QString &path, int) const
 void WorkspaceChats::checkAgent(const QString &id)
 {
     m_agents->check(id);
+}
+
+void WorkspaceChats::pairAgentHost(const QString &address, const QString &code)
+{
+    if (m_agentPairing)
+        return;
+    m_agentPairing = true;
+    Q_EMIT agentPairingChanged();
+    m_agents->pair(address, code);
 }
 
 bool WorkspaceChats::asking(const QString &path, int) const

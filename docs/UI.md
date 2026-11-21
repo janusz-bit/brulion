@@ -1266,10 +1266,15 @@ An AI agent the user runs on this computer answers a conversation like a partner
 CLI (`--acp`), OpenCode (`opencode acp`) or any program that speaks the
 [Agent Client Protocol](https://agentclientprotocol.com) (version 1: JSON-RPC 2.0, a message a line
 on its standard input and output). The agent signs in by itself — the subscription its own program
-knows how to use, or a key of its own — so the app holds none of its credentials. Desktop only
-(`WorkspaceAgents::available()`): Android and the browser start no programs; there a conversation
-with an agent fails its turn and says so. Tried with Claude Code 0.109, Codex 2.8 and OpenCode 1.19
-(the opt-in test `tst_shell_agents realAgent`, `BRULION_REAL_ACP_AGENT="<command>"`).
+knows how to use, or a key of its own — so the app holds none of its credentials. A program runs
+only in the desktop app (`WorkspaceAgents::available()`): Android and the browser start none. An
+agent **on another computer** runs everywhere but the browser (`remoteAvailable()`): a computer of
+the user's runs it with `brulion-cli acp serve` (docs/CLI.md "AI agents for other devices"), this
+device paired with it once; the protocol then goes over `acp::RemoteStream` (core `acp/remote.h`)
+instead of a program's standard input and output, and everything below works the same — the
+agent's files, terminals and Brulion's tools are that computer's. Tried with Claude Code 0.109,
+Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
+`BRULION_REAL_ACP_AGENT="<command>"`).
 
 * **Settings → Extensions → AI agents** (`acpAgentsSettings`, shown where agents run): a row per
   agent (`acpAgentRow`: its name, its command — the middle of a long one left out — and whether it
@@ -1279,9 +1284,20 @@ with an agent fails its turn and says so. Tried with Claude Code 0.109, Codex 2.
   `acpAgentDialog`: `acpAgentName`, `acpAgentCommand`, `acpAgentTools`) and Remove
   (`acpAgentRemove`); **Add** (`acpAgentAdd` → `acpAgentAddMenu`: the presets Claude Code, Codex,
   Gemini CLI and OpenCode started with `npx -y …`, or "Another agent…", `acpAgentOwn`, which opens the
-  dialog). Kept in the device's settings (`AppSettings::acpAgents`, key `ai/agents`: rows {id, name,
-  command, tools, options, known}; at most 20, malformed rows left out) — never in the notebook,
-  which comes from anywhere: a page may only name an agent set up here.
+  dialog), and **An agent on another computer…** (`acpAgentRemote`, the one entry where no
+  programs run) — `acpHostDialog`: the computer's address (`acpHostAddress`) and the code of its
+  `acp pair` (`acpHostCode`); **Pair** pairs (`WorkspaceChats::pairAgentHost` →
+  `WorkspaceAgents::pair`: `acp::pairRemote`, then `acp::fetchRemoteInfo`), the Add button busy
+  meanwhile, and a toast says with whom and which agents, or why not (a wrong or expired code,
+  the computer not reached). Each agent of that computer becomes a row (`raspberry-pi-4-claude`:
+  the computer's name and the agent's id there) whose line says "On raspberry-pi-4
+  (https://agent.example.com) · with Brulion's tools"; pairing again keeps its name and options.
+  Edit… changes only its name there. Kept in the device's settings (`AppSettings::acpAgents`, key
+  `ai/agents`: rows {id, name, command, tools, options, known} and, for an agent on another
+  computer, {url, remote, host, root}; at most 20, malformed rows left out) — never in the
+  notebook, which comes from anywhere: a page may only name an agent set up here. The token a
+  computer gave this device is in the app's secrets (`<app data>/secrets/acp-<id>`, owner-only,
+  masked in every log line), never in the settings; removing the agent removes it.
 * **Who answers**: an agent is offered among the partners (`acp:<id>`, its name, "AI agent") and the
   conversation's page keeps it (`partner: acp:claude`, docs/SYNTAX.md §14); an agent not set up on
   this device fails the turn with what to do.
@@ -1297,6 +1313,16 @@ with an agent fails its turn and says so. Tried with Claude Code 0.109, Codex 2.
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that
   match are chips above it (`chatCommands`, `chatCommand`: `available_commands_update` of the
   session, or of the agent's last one); a tap writes "/name " — the agent reads it as it is.
+* **On another computer**: the stream started for the agent's first turn (`POST streams`; one per
+  agent, the computer ends an older one of this device), its client offering no files or
+  terminals (the computer serves them), the session's `cwd` and the context naming that computer's
+  folder (`AgentConfig::root`, from its info), no MCP server from here (the computer gives its own).
+  What the agent says waits there while the phone sleeps. Its ends in words, after "The AI agent
+  “…” stopped: " (`WorkspaceAgents::remoteEndText`): unpaired ("pair it again"), the computer
+  started again ("try again"), not reached for 15 minutes ("is it on, and is this device in its
+  network?"), the agent not started there, the agent's own end; a sign-in in a terminal is named
+  as one on that computer (on NixOS `sudo brulion-acp login …`). The next turn starts a new
+  stream.
 * **Its program** (`shell/workspaceagents.h`, the protocol `src/core/acp/acp.h`): one process per
   agent, started for its first turn in the notebook's folder (the command split as a shell would,
   the app's environment; on Windows a batch file — `npx` is `npx.cmd` — through `cmd.exe /c`) and

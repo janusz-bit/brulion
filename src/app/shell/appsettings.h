@@ -115,6 +115,9 @@ class AppSettings : public QObject {
     Q_PROPERTY(QVariantList acpAgents READ acpAgentRows NOTIFY acpAgentsChanged FINAL)
     /// Agents can run in this app (the desktop app).
     Q_PROPERTY(bool acpAvailable READ acpAvailable CONSTANT FINAL)
+    /// Agents that are programs of this device can be added (the desktop app), not only ones on
+    /// another computer.
+    Q_PROPERTY(bool acpProgramsAvailable READ acpProgramsAvailable CONSTANT FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
@@ -336,6 +339,11 @@ public:
     QList<AgentConfig> acpAgents() const;
     QVariantList acpAgentRows() const;
     bool acpAvailable() const;
+    bool acpProgramsAvailable() const;
+    /// Agents of another computer this device was paired with (WorkspaceAgents::paired): each
+    /// added — or, the same agent of the same computer, given its new token —, its token kept in
+    /// the app's secrets (`<app data>/secrets/acp-<id>`, owner-only). Their ids.
+    QStringList addRemoteAcpAgents(const QList<AgentConfig> &agents);
     /// Adds an agent: one of WorkspaceAgents::presets() by its id ("claude", "codex", "gemini"),
     /// or "" for one of the user's own (no command yet). Its id ("claude-2" when one is there).
     Q_INVOKABLE QString addAcpAgent(const QString &preset);
@@ -347,7 +355,8 @@ public:
     /// What the chat learnt of agent `id`: the options chosen for its sessions and the options its
     /// last session offered (AgentConfig::options, ::known).
     void setAcpAgentMemory(const QString &id, const QJsonObject &options, const QJsonArray &known);
-    /// The agents a preset offers ({id, name, command}), for the settings' menu.
+    /// The agents a preset offers ({id, name, command}), for the settings' menu (none where no
+    /// programs start).
     Q_INVOKABLE QVariantList acpPresets() const;
     void setCaptureButtonShown(bool on);
     /// Back to the default look: accent, backgrounds, fonts, density, line spacing, sizes (the

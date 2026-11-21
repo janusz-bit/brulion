@@ -17,7 +17,7 @@ Otwórz **Ustawienia → Rozszerzenia → AI** i wybierz:
 Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 
 > [!note] Subskrypcje
-> Subskrypcja Claude Pro/Max albo ChatGPT Plus działa tylko w aplikacjach tych firm; inne programy używają klucza API, rozliczanego osobno, za użycie. Pytanie o jedną notatkę kosztuje ułamek grosza. Z subskrypcją możesz zamiast tego dać tym aplikacjom dostęp do notatek: [[Wiersz poleceń i agenci AI#Twoje notatki w claude.ai i ChatGPT]] — albo, na komputerze, pozwolić ich własnemu agentowi odpowiadać w czacie z AI: [[#Własny agent AI (ACP)]].
+> Subskrypcja Claude Pro/Max albo ChatGPT Plus działa tylko w aplikacjach tych firm; inne programy używają klucza API, rozliczanego osobno, za użycie. Pytanie o jedną notatkę kosztuje ułamek grosza. Z subskrypcją możesz zamiast tego dać tym aplikacjom dostęp do notatek: [[Wiersz poleceń i agenci AI#Twoje notatki w claude.ai i ChatGPT]] — albo pozwolić ich własnemu agentowi odpowiadać w czacie z AI, na komputerze albo, przez Twój komputer, na telefonie: [[#Własny agent AI (ACP)]].
 
 Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacji, nie w dziennikach zdarzeń). Notatki trafiają do dostawcy tylko wtedy, gdy o to poprosisz, albo gdy zrobi to rozszerzenie zatwierdzone przez Ciebie z uprawnieniem `ai`.
 
@@ -102,7 +102,15 @@ Agent pracuje w folderze notatnika: czyta i zmienia notatki przez Brulion — zm
 Nad rozmową jego **model**, **tryb** (ile może zrobić bez pytania), **wysiłek** i reszta to chipy: stuknij, żeby wybrać — agent zapamięta wybór na kolejne rozmowy, także przed ich pierwszą wiadomością. Obok widać, ile jego pamięci zajmuje rozmowa i ile kosztowała. Wpisz `/` w polu, żeby zobaczyć polecenia agenta (`/review`, `/compact` …). Rozmowa toczy się dalej w tej samej sesji agenta także po ponownym uruchomieniu Brulionu; rozmowa zmieniona w międzyczasie (pisana na telefonie, z odpowiedzią asystenta) zaczyna nową sesję, która dostaje całą jej treść.
 
 > [!warning] Agent to Twój program
-> Działa z Twoimi uprawnieniami na tym komputerze, a to, co może zrobić bez pytania, jest jego własnym ustawieniem (jego trybem). Agentów uruchamia tylko aplikacja na komputer; na telefonie i w przeglądarce rozmowa z agentem mówi, że nie da się go tam uruchomić.
+> Działa z Twoimi uprawnieniami na tym komputerze, a to, co może zrobić bez pytania, jest jego własnym ustawieniem (jego trybem). Aplikacja na komputer uruchamia agentów sama; na telefonie odpowiada zamiast tego agent na innym Twoim komputerze (niżej), a w przeglądarce rozmowa z agentem mówi, że nie da się go tam uruchomić.
+
+### Agent na innym komputerze
+Telefon nie uruchamia programów, ale może to zrobić za niego Twój komputer — domowy serwer, laptop: **`brulion-cli acp serve`** uruchamia tam Claude Code (albo innego agenta) w kopii tego notatnika na tamtym komputerze, a Brulion na telefonie z nim rozmawia. Subskrypcja działa tak samo: agent loguje się na tamtym komputerze.
+
+1. Na komputerze: `brulion-cli acp serve --agent claude` (na NixOS usługa `services.brulion-acp`), osiągalny z telefonu tylko w Twojej własnej sieci — w tailnecie, takim jak Tailscale czy headscale, albo w VPN. Potem `brulion-cli acp pair` pokazuje kod (ważny 10 minut, jeden raz).
+2. Na telefonie: **Ustawienia → Rozszerzenia → Agenci AI → Dodaj → Agent na innym komputerze…**, adres komputera (np. `https://agent.example.com`) i kod, potem **Sparuj**. Jego agenci pojawiają się na liście („Na raspberry-pi-4 …”), a w czacie z AI jako ten, **kto odpowiada**.
+
+Wszystko opisane wyżej działa tak samo — plan i kroki, porównania zmian, pytania, chipy — ale pliki, które czyta i zmienia, polecenia, które uruchamia, i narzędzia Brulionu są **tamtego komputera**: synchronizuj jego kopię notatnika z telefonem (Syncthing albo Nextcloud: `acp serve --nextcloud …` synchronizuje ją przed każdą turą i po niej). Telefon może zasnąć, gdy agent pracuje: to, co mówi, czeka na komputerze. `brulion-cli acp revoke` od razu odłącza telefon ([[Wiersz poleceń i agenci AI#Twój agent dla telefonu]]).
 
 ## We własnych rozszerzeniach
 Strona rozszerzenia z `ai` wśród uprawnień może pytać model:

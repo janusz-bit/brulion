@@ -7,6 +7,8 @@
 
 #include "ai/ai.h"
 #include "ai/local.h"
+#include "log/categories.h"
+#include "log/redact.h"
 #include "notebook/journals.h"
 #include "text/text.h"
 #include "util/unicode.h"
@@ -24,6 +26,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTime>
+#include <QUrl>
 
 #include <algorithm>
 #include <array>
@@ -745,6 +748,29 @@ bool validAgentId(const QString &id)
     });
 }
 
+/// The file of the token this device was given for agent `id` on another computer.
+QString acpTokenFileIn(const QString &dataDir, const QString &id)
+{
+    return dataDir + u"/secrets/acp-"_s + id;
+}
+
+/// A host's name as the start of an agent's id: "raspberry-pi-4" stays, "Mój Laptop" is "m-j-laptop".
+QString idPart(const QString &name)
+{
+    QString out;
+    for (const QChar c : name.toLower()) {
+        if ((c >= u'a' && c <= u'z') || (c >= u'0' && c <= u'9'))
+            out += c;
+        else if (!out.endsWith(u'-'))
+            out += u'-';
+    }
+    while (out.startsWith(u'-'))
+        out.remove(0, 1);
+    while (out.endsWith(u'-'))
+        out.chop(1);
+    return out.left(20);
+}
+
 /// `base`, or `base-2`, `base-3` … — the first that none of `agents` has.
 QString freeAgentId(const QString &base, const QList<AgentConfig> &agents)
 {
@@ -765,7 +791,7 @@ QString freeAgentId(const QString &base, const QList<AgentConfig> &agents)
 QList<AgentConfig> AppSettings::acpAgents() const
 {
     QList<AgentConfig> out;
-    if (!WorkspaceAgents::available())
+    if (!WorkspaceAgents::available() && !WorkspaceAgents::remoteAvailable())
         return out;
     const QJsonArray rows = QJsonDocument::fromJson(m_settings->value(kAcpAgents).toString().toUtf8()).array();
     for (const QJsonValue &v : rows) {
@@ -777,8 +803,30 @@ QList<AgentConfig> AppSettings::acpAgents() const
         a.tools = o.value(u"tools"_s).toBool(true);
         a.options = o.value(u"options"_s).toObject();
         a.known = o.value(u"known"_s).toArray();
+        // An agent on another computer: its address (http(s) only), the agent's id there, the
+        // computer's name and notebook folder, and this device's token for it (secrets).
+        const QString url = o.value(u"url"_s).toString().trimmed().left(500);
+        if (!url.isEmpty()) {
+            const QUrl parsed(url, QUrl::StrictMode);
+            if (!parsed.isValid() || (parsed.scheme() != u"https" && parsed.scheme() != u"http")
+                || parsed.host().isEmpty())
+                continue;
+            a.url = url;
+            a.remote = o.value(u"remote"_s).toString().trimmed().left(40);
+            a.host = o.value(u"host"_s).toString().simplified().left(80);
+            a.root = o.value(u"root"_s).toString().left(1000);
+            if (a.remote.isEmpty())
+                continue;
+            if (a.host.isEmpty())
+                a.host = parsed.host();
+            a.token = readSecretFile(acpTokenFileIn(m_dataDir, a.id));
+            if (!a.token.isEmpty())
+                logging::addSecret(a.token); // (masked in every log line from now on)
+        }
         if (!validAgentId(a.id) || std::ranges::any_of(out, [&a](const AgentConfig &b) { return b.id == a.id; }))
             continue; // (malformed, or the same id twice: the first one)
+        if (!WorkspaceAgents::runs(a))
+            continue; // (a program on a device that starts none)
         if (a.name.isEmpty())
             a.name = a.id;
         out << a;
@@ -795,6 +843,13 @@ QJsonArray agentRows(const QList<AgentConfig> &agents)
     for (const AgentConfig &a : agents)
     {
         QJsonObject row{{u"id"_s, a.id}, {u"name"_s, a.name}, {u"command"_s, a.command}, {u"tools"_s, a.tools}};
+        if (a.isRemote()) {
+            // (Never the token: it stays in the app's secrets.)
+            row.insert(u"url"_s, a.url);
+            row.insert(u"remote"_s, a.remote);
+            row.insert(u"host"_s, a.host);
+            row.insert(u"root"_s, a.root);
+        }
         if (!a.options.isEmpty())
             row.insert(u"options"_s, a.options);
         if (!a.known.isEmpty())
@@ -815,19 +870,73 @@ QVariantList AppSettings::acpAgentRows() const
         if (command.size() > 56)
             command = command.left(24) + u'…' + command.right(31);
         const QString tools = a.tools ? tr("with Brulion's tools") : tr("without Brulion's tools");
+        QString summary = command.isEmpty() ? tr("No command yet: Edit… sets it.") : command + u" · "_s + tools;
+        if (a.isRemote())
+            summary = a.token.isEmpty() ? tr("On %1 — not paired: remove it and pair again").arg(a.host)
+                                        : tr("On %1 (%2) · %3").arg(a.host, a.url, tools);
         rows.append(QVariantMap{{u"id"_s, a.id},
                                 {u"name"_s, a.name},
                                 {u"command"_s, a.command},
                                 {u"tools"_s, a.tools},
-                                {u"summary"_s, command.isEmpty() ? tr("No command yet: Edit… sets it.")
-                                                                 : command + u" · "_s + tools}});
+                                {u"remote"_s, a.isRemote()},
+                                {u"host"_s, a.host},
+                                {u"summary"_s, summary}});
     }
     return rows;
 }
 
 bool AppSettings::acpAvailable() const
 {
+    return WorkspaceAgents::available() || WorkspaceAgents::remoteAvailable();
+}
+
+bool AppSettings::acpProgramsAvailable() const
+{
     return WorkspaceAgents::available();
+}
+
+QStringList AppSettings::addRemoteAcpAgents(const QList<AgentConfig> &paired)
+{
+    QList<AgentConfig> agents = acpAgents();
+    QStringList ids;
+    for (const AgentConfig &r : paired) {
+        if (!r.isRemote() || r.remote.isEmpty())
+            continue;
+        // The same agent of the same computer paired again: its token and what the computer
+        // says of itself are new, its name and remembered options stay.
+        const auto same = std::ranges::find_if(
+                agents, [&r](const AgentConfig &a) { return a.url == r.url && a.remote == r.remote; });
+        AgentConfig *a = nullptr;
+        if (same != agents.end()) {
+            a = &*same;
+        } else {
+            if (agents.size() >= MaxAcpAgents)
+                break;
+            AgentConfig fresh;
+            const QString host = idPart(r.host);
+            const QString base = (host.isEmpty() ? QString() : host + u'-') + idPart(r.remote);
+            fresh.id = freeAgentId(base.isEmpty() ? u"agent"_s : base, agents);
+            fresh.name = r.name.simplified().left(80);
+            if (fresh.name.isEmpty())
+                fresh.name = r.remote;
+            agents << fresh;
+            a = &agents.last();
+        }
+        a->command = r.command.trimmed().left(2000);
+        a->tools = r.tools;
+        a->url = r.url;
+        a->remote = r.remote;
+        a->host = r.host.simplified().left(80);
+        a->root = r.root;
+        a->token = r.token;
+        if (!writeSecretFile(acpTokenFileIn(m_dataDir, a->id), r.token))
+            qCWarning(logging::lcApp, "AI agents: the token for %s could not be kept", qUtf8Printable(a->id));
+        logging::addSecret(r.token);
+        ids << a->id;
+    }
+    if (!ids.isEmpty())
+        storeAcpAgents(agents);
+    return ids;
 }
 
 void AppSettings::storeAcpAgents(const QList<AgentConfig> &agents)
@@ -903,12 +1012,16 @@ void AppSettings::removeAcpAgent(const QString &id)
 {
     QList<AgentConfig> agents = acpAgents();
     agents.removeIf([&id](const AgentConfig &a) { return a.id == id; });
+    if (validAgentId(id))
+        writeSecretFile(acpTokenFileIn(m_dataDir, id), QString()); // (its token, if it had one)
     storeAcpAgents(agents);
 }
 
 QVariantList AppSettings::acpPresets() const
 {
     QVariantList out;
+    if (!WorkspaceAgents::available())
+        return out; // (no programs start here: only an agent on another computer)
     for (const AgentConfig &p : WorkspaceAgents::presets())
         out.append(QVariantMap{{u"id"_s, p.id}, {u"name"_s, p.name}, {u"command"_s, p.command}});
     return out;

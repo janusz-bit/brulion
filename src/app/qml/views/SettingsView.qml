@@ -1504,7 +1504,7 @@ Item {
                 id: aiGroup
                 objectName: "aiSettings"
                 heading: qsTr("AI")
-                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key, and neither does a model on this device, which sends nothing anywhere. What an extension sends goes to the provider chosen; the key stays on this device.") + (AppSettings.acpAvailable ? " " + qsTr("A subscription works with an AI agent on this computer: see “AI agents” below.") : "")
+                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key, and neither does a model on this device, which sends nothing anywhere. What an extension sends goes to the provider chosen; the key stays on this device.") + (AppSettings.acpProgramsAvailable ? " " + qsTr("A subscription works with an AI agent on this computer: see “AI agents” below.") : AppSettings.acpAvailable ? " " + qsTr("A subscription works with an AI agent on a computer of yours: see “AI agents” below.") : "")
 
                 readonly property bool local: AppSettings.aiProvider === "local"
                 readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
@@ -1739,7 +1739,9 @@ Item {
                 objectName: "acpAgentsSettings"
                 visible: AppSettings.acpAvailable
                 heading: qsTr("AI agents")
-                note: qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI, or any program that speaks the Agent Client Protocol) can answer in the AI chat: choose it as who answers a conversation. It runs in the notebook's folder and signs in by itself, so a Claude or ChatGPT subscription its own program uses works here too. Each change it makes to a file and each command it runs is shown in the conversation for your yes, as the agent asks for it. The presets start the agents with npx (Node.js); a command of your own may be any program.")
+                note: AppSettings.acpProgramsAvailable
+                      ? qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI, or any program that speaks the Agent Client Protocol) can answer in the AI chat: choose it as who answers a conversation. It runs in the notebook's folder and signs in by itself, so a Claude or ChatGPT subscription its own program uses works here too. Each change it makes to a file and each command it runs is shown in the conversation for your yes, as the agent asks for it. The presets start the agents with npx (Node.js); a command of your own may be any program. An agent on another computer of yours (brulion-cli acp serve) can answer too.")
+                      : qsTr("An AI agent on a computer of yours (Claude Code, Codex …) can answer in the AI chat here: the computer runs it with brulion-cli acp serve, in its copy of this notebook, and this device pairs with it once with a code of acp pair. It signs in there by itself, so a Claude or ChatGPT subscription works. Each change it makes to a file and each command it runs there is shown in the conversation for your yes, as the agent asks for it.")
 
                 Repeater {
                     model: AppSettings.acpAgents
@@ -1748,6 +1750,7 @@ Item {
                         required property var modelData
                         readonly property string agentId: AppController.routeText(agentRow.modelData, "id")
                         readonly property string command: AppController.routeText(agentRow.modelData, "command")
+                        readonly property bool remote: AppController.routeFlag(agentRow.modelData, "remote")
                         objectName: "acpAgentRow"
                         Layout.fillWidth: true
                         title: AppController.routeText(agentRow.modelData, "name")
@@ -1758,7 +1761,7 @@ Item {
                             variant: "secondary"
                             iconName: "sparkles"
                             text: qsTr("Check")
-                            enabled: agentRow.command !== ""
+                            enabled: agentRow.remote || agentRow.command !== ""
                             onClicked: Workspace.chats.checkAgent(agentRow.agentId)
                         }
                         BButton {
@@ -1768,7 +1771,8 @@ Item {
                             iconName: "pencil"
                             text: qsTr("Edit…")
                             onClicked: agentDialog.edit(agentRow.agentId, agentRow.title, agentRow.command,
-                                                        AppController.routeFlag(agentRow.modelData, "tools"))
+                                                        AppController.routeFlag(agentRow.modelData, "tools"),
+                                                        agentRow.remote)
                         }
                         BIconButton {
                             objectName: "acpAgentRemove"
@@ -1787,6 +1791,7 @@ Item {
                         size: "small"
                         iconName: "plus"
                         text: qsTr("Add")
+                        busy: Workspace.chats.agentPairing
                         onClicked: addAgentMenu.popup(addAgentButton, 0, addAgentButton.height)
                     }
                 }
@@ -1806,30 +1811,93 @@ Item {
                         onObjectAdded: (index, object) => addAgentMenu.insertItem(index, object as Item)
                         onObjectRemoved: (index, object) => addAgentMenu.removeItem(object as Item)
                     }
-                    BMenuSeparator {}
+                    BMenuSeparator {
+                        visible: AppSettings.acpProgramsAvailable
+                    }
                     BMenuItem {
                         objectName: "acpAgentOwn"
+                        visible: AppSettings.acpProgramsAvailable
                         text: qsTr("Another agent…")
                         hint: qsTr("Your own command")
                         onTriggered: {
                             const id = AppSettings.addAcpAgent("")
                             if (id !== "")
-                                agentDialog.edit(id, qsTr("My agent"), "", true)
+                                agentDialog.edit(id, qsTr("My agent"), "", true, false)
                         }
+                    }
+                    BMenuItem {
+                        objectName: "acpAgentRemote"
+                        text: qsTr("An agent on another computer…")
+                        hint: qsTr("brulion-cli acp serve")
+                        onTriggered: hostDialog.open()
+                    }
+                }
+                // Pairing with a computer that runs `brulion-cli acp serve` (WorkspaceAgents::pair):
+                // its address and a code of its `acp pair`; the result comes as a toast.
+                BDialog {
+                    id: hostDialog
+                    objectName: "acpHostDialog"
+                    title: qsTr("An agent on another computer")
+                    subtitle: qsTr("On the computer: brulion-cli acp serve runs the agents (on NixOS: services.brulion-acp), and brulion-cli acp pair shows a code valid for 10 minutes.")
+                    iconName: "sparkles"
+                    acceptText: qsTr("Pair")
+                    acceptEnabled: Js.trim(hostAddressField.text) !== "" && Js.trim(hostCodeField.text) !== ""
+                                   && !Workspace.chats.agentPairing
+                    initialFocusItem: hostAddressField.text === "" ? hostAddressField : hostCodeField
+                    onAccepted: {
+                        Workspace.chats.pairAgentHost(hostAddressField.text, hostCodeField.text)
+                        hostCodeField.text = ""
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        text: qsTr("Address")
+                        variant: "label"
+                    }
+                    BTextField {
+                        id: hostAddressField
+                        objectName: "acpHostAddress"
+                        Layout.fillWidth: true
+                        placeholderText: "https://agent.example.com"
+                        accessibleName: qsTr("Address")
+                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Theme.space2
+                        text: qsTr("Pairing code")
+                        variant: "label"
+                    }
+                    BTextField {
+                        id: hostCodeField
+                        objectName: "acpHostCode"
+                        Layout.fillWidth: true
+                        placeholderText: "K7QM-2XRP"
+                        accessibleName: qsTr("Pairing code")
+                        inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhPreferUppercase
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        text: qsTr("Reach the computer only in your own network (a tailnet, a VPN): its agents run commands there for whoever is paired.")
+                        variant: "caption"
+                        wrapMode: Text.Wrap
                     }
                 }
                 BDialog {
                     id: agentDialog
                     objectName: "acpAgentDialog"
                     property string agentId
+                    property bool remote
                     title: qsTr("AI agent")
-                    subtitle: qsTr("A program that speaks the Agent Client Protocol: it runs in the notebook's folder and signs in by itself.")
+                    subtitle: agentDialog.remote
+                              ? qsTr("An agent on another computer: its program, its sign-in and Brulion's tools are that computer's.")
+                              : qsTr("A program that speaks the Agent Client Protocol: it runs in the notebook's folder and signs in by itself.")
                     iconName: "sparkles"
                     acceptText: qsTr("Save")
                     acceptEnabled: Js.trim(agentNameField.text) !== ""
-                    initialFocusItem: agentCommandField
-                    function edit(id: string, name: string, command: string, tools: bool): void {
+                    initialFocusItem: agentDialog.remote ? agentNameField : agentCommandField
+                    function edit(id: string, name: string, command: string, tools: bool, remote: bool): void {
                         agentDialog.agentId = id
+                        agentDialog.remote = remote
                         agentNameField.text = name
                         agentCommandField.text = command
                         agentToolsSwitch.checked = tools
@@ -1837,8 +1905,10 @@ Item {
                     }
                     onAccepted: {
                         AppSettings.setAcpAgentName(agentDialog.agentId, agentNameField.text)
-                        AppSettings.setAcpAgentCommand(agentDialog.agentId, agentCommandField.text)
-                        AppSettings.setAcpAgentTools(agentDialog.agentId, agentToolsSwitch.checked)
+                        if (!agentDialog.remote) {
+                            AppSettings.setAcpAgentCommand(agentDialog.agentId, agentCommandField.text)
+                            AppSettings.setAcpAgentTools(agentDialog.agentId, agentToolsSwitch.checked)
+                        }
                     }
                     BText {
                         Layout.fillWidth: true
@@ -1854,12 +1924,14 @@ Item {
                     BText {
                         Layout.fillWidth: true
                         Layout.topMargin: Theme.space2
+                        visible: !agentDialog.remote
                         text: qsTr("Command")
                         variant: "label"
                     }
                     BTextField {
                         id: agentCommandField
                         objectName: "acpAgentCommand"
+                        visible: !agentDialog.remote
                         Layout.fillWidth: true
                         placeholderText: "npx -y @agentclientprotocol/claude-agent-acp"
                         accessibleName: qsTr("Command")
@@ -1867,6 +1939,7 @@ Item {
                     }
                     BText {
                         Layout.fillWidth: true
+                        visible: !agentDialog.remote
                         text: qsTr("The program and its arguments, as in a terminal: npx -y @agentclientprotocol/claude-agent-acp, npx -y @agentclientprotocol/codex-acp, gemini --acp, opencode acp.")
                         variant: "caption"
                         wrapMode: Text.Wrap
@@ -1874,6 +1947,7 @@ Item {
                     SettingSwitch {
                         id: agentToolsSwitch
                         objectName: "acpAgentTools"
+                        visible: !agentDialog.remote
                         Layout.topMargin: Theme.space2
                         text: qsTr("Brulion's tools")
                         description: qsTr("Its sessions get Brulion's MCP server (brulion-cli mcp): search, queries, tasks and journals of this notebook.")
