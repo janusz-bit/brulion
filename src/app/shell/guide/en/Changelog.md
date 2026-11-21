@@ -7,6 +7,11 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.27.0 — November 21, 2026
+
+**New**
+- **Your AI agent on the phone** — the AI chat on the phone (and in the browser) can be answered by Claude Code, Codex or OpenCode running on a computer of yours, with your subscription: `brulion-cli acp serve` runs the agent there, in that computer's copy of the notebook (with `--nextcloud` kept in sync before and after every turn; on NixOS the service `services.brulion-acp`). Pair once: scan the QR code `brulion-cli --format text acp pair` shows with the phone's camera and tap **Pair**, or **Settings → Extensions → AI agents → Add → An agent on another computer…** with the address and the code. Everything of an agent in the chat works the same, while its files, commands and Brulion's tools are that computer's. The phone may sleep meanwhile, and when Android ends Brulion during a turn, the agent finishes on the computer and the answer comes in when Brulion starts again. Reach the computer only in your own network (a tailnet, a VPN): [[AI#An agent on another computer]].
+
 ## 0.26.0 — November 20, 2026
 
 **New**
