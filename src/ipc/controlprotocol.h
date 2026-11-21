@@ -1,7 +1,9 @@
 // The remote control protocol of the running app (desktop; docs/CLI.md "Remote control"): JSON
 // lines on a socket of its own next to the single-instance one (controlserver.h), for AI agents
 // and scripts through `brulion-cli app …` (controlclient.h). Off unless the app runs with
-// --remote-control or the device setting devtools/remoteControl is on.
+// --remote-control or the device setting devtools/remoteControl is on — or an AI agent the app
+// started was let change it (a grant: then only a connection whose `hello` brings the grant's
+// token is served; docs/CLI.md "Live changes").
 //
 //   request   {"id": 1, "method": "state", "params": {}}       id: a number or a string; params
 //                                                                optional
@@ -76,6 +78,12 @@ struct ControlRequest {
     QJsonValue id; ///< a number or a string (null when the line had none)
     QString method;
     QJsonObject params;
+    /// Who the connection is (the server fills it in): its grant's client name, else what its
+    /// `hello {client}` said ("" when nothing named it). The app's live changes are noted as
+    /// "live:<client>" ("live:agent" for "").
+    QString client{};
+    /// The connection showed a grant's token (hello {token}).
+    bool granted = false;
 };
 
 /// Stable error codes.
@@ -92,6 +100,9 @@ inline constexpr auto Ambiguous = "ambiguous_ref";  ///< several pages have that
 inline constexpr auto Refused = "refused";          ///< a disabled command, another notebook
 inline constexpr auto Timeout = "timeout";          ///< waitFor's condition was not met in time
 inline constexpr auto Failed = "failed";            ///< could not be done (a screenshot not saved)
+/// The connection is not let in: the remote control is off and it showed no grant's token
+/// (hello {token}), or the token it showed is none (its agent stopped).
+inline constexpr auto Unauthorized = "unauthorized";
 } // namespace ControlError
 
 struct ControlFailure {
@@ -125,6 +136,9 @@ enum class ParamType {
     StringOrObject, ///< navigate's route: a view name or a route object
     Modifiers,      ///< "ctrl+shift" or ["ctrl", "shift"] (parseModifiers())
     Target,         ///< drag's from/to: a target object ({handle} | {x, y} | {text, …})
+    Json,           ///< any JSON value (set's and setProperty's value; null too)
+    Object,         ///< a JSON object (theme's tokens)
+    StringList,     ///< "a, b" or ["a", "b"] (load's permissions)
 };
 
 struct ParamSpec {
@@ -152,6 +166,15 @@ const MethodSpec *findControlMethod(const QString &name);
 /// Check a request before running it: the method exists, its parameters are known, of the right
 /// type and present when required, a target is well formed (see checkTarget()). nullopt = fine.
 std::optional<ControlFailure> checkRequest(const ControlRequest &request);
+
+/// The longest client name hello takes (longer is cut).
+constexpr qsizetype MaxClientName = 64;
+/// A client name as the app notes it: control characters removed, spaces simplified, at most
+/// MaxClientName characters ("" when nothing is left).
+QString cleanClientName(const QString &name);
+/// The names of a StringList parameter: "a, b" split at commas, or the strings of an array
+/// (trimmed, empty ones left out).
+QStringList stringList(const QJsonValue &value);
 
 /// What a target object names, after checkTarget() accepted it.
 enum class TargetKind { None, Handle, Point, Selector };

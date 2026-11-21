@@ -11,6 +11,8 @@
 #include "text/text.h"
 #include "util/paths.h"
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::editor {
@@ -116,6 +118,16 @@ void SuggestionModel::setCurrentPath(const QString &path)
 void SuggestionModel::setLimit(int limit)
 {
     setAndRefresh(m_limit, std::max(1, limit), &SuggestionModel::limitChanged);
+}
+
+void SuggestionModel::setExtensionItems(const QVariantList &items)
+{
+    if (m_extensionItems == items)
+        return;
+    m_extensionItems = items;
+    Q_EMIT extensionItemsChanged();
+    if (m_mode == u"slash") // (other lists do not show them)
+        refresh();
 }
 
 QVariantMap SuggestionModel::detect(const QString &text, int cursor) const
@@ -320,6 +332,7 @@ QVariantList SuggestionModel::tagItems() const
 QVariantList SuggestionModel::slashItems() const
 {
     QVariantList out;
+    QList<int> ranks; // of the commands in `out`
     for (const auto commands = filterSlashCommands(m_filter); const SlashCommand *c : commands) {
         // Subtitle: what the command writes ("⏰ data godzina"), not the name in the other language.
         QVariantMap it = item(u"command"_s, m_english ? c->nameEn : c->namePl, m_english ? c->syntaxEn : c->syntaxPl,
@@ -327,6 +340,39 @@ QVariantList SuggestionModel::slashItems() const
         it[u"hint"_s] = c->hint;
         it[u"command"_s] = c->id;
         out.append(it);
+        ranks.append(slashCommandRank(*c, m_filter));
+    }
+    // The extensions' own items (b.app.contribute("slash", …)): by their labels, ranked as the
+    // commands' names are (at the start, at a word's start, anywhere), or by the extension's title
+    // — the subtitle — as a command's keyword; among the commands of the same rank, after them.
+    // Accepting one inserts its Markdown or runs its command on the block
+    // (PageController::applySlashContribution: "ext:<extension>/<id>").
+    QList<std::pair<int, QVariantMap>> extensionItems;
+    for (const QVariant &v : m_extensionItems) {
+        const QVariantMap c = v.toMap();
+        const QString label = c.value(u"label"_s).toString();
+        const QString title = c.value(u"title"_s).toString();
+        int rank = slashMatchRank(label, m_filter);
+        if (rank < 0 && slashMatchRank(title, m_filter) >= 0)
+            rank = 3;
+        if (label.isEmpty() || rank < 0)
+            continue;
+        const QString icon = c.value(u"icon"_s).toString();
+        QVariantMap it =
+                item(u"command"_s, label, title, icon.isEmpty() ? u"puzzle"_s : icon, c.value(u"insert"_s).toString());
+        it[u"command"_s] = QString(u"ext:"_s + c.value(u"extension"_s).toString() + u'/' + c.value(u"id"_s).toString());
+        it[u"extension"_s] = c.value(u"extension"_s).toString();
+        it[u"itemId"_s] = c.value(u"id"_s).toString();
+        extensionItems.append({rank, it});
+    }
+    std::ranges::stable_sort(extensionItems, [](const auto &a, const auto &b) { return a.first < b.first; });
+    qsizetype at = 0; // where the next one goes: after the commands ranked as high
+    for (const auto &[rank, it] : std::as_const(extensionItems)) {
+        while (at < ranks.size() && ranks[at] <= rank)
+            ++at;
+        out.insert(at, it);
+        ranks.insert(at, rank);
+        ++at;
     }
     // The views of extensions, each a ```view block (docs/SYNTAX.md §13 "View blocks"): offered by
     // their titles, and all of them for "view" / "widok".

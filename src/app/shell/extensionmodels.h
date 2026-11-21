@@ -2,10 +2,13 @@
 // The lists of Workspace.extensions (docs/UI.md "Extensions"): ExtensionListModel — every
 // extension of the open notebook with its state (Settings → Extensions), ExtensionConsoleModel —
 // the Luau console's lines (the console view: what was evaluated, results, print() and b.log of
-// every extension, errors), Emacs' *Messages* and *ielm* in one.
+// every extension, errors), Emacs' *Messages* and *ielm* in one. Each line has a number that only
+// grows (also over clear() and the oldest lines dropped): the remote control's `console` and
+// `events` read the lines after one (docs/CLI.md "Live changes").
 
 #include <QAbstractListModel>
 #include <QStringList>
+#include <QVariantList>
 
 namespace brulion::shell {
 
@@ -98,16 +101,28 @@ public:
     /// Every line as plain text ("> 1 + 1\n2"): Copy in the console view.
     Q_INVOKABLE QString text() const;
 
+    /// The number of the newest line (0 before the first one).
+    qint64 lastNumber() const { return m_next - 1; }
+    /// The number of the oldest line kept (lastNumber() + 1 when none is).
+    qint64 firstNumber() const { return m_lines.isEmpty() ? m_next : m_lines.first().number; }
+    /// The lines numbered after `since`, at most `limit` (the first ones): [{n, kind, text,
+    /// source}]. `since` < 0: the newest `limit` lines.
+    QVariantList linesAfter(qint64 since, int limit) const;
+
 Q_SIGNALS:
     void countChanged();
+    /// A line was added (its number, as linesAfter() gives it).
+    void lineAppended(qint64 number, const QString &kind, const QString &text, const QString &source);
 
 private:
     struct Line
     {
         QString kind, text, source;
+        qint64 number = 0;
     };
     QList<Line> m_lines;
     QStringList m_inputs;
+    qint64 m_next = 1;
 };
 
 } // namespace brulion::shell

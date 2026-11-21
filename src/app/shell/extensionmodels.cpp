@@ -1,5 +1,9 @@
 #include "extensionmodels.h"
 
+#include <QVariantMap>
+
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
@@ -101,8 +105,9 @@ void ExtensionConsoleModel::append(const QString &kind, const QString &text, con
         m_lines.remove(0, drop);
         endRemoveRows();
     }
+    const qint64 number = m_next++;
     beginInsertRows({}, int(m_lines.size()), int(m_lines.size()));
-    m_lines.append({kind, text.left(20000), source});
+    m_lines.append({kind, text.left(20000), source, number});
     endInsertRows();
     if (kind == u"input" && (m_inputs.isEmpty() || m_inputs.last() != text)) {
         m_inputs.append(text);
@@ -110,6 +115,26 @@ void ExtensionConsoleModel::append(const QString &kind, const QString &text, con
             m_inputs.removeFirst();
     }
     Q_EMIT countChanged();
+    Q_EMIT lineAppended(number, kind, m_lines.last().text, source);
+}
+
+QVariantList ExtensionConsoleModel::linesAfter(qint64 since, int limit) const
+{
+    QVariantList out;
+    if (limit <= 0)
+        return out;
+    qsizetype from = 0;
+    if (since < 0) {
+        from = std::max<qsizetype>(0, m_lines.size() - limit);
+    } else {
+        // (Numbers grow by one per line: the first one after `since` is found by arithmetic.)
+        from = m_lines.isEmpty() ? 0 : std::clamp<qsizetype>(since + 1 - m_lines.first().number, 0, m_lines.size());
+    }
+    for (qsizetype i = from; i < m_lines.size() && out.size() < limit; ++i) {
+        const Line &l = m_lines[i];
+        out << QVariantMap{{u"n"_s, l.number}, {u"kind"_s, l.kind}, {u"text"_s, l.text}, {u"source"_s, l.source}};
+    }
+    return out;
 }
 
 void ExtensionConsoleModel::clear()

@@ -1,12 +1,17 @@
 #include "remotecontrol.h"
 
 #include "appcontroller.h"
+#include "appscripting.h"
 #include "appsettings.h"
 #include "commandmodel.h"
+#include "extensionmodels.h"
 #include "navigation.h"
 #include "util/unicode.h"
 #include "workspace.h"
+#include "workspaceextensions.h"
 #include "workspacesync.h"
+
+#include "extensions/appapi.h"
 
 #include "dates/local.h"
 #include "dates/natural.h"
@@ -21,10 +26,15 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QFont>
 #include <QImage>
+#include <QJSValue>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMetaProperty>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRegularExpression>
@@ -57,6 +67,12 @@ struct RemoteControl::Wait {
     bool gone = false;
     int ms = 5000;
     QElapsedTimer since;
+    ipc::ControlReply reply;
+};
+
+/// An `events` request waiting for an event after `since` (long poll).
+struct RemoteControl::EventWait {
+    qint64 since = 0;
     ipc::ControlReply reply;
 };
 
@@ -239,6 +255,7 @@ RemoteControl::RemoteControl(QQmlApplicationEngine *engine, AppController *app, 
     m_sinceFrame.start();
     m_waitTimer.setInterval(50ms);
     connect(&m_waitTimer, &QTimer::timeout, this, &RemoteControl::pollWaits);
+    watchEvents();
     apply();
 }
 
@@ -251,18 +268,26 @@ void RemoteControl::apply()
 {
     const bool setting = m_app->settings()->value(QString::fromLatin1(SettingKey), false).toBool();
     const bool wanted = m_options.forced || setting;
+    // An agent the app started with a grant reaches the socket also while the setting is off.
+    const bool serve = wanted || m_server.grantCount() > 0;
+    // (Turned off with grants: the connections without one end now.)
+    m_server.setOpen(wanted);
     QString error;
-    if (wanted && !m_server.isListening()) {
+    if (serve && !m_server.isListening()) {
         if (m_server.listen(m_options.key)) {
-            qCInfo(lcApp).noquote() << u"Remote control on: %1"_s.arg(m_server.socketPath());
+            qCInfo(lcApp).noquote() << (wanted ? u"Remote control on: %1"_s : u"Remote control for agents only: %1"_s)
+                                               .arg(m_server.socketPath());
         } else {
             error = m_server.errorString();
             qCWarning(lcApp).noquote() << u"Remote control could not start: %1"_s.arg(error);
         }
-    } else if (!wanted && m_server.isListening()) {
+    } else if (!serve && m_server.isListening()) {
         m_server.close(); // its connections too: waits and gestures answer nobody
         m_waits.clear();
         m_waitTimer.stop();
+        m_eventWaits.clear();
+        m_events.clear();
+        m_lastRoute = QJsonValue();
         qCInfo(lcApp) << "Remote control off";
     }
     m_app->setRemoteControl({{u"available"_s, true},
@@ -270,7 +295,22 @@ void RemoteControl::apply()
                              {u"active"_s, isActive()},
                              {u"forced"_s, m_options.forced},
                              {u"socket"_s, socketPath()},
+                             {u"grants"_s, m_server.grantCount()},
                              {u"error"_s, error}});
+}
+
+QString RemoteControl::grant(const QString &client)
+{
+    const QString token = m_server.addGrant(client);
+    qCInfo(lcApp).noquote() << u"Remote control: a grant for the agent %1"_s.arg(ipc::cleanClientName(client));
+    apply();
+    return token;
+}
+
+void RemoteControl::revokeGrant(const QString &token)
+{
+    if (m_server.revokeGrant(token))
+        apply();
 }
 
 QQuickWindow *RemoteControl::window() const
@@ -297,6 +337,7 @@ void RemoteControl::onToastShown(int /*toastId*/, const QString &text, const QSt
     m_toasts.append({text, kind, QDateTime::currentDateTime()});
     while (m_toasts.size() > 10)
         m_toasts.removeFirst();
+    noteEvent(u"toast"_s, {{u"text"_s, text.left(2000)}, {u"kind"_s, kind}});
 }
 
 // ---- Requests -----------------------------------------------------------------------------------
@@ -307,7 +348,7 @@ void RemoteControl::handle(const ipc::ControlRequest &request, const ipc::Contro
     const QJsonObject &p = request.params;
     qCDebug(lcApp).noquote() << u"Remote control: %1 %2"_s.arg(method, paramsSummary(method, p)).trimmed();
     if (method == u"hello") {
-        reply.ok(hello());
+        reply.ok(hello(request));
     } else if (method == u"state") {
         reply.ok(state());
     } else if (method == u"navigate") {
@@ -337,12 +378,50 @@ void RemoteControl::handle(const ipc::ControlRequest &request, const ipc::Contro
     } else if (method == u"quit") {
         reply.ok(QJsonObject{{u"quitting"_s, true}});
         QTimer::singleShot(50, m_app, &AppController::quit); // the answer leaves first
+    } else if (method == u"eval") {
+        evaluate(p, reply);
+    } else if (method == u"extensions") {
+        reply.ok(extensionList());
+    } else if (method == u"load") {
+        loadLive(who(request), p, reply);
+    } else if (method == u"unload") {
+        unloadLive(p, reply);
+    } else if (method == u"reload") {
+        m_app->workspace()->extensions()->reloadAll();
+        reply.ok(QJsonObject{
+                {u"reloaded"_s, true},
+                {u"live"_s, QJsonArray::fromVariantList(m_app->workspace()->extensions()->liveExtensions())}});
+    } else if (method == u"console") {
+        reply.ok(consoleLines(p));
+    } else if (method == u"settings") {
+        reply.ok(QJsonObject{{u"settings"_s, QJsonArray::fromVariantList(m_app->scripting()->settings())}});
+    } else if (method == u"set") {
+        setSetting(who(request), p, reply);
+    } else if (method == u"theme") {
+        theme(who(request), p, reply);
+    } else if (method == u"contributions") {
+        contributions(p, reply);
+    } else if (method == u"inspect") {
+        inspect(p, reply);
+    } else if (method == u"setProperty") {
+        setItemProperty(who(request), p, reply);
+    } else if (method == u"events") {
+        events(p, reply);
+    } else if (method == u"changes") {
+        AppScripting *scripting = m_app->scripting();
+        reply.ok(QJsonObject{{u"changes"_s, QJsonArray::fromVariantList(scripting->changes())},
+                             {u"clients"_s, QJsonArray::fromVariantList(scripting->liveClients())},
+                             {u"revision"_s, scripting->liveRevision()}});
+    } else if (method == u"revert") {
+        const int undone = m_app->scripting()->revert(p.value(u"who"_s).toString().trimmed());
+        reply.ok(QJsonObject{{u"undone"_s, undone},
+                             {u"changes"_s, QJsonArray::fromVariantList(m_app->scripting()->changes())}});
     } else {
         reply.fail(code(E::UnknownMethod), u"Unknown method %1"_s.arg(method));
     }
 }
 
-QJsonObject RemoteControl::hello() const
+QJsonObject RemoteControl::hello(const ipc::ControlRequest &request) const
 {
     QJsonArray methods;
     for (const ipc::MethodSpec &m : ipc::controlMethods())
@@ -351,7 +430,9 @@ QJsonObject RemoteControl::hello() const
             {u"app"_s, u"Brulion"_s},
             {u"version"_s, m_app->version()},
             {u"platform"_s, m_app->platform()},
-            {u"methods"_s, methods}};
+            {u"methods"_s, methods},
+            {u"client"_s, who(request).mid(5)},
+            {u"granted"_s, request.granted}};
 }
 
 QJsonObject RemoteControl::state()
@@ -1305,6 +1386,525 @@ void RemoteControl::pollWaits()
     }
     if (m_waits.isEmpty())
         m_waitTimer.stop();
+}
+
+// ---- Live changes -------------------------------------------------------------------------------
+
+namespace {
+
+/// The properties of a password field that hold what was typed: never read, matched or written.
+bool secretProperty(QStringView name)
+{
+    return name == u"text" || name == u"displayText" || name == u"preeditText" || name == u"selectedText"
+           || name == u"getText";
+}
+
+/// A property whose name says it holds a secret (a dialog's `password`, `passphrase`, `token` …):
+/// neither read nor written, on any item.
+bool sensitiveProperty(const QString &name)
+{
+    static const QRegularExpression pattern(u"password|passphrase|passwd|secret|token|credential|apikey|privatekey"_s,
+                                            QRegularExpression::CaseInsensitiveOption);
+    return pattern.match(name).hasMatch();
+}
+
+/// An enum's key (a flag's keys) for its value; "" when it has none.
+QString enumKey(const QMetaEnum &e, int value)
+{
+    const QByteArray key = e.isFlag() ? e.valueToKeys(value) : QByteArray(e.valueToKey(value));
+    return QString::fromLatin1(key);
+}
+
+} // namespace
+
+QString RemoteControl::who(const ipc::ControlRequest &request)
+{
+    return u"live:"_s + (request.client.isEmpty() ? u"agent"_s : request.client);
+}
+
+void RemoteControl::evaluate(const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    Workspace *ws = m_app->workspace();
+    if (!ws->isOpen())
+        return reply.fail(code(E::NotReady), u"No notebook is open (status %1)"_s.arg(m_app->status()));
+    const QVariantMap result =
+            ws->extensions()->evaluateFor(params.value(u"code"_s).toString(), params.value(u"extension"_s).toString());
+    reply.ok(QJsonObject::fromVariantMap(result));
+}
+
+QJsonObject RemoteControl::extensionList() const
+{
+    WorkspaceExtensions *extensions = m_app->workspace()->extensions();
+    QJsonArray rows;
+    for (const ExtensionRow &r : extensions->list()->rows()) {
+        QJsonObject row{{u"id"_s, r.id},
+                        {u"title"_s, r.title},
+                        {u"kind"_s, r.kind},
+                        {u"state"_s, r.state},
+                        {u"message"_s, r.message},
+                        {u"path"_s, r.path},
+                        {u"permissions"_s, r.permissions},
+                        {u"commands"_s, r.commands},
+                        {u"views"_s, r.views},
+                        {u"hooks"_s, r.hooks},
+                        {u"types"_s, r.types}};
+        if (r.errorLine >= 0)
+            row.insert(u"line"_s, r.errorLine + 1);
+        if (!r.typeMessage.isEmpty())
+            row.insert(u"typeMessage"_s, r.typeMessage);
+        if (!r.description.isEmpty())
+            row.insert(u"description"_s, r.description);
+        rows.append(row);
+    }
+    return {{u"extensions"_s, rows}, {u"live"_s, QJsonArray::fromVariantList(extensions->liveExtensions())}};
+}
+
+void RemoteControl::loadLive(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    Workspace *ws = m_app->workspace();
+    if (!ws->isOpen())
+        return reply.fail(code(E::NotReady), u"No notebook is open (status %1)"_s.arg(m_app->status()));
+    WorkspaceExtensions *extensions = ws->extensions();
+    const QString id = params.value(u"id"_s).toString().trimmed();
+    const QString before = extensions->liveOwner(id);
+    const QVariantMap result = extensions->loadLive(id, params.value(u"source"_s).toString(),
+                                                    ipc::stringList(params.value(u"permissions"_s)),
+                                                    params.value(u"title"_s).toString(), who);
+    // In the journal once per client: revert takes it out (unless another client's code replaced it).
+    if (result.value(u"ok"_s).toBool() && before != who) {
+        const QPointer<WorkspaceExtensions> alive(extensions);
+        m_app->scripting()->noteLive(who, u"extension"_s, id, [alive, id, who] {
+            if (alive && alive->liveOwner(id) == who)
+                alive->unloadLive(id);
+        });
+    }
+    reply.ok(QJsonObject::fromVariantMap(result));
+}
+
+void RemoteControl::unloadLive(const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    WorkspaceExtensions *extensions = m_app->workspace()->extensions();
+    const QString id = params.value(u"id"_s).toString().trimmed();
+    if (!extensions->unloadLive(id)) {
+        QJsonArray ids;
+        for (const QVariant &row : extensions->liveExtensions())
+            ids.append(row.toMap().value(u"id"_s).toString());
+        return reply.fail(code(E::NotFound), u"No live extension %1"_s.arg(id), {{u"live"_s, ids}});
+    }
+    // Nothing left to undo of it.
+    m_app->scripting()->forgetLive(u"extension"_s, id);
+    reply.ok(QJsonObject{{u"id"_s, id}, {u"unloaded"_s, true}});
+}
+
+QJsonObject RemoteControl::consoleLines(const QJsonObject &params) const
+{
+    const ExtensionConsoleModel *console = m_app->workspace()->extensions()->console();
+    const qint64 since = params.contains(u"since"_s) ? params.value(u"since"_s).toInteger() : -1;
+    const int limit = params.value(u"limit"_s).toInt(200);
+    const QVariantList lines = console->linesAfter(since, limit);
+    // `next`: what the next request names as since (the newest line given, else as it was).
+    qint64 next = lines.isEmpty() ? std::min(since < 0 ? console->lastNumber() : since, console->lastNumber())
+                                  : lines.last().toMap().value(u"n"_s).toLongLong();
+    return {{u"lines"_s, QJsonArray::fromVariantList(lines)},
+            {u"next"_s, next},
+            {u"first"_s, console->firstNumber()},
+            {u"last"_s, console->lastNumber()}};
+}
+
+void RemoteControl::setSetting(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    AppScripting *scripting = m_app->scripting();
+    const QString key = params.value(u"key"_s).toString().trimmed();
+    QString error;
+    if (!scripting->setSetting(who, key, params.value(u"value"_s).toVariant(), &error))
+        return reply.fail(code(E::BadParams), error, {{u"param"_s, u"value"_s}, {u"key"_s, key}});
+    QString ignored;
+    reply.ok(QJsonObject{{u"key"_s, key}, {u"value"_s, QJsonValue::fromVariant(scripting->setting(key, &ignored))}});
+}
+
+void RemoteControl::theme(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    AppScripting *scripting = m_app->scripting();
+    if (params.contains(u"tokens"_s)) {
+        extensions::ThemeLayer layer;
+        QString error;
+        if (!extensions::themeLayerFrom(params.value(u"tokens"_s).toObject().toVariantMap(), &layer, &error))
+            return reply.fail(code(E::BadParams), error, {{u"param"_s, u"tokens"_s}});
+        scripting->setLiveTheme(who, layer);
+    } else if (params.value(u"clear"_s).toBool()) {
+        // (Only a layer there is noted as a change.)
+        const QVariantList live = scripting->theme().value(u"live"_s).toList();
+        if (std::ranges::any_of(live, [&who](const QVariant &v) { return v.toMap().value(u"who"_s) == who.mid(5); }))
+            scripting->setLiveTheme(who, extensions::ThemeLayer());
+    }
+    QJsonObject out = QJsonObject::fromVariantMap(scripting->theme());
+    if (params.value(u"catalog"_s).toBool()) {
+        QJsonArray catalog;
+        for (const extensions::ThemeToken &t : extensions::themeTokens()) {
+            QJsonObject token{{u"name"_s, t.name}};
+            switch (t.kind) {
+            case extensions::ThemeTokenKind::Color: token.insert(u"kind"_s, u"color"_s); break;
+            case extensions::ThemeTokenKind::Font: token.insert(u"kind"_s, u"font"_s); break;
+            case extensions::ThemeTokenKind::Number:
+                token.insert(u"kind"_s, u"number"_s);
+                token.insert(u"min"_s, t.min);
+                token.insert(u"max"_s, t.max);
+                break;
+            }
+            catalog.append(token);
+        }
+        out.insert(u"catalog"_s, catalog);
+    }
+    reply.ok(out);
+}
+
+void RemoteControl::contributions(const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    const QString slot = params.value(u"slot"_s).toString().trimmed();
+    if (!slot.isEmpty() && !extensions::isContributionSlot(slot))
+        return reply.fail(
+                code(E::BadParams), u"Unknown slot %1"_s.arg(slot),
+                {{u"param"_s, u"slot"_s}, {u"slots"_s, QJsonArray::fromStringList(extensions::contributionSlots())}});
+    const QVariantList items = m_app->workspace()->extensions()->contributions(slot);
+    reply.ok(QJsonObject{{u"contributions"_s, QJsonArray::fromVariantList(items)}});
+}
+
+void RemoteControl::inspect(const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    QQuickWindow *w = window();
+    if (!w)
+        return reply.fail(code(E::NotReady), u"The window is not there yet"_s);
+    QQuickItem *root = w->contentItem();
+    if (params.contains(u"handle"_s)) {
+        const ItemLookup lookup = itemFor(params.value(u"handle"_s).toString());
+        if (!lookup.item)
+            return reply.fail(lookup.code, lookup.message, {{u"param"_s, u"handle"_s}});
+        root = lookup.item;
+    }
+    int count = 0;
+    bool truncated = false;
+    const QJsonObject tree =
+            inspectItem(root, params.value(u"depth"_s).toInt(3), params.value(u"properties"_s).toBool(),
+                        params.value(u"limit"_s).toInt(500), &count, &truncated);
+    reply.ok(QJsonObject{{u"root"_s, tree}, {u"items"_s, count}, {u"truncated"_s, truncated}});
+}
+
+QJsonObject RemoteControl::inspectItem(QQuickItem *item, int depth, bool properties, int limit, int *count,
+                                       bool *truncated)
+{
+    ++*count;
+    QJsonObject o{{u"handle"_s, handleFor(item)},
+                  {u"type"_s, uidriver::typeName(item)},
+                  {u"objectName"_s, item->objectName()},
+                  {u"geometry"_s, rect(sceneRect(item))},
+                  {u"visible"_s, uidriver::shown(item)}};
+    if (const QString text = shownText(item); !text.isEmpty())
+        o.insert(u"text"_s, text.left(500));
+    if (secretField(item))
+        o.insert(u"secret"_s, true); // a password field: its text stays in the app
+    if (properties)
+        o.insert(u"properties"_s, propertiesOf(item));
+    const QList<QQuickItem *> children = item->childItems();
+    if (children.isEmpty())
+        return o;
+    if (depth <= 0) {
+        o.insert(u"childCount"_s, children.size()); // inspect {handle} goes on from here
+        return o;
+    }
+    QJsonArray kids;
+    for (QQuickItem *child : children) {
+        if (*count >= limit) {
+            *truncated = true;
+            o.insert(u"childCount"_s, children.size());
+            break;
+        }
+        kids.append(inspectItem(child, depth - 1, properties, limit, count, truncated));
+    }
+    o.insert(u"children"_s, kids);
+    return o;
+}
+
+QJsonObject RemoteControl::propertiesOf(QQuickItem *item)
+{
+    QJsonObject out;
+    const bool secret = secretField(item);
+    const QMetaObject *meta = item->metaObject();
+    for (int i = 0; i < meta->propertyCount(); ++i) {
+        const QMetaProperty property = meta->property(i);
+        const QString name = QString::fromLatin1(property.name());
+        if (!property.isReadable() || (secret && secretProperty(name)) || sensitiveProperty(name))
+            continue;
+        const QJsonValue value = jsonOf(property.read(item), &property);
+        if (!value.isUndefined())
+            out.insert(name, value);
+    }
+    return out;
+}
+
+QJsonValue RemoteControl::jsonOf(const QVariant &value, const QMetaProperty *property, int depth)
+{
+    if (!value.isValid() || value.isNull())
+        return QJsonValue::Null;
+    const QMetaType type = value.metaType();
+    if (property && property->isEnumType()) {
+        if (const QString key = enumKey(property->enumerator(), value.toInt()); !key.isEmpty())
+            return key;
+        return value.toInt();
+    }
+    switch (type.id()) {
+    case QMetaType::Bool: return value.toBool();
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::Short:
+    case QMetaType::UShort:
+    case QMetaType::Long:
+    case QMetaType::ULong:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong:
+    case QMetaType::Char:
+    case QMetaType::SChar:
+    case QMetaType::UChar: return QJsonValue(value.toLongLong());
+    case QMetaType::Double:
+    case QMetaType::Float:
+    case QMetaType::Float16: {
+        const double d = value.toDouble();
+        return std::isfinite(d) ? QJsonValue(d) : QJsonValue(QJsonValue::Null);
+    }
+    case QMetaType::QString: return value.toString().left(2000);
+    case QMetaType::QUrl: return value.toUrl().toString().left(2000);
+    case QMetaType::QColor: return value.value<QColor>().name(QColor::HexArgb);
+    case QMetaType::QPoint:
+    case QMetaType::QPointF: {
+        const QPointF p = value.toPointF();
+        return QJsonObject{{u"x"_s, rounded(p.x())}, {u"y"_s, rounded(p.y())}};
+    }
+    case QMetaType::QSize:
+    case QMetaType::QSizeF: {
+        const QSizeF size = value.toSizeF();
+        return QJsonObject{{u"width"_s, rounded(size.width())}, {u"height"_s, rounded(size.height())}};
+    }
+    case QMetaType::QRect:
+    case QMetaType::QRectF: return rect(value.toRectF());
+    case QMetaType::QFont: {
+        const QFont font = value.value<QFont>();
+        return QJsonObject{{u"family"_s, font.family()},
+                           {u"pixelSize"_s, font.pixelSize()},
+                           {u"pointSize"_s, font.pointSizeF()},
+                           {u"bold"_s, font.bold()},
+                           {u"italic"_s, font.italic()}};
+    }
+    case QMetaType::QStringList: return QJsonArray::fromStringList(value.toStringList().mid(0, 200));
+    case QMetaType::QVariantMap:
+    case QMetaType::QVariantList: {
+        // Plain data only, and only a little of it (a model's rows are no property to read here).
+        if (depth > 0)
+            return QJsonValue::Undefined;
+        const QJsonValue json = QJsonValue::fromVariant(value);
+        const qsizetype size = json.isObject() ? QJsonDocument(json.toObject()).toJson(QJsonDocument::Compact).size()
+                                               : QJsonDocument(json.toArray()).toJson(QJsonDocument::Compact).size();
+        return size <= 4000 ? json : QJsonValue(QJsonValue::Undefined);
+    }
+    default: break;
+    }
+    if (type == QMetaType::fromType<QJSValue>()) {
+        const QJSValue js = value.value<QJSValue>();
+        if (js.isCallable() || depth > 0)
+            return QJsonValue::Undefined;
+        return jsonOf(js.toVariant(), nullptr, depth + 1);
+    }
+    if (type.flags() & QMetaType::PointerToQObject) {
+        // An item as its handle (parent, contentItem …); other objects are not given.
+        if (auto *item = qobject_cast<QQuickItem *>(value.value<QObject *>()))
+            return QJsonObject{{u"handle"_s, handleFor(item)}};
+        return QJsonValue::Undefined;
+    }
+    if (type.flags() & QMetaType::IsEnumeration)
+        return QJsonValue(value.toLongLong());
+    return QJsonValue::Undefined;
+}
+
+void RemoteControl::setItemProperty(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    const ItemLookup lookup = itemFor(params.value(u"handle"_s).toString());
+    if (!lookup.item)
+        return reply.fail(lookup.code, lookup.message, {{u"param"_s, u"handle"_s}});
+    QQuickItem *item = lookup.item;
+    const QString name = params.value(u"name"_s).toString().trimmed();
+    if ((secretField(item) && secretProperty(name.section(u'.', 0, 0))) || sensitiveProperty(name))
+        return reply.fail(code(E::Refused), u"A password field's text or a secret is neither read nor written"_s,
+                          {{u"param"_s, u"name"_s}});
+    const QQmlProperty property(item, name, qmlContext(item));
+    if (!property.isValid() || property.type() != QQmlProperty::Property)
+        return reply.fail(code(E::NotFound), u"%1 has no property %2"_s.arg(uidriver::typeName(item), name),
+                          {{u"param"_s, u"name"_s}, {u"item"_s, describe(item)}});
+    if (!property.isWritable())
+        return reply.fail(code(E::Refused), u"%1 is read-only"_s.arg(name), {{u"param"_s, u"name"_s}});
+    const QMetaType type = property.propertyMetaType();
+    const QJsonValue json = params.value(u"value"_s);
+    QVariant value = json.toVariant();
+    const QMetaProperty meta = property.property();
+    bool fits = true;
+    if (type == QMetaType::fromType<QColor>()) {
+        const QColor color(json.toString());
+        fits = json.isString() && color.isValid();
+        value = color;
+    } else if (type == QMetaType::fromType<QUrl>()) {
+        fits = json.isString();
+        value = QUrl(json.toString());
+    } else if (meta.isEnumType() && json.isString()) {
+        bool ok = false;
+        const QByteArray key = json.toString().toLatin1();
+        const int v = meta.isFlagType() ? meta.enumerator().keysToValue(key.constData(), &ok)
+                                        : meta.enumerator().keyToValue(key.constData(), &ok);
+        fits = ok;
+        value = v;
+    } else if (type == QMetaType::fromType<QPointF>() || type == QMetaType::fromType<QPoint>()) {
+        const QJsonObject o = json.toObject();
+        fits = o.value(u"x"_s).isDouble() && o.value(u"y"_s).isDouble();
+        value = QPointF(o.value(u"x"_s).toDouble(), o.value(u"y"_s).toDouble());
+    } else if (type == QMetaType::fromType<QSizeF>() || type == QMetaType::fromType<QSize>()) {
+        const QJsonObject o = json.toObject();
+        fits = o.value(u"width"_s).isDouble() && o.value(u"height"_s).isDouble();
+        value = QSizeF(o.value(u"width"_s).toDouble(), o.value(u"height"_s).toDouble());
+    } else if (type == QMetaType::fromType<QRectF>() || type == QMetaType::fromType<QRect>()) {
+        const QJsonObject o = json.toObject();
+        fits = o.value(u"x"_s).isDouble() && o.value(u"y"_s).isDouble() && o.value(u"width"_s).isDouble()
+               && o.value(u"height"_s).isDouble();
+        value = QRectF(o.value(u"x"_s).toDouble(), o.value(u"y"_s).toDouble(), o.value(u"width"_s).toDouble(),
+                       o.value(u"height"_s).toDouble());
+    } else if (type.flags() & QMetaType::PointerToQObject) {
+        fits = false; // (an object is no value an agent can give)
+    } else if (type.id() == QMetaType::QString) {
+        fits = json.isString();
+    } else if (type.id() == QMetaType::Bool) {
+        fits = json.isBool();
+    } else if (type.flags() & QMetaType::IsEnumeration || type.id() == QMetaType::Int || type.id() == QMetaType::Double
+               || type.id() == QMetaType::Float || type.id() == QMetaType::LongLong || type.id() == QMetaType::UInt) {
+        fits = json.isDouble() && std::isfinite(json.toDouble());
+    }
+    if (fits && type.isValid() && type != QMetaType::fromType<QVariant>() && type != QMetaType::fromType<QJSValue>())
+        fits = value.canConvert(type);
+    if (!fits)
+        return reply.fail(code(E::BadParams), u"%1 takes %2"_s.arg(name, QString::fromLatin1(type.name())),
+                          {{u"param"_s, u"value"_s}});
+    const QVariant before = property.read();
+    const QJsonValue beforeJson = jsonOf(before, &meta);
+    // A developer's experiment: the write removes the property's binding (as an assignment in QML
+    // does); revert writes the value before back, the binding stays gone until the item is made again.
+    if (!property.write(value))
+        return reply.fail(code(E::BadParams), u"%1 did not take the value"_s.arg(name), {{u"param"_s, u"value"_s}});
+    const QPointer<QQuickItem> alive(item);
+    m_app->scripting()->noteLive(who, u"property"_s, uidriver::typeName(item) + u'.' + name, [alive, name, before] {
+        if (alive)
+            QQmlProperty(alive.data(), name, qmlContext(alive.data())).write(before);
+    });
+    reply.ok(QJsonObject{{u"handle"_s, handleFor(item)},
+                         {u"name"_s, name},
+                         {u"before"_s, beforeJson.isUndefined() ? QJsonValue() : beforeJson},
+                         {u"after"_s, jsonOf(property.read(), &meta)}});
+}
+
+// ---- Events -------------------------------------------------------------------------------------
+
+void RemoteControl::watchEvents()
+{
+    connect(m_app, &AppController::currentRouteChanged, this, [this] {
+        // (The same route noted again — a route replaced by itself — is no event.)
+        const QJsonValue route = toJson(m_app->currentRoute());
+        if (route == m_lastRoute)
+            return;
+        m_lastRoute = route;
+        noteEvent(u"route"_s, {{u"route"_s, route}});
+    });
+    AppScripting *scripting = m_app->scripting();
+    connect(scripting, &AppScripting::liveChanged, this, [this, scripting] {
+        noteEvent(u"live"_s, {{u"revision"_s, scripting->liveRevision()},
+                              {u"clients"_s, QJsonArray::fromVariantList(scripting->liveClients())}});
+    });
+    Workspace *ws = m_app->workspace();
+    WorkspaceExtensions *extensions = ws->extensions();
+    connect(extensions, &WorkspaceExtensions::liveChanged, this, &RemoteControl::noteExtensionsChanged);
+    connect(extensions, &WorkspaceExtensions::commandsChanged, this, &RemoteControl::noteExtensionsChanged);
+    connect(extensions, &WorkspaceExtensions::appRevisionChanged, this, &RemoteControl::noteExtensionsChanged);
+    connect(extensions->console(), &ExtensionConsoleModel::lineAppended, this,
+            [this](qint64 number, const QString &kind, const QString &text, const QString &source) {
+                noteEvent(u"console"_s,
+                          {{u"n"_s, number}, {u"kind"_s, kind}, {u"text"_s, text.left(2000)}, {u"source"_s, source}});
+            });
+    connect(ws, &Workspace::filesChanged, this, [this](const QStringList &paths) {
+        noteEvent(u"notes"_s,
+                  {{u"paths"_s, QJsonArray::fromStringList(paths.mid(0, 200))}, {u"count"_s, paths.size()}});
+    });
+}
+
+void RemoteControl::noteExtensionsChanged()
+{
+    if (m_extensionsEventDue || !m_server.isListening())
+        return;
+    m_extensionsEventDue = true;
+    QTimer::singleShot(0, this, [this] {
+        m_extensionsEventDue = false;
+        noteEvent(u"extensions"_s,
+                  {{u"live"_s, QJsonArray::fromVariantList(m_app->workspace()->extensions()->liveExtensions())}});
+    });
+}
+
+void RemoteControl::noteEvent(const QString &type, QJsonObject data)
+{
+    if (!m_server.isListening())
+        return; // (nobody to tell: nothing kept)
+    const qint64 id = m_nextEvent++;
+    data.insert(u"id"_s, id);
+    data.insert(u"type"_s, type);
+    data.insert(u"at"_s, QDateTime::currentDateTime().toString(Qt::ISODateWithMs));
+    m_events.append({id, data});
+    while (m_events.size() > MaxEvents)
+        m_events.removeFirst();
+    // The waits it answers: answered from the event loop (the change may be inside a call).
+    if (m_eventWaits.isEmpty())
+        return;
+    QTimer::singleShot(0, this, [this] {
+        const QList<std::shared_ptr<EventWait>> waits = m_eventWaits;
+        for (const std::shared_ptr<EventWait> &wait : waits) {
+            if (!wait->reply.connected()) {
+                m_eventWaits.removeOne(wait);
+            } else if (!m_events.isEmpty() && m_events.last().id > wait->since) {
+                wait->reply.ok(eventsAfter(wait->since));
+                m_eventWaits.removeOne(wait);
+            }
+        }
+    });
+}
+
+QJsonObject RemoteControl::eventsAfter(qint64 since) const
+{
+    QJsonArray out;
+    for (const Event &e : m_events) {
+        if (e.id > since)
+            out.append(e.data);
+    }
+    const qint64 newest = m_nextEvent - 1;
+    return {{u"events"_s, out},
+            {u"next"_s, out.isEmpty() ? std::min(since, newest) : out.last().toObject().value(u"id"_s).toInteger()},
+            {u"first"_s, m_events.isEmpty() ? m_nextEvent : m_events.first().id}};
+}
+
+void RemoteControl::events(const QJsonObject &params, const ipc::ControlReply &reply)
+{
+    // (An id beyond the newest — from an earlier run of the app — waits for the next event.)
+    const qint64 since = std::min(params.value(u"since"_s).toInteger(0), m_nextEvent - 1);
+    const int wait = params.value(u"wait"_s).toInt(0);
+    if (wait <= 0 || (!m_events.isEmpty() && m_events.last().id > since))
+        return reply.ok(eventsAfter(since));
+    auto pending = std::make_shared<EventWait>();
+    pending->since = since;
+    pending->reply = reply;
+    m_eventWaits.append(pending);
+    QTimer::singleShot(wait, this, [this, pending] {
+        if (!m_eventWaits.removeOne(pending))
+            return; // (answered)
+        pending->reply.ok(eventsAfter(pending->since));
+    });
 }
 
 } // namespace brulion::shell

@@ -23,6 +23,10 @@ import Brulion
 // tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
 // On a picture attachment (`picture`) the menu's "Markdown source" is the picture bar's "Show as
 // text" / "Show picture" (Ctrl+E there too), and the note mode is not offered (no note to switch).
+// Extensions (docs/UI.md "Extension items in the UI"): their buttons (b.app.contribute("toolbar", …))
+// before More — on phones the first items of More —, their page items (`pageMenu`) in More while a
+// page shows; the "Live" chip (ShellLiveIndicator) after the title while an AI agent or another
+// live client changed the app.
 // `topInset` extends the bar under the Android status bar (edge-to-edge).
 Rectangle {
     id: bar
@@ -202,6 +206,15 @@ Rectangle {
             }
         }
 
+        // AI agents and other live clients changed the app (docs/UI.md "Extension items in the
+        // UI"): who and what, undone in one click.
+        ShellLiveIndicator {
+            objectName: "topBarLive"
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: Theme.narrow ? 0 : Theme.space1
+            Layout.rightMargin: Theme.narrow ? 0 : Theme.space1
+        }
+
         // Phones: the tab switcher, a square with the number of tabs (two or more).
         T.AbstractButton {
             id: tabSwitcherButton
@@ -362,11 +375,55 @@ Rectangle {
             checked: AppController.sidePanelVisible
             onClicked: AppController.sidePanelVisible = !AppController.sidePanelVisible
         }
+        // The extensions' buttons (b.app.contribute("toolbar", …)); phones: at the top of More.
+        Repeater {
+            model: bar.toolbarKey !== "" ? Workspace.extensions.contributions("toolbar", bar.toolbarKey.length) : bar.noRows
+            delegate: BIconButton {
+                id: extensionButton
+                required property var modelData
+                required property string extension
+                required property string tooltip
+                required property string tone
+                readonly property string itemId: UiModels.stringField(extensionButton.modelData, "id")
+                objectName: "toolbar_" + extensionButton.itemId
+                // A click leaves the keyboard focus where it was (the edited block): the button can
+                // go with the extension's next change, and a focused item that goes leaves the
+                // focus nowhere. Tab reaches it.
+                focusPolicy: Qt.TabFocus
+                iconName: UiModels.stringField(extensionButton.modelData, "icon") !== ""
+                          ? UiModels.stringField(extensionButton.modelData, "icon") : "puzzle"
+                toolTip: extensionButton.tooltip
+                Binding on iconColor {
+                    when: extensionButton.tone !== ""
+                    value: bar.toneColor(extensionButton.tone)
+                }
+                onClicked: AppScripting.activate("toolbar", extensionButton.extension, extensionButton.itemId, "", -1)
+            }
+        }
         BIconButton {
             id: moreButton
+            objectName: "topBarMore"
             iconName: Theme.narrow ? "ellipsis-vertical" : "ellipsis"
             label: qsTr("More")
             onClicked: bar.openMoreMenu()
+        }
+    }
+
+    readonly property list<var> noRows: []
+    /// The extensions' top bar items as text (WorkspaceExtensions.contributionsKey): the buttons are
+    /// made again only when they change, not with every other slot's change.
+    readonly property string toolbarKey: !Theme.narrow && Workspace.extensions !== null
+                                         ? Workspace.extensions.contributionsKey("toolbar", Workspace.extensions.appRevision) : ""
+    /// The text colour of an extension item's `tone` (b.app.contribute): accent, success, danger,
+    /// warning, info.
+    function toneColor(tone: string): color {
+        switch (tone) {
+        case "accent": return Theme.accentText
+        case "success": return Theme.successText
+        case "danger": return Theme.dangerText
+        case "warning": return Theme.warningText
+        case "info": return Theme.infoText
+        default: return Theme.fgMuted
         }
     }
 
@@ -584,6 +641,19 @@ Rectangle {
             id: moreMenu
             objectName: "topBarMoreMenu"
 
+            // ---- Phones: the extensions' top bar buttons (b.app.contribute("toolbar", …)) ------
+            ShellContributionItems {
+                id: toolbarItems
+                menu: moreMenu
+                slot: "toolbar"
+                shown: Theme.narrow
+                onPicked: (extension, id) => AppScripting.activate("toolbar", extension, id, "", -1)
+            }
+            BMenuSeparator {
+                visible: Theme.narrow && toolbarItems.count > 0
+                height: visible ? implicitHeight : 0
+            }
+
             // ---- The page: favourite, rename, move, history ------------------------------------
             Item {
                 visible: bar.onPage
@@ -800,6 +870,7 @@ Rectangle {
                 onTriggered: AppController.requestUiAction("qrCode")
             }
             BMenuItem {
+                id: openInOtherAppItem
                 objectName: "menuOpenInOtherApp"
                 // A PDF; another attachment of the allow-list (DOCX, XLSX, MP3…: name and first bytes).
                 visible: bar.onPage && (bar.pdf || (bar.fileOnly && Workspace.canOpenInOtherApp(bar.pagePath)))
@@ -807,6 +878,14 @@ Rectangle {
                 text: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
                 iconName: "external-link"
                 onTriggered: Workspace.openInOtherApp(bar.pagePath)
+            }
+            // The extensions' items of a page's menu (b.app.contribute("pageMenu", …): ctx.page).
+            ShellContributionItems {
+                menu: moreMenu
+                after: openInOtherAppItem
+                slot: "pageMenu"
+                shown: bar.onPage
+                onPicked: (extension, id) => AppScripting.activate("pageMenu", extension, id, bar.pagePath, -1)
             }
             // The page's last item, set apart on both sides (the rule of BMenuItem's header).
             BMenuSeparator {

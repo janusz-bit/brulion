@@ -29,6 +29,7 @@
 
 #include "appcontroller.h"
 #include "applockcontroller.h"
+#include "appscripting.h"
 #include "appsettings.h"
 #include "appupdates.h"
 #include "cleanupselection.h"
@@ -123,6 +124,18 @@ public:
     static AppLockController *create(QQmlEngine *, QJSEngine *)
     {
         return detail::cppOwned(detail::controllerForQml()->appLock());
+    }
+};
+
+struct AppScriptingForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AppScripting)
+    QML_NAMED_ELEMENT(AppScripting)
+    QML_SINGLETON
+public:
+    static AppScripting *create(QQmlEngine *, QJSEngine *)
+    {
+        return detail::cppOwned(detail::controllerForQml()->scripting());
     }
 };
 

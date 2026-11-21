@@ -812,6 +812,12 @@ public:
     Q_INVOKABLE QVariantMap applyCompletion(int row, const QVariantMap &trigger, const QVariantMap &item);
     /// Run a slash command on [from, to) (the "/query" text) of the row's edit text.
     Q_INVOKABLE QVariantMap applySlashCommand(int row, int from, int to, const QString &command);
+    /// An extension's slash item (SuggestionModel: command "ext:<extension>/<id>") on [from, to):
+    /// its Markdown (`insertText`) in place of the typed "/query" — one line at the caret, as /today
+    /// writes its link; blocks in place of the block when nothing else is in it, else after it —, or,
+    /// without Markdown, the typed text removed and { action: "extension", extension, itemId }: the
+    /// editor runs the item on the block (AppScripting.activate("slash", …)). One undo step.
+    QVariantMap applySlashContribution(int row, int from, int to, const QVariantMap &item);
 
     // --- Tables -----------------------------------------------------------------------------------
     /// Set a cell (tableRow -1 = header) and rewrite the table. `typing`: the cell editor calls

@@ -4,17 +4,22 @@
 // double-click | drag | scroll | type | key | wait | quit`, `app open` and `app capture <text>` —
 // through the app's control socket (ipc/controlprotocol.h), which is there only while the app
 // allows it (--remote-control, or Settings → Application → "For developers"). docs/CLI.md
-// "Remote control".
+// "Remote control". The live changes — `app eval | extensions | load | unload | reload | console |
+// settings | set | theme | contributions | inspect | set-property | events | changes | revert` —
+// change the running app for this run (docs/CLI.md "Live changes"); an AI agent the app started
+// with a grant reaches them through BRULION_APP_TOKEN also while the remote control is off.
 #include "commands_p.h"
 
 #include "appmessage.h"
 #include "controlclient.h"
 #include "controlprotocol.h"
+#include "extensions/appapi.h"
 #include "notebook/itemref.h"
 #include "singleinstance.h"
 #include "vault/vault.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QRegularExpression>
@@ -37,7 +42,7 @@ int exitFor(const QString &code)
             {QLatin1String(E::NotFound), ExitNotFound},   {QLatin1String(E::Timeout), ExitNotFound},
             {QLatin1String(E::OffScreen), ExitNotFound},  {QLatin1String(E::StaleHandle), ExitConflict},
             {QLatin1String(E::Ambiguous), ExitConflict},  {QLatin1String(E::NotReady), ExitUnavailable},
-            {QLatin1String(E::Refused), ExitRefused}};
+            {QLatin1String(E::Refused), ExitRefused},     {QLatin1String(E::Unauthorized), ExitUnavailable}};
     return exits.value(code, ExitInternal);
 }
 
@@ -85,6 +90,14 @@ std::optional<QJsonValue> askApp(Call &call, const QString &method, const QJsonO
     if (response.transportError) {
         call.setError(ExitUnavailable, u"app_not_reached"_s,
                       tr("The running app did not answer: %1").arg(response.message), {{u"reason"_s, response.code}});
+        return std::nullopt;
+    }
+    // The socket is there only for the agents the app started (grants), and this is none of them.
+    if (!response.ok && response.code == QLatin1String(ipc::ControlError::Unauthorized) && client.token().isEmpty()) {
+        call.setError(ExitUnavailable, u"remote_control_off"_s,
+                      tr("The running app does not allow remote control. %1").arg(remoteControlHint()),
+                      {{u"gui"_s, QJsonObject{{u"running"_s, true}, {u"remoteControl"_s, false}}},
+                       {u"hint"_s, remoteControlHint()}});
         return std::nullopt;
     }
     if (!response.ok) {
@@ -259,6 +272,10 @@ Result appOpen(Call &call)
         if (auto e = call.ctx.resolveVault())
             return failWith(*e);
         const auto state = askApp(call, u"state"_s, {});
+        if (!state && call.error && call.error->code == u"remote_control_off") {
+            call.error.reset(); // (only agents may talk to it: the message)
+            return openByMessage(call, target);
+        }
         if (!state)
             return call.failed();
         const QString appVault = state->toObject().value(u"vault"_s).toObject().value(u"path"_s).toString();
@@ -271,8 +288,11 @@ Result appOpen(Call &call)
         return appResult(call, u"open"_s, params);
     const auto result = askApp(call, u"open"_s, params);
     if (!result) {
-        // A notebook still opening: the message, which the app keeps until the notebook is ready.
-        if (call.error && call.error->code == QLatin1String(ipc::ControlError::NotReady)) {
+        // A notebook still opening: the message, which the app keeps until the notebook is ready
+        // (also when the socket is there only for the agents the app started).
+        if (call.error
+            && (call.error->code == QLatin1String(ipc::ControlError::NotReady)
+                || call.error->code == u"remote_control_off")) {
             call.error.reset();
             return openByMessage(call, target);
         }
@@ -463,6 +483,205 @@ Result appWait(Call &call)
 Result appQuit(Call &call)
 {
     return appResult(call, u"quit"_s, {});
+}
+
+// ---- Live changes (docs/CLI.md "Live changes") ------------------------------------------------
+
+/// A JSON value from the command line: JSON (a number, true, "text", [..], {..}), else the word
+/// itself as a string ("compact"). nullopt for "".
+std::optional<QJsonValue> jsonWord(const QString &word)
+{
+    const QString trimmed = word.trimmed();
+    if (trimmed.isEmpty())
+        return std::nullopt;
+    // (QJsonDocument takes only an array or an object: the value inside an array.)
+    QJsonParseError error;
+    const QJsonDocument doc = QJsonDocument::fromJson(QString(u'[' + trimmed + u']').toUtf8(), &error);
+    if (error.error == QJsonParseError::NoError && doc.isArray() && doc.array().size() == 1)
+        return doc.array().first();
+    return QJsonValue(trimmed);
+}
+
+/// The answer of a Luau evaluation or a live load: its `ok` false is the command's error (6
+/// extension_error, the answer in the details).
+Result luauResult(Call &call, const QString &method, const QJsonObject &params, const char *failure)
+{
+    if (call.dryRun())
+        return appResult(call, method, params);
+    const auto result = askApp(call, method, params, 60000);
+    if (!result)
+        return call.failed();
+    const QJsonObject out = result->toObject();
+    if (!out.value(u"ok"_s).toBool())
+        return call.fail(ExitParse, u"extension_error"_s, tr(failure).arg(out.value(u"error"_s).toString()), out);
+    return call.ok(out);
+}
+
+Result appEval(Call &call)
+{
+    const QString code = call.text(u"code"_s);
+    if (code.trimmed().isEmpty())
+        return call.fail(ExitUsage, u"missing_argument"_s, tr("Nothing to evaluate: give Luau code"));
+    QJsonObject params{{u"code"_s, code}};
+    copyGiven(call, params, {u"extension"_s});
+    return luauResult(call, u"eval"_s, params, QT_TRANSLATE_NOOP("brulion::cli", "The Luau code failed: %1"));
+}
+
+Result appExtensions(Call &call)
+{
+    return appResult(call, u"extensions"_s, {});
+}
+
+Result appLoad(Call &call)
+{
+    const bool fromFile = call.has(u"file"_s);
+    const bool fromCode = call.has(u"code"_s) || call.ctx.globals.stdinText;
+    if (fromFile == fromCode)
+        return call.fail(ExitUsage, u"missing_argument"_s,
+                         tr("Give the extension's Luau with one of --file, --code or --stdin"));
+    QString source;
+    if (fromFile && call.ctx.serving)
+        // (An agent gives the code itself: a file's lines would come back in a syntax error.)
+        return call.fail(ExitUsage, u"bad_arguments"_s, tr("Give the extension's Luau as code"));
+    if (fromFile) {
+        const QString path = call.str(u"file"_s).trimmed();
+        const QString expanded = path.startsWith(u"~/"_s) ? QDir::homePath() + path.mid(1) : path;
+        QFile file(QFileInfo(expanded).absoluteFilePath());
+        if (!file.open(QIODevice::ReadOnly))
+            return call.fail(ExitNotFound, u"file_not_found"_s, tr("Cannot read %1").arg(path), {{u"file"_s, path}});
+        if (file.size() > 512 * 1024)
+            return call.fail(ExitUsage, u"too_large"_s, tr("An extension is at most 512 KB of Luau"));
+        source = QString::fromUtf8(file.readAll());
+    } else {
+        source = call.text(u"code"_s);
+    }
+    if (source.trimmed().isEmpty())
+        return call.fail(ExitUsage, u"missing_argument"_s, tr("The extension's Luau is empty"));
+    QJsonObject params{{u"id"_s, call.str(u"id"_s).trimmed()}, {u"source"_s, source}};
+    copyGiven(call, params, {u"title"_s, u"permissions"_s});
+    return luauResult(call, u"load"_s, params,
+                      QT_TRANSLATE_NOOP("brulion::cli", "The live extension does not load: %1"));
+}
+
+Result appUnload(Call &call)
+{
+    return appResult(call, u"unload"_s, {{u"id"_s, call.str(u"id"_s).trimmed()}});
+}
+
+Result appReload(Call &call)
+{
+    return appResult(call, u"reload"_s, {});
+}
+
+Result appConsole(Call &call)
+{
+    QJsonObject params;
+    if (call.has(u"since"_s))
+        params.insert(u"since"_s, std::max(0, call.integer(u"since"_s, 0)));
+    if (call.has(u"limit"_s))
+        params.insert(u"limit"_s, std::clamp(call.integer(u"limit"_s, 200), 1, 1000));
+    return appResult(call, u"console"_s, params);
+}
+
+Result appSettings(Call &call)
+{
+    return appResult(call, u"settings"_s, {});
+}
+
+Result appSet(Call &call)
+{
+    const auto value = jsonWord(call.str(u"value"_s));
+    if (!value)
+        return call.fail(ExitUsage, u"missing_argument"_s, tr("set needs a value (JSON; a bare word is a string)"));
+    return appResult(call, u"set"_s, {{u"key"_s, call.str(u"key"_s).trimmed()}, {u"value"_s, *value}});
+}
+
+Result appTheme(Call &call)
+{
+    QJsonObject params;
+    const QString raw = call.text(u"tokens"_s).trimmed();
+    if (!raw.isEmpty()) {
+        QJsonParseError error;
+        const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &error);
+        if (error.error != QJsonParseError::NoError || !doc.isObject())
+            return call.fail(
+                    ExitUsage, u"bad_tokens"_s,
+                    tr("The tokens are a JSON object ({\"accent\": \"#3a7\", \"dark\": {\"bg\": \"#0b0d10\"}})"));
+        // Checked here as the app checks them (the same catalog: app theme --catalog).
+        extensions::ThemeLayer layer;
+        QString why;
+        if (!extensions::themeLayerFrom(doc.object().toVariantMap(), &layer, &why))
+            return call.fail(ExitUsage, u"bad_tokens"_s, why);
+        if (call.flag(u"clear"_s))
+            return call.fail(ExitUsage, u"bad_arguments"_s, tr("Give tokens or --clear, not both"));
+        params.insert(u"tokens"_s, doc.object());
+    }
+    if (call.flag(u"clear"_s))
+        params.insert(u"clear"_s, true);
+    if (call.flag(u"catalog"_s))
+        params.insert(u"catalog"_s, true);
+    return appResult(call, u"theme"_s, params);
+}
+
+Result appContributions(Call &call)
+{
+    QJsonObject params;
+    if (const QString slot = call.str(u"slot"_s).trimmed(); !slot.isEmpty()) {
+        if (!extensions::isContributionSlot(slot))
+            return call.fail(ExitUsage, u"bad_slot"_s, tr("Unknown slot %1").arg(slot),
+                             {{u"slots"_s, QJsonArray::fromStringList(extensions::contributionSlots())}});
+        params.insert(u"slot"_s, slot);
+    }
+    return appResult(call, u"contributions"_s, params);
+}
+
+Result appInspect(Call &call)
+{
+    QJsonObject params;
+    if (const QString handle = call.str(u"handle"_s).trimmed(); !handle.isEmpty())
+        params.insert(u"handle"_s, handle);
+    if (call.has(u"depth"_s))
+        params.insert(u"depth"_s, std::clamp(call.integer(u"depth"_s, 3), 0, 8));
+    if (call.flag(u"properties"_s))
+        params.insert(u"properties"_s, true);
+    if (call.has(u"limit"_s))
+        params.insert(u"limit"_s, std::clamp(call.integer(u"limit"_s, 500), 1, 2000));
+    return appResult(call, u"inspect"_s, params);
+}
+
+Result appSetProperty(Call &call)
+{
+    const auto value = jsonWord(call.str(u"value"_s));
+    if (!value)
+        return call.fail(ExitUsage, u"missing_argument"_s,
+                         tr("set-property needs a value (JSON; a bare word is a string)"));
+    return appResult(call, u"setProperty"_s,
+                     {{u"handle"_s, call.str(u"handle"_s).trimmed()},
+                      {u"name"_s, call.str(u"name"_s).trimmed()},
+                      {u"value"_s, *value}});
+}
+
+Result appEvents(Call &call)
+{
+    QJsonObject params;
+    if (call.has(u"since"_s))
+        params.insert(u"since"_s, std::max(0, call.integer(u"since"_s, 0)));
+    const int wait = std::clamp(call.integer(u"wait"_s, 0), 0, 30000);
+    if (wait > 0)
+        params.insert(u"wait"_s, wait);
+    return appResult(call, u"events"_s, params, wait + 15000);
+}
+
+Result appChanges(Call &call)
+{
+    return appResult(call, u"changes"_s, {});
+}
+
+Result appRevert(Call &call)
+{
+    QJsonObject params;
+    copyGiven(call, params, {u"who"_s});
+    return appResult(call, u"revert"_s, params);
 }
 
 Command make(const QString &id, const char *summary, Handler run, QList<Arg> args, bool appControl = true)
@@ -676,6 +895,201 @@ void addAppCommands(QList<Command> &out)
                                        "must all hold."));
     out.append(c);
     c = make(u"app.quit"_s, QT_TRANSLATE_NOOP("brulion::cli", "Quit the running app"), appQuit, {});
+    c.writes = true;
+    out.append(c);
+
+    // Live changes of the running app (docs/CLI.md "Live changes"): for this run only, each one
+    // noted for the user (the top bar's live indicator) and undone by `app revert`.
+    c = make(u"app.eval"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Evaluate Luau inside the running app, as its Luau console does: the value and what it "
+                               "printed"),
+             appEval,
+             {stdinable(positional(u"code"_s, ArgType::Text,
+                                   QT_TRANSLATE_NOOP("brulion::cli",
+                                                     "Luau: an expression gives its value (b.app.state(), #b.pages()), "
+                                                     "statements run"),
+                                   true, true)),
+              option(u"extension"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli",
+                                       "Run it in the environment of this running extension (its globals) instead of "
+                                       "the console's"))});
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "The code runs in the app with the notebook's b and every permission (b.app changes the app at once: "
+            "settings, theme, UI items; b.write changes notes). Its value comes back as plain data, with "
+            "`printed` (print, b.log). It cannot wait for a question or b.ai. Exit 6 extension_error when the code "
+            "fails (the error, its line and traceback in the details)."));
+    c.writes = true;
+    out.append(c);
+    c = make(u"app.extensions"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The running app's extensions with their state, and the live ones loaded this run"),
+             appExtensions, {});
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "Each: id, title, kind (builtin, page or live), state (running, error, off, "
+                                       "approval, live …), message, line of an error, permissions, how many commands, "
+                                       "views and hooks it has. `live`: the extensions loaded with app load, who "
+                                       "sent them."));
+    out.append(c);
+    c = make(u"app.load"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Load Luau as a live extension of the running app for this run (no approval, nothing "
+                               "written to the notebook)"),
+             appLoad,
+             {positional(u"id"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "Its id: lower-case letters, digits, - and _")),
+              option(u"file"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli", "Its Luau from this file (the command line only, not MCP)")),
+              stdinable(option(u"code"_s, ArgType::Text,
+                               QT_TRANSLATE_NOOP("brulion::cli", "Its Luau as text (or --stdin)"))),
+              option(u"title"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Its name in the app")),
+              option(u"permissions"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli",
+                                       "What it may do besides reading: write, ai, app (comma-separated)"))});
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "The code is an extension page's Luau (b.command, b.view, b.on, b.app.contribute, b.app.theme …) and "
+            "runs at once. Loading the same id again replaces it; while it is loaded it replaces the page or "
+            "built-in extension of that id, which runs again after app unload. The user sees it among the live "
+            "changes and can undo it (app revert). Exit 6 extension_error when it does not load (the error and its "
+            "line in the details)."));
+    c.writes = true;
+    out.append(c);
+    c = make(u"app.unload"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Take a live extension out of the running app (the page or built-in of its id runs "
+                               "again)"),
+             appUnload,
+             {positional(u"id"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The live extension's id"))});
+    c.writes = true;
+    out.append(c);
+    c = make(u"app.reload"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "Load every extension of the running app again (live ones stay loaded)"),
+             appReload, {});
+    c.writes = true;
+    out.append(c);
+    c = make(u"app.console"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The Luau console's lines of the running app: evaluations, results, print and b.log of "
+                               "every extension, errors"),
+             appConsole,
+             {option(u"since"_s, ArgType::Int,
+                     QT_TRANSLATE_NOOP("brulion::cli", "Only the lines after this number (`next` of the last answer)")),
+              option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most N lines (200)"))});
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "Lines {n, kind (input, result, print, error, info), text, source}; without "
+                                       "--since the newest ones. Pass `next` as --since to read only what is new."));
+    out.append(c);
+    c = make(u"app.settings"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The running app's settings a client may read and change: key, kind, value, options"),
+             appSettings, {});
+    out.append(c);
+    c = make(u"app.set"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "Change a setting of the running app at once (app settings lists them)"),
+             appSet,
+             {positional(u"key"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "The setting (density, accent, editorFontSize …)")),
+              positional(u"value"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli",
+                                           "Its value as JSON (14, true, [\"journals\", …]); a bare word is a string"),
+                         true, true)});
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "The value is checked against the setting's kind (a choice one of its "
+                                       "options, a number within its range). The user can undo it (app revert)."));
+    c.writes = true;
+    out.append(c);
+    c = make(u"app.theme"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The running app's theme overrides: set this client's tokens, clear them, or list the "
+                               "tokens"),
+             appTheme,
+             {stdinable(option(u"tokens"_s, ArgType::Text,
+                               QT_TRANSLATE_NOOP("brulion::cli",
+                                                 "Tokens as JSON: {\"accent\": \"#3a7\", \"radius\": 4, \"dark\": "
+                                                 "{\"bg\": \"#0b0d10\"}} (or --stdin)"))),
+              flag(u"clear"_s, QT_TRANSLATE_NOOP("brulion::cli", "Take this client's tokens away")),
+              flag(u"catalog"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli", "Also every token that can be set, with its kind and range"))});
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "Colours are \"#rgb\", \"#rrggbb\" or \"#aarrggbb\"; `dark` and `light` hold tokens for one mode only. "
+            "New tokens replace this client's earlier ones, over the extensions' (b.app.theme). The answer has the "
+            "layers and the tokens in force in each mode. The user can undo it (app revert)."));
+    c.writes = true;
+    out.append(c);
+    out.append(make(u"app.contributions"_s,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "The items extensions put into the running app's UI: toolbar, statusbar, "
+                                      "sidebar, pageMenu, blockMenu, slash"),
+                    appContributions,
+                    {option(u"slot"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Only this slot's items"))}));
+    c = make(
+            u"app.inspect"_s,
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "The running app's window as a tree of items with handles, types, objectNames, texts "
+                              "and geometry"),
+            appInspect,
+            {positional(u"handle"_s, ArgType::String,
+                        QT_TRANSLATE_NOOP("brulion::cli", "Start at this item (a handle; default: the window)"), false),
+             option(u"depth"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "Levels of children (3, at most 8)")),
+             flag(u"properties"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli", "Also every property of each item that is plain data")),
+             option(u"limit"_s, ArgType::Int,
+                    QT_TRANSLATE_NOOP("brulion::cli", "At most N items (500, at most 2000)"))});
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "An item whose children are not listed (deeper than --depth) has childCount: "
+                                       "inspect its handle to go on. Colours are \"#aarrggbb\", enums their names; "
+                                       "a password field's text is never given."));
+    out.append(c);
+    c = make(u"app.set-property"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Write a property of an item of the running app's window (an experiment: it removes "
+                               "the property's binding)"),
+             appSetProperty,
+             {positional(u"handle"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "The item (a handle from app inspect or app find)")),
+              positional(u"name"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "The property (color, opacity, font.pixelSize …)")),
+              positional(u"value"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli",
+                                           "Its value as JSON (0.5, true, \"#ff0000\", {\"x\": 1, \"y\": 2}); a bare "
+                                           "word is a string"),
+                         true, true)});
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "The value written replaces the property's binding, so it no longer follows the theme or the state it "
+            "was bound to until the item is made again; app revert writes the old value back. Answers the value "
+            "before and after. For lasting changes use app theme, app set or a live extension."));
+    c.writes = true;
+    out.append(c);
+    c = make(u"app.events"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "What happened in the running app: routes shown, toasts, console lines, live changes, "
+                               "extensions and notes changed"),
+             appEvents,
+             {option(u"since"_s, ArgType::Int,
+                     QT_TRANSLATE_NOOP("brulion::cli", "Only events after this id (`next` of the last answer)")),
+              option(u"wait"_s, ArgType::Int,
+                     QT_TRANSLATE_NOOP("brulion::cli",
+                                       "Wait up to this many ms for a new event when there is none (at most 30000)"))});
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "The app keeps the last 500 events, each {id, type, at, …}; pass `next` as "
+                                       "--since with --wait to follow it."));
+    out.append(c);
+    out.append(make(u"app.changes"_s,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "The live changes of the running app not undone yet: who, what, before and "
+                                      "after"),
+                    appChanges, {}));
+    c = make(u"app.revert"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Undo the live changes of the running app (settings, theme, live extensions, "
+                               "properties), newest first"),
+             appRevert,
+             {option(u"who"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli", "Only this client's changes (default: everyone's)"))});
     c.writes = true;
     out.append(c);
 }

@@ -11,10 +11,18 @@
 // PNG of the window's size, where asked, relative paths, the runtime folder by default, a refused
 // path); scroll, long press, double click and drag; a page with a conflict (in state, never
 // idle until the user decides); the MCP server's app tools (--app-control), a screenshot as an
-// image; quit, after which nothing listens any more. The settings switch turns it off, in a
+// image; live changes (eval's value and prints, a live extension with a command — its toast — and a
+// toolbar item in extensions, contributions and the window, the theme's token in state.appearance,
+// a setting, the console's lines, inspect's tree and properties, set-property's before and after,
+// events long-polled until a route changes, changes by client, revert undoing all of it, a wrong
+// token refused); quit, after which nothing listens any more. The settings switch turns it off, in a
 // window where the page fits and in a low one (a finger scrolling over the switch never taps
-// it). Without a private runtime folder the app still starts, with neither socket in the shared
-// temp folder. The app's log must hold no QML TypeError, ReferenceError or binding loop.
+// it). An AI agent let change the app (a stand-in that answers `initialize`, started by Settings →
+// AI agents → Check): its tools get the grant's token in session/new's env, the socket stays for it
+// when the setting goes off — the command line without the token is refused, with it served as
+// the agent — and closes once the agent stops. Without a private runtime folder the app still
+// starts, with neither socket in the shared temp folder. The app's log must hold no QML TypeError, ReferenceError or
+// binding loop.
 #include "controlclient.h"
 #include "controlprotocol.h"
 #include "singleinstance.h"
@@ -35,6 +43,7 @@
 #include <QTest>
 #include <QtEndian>
 
+#include <csignal>
 #include <functional>
 #include <pwd.h>
 #include <sys/stat.h>
@@ -90,6 +99,7 @@ class TestRemoteControl : public QObject {
     QString m_vault;
     QString m_log;
     QProcess m_app;
+    QString m_toolsDir;
 
     QProcessEnvironment environment() const
     {
@@ -106,6 +116,10 @@ class TestRemoteControl : public QObject {
         env.insert(u"QML_IMPORT_PATH"_s, QStringLiteral(BRULION_QML_ROOT));
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
         env.remove(u"BRULION_VAULT"_s);
+        env.remove(u"BRULION_APP_TOKEN"_s);
+        env.remove(u"BRULION_APP_CLIENT"_s);
+        if (!m_toolsDir.isEmpty()) // (the app finds brulion-cli there for an agent's tools)
+            env.insert(u"PATH"_s, m_toolsDir + u':' + env.value(u"PATH"_s));
         return env;
     }
 
@@ -141,6 +155,29 @@ class TestRemoteControl : public QObject {
     {
         args.prepend(u"app"_s);
         return cli(args, workingDir);
+    }
+    /// `brulion-cli app <args…>` as the AI agent with a grant's token.
+    Run appAs(const QString &token, QStringList args)
+    {
+        args.prepend(u"app"_s);
+        QProcess p;
+        QProcessEnvironment env = environment();
+        env.insert(u"BRULION_APP_TOKEN"_s, token);
+        p.setProcessEnvironment(env);
+        p.start(QStringLiteral(BRULION_CLI), args);
+        Run r;
+        if (!p.waitForStarted(kCallMs))
+            return r;
+        p.closeWriteChannel();
+        if (!p.waitForFinished(kCallMs)) {
+            p.kill();
+            return r;
+        }
+        r.code = p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -2;
+        r.out = p.readAllStandardOutput();
+        r.err = p.readAllStandardError();
+        r.json = QJsonDocument::fromJson(r.out).object();
+        return r;
     }
     /// Repeat `app <args>` until `done` holds (true) or the time is up.
     bool until(const QStringList &args, const std::function<bool(const Run &)> &done, int timeoutMs,
@@ -702,9 +739,29 @@ private Q_SLOTS:
         QStringList names;
         for (const QJsonValue &t : reply.value(u"result"_s).toObject().value(u"tools"_s).toArray())
             names.append(t.toObject().value(u"name"_s).toString());
-        for (const QString &tool : {u"brulion_app_state"_s, u"brulion_app_click"_s, u"brulion_app_long_press"_s,
-                                    u"brulion_app_type"_s, u"brulion_app_screenshot"_s, u"brulion_app_wait"_s})
+        for (const QString &tool :
+             {u"brulion_app_state"_s, u"brulion_app_click"_s, u"brulion_app_long_press"_s, u"brulion_app_type"_s,
+              u"brulion_app_screenshot"_s, u"brulion_app_wait"_s, u"brulion_app_eval"_s, u"brulion_app_load"_s,
+              u"brulion_app_theme"_s, u"brulion_app_inspect"_s, u"brulion_app_events"_s, u"brulion_app_revert"_s})
             QVERIFY2(names.contains(tool), qPrintable(tool));
+        // Luau evaluated in the app through the tool.
+        reply = request(
+                QJsonDocument(QJsonObject{{u"jsonrpc"_s, u"2.0"_s},
+                                          {u"id"_s, 5},
+                                          {u"method"_s, u"tools/call"_s},
+                                          {u"params"_s,
+                                           QJsonObject{{u"name"_s, u"brulion_app_eval"_s},
+                                                       {u"arguments"_s, QJsonObject{{u"code"_s, u"return 1 + 2"_s}}}}}})
+                        .toJson(QJsonDocument::Compact));
+        QCOMPARE(reply.value(u"result"_s)
+                         .toObject()
+                         .value(u"structuredContent"_s)
+                         .toObject()
+                         .value(u"result"_s)
+                         .toObject()
+                         .value(u"value"_s)
+                         .toInt(),
+                 3);
         reply = request(
                 R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"brulion_app_state","arguments":{}}})");
         QJsonObject result = reply.value(u"result"_s).toObject();
@@ -726,6 +783,192 @@ private Q_SLOTS:
                  QSize(1280, 800));
         p.closeWriteChannel();
         QVERIFY(p.waitForFinished(kCallMs));
+    }
+
+    // Live changes (docs/CLI.md "Live changes") of the running app, and their revert.
+    void liveChanges()
+    {
+        // The settings and the theme before (revert brings them back).
+        Run r = app({u"state"_s});
+        QCOMPARE(r.code, 0);
+        const QJsonObject appearance = r.result().value(u"appearance"_s).toObject();
+        const QString density = appearance.value(u"density"_s).toString();
+        const QString accent = appearance.value(u"accentColor"_s).toString();
+        const QString otherDensity = density == u"compact" ? u"comfortable"_s : u"compact"_s;
+        QVERIFY(accent != u"#33aa77"_s);
+
+        // eval: a value, what it printed; a failure with its line.
+        r = app({u"eval"_s, u"print(\"zażółć\"); return 40 + 2"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"value"_s).toInt(), 42);
+        QCOMPARE(r.result().value(u"printed"_s).toArray(), QJsonArray{u"zażółć"_s});
+        r = app({u"eval"_s, u"local x = nil\nreturn x.y"_s});
+        QCOMPARE(r.code, 6);
+        QCOMPARE(r.errorCode(), u"extension_error"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"line"_s).toInt(), 2);
+        r = app({u"console"_s, u"--since"_s, u"0"_s});
+        QCOMPARE(r.code, 0);
+        bool sawInput = false;
+        for (const QJsonValue &line : r.result().value(u"lines"_s).toArray())
+            sawInput = sawInput || line.toObject().value(u"text"_s).toString().contains(u"40 + 2"_s);
+        QVERIFY(sawInput);
+        const int consoleNext = r.result().value(u"next"_s).toInt();
+        QVERIFY(consoleNext > 0);
+        QCOMPARE(app({u"console"_s, u"--since"_s, QString::number(consoleNext)})
+                         .result()
+                         .value(u"lines"_s)
+                         .toArray()
+                         .size(),
+                 0);
+
+        // A live extension with a command and a toolbar item, from a client with a name.
+        brulion::ipc::ControlClient agent(controlKey());
+        agent.setIdentity(QString(), u"Agent testowy"_s);
+        QVERIFY(agent.connect());
+        const QString source =
+                u"b.command(\"hej\", function() return \"Hej z żywego kodu\" end, { label = \"Powitanie\" })\n"
+                u"b.app.contribute(\"toolbar\", { id = \"hej\", label = \"Powitanie\", icon = \"sparkles\", "
+                u"command = \"hej\" })\n"_s;
+        brulion::ipc::ControlClient::Response response = agent.call(
+                u"load"_s,
+                {{u"id"_s, u"zywy"_s}, {u"source"_s, source}, {u"title"_s, u"Żywy"_s}, {u"permissions"_s, u"app"_s}},
+                kCallMs);
+        QVERIFY2(response.ok && response.result.toObject().value(u"ok"_s).toBool(),
+                 QJsonDocument(response.result.toObject()).toJson().constData());
+        QCOMPARE(response.result.toObject().value(u"commands"_s).toArray().size(), 1);
+        r = app({u"extensions"_s});
+        QCOMPARE(r.code, 0);
+        const QJsonArray live = r.result().value(u"live"_s).toArray();
+        QCOMPARE(live.size(), 1);
+        QCOMPARE(live.first().toObject().value(u"id"_s).toString(), u"zywy"_s);
+        QCOMPARE(live.first().toObject().value(u"who"_s).toString(), u"live:Agent testowy"_s);
+        bool listed = false;
+        for (const QJsonValue &row : r.result().value(u"extensions"_s).toArray())
+            listed = listed
+                     || (row.toObject().value(u"id"_s) == u"zywy"_s && row.toObject().value(u"kind"_s) == u"live"_s);
+        QVERIFY(listed);
+        r = app({u"contributions"_s, u"--slot"_s, u"toolbar"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"contributions"_s).toArray().first().toObject().value(u"extension"_s).toString(),
+                 u"zywy"_s);
+        r = app({u"wait"_s, u"--text"_s, u"Powitanie"_s, u"--exact"_s, u"--timeout"_s,
+                 QString::number(20000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe())); // the item in the top bar
+        r = app({u"command"_s, u"ext.zywy.hej"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [](const Run &x) {
+                             for (const QJsonValue &t : x.result().value(u"lastToasts"_s).toArray())
+                                 if (t.toObject().value(u"text"_s).toString() == u"Hej z żywego kodu")
+                                     return true;
+                             return false;
+                         },
+                         20000 * kSlowdown, &r),
+                 qPrintable(r.describe()));
+
+        // The theme's token and a setting, seen in what the app shows.
+        r = app({u"theme"_s, u"--tokens"_s, u"{\"accent\": \"#3a7\"}"_s, u"--catalog"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"light"_s).toObject().value(u"accent"_s).toString(), u"#33aa77"_s);
+        QVERIFY(r.result().value(u"catalog"_s).toArray().size() > 20);
+        r = app({u"theme"_s, u"--tokens"_s, u"{\"akcent\": \"#3a7\"}"_s});
+        QCOMPARE(r.code, 2);
+        r = app({u"set"_s, u"density"_s, otherDensity});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"value"_s).toString(), otherDensity);
+        QCOMPARE(app({u"set"_s, u"density"_s, u"ogromna"_s}).code, 2);
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [&otherDensity](const Run &x) {
+                             const QJsonObject a = x.result().value(u"appearance"_s).toObject();
+                             return a.value(u"accentColor"_s).toString() == u"#33aa77"
+                                    && a.value(u"density"_s) == otherDensity;
+                         },
+                         20000 * kSlowdown, &r),
+                 qPrintable(r.describe()));
+
+        // The item tree, an item's properties, one written.
+        r = app({u"inspect"_s, u"--depth"_s, u"2"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"items"_s).toInt() > 1);
+        QVERIFY(r.result().value(u"root"_s).toObject().value(u"handle"_s).toString().startsWith(u'h'));
+        r = app({u"find"_s, u"--object-name"_s, u"toastHost"_s, u"--include-hidden"_s});
+        const QString host = r.result().value(u"items"_s).toArray().first().toObject().value(u"handle"_s).toString();
+        QVERIFY(!host.isEmpty());
+        r = app({u"inspect"_s, host, u"--depth"_s, u"0"_s, u"--properties"_s});
+        QCOMPARE(r.code, 0);
+        const QJsonObject properties = r.result().value(u"root"_s).toObject().value(u"properties"_s).toObject();
+        QCOMPARE(properties.value(u"objectName"_s).toString(), u"toastHost"_s);
+        QCOMPARE(properties.value(u"opacity"_s).toDouble(), 1.0);
+        r = app({u"set-property"_s, host, u"opacity"_s, u"0.5"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"before"_s).toDouble(), 1.0);
+        QCOMPARE(r.result().value(u"after"_s).toDouble(), 0.5);
+        QCOMPARE(app({u"set-property"_s, host, u"nieistniejąca"_s, u"1"_s}).code, 3);
+        QCOMPARE(app({u"set-property"_s, host, u"opacity"_s, u"\"pół\""_s}).code, 2);
+        QCOMPARE(app({u"set-property"_s, host, u"password"_s, u"\"x\""_s}).code, 7); // (a secret by its name)
+
+        // Events: a request waits until the route changes.
+        QCOMPARE(app({u"navigate"_s, u"calendar"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--route"_s, u"calendar"_s}).code, 0);
+        r = app({u"events"_s});
+        QCOMPARE(r.code, 0);
+        const QString next = QString::number(r.result().value(u"next"_s).toInteger());
+        QProcess waiting;
+        waiting.setProcessEnvironment(environment());
+        waiting.start(QStringLiteral(BRULION_CLI),
+                                     {u"app"_s, u"events"_s, u"--since"_s, next, u"--wait"_s, u"30000"_s});
+        QVERIFY(waiting.waitForStarted(kCallMs));
+        QCOMPARE(app({u"navigate"_s, u"tasks"_s}).code, 0);
+        QVERIFY(waiting.waitForFinished(kCallMs));
+        const QJsonObject events =
+                QJsonDocument::fromJson(waiting.readAllStandardOutput()).object().value(u"result"_s).toObject();
+        bool routed = false;
+        for (const QJsonValue &e : events.value(u"events"_s).toArray()) {
+            const QJsonObject o = e.toObject();
+            QVERIFY(o.value(u"id"_s).toInteger() > next.toLongLong());
+            routed = routed
+                     || (o.value(u"type"_s) == u"route"_s
+                         && o.value(u"route"_s).toObject().value(u"view"_s) == u"tasks"_s);
+        }
+        QVERIFY2(routed, QJsonDocument(events).toJson().constData());
+
+        // What changed, by whom; revert undoes it all.
+        r = app({u"changes"_s});
+        QCOMPARE(r.code, 0);
+        QStringList kinds;
+        for (const QJsonValue &c : r.result().value(u"changes"_s).toArray())
+            kinds.append(c.toObject().value(u"kind"_s).toString() + u':' + c.toObject().value(u"who"_s).toString());
+        QVERIFY2(kinds.contains(u"extension:Agent testowy"_s) && kinds.contains(u"theme:agent"_s)
+                         && kinds.contains(u"setting:agent"_s) && kinds.contains(u"property:agent"_s),
+                 qPrintable(kinds.join(u", "_s)));
+        r = app({u"revert"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"undone"_s).toInt(), kinds.size());
+        QCOMPARE(app({u"changes"_s}).result().value(u"changes"_s).toArray().size(), 0);
+        QCOMPARE(app({u"extensions"_s}).result().value(u"live"_s).toArray().size(), 0);
+        r = app({u"wait"_s, u"--text"_s, u"Powitanie"_s, u"--exact"_s, u"--gone"_s, u"--timeout"_s,
+                 QString::number(20000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [&density, &accent](const Run &x) {
+                             const QJsonObject a = x.result().value(u"appearance"_s).toObject();
+                             return a.value(u"accentColor"_s).toString() == accent && a.value(u"density"_s) == density;
+                         },
+                         20000 * kSlowdown, &r),
+                 qPrintable(r.describe()));
+        r = app({u"inspect"_s, host, u"--depth"_s, u"0"_s, u"--properties"_s});
+        QCOMPARE(
+                r.result().value(u"root"_s).toObject().value(u"properties"_s).toObject().value(u"opacity"_s).toDouble(),
+                1.0);
+
+        // A token that is no grant: refused, even with the remote control on.
+        brulion::ipc::ControlClient stranger(controlKey());
+        stranger.setIdentity(QString(64, u'0'), u"Obcy"_s);
+        QVERIFY(stranger.connect());
+        QCOMPARE(stranger.call(u"state"_s).code, u"unauthorized"_s);
     }
 
     void quit()
@@ -816,6 +1059,105 @@ private Q_SLOTS:
         };
         QTRY_COMPARE_WITH_TIMEOUT(stored(), u"false"_s, 10000 * kSlowdown);
         stopApp();
+    }
+
+    // An AI agent the user let change the app ("Let it change the app while it runs"): a grant of
+    // its own, the socket there for it alone once the setting is off, gone when the agent stops.
+    void agentGrant()
+    {
+        // The agent: answers initialize, then keeps what it is sent (session/new: its tools' env).
+        const QString agentLog = m_tmp.filePath(u"agent.log"_s);
+        const QString script = m_tmp.filePath(u"agent.sh"_s);
+        writeFile(script, QByteArray("#!/bin/sh\n"
+                                     "echo \"pid $$\" >> '")
+                                  + agentLog.toUtf8()
+                                  + "'\n"
+                                    "IFS= read -r line\n"
+                                    "id=$(printf '%s' \"$line\" | sed -n 's/^{\"id\":\\([0-9][0-9]*\\),.*/\\1/p')\n"
+                                    "printf '{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"protocolVersion\":1,"
+                                    "\"agentCapabilities\":{}}}\\n' \"$id\"\n"
+                                    "exec cat >> '"
+                                  + agentLog.toUtf8() + "'\n");
+        QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        m_toolsDir = QFileInfo(QStringLiteral(BRULION_CLI)).absolutePath();
+        {
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.setValue(u"devtools/remoteControl"_s, true);
+            settings.setValue(u"ai/agents"_s,
+                              QString::fromUtf8(QJsonDocument(QJsonArray{QJsonObject{
+                                                                      {u"id"_s, u"zywy"_s},
+                                                                      {u"name"_s, u"Agent na żywo"_s},
+                                                                      {u"command"_s, QString(u"\""_s + script + u'"')},
+                                                                      {u"tools"_s, true},
+                                                                      {u"app"_s, true}}})
+                                                        .toJson(QJsonDocument::Compact)));
+        }
+        startApp(false);
+        Run r;
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [](const Run &x) { return x.code == 0 && x.result().value(u"ready"_s).toBool(); }, kStartMs,
+                         &r),
+                 qPrintable(r.describe()));
+        // Check starts the agent: a session with Brulion's tools, the live ones with a grant.
+        QCOMPARE(app({u"navigate"_s, uR"({"view":"settings","section":"extensions"})"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--object-name"_s, u"acpAgentCheck"_s}).code, 0);
+        r = app({u"click"_s, u"--object-name"_s, u"acpAgentCheck"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QString token;
+        qint64 pid = 0;
+        QJsonObject server;
+        const auto readLog = [&] {
+            for (const QByteArray &line : readFile(agentLog).split('\n')) {
+                if (line.startsWith("pid "))
+                    pid = line.mid(4).trimmed().toLongLong();
+                const QJsonObject o = QJsonDocument::fromJson(line).object();
+                if (o.value(u"method"_s).toString() != u"session/new")
+                    continue;
+                server = o.value(u"params"_s).toObject().value(u"mcpServers"_s).toArray().at(0).toObject();
+                for (const QJsonValue &v : server.value(u"env"_s).toArray()) {
+                    if (v.toObject().value(u"name"_s).toString() == u"BRULION_APP_TOKEN")
+                        token = v.toObject().value(u"value"_s).toString();
+                }
+            }
+            return !token.isEmpty() && pid > 0;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(readLog(), 30000 * kSlowdown);
+        QVERIFY(server.value(u"args"_s).toArray().contains(u"--app-control"_s));
+        QVERIFY(!QJsonDocument(server.value(u"args"_s).toArray()).toJson().contains(token.toUtf8()));
+        QCOMPARE(QFileInfo(server.value(u"command"_s).toString()).fileName(), u"brulion-cli"_s);
+        QCOMPARE(token.size(), 64);
+
+        // The setting off: the socket stays for the agent alone.
+        QCOMPARE(app({u"navigate"_s, uR"({"view":"settings","section":"app"})"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--object-name"_s, u"settingsRemoteControl"_s}).code, 0);
+        app({u"click"_s, u"--object-name"_s, u"settingsRemoteControl"_s}); // (its own connection closes)
+        QVERIFY(until(
+                {u"state"_s}, [](const Run &x) { return x.errorCode() == u"remote_control_off"; }, 10000 * kSlowdown,
+                &r));
+        QVERIFY(QFileInfo::exists(controlKey()));
+        r = appAs(token, {u"eval"_s, u"return 6 * 7"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"value"_s).toInt(), 42);
+        r = appAs(token, {u"set"_s, u"reducedMotion"_s, u"true"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        r = appAs(token, {u"changes"_s});
+        QCOMPARE(r.result().value(u"changes"_s).toArray().last().toObject().value(u"who"_s).toString(),
+                 u"Agent na żywo"_s);
+        QCOMPARE(appAs(QString(64, u'1'), {u"state"_s}).errorCode(), u"unauthorized"_s);
+        r = appAs(token, {u"revert"_s});
+        QCOMPARE(r.result().value(u"undone"_s).toInt(), 1);
+
+        // The agent stops: its grant ends, nothing listens any more.
+        QVERIFY(pid > 0);
+        ::kill(pid_t(pid), SIGTERM);
+        QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(controlKey()), 20000 * kSlowdown);
+        QCOMPARE(appAs(token, {u"state"_s}).code, 5);
+        stopApp();
+        m_toolsDir.clear();
+        QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+        settings.remove(u"ai/agents"_s);
+        settings.setValue(u"devtools/remoteControl"_s, false);
     }
 
     // No private runtime folder ($XDG_RUNTIME_DIR unset, Qt's <temp>/runtime-<user> not to be

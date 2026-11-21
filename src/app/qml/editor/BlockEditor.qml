@@ -1748,13 +1748,27 @@ FocusScope {
         case "complete":
             completionLater.restart()
             break
+        case "extension":
+            runSlashItem(row, command.extension(), command.itemId())
+            break
         }
+    }
+    /// An extension's slash item that runs something (PageController.applySlashContribution, the
+    /// typed "/…" gone): on the block as saved, so its command reads the line as shown (ctx.block).
+    function runSlashItem(row: int, extension: string, id: string): void {
+        if (!controller)
+            return
+        const line = controller.savedLineAt(row)
+        const path = controller.path + ""
+        AppScripting.activate("slash", extension, id, path, line)
     }
     /// A slash command's or completion's result (PageController.applySlashCommand / applyCompletion).
     MapHolder {
         id: command
         function action(): string { return command.map.action === undefined ? "" : command.map.action }
         function cursor(): int { return command.map.cursor === undefined ? -1 : command.map.cursor }
+        function extension(): string { return command.map.extension === undefined ? "" : command.map.extension }
+        function itemId(): string { return command.map.itemId === undefined ? "" : command.map.itemId }
     }
     Later {
         id: completionLater
@@ -3191,7 +3205,14 @@ FocusScope {
         now: DatesHelper.fixedNow
         currentPath: editor.controller ? editor.controller.path : ""
         limit: 12
+        // The extensions' items of the `/` menu (b.app.contribute("slash", …)), live.
+        extensionItems: editor.slashKey !== "" ? Workspace.extensions.contributions("slash", editor.slashKey.length)
+                                               : editor.noSlashItems
     }
+    readonly property list<var> noSlashItems: []
+    /// The slash items as text (WorkspaceExtensions.contributionsKey): asked again only when they change.
+    readonly property string slashKey: Workspace.extensions !== null
+                                       ? Workspace.extensions.contributionsKey("slash", Workspace.extensions.appRevision) : ""
 
     /// The autocomplete popup (tests read it), created the first time there is something to
     /// complete — like the dialogs and the touch toolbar, not with every editor.

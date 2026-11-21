@@ -795,11 +795,15 @@ void Client::startTurn(const QString &key)
 QJsonObject Client::sessionParams(const TurnInput &input) const
 {
     QJsonArray servers;
-    for (const McpServer &m : input.mcpServers)
+    for (const McpServer &m : input.mcpServers) {
+        QJsonArray env;
+        for (const auto &[name, value] : m.env)
+            env.append(QJsonObject{{u"name"_s, name}, {u"value"_s, value}});
         servers.append(QJsonObject{{u"name"_s, m.name},
                                    {u"command"_s, m.command},
                                    {u"args"_s, QJsonArray::fromStringList(m.args)},
-                                   {u"env"_s, QJsonArray()}});
+                                   {u"env"_s, env}});
+    }
     return QJsonObject{{u"cwd"_s, input.cwd}, {u"mcpServers"_s, servers}};
 }
 

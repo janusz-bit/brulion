@@ -17,7 +17,10 @@
 // a code of its acp pair, a conversation answered there (its folder as the agent's cwd and in the
 // context, that computer's files read), unpaired there (the turn says so); the settings' remote
 // agents (their token in the app's secrets, never in the settings; paired again: the same agent);
-// the words for a stream's ends and a pairing's errors.
+// the words for a stream's ends and a pairing's errors. "Let it change the app": its tools get
+// --app-control and a grant's token in their environment only (BRULION_APP_TOKEN, the agent's name
+// as BRULION_APP_CLIENT), one grant per process, the context says so; the grant ends when the
+// process stops (its settings changed, it died), and without a grant provider the tools are plain.
 #include "appsettings.h"
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -32,6 +35,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -169,6 +173,116 @@ private Q_SLOTS:
         const QJsonArray next = promptOf(logged(u"session/prompt"_s).last());
         QCOMPARE(next.size(), 1);
         QCOMPARE(next.first().toObject().value(u"text"_s).toString(), u"A pojutrze?"_s);
+    }
+
+    /// Brulion's tools found (a stand-in brulion-cli on PATH where the real one is not): the fake
+    /// agent never starts them.
+    bool toolsThere()
+    {
+        if (!WorkspaceAgents::toolsProgram().isEmpty())
+            return true;
+#ifdef Q_OS_WIN
+        return false;
+#else
+        const QString bin = m_tmp.filePath(u"bin"_s);
+        if (!writeRaw(bin + u"/brulion-cli"_s, "#!/bin/sh\nexit 0\n"))
+            return false;
+        QFile::setPermissions(bin + u"/brulion-cli"_s,
+                              QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        qputenv("PATH", (bin + u':' + qEnvironmentVariable("PATH")).toLocal8Bit());
+        return !WorkspaceAgents::toolsProgram().isEmpty();
+#endif
+    }
+
+    void appAccess()
+    {
+        if (!toolsThere())
+            QSKIP("no brulion-cli to name");
+        auto ws = open({});
+        WorkspaceChats *chats = ws->chats();
+        QStringList granted;
+        QStringList revoked;
+        chats->agents()->setAppGrants(
+                [&granted](const QString &client) {
+                    granted << client;
+                    return u"token-%1"_s.arg(granted.size());
+                },
+                [&revoked](const QString &token) { revoked << token; });
+        // (Before the lists the functions use are gone, whatever way the test ends.)
+        auto unset = qScopeGuard([chats] { chats->agents()->setAppGrants({}, {}); });
+        AgentConfig agent = fake(true);
+        agent.appAccess = true;
+        chats->setAgents({agent});
+        const auto serverOf = [this](qsizetype session) {
+            return logged(u"session/new"_s)
+                    .at(session)
+                    .value(u"params"_s)
+                    .toObject()
+                    .value(u"mcpServers"_s)
+                    .toArray()
+                    .at(0)
+                    .toObject();
+        };
+        const QString path = chats->send(QString(), u"Zmień motyw na zielony"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 20000);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QCOMPARE(granted, QStringList{u"Fałszywy"_s});
+        QJsonObject server = serverOf(0);
+        const QJsonArray args = server.value(u"args"_s).toArray();
+        QCOMPARE(args.first().toString(), u"mcp"_s);
+        QCOMPARE(args.last().toString(), u"--app-control"_s);
+        QVERIFY(!QJsonDocument(args).toJson().contains("token-1")); // (others can list a program's arguments)
+        QCOMPARE(server.value(u"env"_s).toArray(),
+                 (QJsonArray{QJsonObject{{u"name"_s, u"BRULION_APP_TOKEN"_s}, {u"value"_s, u"token-1"_s}},
+                             QJsonObject{{u"name"_s, u"BRULION_APP_CLIENT"_s}, {u"value"_s, u"Fałszywy"_s}}}));
+        const QString context =
+                promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString();
+        QVERIFY2(context.contains(u"brulion_app_eval"_s) && context.contains(u"undo"_s), qPrintable(context));
+        QVERIFY(revoked.isEmpty());
+
+        // Another conversation: the same process, the same grant.
+        const QString second = chats->send(QString(), u"A teraz czcionkę"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(second)->running(), 20000);
+        QCOMPARE(granted.size(), 1);
+        QCOMPARE(serverOf(1).value(u"env"_s).toArray().at(0).toObject().value(u"value"_s).toString(), u"token-1"_s);
+
+        // The agent dies: its grant ends; the next turn starts it with a new one.
+        QCOMPARE(chats->send(path, u"To koniec"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 20000);
+        QTRY_COMPARE(revoked, QStringList{u"token-1"_s});
+        QCOMPARE(chats->send(path, u"Jesteś?"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 20000);
+        QCOMPARE(granted.size(), 2);
+
+        // Not allowed any more (another program): stopped, its grant ended, the tools plain.
+        agent.appAccess = false;
+        chats->setAgents({agent});
+        QCOMPARE(revoked, (QStringList{u"token-1"_s, u"token-2"_s}));
+        const QString third = chats->send(QString(), u"Bez aplikacji"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(third)->running(), 20000);
+        QCOMPARE(granted.size(), 2);
+        server = serverOf(logged(u"session/new"_s).size() - 1);
+        QVERIFY(!server.value(u"args"_s).toArray().contains(u"--app-control"_s));
+        QCOMPARE(server.value(u"env"_s).toArray(), QJsonArray());
+        QVERIFY(!promptOf(logged(u"session/prompt"_s).last())
+                         .at(0)
+                         .toObject()
+                         .value(u"text"_s)
+                         .toString()
+                         .contains(u"brulion_app_"_s));
+
+        // Without a grant provider (no remote control here): plain tools, whatever the setting.
+        chats->agents()->setAppGrants({}, {});
+        agent.appAccess = true;
+        chats->setAgents({agent});
+        const QString fourth = chats->send(QString(), u"Bez pozwolenia"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(fourth)->running(), 20000);
+        QVERIFY(!serverOf(logged(u"session/new"_s).size() - 1).value(u"args"_s).toArray().contains(u"--app-control"_s));
+        // The notebook closes: nothing more to revoke (no grant was made).
+        unset.dismiss(); // (it would reach the workspace after it is gone)
+        chats->agents()->setAppGrants({}, {});
+        ws.reset();
+        QCOMPARE(revoked.size(), 2);
     }
 
     void tools()
@@ -955,6 +1069,21 @@ private Q_SLOTS:
         settings.setAcpAgentMemory(u"agent"_s, QJsonObject{{u"model"_s, u"opus"_s}}, known);
         QCOMPARE(settings.acpAgents().last().options.value(u"model"_s).toString(), u"opus"_s);
         QCOMPARE(settings.acpAgents().last().known, known);
+        // "Let it change the app": kept as `app`, in the row and its summary.
+        QVERIFY(!settings.acpAgents().last().appAccess);
+        settings.setAcpAgentTools(u"agent"_s, true);
+        settings.setAcpAgentApp(u"agent"_s, true);
+        QVERIFY(settings.acpAgents().last().appAccess);
+        QVERIFY(settings.acpAgentRows().last().toMap().value(u"app"_s).toBool());
+        QVERIFY(settings.acpAgentRows()
+                        .last()
+                        .toMap()
+                        .value(u"summary"_s)
+                        .toString()
+                        .endsWith(u" · may change the app"_s));
+        settings.setAcpAgentApp(u"agent"_s, false);
+        QVERIFY(!settings.acpAgents().last().appAccess);
+        QVERIFY(!settings.acpAgentRows().last().toMap().value(u"app"_s).toBool());
     }
 };
 

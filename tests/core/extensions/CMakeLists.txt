@@ -2,7 +2,7 @@
 # notebook host (and its dry run), the built-in gym, habits, flashcards and AI assistant extensions, extensions written as pages of
 # the notebook, the documentation's Luau examples and API references, and ten sample extensions at
 # work on a notebook of their own (samples/).
-foreach(_t engine blockedit gym assistant pages host api habits flashcards docs samples macros events shared hostile types)
+foreach(_t engine blockedit gym assistant pages host api habits flashcards docs samples macros events shared hostile types app)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tst_extensions_${_t}.cpp)
         brulion_add_test(tst_extensions_${_t} SOURCES tst_extensions_${_t}.cpp LIBS brulion_core_extensions)
     endif()

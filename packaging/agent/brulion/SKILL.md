@@ -117,6 +117,30 @@ palette commands, views and hooks through the API table `b`. You can write one f
    `state: approval` until then, and every change you make needs approving again. Never try to
    approve it yourself; say what the extension does and which permissions it asks for.
 
+## Changing the running app (live)
+
+The app itself is scriptable: its theme, device settings, toolbar, status bar, sidebar, menus and
+`/` menu (`b.app`, `extension docs "The app"`). With the running app reachable (remote control on,
+or you are an AI agent of Brulion's chat the user let "change the app"), change it **live** — no
+page, no approval wait — look at the result, and go on:
+
+| To … | Command (MCP `brulion_app_…`) |
+|---|---|
+| run Luau in the app's own engine | `app eval 'b.app.state()'`, `app eval 'b.app.set("density", "compact")'` |
+| load an extension for this run (it shadows a page of the same id) | `app load my-tool --file tool.luau --title "My tool" --permissions app,write` |
+| unload it | `app unload my-tool` |
+| see extensions, their errors, what they print | `app extensions`, `app console --since N` |
+| change colours, corners, fonts | `app theme --tokens '{"accent":"#1f8a80","dark":{"bg":"#101418"}}'` (`--catalog` lists the tokens) |
+| change a device setting | `app settings`, `app set editorFontSize 18` |
+| read the window's items and properties | `app inspect --depth 4 --properties` |
+| see and undo your changes | `app changes`, `app revert` |
+
+- Everything you change live is shown to the user (the top bar's **Live** menu, the console's
+  lines) and undone with one click: change what they asked for, say what you changed.
+- Live code is gone when the app quits. To keep an extension, write its page (`extension write`):
+  that one waits for the user's approval as always.
+- `app screenshot` after a change shows it; `app events --wait 10000` follows what the user does.
+
 Luau notes: strings are UTF-8 bytes (`utf8.len`, `b.fold`, `b.sorted` for Polish text); dates are
 `"YYYY-MM-DD"` text; a command returns its message; a view returns `b.ui` nodes; each call has 2 s.
 

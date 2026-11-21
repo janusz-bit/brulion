@@ -140,6 +140,30 @@ public:
     Q_INVOKABLE QString colorText(double r, double g, double b, double a) const;
 };
 
+/// The theme's overrides in force (docs/EXTENSIONS.md "The app (`b.app`)": extensions' b.app.theme
+/// and live clients', merged by the app's AppScripting): tokens by Theme.qml's names, for each
+/// mode — colours as "#rrggbb" / "#aarrggbb", sizes as numbers, fonts as family names. One per
+/// process (instance()); every ThemeColors follows it, and Theme.qml's tokens read it through
+/// ThemeColors.overrides (pickText(), pickNumber()). Empty by default: the theme is exactly the palette's.
+class ThemeOverrides : public QObject {
+    Q_OBJECT
+public:
+    static ThemeOverrides *instance();
+    /// The tokens of each mode (an empty map: none); changed() when they differ.
+    void setTokens(const QVariantMap &light, const QVariantMap &dark);
+    QVariantMap tokens(bool dark) const { return dark ? m_dark : m_light; }
+    int revision() const { return m_revision; }
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    using QObject::QObject;
+    QVariantMap m_light;
+    QVariantMap m_dark;
+    int m_revision = 0;
+};
+
 /// The colours of paletteMap() for the inputs below, as FINAL properties that compiled QML can read
 /// (Theme.qml: `readonly property ThemeColors palette: ThemeColors { dark: theme.dark; … }` and
 /// `readonly property color bg: palette.bg`). QML type `ThemeColors` (qmlforeign.h).
@@ -179,9 +203,20 @@ class ThemeColors : public QObject {
     Q_PROPERTY(QString chipReminderFg READ chipReminderFg NOTIFY colorsChanged FINAL)
     Q_PROPERTY(QString chipRecurrenceFg READ chipRecurrenceFg NOTIFY colorsChanged FINAL)
     Q_PROPERTY(QString scrimModal READ scrimModal NOTIFY colorsChanged FINAL)
+    /// ThemeOverrides' tokens of this mode (the palette's tokens above already have them): what
+    /// Theme.qml's other tokens pick from (its `_pick()`, pickText(), pickNumber()).
+    Q_PROPERTY(QVariantMap overrides READ overrides NOTIFY colorsChanged FINAL)
 
 public:
     explicit ThemeColors(QObject *parent = nullptr);
+
+    QVariantMap overrides() const { return m_overrides; }
+    /// A size of `overrides` (a number) when it holds `token`, else `fallback` (Theme.qml: the
+    /// token's own value). `overrides` is passed in so a
+    /// binding follows it.
+    Q_INVOKABLE int pickNumber(const QVariantMap &overrides, const QString &token, int fallback) const;
+    /// … and a font family ("" in the overrides: the fallback, the app's default).
+    Q_INVOKABLE QString pickText(const QVariantMap &overrides, const QString &token, const QString &fallback) const;
 
     bool dark() const { return m_dark; }
     void setDark(bool dark) { setInput(m_dark, dark); }
@@ -247,6 +282,7 @@ private:
     QString m_accentName;
     QString m_customAccent;
     QVariantMap m_map;
+    QVariantMap m_overrides;
 };
 
 } // namespace brulion::ui

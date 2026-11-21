@@ -11,16 +11,26 @@
 //
 // It never takes over a socket another live server holds (a second Brulion run with
 // --no-single-instance): listen() fails then. Library brulion_ipc (desktop).
+//
+// Grants (docs/CLI.md "Live changes"): addGrant(client) makes a token (256 random bits, hex) for a
+// program the app starts — an AI agent the user let change the app — which shows it in its
+// `hello {token}`; that connection is then the grant's client (ControlRequest::client, granted).
+// While the server is not open (setOpen(false): the remote control's setting off, the socket
+// there only for grants) every request of a connection that showed no grant's token is answered
+// `unauthorized`; a wrong token is refused also while it is open. revokeGrant() ends the grant
+// and drops the connections that showed it. Grants outlive close() and listen().
 #pragma once
 
 #include "controlprotocol.h"
 
+#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 class QLocalServer;
 class QLocalSocket;
@@ -66,17 +76,39 @@ public:
     QString socketPath() const;
     QString errorString() const { return m_error; }
 
+    /// Serve connections without a grant (true, the default) or only those that showed one's
+    /// token; turned off, the connections without one are dropped.
+    void setOpen(bool open);
+    bool isOpen() const { return m_open; }
+    /// A new grant for `client` (its name in the app, cleanClientName()): its token.
+    QString addGrant(const QString &client);
+    /// Ends the grant of `token` and drops its connections; false when there is none.
+    bool revokeGrant(const QString &token);
+    int grantCount() const { return int(m_grants.size()); }
+
 Q_SIGNALS:
     /// A connection of another user was refused (its uid).
     void refused(qint64 uid);
 
 private:
+    struct Peer {
+        bool granted = false;
+        QString client;
+        QString token;
+    };
     void accept(QLocalSocket *socket);
     void readLines(QLocalSocket *socket);
+    /// The client name of the grant `token` (compared in constant time); nullopt for none.
+    std::optional<QString> grantFor(const QString &token) const;
+    /// hello's token and client name taken in by `peer`; false (and answered) when the token is none.
+    bool introduce(Peer &peer, const ControlRequest &request, QLocalSocket *socket);
 
     std::unique_ptr<QLocalServer> m_server;
     Handler m_handler;
     QString m_error;
+    bool m_open = true;
+    QHash<QString, QString> m_grants; // token → client
+    QHash<QLocalSocket *, Peer> m_peers;
 };
 
 } // namespace brulion::ipc

@@ -5,6 +5,9 @@ brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_sh
 # The tabs (tabs.h): opening, closing, moving, the split pane, tabs in windows of their own, each
 # tab's history and view state, saving them per notebook (also malformed JSON).
 brulion_add_test(tst_shell_tabs SOURCES tst_tabs.cpp LIBS brulion_shell)
+# b.app over the app (appscripting.h): the settings' registry, an extension page's changes of the app,
+# its theme and UI items, the "route" hook, live code and evaluations for a client, revert().
+brulion_add_test(tst_shell_scripting SOURCES tst_scripting.cpp LIBS brulion_shell brulion_platform brulion_ui_helpers)
 # ViewTraits (viewtraits.h): what ShellRouteView reads of its view — typed, following changes, the
 # optional functions called (typed and untyped QML views); folderChoices (folderchoices.h): the
 # rows of "Move to…".

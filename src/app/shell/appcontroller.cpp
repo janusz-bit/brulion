@@ -1,5 +1,7 @@
 #include "appcontroller.h"
 
+#include "appscripting.h"
+
 #include "blocktext.h"
 #include "mediaengine.h"
 #include "voicerecorder.h"
@@ -45,6 +47,7 @@
 #include <QLocale>
 #include <QLoggingCategory>
 #include <QMetaMethod>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -256,6 +259,37 @@ AppController::AppController(const Options &options, QObject *parent)
     connect(m_appLock.get(), &AppLockController::changed, this, hideNoteText);
     m_shortcuts = std::make_unique<ShortcutMap>(m_settings.get());
     m_commands = std::make_unique<CommandModel>(this);
+    // b.app (docs/EXTENSIONS.md "The app (`b.app`)"): the extensions ask AppScripting; their themes
+    // and the live clients' go to the theme, the main view's route to the "route" hooks.
+    m_scripting = std::make_unique<AppScripting>(this);
+    {
+        WorkspaceExtensions *extensions = m_workspace->extensions();
+        AppScripting *scripting = m_scripting.get();
+        extensions->setAppHandler(
+                [scripting](const QString &extension, const QString &operation, const QVariantMap &args,
+                            QString *error) { return scripting->call(extension, operation, args, error); });
+        scripting->setLiveOwner([extensions](const QString &extension) { return extensions->liveOwner(extension); });
+        connect(extensions, &WorkspaceExtensions::appRevisionChanged, scripting,
+                [extensions, scripting] { scripting->setExtensionThemes(extensions->themes()); });
+        connect(this, &AppController::currentRouteChanged, extensions,
+                [this, extensions] { extensions->routeChanged(currentRoute()); });
+        // Live code taken out by other means (Settings → Extensions' Remove, the notebook closed)
+        // is no live change any more. Queued: revert() unloads live code while it walks the journal.
+        connect(
+                extensions, &WorkspaceExtensions::liveChanged, scripting,
+                [extensions, scripting] {
+                    QSet<QString> live;
+                    for (const QVariant &row : extensions->liveExtensions())
+                        live.insert(row.toMap().value(u"id"_s).toString());
+                    for (const QVariant &change : scripting->changes()) {
+                        const QVariantMap c = change.toMap();
+                        const QString key = c.value(u"key"_s).toString();
+                        if (c.value(u"kind"_s).toString() == u"extension" && !live.contains(key))
+                            scripting->forgetLive(u"extension"_s, key);
+                    }
+                },
+                Qt::QueuedConnection);
+    }
     m_tabsSaveTimer = new QTimer(this);
     m_tabsSaveTimer->setSingleShot(true);
     m_tabsSaveTimer->setInterval(500ms);

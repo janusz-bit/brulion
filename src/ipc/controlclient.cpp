@@ -26,7 +26,17 @@ ControlClient::Response transportFailure(const QString &code, const QString &mes
 
 } // namespace
 
-ControlClient::ControlClient(const QString &key) : m_key(key) { }
+ControlClient::ControlClient(const QString &key)
+    : m_key(key)
+    , m_token(qEnvironmentVariable(TokenVariable).trimmed())
+    , m_client(cleanClientName(qEnvironmentVariable(ClientVariable)))
+{ }
+
+void ControlClient::setIdentity(const QString &token, const QString &client)
+{
+    m_token = token.trimmed();
+    m_client = cleanClientName(client);
+}
 
 ControlClient::~ControlClient()
 {
@@ -39,8 +49,21 @@ ControlClient::~ControlClient()
 
 bool ControlClient::connect(int timeoutMs)
 {
+    m_refused.reset();
     m_socket = connectToTrusted(m_key, timeoutMs, &m_error);
-    return m_socket != nullptr;
+    if (!m_socket)
+        return false;
+    if (!m_token.isEmpty() || !m_client.isEmpty()) {
+        QJsonObject who;
+        if (!m_token.isEmpty())
+            who.insert(u"token"_s, m_token);
+        if (!m_client.isEmpty())
+            who.insert(u"client"_s, m_client);
+        Response hello = send(u"hello"_s, who, std::max(timeoutMs, 5000));
+        if (!hello.ok && !hello.transportError)
+            m_refused = std::make_unique<Response>(std::move(hello));
+    }
+    return true;
 }
 
 bool ControlClient::isConnected() const
@@ -49,6 +72,13 @@ bool ControlClient::isConnected() const
 }
 
 ControlClient::Response ControlClient::call(const QString &method, const QJsonObject &params, int timeoutMs)
+{
+    if (m_refused)
+        return *m_refused;
+    return send(method, params, timeoutMs);
+}
+
+ControlClient::Response ControlClient::send(const QString &method, const QJsonObject &params, int timeoutMs)
 {
     if (!isConnected())
         return transportFailure(u"disconnected"_s, u"Not connected to the app"_s);

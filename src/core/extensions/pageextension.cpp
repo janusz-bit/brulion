@@ -248,6 +248,8 @@ QStringList permissionsFrom(const QStringList &words, QStringList *unknown)
             canonical = u"write"_s;
         else if (w == u"ai" || w == u"si")
             canonical = u"ai"_s;
+        else if (w == u"app" || w == u"aplikacja")
+            canonical = u"app"_s;
         else if (w == u"read" || w == u"odczyt")
             continue; // reading is always allowed
         if (canonical.isEmpty()) {

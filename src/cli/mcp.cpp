@@ -124,7 +124,15 @@ QString McpDispatcher::instructions(const McpPolicy &policy) const
                 u"an item or idle, brulion_app_screenshot returns the window as a picture. Prefer the note tools "
                 u"for reading and changing notes; use the app tools to see and test the UI. Pages in "
                 u"brulion_app_state's conflicts were changed elsewhere too and wait for the user's decision (never "
-                u"idle until then): tell the user rather than resolving them."_s;
+                u"idle until then): tell the user rather than resolving them. The app can also be changed live, for "
+                u"this run only: brulion_app_eval runs Luau inside it (its value and prints come back), "
+                u"brulion_app_load loads an extension's Luau without approval (brulion_app_unload takes it out), "
+                u"brulion_app_theme sets theme tokens (brulion_app_theme with catalog lists them), brulion_app_set "
+                u"changes a setting of brulion_app_settings, brulion_app_inspect gives the window's item tree and "
+                u"brulion_app_set_property writes an item's property, brulion_app_console and brulion_app_events "
+                u"tell what happened. The user sees every such change in the app and can undo it "
+                u"(brulion_app_changes lists them, brulion_app_revert undoes them): change only what they asked "
+                u"for."_s;
     if (policy.readOnly)
         text += u" This server is read-only."_s;
     return text;

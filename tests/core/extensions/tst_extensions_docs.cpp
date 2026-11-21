@@ -238,13 +238,52 @@ class TestExtensionsDocs : public QObject {
         options.uiLanguage = language;
         options.updateIndex = true;
         m_host = std::make_unique<NotebookHost>(*m_vault, *m_index, options);
+        // b.app: an app that shows the journal, knows a few commands and settings and takes every
+        // change (docs/EXTENSIONS.md "The app (`b.app`)").
+        m_host->onApp = [](const QString &, const QString &operation, const QVariantMap &args,
+                           QString *error) -> QVariant {
+            static QVariantMap settings{{u"theme"_s, u"system"_s}, {u"density"_s, u"comfortable"_s},
+                                        {u"focusMode"_s, false},   {u"vim"_s, false},
+                                        {u"editorWidth"_s, 680},   {u"accent"_s, u"coral"_s},
+                                        {u"readingMode"_s, false}, {u"editorFont"_s, u"sans"_s},
+                                        {u"sourceMode"_s, false},  {u"lineSpacing"_s, u"normal"_s},
+                                        {u"wordCount"_s, true}};
+            if (operation == u"state")
+                return QVariantMap{{u"view"_s, u"page"_s},     {u"route"_s, QVariantMap{{u"view"_s, u"page"_s}}},
+                                   {u"page"_s, u"Zakupy"_s},   {u"path"_s, u"Zakupy.md"_s},
+                                   {u"sidePanel"_s, false},    {u"platform"_s, u"linux"_s},
+                                   {u"touch"_s, false},        {u"narrow"_s, false},
+                                   {u"dark"_s, true},          {u"width"_s, 1280},
+                                   {u"height"_s, 800},         {u"language"_s, u"en"_s},
+                                   {u"version"_s, u"0.27.0"_s}};
+            if (operation == u"commands")
+                return QVariantList{QVariantMap{{u"id"_s, u"go.calendar"_s}, {u"title"_s, u"Calendar"_s}},
+                                    QVariantMap{{u"id"_s, u"theme.toggle"_s}, {u"title"_s, u"Toggle theme"_s}}};
+            if (operation == u"settings") {
+                QVariantList out;
+                for (auto it = settings.cbegin(); it != settings.cend(); ++it)
+                    out << QVariantMap{{u"key"_s, it.key()}, {u"value"_s, it.value()}};
+                return out;
+            }
+            if (operation == u"get" || operation == u"set") {
+                const QString key = args.value(u"key"_s).toString();
+                if (!settings.contains(key)) {
+                    *error = u"no setting “%1”"_s.arg(key);
+                    return {};
+                }
+                if (operation == u"set")
+                    settings.insert(key, args.value(u"value"_s));
+                return operation == u"get" ? settings.value(key) : QVariant();
+            }
+            return {};
+        };
         m_engine = std::make_unique<Engine>();
         if (!m_engine->start(m_host.get(), Limits{test::kRoomyMs, 64ll << 20}))
             return {Status::Error, {}, u"cannot start the engine"_s};
         Extension extension;
         extension.id = kExtension;
         extension.source = source;
-        extension.permissions = {u"ai"_s, u"write"_s};
+        extension.permissions = {u"ai"_s, u"app"_s, u"write"_s};
         extension.name = name;
         return m_engine->load(extension);
     }
@@ -371,6 +410,8 @@ class TestExtensionsDocs : public QObject {
                 event = {{u"date"_s, u"2026-11-11"_s}, {u"previous"_s, u"2026-11-10"_s}};
             } else if (h.event == u"timer") {
                 event = {{u"label"_s, u"Focus"_s}, {u"seconds"_s, 1500}};
+            } else if (h.event == u"route") {
+                event = {{u"view"_s, u"page"_s}, {u"page"_s, page}, {u"path"_s, path}, {u"previous"_s, u"journals"_s}};
             }
             const Result r = drive(m_engine->runHook(h.id, event), false);
             if (!r.ok())

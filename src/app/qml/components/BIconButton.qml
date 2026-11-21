@@ -4,7 +4,8 @@ import QtQuick.Templates as T
 import Brulion
 
 // BIconButton — square icon-only button. `label` is required: it is the accessible name and
-// the tooltip text (with `shortcut` shown as key caps).
+// the tooltip text (with `shortcut` shown as key caps); `toolTip`, when set, is the tooltip
+// instead (an extension's button: its own tooltip, the label its name).
 //
 //   BIconButton { iconName: "search"; label: qsTr("Search"); shortcut: "Ctrl+Shift+F" }
 //   BIconButton { iconName: "pin"; label: qsTr("Pin"); checkable: true }
@@ -27,8 +28,10 @@ T.Button {
     property bool toolTipBelow: false
     property bool toolTipBeside: false
     property string unavailable: ""
-    /// What the tooltip says: the label, or why the button does nothing now.
-    readonly property string toolTipText: unavailable !== "" ? unavailable : label
+    /// The tooltip when it says more than the label ("" = the label).
+    property string toolTip: ""
+    /// What the tooltip says: the label (or `toolTip`), or why the button does nothing now.
+    readonly property string toolTipText: unavailable !== "" ? unavailable : toolTip !== "" ? toolTip : label
     property color iconColor: {
         if (!enabled)
             return Theme.fgMuted

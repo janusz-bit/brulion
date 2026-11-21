@@ -323,6 +323,8 @@ void WorkspaceExtensions::detach()
     }
     m_engine.reset();
     m_host.reset();
+    m_live.clear();       // live code lives with its notebook
+    scheduleAppChanged(); // the UI items and themes went with the engine
     m_vault = nullptr;
     m_index = nullptr;
     m_pages.clear();
@@ -420,6 +422,7 @@ void WorkspaceExtensions::reload()
     m_loadedKeys.clear();
     m_loadErrors.clear();
     m_hookFailures.clear();
+    scheduleAppChanged(); // the old VM's UI items and themes are gone, the new one's follow
     reconcile();
     if (!m_engine) { // nothing runs: no VM (reconcile() said so already when something did)
         Q_EMIT commandsChanged();
@@ -464,7 +467,20 @@ bool WorkspaceExtensions::ensureEngine()
         if (!m_macros.extensionChanged(extension).isEmpty())
             scheduleMacros();
     };
+    // b.app: the app answers (AppScripting through AppController); the UI items and themes the
+    // engine keeps are shown after the call.
+    m_host->onApp = [this](const QString &extension, const QString &operation, const QVariantMap &args,
+                           QString *error) -> QVariant {
+        if (!m_appHandler) {
+            *error = u"the app is not here"_s;
+            return {};
+        }
+        return m_appHandler(extension, operation, args, error);
+    };
+    m_host->onAppChanged = [this](const QString &) { scheduleAppChanged(); };
     m_host->onLog = [this](const QString &extension, const QString &text) {
+        if (m_printCapture && m_printCapture->size() < 1000)
+            m_printCapture->append(text);
         qCInfo(lcApp, "extension %s: %s", qUtf8Printable(extension), qUtf8Printable(text));
         m_console->append(u"print"_s, text, extension == kConsole ? QString() : title(extension));
     };
@@ -1254,6 +1270,10 @@ void WorkspaceExtensions::reconcile()
             continue;
         }
         taken.insert(e.runId);
+        if (m_live.contains(e.runId)) { // live code from a client runs instead (loadLive)
+            e.state = u"live"_s;
+            continue;
+        }
         if (!e.builtin.isEmpty() && !m_enabled.contains(e.builtin))
             e.state = u"builtinOff"_s;
         else if (m_off.contains(e.runId))
@@ -1268,6 +1288,17 @@ void WorkspaceExtensions::reconcile()
             want.insert(e.runId, x);
             e.state = u"running"_s; // or "error" once loaded
         }
+    }
+    // Live code (loadLive) for this run only: over a page or a built-in of the same id.
+    for (auto it = m_live.cbegin(); it != m_live.cend(); ++it) {
+        extensions::Extension x;
+        x.id = it.key();
+        x.source = it->source;
+        x.permissions = it->permissions;
+        x.name = it->title.isEmpty() ? it.key() : it->title;
+        if (extensions::builtinFor(it.key()) == it.key())
+            x.data = extensions::builtinExtension(it.key()).data;
+        want.insert(it.key(), x);
     }
     bool loaded = false;
     if (!want.isEmpty() && ensureEngine()) {
@@ -1311,6 +1342,12 @@ void WorkspaceExtensions::reconcile()
         }
         m_loadedKeys.clear();
         m_loadErrors.clear();
+    }
+    for (auto it = m_live.begin(); it != m_live.end(); ++it) {
+        const QString error = m_loadErrors.value(it.key());
+        it->error = error.section(u'\n', 0, 0);
+        it->errorLine =
+                error.isEmpty() ? -1 : extensions::errorLine(it->title.isEmpty() ? it.key() : it->title, it->error);
     }
     for (PageEntry &e : m_pages) {
         if (e.state != u"running")
@@ -1368,7 +1405,10 @@ void WorkspaceExtensions::refreshList()
     const auto permissionsText = [](const QStringList &permissions) {
         QStringList out;
         for (const QString &p : permissions)
-            out << (p == u"write" ? tr("change notes") : p == u"ai" ? tr("use AI") : p);
+            out << (p == u"write" ? tr("change notes")
+                    : p == u"ai"  ? tr("use AI")
+                    : p == u"app" ? tr("change the app")
+                                  : p);
         return out.join(u", "_s);
     };
     QList<ExtensionRow> rows;
@@ -1387,6 +1427,8 @@ void WorkspaceExtensions::refreshList()
             if (on && (e.state == u"running" || e.state == u"error"))
                 row.state = u"overridden"_s;
         }
+        if (on && m_live.contains(b.extension.id))
+            row.state = u"live"_s;
         if (on)
             counts(b.extension.id, row);
         rows << row;
@@ -1414,6 +1456,23 @@ void WorkspaceExtensions::refreshList()
             row.typeMessage = tr("line %1: %2").arg(e->types.first().line).arg(e->types.first().message);
         if (e->state == u"running" || e->state == u"error")
             counts(e->runId, row);
+        rows << row;
+    }
+    // Live code (loadLive): a row each, after the pages; "live" in the rows it shadows.
+    QStringList liveIds = m_live.keys();
+    liveIds.sort();
+    for (const QString &id : std::as_const(liveIds)) {
+        const LiveEntry &l = m_live[id];
+        ExtensionRow row;
+        row.id = id;
+        row.title = l.title.isEmpty() ? id : l.title;
+        row.kind = u"live"_s;
+        row.state = l.error.isEmpty() ? u"running"_s : u"error"_s;
+        row.message = l.error;
+        row.errorLine = l.errorLine;
+        row.permissions = permissionsText(l.permissions);
+        row.description = l.who.mid(5); // "live:" left out: who sent it
+        counts(id, row);
         rows << row;
     }
     m_list->setRows(rows);
@@ -1520,7 +1579,7 @@ QVariantMap WorkspaceExtensions::approvalReview(const QString &path) const
     const QVariantMap before = extensions::approvedCode(m_vault ? m_vault->store() : nullptr, e->runId);
     const QStringList earlier = before.value(u"permissions"_s).toStringList();
     const auto permissionText = [](const QString &p) {
-        return p == u"write" ? tr("change notes") : p == u"ai" ? tr("use AI") : p;
+        return p == u"write" ? tr("change notes") : p == u"ai" ? tr("use AI") : p == u"app" ? tr("change the app") : p;
     };
     QStringList permissions, added;
     for (const QString &p : e->page.permissions) {
@@ -1675,6 +1734,8 @@ QString WorkspaceExtensions::title(const QString &extension) const
 {
     if (extension == kConsole)
         return tr("Luau console");
+    if (const auto live = m_live.constFind(extension); live != m_live.constEnd() && !live->title.isEmpty())
+        return live->title; // live code, as its client named it
     for (const extensions::BuiltinExtension &builtin : extensions::builtinExtensions())
         if (builtin.extension.id == extension)
             return m_language == u"en" ? builtin.titleEn : builtin.titlePl;
@@ -1883,7 +1944,7 @@ bool WorkspaceExtensions::ensureConsole()
     extensions::Extension console;
     console.id = kConsole;
     console.name = u"console"_s;
-    console.permissions = {u"ai"_s, u"write"_s}; // what the user types is theirs
+    console.permissions = {u"ai"_s, u"app"_s, u"write"_s}; // what the user types is theirs
     const extensions::Result r = m_engine->load(console);
     if (!r.ok())
         m_console->append(u"error"_s, r.error);

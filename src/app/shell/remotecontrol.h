@@ -21,6 +21,17 @@
 // under it can move that way (uidriver::canScroll()), so it never turns into a tap. `idle` means
 // every shown page saved, none with a conflict waiting for the user (`state.conflicts`).
 //
+// Live changes (docs/CLI.md "Live changes"): eval, load / unload / reload, console, settings / set,
+// theme, contributions, inspect / setProperty, events, changes / revert change the running app
+// for this run through AppScripting and WorkspaceExtensions' live code; each change is noted in
+// AppScripting's journal under "live:<client>" (hello's client, a grant's), which the top bar's
+// live indicator shows and revert() undoes. Grants: an AI agent the app starts with "Let it change
+// the app" gets one (grant(); WorkspaceAgents hands its token to the agent's tools in their
+// environment) — while one exists the socket listens even with the setting off, and then serves
+// only connections that showed a grant's token (ipc::ControlServer). `events` is a ring buffer of
+// the app's last 500 events (routes, toasts, console lines, live changes, extensions, notes
+// changed), recorded only while the socket listens; a request waits for a newer one (long poll).
+//
 // main() creates it for the real app (not the dev tools) once the QML is loaded; it reports its
 // state to AppController::setRemoteControl() for the settings page.
 #pragma once
@@ -41,6 +52,7 @@
 #include <functional>
 #include <memory>
 
+class QMetaProperty;
 class QQmlApplicationEngine;
 class QQuickItem;
 class QQuickWindow;
@@ -64,8 +76,15 @@ public:
     RemoteControl(QQmlApplicationEngine *engine, AppController *app, Options options, QObject *parent = nullptr);
     ~RemoteControl() override;
 
-    bool isActive() const { return m_server.isListening(); }
+    /// Listening for everyone of this user (the setting, --remote-control), not only for grants.
+    bool isActive() const { return m_server.isListening() && m_server.isOpen(); }
     QString socketPath() const { return m_server.socketPath(); }
+
+    /// A grant for the AI agent `client` the app starts (its name: the journal's "live:<client>"):
+    /// the token its tools show in hello (BRULION_APP_TOKEN). The socket listens while one exists.
+    QString grant(const QString &client);
+    /// Ends the grant of `token` (the agent stopped) and drops its connections.
+    void revokeGrant(const QString &token);
 
 private Q_SLOTS:
     void onToastShown(int toastId, const QString &text, const QString &kind);
@@ -85,7 +104,7 @@ private:
     /// The UI language in use ("pl" | "en").
     QString language() const;
 
-    QJsonObject hello() const;
+    QJsonObject hello(const ipc::ControlRequest &request) const;
     QJsonObject state();
     void navigate(const QJsonObject &params, const ipc::ControlReply &reply);
     void open(const QJsonObject &params, const ipc::ControlReply &reply);
@@ -142,6 +161,35 @@ private:
     /// merged): [{page}], each page once.
     QJsonArray conflicts() const;
 
+    // ---- Live changes (the client "live:<name>" of the request)
+    static QString who(const ipc::ControlRequest &request);
+    void evaluate(const QJsonObject &params, const ipc::ControlReply &reply);
+    QJsonObject extensionList() const;
+    void loadLive(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply);
+    void unloadLive(const QJsonObject &params, const ipc::ControlReply &reply);
+    QJsonObject consoleLines(const QJsonObject &params) const;
+    void setSetting(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply);
+    void theme(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply);
+    void contributions(const QJsonObject &params, const ipc::ControlReply &reply);
+    void inspect(const QJsonObject &params, const ipc::ControlReply &reply);
+    /// An item of inspect's tree, its children `depth` levels down; `count` items so far of `limit`.
+    QJsonObject inspectItem(QQuickItem *item, int depth, bool properties, int limit, int *count, bool *truncated);
+    QJsonObject propertiesOf(QQuickItem *item);
+    /// A property's value as JSON (undefined: not given — a list, an object, a function, too big).
+    QJsonValue jsonOf(const QVariant &value, const QMetaProperty *property = nullptr, int depth = 0);
+    void setItemProperty(const QString &who, const QJsonObject &params, const ipc::ControlReply &reply);
+
+    // ---- events
+    struct EventWait;
+    /// Notes an event of `type` (while the socket listens) and answers the waits it satisfies.
+    void noteEvent(const QString &type, QJsonObject data);
+    /// "extensions": once per turn of the event loop (commands and lists change in bursts).
+    void noteExtensionsChanged();
+    void events(const QJsonObject &params, const ipc::ControlReply &reply);
+    QJsonObject eventsAfter(qint64 since) const;
+    /// Connects the events' sources (once the controller's workspace is there).
+    void watchEvents();
+
     // ---- waitFor
     bool satisfied(const Wait &wait) const;
     /// waitFor's answer: {waitedMs, route, item?}.
@@ -174,6 +222,18 @@ private:
 
     QList<std::shared_ptr<Wait>> m_waits;
     QTimer m_waitTimer;
+
+    struct Event {
+        qint64 id = 0;
+        QJsonObject data; ///< {id, type, at, …}
+    };
+    static constexpr int MaxEvents = 500;
+    QList<Event> m_events;
+    qint64 m_nextEvent = 1;
+    QList<std::shared_ptr<EventWait>> m_eventWaits;
+    bool m_extensionsEventDue = false;
+    QJsonValue m_lastRoute; ///< the route of the last `route` event
+
     QElapsedTimer m_sinceFrame; ///< since the window last showed a new frame
     QPointer<QQuickWindow> m_frameWindow;
 };

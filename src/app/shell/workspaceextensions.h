@@ -171,6 +171,9 @@ class WorkspaceExtensions : public QObject {
     Q_PROPERTY(QVariantList timers READ timers NOTIFY timersChanged FINAL)
     /// Changes when a turn's question waits behind another one or stops waiting.
     Q_PROPERTY(int chatQuestionSerial READ chatQuestionSerial NOTIFY chatQuestionsChanged FINAL)
+    /// Counts the changes of the extensions' UI items and theme overrides (b.app.contribute,
+    /// b.app.theme): bindings that call contributions() read it to follow them.
+    Q_PROPERTY(int appRevision READ appRevision NOTIFY appRevisionChanged FINAL)
 
 public:
     using Clock = std::function<QDateTime()>;
@@ -407,6 +410,51 @@ public:
     /// Ends the timer of `extension` without a word (the banner's ×).
     Q_INVOKABLE void stopTimer(const QString &extension);
 
+    // ---- the app (b.app; appscripting.h, docs/EXTENSIONS.md "The app (`b.app`)") ---------------
+    using AppHandler = std::function<QVariant(const QString &extension, const QString &operation,
+                                              const QVariantMap &args, QString *error)>;
+    /// What answers b.app's operations (AppController: AppScripting::call); unset, b.app says the
+    /// app is not there.
+    void setAppHandler(AppHandler handler) { m_appHandler = std::move(handler); }
+    int appRevision() const { return m_appRevision; }
+    /// The items the extensions running put into `slot` (appapi.h contributionSlots(): "toolbar",
+    /// "statusbar", "sidebar", "pageMenu", "blockMenu", "slash"): rows {extension, title (the
+    /// extension's), slot, id, label, icon, tooltip, tone, command, view, params, page, run, insert,
+    /// key ("extension/id"), live}, by their order. `revision` (appRevision) only makes a binding
+    /// ask again.
+    Q_INVOKABLE QVariantList contributions(const QString &slot, int revision = 0) const;
+    /// One item of contributions() ({} when it is gone).
+    QVariantMap contribution(const QString &slot, const QString &extension, const QString &id) const;
+    /// The items of `slot` as one text (compact JSON of contributions()), which changes only when
+    /// they do: a QML string property bound to it notifies only then, so a model that reads it
+    /// (`contributions(slot, key.length)`) is not made again when another slot's items change —
+    /// a status bar text that counts something on every change of a note.
+    Q_INVOKABLE QString contributionsKey(const QString &slot, int revision = 0) const;
+    /// The theme overrides of the extensions running (Engine::themes()).
+    QList<extensions::ThemeInfo> themes() const;
+    /// The main view's route changed (AppController): "route" hooks hear {view, page?, path?,
+    /// date?, previous} once it settled (a burst of changes is one event).
+    void routeChanged(const QVariantMap &route);
+
+    // ---- live code (the remote control's live methods; docs/EXTENSIONS.md "Live code") ----------
+    /// Loads `source` as the extension `id` for this run of the app only, sent by the live client
+    /// `who` ("live:Claude Code"): it runs at once, without an approval — the client was let in to
+    /// change the app — and shadows the page or built-in of the same id while it is loaded (they
+    /// run again when it goes). {ok, error?, line?, commands, views, hooks, contributions, theme,
+    /// types} — what a check gives.
+    QVariantMap loadLive(const QString &id, const QString &source, const QStringList &permissions, const QString &title,
+                         const QString &who);
+    /// Unloads a live extension (its page or built-in runs again); false when there is none.
+    Q_INVOKABLE bool unloadLive(const QString &id);
+    /// The live extensions: [{id, title, who, permissions, state, error?, line?}].
+    Q_INVOKABLE QVariantList liveExtensions() const;
+    /// The live client that loaded `extension` ("live:…"), "" for none.
+    QString liveOwner(const QString &extension) const;
+    /// The console's evaluation for a client: `code` in the console's environment (or the
+    /// extension `extension`'s), its value as plain data, what it printed: {ok, value?, printed,
+    /// error?, line?}. Waits for nothing (a question or b.ai there is an error).
+    QVariantMap evaluateFor(const QString &code, const QString &extension = QString());
+
     // ---- macros, template variables, panels (workspacemacros.cpp; docs/EXTENSIONS.md "Macros") ---
     /// What the macro `macro` written in the note `path` shows now: its last value (computed again
     /// in the background when what it read changed: macrosChanged() then), "…" while it is computed
@@ -483,6 +531,10 @@ Q_SIGNALS:
     void chatPartial(const QString &path, const QString &text, const QString &thoughts, int tokens, qint64 writingMs);
     /// What macros show changed (values computed, extensions loaded, approved, switched off).
     void macrosChanged();
+    /// The extensions' UI items or theme overrides changed (appRevision); themes() has the theme.
+    void appRevisionChanged();
+    /// The live extensions changed (loadLive(), unloadLive()).
+    void liveChanged();
     /// showMacro(), showView(): the extension and what of it was clicked (the macro as written,
     /// "```view extension/view"), for ShellMacroDialog.
     void macroHelpRequested(const QString &extension, const QString &macro);
@@ -635,6 +687,27 @@ private:
     };
     QList<WaitingQuestion> m_waitingQuestions;
     int m_chatQuestionSerial = 0;
+    // b.app (the app's handler, the revision of the UI items and themes, a route's hooks).
+    AppHandler m_appHandler;
+    int m_appRevision = 0;
+    bool m_appChangePending = false;
+    QVariantMap m_lastRoute;
+    QTimer *m_routeTimer = nullptr;
+    QVariantMap m_routeEvent;
+    // Live code (loadLive): by the engine's id, the code a client sent and who.
+    struct LiveEntry {
+        QString source;
+        QStringList permissions;
+        QString title;
+        QString who;
+        QString error;
+        int errorLine = -1;
+    };
+    QHash<QString, LiveEntry> m_live;
+    QStringList *m_printCapture = nullptr; // evaluateFor(): what the call prints
+    /// The UI items or themes changed inside a call: appRevisionChanged() after it.
+    void scheduleAppChanged();
+    void runRouteHooks();
     /// A question of a call to show: now, or after the one shown (a chat's).
     void ask(int call, const QString &chat, const QVariantMap &request);
     /// The first waiting question shown, when none is.
