@@ -40,6 +40,7 @@ struct WorkspaceAgents::Process
     acp::Client *client = nullptr;
     QString errors;    // the end of what it wrote to its standard error
     bool lost = false; // its stream to another computer ended by itself (its turns are recovered)
+    QString grant;     // the token of its grant of the running app (appAccess), "" none
 };
 
 /// A command an agent runs (terminal/create): its output as it comes, its end.
@@ -191,6 +192,8 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
 
 WorkspaceAgents::~WorkspaceAgents()
 {
+    for (Process *p : std::as_const(m_processes))
+        releaseGrant(p);
     for (Terminal *t : std::as_const(m_terminals))
         delete t; // (their programs: below)
     m_terminals.clear();
@@ -331,7 +334,8 @@ QStringList WorkspaceAgents::commandLine(const QString &command, bool onWindows,
     return resolved(splitCommand(command), onWindows, find);
 }
 
-QString WorkspaceAgents::context(const QString &root, const QString &conversation, const QString &page, bool tools)
+QString WorkspaceAgents::context(const QString &root, const QString &conversation, const QString &page, bool tools,
+                                 bool app)
 {
     QStringList lines;
     lines << u"You are answering in the AI chat of Brulion, the user's notes app. Their notebook is the folder "_s
@@ -340,6 +344,12 @@ QString WorkspaceAgents::context(const QString &root, const QString &conversatio
     if (tools)
         lines << u"The MCP server \"brulion\" has tools for this notebook (search, queries, tasks, journals, pages): "
                  u"use them to find and change notes rather than reading every file."_s;
+    if (tools && app)
+        lines << u"Its brulion_app_* tools also let you see and change the running Brulion app live while you work: "
+                 u"evaluate Luau (brulion_app_eval), load extensions for this run (brulion_app_load), set theme "
+                 u"tokens (brulion_app_theme) and settings (brulion_app_set), read and change the window's items "
+                 u"(brulion_app_inspect, brulion_app_set_property) — the app shows the user each change and they "
+                 u"can undo all of them."_s;
     lines << u"This conversation is kept in the note \"%1\" and the app writes your answers into it: never change "
              u"that note yourself."_s.arg(conversation);
     if (!page.isEmpty())
@@ -416,6 +426,21 @@ QString WorkspaceAgents::usageText(const acp::Usage &usage)
 
 // ---- the agents ---------------------------------------------------------------------------------------
 
+void WorkspaceAgents::setAppGrants(GrantFunction grant, RevokeFunction revoke)
+{
+    m_grant = std::move(grant);
+    m_revoke = std::move(revoke);
+}
+
+void WorkspaceAgents::releaseGrant(Process *p)
+{
+    if (p->grant.isEmpty())
+        return;
+    if (m_revoke)
+        m_revoke(p->grant);
+    p->grant.clear();
+}
+
 void WorkspaceAgents::setAgents(const QList<AgentConfig> &agents)
 {
     // An agent removed or changed stops (its turns fail: it is no longer what was asked); a new
@@ -491,6 +516,9 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
         p->client->setCapabilities({true, true});
         p->client->setHandler([this, p](const QString &key, const QJsonValue &id, const QString &method,
                                         const QJsonObject &params) { handle(p, key, id, method, params); });
+        // "Let it change the app": a grant for this process's tools, ended when it stops.
+        if (config.tools && config.appAccess && m_grant && !toolsProgram().isEmpty())
+            p->grant = m_grant(config.name);
 #endif
     }
     m_processes.insert(config.id, p);
@@ -729,6 +757,7 @@ void WorkspaceAgents::ended(const QString &id, Process *p, const QString &why)
         return; // (stopped meanwhile: stopProcess())
     m_processes.remove(id);
     qCInfo(logging::lcApp, "AI agent %s ended: %s", qUtf8Printable(p->config.name), qUtf8Printable(why));
+    releaseGrant(p);
     endTerminals(id);
     p->lost = p->remote != nullptr;
     p->client->closed(why);
@@ -768,6 +797,7 @@ void WorkspaceAgents::stopProcess(const QString &id)
     Process *p = m_processes.take(id);
     if (!p)
         return;
+    releaseGrant(p);
     endTerminals(id);
     // Its turns fail: the agent was stopped (a notebook closed says nothing: reset()).
     if (p->remote) {
@@ -793,7 +823,7 @@ void WorkspaceAgents::stopProcess(const QString &id)
     delete p;
 }
 
-acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config) const
+acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Process *p) const
 {
     acp::TurnInput input;
     if (config.isRemote()) {
@@ -805,8 +835,16 @@ acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config) const
     }
     input.cwd = QDir(m_workspace->rootPath()).absolutePath();
     const QString program = config.tools ? toolsProgram() : QString();
-    if (!program.isEmpty())
-        input.mcpServers << acp::McpServer{u"brulion"_s, program, {u"mcp"_s, u"--vault"_s, input.cwd}};
+    if (!program.isEmpty()) {
+        acp::McpServer server{u"brulion"_s, program, {u"mcp"_s, u"--vault"_s, input.cwd}};
+        // The tools that change the running app: they reach it with the process's grant (the
+        // token only in their environment, never in the arguments others can list).
+        if (p && !p->grant.isEmpty()) {
+            server.args << u"--app-control"_s;
+            server.env = {{u"BRULION_APP_TOKEN"_s, p->grant}, {u"BRULION_APP_CLIENT"_s, config.name}};
+        }
+        input.mcpServers << server;
+    }
     for (auto it = config.options.constBegin(); it != config.options.constEnd(); ++it)
         input.config.insert(it.key(), it.value());
     return input;
@@ -846,7 +884,12 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // The notebook's folder as the agent sees it: this device's, or that computer's copy of it.
     const QString root = agent->isRemote() ? agent->root : m_workspace->rootPath();
     const QString conversation = path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path;
-    acp::TurnInput input = baseInput(*agent);
+    Process *p = processFor(*agent);
+    if (!p) {
+        Q_EMIT failed(path, tr("AI agents run only in the desktop app: choose another partner for this conversation."));
+        return;
+    }
+    acp::TurnInput input = baseInput(*agent, p);
 
     // The user's newest message, its pictures as pictures (a link to the file where the agent
     // takes none — or where a picture cannot be read).
@@ -869,7 +912,7 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // without them: its info said so at pairing.)
     const bool tools = agent->isRemote() ? agent->tools : !input.mcpServers.isEmpty();
     input.firstPrompt << acp::Block::textBlock(
-            context(root, conversation, pagePath.isEmpty() ? QString() : page, tools));
+            context(root, conversation, pagePath.isEmpty() ? QString() : page, tools, !p->grant.isEmpty()));
     if (!pagePath.isEmpty()) {
         bool ok = false;
         const QString text = markdown::isEncryptedNotePath(pagePath) ? QString() : m_workspace->read(pagePath, &ok);
@@ -883,11 +926,6 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         input.firstPrompt << acp::Block::textBlock(before);
     input.firstPrompt << input.prompt;
 
-    Process *p = processFor(*agent);
-    if (!p) {
-        Q_EMIT failed(path, tr("AI agents run only in the desktop app: choose another partner for this conversation."));
-        return;
-    }
     // The session goes on only if it has seen the conversation up to this message — else (another
     // partner answered meanwhile, a message written on another device) a new one gets it all.
     const int seenNow = int(history.size()) - 1;
@@ -1367,7 +1405,7 @@ void WorkspaceAgents::check(const QString &id)
     }
     m_checks.insert(id, CheckKey);
     p->client->forget(CheckKey);
-    if (!p->client->open(CheckKey, baseInput(*agent))) {
+    if (!p->client->open(CheckKey, baseInput(*agent, p))) {
         m_checks.remove(id);
         Q_EMIT checked(id, false, tr("The AI agent “%1” stopped.").arg(agent->name));
     }
@@ -1702,6 +1740,7 @@ void WorkspaceAgents::abandon()
     m_turns.clear();
     m_seen.clear();
     for (Process *p : std::as_const(m_processes)) {
+        releaseGrant(p);
         p->client->blockSignals(true);
         p->client->deleteLater();
         if (p->remote) {

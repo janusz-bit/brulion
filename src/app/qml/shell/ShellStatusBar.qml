@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Templates as T
 import Brulion
 
 // ShellStatusBar — the thin bar along the bottom of wide windows (docs/UI.md "Status bar"; the
@@ -8,7 +9,10 @@ import Brulion
 // failed, grey: only on this device) and its words, a click opens the sync center —, Vim's mode or
 // command line while the view's editor has Vim's keys (ShellRouteView.viewStatusVim); on the right
 // what the view reports (ShellRouteView.viewStatusPosition / viewStatusText: the edited block, the
-// word count) and the command palette's key. Only what there is: an empty part leaves no gap.
+// word count), the extensions' texts (b.app.contribute("statusbar", …): an icon, the label in its
+// tone; one that does something is a button — hover, focus ring, Enter / Space, a click runs it:
+// docs/UI.md "Extension items in the UI") and the command palette's key. Only what there is: an
+// empty part leaves no gap.
 //
 //   ShellStatusBar { routeView: shell.routeView; onPaletteRequested: shell.openPalette("") }
 Rectangle {
@@ -23,6 +27,21 @@ Rectangle {
     /// Vim's mode, the command typed or the command line (docs/UI.md "Vim mode").
     readonly property string vim: routeView ? routeView.viewStatusVim : ""
     readonly property string paletteKey: ShortcutMap.sequences["palette"] || ""
+    readonly property list<var> noRows: []
+    /// The extensions' status bar items as text: made again only when they change.
+    readonly property string itemsKey: Workspace.extensions !== null
+                                       ? Workspace.extensions.contributionsKey("statusbar", Workspace.extensions.appRevision) : ""
+    /// The text colour of an extension item's `tone`: accent, success, danger, warning, info.
+    function toneColor(tone: string): color {
+        switch (tone) {
+        case "accent": return Theme.accentText
+        case "success": return Theme.successText
+        case "danger": return Theme.dangerText
+        case "warning": return Theme.warningText
+        case "info": return Theme.infoText
+        default: return Theme.fgMuted
+        }
+    }
 
     implicitHeight: Theme.dense ? 22 : 24
     color: Theme.bgSunken
@@ -131,6 +150,91 @@ Rectangle {
             font.pixelSize: Theme.textXs
             color: Theme.fgMuted
             elide: Text.ElideRight
+        }
+        // ---- The extensions' texts ---------------------------------------------------------
+        Repeater {
+            model: bar.itemsKey !== "" ? Workspace.extensions.contributions("statusbar", bar.itemsKey.length) : bar.noRows
+            delegate: T.AbstractButton {
+                id: extensionText
+                required property var modelData
+                required property string extension
+                required property string label
+                required property string tooltip
+                required property string tone
+                required property string command
+                required property string view
+                required property string page
+                required property string run
+                readonly property string itemId: UiModels.stringField(extensionText.modelData, "id")
+                readonly property string iconName: UiModels.stringField(extensionText.modelData, "icon")
+                /// It does something when clicked (else a plain text).
+                readonly property bool active: extensionText.command !== "" || extensionText.view !== ""
+                                               || extensionText.page !== "" || extensionText.run !== ""
+                objectName: "statusBar_" + extensionText.itemId
+                Layout.fillHeight: true
+                Layout.maximumWidth: bar.width / 4
+                implicitWidth: extensionRow.implicitWidth + 2 * Theme.space1
+                // (Enabled either way: a plain text's tooltip shows on hover too.)
+                hoverEnabled: !Theme.touchUi
+                // (A click leaves the keyboard focus where it was, as the top bar's extension buttons.)
+                focusPolicy: extensionText.active ? Qt.TabFocus : Qt.NoFocus
+                Accessible.role: extensionText.active ? Accessible.Button : Accessible.StaticText
+                Accessible.name: extensionText.label
+                Accessible.description: extensionText.tooltip !== extensionText.label ? extensionText.tooltip : ""
+                onClicked: {
+                    if (extensionText.active)
+                        AppScripting.activate("statusbar", extensionText.extension, extensionText.itemId, "", -1)
+                }
+
+                background: Rectangle {
+                    anchors.fill: parent
+                    anchors.topMargin: 2
+                    anchors.bottomMargin: 1
+                    radius: Theme.radiusXs
+                    color: !extensionText.active ? "transparent"
+                           : extensionText.down ? Theme.bgPressed : extensionText.hovered ? Theme.bgHover : "transparent"
+                    BFocusRing {
+                        visible: extensionText.visualFocus
+                        targetRadius: Theme.radiusXs
+                        inset: true
+                    }
+                }
+                contentItem: Item {}
+                Row {
+                    id: extensionRow
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: Theme.space1
+                    spacing: Theme.space1
+                    BIcon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: extensionText.iconName !== ""
+                        name: extensionText.iconName
+                        size: Theme.iconSizeSm - 2
+                        color: extensionText.tone !== "" ? bar.toneColor(extensionText.tone) : Theme.fgMuted
+                    }
+                    BText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: extensionText.label
+                        font.pixelSize: Theme.textXs
+                        color: extensionText.tone !== "" ? bar.toneColor(extensionText.tone) : Theme.fgMuted
+                        elide: Text.ElideRight
+                        width: Math.min(implicitWidth, bar.width / 4 - 2 * Theme.space1
+                                        - (extensionText.iconName !== "" ? Theme.iconSizeSm + Theme.space1 : 0))
+                    }
+                }
+                HoverHandler {
+                    enabled: extensionText.active
+                    cursorShape: Qt.PointingHandCursor
+                }
+                Loader {
+                    active: extensionText.hovered && extensionText.tooltip !== extensionText.label
+                    sourceComponent: BToolTip {
+                        parent: extensionText
+                        text: extensionText.tooltip
+                        visible: extensionText.hovered
+                    }
+                }
+            }
         }
         // The palette's key: a quiet way in for those who never heard of it.
         Item {

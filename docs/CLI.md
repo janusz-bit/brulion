@@ -188,7 +188,7 @@ Qt's LinguistTools (`BRULION_BUILD_APP=OFF`, `find_package` finds no `lrelease`)
 | 2 | usage: unknown command or option, missing or invalid argument, a path outside the notebook or in `.brulion/` / `.trash/` |
 | 3 | not found: page, block, line, heading, history version |
 | 4 | conflict: stale ref, hash mismatch, ambiguous page name (with candidates), target exists, a file that keeps changing, not UTF-8 |
-| 5 | unavailable: no notebook, not a folder, lock timeout, no running app, the app's remote control off, no notebook open in the app |
+| 5 | unavailable: no notebook, not a folder, lock timeout, no running app, the app's remote control off, a grant's token the app refused (`unauthorized`), no notebook open in the app |
 | 6 | not understood: a date phrase, a week or month phrase, a recurrence, a query, a calculation; an extension that does not load or fails (`extension_error`) |
 | 7 | refused by policy: `--read-only`, a destructive command without `--allow-destructive` |
 
@@ -336,6 +336,21 @@ Never compute a hash yourself.
 | `app key <keys>` | `[--count N]` | press keys: `Ctrl+K`, `Escape`, `"Down, Down, Return"` | yes |
 | `app wait` | `[--route R] [--text T --object-name N --type T --exact \| --handle H] [--gone] [--idle] [--timeout MS]` | until a route shows, an item is shown (or gone), the app is idle; exit 3 `timeout` | |
 | `app quit` | | quit the running app | yes |
+| `app eval <code>` | `[--extension X] [--stdin]` | evaluate Luau in the running app, as its Luau console: `{ok, value?, printed, error?, line?, traceback?}`; exit 6 `extension_error` when it fails ("Live changes" below) | yes |
+| `app extensions` | | every extension of the app with its state: `{extensions [{id, title, kind (builtin, page, live), state, message, line?, path, permissions, commands, views, hooks, types, typeMessage?}], live [{id, title, who, permissions, state, error?, line?}]}` | |
+| `app load <id>` | `(--file F \| --code C \| --stdin) [--title T] [--permissions write,ai,app]` | load Luau as a live extension for this run (it replaces a page or built-in of that id while loaded): `{ok, id, replaced, commands, views, hooks, contributions, theme?, permissions}`; exit 6 when it does not load | yes |
+| `app unload <id>` | | take a live extension out (the page or built-in of its id runs again) | yes |
+| `app reload` | | load every extension again (live ones stay) | yes |
+| `app console` | `[--since N] [--limit N]` | the Luau console's lines `{lines [{n, kind, text, source}], next, first, last}` | |
+| `app settings` | | the settings a client may change: `{settings [{key, group, kind, label, value, options?, min?, max?, size?}]}` | |
+| `app set <key> <value>` | a JSON value (a bare word is a string) | change one at once: `{key, value}` | yes |
+| `app theme` | `[--tokens JSON \| --stdin] [--clear] [--catalog]` | this client's theme tokens (checked first, exit 2 `bad_tokens`), cleared, or none: `{extensions, live, light, dark, catalog?}` | yes |
+| `app contributions` | `[--slot S]` | the items extensions put into the UI (toolbar, statusbar, sidebar, pageMenu, blockMenu, slash) | |
+| `app inspect [<handle>]` | `[--depth N] [--properties] [--limit N]` | the window's item tree: `{root: {handle, type, objectName, text?, geometry, visible, secret?, properties?, children? \| childCount?}, items, truncated}` | |
+| `app set-property <handle> <name> <value>` | a JSON value | write an item's property (its binding goes): `{handle, name, before, after}` | yes |
+| `app events` | `[--since N] [--wait MS]` | the app's recent events `{events [{id, type, at, …}], next, first}`; waits up to 30 s for a new one | |
+| `app changes` | | the live changes not undone: `{changes [{at, who, kind, key?, before?, after?}], clients, revision}` | |
+| `app revert` | `[--who W]` | undo the live changes (one client's or all), newest first: `{undone, changes}` | yes |
 | `init <path>` | | create a notebook folder | yes |
 | `version` | | `{version, qt, mcpProtocol, mcpProtocols}` (the newest MCP version and all of them) | |
 | `help [<command>]` | `[--json]` | help | |
@@ -562,7 +577,12 @@ line on standard input and output (the stdio transport), tools only. Both eras o
   `--allow-destructive`; the tools that drive the running app (`brulion_app_state`,
   `brulion_app_click`, `brulion_app_type`, `brulion_app_screenshot`, … — "Remote control" below)
   only with `--app-control` (`brulion_app_open`, `brulion_app_today` and `brulion_app_capture` are
-  always there). `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
+  always there) — the live tools too (`brulion_app_eval`, `brulion_app_load`, `brulion_app_theme`,
+  `brulion_app_set`, `brulion_app_inspect`, `brulion_app_set_property`, `brulion_app_events`,
+  `brulion_app_revert` …, "Live changes" below; read-only: only those that look), and the
+  instructions tell the agent the user sees and can undo each change. An AI agent of the app with
+  "Let it change the app while it runs" gets this server with `--app-control` and a grant's token
+  in its environment. `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
   Meta commands (help, schema, completion, `mcp` and its `serve`, `password`, `clients`, `revoke`,
   init) and the `task done`… aliases are no tools.
 * The notebook stays open, watched and indexed: calls after the first are fast. The first one
@@ -803,7 +823,8 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   (served here), whatever the device offered; `session/new`, `session/load` and `session/resume`
   get this notebook's folder as `cwd` and, unless `--no-tools`, Brulion's MCP server
   (`brulion-cli mcp --vault <notebook>`, the program itself or one next to it) instead of any
-  server the device names. The agent's `fs/read_text_file` and `fs/write_text_file` are answered
+  server the device names (so never the app's live tools: "Live changes" above — the phone's app
+  makes no grant for an agent there). The agent's `fs/read_text_file` and `fs/write_text_file` are answered
   here: only files of the notebook (not `.brulion/`, `.trash/` or a link out of it), written as the
   command line writes — the replaced text in the version history ("Replaced from the command line
   (agent)") — and never an encrypted page. Its `terminal/*` run here: in the notebook's folder by
@@ -950,7 +971,9 @@ the socket and its connections close; the settings show the socket while it list
 `--remote-control` applies to a new run: a second launch while Brulion runs only brings it to
 the front (and says so on stderr). Without it every command below exits 5:
 `app_not_running` when no app runs, `remote_control_off` when it runs without remote control,
-both with a `hint`.
+both with a `hint`. (While an AI agent the app started may change it, the socket is there for
+that agent alone: a command line without its token still gets `remote_control_off` — "Live
+changes" below.)
 
 **Security.** The socket is `<single-instance socket>-control` in the user's runtime folder
 (`$XDG_RUNTIME_DIR/brulion-<hash>-control`, a folder only the user can enter), the socket itself
@@ -1034,8 +1057,10 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   path (it could replace a picture of the notebook; without one the screenshot goes to the
   runtime folder).
 * Exit codes of the app's errors: `bad_params` 2, `not_found`, `off_screen` and `timeout` 3,
-  `stale_handle` and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a
-  disabled command, the documentation notebook for capture) 7, `failed` 1.
+  `stale_handle` and `ambiguous_ref` 4, `not_ready` (no notebook open yet) and `unauthorized` (a
+  token that is no grant) 5, `refused` (a disabled command, the documentation notebook for
+  capture, a read-only property) 7, `failed` 1; Luau that fails in `app eval` or `app load` 6
+  (`extension_error`).
 
 ### Protocol
 
@@ -1048,7 +1073,7 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 
 | Method | Parameters | Result |
 |---|---|---|
-| `hello` | | `{protocol, app, version, platform, methods}` |
+| `hello` | `client` (a name for the live changes), `token` (a grant's) | `{protocol, app, version, platform, methods, client, granted}`; a token that is no grant: `unauthorized` |
 | `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source, conflict}, conflicts: [{page}], syncConflicts, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, appearance: {accent, accentColor, surface, background, density, fontUi, fontEditor, fontMono, lineSpacing}, language, version}` |
 | `navigate` | `route` (a view name or a route object, docs/UI.md "Navigation"), `side` | `{route, sidePanelRoute}` |
 | `open` | `ref`, `line` (0-based), `blockId`, `heading`, `side` | `{route, currentRoute}` |
@@ -1064,6 +1089,93 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `key` | `sequence`, `count` (at most 1000 keys in all) | `{keys, handled: [bool…], focusedItem}` |
 | `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` with `{route, idle, conflicts?}` |
 | `quit` | | `{quitting: true}`, then the app quits |
+| `eval` | `code`, `extension` (its environment instead of the console's) | `{ok, value?, printed, error?, line?, traceback?}` (`ok` false: the code failed) |
+| `extensions` | | `{extensions: [{id, title, kind, state, message, line?, path, permissions, commands, views, hooks, types, typeMessage?, description?}], live: [{id, title, who, permissions, state, error?, line?}]}` |
+| `load` | `id`, `source`, `title`, `permissions` (`"write, ai"` or a list) | `{ok, id, replaced, commands, views, hooks, contributions, theme?, permissions, error?, line?}` |
+| `unload` | `id` | `{id, unloaded}`; `not_found` with `live` |
+| `reload` | | `{reloaded, live}` |
+| `console` | `since` (a line number), `limit` (200, at most 1000) | `{lines: [{n, kind, text, source}], next, first, last}` |
+| `settings` / `set` | — / `key`, `value` (any JSON) | `{settings}` / `{key, value}`; a value that does not fit: `bad_params` with the reason |
+| `theme` | `tokens` (an object), `clear`, `catalog` | `{extensions: [{extension, tokens}], live: [{who, tokens}], light, dark, catalog?: [{name, kind, min?, max?}]}`; a bad token: `bad_params` |
+| `contributions` | `slot` | `{contributions: [{extension, title, slot, id, label, icon, tooltip, tone, command, view, params, page, run, insert, key, live}]}` |
+| `inspect` | `handle`, `depth` (3, at most 8), `properties`, `limit` (500, at most 2000) | `{root, items, truncated}` |
+| `setProperty` | `handle`, `name` (`opacity`, `font.pixelSize`), `value` | `{handle, name, before, after}`; `not_found`, `refused` (read-only, a password's text), `bad_params` |
+| `events` | `since` (an event id), `wait` (ms, at most 30000) | `{events: [{id, type, at, …}], next, first}` |
+| `changes` | | `{changes: [{at, who, kind, key?, before?, after?}], clients: [{who, name, changes}], revision}` |
+| `revert` | `who` (one client's; default everyone's) | `{undone, changes}` |
+
+### Live changes
+
+An agent can also **change** the running app, for this run: evaluate Luau in it, load extensions
+of its own, set theme tokens and settings, read the window's item tree and write an item's
+property — to try a design or an extension with the user watching, or to build one with them.
+Nothing of it is written to the notebook or survives a restart, and the user can undo all of it.
+
+```sh
+brulion-cli app eval 'return b.app.state().view'          # Luau in the app: {ok, value, printed}
+brulion-cli app load licznik --file licznik.luau --permissions app   # a live extension
+brulion-cli app theme --tokens '{"accent": "#3a7", "radius": 4, "dark": {"bg": "#0b0d10"}}'
+brulion-cli app set density compact
+brulion-cli app inspect --depth 4                          # the window's items: the "DOM"
+brulion-cli app set-property h42 opacity 0.5
+brulion-cli app events --since 120 --wait 30000            # what happened since event 120
+brulion-cli app changes && brulion-cli app revert          # what changed, and all of it undone
+```
+
+* **eval** runs Luau in the Luau console's environment (or, with `--extension`, inside a running
+  extension's) with the notebook's `b` and every permission: `b.app` changes the app at once,
+  `b.write` notes (docs/EXTENSIONS.md "The app (`b.app`)", "Live code"). Its value comes back as
+  plain data with what it printed; it cannot wait for a question or `b.ai`. The console shows it
+  as the client's input.
+* **load** runs an extension's Luau as the extension `id` for this run only, without an approval
+  (the client was let in to change the app): its commands, views, hooks, UI items
+  (`b.app.contribute`: toolbar, statusbar, sidebar, pageMenu, blockMenu, slash) and theme take
+  effect at once. Loading it again replaces it; while loaded it **shadows** the page or built-in
+  extension of that id, which runs again after `unload`. Code that fails is not kept (the
+  version before it, if any, runs on): `ok: false` with the error and its line (exit 6).
+* **theme** sets this client's layer of tokens over the extensions' (`app theme --catalog` lists
+  every token: colours `#rgb` / `#rrggbb` / `#aarrggbb`, sizes within a range, fonts); `dark` and
+  `light` hold tokens for one mode. **set** changes one of the settings `app settings` lists
+  (density, accent, fonts, the editor's width, sidebar entries, the built-in extensions …),
+  checked against its kind.
+* **inspect** gives the window's items as a tree (or an item's, by its handle) — handle, QML
+  type, objectName, text, geometry, visible; with `--properties` every property that is plain
+  data (colours `#aarrggbb`, enums by name, an item as `{handle}`); a password field's text never.
+  **set-property** writes one (QQmlProperty) and answers the value before and after. It is a
+  developer's experiment: the value written **replaces the property's binding**, so it no longer
+  follows the theme or the state it was bound to until the item is made again; revert writes the
+  old value back, not the binding. Lasting changes belong in the theme, a setting or an extension.
+* **events**: the app keeps its last 500 events while the socket listens — `route` (the main
+  view's route), `toast`, `console` (a line of the Luau console), `live` (the live changes
+  changed), `extensions` (extensions, commands or UI items changed), `notes` (files of the
+  notebook changed: their `paths`) — each with an increasing `id` and its time. `--since` gives
+  those after an id; with `--wait` the request waits until a newer one comes (a long poll). The
+  console's lines have numbers of their own (`app console --since`).
+* **Who**: every change is noted as the client's — the name a connection gives in `hello`
+  (`BRULION_APP_CLIENT` for `brulion-cli`), "agent" when none, an AI agent's name for its grant.
+  The app's top bar shows a **live indicator** while live changes are in force; its menu lists
+  who changed what and undoes them. `app changes` lists them (`{at, who, kind: setting | theme |
+  extension | property, key, before, after}`), `app revert [--who W]` undoes them newest first —
+  settings back to their value before, live themes removed, live extensions unloaded, properties
+  written back.
+* **An AI agent of the app** (docs/UI.md "AI agents (ACP)") with "Let it change the app while it
+  runs" — set per agent of this computer in *Settings → Extensions → AI agents → Edit…* — gets
+  Brulion's tools with `--app-control` and a **grant**: a token (256 random bits) the app makes
+  when it starts the agent's process and ends when the process stops. The token reaches only the
+  MCP server's environment (`BRULION_APP_TOKEN`, with `BRULION_APP_CLIENT` the agent's name),
+  never a command line others can list; `brulion-cli` shows it in `hello {token, client}` before
+  its request. While a grant exists the socket listens **even with the remote control off** — then
+  for granted connections alone: any other request before `hello {token}` is answered
+  `unauthorized` (`brulion-cli` without a token reports `remote_control_off`, as before), and a
+  token that is no grant is refused also while the remote control is on (exit 5 `unauthorized`).
+  The grant's connections close when it ends; once no grant is left and the setting is off, the
+  socket closes.
+* **Security**: a grant is only made for an agent the user marked, only while its program runs,
+  and only in the desktop app; the socket keeps its owner-only file and other users' connections
+  are refused as before. A granted agent can do what the remote control can — drive the UI, read
+  what it shows — and run Luau with every permission, so it can change notes too: give it only to
+  an agent you trust with the notebook. Agents on other computers (`acp serve`) get no grant of
+  this app.
 
 ### Android and the browser
 
@@ -1077,13 +1189,16 @@ does with its `?selftest=` checks (docs/WEB.md "Headless browser smoke test").
 
 `src/ipc` holds the protocol (`controlprotocol.h`: parsing, the methods and their parameters,
 targets, routes), the socket (`controlserver.h`: owner-only, peer credentials, answers in any
-order) and the client (`controlclient.h`); the app's side is `src/app/shell/remotecontrol.h`
-(created by `main()`, state and methods over `AppController`, `CommandModel` and the window), on
+order, grants) and the client (`controlclient.h`: its identity from `BRULION_APP_TOKEN` and
+`BRULION_APP_CLIENT`); the app's side is `src/app/shell/remotecontrol.h`
+(created by `main()`, state and methods over `AppController`, `CommandModel` and the window; the
+live methods over `AppScripting` and `WorkspaceExtensions`), on
 the UI driver `src/app/shell/uidriver.h` it shares with the shell self-test and the journey;
 the commands are `src/cli/commands_app.cpp`. Tests: `tests/ipc/tst_ipc_control` (the protocol, the
 socket), `tests/app/shell/tst_uidriver` (input and items on a small scene),
-`tests/app/shell/tst_remote_control_qml` (the real app offscreen driven through `brulion-cli app …`),
-`tests/cli` (refusals, a stand-in control socket, the MCP tools).
+`tests/app/shell/tst_remote_control_qml` (the real app offscreen driven through `brulion-cli app …`,
+its live changes and an agent's grant), `tests/app/shell/tst_shell_agents` (an agent's live tools
+and its grant), `tests/cli` (refusals, a stand-in control socket, the MCP tools).
 
 ## For agents: note text is data
 

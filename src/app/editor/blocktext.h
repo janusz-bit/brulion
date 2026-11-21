@@ -318,6 +318,12 @@ const SlashCommand *slashCommand(QStringView id);
 /// Commands matching `filter` (diacritic- and case-insensitive; names in both languages and
 /// keywords), best first: name prefix, then word prefix, then substring; menu order otherwise.
 QList<const SlashCommand *> filterSlashCommands(QStringView filter);
+/// How `name` matches `filter` as filterSlashCommands() ranks it (both folded): 0 at its start
+/// (and for an empty filter), 1 at a word's start, 2 anywhere, -1 not at all.
+int slashMatchRank(QStringView name, QStringView filter);
+/// The rank of command `c` for `filter` in filterSlashCommands(): its names' best
+/// slashMatchRank(), a keyword's + 3; -1 when it does not match.
+int slashCommandRank(const SlashCommand &c, QStringView filter);
 /// Commands this build cannot run, left out of filterSlashCommands() (the app sets them at start:
 /// "voiceNote" without a recorder, docs/UI.md "Voice notes").
 void setUnavailableSlashCommands(const QStringList &ids);

@@ -399,6 +399,87 @@ private Q_SLOTS:
         QVERIFY(count.size() >= 2);
     }
 
+    void slashExtensionItems()
+    {
+        // The extensions' items of the `/` menu (b.app.contribute("slash", …)): after the commands
+        // and views, by their labels (diacritics folded) or the extension's title, the title as the
+        // subtitle; a command "ext:<extension>/<id>", the Markdown as insertText.
+        SuggestionModel m;
+        const auto row = [](const QString &extension, const QString &title, const QString &id, const QString &label,
+                            const QString &icon, const QString &insert) {
+            return QVariantMap{{u"extension"_s, extension},
+                               {u"title"_s, title},
+                               {u"id"_s, id},
+                               {u"label"_s, label},
+                               {u"icon"_s, icon},
+                               {u"insert"_s, insert},
+                               {u"command"_s, insert.isEmpty() ? u"x"_s : QString()},
+                               {u"key"_s, QString(extension + u'/' + id)}};
+        };
+        m.setExtensionItems(
+                {row(u"silownia"_s, u"Siłownia"_s, u"seria"_s, u"Dodaj serię"_s, u"dumbbell"_s, QString()),
+                 row(u"notatki"_s, u"Notatki"_s, u"podpis"_s, u"Podpis z datą"_s, QString(), u"— Zażółć, 2026"_s),
+                 row(u"notatki"_s, u"Notatki"_s, u"plan"_s, u"Plan dnia"_s, u"list"_s, u"- Rano\n- Wieczór"_s)});
+        QSignalSpy count(&m, &SuggestionModel::countChanged);
+        m.setTrigger({{u"mode"_s, u"slash"_s}, {u"filter"_s, u"serie"_s}, {u"token"_s, u"/"_s}});
+        // "serię" folds to "serie": the item, the extension's title under it, its icon.
+        QCOMPARE(titles(m), QStringList({u"Dodaj serię"_s}));
+        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"Siłownia"_s);
+        QCOMPARE(m.get(0).value(u"icon"_s).toString(), u"dumbbell"_s);
+        QCOMPARE(m.get(0).value(u"kind"_s).toString(), u"command"_s);
+        QCOMPARE(m.get(0).value(u"command"_s).toString(), u"ext:silownia/seria"_s);
+        QCOMPARE(m.get(0).value(u"extension"_s).toString(), u"silownia"_s);
+        QCOMPARE(m.get(0).value(u"itemId"_s).toString(), u"seria"_s);
+        QCOMPARE(m.get(0).value(u"insertText"_s).toString(), QString());
+        // By the extension's title too, after the labels; no icon: the puzzle.
+        m.setFilter(u"notat"_s);
+        const int podpis = int(titles(m).indexOf(u"Podpis z datą"_s));
+        QVERIFY(podpis >= 0);
+        QCOMPARE(m.get(podpis + 1).value(u"title"_s).toString(), u"Plan dnia"_s);
+        QCOMPARE(m.get(podpis).value(u"icon"_s).toString(), u"puzzle"_s);
+        QCOMPARE(m.get(podpis).value(u"insertText"_s).toString(), u"— Zażółć, 2026"_s);
+        // Ranked among the app's commands: a label that starts with what was typed comes before
+        // every command that matches less well ("/dod": "Dodaj serię" before commands with "dod"
+        // inside a word or in a keyword), after the commands that match as well.
+        m.setFilter(u"dod"_s);
+        const int dodaj = int(titles(m).indexOf(u"Dodaj serię"_s));
+        QVERIFY(dodaj >= 0);
+        for (int i = 0; i < m.count(); ++i) {
+            const SlashCommand *c = slashCommand(m.get(i).value(u"command"_s).toString());
+            if (!c)
+                continue;
+            const int rank = slashCommandRank(*c, u"dod"_s);
+            QVERIFY2(rank == 0 ? i < dodaj : i > dodaj, qPrintable(c->id));
+        }
+        // A label's start before a word's start before anywhere: "da" starts the word "datą" of
+        // the second item, and is only inside "Dodaj" of the first.
+        m.setFilter(u"da"_s);
+        const QStringList all = titles(m);
+        QVERIFY(all.indexOf(u"Podpis z datą"_s) >= 0);
+        QVERIFY(all.indexOf(u"Podpis z datą"_s) < all.indexOf(u"Dodaj serię"_s));
+        QVERIFY(!all.contains(u"Plan dnia"_s));
+        m.setFilter(u"plan"_s); // "Plan dnia" at its start, "Zaplanuj…" inside a word
+        QVERIFY(titles(m).indexOf(u"Plan dnia"_s) >= 0);
+        QVERIFY(titles(m).indexOf(u"Plan dnia"_s) < titles(m).indexOf(u"Zaplanuj…"_s));
+        // A bare "/" lists them after every command.
+        m.setFilter(QString());
+        QCOMPARE(m.count(), int(slashCommands().size()) + 3);
+        QCOMPARE(values(m, u"command"_s).mid(m.count() - 3),
+                 QStringList({u"ext:silownia/seria"_s, u"ext:notatki/podpis"_s, u"ext:notatki/plan"_s}));
+        // They follow the extensions live (an item removed), and only the slash list shows them.
+        m.setExtensionItems({row(u"silownia"_s, u"Siłownia"_s, u"seria"_s, u"Dodaj serię"_s, QString(), QString())});
+        QCOMPARE(m.count(), int(slashCommands().size()) + 1);
+        m.setFilter(u"zażółć"_s);
+        QCOMPARE(m.count(), 0);
+        QVERIFY(count.size() >= 3);
+        SuggestionModel pages;
+        pages.setHost(&m_host);
+        pages.setExtensionItems(
+                {row(u"silownia"_s, u"Siłownia"_s, u"seria"_s, u"Dodaj serię"_s, QString(), QString())});
+        pages.setTrigger({{u"mode"_s, u"pages"_s}, {u"filter"_s, u"Dodaj"_s}});
+        QVERIFY(!values(pages, u"command"_s).contains(u"ext:silownia/seria"_s));
+    }
+
     void dates()
     {
         SuggestionModel m;

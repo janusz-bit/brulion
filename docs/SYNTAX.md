@@ -2458,7 +2458,8 @@ end, { label = "Policz słowa" })
 * **Properties** (Polish or English keys, any case; a `key:: value` line or the frontmatter;
   values in either language): `uprawnienia::` / `permissions::` — a list or words separated by
   commas or spaces: `zapis` / `write` (it may change notes; reading is always allowed, and `odczyt`
-  / `read` may be written), `ai`; `opis::` / `description::` — shown in Settings → Extensions;
+  / `read` may be written), `ai`, `aplikacja` / `app` (it may change the app: its settings, theme,
+  UI items, what it shows — docs/EXTENSIONS.md "The app (`b.app`)"); `opis::` / `description::` — shown in Settings → Extensions;
   `zastępuje::` / `overrides::` — the id of a built-in extension the page replaces (`silownia`,
   `nawyki`, `asystent`). Unknown permission words are reported, not granted.
 * **Id**: the page's title folded — lower case, no diacritics, what is no letter or digit a `-`

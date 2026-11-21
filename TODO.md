@@ -24,6 +24,14 @@ done in the repository simply disappears from the list.
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
   /c`) and macOS; and the other direction — Brulion's assistant as an ACP agent for Zed and
   JetBrains (`brulion-cli acp agent`, which needs `b.ai` in brulion-cli).
+* **AI agents on another computer changing the app live** — an agent of this computer with "Let it
+  change the app while it runs" gets the live tools (`brulion-cli mcp --app-control` with a grant,
+  docs/CLI.md "Live changes"); one on another computer (`brulion-cli acp serve`, the phone's case)
+  does not: its tools there drive no app. Tunnel them: `acp serve` offers the session an MCP server
+  of its own whose `brulion_app_*` calls go back over the device's stream (a request the app
+  answers like the remote control's methods, with a grant the phone makes per stream and the
+  same journal and revert), so an agent on the home server can theme and script the app on the
+  phone; Android has no remote control socket, so the app answers them in process.
 * **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
   from the camera app for a message (the activity recreated while the camera is in front loses the
   photo's path, kept only in memory) and dictation with Google's recognizer and with none
@@ -73,6 +81,23 @@ done in the repository simply disappears from the list.
   the type checker on an Android phone (built in, measured, not run on one yet), the browser's
   hostile-extension self-test in a real browser beside CI's headless Chrome
   (`scripts/wasm-smoke.mjs --extensions`).
+* **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and six
+  slots of the UI are scriptable, and agents change the running app live (docs/EXTENSIONS.md "The
+  app (`b.app`)", "Live code"). Still open: the built-in AI assistant's tools for `b.app` (a theme,
+  a setting, a button — its tool set is what the fine-tuned on-device model learned, so the bench
+  runs first: docs/FINETUNE.md); more slots (the tab bar's menu, the folder tree's menu, the
+  phone's bottom navigation, the editor's toolbar on the keyboard, the share sheet); replacing a
+  built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
+  editor input rules (`->` → `→` as typed, declarative so nothing waits for Luau); styles of blocks
+  by tag (a block tagged `#pilne` tinted); a theme as a page of its own (`#theme`, a `theme` block,
+  picked in Settings → Appearance and synced); `b.app.settings()` for the notebook's own settings
+  (`.brulion/config.json`: journal folder, templates) beside the device's.
+* **Focus after a click in the top bar (desktop)** — a mouse click on the top bar while a day of
+  the Journal is edited leaves the Journal's editor as the place the focus returns to: an AI
+  dialog closed later on another page (the editor's "Rewrite") gives the focus to the hidden
+  Journal's editor (found by the shell self-test's `checkContributions`, which therefore runs after
+  `checkAiWriting`). Typing then could go into a note that is not on screen: make a hidden view's
+  editor never take the focus back.
 * **Gym: next steps** — the exercises' pictures (free-exercise-db's two per exercise, about 70 MB,
   not bundled): fetched on demand into the cache and shown in the exercise view; Polish
   instructions for the common exercises (free-exercise-db's are English); the rest timer's

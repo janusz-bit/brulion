@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QRandomGenerator>
 
 #include <utility>
 
@@ -95,6 +96,84 @@ void ControlServer::close()
     m_server.reset(); // closes it (the socket file is removed) and deletes its connections
 }
 
+void ControlServer::setOpen(bool open)
+{
+    if (m_open == open)
+        return;
+    m_open = open;
+    if (open || !m_server)
+        return;
+    // Closed to everyone without a grant: their connections end now.
+    const QList<QLocalSocket *> sockets = m_server->findChildren<QLocalSocket *>();
+    for (QLocalSocket *socket : sockets) {
+        if (!m_peers.value(socket).granted)
+            socket->abort();
+    }
+}
+
+QString ControlServer::addGrant(const QString &client)
+{
+    quint32 words[8];
+    QRandomGenerator::system()->fillRange(words);
+    QString token;
+    for (const quint32 w : words)
+        token += u"%1"_s.arg(w, 8, 16, u'0');
+    m_grants.insert(token, cleanClientName(client));
+    return token;
+}
+
+bool ControlServer::revokeGrant(const QString &token)
+{
+    if (!m_grants.remove(token))
+        return false;
+    QList<QLocalSocket *> drop;
+    for (auto it = m_peers.cbegin(); it != m_peers.cend(); ++it) {
+        if (it->granted && it->token == token)
+            drop.append(it.key());
+    }
+    for (QLocalSocket *socket : std::as_const(drop))
+        socket->abort();
+    return true;
+}
+
+std::optional<QString> ControlServer::grantFor(const QString &token) const
+{
+    // Every grant compared in full: the time taken tells nothing of how much of a token matched.
+    std::optional<QString> found;
+    const QByteArray given = token.toLatin1();
+    for (auto it = m_grants.cbegin(); it != m_grants.cend(); ++it) {
+        const QByteArray known = it.key().toLatin1();
+        unsigned char diff = given.size() == known.size() ? 0 : 1;
+        for (qsizetype i = 0; i < known.size(); ++i)
+            diff |= static_cast<unsigned char>(known.at(i) ^ (i < given.size() ? given.at(i) : 0));
+        if (diff == 0)
+            found = it.value();
+    }
+    return found;
+}
+
+bool ControlServer::introduce(Peer &peer, const ControlRequest &request, QLocalSocket *socket)
+{
+    const QJsonValue token = request.params.value(u"token"_s);
+    if (token.isString()) {
+        const std::optional<QString> client = grantFor(token.toString());
+        if (!client) {
+            writeLine(socket, encodeError(request.id, QString::fromLatin1(ControlError::Unauthorized),
+                                          u"The token is no grant of this app (its agent stopped, or it was "
+                                          u"never one)"_s));
+            return false;
+        }
+        peer.granted = true;
+        peer.token = token.toString();
+        peer.client = *client;
+        return true;
+    }
+    // A name for a connection without a grant (a grant's name stays).
+    if (!peer.granted && request.params.contains(u"client"_s))
+        peer.client = cleanClientName(request.params.value(u"client"_s).toString());
+    return true;
+}
+
 bool ControlServer::isListening() const
 {
     return m_server && m_server->isListening();
@@ -115,6 +194,8 @@ void ControlServer::accept(QLocalSocket *socket)
         socket->deleteLater();
         return;
     }
+    m_peers.insert(socket, Peer{});
+    connect(socket, &QObject::destroyed, this, [this, socket] { m_peers.remove(socket); });
     connect(socket, &QLocalSocket::readyRead, this, [this, socket] { readLines(socket); });
     connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
     readLines(socket);
@@ -138,15 +219,28 @@ void ControlServer::readLines(QLocalSocket *socket)
         if (line.trimmed().isEmpty())
             continue;
         ControlFailure failure;
-        const std::optional<ControlRequest> request = parseRequest(line, &failure);
+        std::optional<ControlRequest> request = parseRequest(line, &failure);
         if (!request) {
             writeLine(socket, encodeError(failure));
+            continue;
+        }
+        Peer &peer = m_peers[socket];
+        // Not open (only grants): nothing but hello with a token before it showed one.
+        const bool hello = request->method == u"hello";
+        if (!m_open && !peer.granted && !(hello && request->params.value(u"token"_s).isString())) {
+            writeLine(socket, encodeError(request->id, QString::fromLatin1(ControlError::Unauthorized),
+                                          u"The remote control is off: only an agent the app started may connect, "
+                                          u"with its token (hello {token})"_s));
             continue;
         }
         if (const auto problem = checkRequest(*request)) {
             writeLine(socket, encodeError(*problem));
             continue;
         }
+        if (hello && !introduce(peer, *request, socket))
+            continue;
+        request->client = peer.client;
+        request->granted = peer.granted;
         const ControlReply reply(socket, request->id);
         if (m_handler)
             m_handler(*request, reply);

@@ -53,6 +53,7 @@ private Q_SLOTS:
     void colorText_data();
     void colorText();
     void themeColorsFollowInputs();
+    void themeColorsTakeOverrides();
 };
 
 void TestThemePalette::defaultsAreNocny_data()
@@ -475,6 +476,51 @@ void TestThemePalette::themeColorsFollowInputs()
     c.setLightSurface(u"white"_s); // not shown in the dark: the colours stay
     QCOMPARE(changes, before);
     QVERIFY(before >= 3);
+}
+
+void TestThemePalette::themeColorsTakeOverrides()
+{
+    // The theme's overrides (b.app.theme, an agent's live theme: ThemeOverrides, one per process)
+    // over the palette's tokens; the others reach Theme.qml through `overrides`.
+    ThemeOverrides *overrides = ThemeOverrides::instance();
+    brulion::ui::ThemeColors c;
+    QVERIFY(c.overrides().isEmpty());
+    QCOMPARE(c.map(), paletteMap(false, u"", u"", u"", u""));
+    int changes = 0;
+    connect(&c, &brulion::ui::ThemeColors::colorsChanged, this, [&changes] { ++changes; });
+    overrides->setTokens({{u"accent"_s, u"#1f8a80"_s},
+                          {u"bg"_s, u"#f4ecd8"_s},
+                          {u"danger"_s, u"#9b1c1c"_s},
+                          {u"radius"_s, 12.0},
+                          {u"fontUi"_s, u"Literata"_s}},
+                         {{u"bg"_s, u"#0b0d10"_s}, {u"fgOnAccent"_s, u"#000000"_s}});
+    QCOMPARE(changes, 1);
+    QCOMPARE(c.bg(), u"#f4ecd8"_s);
+    QCOMPARE(c.accent(), u"#1f8a80"_s);
+    // The accent's family follows it, as a custom accent's (readable on this surface).
+    const QVariantMap custom = paletteMap(false, u"", u"", u"custom", u"#1f8a80");
+    QCOMPARE(c.accentText(), custom.value(u"accentText"_s).toString());
+    QCOMPARE(c.accentSolid(), custom.value(u"accentSolid"_s).toString());
+    QCOMPARE(c.accentOn(), custom.value(u"accentOn"_s).toString());
+    QCOMPARE(c.fg(), paletteMap(false, u"", u"", u"", u"").value(u"fg"_s).toString()); // not overridden
+    // The tokens Theme.qml picks itself: in `overrides`, read by pickNumber() and pickText().
+    QCOMPARE(c.overrides().value(u"danger"_s).toString(), u"#9b1c1c"_s);
+    QCOMPARE(c.pickNumber(c.overrides(), u"radius"_s, 7), 12);
+    QCOMPARE(c.pickNumber(c.overrides(), u"radiusLg"_s, 10), 10);
+    QCOMPARE(c.pickText(c.overrides(), u"fontUi"_s, u"Inter"_s), u"Literata"_s);
+    QCOMPARE(c.pickText(c.overrides(), u"fontMono"_s, u"JetBrains Mono"_s), u"JetBrains Mono"_s);
+    // The dark mode's own tokens: `fgOnAccent` is the palette's accentOn; `bg` the dark one; the
+    // light mode's accent is not the dark one's.
+    c.setDark(true);
+    QCOMPARE(c.bg(), u"#0b0d10"_s);
+    QCOMPARE(c.accentOn(), u"#000000"_s);
+    QCOMPARE(c.accent(), u"#ff7a66"_s);
+    QVERIFY(!c.overrides().contains(u"danger"_s));
+    // Gone again: exactly the palette, and every token's own value.
+    overrides->setTokens({}, {});
+    QCOMPARE(c.map(), paletteMap(true, u"", u"", u"", u""));
+    QVERIFY(c.overrides().isEmpty());
+    QCOMPARE(c.pickNumber(c.overrides(), u"radius"_s, 7), 7);
 }
 
 QTEST_GUILESS_MAIN(TestThemePalette)

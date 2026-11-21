@@ -75,6 +75,8 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacebackups.h ${_brulion_shell_dir}/workspacebackups.cpp
     ${_brulion_shell_dir}/workspaceextensions.h ${_brulion_shell_dir}/workspaceextensions.cpp
     ${_brulion_shell_dir}/workspacemacros.cpp
+    ${_brulion_shell_dir}/workspaceapp.cpp
+    ${_brulion_shell_dir}/appscripting.h ${_brulion_shell_dir}/appscripting.cpp
     ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
     ${_brulion_shell_dir}/writingsession.h ${_brulion_shell_dir}/writingsession.cpp
@@ -175,11 +177,13 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellBackupSettings.qml
     qml/shell/ShellBottomNav.qml
     qml/shell/ShellContextDrawer.qml
+    qml/shell/ShellContributionItems.qml
     qml/shell/ShellExtensionApproval.qml
     qml/shell/ShellExtensionCopy.qml
     qml/shell/ShellExtensionQuestion.qml
     qml/shell/ShellExtensionSettings.qml
     qml/shell/ShellExtensionView.qml
+    qml/shell/ShellLiveIndicator.qml
     qml/shell/ShellLockScreen.qml
     qml/shell/ShellMacroDialog.qml
     qml/shell/ShellMoveDialog.qml

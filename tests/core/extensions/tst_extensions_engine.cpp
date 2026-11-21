@@ -746,7 +746,7 @@ private Q_SLOTS:
         QCOMPARE(bad.status, Status::Error);
         QVERIFY2(
                 bad.error.startsWith(
-                        u"zle:2: b.on: unknown event \"zamknięcie\" (save, change, task, journal, open, day, timer)"_s),
+                        u"zle:2: b.on: unknown event \"zamknięcie\" (save, change, task, journal, open, day, timer, route)"_s),
                 qPrintable(bad.error));
         bad = engine->load(ext(u"zle"_s, u"b.on(\"save\", 42)"_s));
         QVERIFY2(bad.error.contains(u"b.on: argument 2 must be a function"_s), qPrintable(bad.error));

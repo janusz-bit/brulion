@@ -38,6 +38,8 @@
 //
 // Not thread-safe: one Engine is used from one thread.
 
+#include "extensions/appapi.h"
+
 #include <QElapsedTimer>
 #include <QHash>
 #include <QList>
@@ -133,6 +135,12 @@ struct VariableInfo {
     QString name;
     QString description;
     QStringList arguments;
+};
+
+/// One extension's overrides of the theme (b.app.theme), in the order the extensions set them.
+struct ThemeInfo {
+    QString extension;
+    ThemeLayer layer;
 };
 
 /// What calls read of the notebook while a recording is on (Engine::startRecording): a macro is
@@ -233,6 +241,15 @@ public:
     void cancel(int call); ///< drops a waiting call
     void cancel(); ///< drops the newest call waiting on a question, if any
 
+    // ---- The app (b.app; docs/EXTENSIONS.md "The app (`b.app`)") -------------------------------
+    /// The UI items extensions contributed (b.app.contribute) to `slot` ("" = every slot), by
+    /// their `order`, then in the order contributed. Dropped with their extension.
+    QList<Contribution> contributions(const QString &slot = QString()) const;
+    /// The extensions' overrides of the theme, the first set first (a later one wins per token).
+    QList<ThemeInfo> themes() const;
+    /// Counts the changes of contributions() and themes().
+    int appRevision() const { return m_appRevision; }
+
     qint64 memoryUsed() const { return qint64(m_used); }
     static QString version(); ///< "Luau 0.743"
 
@@ -264,7 +281,7 @@ private:
         bool chat = false;
     };
     /// A macro or a template variable (b.macro, b.variable).
-    struct Contribution {
+    struct MacroEntry {
         QString extension;
         int ref = 0;
         QString description;
@@ -359,6 +376,11 @@ private:
     static int apiSetting(lua_State *L);
     static int apiSetSetting(lua_State *L);
     static int apiStopTimer(lua_State *L);
+    static int apiApp(lua_State *L); // b.app.state … b.app.toast: upvalues (extension, operation)
+    static int apiAppTheme(lua_State *L);
+    static int apiAppContribute(lua_State *L);
+    static int apiAppRemove(lua_State *L);
+    static int apiAppContributions(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -425,6 +447,16 @@ private:
     int settingImpl(lua_State *L);
     int setSettingImpl(lua_State *L);
     int stopTimerImpl(lua_State *L);
+    int appImpl(lua_State *L);
+    int appThemeImpl(lua_State *L);
+    int appContributeImpl(lua_State *L);
+    int appRemoveImpl(lua_State *L);
+    int appContributionsImpl(lua_State *L);
+    /// False, its error raised, when `extension` may not change the app now: no permission "app",
+    /// a macro's or a template variable's call, or — `notWhileLoading` — its top level.
+    bool mayChangeApp(lua_State *L, const QString &extension, const QString &function, bool notWhileLoading);
+    /// Drops the extension's contributions and theme; true when it had any.
+    bool dropAppState(const QString &extension);
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
     /// False, its error raised, inside a macro's or a template variable's call (they only read: no
@@ -473,14 +505,17 @@ private:
     QMap<int, Waiting> m_waiting; // by call id
     int m_nextCall = 1;
     int m_aiFactoryRef = 0; // the b.ai wrapper's factory (a prelude)
-    QHash<QString, Contribution> m_macros; // "extension/name"
-    QHash<QString, Contribution> m_variables;
+    QHash<QString, MacroEntry> m_macros; // "extension/name"
+    QHash<QString, MacroEntry> m_variables;
     Reads *m_reads = nullptr; // a recording is on (startRecording)
     Reads m_recorded;
     bool m_noWrites = false;                 // a macro's or a variable's call runs: writes are refused
     int m_requireFactoryRef = 0;             // the b.require wrapper's factory (a prelude)
     bool m_loading = false;                  // load(): what the top level returns is no result (a library's table)
     QHash<QString, QByteArray> m_moduleCode; // a module's bytecode by its hash (compiled once)
+    QList<Contribution> m_contributions;     // in the order contributed
+    QList<ThemeInfo> m_themes;               // in the order set
+    int m_appRevision = 0;
 };
 
 } // namespace brulion::extensions

@@ -9,7 +9,8 @@ import Brulion
 // documentation, another folder). Then the views as icon buttons, their names in tooltips:
 // Journal, Calendar, Tasks, Habits, Gym, Flashcards (with the count of cards to study now), All
 // pages, Tags, Graph, Search (without the ones
-// hidden in Settings → Appearance → Layout; on phones also Import notes). They scroll when the
+// hidden in Settings → Appearance → Layout; on phones also Import notes), then the extensions'
+// entries (b.app.contribute("sidebar", …), docs/UI.md "Extension items in the UI"). They scroll when the
 // window is too low for all. At the bottom the sync status (ShellSyncFooter, compact; a click
 // syncs now, a right click or long press opens the sync center) and Settings. On wide windows the rail stays at the window's left edge when the page panel
 // (ShellSidebar) is hidden; on phones it is the drawer's left column (`navigated()` closes it).
@@ -35,6 +36,10 @@ Rectangle {
         { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryIcon: "waypoints" },
         { entryView: "search", entryAlso: "", entryTitle: qsTr("Search"), entryIcon: "search" }
     ]
+    readonly property list<var> noRows: []
+    /// The extensions' entries as text: made again only when they change.
+    readonly property string itemsKey: Workspace.extensions !== null
+                                       ? Workspace.extensions.contributionsKey("sidebar", Workspace.extensions.appRevision) : ""
     /// The buttons' squares and the room on both sides of them.
     readonly property int buttonSize: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight
     readonly property int sidePadding: Theme.space2
@@ -188,6 +193,30 @@ Rectangle {
                     iconName: "download"
                     selected: rail.routeView === "importExport"
                     onClicked: rail.go({ view: "importExport", tab: "import" })
+                }
+                // The extensions' entries (b.app.contribute("sidebar", …)) after the app's own; one
+                // that opens a view is selected while that view shows.
+                Repeater {
+                    model: rail.itemsKey !== "" ? Workspace.extensions.contributions("sidebar", rail.itemsKey.length) : rail.noRows
+                    delegate: RailButton {
+                        id: extensionEntry
+                        required property var modelData
+                        required property string extension
+                        required property string tooltip
+                        required property string view
+                        readonly property string itemId: UiModels.stringField(extensionEntry.modelData, "id")
+                        objectName: "sidebarNav_ext_" + extensionEntry.itemId
+                        iconName: UiModels.stringField(extensionEntry.modelData, "icon") !== ""
+                                  ? UiModels.stringField(extensionEntry.modelData, "icon") : "puzzle"
+                        toolTip: extensionEntry.tooltip
+                        selected: extensionEntry.view !== "" && rail.routeView === "extension"
+                                  && AppController.routeText(AppController.currentRoute, "extension") === extensionEntry.extension
+                                  && AppController.routeText(AppController.currentRoute, "name") === extensionEntry.view
+                        onClicked: {
+                            AppScripting.activate("sidebar", extensionEntry.extension, extensionEntry.itemId, "", -1)
+                            rail.navigated()
+                        }
+                    }
                 }
             }
         }

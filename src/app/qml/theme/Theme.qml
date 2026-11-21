@@ -21,6 +21,15 @@ import Brulion
 // (today, the current tab, drop targets) — it never means "destructive": that is `danger*`,
 // red whatever the accent.
 //
+// Overrides (docs/EXTENSIONS.md "The app (`b.app`)": an extension's b.app.theme, an AI agent's live
+// theme): every token of the catalog (core extensions/appapi.cpp themeTokens(): the colours below,
+// radiusXs … radiusXl, focusRingWidth, fontUi/fontSans/fontSerif/fontMono) can be replaced. The
+// palette's tokens have them already (ThemeColors); every other colour keeps its own value as
+// `_<name>Base` and reads `_pick("<name>", _<name>Base)` (the override from palette.overrides through
+// palette.pickText(): a C++ method's QColor cannot be stored in a compiled `color`), sizes
+// `palette.pickNumber()`, fonts `palette.pickText()` (an installed family only). With no overrides
+// every token is exactly its own value.
+//
 // Inputs (set by the app shell / settings; the dev tools set them from the command line):
 //   mode           "system" | "light" | "dark"   (system follows Qt.styleHints.colorScheme)
 //   reducedMotion  durations become 0
@@ -98,6 +107,15 @@ QtObject {
     readonly property color _tagDarkBase: "#c89bf0"
     readonly property color _tagLightBase: "#7a4bb0"
 
+    /// The colour `token` of the theme's overrides (palette.overrides: "#rrggbb" / "#aarrggbb"), else
+    /// `base`, the token's own value — exactly that value with no overrides.
+    function _pick(token: string, base: color): color {
+        const value = "" + theme.palette.pickText(theme.palette.overrides, token, "")
+        if (value === "")
+            return base
+        return value
+    }
+
     // ---- Surfaces ------------------------------------------------------------------------
     // Defaults (paper / black): bg #fbf7ee / #000000, bgElevated #fffdf7 / #0d0f13, bgElevated2
     // #fffefb / #1c2027, bgSunken #f3eee2 / #08090b (slate: #1c2130, #232a3b, #2b3245, #171b28).
@@ -105,12 +123,17 @@ QtObject {
     readonly property color bgElevated: palette.bgElevated     // cards, dialogs, menus
     readonly property color bgElevated2: palette.bgElevated2   // popups over cards
     readonly property color bgSunken: palette.bgSunken         // sidebar, wells, code
-    readonly property color bgHover: dark ? theme._fgDarkBase.alpha(0.06) : theme.ink.alpha(0.055)
-    readonly property color bgPressed: dark ? theme._fgDarkBase.alpha(0.11) : theme.ink.alpha(0.10)
-    readonly property color bgSelected: dark ? theme.gridBlue.alpha(0.16) : theme.gridBlue.alpha(0.30)
-    readonly property color bgInverse: dark ? "#d3d8e2" : "#1f2430"
+    readonly property color _bgHoverBase: dark ? theme._fgDarkBase.alpha(0.06) : theme.ink.alpha(0.055)
+    readonly property color bgHover: theme._pick("bgHover", theme._bgHoverBase)
+    readonly property color _bgPressedBase: dark ? theme._fgDarkBase.alpha(0.11) : theme.ink.alpha(0.10)
+    readonly property color bgPressed: theme._pick("bgPressed", theme._bgPressedBase)
+    readonly property color _bgSelectedBase: dark ? theme.gridBlue.alpha(0.16) : theme.gridBlue.alpha(0.30)
+    readonly property color bgSelected: theme._pick("bgSelected", theme._bgSelectedBase)
+    readonly property color _bgInverseBase: dark ? "#d3d8e2" : "#1f2430"
+    readonly property color bgInverse: theme._pick("bgInverse", theme._bgInverseBase)
     /// Behind edge sheets (bottom sheets, the full-screen palette, the drawer): the page dims.
-    readonly property color scrim: dark ? theme._scrimDarkBase.alpha(0.62) : theme.ink.alpha(0.40)
+    readonly property color _scrimBase: dark ? theme._scrimDarkBase.alpha(0.62) : theme.ink.alpha(0.40)
+    readonly property color scrim: theme._pick("scrim", theme._scrimBase)
     /// Behind centred modal panels (the floating command palette and quick switcher, a centred
     /// BDialog): the page recedes — light: a wash of the page tinted toward ink (paper about
     /// #ddd9d3, page text about 2.5:1 instead of 7:1, the panel's lighter fill stands out); dark:
@@ -122,7 +145,8 @@ QtObject {
     readonly property color fg: palette.fg
     readonly property color fgMuted: palette.fgMuted
     readonly property color fgFaint: palette.fgFaint
-    readonly property color fgInverse: dark ? "#1c2130" : "#fbf7ee"
+    readonly property color _fgInverseBase: dark ? "#1c2130" : "#fbf7ee"
+    readonly property color fgInverse: theme._pick("fgInverse", theme._fgInverseBase)
     /// Text on accentSolid: white, dark ink (#2b0a05) on the dark mode's bright coral.
     readonly property color fgOnAccent: palette.accentOn
     readonly property real disabledOpacity: 0.45
@@ -136,65 +160,97 @@ QtObject {
     readonly property color borderControl: palette.borderControl // ≥ 3:1 (checkbox, switch)
     /// Indent guides (the outline's level lines, the page tree's): quiet but seen, about
     /// Obsidian's level (1.28:1 on paper, 1.46:1 on slate). Not text, not a control.
-    readonly property color guide: border
+    readonly property color _guideBase: border
+    readonly property color guide: theme._pick("guide", theme._guideBase)
     /// Indent guides on bgSunken (the sidebar's and the drawer's tree), where border is only
     /// 1.18:1 in the light: borderStrong there (1.52:1), border in the dark (1.56:1).
-    readonly property color guideOnSunken: dark ? border : borderStrong
+    readonly property color _guideOnSunkenBase: dark ? border : borderStrong
+    readonly property color guideOnSunken: theme._pick("guideOnSunken", theme._guideOnSunkenBase)
 
     // ---- Actions -------------------------------------------------------------------------
-    readonly property color primary: dark ? "#d3d8e2" : "#1f2430"        // primary buttons
-    readonly property color primaryHover: dark ? "#e6e9ef" : "#2d3445"
-    readonly property color primaryPressed: dark ? "#bfc5d1" : "#151923"
-    readonly property color primaryFg: dark ? "#1c2130" : "#fbf7ee"
+    readonly property color _primaryBase: dark ? "#d3d8e2" : "#1f2430"
+    readonly property color primary: theme._pick("primary", theme._primaryBase)        // primary buttons
+    readonly property color _primaryHoverBase: dark ? "#e6e9ef" : "#2d3445"
+    readonly property color primaryHover: theme._pick("primaryHover", theme._primaryHoverBase)
+    readonly property color _primaryPressedBase: dark ? "#bfc5d1" : "#151923"
+    readonly property color primaryPressed: theme._pick("primaryPressed", theme._primaryPressedBase)
+    readonly property color _primaryFgBase: dark ? "#1c2130" : "#fbf7ee"
+    readonly property color primaryFg: theme._pick("primaryFg", theme._primaryFgBase)
     // The accent (default: coral, #c4422f / #ff7a66; its text and hover shades derived by
     // ThemePalette, its solid fill #c4422f under white / #ff7a66 under dark ink).
     readonly property color accent: palette.accent                         // marks (≥ 3:1)
     readonly property color accentHover: palette.accentHover
     readonly property color accentText: palette.accentText                 // accent text on bg
-    readonly property color accentBg: accent.alpha(dark ? 0.18 : 0.12)
+    readonly property color _accentBgBase: accent.alpha(dark ? 0.18 : 0.12)
+    readonly property color accentBg: theme._pick("accentBg", theme._accentBgBase)
     /// Accent fill under fgOnAccent (solid badges, today in the calendar).
     readonly property color accentSolid: palette.accentSolid
     readonly property color link: palette.link                             // #2a62a6 / #8fb8ea
-    readonly property color linkHover: dark ? "#b8d2f2" : "#1f5486"
+    readonly property color _linkHoverBase: dark ? "#b8d2f2" : "#1f5486"
+    readonly property color linkHover: theme._pick("linkHover", theme._linkHoverBase)
     readonly property color linkMissing: palette.linkMissing               // #7a5ea3 / #b9a3d8
     // Tags and due dates: a light tint, well apart from the selection (bgSelected) it used to match.
-    readonly property color tagBg: dark ? theme._tagDarkBase.alpha(0.12) : theme._tagLightBase.alpha(0.10)
+    readonly property color _tagBgBase: dark ? theme._tagDarkBase.alpha(0.12) : theme._tagLightBase.alpha(0.10)
+    readonly property color tagBg: theme._pick("tagBg", theme._tagBgBase)
     readonly property color tagFg: palette.tagFg                           // #7a4bb0 / #c89bf0
 
     // ---- Status --------------------------------------------------------------------------
-    readonly property color danger: dark ? "#c94a3e" : "#c8473b"          // fills under white text (≥ 4.5:1)
-    readonly property color dangerHover: dark ? "#bd4337" : "#b23c31"
-    readonly property color dangerFg: "#ffffff"
+    readonly property color _dangerBase: dark ? "#c94a3e" : "#c8473b"
+    readonly property color danger: theme._pick("danger", theme._dangerBase)          // fills under white text (≥ 4.5:1)
+    readonly property color _dangerHoverBase: dark ? "#bd4337" : "#b23c31"
+    readonly property color dangerHover: theme._pick("dangerHover", theme._dangerHoverBase)
+    readonly property color _dangerFgBase: "#ffffff"
+    readonly property color dangerFg: theme._pick("dangerFg", theme._dangerFgBase)
     readonly property color dangerText: palette.dangerText                 // also on dangerBg chips (#a8382d / #f3877c)
-    readonly property color dangerBg: dark ? theme.marginRed.alpha(0.18) : theme.marginRed.alpha(0.12)
-    readonly property color warning: "#f2b33d"
+    readonly property color _dangerBgBase: dark ? theme.marginRed.alpha(0.18) : theme.marginRed.alpha(0.12)
+    readonly property color dangerBg: theme._pick("dangerBg", theme._dangerBgBase)
+    readonly property color _warningBase: "#f2b33d"
+    readonly property color warning: theme._pick("warning", theme._warningBase)
     readonly property color warningText: palette.warningText               // #835500 / #f2b33d
-    readonly property color warningBg: dark ? theme.amber.alpha(0.16) : theme.amber.alpha(0.22)
-    readonly property color success: dark ? "#6fbf8a" : "#2f7a4c"
+    readonly property color _warningBgBase: dark ? theme.amber.alpha(0.16) : theme.amber.alpha(0.22)
+    readonly property color warningBg: theme._pick("warningBg", theme._warningBgBase)
+    readonly property color _successBase: dark ? "#6fbf8a" : "#2f7a4c"
+    readonly property color success: theme._pick("success", theme._successBase)
     readonly property color successText: palette.successText               // #2a6e44 / #7fd1a8
-    readonly property color successBg: dark ? theme._successDarkBase.alpha(0.16) : theme._successLightBase.alpha(0.14)
-    readonly property color info: dark ? "#9fc3e6" : "#2c6aa3"
-    readonly property color infoText: dark ? "#9fc3e6" : "#2c6aa3"
-    readonly property color infoBg: dark ? theme.gridBlue.alpha(0.14) : theme.gridBlue.alpha(0.28)
+    readonly property color _successBgBase: dark ? theme._successDarkBase.alpha(0.16) : theme._successLightBase.alpha(0.14)
+    readonly property color successBg: theme._pick("successBg", theme._successBgBase)
+    readonly property color _infoBase: dark ? "#9fc3e6" : "#2c6aa3"
+    readonly property color info: theme._pick("info", theme._infoBase)
+    readonly property color _infoTextBase: dark ? "#9fc3e6" : "#2c6aa3"
+    readonly property color infoText: theme._pick("infoText", theme._infoTextBase)
+    readonly property color _infoBgBase: dark ? theme.gridBlue.alpha(0.14) : theme.gridBlue.alpha(0.28)
+    readonly property color infoBg: theme._pick("infoBg", theme._infoBgBase)
 
     // ---- Chips (dates, reminders, tags inside rendered text) ------------------------------
-    readonly property color chipDueBg: dark ? theme.gridBlue.alpha(0.10) : theme.gridBlue.alpha(0.16)
+    readonly property color _chipDueBgBase: dark ? theme.gridBlue.alpha(0.10) : theme.gridBlue.alpha(0.16)
+    readonly property color chipDueBg: theme._pick("chipDueBg", theme._chipDueBgBase)
     readonly property color chipDueFg: palette.chipDueFg                   // #2b5f8f / #b9d4ee
-    readonly property color chipOverdueBg: dangerBg
-    readonly property color chipOverdueFg: dangerText
-    readonly property color chipScheduledBg: dark ? theme._scheduledDarkBase.alpha(0.16) : theme._scheduledLightBase.alpha(0.12)
+    readonly property color _chipOverdueBgBase: dangerBg
+    readonly property color chipOverdueBg: theme._pick("chipOverdueBg", theme._chipOverdueBgBase)
+    readonly property color _chipOverdueFgBase: dangerText
+    readonly property color chipOverdueFg: theme._pick("chipOverdueFg", theme._chipOverdueFgBase)
+    readonly property color _chipScheduledBgBase: dark ? theme._scheduledDarkBase.alpha(0.16) : theme._scheduledLightBase.alpha(0.12)
+    readonly property color chipScheduledBg: theme._pick("chipScheduledBg", theme._chipScheduledBgBase)
     readonly property color chipScheduledFg: palette.chipScheduledFg       // #6a4f93 / #c7b5e2
     // Reminders and alarms are amber whatever the accent (never coral, never the overdue red).
-    readonly property color chipReminderBg: dark ? theme.amber.alpha(0.13) : theme.amber.alpha(0.22)
+    readonly property color _chipReminderBgBase: dark ? theme.amber.alpha(0.13) : theme.amber.alpha(0.22)
+    readonly property color chipReminderBg: theme._pick("chipReminderBg", theme._chipReminderBgBase)
     readonly property color chipReminderFg: palette.chipReminderFg         // #8a5900 / #f2b33d
-    readonly property color chipAlarmBg: dark ? theme.amber.alpha(0.28) : "#f2b33d"
-    readonly property color chipAlarmFg: dark ? "#ffd27a" : "#1f2430"
-    readonly property color chipRecurrenceBg: dark ? theme._successDarkBase.alpha(0.14) : theme._successLightBase.alpha(0.12)
+    readonly property color _chipAlarmBgBase: dark ? theme.amber.alpha(0.28) : "#f2b33d"
+    readonly property color chipAlarmBg: theme._pick("chipAlarmBg", theme._chipAlarmBgBase)
+    readonly property color _chipAlarmFgBase: dark ? "#ffd27a" : "#1f2430"
+    readonly property color chipAlarmFg: theme._pick("chipAlarmFg", theme._chipAlarmFgBase)
+    readonly property color _chipRecurrenceBgBase: dark ? theme._successDarkBase.alpha(0.14) : theme._successLightBase.alpha(0.12)
+    readonly property color chipRecurrenceBg: theme._pick("chipRecurrenceBg", theme._chipRecurrenceBgBase)
     readonly property color chipRecurrenceFg: palette.chipRecurrenceFg     // #2a6e44 / #8fd3a6
-    readonly property color chipDoneBg: dark ? theme._fgDarkBase.alpha(0.08) : theme.ink.alpha(0.06)
-    readonly property color chipDoneFg: fgMuted
-    readonly property color chipNeutralBg: dark ? theme._fgDarkBase.alpha(0.08) : theme.ink.alpha(0.06)
-    readonly property color chipNeutralFg: fgMuted
+    readonly property color _chipDoneBgBase: dark ? theme._fgDarkBase.alpha(0.08) : theme.ink.alpha(0.06)
+    readonly property color chipDoneBg: theme._pick("chipDoneBg", theme._chipDoneBgBase)
+    readonly property color _chipDoneFgBase: fgMuted
+    readonly property color chipDoneFg: theme._pick("chipDoneFg", theme._chipDoneFgBase)
+    readonly property color _chipNeutralBgBase: dark ? theme._fgDarkBase.alpha(0.08) : theme.ink.alpha(0.06)
+    readonly property color chipNeutralBg: theme._pick("chipNeutralBg", theme._chipNeutralBgBase)
+    readonly property color _chipNeutralFgBase: fgMuted
+    readonly property color chipNeutralFg: theme._pick("chipNeutralFg", theme._chipNeutralFgBase)
 
     /// { bg, fg, icon } for a chip variant: tag, due, overdue, scheduled, reminder, alarm,
     /// recurrence, done, neutral. (A member of its result does not compile: chipBg(), chipFg()
@@ -259,31 +315,53 @@ QtObject {
     }
 
     // ---- Editing, selection, focus, diff ---------------------------------------------------
-    readonly property color selection: dark ? theme.gridBlue.alpha(0.30) : theme.gridBlue.alpha(0.55)
-    readonly property color selectionFg: fg
-    readonly property color mark: dark ? theme.amber.alpha(0.30) : theme.amber.alpha(0.38)
-    readonly property color focusRing: dark ? "#9fc3e6" : "#3b7dc0"
-    readonly property color diffAddBg: dark ? theme._successDarkBase.alpha(0.13) : theme._successLightBase.alpha(0.13)
-    readonly property color diffAddStrong: dark ? theme._successDarkBase.alpha(0.32) : theme._successLightBase.alpha(0.30)
-    readonly property color diffAddFg: successText
-    readonly property color diffDelBg: dark ? theme.marginRed.alpha(0.14) : theme.marginRed.alpha(0.11)
-    readonly property color diffDelStrong: dark ? theme.marginRed.alpha(0.36) : theme.marginRed.alpha(0.28)
-    readonly property color diffDelFg: dangerText
-    readonly property color scrollbar: dark ? theme._fgDarkBase.alpha(0.22) : theme.ink.alpha(0.24)
-    readonly property color switchThumb: dark ? "#dfe2e8" : "#ffffff"
-    readonly property color shadow: dark ? theme._black.alpha(0.5) : theme.ink.alpha(0.18)
+    readonly property color _selectionBase: dark ? theme.gridBlue.alpha(0.30) : theme.gridBlue.alpha(0.55)
+    readonly property color selection: theme._pick("selection", theme._selectionBase)
+    readonly property color _selectionFgBase: fg
+    readonly property color selectionFg: theme._pick("selectionFg", theme._selectionFgBase)
+    readonly property color _markBase: dark ? theme.amber.alpha(0.30) : theme.amber.alpha(0.38)
+    readonly property color mark: theme._pick("mark", theme._markBase)
+    readonly property color _focusRingBase: dark ? "#9fc3e6" : "#3b7dc0"
+    readonly property color focusRing: theme._pick("focusRing", theme._focusRingBase)
+    readonly property color _diffAddBgBase: dark ? theme._successDarkBase.alpha(0.13) : theme._successLightBase.alpha(0.13)
+    readonly property color diffAddBg: theme._pick("diffAddBg", theme._diffAddBgBase)
+    readonly property color _diffAddStrongBase: dark ? theme._successDarkBase.alpha(0.32) : theme._successLightBase.alpha(0.30)
+    readonly property color diffAddStrong: theme._pick("diffAddStrong", theme._diffAddStrongBase)
+    readonly property color _diffAddFgBase: successText
+    readonly property color diffAddFg: theme._pick("diffAddFg", theme._diffAddFgBase)
+    readonly property color _diffDelBgBase: dark ? theme.marginRed.alpha(0.14) : theme.marginRed.alpha(0.11)
+    readonly property color diffDelBg: theme._pick("diffDelBg", theme._diffDelBgBase)
+    readonly property color _diffDelStrongBase: dark ? theme.marginRed.alpha(0.36) : theme.marginRed.alpha(0.28)
+    readonly property color diffDelStrong: theme._pick("diffDelStrong", theme._diffDelStrongBase)
+    readonly property color _diffDelFgBase: dangerText
+    readonly property color diffDelFg: theme._pick("diffDelFg", theme._diffDelFgBase)
+    readonly property color _scrollbarBase: dark ? theme._fgDarkBase.alpha(0.22) : theme.ink.alpha(0.24)
+    readonly property color scrollbar: theme._pick("scrollbar", theme._scrollbarBase)
+    readonly property color _switchThumbBase: dark ? "#dfe2e8" : "#ffffff"
+    readonly property color switchThumb: theme._pick("switchThumb", theme._switchThumbBase)
+    readonly property color _shadowBase: dark ? theme._black.alpha(0.5) : theme.ink.alpha(0.18)
+    readonly property color shadow: theme._pick("shadow", theme._shadowBase)
 
     // ---- Typography ----------------------------------------------------------------------
     // The defaults are the bundled fonts (src/app/ui/uifonts.h): Inter for the interface,
     // Literata for note text (serif), JetBrains Mono for code, dates and meta text — the system's
     // when one did not load. A chosen family missing on this device (chosen elsewhere,
     // uninstalled) gives the default.
-    readonly property string fontUi: uiFontFamily !== "" && DeviceInfo.hasFontFamily(uiFontFamily)
-                                     ? uiFontFamily : DeviceInfo.defaultUiFamily
-    readonly property string fontSerif: DeviceInfo.defaultSerifFamily
-    readonly property string fontSans: DeviceInfo.defaultUiFamily
-    readonly property string fontMono: monoFontFamily !== "" && DeviceInfo.hasFontFamily(monoFontFamily)
-                                       ? monoFontFamily : DeviceInfo.defaultMonoFamily
+    // The theme's overrides (b.app.theme: fontUi, fontSans, fontSerif, fontMono) win over these,
+    // when installed (_pickFont).
+    readonly property string _fontUiBase: uiFontFamily !== "" && DeviceInfo.hasFontFamily(uiFontFamily)
+                                          ? uiFontFamily : DeviceInfo.defaultUiFamily
+    readonly property string _fontMonoBase: monoFontFamily !== "" && DeviceInfo.hasFontFamily(monoFontFamily)
+                                            ? monoFontFamily : DeviceInfo.defaultMonoFamily
+    readonly property string fontUi: theme._pickFont("fontUi", theme._fontUiBase)
+    readonly property string fontSerif: theme._pickFont("fontSerif", DeviceInfo.defaultSerifFamily)
+    readonly property string fontSans: theme._pickFont("fontSans", DeviceInfo.defaultUiFamily)
+    readonly property string fontMono: theme._pickFont("fontMono", theme._fontMonoBase)
+    /// The family `token` of the theme's overrides when one is set and installed, else `base`.
+    function _pickFont(token: string, base: string): string {
+        const family = "" + theme.palette.pickText(theme.palette.overrides, token, "")
+        return family !== "" && DeviceInfo.hasFontFamily(family) ? family : base
+    }
     readonly property string fontEditor: editorFontFamily !== "" && DeviceInfo.hasFontFamily(editorFontFamily)
                                          ? editorFontFamily : editorFont === "sans" ? fontSans : fontSerif
 
@@ -331,11 +409,12 @@ QtObject {
     readonly property int space12: 48
     readonly property int space16: 64
 
-    readonly property int radiusXs: 3
-    readonly property int radiusSm: 5
-    readonly property int radius: 7
-    readonly property int radiusLg: 10
-    readonly property int radiusXl: 16
+    // (Each overridable: palette.pickNumber() gives the theme's override, else the value.)
+    readonly property int radiusXs: palette.pickNumber(palette.overrides, "radiusXs", 3)
+    readonly property int radiusSm: palette.pickNumber(palette.overrides, "radiusSm", 5)
+    readonly property int radius: palette.pickNumber(palette.overrides, "radius", 7)
+    readonly property int radiusLg: palette.pickNumber(palette.overrides, "radiusLg", 10)
+    readonly property int radiusXl: palette.pickNumber(palette.overrides, "radiusXl", 16)
     readonly property int radiusFull: 999
 
     /// Minimum hit area for anything interactive (44 px on touch UIs).
@@ -362,7 +441,7 @@ QtObject {
     readonly property int dialogWidthSm: 400
     readonly property int dialogWidth: 520
     readonly property int dialogWidthLg: 760
-    readonly property int focusRingWidth: 2
+    readonly property int focusRingWidth: palette.pickNumber(palette.overrides, "focusRingWidth", 2)
 
     // ---- Elevation (BShadow) --------------------------------------------------------------
     /// { blur, offsetY, spread, opacity } for levels 0 (flat) … 3 (dialogs); each typed:

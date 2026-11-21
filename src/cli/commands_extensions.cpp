@@ -472,6 +472,10 @@ QJsonObject checkJson(Call &call, const Target &t, bool *loaded)
     if (*loaded) {
         for (const QString &key : {u"commands"_s, u"views"_s, u"hooks"_s, u"macros"_s, u"variables"_s})
             o.insert(key, QJsonValue::fromVariant(r.value(key)).toArray());
+        if (r.contains(u"contributions"_s))
+            o.insert(u"contributions"_s, QJsonValue::fromVariant(r.value(u"contributions"_s)).toArray());
+        if (r.contains(u"theme"_s))
+            o.insert(u"theme"_s, QJsonValue::fromVariant(r.value(u"theme"_s)).toObject());
     } else {
         QJsonObject error{{u"status"_s, r.value(u"status"_s).toString()}, {u"message"_s, r.value(u"error"_s).toString()}};
         if (r.contains(u"line"_s))
@@ -636,6 +640,9 @@ Result report(Call &call, Sandbox &box, const Outcome &out, QJsonObject o, const
     o.insert(u"printed"_s, box.printed);
     if (!box.timers.isEmpty())
         o.insert(u"timers"_s, box.timers);
+    // What it would have changed in the app (b.app.navigate, b.app.set …: none runs here).
+    if (const QVariantList app = box.host->dryApp(); !app.isEmpty())
+        o.insert(u"app"_s, QJsonArray::fromVariantList(app));
     if (out.aiRequests > 0) {
         o.insert(u"aiRequests"_s, out.aiRequests);
         call.warn(u"ai_not_run"_s, tr("b.ai was called: brulion-cli asks no model, the call got an error"));

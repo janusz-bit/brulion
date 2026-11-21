@@ -62,6 +62,7 @@
 
 #include <functional>
 #include <optional>
+#include <utility>
 
 namespace brulion::acp {
 
@@ -91,6 +92,9 @@ struct McpServer
     QString name;
     QString command; ///< an absolute path
     QStringList args;
+    /// Environment variables the agent sets for it (McpServerStdio's `env: [{name, value}]`): a
+    /// grant's token for the app's live tools (docs/CLI.md "Live changes").
+    QList<std::pair<QString, QString>> env{};
 };
 
 /// A block of a prompt.

@@ -103,6 +103,8 @@ class QWindow;
 
 namespace brulion::shell {
 
+class AppScripting;
+
 class CommandModel;
 class ShortcutMap;
 
@@ -289,6 +291,8 @@ public:
     LocalAi *localAi() const { return m_localAi.get(); }
     media::Transcriber *speech() const { return m_speech.get(); }
     AppLockController *appLock() const { return m_appLock.get(); }
+    /// The app as extensions and live clients change it (b.app; appscripting.h). QML: AppScripting.
+    AppScripting *scripting() const { return m_scripting.get(); }
     CommandModel *commands() const { return m_commands.get(); }
     /// The commands' keyboard shortcuts, custom ones included (Settings → Keyboard shortcuts).
     ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
@@ -849,6 +853,7 @@ private:
     /// After the workspace (it writes transcripts there): destroyed before it.
     std::unique_ptr<media::Transcriber> m_speech;
     std::unique_ptr<AppLockController> m_appLock;
+    std::unique_ptr<AppScripting> m_scripting;
     std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<ShortcutMap> m_shortcuts;
     std::unique_ptr<CommandModel> m_commands;

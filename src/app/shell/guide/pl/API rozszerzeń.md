@@ -375,6 +375,7 @@ end, { description = "Otwarte zadania z terminem do dnia notatki" })
 | `"open"` | notatnik został otwarty (raz, po wczytaniu rozszerzeń) | `date` |
 | `"day"` | zaczął się nowy dzień, gdy Brulion działa | `date`, `previous` |
 | `"timer"` | skończył się własny timer rozszerzenia | `label`, `seconds` |
+| `"route"` | ekran pokazuje coś innego: stronę, dzień, widok | `view`, `page`, `path`, `date`, `previous` |
 
 Reakcja nigdy nie słyszy tego, co zapisało jej własne rozszerzenie — więc nie odpowiada sama sobie — ale słyszy każde inne: zadanie odhaczone w widoku jednego rozszerzenia dociera do strony, którą prowadzi inne. Rozszerzenia odpowiadające sobie nawzajem zatrzymują się po czterech rundach. Synchronizacja przynosi to, co zapisały rozszerzenia na innym urządzeniu, z `source = "sync"`: reakcja, która coś dopisuje przy każdym zdarzeniu, powinna je pomijać, inaczej wpis pojawi się raz z każdego urządzenia. Reakcja nie może zadać pytania, a taka, która zawiedzie trzy razy z rzędu, zostaje wyłączona do ponownego wczytania rozszerzenia.
 
@@ -480,6 +481,66 @@ end, { label = "Ile otwartych zadań" })
 
 ## AI
 `b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (pole `thoughts` odpowiedzi: to, co model myślał — streszczenie myślenia Claude'a, rozumowanie serwera, myśli modelu na urządzeniu), `images` (obrazki z notatnika dla modelu, który widzi: `b.ai({ prompt = "Co tu jest napisane?", images = { "paragon.jpg" } })`), `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
+
+## Aplikacja
+`b.app` to sam Brulion: to, co pokazuje, jego polecenia, ustawienia tego urządzenia, kolory, górny pasek, pasek stanu i menu. Czytanie nie wymaga niczego; zmienianie wymaga uprawnienia `aplikacja` (`uprawnienia: [aplikacja]`). Zmienia się aplikacja na tym urządzeniu — tak jak przy ustawieniach zmienianych ręcznie — a to, co rozszerzenie dodało do aplikacji, znika, gdy je wyłączysz.
+
+| Funkcja | Co robi |
+|---|---|
+| `b.app.state()` | co jest na ekranie: `view` (`"journals"`, `"page"`, `"calendar"` …), `page`, `date`, `dark`, `touch`, `narrow`, `width`, `height`, `platform`, `language` |
+| `b.app.commands()` | polecenia palety, każde `{ id, title, shortcut, enabled }` |
+| `b.app.run(id)` | uruchamia jedno z nich: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
+| `b.app.settings()` | ustawienia, które rozszerzenie może zmienić, z wartościami i tym, co przyjmują |
+| `b.app.get(klucz)`, `b.app.set(klucz, wartość)` | jedno ustawienie: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)` |
+| `b.app.navigate(widok)` | pokazuje widok: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
+| `b.app.open(strona, { line = 12, side = true })` | otwiera stronę, w danym wierszu, w panelu bocznym |
+| `b.app.back()` | wraca |
+| `b.app.toast(tekst, { tone = "success", button = { label = "Cofnij", command = "cofnij" } })` | komunikat, z przyciskiem uruchamiającym jedno z poleceń rozszerzenia |
+| `b.app.theme({ … })` | kolory, zaokrąglenia i czcionki Brulionu, dopóki rozszerzenie działa (niżej) |
+| `b.app.contribute(miejsce, element)` | dodaje przycisk albo pozycję w aplikacji (niżej) |
+| `b.app.remove(miejsce, id)`, `b.app.contributions()` | zabiera jeden; wypisuje elementy wszystkich rozszerzeń |
+
+Przechodzenie (`navigate`, `open`, `back`, `run`) i komunikaty dzieją się po wywołaniu — w poleceniach, akcjach i reakcjach, nie podczas wczytywania strony. Reakcja `"route"` uruchamia się, gdy ekran pokazuje coś innego: `e.view`, `e.page`, `e.date`.
+
+**Kolory.** `b.app.theme` przyjmuje nazwy tokenów wyglądu Brulionu: `bg`, `bgElevated`, `bgSunken` (powierzchnie), `fg`, `fgMuted` (tekst), `accent`, `link`, `tagFg`, `border`, `selection`, `mark` (wyróżnienia), `danger`, `warning`, `success` i inne, zaokrąglenia `radius`, `radiusSm`, `radiusLg` oraz czcionki `fontUi`, `fontSans`, `fontSerif`, `fontMono`. Kolor to `"#rrggbb"`; kolory jednego trybu idą do `dark = { … }` albo `light = { … }`. Literówka w nazwie to błąd, który podaje właściwą nazwę.
+
+```luau
+-- Sepia: strony w kolorze papieru w jasnym trybie, morski akcent, łagodniejsze rogi.
+b.app.theme({
+    accent = "#1f8a80",
+    radius = 9,
+    light = { bg = "#f4ecd8", bgElevated = "#fbf5e6", bgSunken = "#ebe1c8", fg = "#3b2f20" },
+    dark = { bg = "#14110c" },
+})
+```
+
+**Przyciski i pozycje.** `b.app.contribute(miejsce, element)` dodaje element w jednym z sześciu miejsc: `"toolbar"` (przycisk górnego paska), `"statusbar"` (tekst na dole okna), `"sidebar"` (pozycja paska bocznego), `"pageMenu"` (menu strony), `"blockMenu"` (menu bloku) i `"slash"` (menu `/`). Element ma `id`, `label`, `icon` i mówi, co robi: `command` (jedno z poleceń rozszerzenia), `view`, `page`, `run` (polecenie palety) albo, w menu `/`, `insert` (tekst do wpisania). To samo `id` jeszcze raz zastępuje element — tekst paska stanu, który coś liczy, po prostu dodaje się od nowa.
+
+```luau
+-- Dzisiejsze otwarte zadania na pasku stanu, zawsze aktualne, i pozycja `/` na spotkanie.
+local function policz()
+    local termin = b.query("type:tasks status:open due:<=today", 1).total
+    b.app.contribute("statusbar", {
+        id = "termin",
+        label = if termin == 0 then "Nic na dziś" else `Na dziś: {termin}`,
+        icon = "calendar-check",
+        run = "go.tasks",
+    })
+end
+
+policz()
+b.on("change", function(e)
+    policz()
+end)
+
+b.app.contribute("slash", {
+    id = "spotkanie",
+    label = "Notatka ze spotkania",
+    insert = "## Spotkanie\n- Kto:\n- Ustalenia:\n- [ ] Następny krok",
+})
+```
+
+Agent AI, z którym pracujesz, może zrobić to wszystko od razu w działającej aplikacji, bez strony — a Ty możesz to cofnąć w menu **Na żywo** na górnym pasku. Zobacz [[Rozszerzenia]] i opis dla programistów.
 
 ## Luau w skrócie
 - Teksty łączy `..`, można je też pisać w odwrotnych apostrofach z klamrami: `` `{n} stron` ``. Lista to `{ "a", "b" }` i liczy się od 1; `#lista` to jej długość; `for i, element in lista do … end` przechodzi po niej.

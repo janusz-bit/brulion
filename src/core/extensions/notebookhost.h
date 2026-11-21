@@ -75,10 +75,21 @@ public:
     /// Called after b.setSetting stored (or removed) a value of `extension`'s (never in a dry run):
     /// what follows from its settings is out of date (the app's macros of it).
     std::function<void(const QString &extension)> onSettingChanged;
+    /// b.app's operations (Host::app): the app answers them. Unset: a dry run answers the ones
+    /// that read with a state of no app ({view = "", platform = "cli"}, no commands, no settings)
+    /// and notes the ones that change it (dryApp()); a host that is no dry run says the app is
+    /// not there.
+    std::function<QVariant(const QString &extension, const QString &operation, const QVariantMap &args, QString *error)>
+            onApp;
+    /// The theme or the UI items of an extension changed (Host::appChanged).
+    std::function<void(const QString &extension)> onAppChanged;
 
     void setLanguages(const QString &language, const QString &uiLanguage);
     /// The pages a dry run would have written, in the order first written.
     QList<DryWrite> dryWrites() const { return m_dryWrites; }
+    /// What a dry run's calls asked of the app that would change it, in order: [{extension,
+    /// operation, …args}] (b.app.navigate, b.app.set …).
+    QVariantList dryApp() const { return m_dryApp; }
     /// The note a page name ([[link]] target) names, or "".
     VaultPath pathOf(const QString &page) const;
     /// The block at `line` of `path` as a block map (see host.h), or an empty map.
@@ -131,6 +142,8 @@ public:
     QString setSetting(const QString &extension, const QString &key, const QVariant &value) override;
     void log(const QString &extension, const QString &message) override;
     void status(const QString &extension, const QString &text) override;
+    QVariant app(const QString &extension, const QString &operation, const QVariantMap &args, QString *error) override;
+    void appChanged(const QString &extension) override;
 
 private:
     QDateTime clock() const;
@@ -148,6 +161,7 @@ private:
     QList<DryWrite> m_dryWrites;
     QHash<QString, VaultPath> m_dryPages; // a dry run's new pages by the name b.write was given
     QHash<QString, QVariantMap> m_drySettings; // a dry run's settings by extension
+    QVariantList m_dryApp;                     // a dry run's changes of the app (dryApp())
     qint64 m_writes = 0; // writes made (revision(): the index may follow them later)
 };
 

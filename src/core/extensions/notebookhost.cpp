@@ -908,4 +908,40 @@ void NotebookHost::status(const QString &extension, const QString &text)
         onStatus(extension, text);
 }
 
+QVariant NotebookHost::app(const QString &extension, const QString &operation, const QVariantMap &args, QString *error)
+{
+    if (onApp)
+        return onApp(extension, operation, args, error);
+    if (!m_options.dryRun)
+        return Host::app(extension, operation, args, error);
+    // A dry run: no app, but an extension tried out on the command line sees one that shows
+    // nothing, and what it would change is noted.
+    if (operation == u"state")
+        return QVariantMap{{u"view"_s, QString()},    {u"route"_s, QVariantMap()},
+                           {u"platform"_s, u"cli"_s}, {u"touch"_s, false},
+                           {u"narrow"_s, false},      {u"dark"_s, false},
+                           {u"width"_s, 0},           {u"height"_s, 0},
+                           {u"sidePanel"_s, false},   {u"language"_s, m_options.uiLanguage},
+                           {u"version"_s, QString()}};
+    if (operation == u"commands" || operation == u"settings")
+        return QVariantList();
+    if (operation == u"get") {
+        *error = u"no setting “%1” here: brulion-cli runs extensions without the app"_s.arg(
+                args.value(u"key"_s).toString());
+        return {};
+    }
+    QVariantMap asked = args;
+    asked.insert(u"extension"_s, extension);
+    asked.insert(u"operation"_s, operation);
+    if (m_dryApp.size() < 1000)
+        m_dryApp << asked;
+    return {};
+}
+
+void NotebookHost::appChanged(const QString &extension)
+{
+    if (onAppChanged)
+        onAppChanged(extension);
+}
+
 } // namespace brulion::extensions

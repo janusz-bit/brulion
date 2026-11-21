@@ -5,7 +5,12 @@
 // one, targets of two kinds or half a point, conditions of waitFor), modifiers, buttons and
 // route matching; and the socket end to end: owner-only permissions (0600), answers in any
 // order (a later answer, a client gone meanwhile), Polish text through it, errors for bad lines,
-// a live server never taken over, a stale socket file replaced, the file gone after close().
+// a live server never taken over, a stale socket file replaced, the file gone after close(). The
+// live methods' parameters (eval, load, theme, inspect, setProperty, events …) and grants: a closed
+// server answers `unauthorized` to everything before hello with a grant's token, a wrong token is
+// refused also while it is open, a grant's client name sticks, closing drops the connections
+// without one, a revoked grant drops its connections; ControlClient's identity (setIdentity(),
+// BRULION_APP_TOKEN / BRULION_APP_CLIENT) sent in a hello first.
 #include "controlclient.h"
 #include "controlprotocol.h"
 #include "controlserver.h"
@@ -17,6 +22,7 @@
 #include <QJsonDocument>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QRegularExpression>
 #include <QSemaphore>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -27,6 +33,7 @@
 #include <QElapsedTimer>
 
 #include <cstring>
+#include <functional>
 #ifdef Q_OS_UNIX
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -66,7 +73,9 @@ QJsonObject exchange(QLocalSocket &socket, const QByteArray &line)
 /// A ControlServer on a thread of its own: ControlClient blocks its thread while it waits.
 class ServerThread : public QThread {
 public:
-    ServerThread(const QString &key, ControlServer::Handler handler) : m_key(key), m_handler(std::move(handler)) { }
+    ServerThread(const QString &key, ControlServer::Handler handler, std::function<void(ControlServer &)> setup = {})
+        : m_key(key), m_handler(std::move(handler)), m_setup(std::move(setup))
+    { }
     ~ServerThread() override
     {
         quit();
@@ -86,6 +95,8 @@ protected:
     {
         ControlServer server;
         server.setHandler(m_handler);
+        if (m_setup)
+            m_setup(server);
         m_listening = server.listen(m_key);
         error = server.errorString();
         m_ready.release();
@@ -95,6 +106,7 @@ protected:
 private:
     QString m_key;
     ControlServer::Handler m_handler;
+    std::function<void(ControlServer &)> m_setup;
     QSemaphore m_ready;
     bool m_listening = false;
 };
@@ -282,6 +294,72 @@ private Q_SLOTS:
         QTest::newRow("wait a handle and a text")
                 << u"waitFor"_s << obj(R"({"handle":"h1","text":"a"})") << bad << QString();
         QTest::newRow("quit") << u"quit"_s << QJsonObject() << QString() << QString();
+        // Live changes.
+        QTest::newRow("hello with a client and a token")
+                << u"hello"_s << obj(R"({"client":"Claude Code","token":"ab12"})") << QString() << QString();
+        QTest::newRow("hello a number token") << u"hello"_s << obj(R"({"token":12})") << bad << u"token"_s;
+        QTest::newRow("eval") << u"eval"_s << obj(R"({"code":"return 1 + 1","extension":"nawyki"})") << QString()
+                              << QString();
+        QTest::newRow("eval nothing") << u"eval"_s << QJsonObject() << bad << u"code"_s;
+        QTest::newRow("eval blank") << u"eval"_s << obj(R"({"code":"  
+"})") << bad << u"code"_s;
+        QTest::newRow("eval an extension number")
+                << u"eval"_s << obj(R"({"code":"x","extension":1})") << bad << u"extension"_s;
+        QTest::newRow("extensions") << u"extensions"_s << QJsonObject() << QString() << QString();
+        QTest::newRow("extensions with a param") << u"extensions"_s << obj(R"({"all":1})") << bad << u"all"_s;
+        QTest::newRow("load")
+                << u"load"_s
+                << obj(R"({"id":"zywy","source":"local n = 1","title":"Żywy","permissions":["write","app"]})")
+                << QString() << QString();
+        QTest::newRow("load permissions as text")
+                << u"load"_s << obj(R"({"id":"a","source":"x = 1","permissions":"write, ai"})") << QString()
+                << QString();
+        QTest::newRow("load permissions of numbers")
+                << u"load"_s << obj(R"({"id":"a","source":"x = 1","permissions":[1]})") << bad << u"permissions"_s;
+        QTest::newRow("load without source") << u"load"_s << obj(R"({"id":"a"})") << bad << u"source"_s;
+        QTest::newRow("load blank source") << u"load"_s << obj(R"({"id":"a","source":" "})") << bad << u"source"_s;
+        QTest::newRow("load without id") << u"load"_s << obj(R"({"source":"x = 1"})") << bad << u"id"_s;
+        QTest::newRow("unload") << u"unload"_s << obj(R"({"id":"a"})") << QString() << QString();
+        QTest::newRow("unload nothing") << u"unload"_s << QJsonObject() << bad << u"id"_s;
+        QTest::newRow("reload") << u"reload"_s << QJsonObject() << QString() << QString();
+        QTest::newRow("console") << u"console"_s << obj(R"({"since":12,"limit":50})") << QString() << QString();
+        QTest::newRow("console limit 0") << u"console"_s << obj(R"({"limit":0})") << bad << u"limit"_s;
+        QTest::newRow("console since -1") << u"console"_s << obj(R"({"since":-1})") << bad << u"since"_s;
+        QTest::newRow("settings") << u"settings"_s << QJsonObject() << QString() << QString();
+        QTest::newRow("set a word") << u"set"_s << obj(R"({"key":"density","value":"compact"})") << QString()
+                                    << QString();
+        QTest::newRow("set a list") << u"set"_s << obj(R"({"key":"bottomNav","value":["a","b"]})") << QString()
+                                    << QString();
+        QTest::newRow("set null") << u"set"_s << obj(R"({"key":"uiFont","value":null})") << QString() << QString();
+        QTest::newRow("set without a value") << u"set"_s << obj(R"({"key":"density"})") << bad << u"value"_s;
+        QTest::newRow("theme tokens") << u"theme"_s
+                                      << QJsonObject{{u"tokens"_s,
+                                                      QJsonObject{{u"accent"_s, u"#3a7"_s},
+                                                                  {u"dark"_s, QJsonObject{{u"bg"_s, u"#0b0d10"_s}}}}},
+                                                     {u"catalog"_s, true}}
+                                      << QString() << QString();
+        QTest::newRow("theme nothing") << u"theme"_s << QJsonObject() << QString() << QString();
+        QTest::newRow("theme tokens as text")
+                << u"theme"_s << obj(R"({"tokens":"accent=green"})") << bad << u"tokens"_s;
+        QTest::newRow("theme tokens and clear")
+                << u"theme"_s << obj(R"({"tokens":{},"clear":true})") << bad << u"clear"_s;
+        QTest::newRow("contributions") << u"contributions"_s << obj(R"({"slot":"toolbar"})") << QString() << QString();
+        QTest::newRow("inspect") << u"inspect"_s << obj(R"({"handle":"h2","depth":8,"properties":true,"limit":2000})")
+                                 << QString() << QString();
+        QTest::newRow("inspect too deep") << u"inspect"_s << obj(R"({"depth":9})") << bad << u"depth"_s;
+        QTest::newRow("inspect too many") << u"inspect"_s << obj(R"({"limit":2001})") << bad << u"limit"_s;
+        QTest::newRow("set a property") << u"setProperty"_s
+                                        << obj(R"({"handle":"h2","name":"font.pixelSize","value":18})") << QString()
+                                        << QString();
+        QTest::newRow("set a property without a value")
+                << u"setProperty"_s << obj(R"({"handle":"h2","name":"color"})") << bad << u"value"_s;
+        QTest::newRow("set a blank property")
+                << u"setProperty"_s << obj(R"({"handle":"h2","name":" ","value":1})") << bad << u"name"_s;
+        QTest::newRow("events") << u"events"_s << obj(R"({"since":40,"wait":30000})") << QString() << QString();
+        QTest::newRow("events waiting too long") << u"events"_s << obj(R"({"wait":30001})") << bad << u"wait"_s;
+        QTest::newRow("changes") << u"changes"_s << QJsonObject() << QString() << QString();
+        QTest::newRow("revert one") << u"revert"_s << obj(R"({"who":"Claude Code"})") << QString() << QString();
+        QTest::newRow("revert a number") << u"revert"_s << obj(R"({"who":3})") << bad << u"who"_s;
     }
     void checkRequests()
     {
@@ -314,8 +392,11 @@ private Q_SLOTS:
             QCOMPARE(findControlMethod(m.name), &m);
         }
         for (const char *expected :
-             {"hello", "state", "navigate", "open", "commands", "command", "capture", "screenshot", "find", "click",
-              "longPress", "doubleClick", "drag", "scroll", "type", "key", "waitFor", "quit"})
+             {"hello",      "state",       "navigate", "open",      "commands",    "command",    "capture",
+              "screenshot", "find",        "click",    "longPress", "doubleClick", "drag",       "scroll",
+              "type",       "key",         "waitFor",  "quit",      "eval",        "extensions", "load",
+              "unload",     "reload",      "console",  "settings",  "set",         "theme",      "contributions",
+              "inspect",    "setProperty", "events",   "changes",   "revert"})
             QVERIFY2(names.contains(QLatin1String(expected)), expected);
         QVERIFY(!findControlMethod(u"nothing"_s));
     }
@@ -542,6 +623,186 @@ private Q_SLOTS:
         QVERIFY(client.connect());
         QVERIFY(client.call(u"hello"_s).ok);
 #endif
+    }
+
+    void clientNamesAndLists()
+    {
+        QCOMPARE(cleanClientName(u"  Claude\n Code\u200b "_s), u"Claude Code"_s);
+        QCOMPARE(cleanClientName(u"Żółw\tbłotny"_s), u"Żółw błotny"_s);
+        QCOMPARE(cleanClientName(QString(100, u'ż')).size(), MaxClientName);
+        QCOMPARE(cleanClientName(u"\x01\x02"_s), QString());
+        QCOMPARE(stringList(QJsonValue(u"write, ai,,  app "_s)), (QStringList{u"write"_s, u"ai"_s, u"app"_s}));
+        QCOMPARE(stringList(QJsonArray{u" write"_s, u""_s, u"app"_s}), (QStringList{u"write"_s, u"app"_s}));
+        QCOMPARE(stringList(QJsonValue()), QStringList());
+    }
+
+    // A server only for grants (the remote control's setting off, an AI agent the app started let
+    // change it): raw connections in this thread.
+    void grants()
+    {
+        const QString k = key(u"brulion-test-grants"_s);
+        ControlServer server;
+        int handled = 0;
+        server.setHandler([&handled](const ControlRequest &request, ControlReply reply) {
+            ++handled;
+            reply.ok(QJsonObject{
+                    {u"method"_s, request.method}, {u"client"_s, request.client}, {u"granted"_s, request.granted}});
+        });
+        QVERIFY(server.listen(k));
+        server.setOpen(false);
+        QVERIFY(!server.isOpen());
+        const QString token = server.addGrant(u"Claude\nCode"_s);
+        static const QRegularExpression hex(u"^[0-9a-f]{64}$"_s);
+        QVERIFY2(hex.match(token).hasMatch(), qPrintable(token));
+        const QString other = server.addGrant(u"Codex"_s);
+        QVERIFY(other != token);
+        QCOMPARE(server.grantCount(), 2);
+        const auto code = [](const QJsonObject &response) {
+            return response.value(u"error"_s).toObject().value(u"code"_s).toString();
+        };
+        const auto result = [](const QJsonObject &response) { return response.value(u"result"_s).toObject(); };
+
+        // Nothing before hello with a grant's token: not even an unknown method's list.
+        QLocalSocket stranger;
+        stranger.connectToServer(k);
+        QVERIFY(stranger.waitForConnected(1000));
+        QCOMPARE(code(exchange(stranger, R"({"id":1,"method":"state"})")), u"unauthorized"_s);
+        QCOMPARE(code(exchange(stranger, R"({"id":2,"method":"hello"})")), u"unauthorized"_s);
+        QCOMPARE(code(exchange(stranger, R"({"id":3,"method":"hello","params":{"client":"Ja"}})")), u"unauthorized"_s);
+        QCOMPARE(code(exchange(stranger, R"({"id":4,"method":"explode"})")), u"unauthorized"_s);
+        const QJsonObject wrong = exchange(stranger, R"({"id":5,"method":"hello","params":{"token":"00ff"}})");
+        QCOMPARE(code(wrong), u"unauthorized"_s);
+        QCOMPARE(wrong.value(u"id"_s).toInt(), 5);
+        // (A token of the right length but not a grant's: refused too.)
+        QCOMPARE(code(exchange(stranger,
+                               QJsonDocument(QJsonObject{{u"id"_s, 6},
+                                                         {u"method"_s, u"hello"_s},
+                                                         {u"params"_s, QJsonObject{{u"token"_s, QString(64, u'a')}}}})
+                                       .toJson(QJsonDocument::Compact))),
+                 u"unauthorized"_s);
+        QCOMPARE(handled, 0);
+
+        // A grant's token: its client from now on (hello's own name does not replace it).
+        QLocalSocket agent;
+        agent.connectToServer(k);
+        QVERIFY(agent.waitForConnected(1000));
+        const QByteArray hello =
+                QJsonDocument(QJsonObject{{u"id"_s, 1},
+                                          {u"method"_s, u"hello"_s},
+                                          {u"params"_s, QJsonObject{{u"token"_s, token}, {u"client"_s, u"Inny"_s}}}})
+                        .toJson(QJsonDocument::Compact);
+        QJsonObject r = exchange(agent, hello);
+        QVERIFY2(r.value(u"ok"_s).toBool(), QJsonDocument(r).toJson().constData());
+        QCOMPARE(result(r).value(u"client"_s).toString(), u"Claude Code"_s);
+        QVERIFY(result(r).value(u"granted"_s).toBool());
+        r = exchange(agent, R"({"id":2,"method":"hello","params":{"client":"Ktoś"}})");
+        QCOMPARE(result(r).value(u"client"_s).toString(), u"Claude Code"_s);
+        r = exchange(agent, R"({"id":3,"method":"eval","params":{"code":"return 1"}})");
+        QCOMPARE(result(r).value(u"method"_s).toString(), u"eval"_s);
+        QCOMPARE(result(r).value(u"client"_s).toString(), u"Claude Code"_s);
+        QCOMPARE(code(exchange(agent, R"({"id":4,"method":"explode"})")), u"unknown_method"_s);
+
+        // Open (the setting on): a connection without a token is served and may name itself; a
+        // wrong token is still refused.
+        server.setOpen(true);
+        QLocalSocket script;
+        script.connectToServer(k);
+        QVERIFY(script.waitForConnected(1000));
+        r = exchange(script, R"({"id":1,"method":"state"})");
+        QCOMPARE(result(r).value(u"client"_s).toString(), QString());
+        QVERIFY(!result(r).value(u"granted"_s).toBool());
+        r = exchange(script, R"({"id":2,"method":"hello","params":{"client":"  Skrypt\u0007 "}})");
+        QCOMPARE(result(r).value(u"client"_s).toString(), u"Skrypt"_s);
+        r = exchange(script, R"({"id":3,"method":"state"})");
+        QCOMPARE(result(r).value(u"client"_s).toString(), u"Skrypt"_s);
+        QCOMPARE(code(exchange(script, R"({"id":4,"method":"hello","params":{"token":"zły"}})")), u"unauthorized"_s);
+
+        // Closed again: the connections without a grant end, the agent's goes on.
+        server.setOpen(false);
+        QTRY_COMPARE(script.state(), QLocalSocket::UnconnectedState);
+        QTRY_COMPARE(stranger.state(), QLocalSocket::UnconnectedState);
+        r = exchange(agent, R"({"id":5,"method":"state"})");
+        QVERIFY(r.value(u"ok"_s).toBool());
+
+        // Revoked (the agent stopped): its connections end, its token is no grant any more.
+        QVERIFY(server.revokeGrant(token));
+        QVERIFY(!server.revokeGrant(token));
+        QCOMPARE(server.grantCount(), 1);
+        QTRY_COMPARE(agent.state(), QLocalSocket::UnconnectedState);
+        QLocalSocket again;
+        again.connectToServer(k);
+        QVERIFY(again.waitForConnected(1000));
+        QCOMPARE(code(exchange(again, hello)), u"unauthorized"_s);
+
+        // Grants outlive close() and listen().
+        server.close();
+        QCOMPARE(server.grantCount(), 1);
+        QVERIFY(server.listen(k));
+        QLocalSocket codex;
+        codex.connectToServer(k);
+        QVERIFY(codex.waitForConnected(1000));
+        r = exchange(codex, QJsonDocument(QJsonObject{{u"id"_s, 1},
+                                                      {u"method"_s, u"hello"_s},
+                                                      {u"params"_s, QJsonObject{{u"token"_s, other}}}})
+                                    .toJson(QJsonDocument::Compact));
+        QCOMPARE(result(r).value(u"client"_s).toString(), u"Codex"_s);
+        server.close();
+    }
+
+    // ControlClient says who it is in a hello first: setIdentity(), else the environment.
+    void clientIdentity()
+    {
+        const QString k = key(u"brulion-test-identity"_s);
+        QString token;
+        ServerThread server(
+                k,
+                [](const ControlRequest &request, ControlReply reply) {
+                    reply.ok(QJsonObject{{u"client"_s, request.client}, {u"granted"_s, request.granted}});
+                },
+                [&token](ControlServer &s) {
+                    s.setOpen(false);
+                    token = s.addGrant(u"Agent"_s);
+                });
+        QVERIFY2(server.startListening(), qPrintable(server.error));
+        QVERIFY(!token.isEmpty());
+
+        qunsetenv(ControlClient::TokenVariable);
+        qunsetenv(ControlClient::ClientVariable);
+        ControlClient granted(k);
+        granted.setIdentity(token, u"Ktoś"_s);
+        QVERIFY(granted.connect());
+        ControlClient::Response r = granted.call(u"state"_s);
+        QVERIFY2(r.ok, qPrintable(r.message));
+        QCOMPARE(r.result.toObject().value(u"client"_s).toString(), u"Agent"_s);
+        QVERIFY(r.result.toObject().value(u"granted"_s).toBool());
+
+        // A refused token: connected, but every call answers the refusal (no transport error).
+        ControlClient wrong(k);
+        wrong.setIdentity(u"00ff"_s, QString());
+        QVERIFY(wrong.connect());
+        r = wrong.call(u"state"_s);
+        QVERIFY(!r.ok);
+        QVERIFY(!r.transportError);
+        QCOMPARE(r.code, u"unauthorized"_s);
+        QCOMPARE(wrong.call(u"hello"_s).code, u"unauthorized"_s);
+        // No token at all: the closed server refuses the request itself.
+        ControlClient none(k);
+        QVERIFY(none.token().isEmpty());
+        QVERIFY(none.connect());
+        QCOMPARE(none.call(u"state"_s).code, u"unauthorized"_s);
+
+        // The environment of a program an agent started.
+        qputenv(ControlClient::TokenVariable, token.toUtf8());
+        qputenv(ControlClient::ClientVariable, "Żółw\nbłotny");
+        ControlClient fromEnv(k);
+        qunsetenv(ControlClient::TokenVariable);
+        qunsetenv(ControlClient::ClientVariable);
+        QCOMPARE(fromEnv.token(), token);
+        QCOMPARE(fromEnv.client(), u"Żółw błotny"_s);
+        QVERIFY(fromEnv.connect());
+        r = fromEnv.call(u"state"_s);
+        QVERIFY2(r.ok, qPrintable(r.message));
+        QCOMPARE(r.result.toObject().value(u"client"_s).toString(), u"Agent"_s);
     }
 
     void noHandlerMeansNotReady()
