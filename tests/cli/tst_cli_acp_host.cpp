@@ -947,10 +947,9 @@ private Q_SLOTS:
         std::unique_ptr<Talk> t = talk(token);
         const QString session = askedAndGone(t, u"AI/Pytanie.md"_s, u"pozwolenie"_s);
         QVERIFY(!session.isEmpty());
-        QVERIFY(m_host->turn(device, session)->asking);
-        const auto [first, e1] = fetchTurn(token, session, 0);
-        QVERIFY(!e1.failed());
-        QCOMPARE(first.state, acp::RemoteTurn::State::Running);
+        // (Not whether it is still asking or running: with no wait the answer may already have
+        // gone to the agent, which then ends its turn — on a fast runner before the next line.)
+        Q_UNUSED(device)
         const auto [done, e2] = fetchTurn(token, session, 25);
         QVERIFY(!e2.failed());
         QCOMPARE(done.state, acp::RemoteTurn::State::Done);

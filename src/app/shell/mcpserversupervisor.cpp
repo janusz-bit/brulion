@@ -23,11 +23,11 @@ using logging::lcNet;
 namespace {
 
 /// A run this long counts as one that worked: the next end starts the delays from the first.
-constexpr qint64 kStableSeconds = 60;
+[[maybe_unused]] constexpr qint64 kStableSeconds = 60;
 constexpr int kFirstDelayMs = 1000;
 constexpr int kMaxDelayMs = 60000;
 /// How long it may take to end when asked before it is killed.
-constexpr int kStopMs = 3000;
+[[maybe_unused]] constexpr int kStopMs = 3000;
 
 } // namespace
 
@@ -133,6 +133,7 @@ void McpServerSupervisor::apply()
 
 void McpServerSupervisor::start()
 {
+#if QT_CONFIG(process)
     stop();
     m_out.clear();
     m_err.clear();
@@ -160,10 +161,14 @@ void McpServerSupervisor::start()
     setState(u"starting"_s);
     qCInfo(lcNet, "mcp serve: starting for %s on port %d", qUtf8Printable(m_config.vault), m_config.port);
     m_process->start(m_program.value(0), args);
+#else
+    setState(u"off"_s);
+#endif
 }
 
 void McpServerSupervisor::stop()
 {
+#if QT_CONFIG(process)
     if (!m_process)
         return;
     std::unique_ptr<QProcess> process = std::move(m_process);
@@ -180,10 +185,14 @@ void McpServerSupervisor::stop()
         qCInfo(lcNet, "mcp serve: stopped");
     }
     m_endpoint.clear();
+#else
+    m_endpoint.clear();
+#endif
 }
 
 void McpServerSupervisor::readOutput()
 {
+#if QT_CONFIG(process)
     if (!m_process)
         return;
     m_out += m_process->readAllStandardOutput();
@@ -212,10 +221,12 @@ void McpServerSupervisor::readOutput()
     const QString why = first.value(u"error"_s).toObject().value(u"message"_s).toString();
     m_error = why.isEmpty() ? tr("The server did not start.") : why;
     qCWarning(lcNet, "mcp serve: refused to start: %s", qUtf8Printable(m_error));
+#endif
 }
 
 void McpServerSupervisor::readErrors()
 {
+#if QT_CONFIG(process)
     if (!m_process)
         return;
     m_err += m_process->readAllStandardError();
@@ -229,6 +240,7 @@ void McpServerSupervisor::readErrors()
     m_err.remove(0, from);
     if (m_err.size() > 64 * 1024)
         m_err.clear();
+#endif
 }
 
 void McpServerSupervisor::addLog(const QString &line)
@@ -242,6 +254,7 @@ void McpServerSupervisor::addLog(const QString &line)
     Q_EMIT logChanged();
 }
 
+#if QT_CONFIG(process)
 void McpServerSupervisor::ended(int exitCode, QProcess::ExitStatus status)
 {
     if (!m_process)
@@ -275,6 +288,7 @@ void McpServerSupervisor::ended(int exitCode, QProcess::ExitStatus status)
     m_restart.start(delay);
     setState(u"waiting"_s, why);
 }
+#endif
 
 int McpServerSupervisor::restartDelayMs(int failures)
 {
@@ -300,7 +314,11 @@ bool McpServerSupervisor::reachable() const
 
 qint64 McpServerSupervisor::processId() const
 {
+#if QT_CONFIG(process)
     return m_process && m_process->state() == QProcess::Running ? m_process->processId() : 0;
+#else
+    return 0;
+#endif
 }
 
 bool McpServerSupervisor::copy(const QString &text) const

@@ -30,6 +30,7 @@
 #include "chat/chat.h"
 #include "extensions/engine.h"
 
+#include <QCoreApplication> // Q_DECLARE_TR_FUNCTIONS
 #include <QDateTime>
 #include <QHash>
 #include <QJsonObject>

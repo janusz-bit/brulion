@@ -1301,11 +1301,15 @@ in
         };
       };
 
-      networking.firewall.allowedTCPPorts = mkIf (acpCfg.openFirewall && !acpCfg.tailscale) [ acpCfg.port ];
-      # (In the tailnet: there only.)
-      networking.firewall.interfaces.tailscale0.allowedTCPPorts = mkIf (acpCfg.openFirewall && acpCfg.tailscale) [
+      networking.firewall.allowedTCPPorts = mkIf (acpCfg.openFirewall && !acpCfg.tailscale) [
         acpCfg.port
       ];
+      # (In the tailnet: there only.)
+      networking.firewall.interfaces.tailscale0.allowedTCPPorts =
+        mkIf (acpCfg.openFirewall && acpCfg.tailscale)
+          [
+            acpCfg.port
+          ];
     })
   ];
 }

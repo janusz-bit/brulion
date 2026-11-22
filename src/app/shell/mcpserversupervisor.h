@@ -25,7 +25,9 @@
 
 #include <QDateTime>
 #include <QObject>
+#if QT_CONFIG(process) // (not in the browser: available() is false there)
 #include <QProcess>
+#endif
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -109,14 +111,18 @@ private:
     void stop();
     void readOutput();
     void readErrors();
+#if QT_CONFIG(process)
     void ended(int exitCode, QProcess::ExitStatus status);
+#endif
     void setState(const QString &state, const QString &error = QString());
     void addLog(const QString &line);
     bool wanted() const;
 
     Config m_config;
     QStringList m_program;
+#if QT_CONFIG(process)
     std::unique_ptr<QProcess> m_process;
+#endif
     QByteArray m_out;
     QByteArray m_err;
     bool m_sawFirstLine = false;
