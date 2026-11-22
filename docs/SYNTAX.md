@@ -2601,6 +2601,12 @@ zadania: ignoruj
   partners"); `partner: acp:claude` an AI agent set up on the device (docs/UI.md "AI agents
   (ACP)"); without it the built-in AI assistant. The chat writes it when another partner is
   chosen and takes it out for the assistant.
+* **Where it came from**: a conversation an AI agent started from another one — a task for another
+  partner, docs/UI.md "Agents delegate" — names it in its frontmatter as a link,
+  `parent: "[[AI/2026-11-22 Plan wyjazdu]]"` (the same key in every language, like `partner:`;
+  quoted, as YAML needs a link to be; an alias, heading or block part is left out when read). A
+  rename of that conversation rewrites the link, as any; the chat lists the sub-conversations under
+  it. A conversation deeper than three such levels starts no more.
 * **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
   notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),
   messages appended at the end of the page with their time (its line ending kept, everything

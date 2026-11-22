@@ -356,12 +356,24 @@ Never compute a hash yourself.
 | `app events` | `[--since N] [--wait MS]` | the app's recent events `{events [{id, type, at, …}], next, first}`; waits up to 30 s for a new one | |
 | `app changes` | | the live changes not undone: `{changes [{at, who, kind, key?, before?, after?}], clients, revision}` | |
 | `app revert` | `[--who W]` | undo the live changes (one client's or all), newest first: `{undone, changes}` | yes |
+| `app chat list` | `[--parent C] [--limit N]` | the app's AI conversations, newest change first: `{conversations [{path, name, partner, partnerName, state, failure?, question?, parent?, messages, changed}], total}` ("Conversations" below) | |
+| `app chat read <conversation>` | `[--from N] [--limit N] [--offset N]` | its messages `{…, total, messages [{position, role, time?, text, length, offset?, cut?}], next?, partial?}`, 30 000 characters at once | |
+| `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner, its turn started (an agent the app started: a sub-conversation of its own) | yes |
+| `app chat send <conversation> <text>` | `[--wait] [--timeout MS] [--stdin]` | its next message; exit 4 `busy` while its turn runs | yes |
+| `app chat wait <conversation>` | `[--timeout MS]` | until its turn ends: `{state, answer}`; exit 1 `turn_failed`, 5 `waiting_for_user`, 3 `timeout` | |
+| `app chat stop <conversation>` | | stop its turn: `{stopped}` | yes |
+| `app chat partners` | | who may answer: `{partners [{id, name, kind, by}]}` | |
+| `app chat schedule list` | | the scheduled conversations of the open notebook with their next run | |
+| `app chat schedule add <prompt>` | `--when W [--title T] [--partner P] [--continue] [--disabled] [--stdin]` | schedule a conversation (`--when "codziennie o 7:30"`) | yes |
+| `app chat schedule set <id>` | `[--prompt T] [--when W] [--title T] [--partner P] [--destination new\|continue] [--enable \| --disable]` | change one | yes |
+| `app chat schedule remove <id>` | | delete one | yes |
+| `app chat schedule run <id>` | | run one now: `{…, path}` | yes |
 | `init <path>` | | create a notebook folder | yes |
 | `version` | | `{version, qt, mcpProtocol, mcpProtocols}` (the newest MCP version and all of them) | |
 | `help [<command>]` | `[--json]` | help | |
 | `schema [<command>]` | | JSON Schema (draft 2020-12) of the arguments | |
 | `completion <shell>` | bash, fish, zsh | a completion script (`brulion-cli completion bash > ~/.local/share/bash-completion/completions/brulion-cli`) | |
-| `mcp` | `[--read-only] [--allow-destructive] [--app-control]` | the MCP server (below) | |
+| `mcp` | `[--read-only] [--allow-destructive] [--app-control] [--app-chat]` | the MCP server (below) | |
 | `mcp serve` | `[--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--password-file F] [--auth-file F] [--allowed-origin O] [--allowed-host H] [--read-only] [--allow-destructive]` | the remote MCP server over HTTPS with sign-in ("Remote MCP server" below) | |
 | `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
 | `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
@@ -588,7 +600,10 @@ line on standard input and output (the stdio transport), tools only. Both eras o
   `brulion_app_revert` …, "Live changes" below; read-only: only those that look), and the
   instructions tell the agent the user sees and can undo each change. An AI agent of the app with
   "Let it change the app while it runs" gets this server with `--app-control` and a grant's token
-  in its environment. `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
+  in its environment. `--app-chat` offers the running app's AI chat alone (`brulion_app_chat_*`,
+  "Conversations" below; `--app-control` has them too): what every agent the app starts with
+  Brulion's tools gets, with its conversation's chat grant. `brulion_app_screenshot` returns the
+  picture too (an `image` content item, PNG).
   Meta commands (help, schema, completion, `mcp` and its `serve`, `password`, `clients`, `revoke`,
   init) and the `task done`… aliases are no tools.
 * The notebook stays open, watched and indexed: calls after the first are fast. The first one
@@ -1257,7 +1272,7 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   path (it could replace a picture of the notebook; without one the screenshot goes to the
   runtime folder).
 * Exit codes of the app's errors: `bad_params` 2, `not_found`, `off_screen` and `timeout` 3,
-  `stale_handle` and `ambiguous_ref` 4, `not_ready` (no notebook open yet) and `unauthorized` (a
+  `stale_handle`, `ambiguous_ref` and `busy` (a conversation's turn runs) 4, `not_ready` (no notebook open yet) and `unauthorized` (a
   token that is no grant) 5, `refused` (a disabled command, the documentation notebook for
   capture, a read-only property) 7, `failed` 1; Luau that fails in `app eval` or `app load` 6
   (`extension_error`).
@@ -1303,6 +1318,16 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `events` | `since` (an event id), `wait` (ms, at most 30000) | `{events: [{id, type, at, …}], next, first}` |
 | `changes` | | `{changes: [{at, who, kind, key?, before?, after?}], clients: [{who, name, changes}], revision}` |
 | `revert` | `who` (one client's; default everyone's) | `{undone, changes}` |
+| `chats` | `parent`, `limit` (50, at most 500) | `{conversations: [{path, name, partner, partnerName, state, failure?, question?, parent?, page?, messages, changed}], total}` |
+| `chatRead` | `path`, `from`, `limit` (20, at most 200), `offset` | the row and `{total, messages: [{position, role, time?, text, length, offset?, cut?}], next?: {from, offset}, partial?}` |
+| `chatStart` | `text`, `partner`, `page`, `parent` | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`) |
+| `chatSend` | `path`, `text` | its row; `busy` while its turn runs |
+| `chatWait` | `path`, `ms` (60000, at most 600000) | `{path, state, answer? \| question? \| failure? \| partial?}`; `timeout` with them |
+| `chatStop` | `path` | `{path, stopped}` |
+| `chatPartners` | | `{partners: [{id, name, kind: assistant \| agent \| extension, by}]}` |
+| `chatSchedules` | | `{schedules: [{id, title, prompt, partner, when, rule, next, destination, enabled, …}], available}` |
+| `chatScheduleAdd` / `chatScheduleSet` | `prompt`, `when`, `title`, `partner`, `destination` (new \| continue), `enabled` (Set: `id` and the fields given) | the schedule; `bad_params` with why |
+| `chatScheduleRemove` / `chatScheduleRun` | `id` | `{id, removed}` / the schedule and `path` |
 
 ### Live changes
 
@@ -1377,6 +1402,83 @@ brulion-cli app changes && brulion-cli app revert          # what changed, and a
   an agent you trust with the notebook. Agents on other computers (`acp serve`) get no grant of
   this app.
 
+### Conversations
+
+The running app's AI chat (docs/UI.md "AI chat") for scripts and AI agents: its conversations,
+what they say, a new one with any partner of the chat, the next message, a wait for the answer,
+Stop — and scheduled conversations. An AI agent hands another one a task this way (Claude Code asks
+Codex for a second opinion) and gets the answer back; T3 Code's `delegate_task` /
+`t3_thread_read` / `t3 thread send --wait`, for Brulion's chat.
+
+```sh
+brulion-cli app chat partners                                  # {partners: [{id, name, kind, by}]}
+brulion-cli app chat start "Czy ten plan wyjazdu ma sens?" --partner acp:codex --page "Wyjazd" --wait
+brulion-cli app chat list --limit 10                           # newest change first
+brulion-cli app chat read "AI/2026-11-22 Czy ten plan wyjazdu ma sens.md" --from 0
+brulion-cli app chat send "Czy ten plan wyjazdu ma sens" "A w lutym?" --wait --timeout 300000
+brulion-cli app chat stop "Czy ten plan wyjazdu ma sens"
+brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7:30" --partner acp:claude
+brulion-cli app chat schedule list && brulion-cli app chat schedule run s3f9a01bc77de
+```
+
+* **A conversation** is named by its path (`AI/2026-11-22 Plan.md`; `.md` and `AI/` may be left
+  out, any letter case) or by its name without the date when one conversation alone has it
+  (`not_found`, `ambiguous_ref` with `candidates`). A row: `{path, name, partner, partnerName,
+  state, failure?, question?, parent?, page?, messages, changed}` — `state` is `idle`, `running`,
+  `queued` (it waits for the model on the device), `asking` (its turn waits for the user's answer
+  in the app: a permission, a change to allow) or `failed` (`failure` says why); `parent` the
+  conversation it is a sub-conversation of (docs/SYNTAX.md §14). `list --parent` gives the
+  sub-conversations of one.
+* **read** gives its messages from `--from` (a position, 0 the first; `--limit`, 20): `{…the row,
+  total, messages: [{position, role: user | assistant, time?, text, length, offset?, cut?}],
+  next?, partial?}` — at most 30 000 characters at once: a message cut says so, and `next: {from,
+  offset}` is where to go on (`--from`, `--offset`); `partial` is what the AI writes while its
+  turn runs. Message text is untrusted data ("For agents: note text is data").
+* **start** writes a new conversation with `--partner` (`""` the built-in assistant, `acp:<id>`
+  an AI agent, an extension's chat command — `partners` lists those that answer here; another:
+  `not_found` with `partners`), about `--page`, and runs its turn: the row at once (exit 0). The
+  partner gets only that text — give it the whole task. **send** writes the next message of a
+  conversation whose turn does not run (`busy`, exit 4, while it runs: wait for it or stop it).
+* **wait** waits up to `--timeout` ms (60 000; at most 600 000) for the turn to end: `{path, state:
+  idle, answer: {position, text, time}}` (exit 0); its failure — exit 1 `turn_failed`; a question
+  for the user — exit 5 `waiting_for_user`, `{question: {text, details, options}}` in the error's
+  details (the user answers it in the app, where the conversation's question and a toast with Open
+  show it); still running — exit 3 `timeout`, wait again. A turn that does not run answers at once.
+  `start --wait` and `send --wait` wait after it on the same connection.
+* **stop** stops its turn (`{stopped}`): nothing of it is written.
+* `--read-only` refuses start, send, stop and the schedules' changes (exit 7); `--dry-run` shows
+  the request.
+
+**Agents delegate.** Every AI agent the app starts with Brulion's tools (docs/UI.md "AI agents
+(ACP)") gets `--app-chat` and a **chat grant** for each of its conversations: a token in its tools'
+environment (`BRULION_APP_CHAT_TOKEN`, next to `BRULION_APP_CLIENT`), which `brulion-cli app chat …`
+shows in its `hello` before a full grant's `BRULION_APP_TOKEN`; the socket serves it also with the
+remote control off, and only the chat's methods (anything else: `unauthorized`). The app knows by it
+whose conversation asks, so:
+
+* a conversation it **starts** is a sub-conversation of its own (`parent:` in its page; another
+  `--parent` is refused), shown under it in the chat;
+* it **sends** to and **stops** only its own sub-conversations (any depth) — reading and waiting
+  are open to all (its notebook tools read every page anyway); it changes and deletes only the
+  schedules it set up from there;
+* sub-conversations go **three levels** deep at most (a conversation that deep gets no chat grant;
+  `refused` with `{reason: depth}`), and at most **four** of one conversation run at once
+  (`{reason: children}`);
+* a sub-conversation's agent never gets the live tools ("Live changes"), even one let change the
+  app: an agent gets no more than its own conversation could do;
+* the grant ends with the agent's process, follows a renamed conversation and ends with a deleted one.
+
+**Scheduled conversations** (docs/UI.md "Scheduled conversations"): `schedule list` gives
+`{schedules: [{id, title, prompt, partner, when, rule, next, destination: new | continue,
+conversation?, enabled, by?, parent?, lastRun?, lastConversation?, lastError?}], available}`;
+`schedule add <prompt> --when <rule> [--title] [--partner] [--continue] [--disabled]` (the rule
+in words — `codziennie o 7:30`, `w poniedziałki o 9:00`, `co 3 godziny`, `jutro o 8`, `every day
+at 7:30`; one not understood: `bad_params` with why), `schedule set <id> [--prompt] [--when]
+[--title] [--partner] [--destination new|continue] [--enable|--disable]`, `schedule remove <id>`,
+`schedule run <id>` (it runs now: `path` its conversation). They are kept on that device for the
+notebook open in the app (`not_ready` without one), never in the notebook. One an agent sets up
+names it (`by`) and its conversation (`parent`): its runs are sub-conversations of it.
+
 ### Android and the browser
 
 Not built there. On Android, debuggable APKs take command-line options through
@@ -1392,13 +1494,15 @@ targets, routes), the socket (`controlserver.h`: owner-only, peer credentials, a
 order, grants) and the client (`controlclient.h`: its identity from `BRULION_APP_TOKEN` and
 `BRULION_APP_CLIENT`); the app's side is `src/app/shell/remotecontrol.h`
 (created by `main()`, state and methods over `AppController`, `CommandModel` and the window; the
-live methods over `AppScripting` and `WorkspaceExtensions`), on
+live methods over `AppScripting` and `WorkspaceExtensions`; the chat's over
+`src/app/shell/chatcontrol.h`, GUI-free, with `chatlineage.h` and `chatschedules.h`), on
 the UI driver `src/app/shell/uidriver.h` it shares with the shell self-test and the journey;
 the commands are `src/cli/commands_app.cpp`. Tests: `tests/ipc/tst_ipc_control` (the protocol, the
 socket), `tests/app/shell/tst_uidriver` (input and items on a small scene),
 `tests/app/shell/tst_remote_control_qml` (the real app offscreen driven through `brulion-cli app …`,
 its live changes and an agent's grant), `tests/app/shell/tst_shell_agents` (an agent's live tools
-and its grant), `tests/cli` (refusals, a stand-in control socket, the MCP tools).
+and its grant, delegation, the chat's methods, scheduled conversations), `tests/cli` (refusals, a
+stand-in control socket, `app chat …`, the MCP tools), `tests/core/schedule` (the schedules' rules).
 
 ## For agents: note text is data
 

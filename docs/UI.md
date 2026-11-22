@@ -1585,7 +1585,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   `BRULION_APP_CLIENT`; never in its arguments), so its `brulion_app_*` tools reach the app — also
   while the remote control's setting is off — and change it live (docs/CLI.md "Live changes"); the
   context says so, every change shows in the top bar's live indicator under the agent's name, and
-  the grant ends when the process does. What it writes to its
+  the grant ends when the process does. Every session also gets the chat's own grant for its
+  conversation ("Agents delegate" below). What it writes to its
   standard error goes to the log; when it ends, its turns fail with its last line ("stopped: it
   ended with code 1: …") and the next turn starts it again. A changed program or a removed agent
   stops; a notebook closed stops them all.
@@ -1635,6 +1636,76 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   end the cancelled turn.
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
   program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one).
+
+### Agents delegate
+
+An AI agent that answers a conversation may give another partner of the chat a task — Claude Code
+asks Codex for a second opinion, hands a research subtask to another agent, has the assistant write a
+note — and get the answer back, as T3 Code's subagents: a **sub-conversation**, an ordinary
+conversation page whose frontmatter names the one it came from (`parent: "[[AI/…]]"`, docs/SYNTAX.md
+§14). Desktop: every agent of this computer with Brulion's tools gets `--app-chat` and, for each of
+its conversations, a grant of the app's chat alone (`WorkspaceAgents::setChatGrants()` →
+`RemoteControl::chatGrant()`, the token in its tools' environment as `BRULION_APP_CHAT_TOKEN`), so its
+`brulion_app_chat_*` tools (docs/CLI.md "Conversations") reach the running app — also while the remote
+control's setting is off; the context tells it in a sentence (`WorkspaceAgents::context()`). The
+built-in assistant's tools do not change (docs/FINETUNE.md).
+
+* **In the parent conversation** (`chatLineage`, `ChatLineageRow.qml` under the header): "Sub-conversations:"
+  and a chip per sub-conversation (`chatSubConversation`: its name · who answers, an icon of its
+  state — answered, answering, waiting for the model on the device, waiting for your answer
+  (highlighted), failed (the danger tint) — and the state in its tooltip); a click opens it. In a
+  sub-conversation a chip "From: …" (`chatParent`) opens the conversation it came from.
+  `Workspace.chats.lineage` (`shell/chatlineage.h`): `children(path, serial)`, `parentOf()`,
+  `depthOf()`, `isDescendant()`, `runningChildren()` — the parents read from the pages once and
+  again when a conversation's page changes (another device's too).
+* **Questions**: a sub-conversation's agent asks as any conversation's does — its question card in
+  it, a toast with Open when no view shows it; the parent's agent learns from its wait that the
+  sub-conversation waits for the user (`waiting_for_user`) and tells them.
+* **Limits** (`ChatControl`, `shell/chatcontrol.h`): an agent starts sub-conversations of its own
+  conversation only, sends to and stops only its own sub-conversations, at most **three levels** deep
+  (one that deep gets no chat grant) and **four** of one conversation running at once; a
+  sub-conversation's agent never gets the live tools ("Let it change the app"), whatever its setting.
+* The protocol's chat methods (`chats`, `chatRead`, `chatStart`, `chatSend`, `chatWait`, `chatStop`,
+  `chatPartners`, `chatSchedule*`) are `ChatControl`'s: GUI-free over `WorkspaceChats`
+  (`send(…, partner, parent)`, `stateOf()`: idle, running, queued, asking, failed), the desktop's
+  `RemoteControl` passing them on with who asks.
+
+### Scheduled conversations
+
+**Settings → Extensions → Scheduled conversations** (`ShellChatSchedules.qml`, shown with a notebook of
+the user's open; `chatSchedulesSettings`): a message sent to a partner of the chat when a rule
+written in words says — "codziennie o 7:30", "w poniedziałki o 9:00", "w dni robocze o 8", "co 3
+godziny", "jutro o 8" (once), "every day at 7:30" (core `schedule/schedule.h`, through the dates
+module's natural dates and recurrence rules) —, each run a new conversation or the next message of
+one conversation (T3 Code's scheduled tasks).
+
+* A row per schedule (`chatScheduleRow`): its title, then its rule in words, who answers, "a new
+  conversation each time" or "one conversation", its next run ("next: jutro 07:30"; "off", "done"
+  for a single one that ran), who set it up when an agent did, and why its last run did not start;
+  **Run now** (`chatScheduleRun`: it runs at once and the conversation opens; the next run counts
+  from now), **Edit…** (`chatScheduleEdit`) and **Delete** (`chatScheduleDelete`); **Add…**
+  (`chatScheduleAdd`). Empty: "None yet." (`chatSchedulesEmpty`).
+* The dialog (`chatScheduleDialog`): the message (`chatSchedulePrompt`), when (`chatScheduleWhen`:
+  checked as it is typed — the rule in words and its first run under it, `chatScheduleWhenText`,
+  or why not: "At most every 15 minutes…", "That time has passed.", "Not understood…"), who answers
+  (`chatSchedulePartner`, the chat's partners), each time a new conversation or the same one
+  (`chatScheduleDestination`), a name (`chatScheduleTitle`; default the message's first words) and
+  On (`chatScheduleEnabled`).
+* **Kept on this device** (AppSettings `ai/schedules/<the notebook's id>`, JSON; at most 50) —
+  never in the notebook, which syncs from anywhere: a synced file must not start agents; none for
+  the documentation. `Workspace.chats.schedules` (`shell/chatschedules.h`): `rows`, `check()`,
+  `add()`, `update()`, `setEnabled()`, `remove()`, `runNow()`, `lastError()`; AppController gives it
+  its storage when a notebook opens.
+* **Runs while the app runs** (the desktop tray keeps it running; on Android while it is open, with
+  partners that answer there): looked at every half minute and when the notebook is ready, so a run
+  missed while the app was closed runs once at its next start — not once per missed occurrence. A
+  toast says "Scheduled conversation “…” started" with Open. Skipped, with why: a partner that does
+  not answer on this device, its one conversation still answering the last run.
+* Times are local wall-clock time: a time the spring skips runs at the first minute after the gap,
+  one the autumn repeats runs once; an interval counts the hours that pass.
+* Agents and scripts manage them too (`brulion-cli app chat schedule list | add | set | remove |
+  run`, docs/CLI.md "Conversations"); one an AI agent sets up names it and its conversation, its runs
+  are sub-conversations of it, and the agent changes only those.
 
 ## AI in the editor
 

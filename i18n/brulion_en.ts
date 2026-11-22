@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1231"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1232"/>
         <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1284"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1286"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1294"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1296"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1295"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1297"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -342,7 +342,7 @@
 <context>
     <name>ChatView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/ChatView.qml" line="727"/>
+        <location filename="../src/app/qml/views/ChatView.qml" line="737"/>
         <source>The model on this device does not get the %n message(s) above: too long for it</source>
         <translation>
             <numerusform>The model on this device does not get the %n message above: too long for it</numerusform>
@@ -350,7 +350,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/ChatView.qml" line="728"/>
+        <location filename="../src/app/qml/views/ChatView.qml" line="738"/>
         <source>The AI does not get the %n message(s) above: too long</source>
         <translation>
             <numerusform>The AI does not get the %n message above: too long</numerusform>
@@ -1432,7 +1432,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2858"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2861"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1440,7 +1440,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2723"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2726"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1488,7 +1488,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2547"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2550"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1496,7 +1496,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2725"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2728"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2478,7 +2478,7 @@
 <context>
     <name>brulion::shell::WorkspaceAgents</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceagents.cpp" line="1027"/>
+        <location filename="../src/app/shell/workspaceagents.cpp" line="1107"/>
         <source>%n AI agents are answering…</source>
         <translation>
             <numerusform>%n AI agent is answering…</numerusform>
