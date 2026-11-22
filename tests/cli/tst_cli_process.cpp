@@ -119,6 +119,7 @@ class TestCliProcess : public QObject {
         env.remove(u"BRULION_VAULT"_s);
         // (A grant of an app this test does not run: never the developer's agent's.)
         env.remove(u"BRULION_APP_TOKEN"_s);
+        env.remove(u"BRULION_APP_CHAT_TOKEN"_s);
         env.remove(u"BRULION_APP_CLIENT"_s);
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
         // Messages for people follow the system's language (docs/CLI.md "Language"): English here,
@@ -2541,6 +2542,190 @@ private Q_SLOTS:
         QCOMPARE(r.errorCode(), u"unauthorized"_s);
         QVERIFY(control.revokeGrant(token));
         control.setOpen(true);
+    }
+
+    // `app chat …` against a stand-in remote control: what each command asks (start with --wait on one
+    // connection, the schedules' options), the exit codes of a wait (an answer 0, a failure 1, a
+    // question for the user 5, still running 3, busy 4), --read-only and --dry-run, an agent's chat
+    // grant (BRULION_APP_CHAT_TOKEN) shown for the chat before its full grant, and the MCP tools of
+    // `mcp --app-chat` (the chat's alone; read-only: those that only look).
+    void appChat()
+    {
+        const QString key = brulion::ipc::SingleInstance::keyFor(appDataDir());
+        brulion::ipc::SingleInstance app(key);
+        QVERIFY(app.listen());
+        brulion::ipc::ControlServer control;
+        QList<brulion::ipc::ControlRequest> requests;
+        control.setHandler([&requests](const brulion::ipc::ControlRequest &request, brulion::ipc::ControlReply reply) {
+            requests.append(request);
+            const QString path = request.params.value(u"path"_s).toString();
+            if (request.method == u"chatStart") {
+                reply.ok(QJsonObject{{u"path"_s, u"AI/2026-11-22 Zapytaj Codexa.md"_s}, {u"state"_s, u"running"_s}});
+            } else if (request.method == u"chatWait" && path.contains(u"błąd"_s)) {
+                reply.ok(QJsonObject{{u"path"_s, path}, {u"state"_s, u"failed"_s}, {u"failure"_s, u"Agent padł"_s}});
+            } else if (request.method == u"chatWait" && path.contains(u"pytanie"_s)) {
+                reply.ok(QJsonObject{{u"path"_s, path},
+                                     {u"state"_s, u"asking"_s},
+                                     {u"question"_s, QJsonObject{{u"text"_s, u"Kodeks asks: Write Zgoda.md"_s},
+                                                                {u"options"_s, QJsonArray{u"Allow"_s, u"Reject"_s}}}}});
+            } else if (request.method == u"chatWait" && path.contains(u"długo"_s)) {
+                reply.fail(u"timeout"_s, u"Its turn still runs"_s, {{u"path"_s, path}, {u"state"_s, u"running"_s}});
+            } else if (request.method == u"chatWait") {
+                reply.ok(QJsonObject{{u"path"_s, path},
+                                     {u"state"_s, u"idle"_s},
+                                     {u"answer"_s, QJsonObject{{u"position"_s, 1}, {u"text"_s, u"Plan jest dobry."_s}}}});
+            } else if (request.method == u"chatSend" && path.contains(u"zajęta"_s)) {
+                reply.fail(u"busy"_s, u"Its turn runs"_s, {{u"state"_s, u"running"_s}});
+            } else {
+                reply.ok(QJsonObject{{u"method"_s, request.method},
+                                     {u"params"_s, request.params},
+                                     {u"granted"_s, request.granted},
+                                     {u"chatOnly"_s, request.chatOnly}});
+            }
+        });
+        QVERIFY(control.listen(brulion::ipc::controlKeyFor(key)));
+
+        // Start and wait on one connection.
+        Run r = cliLive({u"app"_s, u"chat"_s, u"start"_s, u"Druga"_s, u"opinia,"_s, u"proszę"_s, u"--partner"_s,
+                         u"acp:codex"_s, u"--page"_s, u"Dom"_s, u"--wait"_s, u"--timeout"_s, u"5000"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"state"_s).toString(), u"idle"_s);
+        QCOMPARE(r.result().value(u"answer"_s).toObject().value(u"text"_s).toString(), u"Plan jest dobry."_s);
+        QCOMPARE(requests.size(), 2);
+        QCOMPARE(requests.at(0).method, u"chatStart"_s);
+        QCOMPARE(requests.at(0).params, (QJsonObject{{u"text"_s, u"Druga opinia, proszę"_s},
+                                                     {u"partner"_s, u"acp:codex"_s},
+                                                     {u"page"_s, u"Dom"_s}}));
+        QCOMPARE(requests.at(1).method, u"chatWait"_s);
+        QCOMPARE(requests.at(1).params,
+                 (QJsonObject{{u"path"_s, u"AI/2026-11-22 Zapytaj Codexa.md"_s}, {u"ms"_s, 5000}}));
+        // A wait's ends as exit codes.
+        r = cliLive({u"app"_s, u"chat"_s, u"wait"_s, u"AI/błąd"_s});
+        QCOMPARE(r.code, 1);
+        QCOMPARE(r.errorCode(), u"turn_failed"_s);
+        QVERIFY(r.json.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"Agent padł"_s));
+        QCOMPARE(requests.last().params.value(u"ms"_s).toInt(), 60000);
+        r = cliLive({u"app"_s, u"chat"_s, u"wait"_s, u"pytanie"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"waiting_for_user"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"question"_s).toObject().value(
+                         u"options"_s),
+                 QJsonValue(QJsonArray{u"Allow"_s, u"Reject"_s}));
+        r = cliLive({u"app"_s, u"chat"_s, u"wait"_s, u"długo"_s, u"--timeout"_s, u"100"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"timeout"_s);
+        r = cliLive({u"app"_s, u"chat"_s, u"send"_s, u"zajęta"_s, u"I"_s, u"jeszcze"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"busy"_s);
+        // What the others ask.
+        r = cliLive({u"app"_s, u"chat"_s, u"list"_s, u"--parent"_s, u"AI/Plan"_s, u"--limit"_s, u"7"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chats"_s);
+        QCOMPARE(requests.last().params, (QJsonObject{{u"parent"_s, u"AI/Plan"_s}, {u"limit"_s, 7}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"read"_s, u"Plan wyjazdu"_s, u"--from"_s, u"2"_s, u"--offset"_s, u"300"_s});
+        QCOMPARE(requests.last().params,
+                 (QJsonObject{{u"path"_s, u"Plan wyjazdu"_s}, {u"from"_s, 2}, {u"offset"_s, 300}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"stop"_s, u"AI/Plan"_s});
+        QCOMPARE(requests.last().method, u"chatStop"_s);
+        r = cliLive({u"app"_s, u"chat"_s, u"partners"_s});
+        QCOMPARE(requests.last().method, u"chatPartners"_s);
+        r = cliLive({u"app"_s, u"chat"_s, u"schedule"_s, u"add"_s, u"Co"_s, u"mam"_s, u"dziś?"_s, u"--when"_s,
+                     u"codziennie o 7:30"_s, u"--title"_s, u"Plan dnia"_s, u"--continue"_s, u"--partner"_s, u"acp:claude"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatScheduleAdd"_s);
+        QCOMPARE(requests.last().params, (QJsonObject{{u"prompt"_s, u"Co mam dziś?"_s},
+                                                      {u"when"_s, u"codziennie o 7:30"_s},
+                                                      {u"title"_s, u"Plan dnia"_s},
+                                                      {u"partner"_s, u"acp:claude"_s},
+                                                      {u"destination"_s, u"continue"_s}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"schedule"_s, u"add"_s, u"Bez reguły"_s});
+        QCOMPARE(r.code, 2); // (--when is needed)
+        r = cliLive({u"app"_s, u"chat"_s, u"schedule"_s, u"set"_s, u"s1"_s, u"--disable"_s, u"--destination"_s, u"new"_s});
+        QCOMPARE(requests.last().params,
+                 (QJsonObject{{u"id"_s, u"s1"_s}, {u"destination"_s, u"new"_s}, {u"enabled"_s, false}}));
+        for (const QString &verb : {u"remove"_s, u"run"_s}) {
+            r = cliLive({u"app"_s, u"chat"_s, u"schedule"_s, verb, u"s1"_s});
+            QCOMPARE(r.code, 0);
+            QCOMPARE(requests.last().params, (QJsonObject{{u"id"_s, u"s1"_s}}));
+        }
+        r = cliLive({u"app"_s, u"chat"_s, u"schedule"_s, u"list"_s});
+        QCOMPARE(requests.last().method, u"chatSchedules"_s);
+        // --read-only refuses what writes a conversation; --dry-run says what it would ask.
+        const qsizetype asked = requests.size();
+        r = cliLive({u"--read-only"_s, u"app"_s, u"chat"_s, u"start"_s, u"Ą"_s});
+        QCOMPARE(r.code, 7);
+        r = cliLive({u"--read-only"_s, u"app"_s, u"chat"_s, u"schedule"_s, u"run"_s, u"s1"_s});
+        QCOMPARE(r.code, 7);
+        r = cliLive({u"--dry-run"_s, u"app"_s, u"chat"_s, u"start"_s, u"Ą"_s, u"--wait"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"method"_s).toString(), u"chatStart"_s);
+        QVERIFY(r.result().value(u"wait"_s).toBool());
+        QCOMPARE(requests.size(), asked);
+        r = cliLive({u"--read-only"_s, u"app"_s, u"chat"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+
+        // An agent's chat grant goes first for the chat, its full one for the rest.
+        control.setOpen(false);
+        const QString chatToken = control.addGrant(u"Claude Code"_s, brulion::ipc::GrantScope::Chat);
+        const QString fullToken = control.addGrant(u"Claude Code"_s);
+        QProcessEnvironment agentEnv = environment();
+        agentEnv.insert(u"BRULION_APP_CHAT_TOKEN"_s, chatToken);
+        r = cliLive({u"app"_s, u"chat"_s, u"partners"_s}, {}, agentEnv);
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"granted"_s).toBool());
+        QVERIFY(r.result().value(u"chatOnly"_s).toBool());
+        r = cliLive({u"app"_s, u"state"_s}, {}, agentEnv); // (a chat grant is no grant for the rest)
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"remote_control_off"_s);
+        agentEnv.insert(u"BRULION_APP_TOKEN"_s, fullToken);
+        r = cliLive({u"app"_s, u"chat"_s, u"list"_s}, {}, agentEnv);
+        QVERIFY(r.result().value(u"chatOnly"_s).toBool());
+        r = cliLive({u"app"_s, u"state"_s}, {}, agentEnv);
+        QCOMPARE(r.code, 0);
+        QVERIFY(!r.result().value(u"chatOnly"_s).toBool());
+        QVERIFY(control.revokeGrant(chatToken));
+        QVERIFY(control.revokeGrant(fullToken));
+        control.setOpen(true);
+
+        // MCP: --app-chat offers the chat's tools alone.
+        const QString dir = vault({{u"Dom.md"_s, "- żółw\n"}});
+        for (const bool readOnly : {false, true}) {
+            QProcess mcp;
+            mcp.setProcessEnvironment(environment());
+            QStringList args{u"--vault"_s, dir, u"mcp"_s, u"--app-chat"_s};
+            if (readOnly)
+                args.append(u"--read-only"_s);
+            mcp.start(QStringLiteral(BRULION_CLI), args);
+            QVERIFY(mcp.waitForStarted(kTimeoutMs));
+            mcp.write(R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})"
+                      "\n"
+                      R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})"
+                      "\n");
+            mcp.closeWriteChannel();
+            QVERIFY(mcp.waitForFinished(kTimeoutMs));
+            const QList<QByteArray> lines = mcp.readAllStandardOutput().trimmed().split('\n');
+            QCOMPARE(lines.size(), 2);
+            QVERIFY(QJsonDocument::fromJson(lines.first())
+                            .object()
+                            .value(u"result"_s)
+                            .toObject()
+                            .value(u"instructions"_s)
+                            .toString()
+                            .contains(u"brulion_app_chat_start"_s));
+            QStringList tools;
+            for (const QJsonValue &t :
+                 QJsonDocument::fromJson(lines.last()).object().value(u"result"_s).toObject().value(u"tools"_s).toArray())
+                tools.append(t.toObject().value(u"name"_s).toString());
+            for (const char *tool : {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
+                                     "brulion_app_chat_partners", "brulion_app_chat_schedule_list"})
+                QVERIFY2(tools.contains(QLatin1String(tool)), tool);
+            for (const char *tool : {"brulion_app_chat_start", "brulion_app_chat_send", "brulion_app_chat_stop",
+                                     "brulion_app_chat_schedule_add", "brulion_app_chat_schedule_run"})
+                QVERIFY2(tools.contains(QLatin1String(tool)) == !readOnly, tool);
+            for (const char *tool : {"brulion_app_state", "brulion_app_click", "brulion_app_eval"})
+                QVERIFY2(!tools.contains(QLatin1String(tool)), tool);
+            QVERIFY(tools.contains(u"brulion_search"_s));
+        }
     }
 
     // `mcp serve` as the real program (the in-process flow: tst_cli_remote_mcp): the password

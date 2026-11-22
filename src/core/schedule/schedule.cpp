@@ -374,6 +374,7 @@ QJsonObject toJson(const Schedule &s)
     put(u"lastConversation"_s, s.lastConversation);
     put(u"lastError"_s, s.lastError);
     put(u"by"_s, s.by);
+    put(u"parent"_s, s.parent);
     return out;
 }
 
@@ -398,6 +399,7 @@ std::optional<Schedule> scheduleFromJson(const QJsonObject &o)
     s.lastConversation = o.value(u"lastConversation"_s).toString();
     s.lastError = o.value(u"lastError"_s).toString();
     s.by = o.value(u"by"_s).toString().simplified().left(64);
+    s.parent = o.value(u"parent"_s).toString();
     if (!s.created.isValid())
         return std::nullopt;
     return s;

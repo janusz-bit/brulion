@@ -424,6 +424,25 @@ AppController::AppController(const Options &options, QObject *parent)
         const int id = toastWithAction(text, u"info"_s, tr("Open"));
         m_chatToasts.insert(id, path);
     });
+    // Scheduled conversations (chatschedules.h): kept on this device for the open notebook — never
+    // in it, nor for the documentation —, and said when one starts.
+    ChatSchedules *schedules = m_workspace->chats()->schedules();
+    const auto scheduleStorage = [this, schedules] {
+        if (!m_workspace->isOpen() || inDocsVault()) {
+            schedules->setStorage({}, {});
+            return;
+        }
+        const QString key = u"ai/schedules/"_s + Vault::idForPath(m_workspace->rootPath());
+        schedules->setStorage([this, key] { return m_settings->value(key).toString().toUtf8(); },
+                              [this, key](const QByteArray &json) { m_settings->setValue(key, QString::fromUtf8(json)); });
+    };
+    scheduleStorage();
+    connect(m_workspace.get(), &Workspace::openChanged, this, scheduleStorage);
+    connect(this, &AppController::inDocsVaultChanged, this, scheduleStorage);
+    connect(schedules, &ChatSchedules::ran, this, [this](const QString &, const QString &title, const QString &path) {
+        const int id = toastWithAction(tr("Scheduled conversation “%1” started").arg(title), u"info"_s, tr("Open"));
+        m_chatToasts.insert(id, path);
+    });
     // The model chosen in the settings is the one Settings → Extensions → AI downloads and removes.
     m_localAi->setChosen(m_settings->aiLocalModel());
     connect(m_settings.get(), &AppSettings::aiChanged, this,

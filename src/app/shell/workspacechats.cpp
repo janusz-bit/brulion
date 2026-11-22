@@ -1,6 +1,8 @@
 #include "workspacechats.h"
 
 #include "agentshare.h"
+#include "chatlineage.h"
+#include "chatschedules.h"
 
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -84,8 +86,14 @@ void ChatTurn::clearPartial()
 
 WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent)
     : QObject(parent), m_workspace(workspace), m_extensions(extensions), m_agents(new WorkspaceAgents(workspace, this)),
-      m_share(new AgentShare(workspace, m_agents, this))
+      m_share(new AgentShare(workspace, m_agents, this)), m_lineage(new ChatLineage(workspace, this, this)),
+      m_schedules(new ChatSchedules(workspace, this, this))
 {
+    // A conversation's sub-conversations (an agent's tasks for other partners) are told which one
+    // they come from: WorkspaceAgents gives their agents no tools that change the app, and none of
+    // the chat's from MaxDepth levels down.
+    m_agents->setLineage([workspace](const QString &path) { return ChatLineage::depth(workspace, path); },
+                         [workspace](const QString &path) { return !ChatLineage::writtenParent(workspace, path).isEmpty(); });
     connect(m_extensions, &WorkspaceExtensions::chatAnswered, this, &WorkspaceChats::answered);
     connect(m_extensions, &WorkspaceExtensions::chatFailed, this, &WorkspaceChats::failed);
     connect(m_extensions, &WorkspaceExtensions::chatStatus, this, &WorkspaceChats::setStatus);
@@ -502,6 +510,16 @@ bool WorkspaceChats::isQueued(const QString &path) const
     return t && t->m_queued;
 }
 
+QString WorkspaceChats::stateOf(const QString &path, QString *failure) const
+{
+    const ChatTurn *t = find(path);
+    if (failure)
+        *failure = t && !t->m_running ? t->m_failure : QString();
+    if (t && t->m_running)
+        return asking(path) ? u"asking"_s : (t->m_queued ? u"queued"_s : u"running"_s);
+    return t && !t->m_failure.isEmpty() ? u"failed"_s : u"idle"_s;
+}
+
 ChatTurn *WorkspaceChats::turn(const QString &path)
 {
     if (ChatTurn *t = find(path))
@@ -512,7 +530,7 @@ ChatTurn *WorkspaceChats::turn(const QString &path)
 }
 
 QString WorkspaceChats::send(const QString &path, const QString &text, const QString &page, const QStringList &pictures,
-                             const QString &partner)
+                             const QString &partner, const QString &parent)
 {
     const QString message = text.trimmed();
     QStringList sent;
@@ -537,7 +555,7 @@ QString WorkspaceChats::send(const QString &path, const QString &text, const QSt
         // A new conversation: its page, named after the question, and a line in today's journal.
         const QString title = chat::pageTitle(message, now.date(), language);
         target = paths::uniquePath(title + u".md"_s, [this](const QString &p) { return m_workspace->exists(p); });
-        if (!m_workspace->write(target, chat::newConversation(markdown, page, language, now, who))) {
+        if (!m_workspace->write(target, chat::newConversation(markdown, page, language, now, who, parent))) {
             setFailure(turn(QString()), tr("The conversation could not be saved."));
             return {};
         }

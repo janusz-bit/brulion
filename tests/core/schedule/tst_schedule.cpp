@@ -289,6 +289,7 @@ private Q_SLOTS:
         s.lastRun = at(u"2026-11-23 07:30"_s);
         s.lastConversation = s.conversation;
         s.by = u"Claude Code"_s;
+        s.parent = u"AI/2026-11-22 Plan tygodnia.md"_s;
         Schedule off = s;
         off.id = u"s2"_s;
         off.enabled = false;

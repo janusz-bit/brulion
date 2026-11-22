@@ -9,7 +9,8 @@
 // live methods' parameters (eval, load, theme, inspect, setProperty, events …) and grants: a closed
 // server answers `unauthorized` to everything before hello with a grant's token, a wrong token is
 // refused also while it is open, a grant's client name sticks, closing drops the connections
-// without one, a revoked grant drops its connections; ControlClient's identity (setIdentity(),
+// without one, a revoked grant drops its connections; a grant of the chat alone serves only the
+// chat's methods (the handler learns its token); ControlClient's identity (setIdentity(),
 // BRULION_APP_TOKEN / BRULION_APP_CLIENT) sent in a hello first.
 #include "controlclient.h"
 #include "controlprotocol.h"
@@ -759,6 +760,88 @@ private Q_SLOTS:
                                                       {u"params"_s, QJsonObject{{u"token"_s, other}}}})
                                     .toJson(QJsonDocument::Compact));
         QCOMPARE(result(r).value(u"client"_s).toString(), u"Codex"_s);
+        server.close();
+    }
+
+    // A grant of the chat alone (every agent the app starts with Brulion's tools, a conversation's):
+    // hello and the chat's methods, nothing else — whether the server is open or not; the handler
+    // learns the token and that it is such a grant.
+    void chatGrants()
+    {
+        const QString k = key(u"brulion-test-chatgrants"_s);
+        ControlServer server;
+        server.setHandler([](const ControlRequest &request, ControlReply reply) {
+            reply.ok(QJsonObject{{u"method"_s, request.method},
+                                 {u"client"_s, request.client},
+                                 {u"grant"_s, request.grant},
+                                 {u"chatOnly"_s, request.chatOnly}});
+        });
+        QVERIFY(server.listen(k));
+        server.setOpen(false);
+        const QString chat = server.addGrant(u"Claude Code"_s, GrantScope::Chat);
+        const QString full = server.addGrant(u"Claude Code"_s);
+        const auto code = [](const QJsonObject &response) {
+            return response.value(u"error"_s).toObject().value(u"code"_s).toString();
+        };
+        const auto result = [](const QJsonObject &response) { return response.value(u"result"_s).toObject(); };
+        const auto hello = [](const QString &token) {
+            return QJsonDocument(QJsonObject{{u"id"_s, 1},
+                                             {u"method"_s, u"hello"_s},
+                                             {u"params"_s, QJsonObject{{u"token"_s, token}}}})
+                    .toJson(QJsonDocument::Compact);
+        };
+        for (const bool open : {false, true}) {
+            server.setOpen(open);
+            QLocalSocket agent;
+            agent.connectToServer(k);
+            QVERIFY(agent.waitForConnected(1000));
+            QJsonObject r = exchange(agent, hello(chat));
+            QVERIFY(r.value(u"ok"_s).toBool());
+            QVERIFY(result(r).value(u"chatOnly"_s).toBool());
+            r = exchange(agent, R"({"id":2,"method":"chatStart","params":{"text":"Zapytaj Codexa o zdanie"}})");
+            QVERIFY2(r.value(u"ok"_s).toBool(), QJsonDocument(r).toJson().constData());
+            QCOMPARE(result(r).value(u"grant"_s).toString(), chat);
+            QCOMPARE(result(r).value(u"client"_s).toString(), u"Claude Code"_s);
+            QVERIFY(result(r).value(u"chatOnly"_s).toBool());
+            for (const char *line : {R"({"id":3,"method":"eval","params":{"code":"return 1"}})",
+                                     R"({"id":4,"method":"state"})",
+                                     R"({"id":5,"method":"click","params":{"x":1,"y":2}})"}) {
+                r = exchange(agent, line);
+                QCOMPARE(code(r), u"unauthorized"_s);
+                QVERIFY(r.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"chat"_s));
+            }
+            // (Its requests are checked as anyone's.)
+            QCOMPARE(code(exchange(agent, R"({"id":6,"method":"explode"})")), u"unknown_method"_s);
+            QCOMPARE(code(exchange(agent, R"({"id":7,"method":"chatWait","params":{"path":"AI/a.md","ms":-1}})")),
+                     u"bad_params"_s);
+            r = exchange(agent, R"({"id":8,"method":"chatSchedules"})");
+            QVERIFY(r.value(u"ok"_s).toBool());
+        }
+        // The full grant: everything, not chat-only.
+        QLocalSocket other;
+        other.connectToServer(k);
+        QVERIFY(other.waitForConnected(1000));
+        QVERIFY(exchange(other, hello(full)).value(u"ok"_s).toBool());
+        QJsonObject r = exchange(other, R"({"id":2,"method":"state"})");
+        QVERIFY(r.value(u"ok"_s).toBool());
+        QVERIFY(!result(r).value(u"chatOnly"_s).toBool());
+        QCOMPARE(result(r).value(u"grant"_s).toString(), full);
+        // Without a grant (open): no token, not chat-only.
+        QLocalSocket script;
+        script.connectToServer(k);
+        QVERIFY(script.waitForConnected(1000));
+        r = exchange(script, R"({"id":1,"method":"chats"})");
+        QCOMPARE(result(r).value(u"grant"_s).toString(), QString());
+        QVERIFY(!result(r).value(u"chatOnly"_s).toBool());
+        // The chat's methods, as the protocol lists them.
+        QStringList chatMethods;
+        for (const MethodSpec &m : controlMethods()) {
+            if (m.chat)
+                chatMethods << m.name;
+        }
+        QCOMPARE(chatMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s,
+                                           u"chatStop"_s, u"chatPartners"_s, u"chatSchedules"_s, u"chatScheduleAdd"_s,
+                                           u"chatScheduleSet"_s, u"chatScheduleRemove"_s, u"chatScheduleRun"_s}));
         server.close();
     }
 

@@ -473,6 +473,52 @@ const QList<MethodSpec> &controlMethods()
         out.append(method(u"changes"_s, u"The live changes not reverted, oldest first"_s, {}));
         out.append(method(u"revert"_s, u"Undo the live changes (of one client, or everyone's)"_s,
                           {param(u"who"_s, ParamType::String)}));
+        // The AI chat (docs/CLI.md "Conversations"): what an AI agent's chat grant may call.
+        const auto chat = [&out](MethodSpec m) {
+            m.chat = true;
+            out.append(std::move(m));
+        };
+        const QStringList destinations{u"new"_s, u"continue"_s};
+        chat(method(u"chats"_s,
+                    u"The conversations, newest change first: path, name, partner, state, parent (parent: only "
+                    u"its sub-conversations)"_s,
+                    {param(u"parent"_s, ParamType::String), range(u"limit"_s, ParamType::Integer, 1, 500)}));
+        chat(method(u"chatRead"_s,
+                    u"A conversation's messages from a position (0 the first), long texts cut with the offset "
+                    u"to go on from"_s,
+                    {param(u"path"_s, ParamType::String, true), range(u"from"_s, ParamType::Integer, 0, 1e7),
+                     range(u"limit"_s, ParamType::Integer, 1, 200), range(u"offset"_s, ParamType::Integer, 0, 1e9)}));
+        chat(method(u"chatStart"_s,
+                    u"Start a conversation with a partner (\"\" the assistant, acp:<id>, an extension's); its "
+                    u"turn runs"_s,
+                    {param(u"text"_s, ParamType::String, true), param(u"partner"_s, ParamType::String),
+                     param(u"page"_s, ParamType::String), param(u"parent"_s, ParamType::String)}));
+        chat(method(u"chatSend"_s, u"Send a message into a conversation whose turn does not run; its turn runs"_s,
+                    {param(u"path"_s, ParamType::String, true), param(u"text"_s, ParamType::String, true)}));
+        chat(method(u"chatWait"_s,
+                    u"Wait up to ms for a conversation's turn to end: its answer, the question it waits on, or "
+                    u"why it failed"_s,
+                    {param(u"path"_s, ParamType::String, true), range(u"ms"_s, ParamType::Integer, 0, 600000)}));
+        chat(method(u"chatStop"_s, u"Stop a conversation's turn (nothing of it is written)"_s,
+                    {param(u"path"_s, ParamType::String, true)}));
+        chat(method(u"chatPartners"_s, u"Who may answer a conversation here: id, name, kind"_s, {}));
+        chat(method(u"chatSchedules"_s, u"The scheduled conversations of the open notebook, with their next run"_s,
+                    {}));
+        chat(method(u"chatScheduleAdd"_s,
+                    u"Schedule a conversation: a prompt sent when the rule says (\"codziennie o 7:30\", "
+                    u"\"co 3 godziny\", \"jutro o 8\")"_s,
+                    {param(u"prompt"_s, ParamType::String, true), param(u"when"_s, ParamType::String, true),
+                     param(u"title"_s, ParamType::String), param(u"partner"_s, ParamType::String),
+                     oneOf(u"destination"_s, destinations), param(u"enabled"_s, ParamType::Bool)}));
+        chat(method(u"chatScheduleSet"_s, u"Change a scheduled conversation (the fields given)"_s,
+                    {param(u"id"_s, ParamType::String, true), param(u"prompt"_s, ParamType::String),
+                     param(u"when"_s, ParamType::String), param(u"title"_s, ParamType::String),
+                     param(u"partner"_s, ParamType::String), oneOf(u"destination"_s, destinations),
+                     param(u"enabled"_s, ParamType::Bool)}));
+        chat(method(u"chatScheduleRemove"_s, u"Delete a scheduled conversation"_s,
+                    {param(u"id"_s, ParamType::String, true)}));
+        chat(method(u"chatScheduleRun"_s, u"Run a scheduled conversation now"_s,
+                    {param(u"id"_s, ParamType::String, true)}));
         return out;
     }();
     return methods;

@@ -192,7 +192,7 @@ int run(int argc, char **argv)
         useLanguage(u"en"_s);
         return serveMcp(ctx, inv.globals.readOnly || inv.args.value(u"readOnly"_s).toBool(),
                         inv.globals.allowDestructive || inv.args.value(u"allowDestructive"_s).toBool(),
-                        inv.args.value(u"appControl"_s).toBool());
+                        inv.args.value(u"appControl"_s).toBool(), inv.args.value(u"appChat"_s).toBool());
     }
     if (inv.command->id == u"mcp.serve") {
         // The remote server, English for its clients like `mcp` (its log is English too).

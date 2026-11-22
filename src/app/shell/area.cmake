@@ -81,6 +81,9 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspaceapp.cpp
     ${_brulion_shell_dir}/appscripting.h ${_brulion_shell_dir}/appscripting.cpp
     ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
+    ${_brulion_shell_dir}/chatlineage.h ${_brulion_shell_dir}/chatlineage.cpp
+    ${_brulion_shell_dir}/chatschedules.h ${_brulion_shell_dir}/chatschedules.cpp
+    ${_brulion_shell_dir}/chatcontrol.h ${_brulion_shell_dir}/chatcontrol.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
     ${_brulion_shell_dir}/agentshare.h ${_brulion_shell_dir}/agentshare.cpp
     ${_brulion_shell_dir}/serverprocess.h ${_brulion_shell_dir}/serverprocess.cpp
@@ -113,7 +116,7 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
-           brulion_core_extensions brulion_core_ai brulion_core_acp brulion_core_chat brulion_core_automation brulion_planning
+           brulion_core_extensions brulion_core_ai brulion_core_acp brulion_core_chat brulion_core_schedule brulion_core_automation brulion_planning
            brulion_core_writing
            brulion_core_encryption brulion_core_applock brulion_core_semantic
     PRIVATE Qt6::Network brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
@@ -182,6 +185,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellAutomationSettings.qml
     qml/shell/ShellBackupSettings.qml
     qml/shell/ShellBottomNav.qml
+    qml/shell/ShellChatSchedules.qml
     qml/shell/ShellContextDrawer.qml
     qml/shell/ShellContributionItems.qml
     qml/shell/ShellExtensionApproval.qml

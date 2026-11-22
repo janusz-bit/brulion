@@ -114,6 +114,9 @@ struct Schedule {
     QString lastConversation{};  ///< the conversation of its last run
     QString lastError{};         ///< why its last run did not start ("" it did)
     QString by{};                ///< who set it up: "" the user, else an agent's (a client's) name
+    /// The conversation of the AI agent that set it up ("" the user's): each run is a
+    /// sub-conversation of it (docs/UI.md "Agents delegate").
+    QString parent{};
 
     /// The next run: after the last one, else after `created`; nullopt none (a single run done,
     /// switched off is not considered here).

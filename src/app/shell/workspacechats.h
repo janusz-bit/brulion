@@ -27,6 +27,8 @@
 // Single-threaded (the GUI thread).
 
 #include "agentshare.h"
+#include "chatlineage.h"
+#include "chatschedules.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -174,6 +176,10 @@ class WorkspaceChats : public QObject {
     /// "Share agents with the phone": this computer's agents for the user's other devices, and the
     /// agents other computers offer in the notebook (agentshare.h).
     Q_PROPERTY(brulion::shell::AgentShare *share READ share CONSTANT FINAL)
+    /// Which conversations AI agents started from which (sub-conversations: chatlineage.h).
+    Q_PROPERTY(brulion::shell::ChatLineage *lineage READ lineage CONSTANT FINAL)
+    /// Scheduled conversations (chatschedules.h).
+    Q_PROPERTY(brulion::shell::ChatSchedules *schedules READ schedules CONSTANT FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -207,15 +213,20 @@ public:
     /// The turn of `path` runs (or waits in line) / waits in line — without making a ChatTurn.
     bool isRunning(const QString &path) const;
     bool isQueued(const QString &path) const;
+    /// What the conversation does, in a word: "asking" (its turn waits for the user's answer),
+    /// "queued", "running", "failed" (`*failure`: why), else "idle" — without making a ChatTurn.
+    QString stateOf(const QString &path, QString *failure = nullptr) const;
 
     /// Writes `text` and `pictures` (vault paths, addPicture…) into the conversation `path` and
     /// runs the AI's turn; "" `path`: a new conversation about the page `page` (its name as a link
     /// names it; "" for none) answered by `partner` ("" the built-in assistant). Returns the
     /// conversation's path, "" when nothing was sent: no text nor picture, a turn of it running,
     /// the assistant off (said in the turn's failure), no notebook, a page that could not be
-    /// written.
+    /// written. `parent`: a new conversation is a sub-conversation of that one (its page names it:
+    /// an AI agent's task for another partner, ChatControl).
     Q_INVOKABLE QString send(const QString &path, const QString &text, const QString &page = QString(),
-                             const QStringList &pictures = QStringList(), const QString &partner = QString());
+                             const QStringList &pictures = QStringList(), const QString &partner = QString(),
+                             const QString &parent = QString());
     /// The AI's turn again on the conversation as it is (its last message the user's): after a
     /// failure or a stop. False when it cannot run now.
     Q_INVOKABLE bool retry(const QString &path);
@@ -291,6 +302,8 @@ public:
     /// computer wants its code.
     Q_INVOKABLE void addOfferedAgent(const QString &address, const QString &agent);
     AgentShare *share() const { return m_share; }
+    ChatLineage *lineage() const { return m_lineage; }
+    ChatSchedules *schedules() const { return m_schedules; }
     /// The answers of agents on another computer that went on with a turn while this device was
     /// gone (Android ended the app): fetched from there (WorkspaceAgents::recover()). When the
     /// notebook is ready and when the agents change.
@@ -410,6 +423,8 @@ private:
     int m_agentSerial = 0;
     bool m_agentPairing = false;
     AgentShare *m_share = nullptr;
+    ChatLineage *m_lineage = nullptr;
+    ChatSchedules *m_schedules = nullptr;
     QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
     QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order

@@ -73,7 +73,8 @@ bool McpDispatcher::isModern(const QJsonObject &request)
 bool McpDispatcher::offered(const Command &c, const McpPolicy &policy)
 {
     return c.mcp && !(policy.readOnly && c.writes) && !(c.destructive && !policy.allowDestructive)
-           && !(c.appControl && !policy.appControl) && !(policy.remote && c.id.startsWith(u"app."));
+           && !(c.appControl && !policy.appControl && !(c.appChat && policy.appChat))
+           && !(policy.remote && c.id.startsWith(u"app."));
 }
 
 const Command *McpDispatcher::tool(const QString &name, const McpPolicy &policy) const
@@ -133,6 +134,15 @@ QString McpDispatcher::instructions(const McpPolicy &policy) const
                 u"tell what happened. The user sees every such change in the app and can undo it "
                 u"(brulion_app_changes lists them, brulion_app_revert undoes them): change only what they asked "
                 u"for."_s;
+    if (policy.appControl || policy.appChat)
+        text += u" The brulion_app_chat_* tools reach the AI chat of the Brulion app running on this desktop: "
+                u"brulion_app_chat_partners lists who may answer (AI agents such as Codex or Claude Code, the "
+                u"built-in assistant, extensions), brulion_app_chat_start gives one of them a task in a new "
+                u"conversation (from an agent the app started: a sub-conversation of its own), "
+                u"brulion_app_chat_wait waits for its answer (call it again while it still runs; a question it "
+                u"waits on is for the user to answer in the app), brulion_app_chat_read reads a conversation, "
+                u"brulion_app_chat_send asks a follow-up, brulion_app_chat_schedule_* schedule conversations. Give "
+                u"another partner the whole task: it does not see this conversation."_s;
     if (policy.readOnly)
         text += u" This server is read-only."_s;
     return text;
@@ -370,12 +380,13 @@ QStringList mcpProtocolVersions()
     return McpDispatcher::allVersions();
 }
 
-int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl)
+int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl, bool appChat)
 {
     McpPolicy policy;
     policy.readOnly = readOnly;
     policy.allowDestructive = allowDestructive;
     policy.appControl = appControl;
+    policy.appChat = appChat;
     StdioServer server(context, policy);
     // Open the notebook before the first request: its index is ready (warm) for the first call.
     // A missing notebook is reported by every tool call instead.

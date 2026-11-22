@@ -31,6 +31,9 @@
 // only connections that showed a grant's token (ipc::ControlServer). `events` is a ring buffer of
 // the app's last 500 events (routes, toasts, console lines, live changes, extensions, notes
 // changed), recorded only while the socket listens; a request waits for a newer one (long poll).
+// The AI chat's methods (chats, chatRead, chatStart, chatSend, chatWait, chatStop, chatPartners,
+// chatSchedule*) are ChatControl's; every agent the app starts with Brulion's tools reaches them
+// with a grant of the chat alone for its conversation (chatGrant()).
 //
 // main() creates it for the real app (not the dev tools) once the QML is loaded; it reports its
 // state to AppController::setRemoteControl() for the settings page.
@@ -60,6 +63,7 @@ class QQuickWindow;
 namespace brulion::shell {
 
 class AppController;
+class ChatControl;
 
 class RemoteControl : public QObject {
     Q_OBJECT
@@ -83,6 +87,10 @@ public:
     /// A grant for the AI agent `client` the app starts (its name: the journal's "live:<client>"):
     /// the token its tools show in hello (BRULION_APP_TOKEN). The socket listens while one exists.
     QString grant(const QString &client);
+    /// A grant of the chat alone (hello and the chat's methods: ChatControl) for a conversation of
+    /// the AI agent `client` (BRULION_APP_CHAT_TOKEN of its tools). The socket listens while one
+    /// exists.
+    QString chatGrant(const QString &client);
     /// Ends the grant of `token` (the agent stopped) and drops its connections.
     void revokeGrant(const QString &token);
 
@@ -197,8 +205,12 @@ private:
     bool idle() const;
     void pollWaits();
 
+    /// The AI chat's methods (chats, chatStart, chatWait …), answered by ChatControl.
+    void chatRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply);
+
     QQmlApplicationEngine *m_engine;
     AppController *m_app;
+    ChatControl *m_chat = nullptr;
     Options m_options;
     ipc::ControlServer m_server;
 

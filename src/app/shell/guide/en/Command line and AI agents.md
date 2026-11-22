@@ -146,6 +146,19 @@ An agent using MCP gets these tools when you run `brulion-cli mcp --app-control`
 
 On Android and in the browser there is no such control — there the app is tested with developer tools (adb, Playwright).
 
+## Conversations in the running app
+Scripts and agents can talk to the app's AI chat too: start a conversation with any partner (an AI agent, the assistant), wait for its answer, read it, send the next message, stop it — and manage the [[AI#Scheduled conversations|scheduled conversations]].
+
+```sh
+brulion-cli app chat partners                                     # who may answer
+brulion-cli app chat start "Is this plan any good?" --partner acp:codex --wait
+brulion-cli app chat list                                         # conversations and their state
+brulion-cli app chat read "Is this plan any good"                 # its messages
+brulion-cli app chat schedule add "Plan my day" --when "weekdays at 7:30"
+```
+
+`wait` ends with exit 0 and the answer, 1 when the turn failed, 5 when it waits for your answer in the app (a permission), 3 when it still runs. With the remote control on (above) any script may; an AI agent the app starts gets these tools for its own conversation by itself (`brulion-cli mcp --app-chat`) — what it starts are sub-conversations of it ([[AI#Agents ask other agents]]).
+
 ## For the curious
 - The output of every command is JSON (`--format text` — readable for people), and the exit code tells you what happened: 0 fine, 3 not found, 4 conflict (e.g. the line changed since it was read), 7 refused.
 - You point to tasks and lines with a reference from the output, e.g. `Home.md#L12@3f9a01bc` — if the line has changed in the meantime, the command refuses instead of changing something else.

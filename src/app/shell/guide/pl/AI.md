@@ -117,6 +117,16 @@ Wszystko opisane wyżej działa tak samo — plan i kroki, porównania zmian, py
 > [!tip] Serwer bez ekranu
 > Na domowym serwerze bez aplikacji to samo robi `brulion-cli acp serve --agent claude --tailscale` (na NixOS usługa `services.brulion-acp` z `tailscale = true`): [[Wiersz poleceń i agenci AI#Twój agent dla telefonu]].
 
+### Agenci pytają innych agentów
+Agent, który odpowiada w czacie AI na komputerze, może dać zadanie innemu rozmówcy czatu i dostać od niego odpowiedź: Claude Code pyta Codexa o drugą opinię, zleca innemu agentowi poszukiwania, prosi asystenta o notatkę. Zadanie staje się **podrozmową** — zwykłą rozmową w `AI/`, która wskazuje tę, z której wyszła (`parent:`) — widoczną pod swoją rozmową jako znacznik z tym, kto odpowiada, i jak mu idzie (dotknij, by ją otworzyć; w podrozmowie **Z: …** prowadzi z powrotem). Jej pytania (czy może zmienić plik?) pokazują się w niej jak w każdej rozmowie, a gdy jesteś gdzie indziej — komunikat z **Otwórz**.
+
+Nie trzeba nic ustawiać: każdy agent z **narzędziami Brulionu** dostaje narzędzia czatu dla własnej rozmowy. Może zaczynać tylko podrozmowy tej rozmowy, najwyżej trzy poziomy w głąb i cztery naraz, a podrozmowa nigdy nie dostaje narzędzi zmieniających aplikację. Skrypty robią to samo przez `brulion-cli app chat …` ([[Wiersz poleceń i agenci AI#Rozmowy w działającej aplikacji]]).
+
+## Rozmowy według harmonogramu
+**Ustawienia → Rozszerzenia → Rozmowy według harmonogramu** wysyła wiadomość asystentowi albo agentowi wtedy, kiedy powiesz — „Zaplanuj mi dzień” w dni robocze o 7:30, „Co się zmieniło w notatkach w tym tygodniu?” w piątki. **Dodaj…**, wpisz wiadomość i **kiedy** słowami — `codziennie o 7:30`, `w poniedziałki o 9:00`, `co 3 godziny`, `jutro o 8` (albo po angielsku: `every day at 7:30`) —, wybierz, kto odpowiada, i czy za każdym razem to **nowa rozmowa**, czy **ta sama rozmowa** ciągnięta dalej. Reguła wraca słowami, z pierwszym uruchomieniem, już przy pisaniu; każdy wiersz mówi, kiedy będzie następne, z **Uruchom teraz**, **Edytuj…** i **Usuń**.
+
+Są przechowywane **na tym urządzeniu**, dla tego notatnika — nigdy w notatniku, więc zsynchronizowany plik nigdy nie uruchomi agenta. Działają, gdy Brulion działa (na komputerze utrzymuje go ikona w zasobniku; na telefonie gdy aplikacja jest otwarta); pominięta, gdy Brulion był zamknięty, uruchamia się raz przy następnym starcie, a nie tyle razy, ile ją pominął. Agenci i skrypty też nimi zarządzają: `brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7:30"`.
+
 ### W drugą stronę: asystent w Twoim edytorze
 Zed i środowiska JetBrains rozmawiają z agentami tak samo — a asystent AI Brulionu może być jednym z nich, z Twoimi notatkami i modelem wybranym wyżej: `brulion-cli acp agent` ([[Wiersz poleceń i agenci AI#Asystent Brulionu w edytorze]]).
 

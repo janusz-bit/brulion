@@ -78,6 +78,7 @@ Result help(Call &call)
                        {u"destructive"_s, c.destructive},
                        {u"needsVault"_s, c.needsVault},
                        {u"appControl"_s, c.appControl},
+                       {u"appChat"_s, c.appChat},
                        {u"mcpTool"_s, c.mcp ? toolName(c) : QString()}};
         if (!c.help.isEmpty())
             co.insert(u"help"_s, c.help);
@@ -190,7 +191,11 @@ void addMetaCommands(QList<Command> &out)
               flag(u"appControl"_s,
                    QT_TRANSLATE_NOOP("brulion::cli",
                                      "Also offer the tools that drive the running app (app state, click, type, "
-                                     "screenshot …; its remote control must be on)"))});
+                                     "screenshot …; its remote control must be on)")),
+              flag(u"appChat"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "Also offer the tools of the running app's AI chat (app chat …): what an AI agent "
+                                     "the app starts gets"))});
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "JSON-RPC 2.0 over stdio, tools only; the notebook stays open and watched, so "
                                        "calls after the first are fast. Give the notebook with --vault."));

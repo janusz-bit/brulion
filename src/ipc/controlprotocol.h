@@ -84,6 +84,11 @@ struct ControlRequest {
     QString client{};
     /// The connection showed a grant's token (hello {token}).
     bool granted = false;
+    /// That token ("" none): the app tells by it whose grant it is (an AI agent's conversation:
+    /// the chat's methods start sub-conversations of it).
+    QString grant{};
+    /// The grant covers only the chat's methods (MethodSpec::chat; GrantScope::Chat).
+    bool chatOnly = false;
 };
 
 /// Stable error codes.
@@ -100,6 +105,8 @@ inline constexpr auto Ambiguous = "ambiguous_ref";  ///< several pages have that
 inline constexpr auto Refused = "refused";          ///< a disabled command, another notebook
 inline constexpr auto Timeout = "timeout";          ///< waitFor's condition was not met in time
 inline constexpr auto Failed = "failed";            ///< could not be done (a screenshot not saved)
+/// A conversation's turn runs: wait for it (chatWait) or stop it (chatStop) first.
+inline constexpr auto Busy = "busy";
 /// The connection is not let in: the remote control is off and it showed no grant's token
 /// (hello {token}), or the token it showed is none (its agent stopped).
 inline constexpr auto Unauthorized = "unauthorized";
@@ -157,6 +164,9 @@ struct MethodSpec {
     bool target = false;
     bool targetRequired = false;
     QString summary; ///< one line, English
+    /// A method of the AI chat (chats, chatRead, chatStart …, docs/CLI.md "Conversations"): one a
+    /// chat grant may call (every agent the app starts with Brulion's tools has one).
+    bool chat = false;
 };
 
 /// Every method of the protocol, in documentation order.
