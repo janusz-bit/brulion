@@ -537,17 +537,15 @@ void PageController::setActive(bool active)
     if (active == m_active)
         return;
     m_active = active;
-    if (m_active && m_indexStale)
-        onIndexChanged();
-    if (m_active && m_macrosStale)
-        onMacrosChanged();
+    followStaleRows();
     Q_EMIT activeChanged();
 }
 
 void PageController::onMacrosChanged()
 {
-    // As the index: a hidden editor follows what its macros show once it is shown again.
-    m_macrosStale = !m_active;
+    // As the index: a hidden editor (or one in source mode) follows what its macros show once its
+    // rows are shown again.
+    m_macrosStale = !m_active || m_sourceMode;
     if (!m_macrosStale)
         m_model->followMacros();
 }
@@ -556,12 +554,25 @@ void PageController::onIndexChanged()
 {
     m_notebookTypes.reset();
     // Hidden: nothing is rendered for nobody; the changes are followed at once when shown (the
-    // index's change log tells what changed meanwhile).
-    m_indexStale = !m_active;
-    if (m_indexStale)
+    // index's change log tells what changed meanwhile). In source mode the page shows its text,
+    // not its rows (the list behind it is hidden): they follow once source mode ends, and an
+    // autosave there renders no row (the first one after loading rendered them all).
+    m_indexStale = !m_active || m_sourceMode;
+    if (!m_active)
         return;
-    m_model->followIndex();
-    updateLook(); // the cover's file may have come or gone
+    if (!m_sourceMode)
+        m_model->followIndex();
+    updateLook(); // the cover's file may have come or gone (shown in source mode too)
+}
+
+void PageController::followStaleRows()
+{
+    if (!m_active)
+        return;
+    if (m_indexStale)
+        onIndexChanged();
+    if (m_macrosStale)
+        onMacrosChanged();
 }
 
 bool PageController::refusesEdit()
@@ -5214,6 +5225,8 @@ void PageController::setSourceMode(bool on)
         const QString edited = std::exchange(m_sourceText, {});
         if (m_sourceEdited && edited != text())
             applyText(edited, Focus{-1, -1});
+        // The rows follow what the index and the macros changed meanwhile (onIndexChanged()).
+        followStaleRows();
         markDirty();
     }
     Q_EMIT sourceModeChanged();

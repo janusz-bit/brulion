@@ -387,10 +387,6 @@ Details in docs/PERFORMANCE.md, "Next steps":
   Pi (`tests/bench/app` scenario `source-typing`; docs/PERFORMANCE.md "Source mode: one edit, not
   the page": on the laptop a keystroke's handling went from 6 to 1.6 ms at 500 KB, Enter from 20
   to 1.8 ms);
-* the autosave after typing in source mode blocks the GUI for 250–315 ms in all (its longest
-  stall ~97 ms) on the reference laptop, on a 32 KB page as on a 0.5 MB one — about twice what
-  it blocks in the outline (docs/PERFORMANCE.md "Source mode: one edit, not the page"): find
-  where it goes (`tests/bench/app/profile-cases.sh`, an `autosave` window) and cut it;
 * precompiled headers in the Windows, Android and browser builds (cmake/BrulionPch.cmake: on for
   Clang on Linux only, "Build times" in docs/PERFORMANCE.md): build and measure them in CI, with
   the jobs' ccache (MSVC's `/Yc` / `/Yu` from ccache 4.10 on);

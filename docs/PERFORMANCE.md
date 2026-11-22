@@ -13,6 +13,14 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **The save after typing in long pages, also in the Markdown source** (2026-11-22). When you
+  pause typing, Brulion saves the page and takes the new version into its index. On a page of
+  5000 blocks with tags that took the interface 7–8 ms after every pause, now 4–5 ms: the tags as
+  you wrote them are read while the page is written, on another core. In source mode (Ctrl+E) the
+  page's blocks, which wait hidden behind the text, are no longer drawn again after each save;
+  they catch up once when you leave source mode. After a pause the window no longer stops at all
+  there (it used to stop for about 15 ms), on a short page as on a long one.
+
 * **Smaller app on Linux and Android** (2026-11-19). The Nix package takes 94 instead of 143 MB
   (the program 73 instead of 118 MB): it no longer carries the program's symbol table, a list of
   the names of its functions that only a debugger reads, and its linker now shares identical
@@ -1719,8 +1727,8 @@ medians of the runs' medians, min–max in brackets; base = `6e4e15f2`, the comm
 (p95 15.0 → 0.6 ms); the autosave the same (250 / 241 ms blocked). Every key now shows in the
 next frame (llvmpipe's ~11 ms frame); before, a keystroke paid for the whole page (and again
 for the change of highlighting it caused), and on the long page Enter and Backspace missed a
-frame. What a burst's autosave blocks in source mode (about twice what it blocks in the outline;
-not looked into yet) is unchanged: TODO.md.
+frame. What a burst's autosave blocks in source mode (about twice what it blocks in the outline
+then) is unchanged here; measured again and cut on 2026-11-22: "Source mode's autosave" below.
 
 The fuzzing that came first (a standalone program: random typing, pastes with `\r\n` and `\r`,
 deletions across lines, undo and redo, edit blocks, select-all, character and block formats and a
@@ -3056,6 +3064,58 @@ the standard ones at a few points less accuracy, `nix/package.nix`): a clean pag
 is why OCR is **off by default** (Settings → Search): a 300-page scanned book is 10–20 minutes of
 one core, in the background; the text layer of the same book, a second or two. Tesseract's OpenMP
 threads are held to one (`OMP_THREAD_LIMIT=1`): background work never takes the machine.
+
+### Source mode's autosave (2026-11-22)
+
+The 250–315 ms that source mode's autosave blocked the GUI for (above, measured on 2026-11-17) are
+gone on main: they predate the save on a writer thread and the hidden views that stopped refreshing
+their lists (2026-11-18, "Only what is on screen, only what changed" and "The save on a writer
+thread"), which took the outline's autosave from 325 ms to nothing on a small page. Source mode
+saves through the same `saveInBackground()`. Measured again (the 10k vault, Release `-g1` of
+b4132596, Xvfb, `BENCH_WAIT_KEPT=1`), source mode blocked what the outline blocks: on the 32 KB page
+a stall of 12–17 ms in four runs of six (none in the others), on the 0.5 MB outline one stall of
+14–19 ms per run.
+
+**Where it went** (`profile-cases.sh source-typing-outline`, perf `cycles:u` with DWARF stacks; the
+new `merge` window of `perf-slice.py` is a background save's result merged on the GUI thread): the
+merge of the note written into the index, the same in both modes — `VaultIndex::updatePrepared` →
+`putEntry` 79 % of it. The largest part (25 of its 42 M instructions on the 0.5 MB outline) was `noteChanged()`'s
+comparison of the tags as written (`Entry::tagSpellings()`: an inline parse of every block with a
+tag, for the new version only — the old one's is cached since its own merge), then the links
+resolved again, the old version detached and freed. Source mode added its own waste: the page's rows stay in a hidden list behind the text,
+and every index change made them follow it — the first save after loading rendered every row again
+(300 rows of the medium page: 38 ms in a Debug build), each later one walked them.
+
+**What changed.**
+
+* `VaultIndex::prepareSave()`: an editor's save, parsed on the vault's writer as before, also
+  computes the new version's tag spellings there (`Workspace::writeIfUnchangedAsync`). The loader
+  keeps `prepare()`: a new note has nothing to compare with.
+* In source mode `PageController::onIndexChanged()` / `onMacrosChanged()` only mark the rows stale,
+  as for a hidden editor; leaving source mode follows everything at once
+  (`followStaleRows()`, after the source's text is applied; docs/UI.md "What an index change
+  renders again"). The cover still follows the index.
+
+**Measured** (the same setup, base = b4132596, two alternating rounds of 3 runs per build, the
+machine shared with other agents' builds; medians [min–max]; instructions in user space, spread
+< 1 %; b0 = the first save after the page opened):
+
+| per autosave, GUI thread | base | branch |
+|---|---:|---:|
+| source mode, 32 KB: GUI blocked after a burst (the worst of a run's three) | 13.1 ms [0–17.3] | **0** [0–0] |
+| … the merge: instructions / time | 3.3 M / 1.0 ms | **1.3 M / 0.6 ms** |
+| … the first save's merge: instructions / time | 42.4 M / 12.2 ms | **2.9 M / 0.7 ms** |
+| … the first save and what follows it (`fanout_insns_M_b0`) | 67.7 M | **28.1 M** |
+| source mode, 0.5 MB outline: GUI blocked after a burst (worst of a run) | 16.7 ms [14.2–18.9] | **0** [0–0] |
+| … the merge: instructions / time | 42.1 M / 7.6 ms | **16.3 M / 4.3 ms** |
+| … the first save's merge | 92.4 M / 14.5 ms | **40.4 M / 7.5 ms** |
+| outline mode, 0.5 MB outline: GUI blocked after a burst (worst of a run) | 14.6 ms [13.0–33.8] | **0** [0–13.7] |
+| … the merge: instructions / time | 42.5 M / 7.6 ms | **17.8 M / 5.1 ms** |
+| … the first save's merge | 79.6 M / 12.3 ms | **54.9 M / 9.7 ms** |
+
+Typing itself is the same (a letter's handling 0.6–1.7 ms, its frame 12–13 ms; the frames' p95
+followed the machine's load in both builds). What is left of a 0.5 MB page's merge: the links
+resolved again against the names, the old version detached from the lookups and freed.
 
 ### Budgets
 

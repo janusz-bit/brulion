@@ -1297,6 +1297,17 @@ PreparedNote VaultIndex::prepare(const VaultPath &path, const QString &content, 
     return prepareParsed(path, content, parseIndexed(path, indexedText(path, content), config), config);
 }
 
+PreparedNote VaultIndex::prepareSave(const VaultPath &path, const QString &content, const VaultConfig &config)
+{
+    PreparedNote out = prepare(path, content, config);
+    // (Cached in the entry: noteChanged() compares the spellings when the tags and their blocks
+    // are the same — typing in a tagged page — and the old version's are cached since its own
+    // merge.)
+    if (out.m_entry && !out.m_entry->note.tags.isEmpty())
+        (void)out.m_entry->tagSpellings();
+    return out;
+}
+
 PreparedNote VaultIndex::prepareParsed(const VaultPath &path, const QString &content, ParsedNote note,
                                        const VaultConfig &config)
 {

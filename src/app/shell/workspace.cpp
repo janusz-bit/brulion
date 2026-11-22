@@ -811,9 +811,10 @@ void Workspace::writeIfUnchangedAsync(const QString &path, const QString &conten
     auto prepared = std::make_shared<PreparedWrite>();
     AsyncTextWrite write{.path = path, .content = content, .expected = expected, .source = ChangeSource::User};
     if (paths::isMarkdown(path) && !paths::isIgnored(path)) {
-        // The parse runs on the writer, over the very text written (prepare() is pure).
+        // The parse runs on the writer, over the very text written (prepareSave() is pure), with
+        // what the index compares with the note's indexed version.
         write.afterWrite = [prepared, path, config = m_vault->config()](const QString &text) {
-            prepared->note = VaultIndex::prepare(path, text, config);
+            prepared->note = VaultIndex::prepareSave(path, text, config);
         };
     }
     write.done = [this, path, prepared, done = std::move(done)](WriteOutcome outcome) {

@@ -14,6 +14,9 @@ Windows (from the probe's marks and stalls, GUI thread only):
   autosave       the stalls 30..1700 ms after each typing burst's last key
   save           each autosave: the probe's "timer:save" signal span (PageController's save timer,
                  the whole synchronous save; needs the probe's spans, BENCH_SPANS)
+  merge          each background save's result merged on the GUI thread: the outermost
+                 Vault.changed / PageController saved / dirtyChanged spans outside the save timers
+                 (analyze.py's save_merge_*)
   fanout         after each autosave: from the save's end 1700 ms on, cut at the typing window's
                  end (the deferred work the save started: queued slots, timers, polish, rendering)
   keys           the synchronous handling of every synthetic key (t0..t2)
@@ -45,7 +48,7 @@ def read_probe(path):
             actions = o["list"]
         elif o["ev"] == "spans":
             names = o["names"]
-            spans = [(x[0], names[x[1]], x[3], bool(x[10])) for x in o["list"]]  # t, name, incl, qml
+            spans = [(x[0], names[x[1]], x[3], bool(x[10]), x[2]) for x in o["list"]]  # t, name, incl, qml, depth
     return start, marks, stalls, actions, spans
 
 
@@ -89,7 +92,12 @@ def main():
     ap.add_argument("--top", type=int, default=30)
     args = ap.parse_args()
     start, marks, stalls, actions, sig_spans = read_probe(args.probe)
-    saves = [(t, t + incl) for t, name, incl, qml in sig_spans if name == "timer:save" and not qml]
+    saves = [(t, t + incl) for t, name, incl, qml, _ in sig_spans if name == "timer:save" and not qml]
+    # A background save's result merged from the event loop (as analyze.py's save_merge_*): the
+    # outermost Vault.changed / saved / dirtyChanged spans outside the save timers.
+    merges = [(t, t + incl) for t, name, incl, qml, depth in sig_spans
+              if not qml and depth == 0 and name in ("Vault.changed", "PageController.saved", "PageController.dirtyChanged")
+              and not any(a <= t <= b for a, b in saves)]
     window_ends = sorted(m["t"] for n, m in marks.items() if n.startswith("window_end:"))
     t0 = int(start["t0ns"]) / 1e9
     pid = start["pid"]
@@ -126,6 +134,8 @@ def main():
                 spans += [(s, s + d) for s, d in stalls if last + 30 <= s < e["t"] + 1700]
         elif w == "save":
             spans = list(saves)
+        elif w == "merge":
+            spans = list(merges)
         elif w == "fanout":
             for a, b in saves:
                 cut = min([e for e in window_ends if e >= b] + [b + 1700])

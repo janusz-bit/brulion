@@ -3507,6 +3507,11 @@ changed on disk, `finishIndexing()` — at once (with the merges held back so fa
 ContentJournalDay): an editor that is not shown — the days of the hidden Journal, the page of a
 hidden view or a closed side panel — only marks its rendering stale when the index changes, and
 follows all the changes at once when it is shown again (`setActive(true)`, before its next frame).
+Source mode is treated the same way for the rows: the page shows its text, and the list of rows
+behind it is hidden, so an index change there (each autosave of the source among them) renders no
+row. Leaving source mode follows everything that changed meanwhile, once
+(`PageController::followStaleRows()`, after the source's text is applied). The cover still follows
+the index in source mode.
 The autocomplete popup's model computes nothing for a closed popup (`SuggestionModel.clear()` in
 `closeSuggestions()`: a `[[` once completed ranked every page name after every save), and the
 side panel's outline ignores `dataChanged` of roles it does not show (html rendered again).
