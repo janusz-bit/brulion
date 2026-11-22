@@ -1377,6 +1377,10 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   5, not the conversation nor the page it is about — with the message: their text where it takes
   embedded context, else links (an encrypted page: a link); the built-in assistant reads them with
   its own tools.
+* **Drafts**: what is written in the field and not sent stays with its conversation while another
+  is shown, and over a restart (`WorkspaceChats.draft()` / `setDraft()`, the notebook's device
+  state `chat/drafts`, following a rename; a new conversation's draft under ""); its pictures stay
+  with the field.
 * **Questions asked before**: Up in an empty field brings back the user's questions of the
   conversation, newest first (Down goes forward again, to an empty field; editing one makes it a
   new message — `WorkspaceChats.prompts()`, core `chat::prompts`: without their pictures and the

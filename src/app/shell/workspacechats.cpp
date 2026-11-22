@@ -179,13 +179,20 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         Q_EMIT t->stateChanged();
         Q_EMIT stateChanged();
     });
-    // (The waiting messages follow their conversation, whether a turn ran or not.)
+    // (The waiting messages and the draft follow their conversation, whether a turn ran or not.)
     connect(m_workspace, &Workspace::pathRenamed, this, &WorkspaceChats::moveQueue);
+    connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
+        if (const QString text = draft(from); !text.isEmpty()) {
+            setDraft(from, QString());
+            setDraft(to, text);
+        }
+    });
     connect(m_workspace, &Workspace::pathRemoved, this, [this](const QString &path) {
         if (ChatTurn *t = find(path); t && t->m_running)
             stop(path);
         moveQueue(path, QString());
         m_rewound.remove(path.toLower());
+        setDraft(path, QString());
     });
     connect(this, &WorkspaceChats::stateChanged, this, &WorkspaceChats::updateRunningShown);
     connect(this, &WorkspaceChats::shownChanged, this, &WorkspaceChats::updateRunningShown);
@@ -1432,6 +1439,39 @@ QString WorkspaceChats::forkedFrom(const QString &path) const
 QString WorkspaceChats::quote(const QString &markdown) const
 {
     return chat::quoted(markdown);
+}
+
+namespace {
+
+const QString DraftsKey = u"chat/drafts"_s;
+
+} // namespace
+
+QString WorkspaceChats::draft(const QString &path) const
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    return local ? local->get(DraftsKey).toObject().value(path.toLower()).toString() : QString();
+}
+
+void WorkspaceChats::setDraft(const QString &path, const QString &text)
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local)
+        return;
+    QJsonObject all = local->get(DraftsKey).toObject();
+    const QString key = path.toLower();
+    if (text.trimmed().isEmpty()) {
+        if (!all.contains(key))
+            return;
+        all.remove(key);
+    } else {
+        if (all.value(key).toString() == text)
+            return;
+        all.insert(key, text.left(120000));
+    }
+    while (all.size() > 200)
+        all.remove(all.keys().first());
+    local->set(DraftsKey, all);
 }
 
 std::pair<int, QString> WorkspaceChats::mentionAt(const QString &text, int caret)

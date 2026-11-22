@@ -525,6 +525,17 @@ private Q_SLOTS:
         QCOMPARE(logged(u"session/new"_s).size(), 3);
         QCOMPARE(chat::parse(ws->read(path)).messages.size(), 4); // (the source as it was)
         QCOMPARE(chats->quote(u"Pierwsza\n![[a.png]]"_s), u"> Pierwsza\n\n"_s);
+
+        // A draft stays with its conversation, follows a rename, goes with an empty text.
+        chats->setDraft(forked, u"Jeszcze nie wysłane: ąę"_s);
+        chats->setDraft(QString(), u"Nowa rozmowa"_s);
+        QCOMPARE(chats->draft(forked), u"Jeszcze nie wysłane: ąę"_s);
+        QCOMPARE(chats->draft(QString()), u"Nowa rozmowa"_s);
+        const QString renamed = chats->rename(forked, u"Gałąź"_s);
+        QCOMPARE(chats->draft(renamed), u"Jeszcze nie wysłane: ąę"_s);
+        QCOMPARE(chats->draft(forked), QString());
+        chats->setDraft(renamed, QString());
+        QCOMPARE(chats->draft(renamed), QString());
     }
 
     /// Approvals: "edits" lets a change of a file go by itself, "all" too, never a plan; "ask"

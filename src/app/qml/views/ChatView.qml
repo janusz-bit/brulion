@@ -108,6 +108,7 @@ FocusScope {
     readonly property string shownPath: root.visible && root.conversationShown ? root.path : ""
     onShownPathChanged: root.register()
     Component.onDestruction: {
+        root.keepDraft()
         if (root.registered !== "")
             Workspace.chats.showing(root.registered, false)
         // Pictures picked but never sent: not left in the notebook.
@@ -127,7 +128,10 @@ FocusScope {
     }
 
     function syncRoute(): void {
+        // What was written and not sent stays with its conversation.
+        root.keepDraft()
         root.path = AppController.routeText(root.route, "path")
+        root.loadDraft()
         root.page = AppController.routeText(root.route, "page")
         root.starting = root.path === "" && AppController.routeFlag(root.route, "new")
         root.thoughtsOpen = false
@@ -207,6 +211,20 @@ FocusScope {
     function suggest(text: string): void {
         input.text = text
         root.send()
+    }
+    /// The field's text as the draft of the conversation shown (`draftPath`).
+    property string draftPath
+    property bool draftLoaded: false
+    function keepDraft(): void {
+        if (root.draftLoaded)
+            root.chats.setDraft(root.draftPath, input.text)
+    }
+    function loadDraft(): void {
+        root.draftPath = root.path
+        root.draftLoaded = true
+        input.text = root.chats.draft(root.path)
+        input.cursorPosition = input.length
+        root.recallIndex = -1
     }
     function clearField(): void {
         input.text = ""

@@ -415,6 +415,11 @@ public:
     Q_INVOKABLE QString fork(const QString &path, int line);
     /// The conversation `path` was forked from ("" none): its path.
     Q_INVOKABLE QString forkedFrom(const QString &path) const;
+    /// What was written in the field of the conversation `path` and not sent ("" a new
+    /// conversation's): kept per conversation while another is shown, and over a restart (the
+    /// notebook's device state, "chat/drafts"). setDraft() with "" forgets it.
+    Q_INVOKABLE QString draft(const QString &path) const;
+    Q_INVOKABLE void setDraft(const QString &path, const QString &text);
     /// A message as a quote for the field ("> …" lines and a blank line).
     Q_INVOKABLE QString quote(const QString &markdown) const;
     /// The page being named at `caret` of the field's `text` (as T3 Code's @-mentions): "@" and
