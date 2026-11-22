@@ -7,6 +7,20 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.28.1 — 22 listopada 2026
+
+**Nowe**
+- **Szukanie po znaczeniu** — **Ustawienia → Szukaj → Szukaj po znaczeniu** znajduje notatki po tym, co znaczą, a nie tylko po słowach: „ciasto z jabłkami” znajdzie „Szarlotkę babci”, angielskie zapytanie — polską notatkę. Za pierwszym razem pobiera mały model (Multilingual E5 Small, 126 MB), który potem działa na tym urządzeniu, bez internetu. Domyślnie wyłączone; na komputerze i na Androidzie ([[Szukanie#Szukanie po znaczeniu]]).
+- **Nazwy obok widoków** — na komputerze pasek widoków rozsuwa się, gdy zatrzymasz na nim kursor: nazwa notatnika, nazwa każdego widoku z plakietką i skrótem, stan synchronizacji. Rozsuwa się nad panelem stron, więc nic się nie przesuwa, i zwija, gdy kursor odjedzie; Tab też go rozsuwa. Widoki są w grupach oddzielonych kreskami, wybrany ma odcień akcentu i słupek przy krawędzi. **Ustawienia → Wygląd → Układ → Nazwy obok ikon widoków** to wyłącza (nazwy znów pokazują dymki).
+- **„Atrament”** — ciepłe, węglowe ciemne tło z ciepłym, papierowo-białym tekstem: **Ustawienia → Wygląd → Ciemne tło → Atrament** (także `--surface ink` i `b.app.settings`).
+- **Karty jak w przeglądarce** — na grafitowym i atramentowym tle aktywna karta ma zaokrąglone rogi i łączy się ze stroną jak w przeglądarce.
+- **Przycisk panelu bocznego zostaje na miejscu** — schowanie panelu stron już nie przesuwa jego przycisku: panel wysuwa się pod pasek widoków i wraca tak samo, w szerokości, w jakiej go zostawiłeś.
+- **Karty przewijają się do widoku** — nowa karta (Ctrl+T) albo wybrana przewija się do widoku; ‹ › na końcach paska, gdy karty się nie mieszczą.
+- **Na telefonie** — pasek edycji znika razem z klawiaturą (Wstecz, klawisz samej klawiatury) i wraca po dotknięciu tekstu; podpowiedzi nowej rozmowy z AI przewijają się w miejscu wiadomości, więc pole wiadomości zostaje nad klawiaturą; tabele w odpowiedziach AI wyglądają jak tabele.
+
+**Poprawki**
+- Starszy zapis tego, co szukanie po znaczeniu przeczytało, mógł trafić na dysk po zamknięciu notatnika, nadpisując nowszy.
+
 ## 0.28.0 — 22 listopada 2026
 
 **Nowe**
