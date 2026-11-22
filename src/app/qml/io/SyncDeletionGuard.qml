@@ -23,12 +23,19 @@ IoCard {
     iconName: "triangle-alert"
     iconColor: Theme.warningText
     title: qsTr("Sync paused: %n file(s) would be deleted", "", deletions.length)
-    subtitle: qsTr("Many files disappeared at once. So that nothing is lost by mistake – an unplugged memory card, a wrong folder on the server – Brulion waits for your decision.")
+    readonly property bool folder: !!sync && sync.deviceFolder
+    subtitle: folder ? qsTr("Many files disappeared at once. So that nothing is lost by mistake – a memory card taken out, a wrong folder picked – Brulion waits for your decision.")
+                     : qsTr("Many files disappeared at once. So that nothing is lost by mistake – an unplugged memory card, a wrong folder on the server – Brulion waits for your decision.")
 
     BText {
         Layout.fillWidth: true
         wrapMode: Text.Wrap
-        text: guard.localCount > 0 && guard.remoteCount > 0
+        text: guard.folder
+              ? (guard.localCount > 0 && guard.remoteCount > 0
+                 ? qsTr("%1 would be deleted in this notebook and %2 in the folder.").arg(guard.localCount).arg(guard.remoteCount)
+                 : guard.localCount > 0 ? qsTr("They were deleted in the folder and would be deleted in this notebook too.")
+                 : qsTr("They were deleted in this notebook and would be deleted in the folder too."))
+              : guard.localCount > 0 && guard.remoteCount > 0
               ? qsTr("%1 would be deleted on this device and %2 on the server.").arg(guard.localCount).arg(guard.remoteCount)
               : guard.localCount > 0 ? qsTr("They were deleted on the server and would be deleted on this device too.")
               : qsTr("They were deleted on this device and would be deleted on the server too.")
@@ -60,7 +67,7 @@ IoCard {
                 spacing: Theme.space2
                 BIcon {
                     Layout.leftMargin: Theme.space3
-                    name: row.action === "delete-local" ? "smartphone" : "server"
+                    name: row.action === "delete-local" ? "smartphone" : guard.folder ? "folder" : "server"
                     size: Theme.iconSizeSm
                     color: Theme.fgMuted
                 }
@@ -72,7 +79,7 @@ IoCard {
                 BText {
                     Layout.rightMargin: Theme.space3
                     visible: !Theme.compact
-                    text: row.action === "delete-local" ? qsTr("here") : qsTr("on the server")
+                    text: row.action === "delete-local" ? qsTr("here") : guard.folder ? qsTr("in the folder") : qsTr("on the server")
                     variant: "small"
                     color: Theme.fgMuted
                 }
@@ -102,7 +109,8 @@ IoCard {
         // other deletions meanwhile makes the confirmation fail instead of deleting unseen files.
         property list<string> shownPaths: []
         title: qsTr("Delete %n file(s)?", "", shownPaths.length)
-        message: qsTr("The files listed will be deleted on the other side as well. Files deleted on this device go to the trash; files deleted on the server go to its deleted files.")
+        message: guard.folder ? qsTr("The files listed will be deleted on the other side as well. Files deleted in this notebook go to its trash; files deleted in the folder are gone from it (Syncthing's file versions may keep a copy).")
+                              : qsTr("The files listed will be deleted on the other side as well. Files deleted on this device go to the trash; files deleted on the server go to its deleted files.")
         checkText: qsTr("Yes, these files should be deleted")
         confirmText: qsTr("Delete")
         destructive: true

@@ -198,7 +198,9 @@ BDialog {
     Note {
         visible: dialog.known
         text: dialog.known
-              ? qsTr("Sent %1 · downloaded %2 · merged %3 · deleted %4 here and %5 on the server · conflicts %6 · errors %7")
+              ? (Workspace.sync.deviceFolder
+                 ? qsTr("Sent %1 · downloaded %2 · merged %3 · deleted %4 here and %5 in the folder · conflicts %6 · errors %7")
+                 : qsTr("Sent %1 · downloaded %2 · merged %3 · deleted %4 here and %5 on the server · conflicts %6 · errors %7"))
                 .arg("" + runInfo.counts.uploaded).arg("" + runInfo.counts.downloaded).arg("" + runInfo.counts.merged)
                 .arg("" + runInfo.counts.deletedLocal).arg("" + runInfo.counts.deletedRemote).arg("" + runInfo.counts.conflicts)
                 .arg("" + runInfo.counts.fileErrors)
@@ -219,7 +221,7 @@ BDialog {
     // ---- Requests ------------------------------------------------------------------------------
     Heading {
         visible: dialog.known && runInfo.stats.requests > 0
-        text: qsTr("Requests to the server")
+        text: Workspace.sync.deviceFolder ? qsTr("Operations in the folder") : qsTr("Requests to the server")
     }
     Note {
         visible: dialog.known && runInfo.stats.requests > 0

@@ -74,7 +74,8 @@ ColumnLayout {
 
     ImportPathCard {
         Layout.fillWidth: true
-        visible: importerObject.state === "empty" && !AppController.isWasm
+        // (The app for Google Play reaches no path outside its storage: the pickers above only.)
+        visible: importerObject.state === "empty" && !AppController.isWasm && !(AppController.isAndroid && AppController.playStore)
         importer: importerObject
     }
 

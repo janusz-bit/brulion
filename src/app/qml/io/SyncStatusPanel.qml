@@ -3,7 +3,8 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// SyncStatusPanel — the Nextcloud sync state (Workspace.sync): what is happening now
+// SyncStatusPanel — the Nextcloud sync state (Workspace.sync), or a folder of the phone's when the
+// notebook syncs with one (WorkspaceSync.deviceFolder: its name, its words): what is happening now
 // (SyncLiveProgress: phase, n of N, files in flight, elapsed time, a stalled server), offline and
 // error explanations, a retry countdown with "Try now", "Sync now", when it last /
 // next runs, the last run's result with "Details" and what it did (sent, downloaded, merged,
@@ -95,7 +96,8 @@ IoCard {
     // only amber — Brulion retries by itself.
     readonly property bool needsUser: syncState === "error" && !passingError(sync.lastErrorCode)
     tone: syncState === "error" ? (needsUser ? "danger" : "warning") : "default"
-    title: qsTr("Nextcloud")
+    readonly property bool folder: sync.deviceFolder
+    title: folder ? qsTr("Folder “%1”").arg(sync.deviceFolderName) : qsTr("Nextcloud")
     subtitle: sync.statusText !== "" ? sync.statusText : qsTr("Not set up. Fill in the form below to start.")
 
     trailing: [
@@ -148,11 +150,17 @@ IoCard {
             case "timeout":
             case "stalled":
             case "other-process": return qsTr("Brulion tries again by itself; your notes stay safe on this device.")
-            case "not-found": return qsTr("Check the server folder below – or let the first sync create it.")
+            case "forbidden": return panel.folder ? qsTr("Choose the folder again above: Android asks once more whether Brulion may use it.") : ""
+            case "server": return panel.folder ? qsTr("Brulion tries again by itself; your notes stay safe in the app's storage.") : ""
+            case "not-found": return panel.folder ? qsTr("Choose the folder again above.")
+                                                  : qsTr("Check the server folder below – or let the first sync create it.")
             case "local-empty":
-            case "remote-empty": return qsTr("Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again.")
+            case "remote-empty": return panel.folder
+                                 ? qsTr("Nothing was deleted. Check that the folder above is the right one, then sync again.")
+                                 : qsTr("Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again.")
             case "vault-unavailable": return qsTr("Insert the card or connect the drive with the notebook, then sync again.")
-            case "insufficient-storage": return qsTr("Free some space on the server; nothing is lost meanwhile.")
+            case "insufficient-storage": return panel.folder ? qsTr("Free some space on the phone; nothing is lost meanwhile.")
+                                                             : qsTr("Free some space on the server; nothing is lost meanwhile.")
             default: return ""
             }
         }
@@ -295,7 +303,8 @@ IoCard {
 
     Note {
         text: panel.hasReport && (panel.sync.lastReport.deletedLocal > 0 || panel.sync.lastReport.deletedRemote > 0)
-              ? qsTr("Deleted: %1 on this device, %2 on the server (they are in the trash or the server's deleted files).")
+              ? (panel.folder ? qsTr("Deleted: %1 in this notebook (they are in its trash), %2 in the folder.")
+                              : qsTr("Deleted: %1 on this device, %2 on the server (they are in the trash or the server's deleted files)."))
                 .arg("" + panel.sync.lastReport.deletedLocal).arg("" + panel.sync.lastReport.deletedRemote)
               : ""
     }

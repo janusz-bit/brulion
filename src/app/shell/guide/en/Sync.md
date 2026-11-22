@@ -8,10 +8,19 @@ Brulion has no server of its own. Your notes are an ordinary folder, so you sync
 
 ## Syncthing (recommended for working offline)
 1. Share the notebook folder in Syncthing (on Android: Syncthing-Fork).
-2. On every device, point Brulion to the same folder (on Android e.g. `/storage/emulated/0/Brulion` and the “All files access” permission).
+2. On every device, point Brulion to the same folder (on Android e.g. `/storage/emulated/0/Brulion` and the “All files access” permission; the app from Google Play: below).
 3. When the same note changes on two devices, Syncthing leaves a `*.sync-conflict-*` copy. Brulion doesn't show it as a page, but in the Sync center as a **conflict to merge** — also a copy of a drawing, which you merge with the **Merge drawings** button, or of a canvas (**Merge canvases**).
 
 Optionally Brulion shows the status from Syncthing's API.
+
+### A folder picked on the phone (the app from Google Play)
+Brulion from Google Play has no “All files access”. Its notebook lives in the app's own storage, and Brulion keeps it in sync with a folder you pick in the phone's own folder dialog — for example the one Syncthing-Fork syncs:
+
+1. On the start screen tap **Choose a folder…** (or, in a notebook already in the app's storage: Sync center → **Syncthing** → **A folder on this phone** → **Choose a folder…**).
+2. Pick the folder and allow Brulion to use it. The first time, Brulion copies the folder's notes into its notebook and opens it.
+3. From then on changes travel both ways: a few seconds after your edits, every few minutes, when you come back to the app and — while it is closed — with the background check of the reminders. Changes made on both sides at once are merged as with Nextcloud; when that is impossible, both versions are kept as a conflict to merge.
+
+The full APK from GitHub or F-Droid can do this too (for a notebook in the app's storage), next to opening a folder of the phone directly. **Stop syncing** leaves the notes in both places.
 
 ## Nextcloud (WebDAV)
 *Settings → Sync* (or the Sync center): the server address, the user name and an **app password** generated in Nextcloud. Changes from several devices are merged three-way (drawings element by element and canvases card by card, never line by line), so usually nothing gets lost and you don't have to do anything. When merging is impossible, both versions are kept and you get the merge view.

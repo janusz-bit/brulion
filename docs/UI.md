@@ -2027,7 +2027,12 @@ quickly by someone coming back and explained to someone new:
   `FilePicker`; on phones an icon button), the waiting card for "All files access" (Android), and
   **Open notebook** as a large primary button across the card (the browser: **Start with an empty
   notebook**; Android adds **Use app storage**). The field starts with the current notebook, else
-  the suggested folder; a missing folder is created.
+  the suggested folder; a missing folder is created. The app for Google Play (`AppController.
+  playStore`, no "All files access") has no field: **Choose a folder…** is its primary button — the
+  system's folder dialog, then `AppController.openDeviceFolder()`: a notebook in the app's storage
+  kept in sync with the picked folder, its notes copied in first while the splash says how far
+  ("Copying the notes from the folder “Notatki”… 12 of 340", `AppController.loadingText`) —
+  and **Use app storage** below it (docs/ANDROID.md "A folder picked in the system's dialog").
 * **Other ways to start** — one card of three rows (an icon in a rounded square, the title, one
   line about it, a chevron): **Import notes** (the chosen notebook opens on its import tab),
   **Open from GitHub…** (`GitHubOpenDialog`) and **Try the sample notebook** ("Sample notebook" —
@@ -5855,6 +5860,19 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   password could not be saved.") and "Save" changes nothing, the typed password staying for
   another try; one "Sign out" cannot delete is a toast too. The switch and folder of 0.3.0 and
   older go to the notebook they belong to (AppSettings).
+* **A folder of the phone** (`qml/io/DeviceFolderPanel.qml`, Android, a notebook in the app's
+  storage: the sync center's Syncthing tab, and the row "Folder on this phone" of Settings → Sync;
+  docs/ANDROID.md "A folder picked in the system's dialog"): not linked — why and **Choose a
+  folder…** (the system's folder dialog, `AppController.linkDeviceFolder()`); linked — "Folder
+  “Notatki” on this phone", where it is ("primary:Syncthing/Notatki"), the sync's state with a badge
+  (On / Syncing / Problem), **Sync now**, **Choose another folder** and **Stop syncing**, which says
+  in place what it does (the notes stay in both) before it unlinks (`unlinkDeviceFolder()`). With a
+  folder the sync is the folder's (`Workspace.sync.deviceFolder`): the Syncthing tab shows the
+  status card, the deletion guard and the history below the panel, in the folder's words ("Checking
+  files in the folder “Notatki”…", "Brulion no longer has access to the folder “Notatki”. Choose it
+  again in Settings → Sync.", "deleted … in the folder", "Operations in the folder" in a run's
+  details); the Nextcloud tab says that Nextcloud is off for this notebook (one way per notebook)
+  and hides its form; the overview's Syncthing card carries the folder's state.
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Checking files on the server…", "Sending and

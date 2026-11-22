@@ -539,8 +539,6 @@ public:
     /// The open notebook stops syncing with its folder: the notes stay on both sides, the grant
     /// to the folder is given back.
     Q_INVOKABLE void unlinkDeviceFolder();
-    /// The folder of the open notebook can still be reached (Android: the grant was not taken back).
-    Q_INVOKABLE bool deviceFolderAccessible() const;
     /// Where a new notebook for the folder `name` goes: <app data>/Folders/<name> (a number added
     /// while that is taken).
     QString deviceFolderNotebookPath(const QString &name) const;

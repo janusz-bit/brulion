@@ -1408,7 +1408,9 @@ void AppController::zoomInterface(int steps)
 QString AppController::defaultVaultPath() const
 {
 #if defined(Q_OS_ANDROID)
-    return u"/storage/emulated/0/Brulion"_s;
+    // The app for Google Play cannot reach shared storage by path: its own storage, or a folder
+    // picked in the system's dialog (openDeviceFolder()).
+    return platform::playStoreBuild() ? appStorageVaultPath() : u"/storage/emulated/0/Brulion"_s;
 #elif defined(Q_OS_WASM)
     return platform::WasmStorage::vaultRoot();
 #else
@@ -1597,12 +1599,6 @@ void AppController::unlinkDeviceFolder()
     m_settings->setDeviceFolderLink(notebook, {});
     platform::releaseDeviceFolder(link.address);
     toast(tr("This notebook no longer syncs with the folder “%1”. The notes stay in both.").arg(link.name));
-}
-
-bool AppController::deviceFolderAccessible() const
-{
-    const AppSettings::DeviceFolderLink link = m_settings->deviceFolderLink(m_workspace->rootPath());
-    return !link.isEmpty() && platform::deviceFolderAccessible(link.address);
 }
 
 bool AppController::needsStoragePermission(const QString &rawPath) const

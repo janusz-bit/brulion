@@ -8,10 +8,19 @@ Brulion nie ma własnego serwera. Notatki to zwykły folder, więc synchronizuje
 
 ## Syncthing (polecane do pracy offline)
 1. Udostępnij folder notatnika w Syncthing (na Androidzie: Syncthing-Fork).
-2. Na każdym urządzeniu wskaż w Brulionie ten sam folder (na Androidzie np. `/storage/emulated/0/Brulion` i zgoda „Dostęp do wszystkich plików”).
+2. Na każdym urządzeniu wskaż w Brulionie ten sam folder (na Androidzie np. `/storage/emulated/0/Brulion` i zgoda „Dostęp do wszystkich plików”; aplikacja z Google Play: niżej).
 3. Gdy ta sama notatka zmieni się na dwóch urządzeniach, Syncthing zostawia kopię `*.sync-conflict-*`. Brulion nie pokazuje jej jako strony, tylko w centrum synchronizacji jako **konflikt do scalenia** — także kopię rysunku, którą scalisz przyciskiem **Scal rysunki**, albo tablicy (**Scal tablice**).
 
 Opcjonalnie Brulion pokazuje stan z API Syncthinga.
+
+### Folder wybrany na telefonie (aplikacja z Google Play)
+Brulion z Google Play nie ma zgody „Dostęp do wszystkich plików”. Jego notatnik leży w pamięci aplikacji, a Brulion synchronizuje go z folderem, który wskażesz w systemowym okienku wyboru folderu — na przykład z tym, który synchronizuje Syncthing-Fork:
+
+1. Na ekranie startowym stuknij **Wybierz folder…** (albo, w notatniku, który już jest w pamięci aplikacji: centrum synchronizacji → **Syncthing** → **Folder na tym telefonie** → **Wybierz folder…**).
+2. Wskaż folder i pozwól Brulionowi z niego korzystać. Za pierwszym razem Brulion kopiuje notatki z folderu do swojego notatnika i go otwiera.
+3. Od tej pory zmiany płyną w obie strony: kilka sekund po Twoich edycjach, co kilka minut, po powrocie do aplikacji i — gdy jest zamknięta — razem ze sprawdzaniem przypomnień w tle. Zmiany zrobione po obu stronach naraz są scalane jak przy Nextcloudzie; gdy się nie da, obie wersje zostają jako konflikt do scalenia.
+
+Pełny APK z GitHuba albo F-Droid też to potrafi (dla notatnika w pamięci aplikacji), obok bezpośredniego otwierania folderu na telefonie. **Przestań synchronizować** zostawia notatki w obu miejscach.
 
 ## Nextcloud (WebDAV)
 *Ustawienia → Synchronizacja* (albo centrum synchronizacji): adres serwera, użytkownik i **hasło aplikacji** wygenerowane w Nextcloudzie. Zmiany z wielu urządzeń scalane są trójstronnie (rysunki element po elemencie, a tablice karta po karcie, nigdy wiersz po wierszu), więc zwykle nic nie ginie i nie musisz nic robić. Gdy scalenie jest niemożliwe, zostają obie wersje i dostajesz widok scalania.

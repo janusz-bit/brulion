@@ -95,13 +95,13 @@ internal object TreeFolder {
   /** Gives the grant of a folder back (the notebook no longer syncs with it). */
   @JvmStatic
   fun release(context: Context, uriString: String) {
-    try {
-      context.contentResolver.releasePersistableUriPermission(
-        Uri.parse(uriString),
-        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-      )
-    } catch (e: Exception) {
-      Log.i(TAG, "release: $e")
+    val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+    for (grant in grantsOf(context, uriString)) {
+      try {
+        context.contentResolver.releasePersistableUriPermission(grant, flags)
+      } catch (e: Exception) {
+        Log.i(TAG, "release: $e")
+      }
     }
     synchronized(ids) { ids.keys.removeAll { it.startsWith(uriString + "\n") } }
   }
@@ -110,8 +110,26 @@ internal object TreeFolder {
   @JvmStatic
   fun hasAccess(context: Context, uriString: String): Boolean =
     context.contentResolver.persistedUriPermissions.any {
-      it.uri.toString() == uriString && it.isReadPermission && it.isWritePermission
+      it.isReadPermission && it.isWritePermission && sameTree(it.uri, uriString)
     }
+
+  /** The kept grants of the folder [uriString] (as the system wrote its address). */
+  private fun grantsOf(context: Context, uriString: String): List<Uri> =
+    context.contentResolver.persistedUriPermissions.map { it.uri }.filter { sameTree(it, uriString) }
+
+  /** [uri] names the tree [uriString] names: the same text, or the same provider and root document. */
+  private fun sameTree(uri: Uri, uriString: String): Boolean {
+    if (uri.toString() == uriString) return true
+    val other = Uri.parse(uriString)
+    if (uri.authority != other.authority || !DocumentsContract.isTreeUri(uri) || !DocumentsContract.isTreeUri(other)) {
+      return false
+    }
+    return try {
+      DocumentsContract.getTreeDocumentId(uri) == DocumentsContract.getTreeDocumentId(other)
+    } catch (e: Exception) {
+      false
+    }
+  }
 
   // ---------------------------------------------------------------------------------------------
   // The sync's operations (sync::FolderStorage)

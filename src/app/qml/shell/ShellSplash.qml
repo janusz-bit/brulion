@@ -27,8 +27,11 @@ Rectangle {
                 size: Theme.iconSize
             }
             BText {
-                text: qsTr("Opening the notebook…")
+                // The first copy of a picked folder's notes says what it copies (and how far).
+                text: AppController.loadingText !== "" ? AppController.loadingText : qsTr("Opening the notebook…")
                 variant: "muted"
+                Layout.maximumWidth: 300
+                wrapMode: Text.Wrap
             }
         }
     }
