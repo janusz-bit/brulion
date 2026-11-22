@@ -6,24 +6,32 @@ import Brulion
 
 // ShellRail — the sidebar's narrow column of views (docs/UI.md "Sidebar"). At the top the
 // notebook: its first letter, a click opens the notebook switcher (the recent notebooks, the
-// documentation, another folder). Then the views as icon buttons, their names in tooltips:
-// Journal, Calendar, Tasks, Habits, Gym, Flashcards (with the count of cards to study now), All
-// pages, Tags, Graph, Search (without the ones
-// hidden in Settings → Appearance → Layout; on phones also Import notes), then the extensions'
-// entries (b.app.contribute("sidebar", …), docs/UI.md "Extension items in the UI"). They scroll when the
+// documentation, another folder). Then the views as icon buttons in groups split by a line (the
+// day: Journal, Calendar, Tasks; practice: Habits, Gym, Flashcards with the count of cards to study
+// now; the notes: All pages, Tags, Graph; Search), without the ones hidden in Settings →
+// Appearance → Layout (on phones also Import notes), then the extensions' entries
+// (b.app.contribute("sidebar", …), docs/UI.md "Extension items in the UI"). They scroll when the
 // window is too low for all. At the bottom the sync status (ShellSyncFooter, compact; a click
-// syncs now, a right click or long press opens the sync center) and Settings. On wide windows the rail stays at the window's left edge when the page panel
-// (ShellSidebar) is hidden; on phones it is the drawer's left column (`navigated()` closes it).
-Rectangle {
+// syncs now, a right click or long press opens the sync center) and Settings. The selected view:
+// tinted in the accent, a pill at the rail's edge (a short one under the pointer).
+//
+// On wide windows the rail stays at the window's left edge when the page panel (ShellSidebar) is
+// hidden; with `expandable` (AppSettings.railExpands, not on touch screens) it widens over the
+// page panel with each view's name while the pointer rests on it, or while the keyboard's focus is
+// in it — the icons stay where they are; otherwise the names are tooltips. On phones it is the
+// drawer's left column, each name under its icon (`navigated()` closes the drawer).
+Item {
     id: rail
 
     property real topInset: 0
     property real bottomInset: 0
+    /// Widens with the names under the pointer (AppShell: the wide windows' rail).
+    property bool expandable: false
 
     signal navigated()
 
     readonly property string routeView: AppController.currentView
-    /// The views offered (the ones hidden in the settings are not shown: AppSettings.sidebarHidden).
+    /// The views offered (the ones hidden in the settings are not shown: rail.shows()).
     readonly property list<var> entries: [
         { entryView: "journals", entryAlso: "journal", entryTitle: qsTr("Journals"), entryShort: qsTr("Journal"), entryIcon: "book-open" },
         { entryView: "calendar", entryAlso: "", entryTitle: qsTr("Calendar"), entryShort: qsTr("Calendar"), entryIcon: "calendar" },
@@ -36,6 +44,9 @@ Rectangle {
         { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryShort: qsTr("Graph"), entryIcon: "waypoints" },
         { entryView: "search", entryAlso: "", entryTitle: qsTr("Search"), entryShort: qsTr("Search"), entryIcon: "search" }
     ]
+    /// The entries' views in their order (typed, for startsGroup()).
+    readonly property list<string> entryViews: ["journals", "calendar", "tasks", "habits", "gym", "flashcards",
+                                                "allPages", "tags", "graph", "search"]
     readonly property list<var> noRows: []
     /// The extensions' entries as text: made again only when they change.
     readonly property string itemsKey: Workspace.extensions !== null
@@ -48,28 +59,355 @@ Rectangle {
     readonly property int sidePadding: Theme.space2
     /// A short name's line under its button (labelled).
     readonly property int labelHeight: labelled ? Theme.textXs + 6 : 0
+    readonly property int collapsedWidth: labelled ? 76 : buttonSize + 2 * sidePadding
+    /// The width with the names (expandable).
+    readonly property int expandedWidth: 216
+
+    /// Widened: the pointer rested on it, the keyboard's focus is in it, or its notebook menu is
+    /// open (the menu stays beside its button).
+    readonly property bool expanded: expandable && (pointerOpened || keyboardItem !== null
+                                                    || (notebookMenuPopup !== null && notebookMenuPopup.visible))
+    /// The pointer has rested on the rail (openTimer) and not left it since.
+    property bool pointerOpened: false
+    /// The rail's control with the keyboard's focus (Tab), null: none.
+    property Item keyboardItem: null
+    /// The names are shown: widened, or widening/narrowing (the surface clips them meanwhile).
+    readonly property bool namesShown: expandable && surface.overhang > 1
+    /// The width it covers: wider than its place in the layout (implicitWidth) while expanded.
+    /// The owner sizes it so (AppShell): a pointer is delivered only within an item's parents, so
+    /// the part over the page panel would take no clicks otherwise.
+    readonly property real faceWidth: surface.width
 
     function go(route: var): void {
         AppController.navigate(route)
         rail.navigated()
     }
+    /// A view of the app is offered: not hidden in the settings, the built-in extensions' views
+    /// only while switched on (Settings → Extensions).
+    function shows(view: string): bool {
+        return AppSettings.sidebarHidden.indexOf(view) < 0 && (view !== "gym" || AppSettings.gymEnabled)
+                && (view !== "habits" || AppSettings.habitsEnabled)
+                && (view !== "flashcards" || AppSettings.flashcardsEnabled)
+    }
+    function groupOf(view: string): int {
+        switch (view) {
+        case "journals":
+        case "calendar":
+        case "tasks":
+            return 0
+        case "habits":
+        case "gym":
+        case "flashcards":
+            return 1
+        case "search":
+            return 3
+        }
+        return 2
+    }
+    /// The entry at `index` is the first shown one of its group, after another group's: a line
+    /// above it.
+    function startsGroup(index: int): bool {
+        const view = rail.entryViews[index]
+        if (!rail.shows(view))
+            return false
+        const group = rail.groupOf(view)
+        let after = false
+        for (let j = index - 1; j >= 0; --j) {
+            const before = rail.entryViews[j]
+            if (!rail.shows(before))
+                continue
+            if (rail.groupOf(before) === group)
+                return false
+            after = true
+        }
+        return after
+    }
+    /// A control of the rail took or lost the keyboard's focus.
+    function keyboardFocus(item: Item, on: bool): void {
+        if (on)
+            rail.keyboardItem = item
+        else if (rail.keyboardItem === item)
+            rail.keyboardItem = null
+    }
 
-    implicitWidth: labelled ? 76 : buttonSize + 2 * sidePadding
-    // The darkest layer on the graphite background (Discord's column of servers).
-    color: Theme.paneLines ? Theme.bgSunken : Theme.bgSunken.darker(1.25)
+    implicitWidth: collapsedWidth
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Views")
 
-    // The line between the rail and the page panel (or the page, the panel hidden).
+    Timer {
+        id: openTimer
+        interval: 250
+        onTriggered: rail.pointerOpened = true
+    }
+    Timer {
+        id: closeTimer
+        interval: 150
+        onTriggered: rail.pointerOpened = false
+    }
+    onExpandableChanged: if (!rail.expandable) rail.pointerOpened = false
+
+    BShadow {
+        target: surface
+        level: rail.namesShown ? 2 : 0
+    }
+    // The rail's face: as wide as the rail, or wider over the page panel while expanded.
     Rectangle {
-        visible: Theme.paneLines
-        anchors.right: parent.right
-        width: 1
-        height: parent.height
-        color: Theme.borderSubtle
+        id: surface
+        objectName: "railSurface"
+        /// The room it takes over the page panel; only this animates (the rail's own width, set
+        /// as it is made, must not: its clipped buttons would take no clicks meanwhile).
+        property real overhang: rail.expanded ? rail.expandedWidth - rail.collapsedWidth : 0
+        width: rail.collapsedWidth + overhang
+        height: rail.height
+        clip: rail.expandable
+        // The darkest layer on the graphite background (Discord's column of servers).
+        color: Theme.paneLines ? Theme.bgSunken : Theme.bgSunken.darker(1.25)
+        Behavior on overhang {
+            NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing }
+        }
+
+        // The pointer moving onto the rail and resting there widens it, leaving it narrows it after
+        // a moment (a pointer crossing the window's edge on its way to the page panel does not open
+        // it). It must have moved over it: a window that opens under a still pointer (in its
+        // corner, where the notebook's mark is) stays narrow.
+        HoverHandler {
+            id: railHover
+            /// Where the pointer came onto the rail (valid once `entered`).
+            property point enteredAt
+            property bool entered: false
+            enabled: rail.expandable
+            onHoveredChanged: {
+                if (railHover.hovered) {
+                    closeTimer.stop()
+                } else {
+                    railHover.entered = false
+                    openTimer.stop()
+                    if (rail.pointerOpened)
+                        closeTimer.restart()
+                }
+            }
+            onPointChanged: {
+                if (!railHover.hovered || rail.pointerOpened || openTimer.running)
+                    return
+                const at = railHover.point.position
+                if (!railHover.entered) {
+                    railHover.enteredAt = at
+                    railHover.entered = true
+                } else if (Math.abs(at.x - railHover.enteredAt.x) + Math.abs(at.y - railHover.enteredAt.y) > 2) {
+                    openTimer.start()
+                }
+            }
+        }
+
+        // Over the page panel: its clicks, wheel turns and hovering stay here.
+        MouseArea {
+            anchors.fill: parent
+            enabled: rail.namesShown
+            hoverEnabled: true
+            acceptedButtons: Qt.AllButtons
+            onWheel: (wheel) => wheel.accepted = true
+        }
+
+        // The line between the rail and the page panel (or the page, the panel hidden).
+        Rectangle {
+            visible: Theme.paneLines || rail.namesShown
+            anchors.right: parent.right
+            width: 1
+            height: parent.height
+            color: Theme.borderSubtle
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.topMargin: rail.topInset + Theme.space2
+            anchors.bottomMargin: rail.bottomInset + Theme.space2
+            anchors.rightMargin: 1
+            spacing: Theme.space1
+
+            // ---- The notebook: its switcher ------------------------------------------------
+            T.Button {
+                id: notebookButton
+                objectName: "notebookSwitch"
+                /// The accessible name and what UI tests look for.
+                readonly property string label: qsTr("Switch notebook")
+                Layout.alignment: rail.labelled ? Qt.AlignHCenter : Qt.AlignLeft
+                Layout.leftMargin: rail.labelled ? 0 : rail.sidePadding
+                Layout.rightMargin: rail.labelled ? 0 : rail.sidePadding
+                Layout.fillWidth: rail.namesShown
+                Layout.bottomMargin: Theme.space1
+                implicitWidth: rail.buttonSize
+                implicitHeight: rail.buttonSize
+                hoverEnabled: !Theme.touchUi
+                focusPolicy: Qt.StrongFocus
+                Accessible.role: Accessible.Button
+                Accessible.name: label
+                Accessible.description: Workspace.name
+                onVisualFocusChanged: rail.keyboardFocus(notebookButton, notebookButton.visualFocus)
+                // (Expandable: the open menu widens the rail, so it opens beside the widened one.)
+                onClicked: rail.notebookMenuNow().popup(notebookButton, (rail.expandable ? rail.expandedWidth - notebookButton.x
+                                                                                         : notebookButton.width) + Theme.space1, 0)
+
+                background: Item {
+                    BFocusRing {
+                        visible: notebookButton.visualFocus
+                        targetRadius: Theme.radius
+                    }
+                }
+                contentItem: Item {
+                    // A circle that squares its corners under the pointer, as Discord's servers.
+                    BAvatar {
+                        x: Math.round((rail.buttonSize - width) / 2)
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Math.round(rail.buttonSize * 0.8)
+                        name: Workspace.name
+                        active: notebookButton.hovered || notebookButton.down
+                    }
+                    // Expanded: the notebook's name and the switcher's mark.
+                    BText {
+                        visible: rail.namesShown
+                        x: rail.buttonSize + Theme.space2
+                        width: parent.width - x - Theme.iconSizeSm - Theme.space2
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Workspace.name
+                        elide: Text.ElideRight
+                        font.weight: Theme.weightSemiBold
+                        Accessible.ignored: true
+                    }
+                    BIcon {
+                        visible: rail.namesShown
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        name: "chevrons-up-down"
+                        size: Theme.iconSizeSm
+                        color: Theme.fgMuted
+                    }
+                }
+                // No tooltip: the panel beside it names the notebook, and the window's corner is
+                // where a pointer rests when the app starts (a tooltip would greet every start).
+            }
+
+            // ---- The views (scrolling when the window is too low) ---------------------------
+            Flickable {
+                id: entriesView
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentHeight: entriesColumn.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
+
+                ColumnLayout {
+                    id: entriesColumn
+                    width: entriesView.width
+                    spacing: Theme.space1
+
+                    Repeater {
+                        model: rail.entries
+                        delegate: RailButton {
+                            id: entry
+                            required property int index
+                            required property string entryView
+                            required property string entryAlso
+                            required property string entryTitle
+                            required property string entryIcon
+                            required property string entryShort
+                            objectName: "sidebarNav_" + entryView
+                            shortName: entryShort
+                            // Hidden in the settings: not shown (the layout leaves no gap).
+                            visible: rail.shows(entryView)
+                            groupStart: rail.startsGroup(index)
+                            badge: entryView === "flashcards" ? Workspace.extensions.flashcardsDue : 0
+                            label: entryTitle
+                            iconName: entryIcon
+                            shortcut: AppController.routeText(ShortcutMap.sequences, "go." + entryView)
+                            selected: rail.routeView === entryView || (entryAlso !== "" && rail.routeView === entryAlso)
+                            onClicked: rail.go({ view: entry.entryView })
+                        }
+                    }
+                    // Import (the drawer on phones: notes from other apps, docs/UI.md).
+                    RailButton {
+                        objectName: "drawerImportNotes"
+                        visible: Theme.narrow
+                        label: qsTr("Import notes")
+                        shortName: qsTr("Import", "the drawer's short name of Import notes")
+                        iconName: "download"
+                        selected: rail.routeView === "importExport"
+                        onClicked: rail.go({ view: "importExport", tab: "import" })
+                    }
+                    // The extensions' entries (b.app.contribute("sidebar", …)) after the app's own,
+                    // a group of their own; one that opens a view is selected while that view shows.
+                    Repeater {
+                        model: rail.itemsKey !== "" ? Workspace.extensions.contributions("sidebar", rail.itemsKey.length) : rail.noRows
+                        delegate: RailButton {
+                            id: extensionEntry
+                            required property var modelData
+                            required property int index
+                            required property string extension
+                            required property string tooltip
+                            required property string view
+                            readonly property string itemId: UiModels.stringField(extensionEntry.modelData, "id")
+                            objectName: "sidebarNav_ext_" + extensionEntry.itemId
+                            groupStart: extensionEntry.index === 0
+                            iconName: UiModels.stringField(extensionEntry.modelData, "icon") !== ""
+                                      ? UiModels.stringField(extensionEntry.modelData, "icon") : "puzzle"
+                            toolTip: extensionEntry.tooltip
+                            // (The drawer: its tooltip under the icon, elided; expanded: beside it.)
+                            shortName: extensionEntry.tooltip
+                            selected: extensionEntry.view !== "" && rail.routeView === "extension"
+                                      && AppController.routeText(AppController.currentRoute, "extension") === extensionEntry.extension
+                                      && AppController.routeText(AppController.currentRoute, "name") === extensionEntry.view
+                            onClicked: {
+                                AppScripting.activate("sidebar", extensionEntry.extension, extensionEntry.itemId, "", -1)
+                                rail.navigated()
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---- Sync status and settings --------------------------------------------------
+            // A click syncs now (with a sync engine, not while a sync runs); without one, while it
+            // runs, a right click or a long press: the sync center. Expanded: its status beside.
+            ShellSyncFooter {
+                id: railSync
+                objectName: "railSync"
+                compact: true
+                textShown: rail.namesShown
+                syncOnClick: AppController.syncAvailable
+                Layout.alignment: rail.labelled ? Qt.AlignHCenter : Qt.AlignLeft
+                // (Its square is a little larger than the buttons': centred on their icons.)
+                Layout.leftMargin: rail.labelled ? 0 : rail.sidePadding - Math.round((railSync.squareSize - rail.buttonSize) / 2)
+                Layout.rightMargin: rail.labelled ? 0 : rail.sidePadding
+                Layout.fillWidth: rail.namesShown
+                onVisualFocusChanged: rail.keyboardFocus(railSync, railSync.visualFocus)
+                onClicked: {
+                    if (railSync.syncOnClick && railSync.syncState !== "syncing")
+                        AppController.requestSync()
+                    else
+                        rail.go({ view: "sync" })
+                }
+                onPressAndHold: rail.go({ view: "sync" })
+                // Only devices with buttons: Qt hands a finger to it whatever acceptedButtons.
+                TapHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                    acceptedButtons: Qt.RightButton
+                    onTapped: rail.go({ view: "sync" })
+                }
+            }
+            RailButton {
+                objectName: "railSettings"
+                label: qsTr("Settings")
+                shortName: qsTr("Settings")
+                iconName: "settings"
+                shortcut: ShortcutMap.sequences["go.settings"] || ""
+                selected: rail.routeView === "settings"
+                onClicked: rail.go({ view: "settings" })
+            }
+        }
     }
 
-    /// One view: its icon, the selected one tinted with the accent's bar at the rail's edge.
+    /// One view: its icon (and its name beside it while expanded), the selected one tinted in the
+    /// accent with a pill at the rail's edge.
     component RailButton: BIconButton {
         id: button
         property bool selected: false
@@ -77,28 +415,92 @@ Rectangle {
         property int badge: 0
         /// The name under the icon in the drawer ("" none).
         property string shortName
+        /// The first of a group: a line above it.
+        property bool groupStart: false
+        /// The name beside the icon (expanded): an extension's tooltip, else the label.
+        readonly property string name: toolTip !== "" ? toolTip : label
         checked: selected
         toolTipBeside: true
-        showToolTip: !rail.labelled
-        Layout.alignment: Qt.AlignHCenter
+        // (Expandable: the name shows beside the icon instead.)
+        showToolTip: !rail.labelled && !rail.expandable
+        Layout.alignment: rail.labelled ? Qt.AlignHCenter : Qt.AlignLeft
+        Layout.leftMargin: rail.labelled ? 0 : rail.sidePadding
+        Layout.rightMargin: rail.labelled ? 0 : rail.sidePadding
+        Layout.fillWidth: rail.namesShown
+        Layout.topMargin: groupStart ? Theme.space3 : 0
         Layout.bottomMargin: rail.labelHeight
-        iconColor: selected || hovered || down ? Theme.fg : Theme.fgMuted
+        iconColor: selected ? Theme.accentText : hovered || down ? Theme.fg : Theme.fgMuted
         Accessible.checked: selected
+        onVisualFocusChanged: rail.keyboardFocus(button, button.visualFocus)
+
+        background: Rectangle {
+            radius: Theme.radiusLg
+            color: button.selected ? Theme.accentBg : button.down ? Theme.bgPressed : button.hovered ? Theme.bgHover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            BFocusRing {
+                visible: button.visualFocus
+                targetRadius: Theme.radiusLg
+            }
+        }
+        contentItem: Item {
+            // At the same place narrow and expanded: the icons do not move as the rail widens.
+            BIcon {
+                x: Math.round((rail.buttonSize - width) / 2)
+                anchors.verticalCenter: parent.verticalCenter
+                name: button.iconName
+                size: Theme.iconSize
+                color: button.iconColor
+                Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            }
+            BText {
+                visible: rail.namesShown
+                x: rail.buttonSize
+                width: (shortcutKeys.visible ? shortcutKeys.x - Theme.space2 : parent.width - Theme.space2) - x
+                anchors.verticalCenter: parent.verticalCenter
+                text: button.name
+                elide: Text.ElideRight
+                font.pixelSize: Theme.textSm
+                font.weight: button.selected ? Theme.weightSemiBold : Theme.weightMedium
+                color: button.selected ? Theme.fg : Theme.fgMuted
+                Accessible.ignored: true
+            }
+            // The shortcut under the pointer (the name's place for the count of a badge).
+            BKbd {
+                id: shortcutKeys
+                visible: rail.namesShown && (button.hovered || button.visualFocus) && button.badge <= 0 && button.shortcut !== ""
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.space2
+                anchors.verticalCenter: parent.verticalCenter
+                sequence: button.shortcut
+                small: true
+            }
+        }
+        // The line above a group, across the rail (a short one while narrow).
         Rectangle {
-            visible: button.selected
-            // (Out to the rail's edge: the button is centred in it.)
-            x: -button.x
+            visible: button.groupStart
+            width: rail.namesShown ? surface.width - 4 * rail.sidePadding : Math.round(rail.buttonSize * 0.6)
+            height: 1
+            x: -button.x + Math.round((surface.width - width) / 2)
+            y: -Math.round((Theme.space3 + Theme.space1) / 2) - 1
+            color: Theme.borderStrong
+        }
+        // Discord's pill at the rail's edge: tall for the selected view, short under the pointer.
+        Rectangle {
+            objectName: "railPill"
+            visible: height > 0
+            x: -button.x - 3
             anchors.verticalCenter: parent.verticalCenter
-            width: 3
-            height: Math.round(parent.height * 0.5)
-            radius: 2
-            color: Theme.accent
+            width: 6
+            height: button.selected ? Math.round(button.height * 0.6) : button.hovered ? 8 : 0
+            radius: 3
+            color: Theme.fg
+            Behavior on height { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
         }
         BBadge {
             objectName: "railBadge"
             visible: button.badge > 0
-            x: button.width - width + 2
-            y: 1
+            x: rail.namesShown ? button.width - width - Theme.space2 : button.width - width + 2
+            y: rail.namesShown ? Math.round((button.height - height) / 2) : 1
             count: button.badge
             variant: "accent"
             Accessible.ignored: true
@@ -120,161 +522,6 @@ Rectangle {
             TapHandler {
                 onTapped: button.clicked()
             }
-        }
-    }
-
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.topMargin: rail.topInset + Theme.space2
-        anchors.bottomMargin: rail.bottomInset + Theme.space2
-        anchors.rightMargin: 1
-        spacing: Theme.space1
-
-        // ---- The notebook: its switcher ----------------------------------------------------
-        T.Button {
-            id: notebookButton
-            objectName: "notebookSwitch"
-            /// The accessible name and what UI tests look for.
-            readonly property string label: qsTr("Switch notebook")
-            Layout.alignment: Qt.AlignHCenter
-            Layout.bottomMargin: Theme.space1
-            implicitWidth: rail.buttonSize
-            implicitHeight: rail.buttonSize
-            hoverEnabled: !Theme.touchUi
-            focusPolicy: Qt.StrongFocus
-            Accessible.role: Accessible.Button
-            Accessible.name: label
-            Accessible.description: Workspace.name
-            onClicked: rail.notebookMenuNow().popup(notebookButton, notebookButton.width + Theme.space1, 0)
-
-            background: Item {
-                BFocusRing {
-                    visible: notebookButton.visualFocus
-                    targetRadius: Theme.radius
-                }
-            }
-            contentItem: Item {
-                // A circle that squares its corners under the pointer, as Discord's servers.
-                BAvatar {
-                    anchors.centerIn: parent
-                    size: Math.round(rail.buttonSize * 0.8)
-                    name: Workspace.name
-                    active: notebookButton.hovered || notebookButton.down
-                }
-            }
-            // No tooltip: the panel beside it names the notebook, and the window's corner is where
-            // a pointer rests when the app starts (a tooltip would greet every start).
-        }
-
-        // ---- The views (scrolling when the window is too low) -------------------------------
-        Flickable {
-            id: entriesView
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            contentHeight: entriesColumn.implicitHeight
-            boundsBehavior: Flickable.StopAtBounds
-            interactive: contentHeight > height
-
-            ColumnLayout {
-                id: entriesColumn
-                width: entriesView.width
-                spacing: Theme.space1
-
-                Repeater {
-                    model: rail.entries
-                    delegate: RailButton {
-                        id: entry
-                        required property string entryView
-                        required property string entryAlso
-                        required property string entryTitle
-                        required property string entryIcon
-                        required property string entryShort
-                        objectName: "sidebarNav_" + entryView
-                        shortName: entryShort
-                        // Hidden in the settings: not shown (the layout leaves no gap); the gym and
-                        // habits only while they are switched on (Settings → Extensions).
-                        visible: AppSettings.sidebarHidden.indexOf(entryView) < 0 && (entryView !== "gym" || AppSettings.gymEnabled)
-                                 && (entryView !== "habits" || AppSettings.habitsEnabled)
-                                 && (entryView !== "flashcards" || AppSettings.flashcardsEnabled)
-                        badge: entryView === "flashcards" ? Workspace.extensions.flashcardsDue : 0
-                        label: entryTitle
-                        iconName: entryIcon
-                        shortcut: AppController.routeText(ShortcutMap.sequences, "go." + entryView)
-                        selected: rail.routeView === entryView || (entryAlso !== "" && rail.routeView === entryAlso)
-                        onClicked: rail.go({ view: entry.entryView })
-                    }
-                }
-                // Import (the drawer on phones: notes from other apps, docs/UI.md).
-                RailButton {
-                    objectName: "drawerImportNotes"
-                    visible: Theme.narrow
-                    label: qsTr("Import notes")
-                    shortName: qsTr("Import", "the drawer's short name of Import notes")
-                    iconName: "download"
-                    selected: rail.routeView === "importExport"
-                    onClicked: rail.go({ view: "importExport", tab: "import" })
-                }
-                // The extensions' entries (b.app.contribute("sidebar", …)) after the app's own; one
-                // that opens a view is selected while that view shows.
-                Repeater {
-                    model: rail.itemsKey !== "" ? Workspace.extensions.contributions("sidebar", rail.itemsKey.length) : rail.noRows
-                    delegate: RailButton {
-                        id: extensionEntry
-                        required property var modelData
-                        required property string extension
-                        required property string tooltip
-                        required property string view
-                        readonly property string itemId: UiModels.stringField(extensionEntry.modelData, "id")
-                        objectName: "sidebarNav_ext_" + extensionEntry.itemId
-                        iconName: UiModels.stringField(extensionEntry.modelData, "icon") !== ""
-                                  ? UiModels.stringField(extensionEntry.modelData, "icon") : "puzzle"
-                        toolTip: extensionEntry.tooltip
-                        // (The drawer: its tooltip under the icon, elided.)
-                        shortName: extensionEntry.tooltip
-                        selected: extensionEntry.view !== "" && rail.routeView === "extension"
-                                  && AppController.routeText(AppController.currentRoute, "extension") === extensionEntry.extension
-                                  && AppController.routeText(AppController.currentRoute, "name") === extensionEntry.view
-                        onClicked: {
-                            AppScripting.activate("sidebar", extensionEntry.extension, extensionEntry.itemId, "", -1)
-                            rail.navigated()
-                        }
-                    }
-                }
-            }
-        }
-
-        // ---- Sync status and settings ------------------------------------------------------
-        // A click syncs now (with a sync engine, not while a sync runs); without one, while it
-        // runs, a right click or a long press: the sync center.
-        ShellSyncFooter {
-            id: railSync
-            objectName: "railSync"
-            compact: true
-            syncOnClick: AppController.syncAvailable
-            Layout.alignment: Qt.AlignHCenter
-            onClicked: {
-                if (railSync.syncOnClick && railSync.syncState !== "syncing")
-                    AppController.requestSync()
-                else
-                    rail.go({ view: "sync" })
-            }
-            onPressAndHold: rail.go({ view: "sync" })
-            // Only devices with buttons: Qt hands a finger to it whatever acceptedButtons.
-            TapHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                acceptedButtons: Qt.RightButton
-                onTapped: rail.go({ view: "sync" })
-            }
-        }
-        RailButton {
-            objectName: "railSettings"
-            label: qsTr("Settings")
-            shortName: qsTr("Settings")
-            iconName: "settings"
-            shortcut: ShortcutMap.sequences["go.settings"] || ""
-            selected: rail.routeView === "settings"
-            onClicked: rail.go({ view: "settings" })
         }
     }
 

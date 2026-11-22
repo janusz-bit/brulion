@@ -405,17 +405,23 @@ FocusScope {
     onWidthChanged: if (!Theme.narrow && drawer.opened) drawer.close()
 
     // The rail of views at the window's left edge (wide windows; phones have it in the drawer):
-    // it stays when the sidebar's page panel is hidden, not in focus mode.
+    // it stays when the sidebar's page panel is hidden, not in focus mode. Above the split: expanded
+    // (the names under the pointer) it lies over the page panel — as wide as it shows itself
+    // (faceWidth, so its wider part takes the pointer), the split beside its narrow place.
     Loader {
         id: rail
+        /// Its place in the layout: the narrow rail's width.
+        readonly property real layoutWidth: visible && rail.item ? (rail.item as Item).implicitWidth : 0
+        z: 1
         active: !Theme.narrow
         visible: active && !shell.focusMode
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: statusBar.top
-        width: visible && rail.item ? (rail.item as Item).implicitWidth : 0
+        width: visible && rail.item ? (rail.item as ShellRail).faceWidth : 0
         sourceComponent: ShellRail {
             objectName: "shellRail"
+            expandable: AppSettings.railExpands && !Theme.touchUi
             topInset: shell.SafeArea.margins.top
             bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
         }
@@ -440,7 +446,8 @@ FocusScope {
 
     SplitView {
         id: split
-        anchors.left: rail.right
+        anchors.left: parent.left
+        anchors.leftMargin: rail.layoutWidth
         anchors.right: parent.right
         anchors.top: parent.top
         // Everything ends at the keyboard's top (the status bar's on the desktop): an editor in
