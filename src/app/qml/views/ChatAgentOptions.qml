@@ -10,8 +10,9 @@ import Brulion
 // (Workspace.chats.setAgentOption: set on the session and remembered for the agent's next ones).
 // A bool, and a select of just "Off" and "On" (Claude Code's "Fast mode"), is a switch chip: the
 // option's name, highlighted while on, a click toggles it. Then how much of the agent's context the
-// conversation uses and what it cost. Shown for a conversation an agent answers — before its first
-// message too, with the options the agent's last session offered.
+// conversation uses and what it cost, and the subscription's limits of Claude Code and Codex
+// (ChatAgentLimits). Shown for a conversation an agent answers — before its first message too, with
+// the options the agent's last session offered.
 // The option and value names come from the agent (in English): the known kinds (model, mode,
 // effort, speed) and the common values (low … max, on, off, auto, the permission modes) are
 // shown in the interface's language; others as the agent wrote them.
@@ -90,7 +91,8 @@ Flow {
         return Js.toUpperCase(Js.charAt(text, 0)) + Js.sliceFrom(text, 1)
     }
 
-    visible: bar.chats.isAgent(bar.partner) && (bar.options.length > 0 || bar.usage !== "")
+    readonly property bool limitsShown: bar.chats.isAgent(bar.partner) && bar.chats.limits.applies(bar.partner, bar.chats.limits.serial)
+    visible: bar.chats.isAgent(bar.partner) && (bar.options.length > 0 || bar.usage !== "" || bar.limitsShown)
     spacing: Theme.space1
 
     Repeater {
@@ -157,6 +159,10 @@ Flow {
         text: bar.usage
         variant: "faint"
         font.pixelSize: Theme.textSm
+    }
+    // The subscription's limits (Claude Code, Codex of this computer).
+    ChatAgentLimits {
+        partner: bar.limitsShown ? bar.partner : ""
     }
 
     BMenu {

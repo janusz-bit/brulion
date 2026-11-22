@@ -15,6 +15,7 @@
 //                                       / .chats
 //   ChatTurn         uncreatable — Workspace.chats.turn(path): one conversation's turn
 //   AgentShare       uncreatable — Workspace.chats.share ("Share agents with the phone")
+//   AgentLimits      uncreatable — Workspace.chats.limits (Claude Code's and Codex's subscription limits)
 //   WritingSession   creatable — WritingSession { workspace: Workspace } (the editor's AI assistant)
 //   WorkspaceEncryption uncreatable — Workspace.encryption (encrypted notes)
 //   EncryptedPageHost creatable — PageView's EditorHost (encryptedpagehost.h)
@@ -274,6 +275,13 @@ struct AgentShareForeign {
     QML_FOREIGN(brulion::shell::AgentShare)
     QML_NAMED_ELEMENT(AgentShare)
     QML_UNCREATABLE("Use Workspace.chats.share")
+};
+
+struct AgentLimitsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AgentLimits)
+    QML_NAMED_ELEMENT(AgentLimits)
+    QML_UNCREATABLE("Use Workspace.chats.limits")
 };
 
 struct WritingSessionForeign {

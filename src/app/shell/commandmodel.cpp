@@ -675,6 +675,11 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
         out.append({u"go.chat"_s, CommandModel::tr("AI chat"), CommandModel::tr("Conversations with the AI assistant"),
                     u"message-square"_s, {}, ready});
     }
+    // While the AI chat shows: a prompt link of the draft (brulion://chat, docs/UI.md "Automation").
+    if (app->currentRoute().value(u"view"_s).toString() == u"chat")
+        out.append({u"ai.copyPromptLink"_s, CommandModel::tr("AI: Copy prompt link"),
+                    CommandModel::tr("A link that opens a new conversation with this prompt, never sending it"),
+                    u"link"_s, {}, ready});
     out.append({u"go.console"_s, CommandModel::tr("Luau console"),
                 CommandModel::tr("Evaluate Luau with the notebook's API; what extensions print"), u"terminal"_s, {},
                 ready});
@@ -884,6 +889,8 @@ bool CommandModel::run(const QString &id)
         m_app->navigate({{u"view"_s, u"chat"_s},
                          {u"new"_s, true},
                          {u"page"_s, path.isEmpty() ? QString() : m_app->workspace()->pageTitle(path)}});
+    } else if (id == u"ai.copyPromptLink") {
+        m_app->requestUiAction(u"chat:copyPromptLink"_s);
     } else if (id == u"flashcards.reviewPage") {
         const QString path = m_app->currentRoute().value(u"path"_s).toString();
         const QString deck = u"page:"_s + m_app->workspace()->pageTitle(path);

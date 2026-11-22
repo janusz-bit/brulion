@@ -3,6 +3,7 @@
 #include "appscripting.h"
 
 #include "blocktext.h"
+#include "dictation.h"
 #include "mediaengine.h"
 #include "voicerecorder.h"
 
@@ -1856,6 +1857,15 @@ void AppController::setUpSpeech()
     media::VoiceRecorder::setClock([this] { return now(); });
     if (!media::mediaSupported())
         editor::setUnavailableSlashCommands({u"voiceNote"_s});
+#if !defined(Q_OS_ANDROID)
+    // The AI chat's dictation where the system has no recognizer (the desktop): recorded and heard
+    // here with the voice notes' speech model (docs/UI.md "AI chat" → Dictation). Android keeps its
+    // system's recognizer.
+    if (m_speech->available() && media::mediaSupported()) {
+        platform::setSpeechRecognizer(new media::Dictation(m_speech.get(), this));
+        m_workspace->chats()->useSpeechRecognizer();
+    }
+#endif
 }
 
 QVariantMap AppController::permissions() const

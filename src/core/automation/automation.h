@@ -18,8 +18,11 @@
 //             planned(plan, current) (the text a write leaves: previews); execute(plan, Writer) ->
 //             Outcome{ok, error, path, line, block, reminder, route} (toJson(), callbackParams());
 //             NotebookWriter (a headless notebook); matchNotebook(name or folder, known)
+//   chatlink.h prompt links: cleanPrompt(text) -> {text, hidden, capped} (the characters nobody
+//             sees taken out, MaxPromptLength); chatLinkUri(prompt, partner, page)
 #pragma once
 
+#include "automation/chatlink.h"
 #include "automation/edits.h"
 #include "automation/plan.h"
 #include "automation/policy.h"

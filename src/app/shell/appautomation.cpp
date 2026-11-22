@@ -16,6 +16,7 @@
 #include "notebook/session.h"
 #include "util/paths.h"
 #include "vault/vault.h"
+#include "workspacechats.h"
 #include "workspaceextensions.h"
 
 #ifdef Q_OS_ANDROID
@@ -265,6 +266,11 @@ QString AppController::pageAutomationLink(const QString &path, const QString &he
     return automation::buildUri(r);
 }
 
+QString AppController::chatPromptLink(const QString &prompt, const QString &partner, const QString &page) const
+{
+    return automation::chatLinkUri(prompt, partner, page);
+}
+
 void AppController::receiveUri(const QString &uri, const QString &origin)
 {
     const automation::ParsedUri parsed = automation::parseUri(uri);
@@ -381,7 +387,23 @@ automation::Outcome AppController::carryOutAutomation(const automation::Request 
 {
     using automation::Access;
     if (plan.access == Access::Open) {
-        const QVariantMap route = plan.route.toVariantMap();
+        QVariantMap route = plan.route.toVariantMap();
+        // A prompt link's partner only when it is set up here (by its id or its name), else the
+        // default with a note.
+        if (route.value(u"view"_s).toString() == u"chat" && route.contains(u"partner"_s)) {
+            const QString wanted = route.take(u"partner"_s).toString();
+            for (const QVariant &p : m_workspace->chats()->partners()) {
+                const QVariantMap partner = p.toMap();
+                const QString id = partner.value(u"id"_s).toString();
+                if (id.compare(wanted, Qt::CaseInsensitive) == 0
+                    || partner.value(u"label"_s).toString().compare(wanted, Qt::CaseInsensitive) == 0) {
+                    route.insert(u"partner"_s, id);
+                    break;
+                }
+            }
+            if (!route.contains(u"partner"_s))
+                route.insert(u"partnerMissing"_s, wanted);
+        }
         if (route.value(u"view"_s).toString() == u"capture")
             quickCapture();
         else {

@@ -507,6 +507,12 @@ QString WorkspaceAgents::label(const QString &partner) const
     return a ? a->name : QString();
 }
 
+QString WorkspaceAgents::programName(const QString &id) const
+{
+    const Process *p = m_processes.value(id);
+    return p && p->client ? p->client->agentName() : QString();
+}
+
 WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
 {
     if (Process *p = m_processes.value(config.id))

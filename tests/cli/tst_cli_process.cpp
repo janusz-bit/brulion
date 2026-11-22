@@ -2132,6 +2132,17 @@ private Q_SLOTS:
         r = run(dir, {u"uri"_s, u"build"_s, u"open"_s, u"--text"_s, u"x"_s});
         QCOMPARE(r.code, 2);
         QCOMPARE(r.errorCode(), u"unknown_parameter"_s);
+        // A prompt link: the text is its prompt, what nobody sees taken out (and counted).
+        r = run(dir, {u"uri"_s, u"build"_s, u"chat"_s, u"--text"_s, u"Streść\u200B „Zakupy”\U000E0068"_s,
+                      u"--partner"_s, u"acp:claude"_s, u"--page"_s, u"Zakupy"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"uri"_s).toString(),
+                 u"brulion://chat?page=Zakupy&prompt=Stre%C5%9B%C4%87%20%E2%80%9EZakupy%E2%80%9D&partner=acp%3Aclaude"_s);
+        QCOMPARE(r.result().value(u"hidden"_s).toInt(), 2);
+        r = run(dir, {u"uri"_s, u"run"_s, r.result().value(u"uri"_s).toString()});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"route"_s).toObject().value(u"draft"_s).toString(), u"Streść „Zakupy”"_s);
+        QCOMPARE(r.result().value(u"route"_s).toObject().value(u"page"_s).toString(), u"Zakupy"_s);
         // parse: never shows the key.
         r = cli({u"uri"_s, u"parse"_s, built + u"&key=tajny"_s});
         QCOMPARE(r.code, 0);

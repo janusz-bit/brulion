@@ -409,6 +409,27 @@ bool Transcriber::transcribe(const QString &attachment, const QString &page, con
     return true;
 }
 
+bool Transcriber::transcribeFile(const QString &file, const QString &language)
+{
+    if (!m_available || !usable() || file.isEmpty() || isQueued(file) || !QFileInfo(file).isFile())
+        return false;
+    Job job{file, file, QString(), QString(), -1, std::make_shared<std::atomic<bool>>(false)};
+    job.place = false;
+    job.language = language;
+    m_jobs.append(job);
+    Q_EMIT jobsChanged();
+    next();
+    return true;
+}
+
+void Transcriber::tell(const Job &job, bool ok, const QString &text, const QString &error)
+{
+    if (job.place)
+        Q_EMIT transcribed(job.attachment, job.page, ok, text, error);
+    else
+        Q_EMIT heard(job.file, ok, text, error);
+}
+
 void Transcriber::cancel(const QString &attachment)
 {
     for (qsizetype i = 0; i < m_jobs.size(); ++i) {
@@ -417,9 +438,12 @@ void Transcriber::cancel(const QString &attachment)
         m_jobs.at(i).cancel->store(true);
         // One waiting goes at once; the one being heard ends when the recognizer sees it.
         if (i > 0 || !m_running) {
-            m_jobs.removeAt(i);
+            const Job job = m_jobs.takeAt(i);
             Q_EMIT jobsChanged();
-            Q_EMIT transcribed(attachment, QString(), false, QString(), QString());
+            if (job.place)
+                Q_EMIT transcribed(attachment, QString(), false, QString(), QString());
+            else
+                Q_EMIT heard(job.file, false, QString(), QString());
         }
         return;
     }
@@ -435,7 +459,7 @@ void Transcriber::next()
         const QList<Job> jobs = std::exchange(m_jobs, {});
         Q_EMIT jobsChanged();
         for (const Job &job : jobs)
-            Q_EMIT transcribed(job.attachment, job.page, false, QString(), tr("No speech model is on this device."));
+            tell(job, false, QString(), tr("No speech model is on this device."));
         return;
     }
     m_running = true;
@@ -443,7 +467,8 @@ void Transcriber::next()
     m_jobStage = u"decoding"_s;
     Q_EMIT jobsChanged();
     const Job &job = m_jobs.first();
-    TranscriberWorker::Job work{job.attachment, job.file, m_files.pathOf(m->file), m->id, language(), job.cancel};
+    TranscriberWorker::Job work{job.attachment, job.file, m_files.pathOf(m->file), m->id,
+                                job.language.isEmpty() ? language() : speech::knownLanguage(job.language), job.cancel};
     QMetaObject::invokeMethod(m_worker, [this, worker = m_worker, work] {
         const TranscriberWorker::Result r = worker->run(work, [this](const QString &stage, double progress) {
             QMetaObject::invokeMethod(
@@ -477,7 +502,17 @@ void Transcriber::onDone(const QString &attachment, bool ok, const QString &text
     m_jobStage.clear();
     Q_EMIT jobsChanged();
     const bool cancelled = job.cancel && job.cancel->load();
-    if (cancelled) {
+    if (!job.place) {
+        // A file of no note (dictation): its text, nothing placed.
+        if (cancelled)
+            tell(job, false, QString(), QString());
+        else if (!ok)
+            tell(job, false, QString(), error);
+        else if (text.isEmpty())
+            tell(job, false, QString(), tr("No speech was heard in the recording."));
+        else
+            tell(job, true, text, QString());
+    } else if (cancelled) {
         Q_EMIT transcribed(attachment, job.page, false, QString(), QString());
     } else if (!ok) {
         Q_EMIT transcribed(attachment, job.page, false, QString(), error);

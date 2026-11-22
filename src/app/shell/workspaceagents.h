@@ -181,6 +181,8 @@ public:
     QVariantList partners() const;
     /// An agent's name ("" for no agent set up here).
     QString label(const QString &partner) const;
+    /// What the program of agent `id` said it is in its initialize (its name; "" not started).
+    QString programName(const QString &id) const;
 
     /// Runs the turn of the conversation `path` with the agent `partner`: `history` its messages
     /// ({role, content, images}, the user's last; images named as in notes), `page` the name of the

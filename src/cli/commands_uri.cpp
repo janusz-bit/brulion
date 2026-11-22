@@ -144,9 +144,22 @@ Result uriBuild(Call &call)
         if (call.has(name))
             r.params.append({name, call.str(name)});
     }
-    if (const QString text = call.text(u"text"_s); !text.isEmpty())
-        r.params.append({u"text"_s, text});
-    for (const QString &name : {u"due"_s, u"remind"_s, u"query"_s}) {
+    // A prompt link (chat): the text is its prompt, without what nobody sees, at most 8 000
+    // characters — as the app reads it.
+    QJsonObject cleaned;
+    if (const QString text = call.text(u"text"_s); !text.isEmpty()) {
+        if (r.action == automation::Action::Chat) {
+            const automation::CleanedPrompt prompt = automation::cleanPrompt(text);
+            r.params.append({u"prompt"_s, prompt.text});
+            if (prompt.hidden > 0)
+                cleaned.insert(u"hidden"_s, prompt.hidden);
+            if (prompt.capped)
+                cleaned.insert(u"capped"_s, true);
+        } else {
+            r.params.append({u"text"_s, text});
+        }
+    }
+    for (const QString &name : {u"due"_s, u"remind"_s, u"query"_s, u"partner"_s}) {
         if (call.has(name))
             r.params.append({name, call.str(name)});
     }
@@ -173,7 +186,10 @@ Result uriBuild(Call &call)
         r.key = key;
     }
     const QString uri = automation::buildUri(r);
-    return call.ok(QJsonObject{{u"uri"_s, uri}, {u"action"_s, automation::actionName(r.action)}}, uri);
+    QJsonObject out{{u"uri"_s, uri}, {u"action"_s, automation::actionName(r.action)}};
+    for (auto it = cleaned.begin(); it != cleaned.end(); ++it)
+        out.insert(it.key(), it.value());
+    return call.ok(out, uri);
 }
 
 Result uriRun(Call &call)
@@ -271,7 +287,7 @@ void addUriCommands(QList<Command> &out)
     Command c = make(u"uri.build"_s, QT_TRANSLATE_NOOP("brulion::cli", "Write a brulion:// address"), uriBuild,
                      {choice(u"action"_s,
                              {u"open"_s, u"daily"_s, u"new"_s, u"append"_s, u"prepend"_s, u"task"_s, u"capture"_s,
-                              u"search"_s, u"view"_s, u"run"_s},
+                              u"search"_s, u"view"_s, u"run"_s, u"chat"_s},
                              QT_TRANSLATE_NOOP("brulion::cli", "What the address does"), true, true),
                       option(u"page"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A page (name, path, date)")),
                       option(u"heading"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A heading of the page")),
@@ -280,6 +296,8 @@ void addUriCommands(QList<Command> &out)
                       option(u"due"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A task's due date")),
                       option(u"remind"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A task's reminder")),
                       option(u"query"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "What to search for")),
+                      option(u"partner"_s, ArgType::String,
+                             QT_TRANSLATE_NOOP("brulion::cli", "Who answers a prompt link (chat: acp:claude …)")),
                       stdinable(option(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The text to write"))),
                       option(u"params"_s, ArgType::String,
                              QT_TRANSLATE_NOOP("brulion::cli", "Any parameters as a JSON object of strings")),

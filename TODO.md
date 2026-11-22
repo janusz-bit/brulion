@@ -39,9 +39,9 @@ done in the repository simply disappears from the list.
   from the camera app for a message (the activity recreated while the camera is in front loses the
   photo's path, kept only in memory) and dictation with Google's recognizer and with none
   (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's summarised thinking with a real
-  key (`thoughts = true`, `ai::showsThinking`); dictation elsewhere than Android waits for on-device
-  speech recognition (`platform::setSpeechRecognizer`); the browser picks no picture files for the
-  chat yet (its file picker is the editor's own, `platform/wasm/wasmfiles.h`).
+  key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
+  real microphone on Windows; the browser picks no picture files for the chat yet (its file picker is
+  the editor's own, `platform/wasm/wasmfiles.h`).
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",

@@ -1,5 +1,6 @@
 #include "automation/plan.h"
 
+#include "automation/chatlink.h"
 #include "dates/local.h"
 #include "index/vaultindex.h"
 #include "markdown/journal.h"
@@ -327,6 +328,7 @@ QStringList knownParameters(Action action)
     }
     case Action::Run: return {u"extension"_s, u"command"_s, u"args"_s, u"page"_s};
     case Action::Pair: return {u"url"_s, u"address"_s, u"code"_s};
+    case Action::Chat: return {u"prompt"_s, u"partner"_s, u"page"_s};
     }
     return {};
 }
@@ -407,6 +409,30 @@ Plan plan(const Request &request, Vault &vault, const VaultIndex &index, const C
                      {u"section"_s, u"extensions"_s},
                      {u"pairUrl"_s, url.left(2000)},
                      {u"pairCode"_s, request.value({u"code"}).trimmed().left(64)}};
+        return out;
+    }
+    case Action::Chat: {
+        // A new conversation's draft: the prompt in the field, never sent (the user presses Send),
+        // without what nobody sees — and the view says so.
+        const CleanedPrompt prompt = cleanPrompt(request.value({u"prompt"}));
+        out.route = {{u"view"_s, u"chat"_s}, {u"new"_s, true}, {u"fromLink"_s, true}};
+        if (!prompt.text.isEmpty())
+            out.route.insert(u"draft"_s, prompt.text);
+        if (prompt.hidden > 0)
+            out.route.insert(u"hidden"_s, prompt.hidden);
+        if (prompt.capped)
+            out.route.insert(u"capped"_s, true);
+        // Who answers: the app keeps it only when that partner is set up on the device.
+        if (const QString partner = cleanPrompt(request.value({u"partner"}), 200).text; !partner.isEmpty())
+            out.route.insert(u"partner"_s, partner);
+        // The page it is about, when the notebook has it.
+        if (const QString name = cleanPrompt(request.value({u"page"}), 500).text; !name.isEmpty()) {
+            const Resolved page = resolvePage(splitRef(name).name, vault, index, context, false);
+            if (page.error.isEmpty() && page.exists)
+                out.route.insert(u"page"_s, paths::pageTitle(page.path));
+            else
+                out.route.insert(u"pageMissing"_s, name);
+        }
         return out;
     }
     case Action::View: {
