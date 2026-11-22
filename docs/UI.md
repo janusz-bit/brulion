@@ -6864,6 +6864,12 @@ and compiled QML keeps the objects a function used as plain pointers that the ga
 reads. An editor's field that Escape closed was deleted by a touch's events, and a collection later
 in the same pass (a menu being made) read the freed object and crashed the app
 (`tst_editor_qml_properties_touch`, 5 % of runs under load once collections did whole runs).
+The hold covers `deleteLater()` only, so C++ that removes an item QML can reach deletes it later
+too: `JournalDayItem` takes the text items of rows it no longer draws out of the scene and calls
+`deleteLater()` (`textItemOf()` hands them to the span self-test; deleted at once by the tap that
+made the day editable, they crashed `tst_content_journals_span_qml_touch_dayitem` in every run of
+the Nix build — `QV4_MM_AGGRESSIVE_GC=1`, a collection at every allocation, shows such a crash in
+any build).
 
 ### UI benchmark (Brulion vs Obsidian)
 

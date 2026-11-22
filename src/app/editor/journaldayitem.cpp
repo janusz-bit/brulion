@@ -312,13 +312,21 @@ void JournalDayItem::updateDrawable(bool drawable)
     Q_EMIT drawableChanged();
 }
 
+void JournalDayItem::discardText(RenderedTextItem *&item)
+{
+    if (!item)
+        return;
+    item->setVisible(false);
+    item->setParentItem(nullptr);
+    item->deleteLater();
+    item = nullptr;
+}
+
 void JournalDayItem::releaseTexts()
 {
     for (Row &row : m_rows) {
-        delete row.textItem;
-        row.textItem = nullptr;
-        delete row.numberItem;
-        row.numberItem = nullptr;
+        discardText(row.textItem);
+        discardText(row.numberItem);
     }
 }
 
@@ -575,9 +583,8 @@ void JournalDayItem::layout()
             number->setPosition(QPointF(row.levelX - number->width() - gap,
                                         y + row.firstLineCenter - level(m_firstLineCenters, 0, 16)));
             number->setVisible(true);
-        } else if (row.numberItem) {
-            delete row.numberItem;
-            row.numberItem = nullptr;
+        } else {
+            discardText(row.numberItem);
         }
         y += row.height;
     }

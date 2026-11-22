@@ -229,6 +229,10 @@ private:
     void decorate();
     void updateDrawable(bool drawable);
     void releaseTexts();
+    /// A text item no row draws any more: out of the scene at once, deleted later — never right
+    /// away, as QML may hold it (textItemOf()) in a compiled function's locals, which the garbage
+    /// collector reads until that function returns (a freed one crashed the self-tests).
+    static void discardText(RenderedTextItem *&item);
     void applyTextLook(Row &row, RenderedTextItem *text) const;
     void applyFind(RenderedTextItem *text) const;
     qreal level(const QList<qreal> &list, int level, qreal fallback) const;

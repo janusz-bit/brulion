@@ -12,6 +12,7 @@
 #include "journaldayitem.h"
 #include "pagecontroller.h"
 
+#include <QPointer>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QSignalSpy>
@@ -138,6 +139,27 @@ private Q_SLOTS:
         // So is a selected one.
         f.page.selectRange(0, 1);
         QVERIFY(!f.item->drawable());
+    }
+
+    // The text items of rows no longer drawn leave the scene at once and are deleted later: QML
+    // may hold one (textItemOf(), a self-test's compiled locals, read by the garbage collector
+    // until its function returns) — a tap that made the day editable deleted it under the
+    // span self-test, and a collection while the editor's rows were made read the freed item.
+    void textsDeletedLater()
+    {
+        Fixture f(u"- pierwszy z listą\n- drugi\n"_s);
+        QVERIFY(f.item->drawable());
+        QPointer<RenderedTextItem> text = f.item->textItemOf(0);
+        QVERIFY(text);
+        QCOMPARE(text->parentItem(), f.item.get());
+        f.page.startEditing(1, -1); // the editor's rows take over
+        QVERIFY(!f.item->drawable());
+        QVERIFY(f.item->textItemOf(0) == nullptr);
+        QVERIFY(text); // not yet
+        QCOMPARE(text->parentItem(), nullptr);
+        QVERIFY(!text->isVisible());
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY(!text);
     }
 
     void outlineGeometry()
