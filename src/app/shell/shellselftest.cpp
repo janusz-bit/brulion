@@ -7321,6 +7321,27 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
           "the page on screen goes along: its chip above the field");
     check(named(u"chatSuggestSummary"_s) != nullptr && named(u"chatEmpty"_s) != nullptr,
           "a new conversation suggests what to ask, a summary of the page among it");
+    // The on-screen keyboard up (simulated, over more than half the window): the suggestions give
+    // way, the field stays whole above the keyboard (they pushed it under the keyboard).
+    if (QQmlEngine *engine = qmlEngine(window->contentItem())) {
+        auto *insets = engine->singletonInstance<brulion::ui::KeyboardInsets *>("Brulion", "KeyboardInsets");
+        QQuickItem *field = named(u"chatInput"_s);
+        const qreal keyboard = std::round(window->height() * 0.55);
+        if (insets && field) {
+            insets->setSimulated(keyboard);
+            check(waitFor([&] {
+                      const QRectF box = field->mapRectToScene(QRectF(0, 0, field->width(), field->height()));
+                      return field->isVisible() && box.top() >= 0 && box.bottom() <= window->height() - keyboard + 1;
+                  }),
+                  "the keyboard up in a new conversation: the message field stays above it");
+            const QRectF box = field->mapRectToScene(QRectF(0, 0, field->width(), field->height()));
+            std::fprintf(stderr, "selftest: the chat's field at %.0f–%.0f, the keyboard's top %.0f\n", box.top(),
+                         box.bottom(), window->height() - keyboard);
+            insets->setSimulated(-1);
+        } else {
+            check(false, "KeyboardInsets and the chat's field are there");
+        }
+    }
     QQuickItem *send = named(u"chatSend"_s);
     check(send && !send->isEnabled(), "nothing typed: nothing to send");
     check(app->workspace()->chats()->runningCount() == 0, "no conversation was started by opening the chat");
@@ -9048,12 +9069,13 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
 
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
-///     (quick capture) sit above it. Editing with the keyboard hidden by the system: the bottom
-///     navigation is back and the editing toolbar docks right on it (also with a system
+///     (quick capture) sit above it. Editing without the keyboard (none came up: a hardware one):
+///     the bottom navigation is back and the editing toolbar docks right on it (also with a system
 ///     navigation bar under it), toasts show at the top, away from the line being written, the
 ///     navigation's "+ Note" stays under the toolbar; the keyboard sliding in leaves the navigation under it until it
 ///     covers it (the toolbar never drops first), sliding away uncovers it again, the toolbar
-///     following the keyboard's top down to the navigation; a keyboard shorter than the navigation
+///     following the keyboard's top down to the navigation, and once it is gone the toolbar goes
+///     with it while the editing goes on; a keyboard shorter than the navigation
 ///     takes its place but leaves the toolbar where it was; a browser's keyboard (the page resized
 ///     for it: no overlap, still settling) takes the navigation away at once; a tap on a navigation
 ///     tab while editing opens that view and the editing ends, a tap on "+ Note" ends the
@@ -9131,8 +9153,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
           }),
           "the keyboard goes: the bottom navigation is back at the window's bottom");
 
-    // Editing with the keyboard hidden by the system: the bottom navigation is back, the toolbar
-    // docks right on it.
+    // Editing without the keyboard (a hardware one: none came up while editing): the bottom
+    // navigation is back, the toolbar docks right on it.
     const QString guide = u"Witaj w Brulionie.md"_s;
     QQuickItem *shellItem = appShell(window);
     // Quick capture's + on the top bar (it was the bottom navigation's "+ Note" up to 0.13).
@@ -9250,8 +9272,11 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()); }),
               "below the navigation's top: the toolbar rests on the navigation");
         insets->setProperty("simulated", 0);
-        check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()) && !room->isVisible(); }),
-              "the keyboard gone: the toolbar on the bottom navigation");
+        const auto toolbarGone = [&] {
+            return !editor->property("toolbarVisible").toBool() && slot && !slot->isVisible() && navAtBottom()
+                   && !room->isVisible() && page->property("editingRow").toInt() >= 0;
+        };
+        check(waitFor(toolbarGone), "the keyboard gone (Back): the toolbar goes with it, the editing goes on");
 
         // A keyboard that ends below the navigation's top (a suggestion strip over a hardware
         // keyboard): the navigation stays under it while it slides in and makes way once it has
@@ -9271,8 +9296,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()) && !room->isVisible(); }),
               "a short keyboard sliding away: the navigation back under it, the toolbar still on it");
         insets->setProperty("simulated", 0);
-        check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()) && !room->isVisible(); }),
-              "the short keyboard gone: the toolbar on the bottom navigation");
+        check(waitFor(toolbarGone), "the short keyboard gone: the toolbar goes with it");
 
         // A browser's keyboard: the page resized for it (interactive-widget=resizes-content), so no
         // overlap, `shown` from the page's shrink while the readings settle — the navigation goes
@@ -9293,8 +9317,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                 keyboardInsets->setViewportSample(sample);
             };
             browser(h, true);
-            check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()); }),
-                  "a browser without the keyboard: the toolbar on the bottom navigation");
+            check(waitFor(toolbarGone), "a browser without the keyboard: the navigation at the bottom, no toolbar");
             browser(h - keyboard, false);
             check(keyboardInsets->shown() && keyboardInsets->animating() && keyboardInsets->overlap() == 0
                           && !keyboardInsets->slidesOver()
@@ -9305,6 +9328,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
             check(waitFor([&] { return navAtBottom() && near(slotBottom(), navTop()); }),
                   "the browser's page tall again: the navigation is back under the toolbar");
             browser(h, true);
+            check(waitFor(toolbarGone), "the browser's page settled tall: the toolbar goes with the keyboard");
         }
         insets->setProperty("simulated", 0);
 

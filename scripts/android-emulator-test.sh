@@ -24,8 +24,8 @@
 # finger, the system's keyboard up: the toolbar sits right on its top edge (the IME window's frame
 # from dumpsys against the app's KeyboardInsets log and the screenshot), follows its slide frame
 # by frame on Android 11+ (the window keeps its size), stays there while the journal scrolls; when
-# Back hides the keyboard the bottom navigation comes back and the toolbar stays docked right on it
-# (the shell's log, UiAutomator's tabs); a tap on the text brings the keyboard back, the toolbar
+# Back hides the keyboard the bottom navigation comes back and the toolbar goes with the keyboard
+# while the block stays edited (the shell's log, UiAutomator's tabs); a tap on the text brings the keyboard back, the toolbar
 # on it and the navigation away again;
 # a last screenshot in the dark theme (the system bars' icons). Needs a DEBUGGABLE APK (Qt passes
 # app arguments and environment only to those):
@@ -584,26 +584,16 @@ keyboard_matches() {
 keyboard_reported_hidden() { adb logcat -d | grep 'On-screen keyboard' | tail -n 1 | grep -q 'hidden, overlap 0'; }
 # The shell's last settled layout while typing (AppShell.qml, logical px): "Typing: the content
 # ends <end> px above the window's bottom (keyboard <k> px, navigation bar <s> px, bottom
-# navigation <n> px), editing toolbar docked". With the keyboard hidden by the system the bottom
-# navigation is back (60 px over the navigation bar) and the toolbar stays docked right on it: the
-# view ends exactly that far above the bottom. With the keyboard up the navigation is away (0) and
-# the view ends at the keyboard's top.
+# navigation <n> px), editing toolbar docked" ("Typing ended" once neither is there). With the
+# keyboard up the navigation is away (0) and the view ends at the keyboard's top.
 typing_report() {
   adb logcat -d | grep -oE "Typing: the content ends [0-9]+ px above the window's bottom \(keyboard [0-9]+ px, navigation bar [0-9]+ px, bottom navigation [0-9]+ px\), editing toolbar (docked|not docked)" |
     tail -n 1
 }
-toolbar_on_bottom_navigation() {
-  local report
-  report=$(typing_report)
-  [[ $report =~ ends\ ([0-9]+)\ px.*keyboard\ 0\ px,\ navigation\ bar\ ([0-9]+)\ px,\ bottom\ navigation\ ([0-9]+)\ px.*toolbar\ docked$ ]] &&
-    ((BASH_REMATCH[3] > BASH_REMATCH[2] && BASH_REMATCH[1] == BASH_REMATCH[3]))
-}
-toolbar_above_tabs() { # the toolbar's centre above the bottom navigation's Kalendarz (UiAutomator)
-  local bar tab
-  bar=$(ui_y 'Narzędzia edycji')
-  tab=$(ui_y 'Kalendarz')
-  echo "    toolbar at y=${bar:-?}, Kalendarz at y=${tab:-?} (px)"
-  [[ -n $bar && -n $tab ]] && ((bar < tab))
+typing_ended() { adb logcat -d | grep -E "Typing: the content ends|Typing ended" | tail -n 1 | grep -q 'Typing ended'; }
+toolbar_gone_tabs_back() { # the bottom navigation's Kalendarz on screen, no editing toolbar (UiAutomator)
+  ui_dump
+  ui_nodes 'Kalendarz' | grep -q . && ! ui_nodes 'Narzędzia edycji' | grep -q .
 }
 toolbar_on_keyboard_report() {
   local report
@@ -1020,17 +1010,15 @@ if ((KEYBOARD)); then
   sleep 2
   app_shot keyboard-journal-scrolled
   check "scrolling the journal leaves the keyboard up" ime_shown
-  # Back hides the keyboard: the bottom navigation comes back, the toolbar stays docked right on
-  # it while editing goes on.
+  # Back hides the keyboard: the bottom navigation comes back, the toolbar goes with the keyboard
+  # while editing goes on.
   adb shell input keyevent 4
   check "Back hides the keyboard" wait_for 10 ime_hidden
   sleep 2
   app_shot keyboard-journal-hidden
   check "the app reports it hidden" wait_for 10 keyboard_reported_hidden
-  check "the toolbar stays docked right on the bottom navigation, editing goes on" \
-    wait_for 10 toolbar_on_bottom_navigation
-  echo "    $(typing_report)"
-  check "the bottom navigation's tabs are on screen, the editing toolbar above them" toolbar_above_tabs
+  check "the shell stops typing: no toolbar docked" wait_for 10 typing_ended
+  check "the bottom navigation's tabs are on screen, the editing toolbar gone" wait_for 10 toolbar_gone_tabs_back
   # A tap on the text brings the keyboard back: the toolbar on it, the navigation away. The
   # sample's days follow today's date (other chips, other line breaks): a tap that lands between
   # two blocks edits none, so a few heights 25–31 % down the screen, as with the page below.
@@ -1589,7 +1577,7 @@ if ((PICKERS)); then
   downloads_zip() { adb shell find /sdcard/Download -name "'*.zip'" 2>/dev/null | tr -d '\r' | head -n 1; }
   zip_saved() { [[ -n $(downloads_zip) ]]; }
   # A finger drags the view up until the item so named lies wholly above the bottom navigation —
-  # its top, read from its Journals tab, as toolbar_above_tabs does (a node under the navigation is
+  # its top, read from its Journals tab (a node under the navigation is
   # "on screen" for UiAutomator, and a tap there switches the view) — and below the top bar.
   pk_show() { # <ERE>
     local item nav _ y1 y2
@@ -3012,17 +3000,17 @@ HTML
     s=$(wk_state "$1")
     [[ -n $s ]] && awk '{ exit !($4 == 1 && $5 == 0 && $6 == 1 && $7 == 1 && $8 >= 0) }' <<<"$s"
   }
-  # The keyboard hidden, settled, the toolbar still docked.
+  # The keyboard hidden, settled, the toolbar gone with it.
   wk_hidden_settled() {
     local s
     s=$(wk_state "$1")
-    [[ -n $s ]] && awk '{ exit !($4 == 0 && $5 == 0 && $7 == 1 && $8 >= 0) }' <<<"$s"
+    [[ -n $s ]] && awk '{ exit !($4 == 0 && $5 == 0 && $7 == 1 && $8 < 0) }' <<<"$s"
   }
-  # The bottom navigation shown and the docked toolbar ending right on its top (±1 px).
-  wk_toolbar_on_nav() {
+  # The bottom navigation shown, no toolbar.
+  wk_nav_back() {
     local s
     s=$(wk_state "$1")
-    [[ -n $s ]] && awk '{ d = $8 - $13; if (d < 0) d = -d; exit !($13 > 0 && $8 >= 0 && d <= 1) }' <<<"$s"
+    [[ -n $s ]] && awk '{ exit !($13 > 0 && $8 < 0) }' <<<"$s"
   }
   wk_count() { local s; s=$(wk_state "$1"); echo "${s%% *}"; }
   # A page this wide (CSS px) is the turned screen's: 1.3 times the upright screen's width (a page
@@ -3035,13 +3023,12 @@ HTML
     [[ -n $s ]] && awk -v wide="$WK_WIDE" '{ exit !($5 == 0 && $6 == 1 && $7 == 1 && $12 >= wide && $2 > 0) }' <<<"$s"
   }
   # Landscape: with the keyboard counted as up the toolbar ends at the window's bottom; with it
-  # hidden (a browser that closes it on the turn) the bottom navigation is back and the toolbar
-  # docked right on it.
+  # hidden (a browser that closes it on the turn) the bottom navigation is back, the toolbar gone.
   wk_landscape_toolbar() {
     local s
     s=$(wk_state "$1")
-    [[ -n $s ]] && awk '{ d = ($4 == 1 ? $8 - $2 : $8 - $13); if (d < 0) d = -d
-      exit !($8 >= 0 && d <= 1 && ($4 == 1 || $13 > 0)) }' <<<"$s"
+    [[ -n $s ]] && awk '{ d = $8 - $2; if (d < 0) d = -d
+      exit !($4 == 1 ? ($8 >= 0 && d <= 1) : ($8 < 0 && $13 > 0)) }' <<<"$s"
   }
   # adb's connection to the emulator back (it drops now and then, also while the screen turns).
   # Not back within 3 minutes — an emulator hung in its crash handler stays "offline" — the
@@ -3279,13 +3266,13 @@ print(last)' "$OUT/report.jsonl" "$1"
       # The phone turned with the keyboard up, and back: a width never seen whose first heights have
       # the keyboard in them (docs/WEB.md "On-screen keyboard (phone)"). Where the keyboard stays
       # up, the app counts it as up and the toolbar ends at the window's bottom; where the browser
-      # hides it on the turn (Chrome, Brave), the bottom navigation comes back under the toolbar.
+      # hides it on the turn (Chrome, Brave), the bottom navigation comes back, the toolbar goes.
       wk_turn 1 || true
       check "$run: turned with the keyboard up: the app settles in landscape" wait_for 30 wk_landscape_settled "$run"
       sleep 3
       s=$(wk_state "$run")
       app_shot "wk-$run-2-landscape"
-      check "$run: landscape: the toolbar at the window's bottom (the keyboard up) or on the bottom navigation" \
+      check "$run: landscape: the toolbar at the window's bottom (the keyboard up), else the bottom navigation back" \
         wait_for 10 wk_landscape_toolbar "$run"
       s=$(wk_state "$run")
       # The keyboard up by the input method's state or its visible window (either one may lag).
@@ -3315,19 +3302,19 @@ print(last)' "$OUT/report.jsonl" "$1"
         echo "    resizes-visual: no gap in $b (if this is Brave: brave-browser#60074 is fixed upstream)"
       fi
     fi
-    # Back: the keyboard goes, the block stays edited and its toolbar docked on the bottom
-    # navigation, which comes back.
+    # Back: the keyboard goes and its toolbar with it, the block stays edited, the bottom
+    # navigation comes back.
     adb shell input keyevent 4
     check "$run: Back hides the keyboard" wait_for 15 ime_hidden
-    check "$run: the app reports the keyboard hidden, the toolbar still docked" wait_for 30 wk_hidden_settled "$run"
-    check "$run: the bottom navigation is back, the toolbar docked right on it" wait_for 10 wk_toolbar_on_nav "$run"
+    check "$run: the app reports the keyboard hidden, the toolbar gone with it" wait_for 30 wk_hidden_settled "$run"
+    check "$run: the bottom navigation is back" wait_for 10 wk_nav_back "$run"
     sleep 2
     wk_capture "$OUT/wk-$run-3-back.raw" || true
     app_shot "wk-$run-3-back"
     read -r gap magenta rows anywhere < <(wk_py screen "$OUT/wk-$run-3-back.raw" "$SCREEN_H") ||
       gap=-1 magenta=-1 rows=-1 anywhere=-1
     wk_screen_line "after Back (from the screen's bottom)" "$gap" "$magenta" "$rows" "$anywhere"
-    check "$run: no keyboard's room left after Back, the toolbar on screen" test "$anywhere" -eq 0 -a "$rows" -ge 20
+    check "$run: no keyboard's room left after Back, no toolbar on screen" test "$anywhere" -eq 0 -a "$rows" -le 0
     echo "    report: $(wk_state "$run")"
     echo "    samples from the tap to Back (tests/app/tst_keyboardinsets.cpp rows):"
     wk_py samples "$OUT/report.jsonl" "$run" "$start" "$OUT/samples-$run.jsonl"

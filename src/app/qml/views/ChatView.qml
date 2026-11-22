@@ -1182,6 +1182,68 @@ FocusScope {
                     }
                 }
 
+                // A new conversation: what to ask. In the messages' place, at their bottom, right
+                // above the message being written; scrolled when the keyboard leaves too little
+                // room — it never pushes the message field under the keyboard.
+                Flickable {
+                    id: emptyFlick
+                    objectName: "chatEmptyFlick"
+                    anchors.fill: parent
+                    visible: root.path === "" && root.conversationShown
+                    clip: true
+                    contentWidth: width
+                    contentHeight: emptyColumn.implicitHeight + Theme.space4
+                    boundsBehavior: Flickable.StopAtBounds
+                    interactive: contentHeight > height
+                    TouchFlick.enabled: true
+                    ColumnLayout {
+                        id: emptyColumn
+                        objectName: "chatEmpty"
+                        x: Theme.space4
+                        y: Math.max(0, emptyFlick.height - emptyFlick.contentHeight)
+                        width: emptyFlick.width - 2 * Theme.space4
+                        spacing: Theme.space3
+                        BEmptyState {
+                            Layout.alignment: Qt.AlignHCenter
+                            iconName: "sparkles"
+                            title: qsTr("Ask about your notes")
+                            description: qsTr("The AI searches and reads the whole notebook, looks at its pictures and, with your yes, changes it. The conversation is kept as a page.")
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 560
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Theme.space2
+                            BChip {
+                                objectName: "chatSuggestSummary"
+                                visible: root.page !== ""
+                                interactive: true
+                                iconName: "scroll-text"
+                                text: qsTr("Summarise this page")
+                                onClicked: root.suggest(qsTr("Summarise this page in a few sentences and list its most important tasks."))
+                            }
+                            BChip {
+                                interactive: true
+                                iconName: "list-todo"
+                                text: qsTr("What do I have to do this week?")
+                                onClicked: root.suggest(qsTr("What do I have to do this week?"))
+                            }
+                            BChip {
+                                interactive: true
+                                iconName: "notebook-pen"
+                                text: qsTr("What did I write yesterday?")
+                                onClicked: root.suggest(qsTr("What did I write yesterday?"))
+                            }
+                            BChip {
+                                interactive: true
+                                iconName: "calendar"
+                                text: qsTr("Plan my tomorrow")
+                                onClicked: root.suggest(qsTr("Plan my tomorrow from my tasks and reminders."))
+                            }
+                        }
+                    }
+                }
+
                 // Pictures dropped on the conversation go with the next message.
                 DropArea {
                     id: drop
@@ -1206,55 +1268,6 @@ FocusScope {
                         anchors.centerIn: parent
                         text: qsTr("Drop pictures to send them with the message")
                         font.weight: Font.DemiBold
-                    }
-                }
-            }
-
-            // A new conversation: what to ask.
-            ColumnLayout {
-                objectName: "chatEmpty"
-                Layout.fillWidth: true
-                Layout.leftMargin: Theme.space4
-                Layout.rightMargin: Theme.space4
-                Layout.bottomMargin: Theme.space4
-                visible: root.path === "" && root.conversationShown
-                spacing: Theme.space3
-                BEmptyState {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconName: "sparkles"
-                    title: qsTr("Ask about your notes")
-                    description: qsTr("The AI searches and reads the whole notebook, looks at its pictures and, with your yes, changes it. The conversation is kept as a page.")
-                }
-                Flow {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: 560
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: Theme.space2
-                    BChip {
-                        objectName: "chatSuggestSummary"
-                        visible: root.page !== ""
-                        interactive: true
-                        iconName: "scroll-text"
-                        text: qsTr("Summarise this page")
-                        onClicked: root.suggest(qsTr("Summarise this page in a few sentences and list its most important tasks."))
-                    }
-                    BChip {
-                        interactive: true
-                        iconName: "list-todo"
-                        text: qsTr("What do I have to do this week?")
-                        onClicked: root.suggest(qsTr("What do I have to do this week?"))
-                    }
-                    BChip {
-                        interactive: true
-                        iconName: "notebook-pen"
-                        text: qsTr("What did I write yesterday?")
-                        onClicked: root.suggest(qsTr("What did I write yesterday?"))
-                    }
-                    BChip {
-                        interactive: true
-                        iconName: "calendar"
-                        text: qsTr("Plan my tomorrow")
-                        onClicked: root.suggest(qsTr("Plan my tomorrow from my tasks and reminders."))
                     }
                 }
             }

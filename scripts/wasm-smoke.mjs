@@ -35,8 +35,7 @@
 // the browser shrank itself (resizes-content: the emulated screen made lower) gets no overlap,
 // the keyboard still counts as shown and the toolbar ends at the window's bottom — also with a
 // stale innerHeight (the old formula's double count) —, the keyboard hidden again brings the
-// bottom navigation back with the toolbar docked right on it, and Qt's containers never stay
-// scrolled.
+// bottom navigation back and takes the toolbar away, and Qt's containers never stay scrolled.
 // --two-tabs opens a second tab,
 // which must wait ("open in another tab") until the first one leaves the app. --share checks the
 // share target (docs/WEB.md "Sharing to Brulion"): the manifest offers it (GET ./ with
@@ -790,10 +789,10 @@ async function main() {
           && near(s.contentBottom, H - 300)],
       ['content: a stale innerHeight', 'window.__brulionInnerHeight(' + H + ')',
         (s) => s.overlap === 0 && s.shown && near(s.legacyOverlap, 300) && near(s.toolbarBottom, H - 300)],
-      // The bottom navigation back, the toolbar (the block still edited) docked right on it.
+      // The bottom navigation back; the toolbar gone with the keyboard (the block still edited).
       ['content: the keyboard hidden (Back)', { height: H, innerHeight: null },
         (s) => s.overlap === 0 && !s.shown && near(s.windowHeight, H) && s.bottomNavTop > H - 120
-          && s.bottomNavTop < H && near(s.toolbarBottom, s.bottomNavTop)],
+          && s.bottomNavTop < H && s.toolbarBottom < 0],
       ['malformed (NaN)', 'window.__brulionKeyboard(NaN)', (s) => s.overlap === 0 && !s.shown],
       ['a page zoomed in twice, no keyboard', 'window.__brulionKeyboard(0, 0, 2)', (s) => s.overlap === 0 && !s.shown],
       ['no keyboard, not zoomed', 'window.__brulionKeyboard(0, 0, 1)', (s) => s.overlap === 0 && !s.shown],

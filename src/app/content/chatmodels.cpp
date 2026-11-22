@@ -1,4 +1,5 @@
 #include "chatmodels.h"
+#include "calc/table.h"
 
 #include "chat/chat.h"
 #include "contentutil.h"
@@ -80,6 +81,49 @@ void ChatMessageModel::setBudget(int budget)
     scheduleRefresh();
 }
 
+namespace {
+
+/// A table block of a message as a rich-text table: the header row bold, each cell's text
+/// rendered (escaped) as a paragraph's, the columns aligned as the delimiter row says, thin
+/// borders in the muted colour. Empty when `body` is no table (it is shown as written then).
+/// QTextDocument lays the columns out in the bubble's width, wrapping a long cell.
+QString renderTable(const QString &body, const markdown::InlineRenderer &renderer, const QString &border, int below,
+                    int indent)
+{
+    // (In a list item the rows after the first are indented.)
+    QStringList lines = body.split(u'\n');
+    for (QString &line : lines)
+        line = line.trimmed();
+    const std::optional<calc::TableModel> table = calc::parseTable(lines.join(u'\n'));
+    if (!table || table->header.isEmpty())
+        return QString();
+    const auto cell = [&](bool header, const QString &text, int column) {
+        const calc::TableAlign align = column < table->aligns.size() ? table->aligns.at(column) : calc::TableAlign::None;
+        const QString alignment = align == calc::TableAlign::Right    ? u"right"_s
+                                  : align == calc::TableAlign::Center ? u"center"_s
+                                                                      : u"left"_s;
+        const QString html = renderer.renderBlock(text, BlockKind::Paragraph);
+        return header ? u"<th align=\"%1\"><b>%2</b></th>"_s.arg(alignment, html)
+                      : u"<td align=\"%1\">%2</td>"_s.arg(alignment, html);
+    };
+    QString out = u"<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\" style=\"border-collapse:collapse; "
+                  "border-color:%1; margin-top:0px; margin-bottom:%2px; margin-left:%3px;\"><tr>"_s.arg(border)
+                          .arg(below)
+                          .arg(indent);
+    for (int c = 0; c < table->header.size(); ++c)
+        out += cell(true, table->header.at(c), c);
+    out += u"</tr>"_s;
+    for (const QStringList &row : table->rows) {
+        out += u"<tr>"_s;
+        for (int c = 0; c < table->header.size(); ++c)
+            out += cell(false, c < row.size() ? row.at(c) : QString(), c);
+        out += u"</tr>"_s;
+    }
+    return out + u"</table>"_s;
+}
+
+} // namespace
+
 QString ChatMessageModel::renderMessage(const QString &markdown, const markdown::RenderContext &context)
 {
     const markdown::BlockDocument doc(markdown);
@@ -92,6 +136,13 @@ QString ChatMessageModel::renderMessage(const QString &markdown, const markdown:
         // Room under a block: more after a blank line (a paragraph's end), little between the
         // items of a list.
         const int below = b.trailing.contains(u'\n') ? 10 : b.kind == BlockKind::ListItem ? 2 : 6;
+        if (b.kind == BlockKind::Table) {
+            const QString table = renderTable(b.body, renderer, context.palette.muted, below, indent);
+            if (!table.isEmpty()) {
+                parts.append(table);
+                continue;
+            }
+        }
         switch (b.kind) {
         case BlockKind::Code:
         case BlockKind::Table:

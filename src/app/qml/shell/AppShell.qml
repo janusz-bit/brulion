@@ -88,7 +88,8 @@ FocusScope {
     /// The side panel (wide windows), null until it first shows.
     readonly property ShellSidePanel sidePanel: sidePanelLoader.item as ShellSidePanel
     property bool _sidePanelMade: false
-    /// Typing: the keyboard is up, or a toolbar stays docked after the system hid it.
+    /// Typing: the keyboard is up, or a toolbar stays docked (a menu took the keys and the system
+    /// hid the keyboard; one hidden by Back takes its toolbar with it).
     readonly property bool typing: KeyboardInsets.shown || toolbarDocked
     /// The bottom navigation's height (with the system's navigation bar under it), shown or not.
     readonly property real bottomNavHeight: bottomNav.implicitHeight
@@ -101,7 +102,7 @@ FocusScope {
         && !(KeyboardInsets.animating && KeyboardInsets.slidesOver && keyboardOverlap < bottomNavHeight)
     /// Phones: the bottom navigation shows unless the keyboard is up or the view has a bar of
     /// its own at the bottom instead (the drawing's tools). An editing toolbar that stays after
-    /// the keyboard went (the editing goes on) docks right above it.
+    /// the keyboard went (a menu above it took the keys) docks right above it.
     readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !shell.routeView.viewReplacesBottomNav && !focusMode
     /// Room under the content: the keyboard (minus the bottom navigation, while that is shown:
     /// sliding, the keyboard covers or uncovers it first); while typing without the navigation

@@ -3907,9 +3907,12 @@ ApplicationWindow {
         if (window.at()) check(near(editor.listView.contentY, window.contentBefore) && caretBottom() <= slotTop(),
                     "typing on the same line does not scroll")
         if (window.at()) check(window.countNamed(editor, "editToolbarSlot") === 1, "one toolbar")
-        // (d) The system hides the keyboard (Back) while the block is still being edited.
+        // (d) The system hides the keyboard (Back) while the block is still being edited: the
+        // toolbar goes with it (one never shown — a hardware keyboard, above — stays).
         if (window.at()) KeyboardInsets.simulated = 0
-        if (window.at()) window.waitStep(dockedOn(0) && page.editingRow === window.realRow, "the keyboard hidden by the system: the toolbar stays docked at the bottom, editing goes on")
+        if (window.at()) window.waitStep(!editor.toolbarVisible && !toolbarSlot().visible && editor.keyboardDismissed
+                                         && page.editingRow === window.realRow && editor.activeEditor.activeFocus,
+                                         "the keyboard hidden by the system: the toolbar goes with it, editing goes on")
         // (e) The keyboard slides in frame by frame: the toolbar follows each frame, nothing
         // scrolls until it has settled. (The caret low on the screen first: the keyboard will
         // cover it.)

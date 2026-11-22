@@ -167,13 +167,52 @@ FocusScope {
     property bool sourceEditing: false
     /// The tools of the touch toolbar: "block" (a block is being edited), "cell" (a table cell),
     /// "source" (source mode), "" (none: no toolbar). Stays while the system hides the keyboard
-    /// and the editing goes on. One slot: another tool set docks the same way (a new mode).
+    /// and the editing goes on (the toolbar is hidden then: keyboardDismissed). One slot: another
+    /// tool set docks the same way (a new mode).
     readonly property string toolbarMode: !touch || controller === null ? ""
                                           : controller.sourceMode ? (sourceEditing ? "source" : "")
                                           : controller.editingRow >= 0 ? (findKeepsKeyboard ? "" : "block")
                                           : editingTable !== null ? "cell"
                                           : (inSpan ? spanTools : selectionMode && selectionCount > 0) ? "selection" : ""
-    readonly property bool toolbarVisible: toolbarMode !== ""
+    /// The toolbar of typing: a block, a table cell or the source is being edited.
+    readonly property bool typingToolbar: toolbarMode !== "" && toolbarMode !== "selection"
+    readonly property bool toolbarVisible: toolbarMode !== "" && !(typingToolbar && keyboardDismissed)
+    /// The system hid the on-screen keyboard (Back, the keyboard's own key) while the text kept
+    /// the keys: the editing goes on, the toolbar goes with the keyboard — a tap on the text brings
+    /// both back. Only a keyboard that was up (with a hardware keyboard the toolbar stays), once it
+    /// has settled (one that goes and comes back as the keys pass between two blocks leaves the
+    /// toolbar be), and only while the edited text keeps the keys and no menu is open above the
+    /// toolbar (a menu or a dialog that took them hid the keyboard: the toolbar stays under it,
+    /// the menu above it).
+    property bool keyboardDismissed: false
+    /// The keyboard came up since it last settled hidden.
+    property bool _keyboardWasUp: false
+    /// The text the toolbar is docked for has the keys.
+    function typingHasKeys(): bool {
+        if (toolbarMode === "block")
+            return activeEditor !== null && activeEditor.activeFocus
+        if (toolbarMode === "cell")
+            return editingTable !== null && editingTable.cellInput !== null && editingTable.cellInput.activeFocus
+        if (toolbarMode === "source")
+            return sourceTextEdit !== null && sourceTextEdit.activeFocus
+        return false
+    }
+    function followKeyboard(): void {
+        if (KeyboardInsets.shown) {
+            _keyboardWasUp = true
+            keyboardDismissed = false
+        } else if (!KeyboardInsets.animating && _keyboardWasUp) {
+            _keyboardWasUp = false
+            keyboardDismissed = typingToolbar && typingHasKeys() && !(menuAbove !== null && menuAbove.visible)
+        }
+    }
+    onTypingToolbarChanged: if (!typingToolbar) keyboardDismissed = false
+    Connections {
+        target: KeyboardInsets
+        enabled: editor.touch
+        function onShownChanged() { editor.followKeyboard() }
+        function onAnimatingChanged() { editor.followKeyboard() }
+    }
     readonly property real toolbarHeight: Theme.editToolbarHeight
     /// Where the toolbar docks: an item that does not scroll with the blocks and whose bottom
     /// edge the shell keeps on the keyboard — the editor itself (null) on a page, the journal
@@ -1570,7 +1609,7 @@ FocusScope {
     /// capture from the bottom navigation would otherwise open over it. The selection's tools stay.
     function endTouchEditing(): void {
         const bar = toolbarLoader.item as MobileEditToolbar
-        if (bar && toolbarVisible && toolbarMode !== "selection")
+        if (bar && typingToolbar)
             bar.hideKeyboard()
     }
 
@@ -3970,8 +4009,8 @@ FocusScope {
     // ---- Menus above the docked toolbar ---------------------------------------------------------
     /// A menu opened right above the docked toolbar (its More, its task button held down), the
     /// toolbar's button it is above and its place there. Such a menu takes the keys, so the system
-    /// hides the on-screen keyboard and the toolbar drops to the bottom (it stays docked while the
-    /// editing goes on): the menu follows it — and gets the room the keyboard leaves, every item
+    /// hides the on-screen keyboard and the toolbar drops to the bottom (it stays docked: the
+    /// edited text lost the keys, keyboardDismissed stays false): the menu follows it — and gets the room the keyboard leaves, every item
     /// shown, none scrolled away — until something in it is touched (BMenu.touched): it never
     /// moves away from a finger that aims at it.
     property BMenu menuAbove: null
