@@ -400,6 +400,8 @@ public:
     Q_INVOKABLE bool selectTab(int id);
     /// The bar tab at `index` (Ctrl+1…8); -1 or past the end: the last one (Ctrl+9).
     Q_INVOKABLE bool selectTabAt(int index);
+    /// Where bar tab `id` stands in the bar (`tabs`), from 0; -1 for none there (a window's tab).
+    Q_INVOKABLE int tabIndex(int id) const;
     Q_INVOKABLE bool nextTab();
     Q_INVOKABLE bool previousTab();
     Q_INVOKABLE bool moveTab(int from, int to);

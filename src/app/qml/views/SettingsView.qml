@@ -907,6 +907,7 @@ Item {
                         accessibleName: qsTr("Dark background")
                         model: [
                             { value: "graphite", text: qsTr("Graphite", "dark background") },
+                            { value: "ink", text: qsTr("Ink", "dark background") },
                             { value: "slate", text: qsTr("Blue-grey") },
                             { value: "black", text: qsTr("Black", "background") }
                         ]

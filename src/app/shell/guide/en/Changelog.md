@@ -7,6 +7,20 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.28.1 — November 22, 2026
+
+**New**
+- **Search by meaning** — **Settings → Search → Search by meaning** finds notes by what they mean, not only by their words: "apple cake" finds "Szarlotka babci", an English query a Polish note. The first time it downloads a small model (Multilingual E5 Small, 126 MB) that then runs on this device, offline. Off by default; on the computer and Android ([[Search#Search by meaning]]).
+- **Names beside the views** — on the computer the rail of views widens when the pointer rests on it: the notebook's name, each view's name with its badge and shortcut, the sync status. It opens over the page panel, so nothing moves, and narrows when the pointer leaves; Tab widens it too. The views come in groups split by lines, the selected one in the accent's tint with a pill at the edge. **Settings → Appearance → Layout → Names beside the views' icons** turns it off (the names show in tooltips again).
+- **"Ink"** — a warm, charcoal dark background with warm, paper-white text: **Settings → Appearance → Dark background → Ink** (also `--surface ink` and `b.app.settings`).
+- **Browser-like tabs** — on the graphite and ink backgrounds the active tab has rounded corners and joins the page as in a web browser.
+- **The sidebar button stays put** — hiding the page panel no longer moves its button: the panel slides away under the rail and comes back the same way, at the width you left it.
+- **Tabs scroll into view** — a new tab (Ctrl+T) or a chosen one scrolls into view; ‹ › at the bar's ends when the tabs don't fit.
+- **On the phone** — the editing toolbar goes away with the keyboard (Back, the keyboard's own key) and comes back with a tap on the text; a new AI conversation's suggestions scroll in place of the messages, so the message field stays above the keyboard; tables in AI answers show as tables.
+
+**Fixes**
+- An older save of what search by meaning had read could land after its notebook closed, over a newer one.
+
 ## 0.28.0 — November 22, 2026
 
 **New**

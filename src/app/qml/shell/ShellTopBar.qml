@@ -4,7 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
+// ShellTopBar — the bar above the current view: the drawer button (narrow; wide windows leave room
+// for the page panel's button of AppShell, which never moves), back/forward, the title
 // (a breadcrumb for pages in folders and for All pages in a folder), search, command palette,
 // reading mode, quick capture, side panel toggle and the "more" menu with page actions (Move to…, Show in
 // tree among them). On narrow windows it keeps only what fits a phone: the drawer button ☰,
@@ -37,7 +38,10 @@ Rectangle {
     property list<string> crumbs
     property list<string> crumbPaths
     property real topInset: 0
-    property bool sidebarVisible: true
+    /// Wide windows: how much of the bar, from its left edge, the page panel's button covers
+    /// (AppShell's sidebarToggle stays in one place over this bar or over the panel): the row
+    /// starts after it.
+    property real leadingRoom: 0
     /// The system has a back key / gesture of its own that walks the history (Android): narrow
     /// windows leave the top bar's back out.
     property bool systemBack: AppController.isAndroid
@@ -55,7 +59,6 @@ Rectangle {
     property string noteMode
 
     signal menuClicked()
-    signal sidebarToggled()
     signal paletteRequested()
     /// The search field: the page switcher (pages, "> " for the commands, the notes' text).
     signal switcherRequested()
@@ -170,13 +173,12 @@ Rectangle {
                 }
             }
         }
-        BIconButton {
-            visible: !Theme.narrow
-            iconName: "panel-left"
-            label: bar.sidebarVisible ? qsTr("Hide sidebar") : qsTr("Show sidebar")
-            checkable: true
-            checked: bar.sidebarVisible
-            onClicked: bar.sidebarToggled()
+        // The room of the page panel's button (less the row's margin; the spacing after it
+        // stays the gap between that button and Back).
+        Item {
+            visible: !Theme.narrow && bar.leadingRoom > Theme.space2
+            Layout.preferredWidth: Math.max(0, bar.leadingRoom - Theme.space2)
+            Layout.preferredHeight: 1
         }
         BIconButton {
             objectName: "topBarBack"

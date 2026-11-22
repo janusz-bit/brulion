@@ -129,7 +129,7 @@ constexpr qsizetype kMaxRecentSearches = 8;
 constexpr std::array kThemeChoices{u"dark", u"light", u"system"};
 constexpr std::array kAccentChoices{u"coral", u"red", u"blue", u"green", u"teal", u"violet", u"graphite", u"custom"};
 constexpr std::array kLightSurfaceChoices{u"paper", u"white"};
-constexpr std::array kDarkSurfaceChoices{u"graphite", u"black", u"slate"};
+constexpr std::array kDarkSurfaceChoices{u"graphite", u"ink", u"black", u"slate"};
 constexpr std::array kDensityChoices{u"comfortable", u"compact"};
 constexpr std::array kEditorFontChoices{u"sans", u"serif"};
 constexpr std::array kLineSpacingChoices{u"normal", u"compact", u"relaxed"};

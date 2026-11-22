@@ -1504,8 +1504,13 @@ private Q_SLOTS:
         QVERIFY(app->selectTabAt(-1));
         QCOMPARE(app->focusedTab(), second);
         QVERIFY(!app->selectTabAt(-1)); // already there
+        QCOMPARE(app->tabIndex(first), 0);
+        QCOMPARE(app->tabIndex(second), 1);
+        QCOMPARE(app->tabIndex(4242), -1);
         QVERIFY(app->moveTab(1, 0));
         QCOMPARE(app->tabs().first().toMap().value(u"id"_s).toInt(), second);
+        QCOMPARE(app->tabIndex(second), 0); // the bar's tab stands where it was moved
+        QCOMPARE(app->tabIndex(first), 1);
         QVERIFY(app->closeTab(second));
         QCOMPARE(app->tabCount(), 1);
         QCOMPARE(app->currentRoute(), page(a));

@@ -1,6 +1,7 @@
 // ThemePalette — the colours of Theme.qml that the appearance settings change (Settings →
 // Appearance, docs/UI.md "Look & feel"): the surfaces (light "paper" | "white", dark "graphite" —
-// the default: layered greys — | "black" for OLED screens, the "Nocny" look | "slate"), the accent colour (presets "coral" —
+// the default: layered greys — | "ink", warm charcoal layers with warm text (the "Papier i atrament" look)
+// | "black" for OLED screens, the "Nocny" look | "slate"), the accent colour (presets "coral" —
 // the default, #ff7a66 in dark and #c4422f in light —, "red" — the logo's margin red —, "blue",
 // "green", "teal", "violet", "graphite", or "custom" with any "#rrggbb"),
 // and the text colours, kept here so the tests check every one of them on every surface.
@@ -54,7 +55,7 @@ struct Surface {
     Rgb bg, bgElevated, bgElevated2, bgSunken;
     Rgb border, borderSubtle, borderStrong, borderControl;
 };
-/// "paper" | "white" (light) or "graphite" | "black" | "slate" (dark); unknown → "paper" / "graphite".
+/// "paper" | "white" (light) or "graphite" | "ink" | "black" | "slate" (dark); unknown → "paper" / "graphite".
 Surface surface(QStringView name, bool dark);
 /// Known names of the light (`dark` false) or dark surfaces, the default first.
 QStringList surfaceNames(bool dark);
@@ -89,7 +90,8 @@ struct TextColors {
     Rgb dangerText, warningText, successText;
     Rgb chipDueFg, chipScheduledFg, chipReminderFg, chipRecurrenceFg;
 };
-TextColors textColors(bool dark);
+/// The text colours of the mode; "ink" has warm ones of its own.
+TextColors textColors(bool dark, QStringView surfaceName = {});
 
 /// A translucent colour (a scrim over the page).
 struct Scrim {

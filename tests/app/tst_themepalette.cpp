@@ -35,6 +35,7 @@ private Q_SLOTS:
     void defaultsAreNocny_data();
     void defaultsAreNocny();
     void defaultDarkIsLayered();
+    void inkIsWarmAndLayered();
     void redKeepsItsShades_data();
     void redKeepsItsShades();
     void unknownNamesGiveDefaults_data();
@@ -161,6 +162,40 @@ void TestThemePalette::defaultDarkIsLayered()
     QVERIFY(relativeLuminance(g.bg) > 0.01);
 }
 
+// "Atrament" ("ink", the "Papier i atrament" design): graphite's layering in warm charcoal, with
+// warm text of its own; every other surface keeps the mode's cool text.
+void TestThemePalette::inkIsWarmAndLayered()
+{
+    QVERIFY(surfaceNames(true).contains(u"ink"_s));
+    QVERIFY(!surfaceNames(false).contains(u"ink"_s));
+    const QVariantMap m = paletteMap(true, u"paper", u"ink", u"coral", u"");
+    QCOMPARE(m.value(u"bgSunken"_s).toString(), u"#151412"_s);
+    QCOMPARE(m.value(u"bg"_s).toString(), u"#1e1d1a"_s);
+    QCOMPARE(m.value(u"bgElevated"_s).toString(), u"#282723"_s);
+    QCOMPARE(m.value(u"bgElevated2"_s).toString(), u"#312f2b"_s);
+    QCOMPARE(m.value(u"fg"_s).toString(), u"#ede8de"_s);
+    QCOMPARE(m.value(u"link"_s).toString(), u"#93bceb"_s);
+    QCOMPARE(m.value(u"tagFg"_s).toString(), u"#c9a2f0"_s);
+    QCOMPARE(m.value(u"accent"_s).toString(), u"#ff7a66"_s);
+    const Surface ink = surface(u"ink", true);
+    const QList<Rgb> layers{ink.bgSunken, ink.bg, ink.bgElevated, ink.bgElevated2};
+    for (qsizetype i = 1; i < layers.size(); ++i) {
+        QVERIFY(relativeLuminance(layers[i]) > relativeLuminance(layers[i - 1]));
+        QVERIFY2(contrast(layers[i], layers[i - 1]) >= 1.08, qPrintable(describe("layer step", layers[i], layers[i - 1])));
+    }
+    // Warm: more red than blue in every layer and in the text.
+    for (const Rgb &c : layers)
+        QVERIFY2(c.r > c.b, qPrintable(toHex(c)));
+    const TextColors warm = textColors(true, u"ink");
+    QVERIFY(warm.fg.r > warm.fg.b && warm.fgMuted.r > warm.fgMuted.b);
+    // The other dark backgrounds keep the cool text (and so do unknown names).
+    for (const QString &name : surfaceNames(true)) {
+        if (name != u"ink")
+            QCOMPARE(toHex(textColors(true, name).fg), u"#d3d8e2"_s);
+    }
+    QCOMPARE(toHex(textColors(true, u"atrament").fg), u"#d3d8e2"_s);
+}
+
 void TestThemePalette::redKeepsItsShades_data()
 {
     QTest::addColumn<bool>("dark");
@@ -251,7 +286,7 @@ void TestThemePalette::contrastOnEverySurface()
     QFETCH(QString, custom);
     const Surface s = surface(surfaceName, dark);
     const Accent a = accent(accentName, custom, dark, s);
-    const TextColors t = textColors(dark);
+    const TextColors t = textColors(dark, surfaceName);
     // The page, cards and dialogs, wells (Theme.qml's promise; popups over cards use fg).
     const QList<Rgb> surfaces{s.bg, s.bgElevated, s.bgSunken};
     const Rgb white{255, 255, 255};
@@ -311,7 +346,7 @@ void TestThemePalette::modalScrimMakesThePageRecede()
     QFETCH(bool, dark);
     QFETCH(QString, surfaceName);
     const Surface s = surface(surfaceName, dark);
-    const TextColors t = textColors(dark);
+    const TextColors t = textColors(dark, surfaceName);
     const Scrim scrim = modalScrim(dark, s, t);
     const auto under = [&](const Rgb &c) { return over(scrim.color, scrim.alpha, c); };
     const Rgb page = under(s.bg);

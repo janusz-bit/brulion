@@ -8905,6 +8905,79 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
           }),
           "the event log's tab is titled “Event log”, with the log's icon");
 
+    // Many tabs (wide windows): past the bar's room its arrows show; a tab opened past the right
+    // end glides into view, so does a tab shown from the far end (Ctrl+1, Ctrl+9); ‹ brings the tab
+    // before the first one in view. (What the list shows asked from the list: indexAt.)
+    if (!narrow) {
+        const QStringList views{u"tasks"_s, u"calendar"_s, u"tags"_s, u"allPages"_s, u"search"_s};
+        for (int i = 0; app->tabCount() < 14; ++i)
+            app->openTab({{u"view"_s, views.at(i % views.size())}});
+        QQuickItem *list = nullptr;
+        const auto edgeIndex = [&](bool right) {
+            int at = -1;
+            if (list) {
+                const qreal x = list->property("contentX").toReal() + (right ? list->width() - 2 : 2);
+                QMetaObject::invokeMethod(list, "indexAt", qReturnArg(at), x, qreal(list->height() / 2));
+            }
+            return at;
+        };
+        const auto atEnd = [&](bool right) {
+            return list && list->property(right ? "atXEnd" : "atXBeginning").toBool()
+                   && edgeIndex(right) == app->tabIndex(app->focusedTab());
+        };
+        // The focused tab whole in the list's view (all tabs are equally wide).
+        const auto focusedWhole = [&] {
+            if (!list)
+                return false;
+            const qreal width = list->property("contentWidth").toReal() / app->tabCount();
+            const qreal x = app->tabIndex(app->focusedTab()) * width;
+            const qreal from = list->property("contentX").toReal() - list->property("originX").toReal();
+            return x >= from - 0.5 && x + width <= from + list->width() + 0.5;
+        };
+        const auto report = [&](const char *what) {
+            std::fprintf(stderr, "selftest: tabs (%s): %d, focused at %d, in view %d…%d, contentX %.1f of %.1f, width %.1f\n",
+                         what, int(app->tabCount()), app->tabIndex(app->focusedTab()), edgeIndex(false), edgeIndex(true),
+                         list ? list->property("contentX").toReal() : -1.0,
+                         list ? list->property("contentWidth").toReal() : -1.0, list ? list->width() : -1.0);
+        };
+        const bool opened = waitFor([&] {
+            list = named(u"shellTabList"_s);
+            return named(u"shellTabsBack"_s) && named(u"shellTabsOn"_s) && !list->property("atXBeginning").toBool()
+                   && focusedWhole() && !list->property("moving").toBool();
+        });
+        if (!opened)
+            report("opened");
+        check(opened, "past the tab bar's room its arrows show, and the tab opened last glides whole into view");
+        QPointF at;
+        QQuickItem *back = steadyItem(window, [&] { return named(u"shellTabsBack"_s); }, &at);
+        // (The tab cut by the left edge comes whole into view, or else the one before it: its
+        // left edge at the list's.)
+        const auto scrolled = [&] {
+            return list ? list->property("contentX").toReal() - list->property("originX").toReal() : -1.0;
+        };
+        const qreal tabWidth = list ? list->property("contentWidth").toReal() / app->tabCount() : 1;
+        const qreal before = scrolled();
+        const int expected = edgeIndex(false) - (std::fmod(before, tabWidth) > 0.5 ? 0 : 1);
+        if (back)
+            tapOrClick(window, at, touch);
+        const bool stepped = back && waitFor([&] {
+            return edgeIndex(false) == expected && qAbs(scrolled() - expected * tabWidth) < 0.5;
+        });
+        if (!stepped)
+            report("‹");
+        check(stepped, "‹ scrolls the tabs back by one whole tab");
+        key(Qt::Key_1);
+        const bool firstShown = waitFor([&] { return atEnd(false); });
+        if (!firstShown)
+            report("Ctrl+1");
+        check(firstShown, "the first tab shown with Ctrl+1 glides into view");
+        key(Qt::Key_9);
+        const bool lastShown = waitFor([&] { return atEnd(true); });
+        if (!lastShown)
+            report("Ctrl+9");
+        check(lastShown, "the last tab shown with Ctrl+9 glides into view");
+    }
+
     // One tab again.
     app->closeOtherTabs(app->focusedTab());
     check(waitFor([&] { return app->tabCount() == 1 && !named(u"shellTabBar"_s); }), "one tab left: the bar goes");
@@ -9742,18 +9815,49 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     }
 
     // Wide windows: the sidebar's button hides the page panel, the rail of views stays; the top
-    // bar's search field opens the page switcher, ">" in it the command palette.
+    // bar's search field opens the page switcher, ">" in it the command palette. The button stays
+    // where it was (it does not jump under the pointer as the panel slides away and back): over
+    // the panel's header, then over the top bar's start, which leave it room.
     if (!narrow) {
         QQuickItem *shellItem = appShell(window);
-        if (shellItem)
-            QMetaObject::invokeMethod(shellItem, "toggleSidebar");
-        check(shellItem && waitFor([&] { return !shownNamed(window->contentItem(), u"sidebarTree"_s); })
+        QQuickItem *toggle = shownItem(u"shellSidebarToggle"_s);
+        const auto revealed = [&](qreal share) {
+            return shellItem && waitFor([&] { return qAbs(shellItem->property("sidebarReveal").toReal() - share) < 0.001; });
+        };
+        const auto place = [&] { return toggle ? toggle->mapToScene(QPointF(0, 0)) : QPointF(-1, -1); };
+        const auto left = [&](const QString &name) {
+            QQuickItem *item = shownNamed(window->contentItem(), name);
+            return item ? item->mapToScene(QPointF(0, 0)).x() : -1.0;
+        };
+        revealed(1);
+        const QPointF shownAt = place();
+        const qreal nameAt = left(u"sidebarNotebookName"_s);
+        check(toggle && activate(toggle) && waitFor([&] { return !shownNamed(window->contentItem(), u"sidebarTree"_s); })
                       && shownItem(u"shellRail"_s) && shownItem(u"sidebarNav_calendar"_s),
               "with the page panel hidden the rail of views stays");
-        if (shellItem)
-            QMetaObject::invokeMethod(shellItem, "toggleSidebar");
-        check(waitFor([&] { return shownNamed(window->contentItem(), u"sidebarTree"_s) != nullptr; }),
+        revealed(0);
+        const QPointF hiddenAt = place();
+        const qreal backAt = left(u"topBarBack"_s);
+        const qreal toggleEnd = hiddenAt.x() + (toggle ? toggle->width() : 0);
+        if (hiddenAt != shownAt || backAt < toggleEnd || nameAt < shownAt.x() + (toggle ? toggle->width() : 0))
+            std::fprintf(stderr, "selftest: the panel's button at (%.1f, %.1f) shown, (%.1f, %.1f) hidden, ends at %.1f; "
+                                 "the notebook's name at %.1f, Back at %.1f\n",
+                         shownAt.x(), shownAt.y(), hiddenAt.x(), hiddenAt.y(), toggleEnd, nameAt, backAt);
+        check(toggle && hiddenAt == shownAt, "the page panel's button stays in its place as the panel hides");
+        check(toggle && nameAt >= shownAt.x() + toggle->width() && backAt >= toggleEnd,
+              "the panel's header and the top bar leave the button room");
+        check(toggle && activate(toggle)
+                      && waitFor([&] { return shownNamed(window->contentItem(), u"sidebarTree"_s) != nullptr; }),
               "the page panel comes back");
+        // (Once the split has laid the panel out again: the reveal ends a frame before that.)
+        const bool returned = revealed(1) && waitFor([&] {
+            return place() == shownAt && qAbs(left(u"sidebarNotebookName"_s) - nameAt) < 0.5;
+        });
+        if (!returned)
+            std::fprintf(stderr, "selftest: the panel shown again: its button at (%.1f, %.1f), was (%.1f, %.1f); "
+                                 "the notebook's name at %.1f, was %.1f\n",
+                         place().x(), place().y(), shownAt.x(), shownAt.y(), left(u"sidebarNotebookName"_s), nameAt);
+        check(returned, "the panel slides back where it was, its button still in place");
 
         // The rail widens over the page panel with the views' names while the pointer rests on
         // it, nothing beside it moves; it narrows once the pointer leaves. Switched off it stays
@@ -9764,15 +9868,29 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         QQuickItem *tree = shownItem(u"sidebarTree"_s);
         if (!touch && railItem && railSurface && calendarEntry && tree) {
             const qreal narrowWidth = railItem->width();
-            const qreal treeX = tree->mapToScene(QPointF(0, 0)).x();
+            // (Where the page panel rests: it may still be ending its slide back above.)
+            qreal treeX = -1;
+            uidriver::waitFor(
+                    [&] {
+                        const qreal now = tree->mapToScene(QPointF(0, 0)).x();
+                        const bool still = now == treeX;
+                        treeX = now;
+                        if (!still)
+                            uidriver::settle(100);
+                        return still;
+                    },
+                    3000);
             const QPointF onCalendar = calendarEntry->mapToScene(QPointF(calendarEntry->width() / 2, calendarEntry->height() / 2));
             // (It must move over the rail: one event is where it came in.)
             mouseMove(window, onCalendar - QPointF(0, 6));
             mouseMove(window, onCalendar);
             check(waitFor([&] { return railSurface->width() >= 200 && calendarEntry->width() > narrowWidth; }),
                   "the pointer resting on the rail widens it with the views' names");
-            check(tree->mapToScene(QPointF(0, 0)).x() == treeX,
-                  "the widened rail lies over the page panel: nothing beside it moves");
+            const qreal treeNow = tree->mapToScene(QPointF(0, 0)).x();
+            if (treeNow != treeX)
+                std::fprintf(stderr, "selftest: the page panel's tree at x %.2f, was %.2f (the rail %.1f wide)\n",
+                             treeNow, treeX, railItem->width());
+            check(treeNow == treeX, "the widened rail lies over the page panel: nothing beside it moves");
             // A click on a name over the page panel is the rail's (its items take the pointer
             // there, not the page panel under them).
             const QPointF onName = calendarEntry->mapToScene(QPointF(calendarEntry->width() - 30, calendarEntry->height() / 2));

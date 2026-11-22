@@ -9,8 +9,8 @@ import Brulion
 // Layout (AppSettings.sidebarSections): All pages — the notebook's folder tree —, Favorites and
 // Recent by default. Favorites and Recent can be hidden (AppSettings.sidebarHidden); the sections
 // before the tree are the list's header, the ones after it its footer. The same component is the
-// left pane on wide windows (hidden with the top bar's sidebar button; the rail stays) and, beside
-// the rail, the drawer's content on narrow ones (`navigated()` closes it).
+// left pane on wide windows (hidden with AppShell's panel button, which stays put over its header;
+// the rail stays) and, beside the rail, the drawer's content on narrow ones (`navigated()` closes it).
 //
 // The tree (FolderTreeModel): a tap on a folder opens or closes it, on a page opens it; the
 // context menu (right-click, press-and-hold, the Menu key, and on touch screens the row's "⋯"
@@ -36,6 +36,9 @@ Rectangle {
 
     property real topInset: 0
     property real bottomInset: 0
+    /// Room at the header's start for something drawn over it (wide windows: AppShell's button
+    /// that hides this panel); 0: none.
+    property real leadingRoom: 0
 
     signal navigated()
     signal newPageRequested(string folder)
@@ -476,7 +479,7 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight
-            Layout.leftMargin: Theme.space3
+            Layout.leftMargin: Math.max(Theme.space3, sidebar.leadingRoom)
             Layout.rightMargin: Theme.space1
             Layout.topMargin: Theme.space2
             Layout.bottomMargin: Theme.space1

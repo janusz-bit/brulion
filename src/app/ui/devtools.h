@@ -20,7 +20,7 @@
 //   --theme light|dark     force the colour scheme (Theme.mode)
 //   --accent <name|#hex>   force the accent colour (red, blue, green, teal, violet, graphite, or
 //                          a custom "#rrggbb"; Theme.accentName / customAccent)
-//   --surface <name>       force a background: paper | white (light), slate | black (dark)
+//   --surface <name>       force a background: paper | white (light), ink | slate | black (dark)
 //   --density compact|comfortable  force the density (Theme.density)
 //   --locale pl|en         UI language (translation + DatesHelper.locale)
 //   --touch                touch UI sizes (Theme.forceTouch), as on a phone

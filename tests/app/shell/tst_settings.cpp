@@ -372,6 +372,7 @@ private Q_SLOTS:
         QTest::newRow("light black") << "lightSurface" << QVariant(u"black"_s) << QVariant(u"paper"_s);
         QTest::newRow("dark black") << "darkSurface" << QVariant(u"black"_s) << QVariant(u"black"_s);
         QTest::newRow("dark slate") << "darkSurface" << QVariant(u"slate"_s) << QVariant(u"slate"_s);
+        QTest::newRow("dark ink") << "darkSurface" << QVariant(u"ink"_s) << QVariant(u"ink"_s);
         QTest::newRow("dark graphite") << "darkSurface" << QVariant(u"graphite"_s) << QVariant(u"graphite"_s);
         QTest::newRow("dark white") << "darkSurface" << QVariant(u"white"_s) << QVariant(u"graphite"_s);
         QTest::newRow("dark Polish") << "darkSurface" << QVariant(u"grafitowe"_s) << QVariant(u"graphite"_s);

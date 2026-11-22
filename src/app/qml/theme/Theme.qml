@@ -8,7 +8,8 @@ import Brulion
 // Look: a layered dark theme by default — three clearly different greys ("graphite": side panes
 // darkest, the page above them, cards, menus and dialogs lighter still; surfaces part by shade, not
 // by hairlines) with a coral accent (#ff7a66; #c4422f in light) and soft, rounded shapes; true OLED
-// black ("Nocny") and blue-grey are the other dark backgrounds; and a calm, paper-like light theme — ink #1f2430, paper #fbf7ee,
+// black ("Nocny"), blue-grey and "ink" ("Atrament": warm charcoal layered like graphite, warm
+// paper-white text — the "Papier i atrament" look) are the other dark backgrounds; and a calm, paper-like light theme — ink #1f2430, paper #fbf7ee,
 // margin red #e2574c (destructive; also an accent preset), amber #f2b33d (reminders, alarms —
 // whatever the accent), grid blue #9fc3e6 (links, focus, selection). All text colours meet WCAG AA (4.5:1)
 // on the backgrounds they are used on (fgFaint on bg/bgElevated/bgSunken included, chip text
@@ -40,7 +41,7 @@ import Brulion
 //   editorFont     "sans" | "serif";  fontScale  user font size factor
 //   editorFontSize the editor's base size in px (setting; touch UIs add one, fontScale applies)
 //   accentName     "coral" | "red" | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (+ customAccent "#rrggbb")
-//   lightSurface   "paper" | "white";  darkSurface  "graphite" (layered) | "black" (OLED) | "slate"
+//   lightSurface   "paper" | "white";  darkSurface  "graphite" (layered) | "ink" (layered, warm) | "black" (OLED) | "slate"
 //   uiFontFamily, editorFontFamily, monoFontFamily  installed families ("" or one missing on
 //                  this device: the default font)
 //   lineSpacing    "compact" | "normal" | "relaxed" (lineHeightLoose: editor prose)
@@ -121,7 +122,7 @@ QtObject {
     // ---- Surfaces ------------------------------------------------------------------------
     // Defaults (paper / graphite): bg #fbf7ee / #1e1f24, bgElevated #fffdf7 / #27292f, bgElevated2
     // #fffefb / #30323a, bgSunken #f3eee2 / #16171b (black: #000000, #0d0f13, #1c2027, #08090b;
-    // slate: #1c2130, #232a3b, #2b3245, #171b28).
+    // slate: #1c2130, #232a3b, #2b3245, #171b28; ink: #1e1d1a, #282723, #312f2b, #151412).
     readonly property color bg: palette.bg                     // page / window
     readonly property color bgElevated: palette.bgElevated     // cards, dialogs, menus
     readonly property color bgElevated2: palette.bgElevated2   // popups over cards
@@ -157,10 +158,12 @@ QtObject {
     // ---- Lines ---------------------------------------------------------------------------
     // Defaults: border #e4dccb / #262a32, borderSubtle #ece6d8 / #1a1d23, borderStrong #cdc2ab /
     // #3a404d, borderControl #928775 / #6c7793.
+    /// The dark background's layers part by their shade (graphite, ink): Discord's way, and the
+    /// tabs are rounded and run into the view (ShellTabBar).
+    readonly property bool layered: dark && (darkSurface === "graphite" || darkSurface === "ink")
     /// Hairlines between the window's panes (the rail, the page panel, the side panel): drawn
-    /// where the panes' shades are too close to part them — not on the graphite background,
-    /// whose layers part by their shade (Discord's way).
-    readonly property bool paneLines: !(dark && darkSurface === "graphite")
+    /// where the panes' shades are too close to part them — not on a layered background.
+    readonly property bool paneLines: !layered
     readonly property color border: palette.border
     readonly property color borderSubtle: palette.borderSubtle
     readonly property color borderStrong: palette.borderStrong
