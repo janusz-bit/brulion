@@ -51,6 +51,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/applockcontroller.h ${_brulion_shell_dir}/applockcontroller.cpp
     ${_brulion_shell_dir}/appupdates.h ${_brulion_shell_dir}/appupdates.cpp
     ${_brulion_shell_dir}/localai.h ${_brulion_shell_dir}/localai.cpp
+    ${_brulion_shell_dir}/mcpserversupervisor.h ${_brulion_shell_dir}/mcpserversupervisor.cpp
     ${_brulion_shell_dir}/webclippersetup.h ${_brulion_shell_dir}/webclippersetup.cpp
     ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp

@@ -1420,7 +1420,8 @@ end, { label = "Ask my notes (AI)" })
   * A note's text never becomes part of the conversation's structure: the request is given to
     the model as pieces — its control tokens (a turn's end, a tool call) apart from the text, in
     which the same letters are only letters — and its answer is read the same way.
-  * `brulion-cli` runs no model; the browser version has none (`available` is false there, and
+  * `brulion-cli` runs no model on the device (`acp agent` asks the network's providers only);
+    the browser version has none (`available` is false there, and
     in any build without llama.cpp: docs/ARCHITECTURE.md "The model on the device").
 * **Subscriptions** (Claude Pro/Max, ChatGPT Plus) cannot be used by other apps: the providers bill
   their APIs separately, by use. On a phone that leaves an API key (a question about a note costs
@@ -1577,7 +1578,10 @@ of the page as a new conversation; a spinner while `aiPending`, none while a cha
 from a page of the notebook and be changed there: a page tagged as an extension, with
 `permissions: [write, ai]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
 has `overrides: asystent`) — Settings → Extensions → AI → **The assistant's code → Edit the code**
-writes it, as for the gym, the habits and the flashcards. How
+writes it, as for the gym, the habits and the flashcards. An editor that talks to agents (Zed, a
+JetBrains IDE) runs the same `chat` through `brulion-cli acp agent` (docs/CLI.md "The assistant in
+Zed and JetBrains"): its `b.ai` asks the app's model, its `b.choose` of a change is the editor's
+question (`session/request_permission`), its `b.status` a tool call; the built-in code, no page's. How
 well a model does its work is measured by the assistant's bench (docs/FINETUNE.md): tasks with a
 known outcome on notebooks of their own, run by this script — a change of its tools or instructions
 shows there.

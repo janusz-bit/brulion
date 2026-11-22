@@ -288,6 +288,17 @@ endif()
 brulion_add_test(tst_shell_workspace_perf SOURCES tst_workspace_perf.cpp
     LIBS brulion_shell brulion_core_reminders)
 set_tests_properties(tst_shell_workspace_perf PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+# The remote MCP server the desktop app runs (mcpserversupervisor.h) with the real brulion-cli:
+# its arguments and delays, off and refused, running and answering, its log, refused by the
+# server (no https, a port in use), started again after a kill and a setting changed, stopped.
+if(TARGET brulion-cli)
+    brulion_add_test(tst_shell_mcpserver SOURCES tst_mcpserver.cpp LIBS brulion_shell Qt6::Network)
+    target_compile_definitions(tst_shell_mcpserver PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
+    add_dependencies(tst_shell_mcpserver brulion-cli)
+    math(EXPR _mcpserver_timeout "180 * ${BRULION_TEST_SLOWDOWN}")
+    set_tests_properties(tst_shell_mcpserver PROPERTIES TIMEOUT ${_mcpserver_timeout})
+endif()
+
 # AI agents of the user's own in the AI chat (workspaceagents.h) on a real Workspace, the agent a
 # real program that speaks the Agent Client Protocol (fakeacpagent.cpp): a conversation answered,
 # the same session for the next message, the agent's question allowed, rejected and stopped, Stop,

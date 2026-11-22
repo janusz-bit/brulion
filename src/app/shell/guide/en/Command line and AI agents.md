@@ -58,6 +58,14 @@ An agent running on another computer (e.g. on a Raspberry Pi) works on a copy of
 ## Your notes in claude.ai and ChatGPT
 The AI apps themselves — claude.ai, the Claude app on your phone, ChatGPT — can use your notes too, through a **remote MCP server**: `brulion-cli mcp serve` on a computer of yours that holds the notes (e.g. a home server with the folder synced by Syncthing). You add it once in the app as a custom connector and sign in with a password of your own; on the sign-in page you decide whether the app may only read your notes or also write in them.
 
+**On this computer, Brulion runs it for you** while it is open: **Settings → Extensions → claude.ai and ChatGPT**.
+
+1. Type a **Password** (at least 8 characters; it stays on this device) and switch on **Connector server**.
+2. Make the port reachable over HTTPS — e.g. `tailscale funnel --bg 8780` — and enter that address as the **Public address**.
+3. **Copy** the **Connector URL** and add it in claude.ai or ChatGPT as below. **Only reading** keeps every app from changing notes; **Requests** shows what the apps asked for.
+
+On a server without the app:
+
 1. Set a password: `brulion-cli mcp password` (only its hash is stored).
 2. Start the server: `brulion-cli mcp serve --public-url https://notes.example.com`. The apps reach it over the internet, so it needs an HTTPS address: a reverse proxy (Caddy, nginx) or, for a computer at home, a tunnel such as Tailscale Funnel or Cloudflare Tunnel. On NixOS it is one option: `services.brulion-mcp`.
 3. In **claude.ai**: Settings → Connectors → Add custom connector, the address `https://notes.example.com/mcp`, then Connect. A Brulion page opens: enter the password and choose **Allow**. The connector then works in the Claude app on your phone too. In **ChatGPT**: turn on developer mode and add an MCP app with the same address and OAuth.
@@ -76,6 +84,25 @@ Details, and how to set up a proxy or a tunnel: “Remote MCP server” in `docs
 3. `brulion-cli acp clients` lists the paired devices, `brulion-cli acp revoke <dev_…>` (or `--all`) unpairs one at once, its agents stop.
 
 With `--nextcloud https://cloud.example.com --nextcloud-user jan --nextcloud-folder Brulion --nextcloud-password-file F` (an app password) the computer keeps its copy of the notebook in sync with your Nextcloud, before every turn — the turn waits for it, so the notes you just wrote on the phone are there — and after it. A turn goes on when the phone is gone, and the computer keeps its answer for the phone for a day. Brulion in a browser may use the agents too when `acp serve` names its site: `--allowed-origin https://janusz-bit.github.io`. Details: `docs/CLI.md` "AI agents for other devices" in the repository.
+
+## Brulion's assistant in your editor
+Editors that talk to AI agents — **Zed** and the **JetBrains** IDEs — can have Brulion's [[AI#The AI assistant|AI assistant]] as one of them: `brulion-cli acp agent`. It answers about your notes and changes them as in the AI chat, asking in the editor before each change (**Allow**, **Allow every change of this question**, **No**). It asks the model of **Settings → Extensions → AI** with its key — Claude or an OpenAI-compatible server; the model on the device runs only in the app.
+
+In Zed, add it to `settings.json`:
+
+```json
+{
+  "agent_servers": {
+    "Brulion": {
+      "type": "custom",
+      "command": "brulion-cli",
+      "args": ["acp", "agent", "--vault", "/home/ala/Notatki"]
+    }
+  }
+}
+```
+
+In a JetBrains IDE: AI Assistant's chat → **Add Custom Agent**, and the same entry (without `"type"`) in `~/.jetbrains/acp.json`. Without `--vault` it uses the notebook open in the app. Details: “The assistant in Zed and JetBrains” in `docs/CLI.md` in the repository.
 
 ## Extensions written by an agent
 An agent can also write [[Extensions|extensions]] — commands, views and reactions in Luau — and try them before you see them:

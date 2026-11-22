@@ -11,8 +11,8 @@ done in the repository simply disappears from the list.
   reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: a try of the
   remote MCP server (`brulion-cli mcp serve`, docs/CLI.md "Remote MCP server") from claude.ai and
   ChatGPT themselves (it passes the official MCP Python SDK and reads their published client
-  documents) and the desktop app starting it from Settings, and search by meaning rather than
-  words (docs/SEMANTIC.md).
+  documents) — also as the desktop app runs it (Settings → Extensions → claude.ai and ChatGPT) —,
+  and search by meaning rather than words (docs/SEMANTIC.md).
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's, on
@@ -22,8 +22,9 @@ done in the repository simply disappears from the list.
   when Brulion runs again), the agent's questions while the phone was gone (answered "cancelled"
   there now: they could wait for the phone instead), a try with a real agent from a real phone, a try with
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
-  /c`) and macOS; and the other direction — Brulion's assistant as an ACP agent for Zed and
-  JetBrains (`brulion-cli acp agent`, which needs `b.ai` in brulion-cli).
+  /c`) and macOS; and a try of the other direction, Brulion's assistant as an ACP agent
+  (`brulion-cli acp agent`, docs/CLI.md "The assistant in Zed and JetBrains"), in a real Zed and a
+  JetBrains IDE.
 * **AI agents on another computer changing the app live** — an agent of this computer with "Let it
   change the app while it runs" gets the live tools (`brulion-cli mcp --app-control` with a grant,
   docs/CLI.md "Live changes"); one on another computer (`brulion-cli acp serve`, the phone's case)

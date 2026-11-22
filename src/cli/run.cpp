@@ -204,6 +204,11 @@ int run(int argc, char **argv)
         useLanguage(u"en"_s);
         return serveAcpHost(ctx, *inv.command, inv.args, output);
     }
+    if (inv.command->id == u"acp.agent") {
+        // The editor shows what it says to the user (the assistant's questions, its failures): the
+        // system's language, as other commands for people (the assistant's own follows the app's).
+        return serveAcpAgent(ctx, *inv.command, inv.args, output);
+    }
     if (inv.command->id == u"clip.host") {
         useLanguage(u"en"_s);
         return serveClipHost(ctx);

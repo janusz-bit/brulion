@@ -16,8 +16,10 @@ One C++/QML code base, four targets, all built against **Qt 6.12.0** (CMake acce
 
 On the desktop (Linux, Windows) a command line for scripts and AI agents comes with it:
 `brulion-cli` (also `brulion cli …`), with an MCP server (`brulion-cli mcp`; over HTTPS with sign-in for
-claude.ai and ChatGPT: `brulion-cli mcp serve`) and AI agents of the computer for the app on a phone
-(`brulion-cli acp serve`) — see "Command line" below and docs/CLI.md.
+claude.ai and ChatGPT: `brulion-cli mcp serve`, which the desktop app also runs itself from its
+settings), AI agents of the computer for the app on a phone (`brulion-cli acp serve`) and the AI
+assistant as an agent for editors such as Zed (`brulion-cli acp agent`) — see "Command line" below
+and docs/CLI.md.
 
 ## Layers
 
@@ -400,14 +402,18 @@ QML smoke tests and screenshot scripts that run the real app headless).
   sessions given this notebook and Brulion's MCP server, the agent's files and terminals served
   here, devices paired with one-time codes; `hostsync.h`: the notebook kept in sync with Nextcloud
   by core `sync`'s engine, the one sync of the command line — docs/CLI.md "AI agents for other
-  devices"; core `acp/remote.h` is the app's side), the Web Clipper's native
+  devices"; core `acp/remote.h` is the app's side), `brulion-cli acp agent` (`acpagent.h`: the
+  built-in AI assistant as an ACP agent for an editor — the protocol's agent side over core
+  `acp`'s `Connection`, the assistant run in an extension engine over the notebook, its `b.ai`
+  sent through core `ai` with the app's settings and key, its questions as
+  `session/request_permission`; docs/CLI.md "The assistant in Zed and JetBrains"), the Web Clipper's native
   messaging host (`clip host`, also started by a browser with its own arguments — `run()` and the
   app's `main()` recognise them — and `clip install` for the browsers' host manifests;
   docs/CLIPPER.md). One registry
   (`registry.cpp`) gives the argv parser, the help, the JSON Schema and the MCP tools. Built on
   `core/notebook` (never on the app's shell): it never creates a `ReminderScheduler`,
-  `WorkspaceSync` or `AppSettings`, reads the app's settings file only for the current notebook
-  and language, and shares the device state (History, LocalStore) with the app on one computer.
+  `WorkspaceSync` or `AppSettings`, reads the app's settings file only for the current notebook,
+  the language and (`acp agent`) the AI model, and shares the device state (History, LocalStore) with the app on one computer.
   Writes: the device's lock, compare-and-swap with retries, History reason "cli" (the app's
   history shows "Replaced from the command line (agent)"). The app's `main()` hands `brulion cli …`
   over before anything else (the AppImage's one entry point). CMake `BRULION_BUILD_APP=OFF` builds

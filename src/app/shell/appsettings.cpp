@@ -67,6 +67,10 @@ constexpr auto kAiModel = "ai/model"_L1;
 constexpr auto kAiLocalModel = "ai/localModel"_L1;
 constexpr auto kAiBaseUrl = "ai/baseUrl"_L1;
 constexpr auto kAcpAgents = "ai/agents"_L1;
+constexpr auto kMcpServerEnabled = "mcpServer/enabled"_L1;
+constexpr auto kMcpServerPort = "mcpServer/port"_L1;
+constexpr auto kMcpServerPublicUrl = "mcpServer/publicUrl"_L1;
+constexpr auto kMcpServerReadOnly = "mcpServer/readOnly"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
 constexpr auto kEditorMonoFamily = "editor/monoFamily"_L1;
@@ -916,6 +920,84 @@ bool AppSettings::acpAvailable() const
 bool AppSettings::acpProgramsAvailable() const
 {
     return WorkspaceAgents::available();
+}
+
+// ---- The remote MCP server (mcpserversupervisor.h) ----------------------------------------------
+
+bool AppSettings::mcpServerEnabled() const
+{
+    return m_settings->value(kMcpServerEnabled, false).toBool();
+}
+
+void AppSettings::setMcpServerEnabled(bool on)
+{
+    if (store(kMcpServerEnabled, on, mcpServerEnabled()))
+        Q_EMIT mcpServerChanged();
+}
+
+int AppSettings::mcpServerPort() const
+{
+    bool ok = false;
+    const int port = m_settings->value(kMcpServerPort, 8780).toInt(&ok);
+    return ok && port >= 1024 && port <= 65535 ? port : 8780;
+}
+
+void AppSettings::setMcpServerPort(int port)
+{
+    if (port < 1024 || port > 65535)
+        return; // (the field keeps showing the port in use)
+    if (store(kMcpServerPort, port, mcpServerPort()))
+        Q_EMIT mcpServerChanged();
+}
+
+QString AppSettings::mcpServerPublicUrl() const
+{
+    return m_settings->value(kMcpServerPublicUrl).toString();
+}
+
+void AppSettings::setMcpServerPublicUrl(const QString &url)
+{
+    // An address as typed: the server says what is wrong with one it cannot use.
+    QString clean = url.trimmed().left(500);
+    while (clean.endsWith(u'/'))
+        clean.chop(1);
+    if (store(kMcpServerPublicUrl, clean, mcpServerPublicUrl()))
+        Q_EMIT mcpServerChanged();
+}
+
+bool AppSettings::mcpServerReadOnly() const
+{
+    return m_settings->value(kMcpServerReadOnly, false).toBool();
+}
+
+void AppSettings::setMcpServerReadOnly(bool on)
+{
+    if (store(kMcpServerReadOnly, on, mcpServerReadOnly()))
+        Q_EMIT mcpServerChanged();
+}
+
+QString AppSettings::mcpServerPasswordFile() const
+{
+    return m_dataDir + u"/secrets/mcp-password"_s;
+}
+
+bool AppSettings::hasMcpServerPassword() const
+{
+    return QFileInfo(mcpServerPasswordFile()).size() > 0;
+}
+
+bool AppSettings::setMcpServerPassword(const QString &password)
+{
+    // As `brulion-cli mcp password` takes one (oauth::kMinPasswordLength); kept as typed, spaces
+    // too — the sign-in page compares it so.
+    if (!password.isEmpty() && (password.size() < 8 || password.size() > 1024))
+        return false;
+    const bool had = hasMcpServerPassword();
+    m_mcpPasswordSecret.reset(password); // masked in every log line from now on
+    const bool ok = writeSecretFile(mcpServerPasswordFile(), password); // owner-only; "" removes the file
+    if (ok || had != hasMcpServerPassword())
+        Q_EMIT mcpServerChanged();
+    return ok;
 }
 
 QStringList AppSettings::addRemoteAcpAgents(const QList<AgentConfig> &paired)

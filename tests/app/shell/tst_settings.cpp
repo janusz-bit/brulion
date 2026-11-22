@@ -1329,6 +1329,64 @@ private Q_SLOTS:
         QVERIFY(!QFile::exists(s.passwordFile()));
         QVERIFY(s.setNextcloudPassword(QString())); // deleting nothing is fine
     }
+
+    void mcpServer()
+    {
+        // The remote MCP server's settings (mcpserversupervisor.h): off, port 8780, no public
+        // address, writes allowed by the apps' own consent.
+        QTemporaryDir data;
+        const QString file = nextFile();
+        AppSettings s(file, data.path());
+        QVERIFY(!s.mcpServerEnabled());
+        QCOMPARE(s.mcpServerPort(), 8780);
+        QCOMPARE(s.mcpServerPublicUrl(), QString());
+        QVERIFY(!s.mcpServerReadOnly());
+        QVERIFY(!s.hasMcpServerPassword());
+        QSignalSpy changed(&s, &AppSettings::mcpServerChanged);
+        s.setMcpServerEnabled(true);
+        s.setMcpServerEnabled(true);
+        QCOMPARE(changed.size(), 1);
+        // A port out of 1024 … 65535 is not taken.
+        s.setMcpServerPort(80);
+        s.setMcpServerPort(70000);
+        QCOMPARE(s.mcpServerPort(), 8780);
+        s.setMcpServerPort(8443);
+        QCOMPARE(s.mcpServerPort(), 8443);
+        // The address without its trailing slashes and spaces.
+        s.setMcpServerPublicUrl(u"  https://notatki.example.pl/brulion// "_s);
+        QCOMPARE(s.mcpServerPublicUrl(), u"https://notatki.example.pl/brulion"_s);
+        s.setMcpServerReadOnly(true);
+        QCOMPARE(changed.size(), 4);
+        // The password: at least 8 characters, owner-only in the app's secrets, never in the
+        // settings file.
+        QVERIFY(!s.setMcpServerPassword(u"krótkie"_s));
+        QVERIFY(!s.hasMcpServerPassword());
+        QVERIFY(s.setMcpServerPassword(u"zażółć gęślą jaźń"_s));
+        QVERIFY(s.hasMcpServerPassword());
+        QCOMPARE(changed.size(), 5);
+        QCOMPARE(s.mcpServerPasswordFile(), data.path() + u"/secrets/mcp-password"_s);
+        QFile secret(s.mcpServerPasswordFile());
+        QVERIFY(secret.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(secret.readAll()), u"zażółć gęślą jaźń"_s);
+        if (brulion::test::hasUnixPermissions()) {
+            const QFileDevice::Permissions perms = QFile::permissions(s.mcpServerPasswordFile());
+            QVERIFY(!(perms & (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::WriteGroup
+                               | QFileDevice::WriteOther)));
+        }
+        s.sync();
+        QFile ini(file);
+        QVERIFY(ini.open(QIODevice::ReadOnly));
+        QVERIFY(!QString::fromUtf8(ini.readAll()).contains(u"gęślą"_s));
+        // Kept for the next run; forgotten.
+        AppSettings other(file, data.path());
+        QVERIFY(other.mcpServerEnabled());
+        QCOMPARE(other.mcpServerPort(), 8443);
+        QVERIFY(other.mcpServerReadOnly());
+        QVERIFY(other.hasMcpServerPassword());
+        QVERIFY(s.setMcpServerPassword(QString()));
+        QVERIFY(!s.hasMcpServerPassword());
+        QVERIFY(!QFile::exists(s.mcpServerPasswordFile()));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSettings)

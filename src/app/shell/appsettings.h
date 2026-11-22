@@ -121,6 +121,15 @@ class AppSettings : public QObject {
     /// Agents that are programs of this device can be added (the desktop app), not only ones on
     /// another computer.
     Q_PROPERTY(bool acpProgramsAvailable READ acpProgramsAvailable CONSTANT FINAL)
+    /// The remote MCP server for claude.ai and ChatGPT run in the background while the app runs
+    /// (mcpserversupervisor.h, desktop): on or off (off by default), its port (1024 … 65535, 8780),
+    /// the public https address that reaches it ("" this computer's only), whether the apps may
+    /// only read. Its sign-in password lives in `<app data>/secrets/mcp-password` (owner-only).
+    Q_PROPERTY(bool mcpServerEnabled READ mcpServerEnabled WRITE setMcpServerEnabled NOTIFY mcpServerChanged FINAL)
+    Q_PROPERTY(int mcpServerPort READ mcpServerPort WRITE setMcpServerPort NOTIFY mcpServerChanged FINAL)
+    Q_PROPERTY(QString mcpServerPublicUrl READ mcpServerPublicUrl WRITE setMcpServerPublicUrl NOTIFY mcpServerChanged FINAL)
+    Q_PROPERTY(bool mcpServerReadOnly READ mcpServerReadOnly WRITE setMcpServerReadOnly NOTIFY mcpServerChanged FINAL)
+    Q_PROPERTY(bool hasMcpServerPassword READ hasMcpServerPassword NOTIFY mcpServerChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
@@ -345,6 +354,20 @@ public:
     QVariantList acpAgentRows() const;
     bool acpAvailable() const;
     bool acpProgramsAvailable() const;
+    bool mcpServerEnabled() const;
+    void setMcpServerEnabled(bool on);
+    int mcpServerPort() const;
+    void setMcpServerPort(int port);
+    QString mcpServerPublicUrl() const;
+    void setMcpServerPublicUrl(const QString &url);
+    bool mcpServerReadOnly() const;
+    void setMcpServerReadOnly(bool on);
+    bool hasMcpServerPassword() const;
+    /// The sign-in password of the MCP server: at least 8 characters, at most 1024 ("" forgets it);
+    /// false when it is too short or long or could not be written.
+    Q_INVOKABLE bool setMcpServerPassword(const QString &password);
+    /// The file that keeps it (passed to the server as --password-file).
+    QString mcpServerPasswordFile() const;
     /// Agents of another computer this device was paired with (WorkspaceAgents::paired): each
     /// added — or, the same agent of the same computer, given its new token —, its token kept in
     /// the app's secrets (`<app data>/secrets/acp-<id>`, owner-only). Their ids.
@@ -564,6 +587,7 @@ Q_SIGNALS:
     void flashcardsSettingsChanged();
     void aiChanged();
     void acpAgentsChanged();
+    void mcpServerChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();
@@ -629,6 +653,7 @@ private:
     /// The app password is masked in every log line (logging::redact) while it is stored.
     mutable logging::ScopedSecret m_passwordSecret;
     mutable logging::ScopedSecret m_aiKeySecret;
+    mutable logging::ScopedSecret m_mcpPasswordSecret;
 };
 
 } // namespace brulion::shell
