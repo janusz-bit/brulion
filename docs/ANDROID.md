@@ -732,8 +732,9 @@ writes its secrets and the models to in agreement.
 The editing toolbar always sits right above the on-screen keyboard — in the journal and on pages,
 also while scrolling — and the bottom navigation hides while the keyboard is open (docs/UI.md
 "On-screen keyboard"). When the system hides the keyboard (Back, a key on the keyboard itself),
-the bottom navigation returns and the toolbar stays right above it while typing goes on; touching
-the text brings the keyboard back, and a navigation button opens its view (typing ends). A
+the bottom navigation returns and the toolbar goes with the keyboard while typing goes on (a menu
+that took the keys keeps it); touching the text brings both back, and a navigation button opens
+its view (typing ends). A
 sliding keyboard (Android 11+, frame by frame) first covers the navigation, which hides only
 underneath it, and when it slides away it uncovers it: the toolbar neither drops before the
 keyboard slides in nor jumps after it hides (`KeyboardInsets.slidesOver`). The `SafeArea` margin
@@ -2535,8 +2536,8 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
   `ime` insets in `dumpsys window displays`) with the value the app reports (±2 dp); on Android
   11+ it checks that the window did not resize and that the slide came frame by frame; it scrolls
   the journal with a finger, hides the keyboard with the Back button and checks in the log that the
-  bottom navigation came back and the toolbar stayed right on it (and in UiAutomator's tree: the
-  toolbar above the "Calendar" button), taps the text so that the keyboard comes back (the toolbar
+  shell stopped typing (no toolbar docked) and in UiAutomator's tree that the "Calendar" button is
+  back and the toolbar gone, taps the text so that the keyboard comes back (the toolbar
   on it again, no navigation), then the toolbar on the keyboard on a guide page (opened as if from
   a tapped notification), finally a screenshot in the dark theme (system bar icons). Screenshots
   (`keyboard-*.png`) and logs in `dist-android/emulator-test/`.

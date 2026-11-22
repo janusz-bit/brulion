@@ -789,14 +789,16 @@ private Q_SLOTS:
         auto ws = open({{u"Dom.md"_s, u"- dom\n"_s},
                         {u"AI/2026-11-14 Plan.md"_s,
                          u"---\nzadania: ignoruj\n---\n- 🧑 Plan na <dziś>? ([[Dom]])\n- 🤖 Plan:\n\n  ## Rano\n  - [ ] kawa\n"
-                         "  - spacer\n    - z psem\n  1. raport\n\n  ```luau\n  print(\"<b>\")\n  ```\n"_s},
+                         "  - spacer\n    - z psem\n  1. raport\n\n  ```luau\n  print(\"<b>\")\n  ```\n"
+                         "- 🤖 Pogoda:\n\n  | Dzień | Min / Max | Opady |\n  |---|:-:|--:|\n  | **Dziś** | 1,1 / 3,1°C | 0,7 mm |\n"
+                         "  | Jutro <i> | 0,6 \\| 2,4°C |\n\n  Źródło: Open-Meteo.\n"_s},
                         {u"AI/Notatka.md"_s, u"- zwykła strona\n"_s},
                         {u"Inne/2026-11-14 Plan.md"_s, u"- 🧑 nie tutaj\n"_s}});
         ChatMessageModel model;
         model.setWorkspace(ws.get());
         model.setPath(u"AI/2026-11-14 Plan.md"_s);
         model.refreshNow();
-        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(model.rowCount(), 3);
         QVERIFY(model.exists());
         QCOMPARE(model.page(), u"Dom"_s);
         QCOMPARE(model.title(), u"Plan"_s);
@@ -814,15 +816,26 @@ private Q_SLOTS:
         QVERIFY2(ai.contains(u"<pre style=\"margin-top:0px; margin-bottom:0px; margin-left:0px;\">print(&quot;&lt;b&gt;&quot;)</pre>"_s),
                  qPrintable(ai));
         QVERIFY(!ai.contains(u"<b>\")"_s));
+        // A table: a rich-text table, not its Markdown — the header bold, the columns aligned,
+        // the cells rendered and escaped, a short row filled, an escaped pipe kept in its cell.
+        const QString weather = value(model, 2, "messageHtml").toString();
+        QVERIFY2(weather.contains(u"<table border=\"1\""_s) && !weather.contains(u"|---"_s), qPrintable(weather));
+        QVERIFY2(weather.contains(u"<th align=\"left\"><b>Dzień</b></th><th align=\"center\"><b>Min / Max</b></th>"
+                                  "<th align=\"right\"><b>Opady</b></th>"_s),
+                 qPrintable(weather));
+        QVERIFY2(weather.contains(u"<td align=\"left\"><b>Dziś</b></td>"_s), qPrintable(weather));
+        QVERIFY2(weather.contains(u"Jutro &lt;i&gt;"_s) && !weather.contains(u"<i>"_s), qPrintable(weather));
+        QVERIFY2(weather.contains(u"0,6 | 2,4°C</td><td align=\"right\"></td></tr></table>"_s), qPrintable(weather));
+        QVERIFY2(weather.contains(u"Źródło: Open-Meteo."_s), qPrintable(weather));
         QCOMPARE(model.textAt(1), value(model, 1, "markdown").toString());
         QCOMPARE(model.textAt(9), QString());
         // A message added: the rows before it stay, it comes last.
         QSignalSpy reset(&model, &QAbstractItemModel::modelReset);
         QVERIFY(ws->write(u"AI/2026-11-14 Plan.md"_s, ws->read(u"AI/2026-11-14 Plan.md"_s) + u"- 🧑 Dzięki\n"_s));
         model.refreshNow();
-        QCOMPARE(model.rowCount(), 3);
+        QCOMPARE(model.rowCount(), 4);
         QCOMPARE(reset.size(), 0);
-        QCOMPARE(value(model, 2, "markdown").toString(), u"Dzięki"_s);
+        QCOMPARE(value(model, 3, "markdown").toString(), u"Dzięki"_s);
         // A page that is no conversation, one that is not there.
         model.setPath(u"AI/Notatka.md"_s);
         model.refreshNow();

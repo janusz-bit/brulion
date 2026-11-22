@@ -207,7 +207,7 @@ Other options:
   formula would count the keyboard twice); Qt's containers are not scrolled. The app reports the position of the toolbar
   and content in `brulionKeyboardSelfTest` (`windowHeight`, `contentBottom`,
   `toolbarBottom`, `bottomNavTop`); when the page grows again (keyboard hidden with Back), the bottom
-  navigation comes back and the toolbar sits right on it. With `--screenshot`, screenshots `…-edit.png`, `…-visual.png`,
+  navigation comes back and the toolbar goes with the keyboard. With `--screenshot`, screenshots `…-edit.png`, `…-visual.png`,
   `…-content.png` are added. CI runs it with the first test.
 * `--two-tabs` — opens a second tab: it must wait with the message "Brulion is open in another
   tab…", and take over the data once the app in the first tab is left.
