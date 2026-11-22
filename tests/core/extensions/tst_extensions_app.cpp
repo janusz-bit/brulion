@@ -229,7 +229,7 @@ private Q_SLOTS:
     void themeFromLuau()
     {
         QVERIFY(m_engine.load(ext(u"motyw"_s, uR"lua(
-            b.app.theme({ accent = "\x233A7", radius = 10, dark = { bg = "\x230b0d10" } })
+            b.app.theme({ accent = string.char(35) .. "3A7", radius = 10, dark = { bg = string.char(35) .. "0b0d10" } })
         )lua"_s))
                         .ok());
         QCOMPARE(m_engine.themes().size(), 1);
@@ -636,7 +636,7 @@ private Q_SLOTS:
     void macrosCannotChangeTheApp()
     {
         QVERIFY(m_engine.load(ext(u"m"_s, uR"lua(
-            b.macro("theme", function(ctx) b.app.theme({ accent = "\x23000" }) return "x" end)
+            b.macro("theme", function(ctx) b.app.theme({ accent = string.char(35) .. "000" }) return "x" end)
             b.macro("set", function(ctx) b.app.set("vim", true) return "x" end)
             b.macro("item", function(ctx) b.app.contribute("statusbar", { id = "a", label = "A" }) return "x" end)
             b.macro("state", function(ctx) return b.app.state().view end)
@@ -728,7 +728,7 @@ private Q_SLOTS:
         Extension e = ext(u"k"_s, uR"lua(
             b.command("go", function() end)
             b.app.contribute("toolbar", { id = "go", label = "Go", icon = "play", command = "go" })
-            b.app.theme({ accent = "\x23123456" })
+            b.app.theme({ accent = string.char(35) .. "123456" })
         )lua"_s);
         const QVariantMap report = checkExtension(vault, index, e, options);
         QVERIFY2(report.value(u"ok"_s).toBool(), qPrintable(report.value(u"error"_s).toString()));

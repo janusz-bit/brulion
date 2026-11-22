@@ -6561,14 +6561,16 @@ void checkContributions(QQuickWindow *window, AppController *app, const Check &c
     const QString path = ws->newPagePath(u"Przyciski samotestu"_s);
     check(!ws->exists(path), "the self-test's contributing page is new");
     const auto page = [](const QString &items) {
-        return u"---\ntags: [rozszerzenie]\nuprawnienia: [aplikacja]\n---\n```luau\n"
-               "b.command(\"klik\", function(ctx) b.log(\"klik samotestu\") end, { label = \"Samotest: klik\" })\n"_s
+        // (Pieces joined with +, each with its own prefix: MSVC refused this literal's
+        // concatenation of a u"…" piece with a plain "…"_s one.)
+        return u"---\ntags: [rozszerzenie]\nuprawnienia: [aplikacja]\n---\n```luau\n"_s
+               + u"b.command(\"klik\", function(ctx) b.log(\"klik samotestu\") end, { label = \"Samotest: klik\" })\n"_s
                + items + u"```\n"_s;
     };
-    const QString statusItem = u"b.app.contribute(\"statusbar\", { id = \"licznik\", label = \"Licznik samotestu\", "
-                               "icon = \"flame\", tone = \"success\", command = \"klik\" })\n"_s;
-    const QString toolbarItem = u"b.app.contribute(\"toolbar\", { id = \"przycisk\", label = \"Przycisk samotestu\", "
-                                "icon = \"dumbbell\", command = \"klik\" })\n"_s;
+    const QString statusItem = u"b.app.contribute(\"statusbar\", { id = \"licznik\", label = \"Licznik samotestu\", "_s
+                               + u"icon = \"flame\", tone = \"success\", command = \"klik\" })\n"_s;
+    const QString toolbarItem = u"b.app.contribute(\"toolbar\", { id = \"przycisk\", label = \"Przycisk samotestu\", "_s
+                                + u"icon = \"dumbbell\", command = \"klik\" })\n"_s;
     const auto clicks = [&] { return int(ext->console()->text().count(u"klik samotestu"_s)); };
     // (The keyboard focus handed back at the end: a tapped top bar button takes it, and goes.)
     const QPointer<QQuickItem> focused = window->activeFocusItem();
