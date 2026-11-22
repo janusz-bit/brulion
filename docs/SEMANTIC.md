@@ -86,18 +86,14 @@ Embedder) — the last two run a real model when `BRULION_SEMANTIC_MODEL` names 
 
 ## The model file
 
-**Not published yet** (`kPublished` false in `src/core/semantic/models.cpp`, `SemanticSearch.downloadable`):
-until the file is uploaded, Settings offers search by meaning only on a device whose models folder
-(`<app data>/models/semantic`) holds the file already — no Download that would fail. Upload it,
-pin `kRevision` and set `kPublished` (TODO.md).
-
 The app downloads `multilingual-e5-small-q8_0.gguf` — 132,440,544 bytes, SHA-256
 `3a98dd889ee152d923991c60df2fad21e39f7441a5ee302a0a050d5137993b60` — from
-`https://huggingface.co/janusz-bit/multilingual-e5-small-gguf/resolve/main/` (`kRepository` /
-`kRevision` in `src/core/semantic/models.cpp`; the checksum pins the bytes whatever the repository
-does). Made from `intfloat/multilingual-e5-small` at revision
-`614241f622f53c4eeff9890bdc4f31cfecc418b3` with the llama.cpp release `3rdparty/llama/pin.json` pins
-(v0.9.0; the dev shell's `llama-quantize` is the same release):
+https://huggingface.co/janusz-bit/multilingual-e5-small-gguf (with its model card and licence), at
+the commit that added it, `57c0a8f1481a66ca991375e4f87311c9e4bd0cc5` (`kRepository` / `kRevision`
+in `src/core/semantic/models.cpp`; the checksum pins the bytes whatever the repository does). Made
+from `intfloat/multilingual-e5-small` at revision `614241f622f53c4eeff9890bdc4f31cfecc418b3` with
+the llama.cpp release `3rdparty/llama/pin.json` pins (v0.9.0; the dev shell's `llama-quantize` is
+the same release):
 
 ```sh
 rev=614241f622f53c4eeff9890bdc4f31cfecc418b3

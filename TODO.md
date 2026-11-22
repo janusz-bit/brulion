@@ -213,13 +213,6 @@ done in the repository simply disappears from the list.
   "All files access" (shown as available, opening it asks) and the rows' × as touch targets; in
   the browser build, the one notebook without the folder field.
 
-* **Search by meaning: publish the model** — the code ships (docs/SEMANTIC.md), but the model file
-  (multilingual-e5-small q8_0 GGUF, 132 440 544 B, sha256 3a98dd88…; a copy in
-  ~/.cache/brulion-models on the dev machine) is not on Hugging Face yet: upload it to
-  janusz-bit/multilingual-e5-small-gguf with its licence, pin the revision in
-  src/core/semantic/models.cpp and set `kPublished` there — until then the setting shows only where
-  the file is on the device already.
-
 ## Views and data
 
 * **Database views: what remains** — dragging cards on a board and a calendar was tested with the

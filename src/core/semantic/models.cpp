@@ -14,9 +14,9 @@ namespace {
 // the bytes never change whatever the repository does; kRepository / kRevision say where it comes
 // from — one constant to change when it moves.
 const QString kRepository = u"https://huggingface.co/janusz-bit/multilingual-e5-small-gguf"_s;
-const QString kRevision = u"main"_s;
-/// The file is not published at kRepository yet (see semanticModelPublished()): true once it is.
-constexpr bool kPublished = false;
+/// The repository's commit that added the file (2026-11-22), not `main`: a later commit cannot
+/// change what this version downloads.
+const QString kRevision = u"57c0a8f1481a66ca991375e4f87311c9e4bd0cc5"_s;
 /// The Hugging Face model it was converted from, at the revision converted.
 const QString kSource = u"https://huggingface.co/intfloat/multilingual-e5-small"_s;
 
@@ -94,11 +94,6 @@ QList<ai::LocalModel> knownModels()
 }
 
 } // namespace
-
-bool semanticModelPublished()
-{
-    return kPublished;
-}
 
 const QList<ai::LocalModel> &semanticModels()
 {

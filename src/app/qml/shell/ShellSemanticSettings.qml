@@ -9,16 +9,14 @@ import Brulion
 // file (Download / Stop / Remove with the progress — Remove also deletes every notebook's vectors on
 // this device, after a confirmation), how far the open notebook's notes are read by meaning, and
 // whose model it is (Multilingual E5 Small, Microsoft, MIT). Hidden in builds that cannot search by
-// meaning (`available`: the browser, a build without the model runner), and while the model is not
-// published for download (`downloadable`) unless its file is on this device already. A card like SettingsView's
+// meaning (`available`: the browser, a build without the model runner). A card like SettingsView's
 // groups (its heading, note, hairlines).
 ColumnLayout {
     id: section
 
     objectName: "semanticSettings"
     readonly property SemanticSearch semantic: Workspace.semantic
-    // (Until the model is published: only where its file is here already.)
-    visible: section.semantic.available && (section.semantic.downloadable || section.semantic.modelHere)
+    visible: section.semantic.available
     Layout.fillWidth: true
     spacing: Theme.space2
 

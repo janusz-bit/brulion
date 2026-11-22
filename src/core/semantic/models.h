@@ -17,10 +17,6 @@ namespace brulion::semantic {
 
 /// The models the app knows, the default first: multilingual-e5-small (8-bit, 132 MB).
 const QList<ai::LocalModel> &semanticModels();
-/// Whether the default model's file is published where the app downloads it from (models.cpp's
-/// kRepository). Until it is, the app offers search by meaning only where the file is on the
-/// device already (put there by hand, docs/SEMANTIC.md "The model file"): no Download that fails.
-bool semanticModelPublished();
 /// The model `id` names ("": the default); nullptr for an unknown one.
 const ai::LocalModel *semanticModel(const QString &id);
 
