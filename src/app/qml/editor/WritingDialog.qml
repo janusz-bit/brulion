@@ -11,8 +11,9 @@ import Brulion
 // PageController.pasteText, replaceSelection or insertAfterBlock; in source mode one step of the
 // text's own undo), Try again, Stop and Cancel. Nothing is sent but by the user's action (the menu,
 // the shortcut, the palette: BlockEditor.startWriting) and nothing changes in the note but on
-// Replace / Insert. A centred card on wide windows, a bottom sheet on a phone (BDialog); modal, so
-// the text it works on stays as it was while the AI writes (checked again before it is changed).
+// Replace / Insert. Report response… under a result reports it (ShellAiReportDialog). A centred
+// card on wide windows, a bottom sheet on a phone (BDialog); modal, so the text it works on stays
+// as it was while the AI writes (checked again before it is changed).
 //
 //   writingDialog.startInline(action, preset, row, editText, from, to)   // text of the block being edited
 //   writingDialog.startBlocks(action, preset, selectionMarkdown, firstRow, lastRow)
@@ -34,10 +35,26 @@ BDialog {
     readonly property bool acceptable: writing.result !== "" && (writing.state === "done" || writing.state === "stopped")
     /// The change word by word is shown (a rewrite that is written: while it comes, the new text).
     readonly property bool changesNow: dialog.action === "rewrite" && dialog.changesShown && dialog.acceptable
+    /// The result shown was reported (Report response); a new one is not.
+    property bool reported: false
 
     WritingSession {
         id: writing
         workspace: Workspace
+        onStateChanged: if (writing.state === "" || writing.state === "waiting") dialog.reported = false
+    }
+    // Report response: the result reported as offensive, harmful or wrong (nothing is hidden: it is
+    // in no note until Replace / Insert).
+    ShellAiReportDialog {
+        id: reportDialog
+        questionLabel: qsTr("Add the text it worked on")
+        questionNote: qsTr("Off: your text stays out of the report.")
+        onSent: dialog.reported = true
+    }
+    function report(): void {
+        const asked = writing.instruction !== "" ? writing.instruction + "\n\n" + writing.original : writing.original
+        reportDialog.openFor("writing/" + writing.action + "/" + writing.preset, writing.result, asked,
+                             writing.modelName(), 0, false)
     }
 
     title: dialog.action === "continue" ? qsTr("Continue writing") : dialog.action === "summarize" ? qsTr("Summarize") : qsTr("Rewrite")
@@ -287,6 +304,35 @@ BDialog {
                 color: Theme.fg
                 mutability: Item.DynamicMutabilityGroup
             }
+        }
+    }
+    RowLayout {
+        objectName: "writingReportRow"
+        Layout.fillWidth: true
+        visible: dialog.acceptable
+        spacing: Theme.space2
+        BButton {
+            objectName: "writingReport"
+            visible: !dialog.reported
+            text: qsTr("Report response…")
+            iconName: "flag"
+            variant: "ghost"
+            size: "small"
+            onClicked: dialog.report()
+        }
+        BIcon {
+            visible: dialog.reported
+            name: "flag"
+            size: Theme.iconSizeSm
+            color: Theme.fgMuted
+        }
+        BText {
+            objectName: "writingReported"
+            Layout.fillWidth: true
+            visible: dialog.reported
+            text: qsTr("Reported response")
+            variant: "caption"
+            color: Theme.fgMuted
         }
     }
     BText {

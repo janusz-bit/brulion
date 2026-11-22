@@ -26,8 +26,12 @@ import Brulion
 // ones one of them (the list → a conversation is a step of the history, Back returns). The first
 // message of a new conversation replaces the route with the conversation's (in the side panel:
 // pins it there again). The list's rows have a menu (right-click, a long press): Rename…, Delete
-// (to the trash, with Undo). Several conversations answer at once: each its own turn. Contract
-// with the shell (qml/shell/ShellRouteView.qml): `route`, `title`.
+// (to the trash, with Undo). A message's menu (right-click, a long press): Copy, Show in the page
+// and, for the AI's, Report response… (ShellAiReportDialog: the report opened as a GitHub issue
+// or an email, or the answer only hidden) — an answer reported or hidden is a folded line until
+// Show opens it (its page's frontmatter keeps the mark: chat::setFlag). Several conversations
+// answer at once: each its own turn. Contract with the shell (qml/shell/ShellRouteView.qml):
+// `route`, `title`.
 FocusScope {
     id: root
 
@@ -345,6 +349,29 @@ FocusScope {
             placeholderText: qsTr("Name")
             onAccepted: if (renameDialog.acceptEnabled) renameDialog.accept()
         }
+    }
+
+    // Report response (a message's menu): the report of an AI's answer, or the answer only folded.
+    ShellAiReportDialog {
+        id: reportDialog
+        onSent: (number) => root.flag(number, "reported")
+        onHideChosen: (number) => root.flag(number, "hidden")
+    }
+    /// Report response: the dialog for the AI's message at `row` (its question offered, not added).
+    function report(row: int): void {
+        reportDialog.openFor("chat", messages.textAt(row), messages.questionBefore(row), root.chats.modelName(root.path),
+                             row + 1, true)
+    }
+    /// Marks the message `number` (from 1) "reported" or "hidden" ("" none) in the conversation's
+    /// page; a marked one is shown folded.
+    function flag(number: int, mark: string): void {
+        if (!root.chats.setFlag(root.path, number, mark)) {
+            AppController.toast(qsTr("The conversation could not be saved."), "error")
+            return
+        }
+        messages.refreshNow()
+        if (mark !== "")
+            messages.reveal(number - 1, false)
     }
 
     Later {
@@ -675,7 +702,11 @@ FocusScope {
                         required property list<string> picturePaths
                         required property bool sent
                         required property bool firstSent
+                        required property string flag
+                        required property bool revealed
                         readonly property bool mine: message.sender === "user"
+                        /// The user reported or hid it: a line in its place until it is opened.
+                        readonly property bool folded: message.flag !== "" && !message.revealed
                         property string hoveredLink
                         property point linkPoint
                         readonly property real maxWidth: Math.min(message.width * (message.mine ? 0.82 : 0.92), 720)
@@ -737,9 +768,41 @@ FocusScope {
                                 }
                             }
 
+                            // An answer the user reported or hid (Report response): a line in its
+                            // place, Show opens it (Fold folds it again).
+                            RowLayout {
+                                objectName: "chatFlagged"
+                                width: parent.width
+                                visible: message.flag !== ""
+                                spacing: Theme.space2
+                                BIcon {
+                                    Layout.leftMargin: Theme.space3
+                                    name: message.flag === "reported" ? "flag" : "eye-off"
+                                    size: Theme.iconSizeSm
+                                    color: Theme.fgMuted
+                                }
+                                BText {
+                                    objectName: "chatFlaggedText"
+                                    text: message.flag === "reported" ? qsTr("Reported response") : qsTr("Hidden response")
+                                    variant: "caption"
+                                    color: Theme.fgMuted
+                                }
+                                BButton {
+                                    objectName: "chatFlaggedToggle"
+                                    text: message.revealed ? qsTr("Fold") : qsTr("Show")
+                                    variant: "ghost"
+                                    size: "small"
+                                    onClicked: messages.reveal(message.index, !message.revealed)
+                                }
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+                            }
+
                             Item {
                                 width: parent.width
                                 height: bubble.height
+                                visible: !message.folded
 
                                 Rectangle {
                                     id: bubble
@@ -838,6 +901,23 @@ FocusScope {
                                         text: qsTr("Show in the page")
                                         iconName: "file-text"
                                         onTriggered: AppController.openPage(root.path, message.line)
+                                    }
+                                    // An AI's answer the user finds offensive, harmful or wrong.
+                                    BMenuItem {
+                                        objectName: "chatMessageReport"
+                                        visible: !message.mine && message.flag !== "reported"
+                                        height: visible ? implicitHeight : 0
+                                        text: qsTr("Report response…")
+                                        iconName: "flag"
+                                        onTriggered: root.report(message.index)
+                                    }
+                                    BMenuItem {
+                                        objectName: "chatMessageUnflag"
+                                        visible: message.flag !== ""
+                                        height: visible ? implicitHeight : 0
+                                        text: message.flag === "reported" ? qsTr("Remove the “Reported” mark") : qsTr("Unhide response")
+                                        iconName: "eye"
+                                        onTriggered: root.flag(message.index + 1, "")
                                     }
                                 }
                             }

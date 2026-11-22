@@ -301,6 +301,18 @@ public:
     /// Sets who answers the conversation from now on (its page's frontmatter; "" the assistant).
     Q_INVOKABLE bool setPartner(const QString &path, const QString &partner);
 
+    // ---- reported and hidden answers (Report response) ------------------------------------------
+    /// Marks the AI's message `number` (1-based, the page's messages in order) of the conversation
+    /// `path` "reported" or "hidden" — "" takes its mark away — in its page's frontmatter
+    /// (chat::setFlag; the view shows it folded). False for no such AI's message, an unknown
+    /// flag, a page that could not be written.
+    Q_INVOKABLE bool setFlag(const QString &path, int number, const QString &flag);
+    /// Who answers the conversation `path`, as a report of an answer says it (English): "Brulion's
+    /// AI assistant · Anthropic · claude-opus-5-5", "Chat partner pirat/rozmowa (an extension) ·
+    /// …", "AI agent Claude Code · model Opus 5.5" — the model of the settings now (aireport::
+    /// modelDescription), an agent's from its session's options.
+    Q_INVOKABLE QString modelName(const QString &path) const;
+
     // ---- what a turn asks (a change to allow, an agent's permission or sign-in) ----------------
     int questionSerial() const { return m_questionSerial; }
     /// The turn of `path` waits for the user's choice (`serial`: questionSerial, so a binding asks

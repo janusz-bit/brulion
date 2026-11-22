@@ -11,9 +11,12 @@
 // (attachments of the notebook, the model's images, a model that does not see them), several conversations answering at
 // once (an OpenAI-compatible server played by FakeAiServer) and the model on the device taking them one at a time in
 // line, a conversation too long for the model sent from a later turn (the model told, the view's line), a partner of
-// the user's own (an extension's chat command), renaming and deleting a conversation, and Claude's thinking the turn
-// shows.
+// the user's own (an extension's chat command), renaming and deleting a conversation, Claude's thinking the turn
+// shows, and answers the user reported or hid (Report response: the marks in the page's frontmatter, folded rows,
+// the list's preview, an older page, marks made in another app; the report's draft and its link).
 #include "chatmodels.h"
+
+#include "aireportdraft.h"
 
 #include "workspace.h"
 #include "workspacechats.h"
@@ -22,6 +25,8 @@
 #include "../fakeaiserver.h"
 
 #include "ai/local.h"
+#include "aireport/aireport.h"
+#include "chat/chat.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -33,6 +38,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QUrlQuery>
 
 using namespace Qt::StringLiterals;
 using namespace brulion;
@@ -782,6 +788,184 @@ private Q_SLOTS:
         QCOMPARE(chats->send(path, u"Halo?"_s), path);
         QTRY_VERIFY(!chats->turn(path)->failure().isEmpty());
         QVERIFY2(chats->turn(path)->failure().contains(u"nikt/rozmowa"_s), qPrintable(chats->turn(path)->failure()));
+    }
+
+    void reportedAndHiddenAnswers()
+    {
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        m_model.replies = {answer(u"Pierwsza **odpowiedź** <b>"_s), answer(u"Druga — żółć"_s), answer(u"Trzecia"_s)};
+        const QString path = chats->send(QString(), u"Co je żółw?"_s, u"Dom"_s);
+        QTRY_VERIFY(!chats->turn(path)->running());
+        QCOMPARE(chats->send(path, u"A w zimie?"_s), path);
+        QTRY_VERIFY(!chats->turn(path)->running());
+        const QString before = ws->read(path);
+        const QString head = u"---\nzadania: ignoruj\n---\n"_s;
+        QVERIFY(before.startsWith(head));
+
+        // Only an AI's message of a conversation that is there.
+        QVERIFY(!chats->setFlag(path, 1, u"reported"_s)); // (the user's)
+        QVERIFY(!chats->setFlag(path, 0, u"hidden"_s));
+        QVERIFY(!chats->setFlag(path, 5, u"hidden"_s));
+        QVERIFY(!chats->setFlag(path, 2, u"obraźliwa"_s));
+        QVERIFY(!chats->setFlag(u"AI/2026-11-15 Brak.md"_s, 2, u"hidden"_s));
+        QVERIFY(!chats->setFlag(QString(), 2, u"hidden"_s));
+        QCOMPARE(ws->read(path), before);
+
+        // Marked: the frontmatter lists them, every message as it was.
+        QVERIFY(chats->setFlag(path, 2, u"reported"_s));
+        QVERIFY(chats->setFlag(path, 4, u"hidden"_s));
+        QVERIFY(chats->setFlag(path, 4, u"hidden"_s)); // (again: nothing more)
+        const QString marked = ws->read(path);
+        QCOMPARE(marked, u"---\nzadania: ignoruj\nzgłoszone: [2]\nukryte: [4]\n---\n"_s + before.mid(head.size()));
+
+        // The view: folded rows, opened again in the view only.
+        ChatMessageModel model;
+        model.setWorkspace(ws.get());
+        model.setPath(path);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 4);
+        QCOMPARE(value(model, 0, "flag").toString(), QString());
+        QCOMPARE(value(model, 1, "flag").toString(), u"reported"_s);
+        QCOMPARE(value(model, 2, "flag").toString(), QString());
+        QCOMPARE(value(model, 3, "flag").toString(), u"hidden"_s);
+        QCOMPARE(value(model, 1, "markdown").toString(), u"Pierwsza **odpowiedź** <b>"_s);
+        QCOMPARE(value(model, 1, "line").toInt(), 7); // (the frontmatter's two lines more)
+        QVERIFY(!value(model, 1, "revealed").toBool());
+        QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+        model.reveal(1, true);
+        QCOMPARE(changed.size(), 1);
+        QVERIFY(value(model, 1, "revealed").toBool());
+        model.reveal(1, true);
+        QCOMPARE(changed.size(), 1);
+        model.reveal(0, true); // (not marked: nothing to open)
+        QVERIFY(!value(model, 0, "revealed").toBool());
+        model.reveal(9, true);
+        // The question each answer answers (without the page's text, which stays out).
+        QCOMPARE(model.questionBefore(1), u"Co je żółw? ([[Dom]])"_s);
+        QCOMPARE(model.questionBefore(3), u"A w zimie?"_s);
+        QCOMPARE(model.questionBefore(0), QString());
+        QCOMPARE(model.questionBefore(7), QString());
+
+        // The list does not show a hidden answer's words either.
+        ChatListModel list;
+        list.setWorkspace(ws.get());
+        list.refreshNow();
+        QCOMPARE(list.rowCount(), 1);
+        QCOMPARE(value(list, 0, "preview").toString(), u"Hidden response"_s);
+        QVERIFY(value(list, 0, "fromAi").toBool());
+
+        // The next turn: the marks stay with their messages, the model still gets both answers.
+        QCOMPARE(chats->send(path, u"Dzięki!"_s), path);
+        QTRY_VERIFY(!chats->turn(path)->running());
+        const QList<ai::Message> history = m_model.requests.last().messages;
+        QVERIFY(std::ranges::any_of(history, [](const ai::Message &m) { return m.content.contains(u"Druga — żółć"_s); }));
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 6);
+        QCOMPARE(value(model, 1, "flag").toString(), u"reported"_s);
+        QVERIFY(value(model, 1, "revealed").toBool()); // (still open in this view)
+        QCOMPARE(value(model, 3, "flag").toString(), u"hidden"_s);
+        QCOMPARE(value(model, 5, "flag").toString(), QString());
+        list.refreshNow();
+        QCOMPARE(value(list, 0, "preview").toString(), u"Trzecia"_s);
+
+        // Kept with the page: read again from the file, as after a restart or a sync.
+        const chat::Conversation again = chat::parse(ws->read(path));
+        QCOMPARE(again.messages.at(1).flag, chat::Flag::Reported);
+        QCOMPARE(again.messages.at(3).flag, chat::Flag::Hidden);
+
+        // Hidden → reported; marks taken away: the page as it would be without them.
+        QVERIFY(chats->setFlag(path, 4, u"reported"_s));
+        QVERIFY2(ws->read(path).startsWith(u"---\nzadania: ignoruj\nzgłoszone: [2, 4]\n---\n"_s), qPrintable(ws->read(path)));
+        QVERIFY(chats->setFlag(path, 2, QString()));
+        QVERIFY(chats->setFlag(path, 4, QString()));
+        QVERIFY(ws->read(path).startsWith(head + u"- 🧑 Co je żółw?"_s));
+        model.refreshNow();
+        QCOMPARE(value(model, 1, "flag").toString(), QString());
+        QVERIFY(!value(model, 1, "revealed").toBool());
+
+        // Who answered, as a report says it (the settings now).
+        QVERIFY(!ai::localModels().isEmpty());
+        QCOMPARE(chats->modelName(path), u"Brulion's AI assistant · On this device · "_s + ai::localModels().first().name);
+        QVERIFY(chats->setPartner(path, u"pirat/rozmowa"_s));
+        QVERIFY(chats->modelName(path).startsWith(u"Chat partner pirat/rozmowa (an extension) · On this device · "_s));
+    }
+
+    void anOlderPageAndMarksByHand()
+    {
+        // A page written before the marks (no frontmatter, Logseq's tabs) and one marked in another
+        // app (an English notebook, a block list).
+        auto ws = open({{u"AI/2026-11-01 Stara.md"_s, u"- 🧑 Pytanie\n- 🤖 Odpowiedź\n\t- punkt\n"_s},
+                        {u"AI/2026-11-02 Ręczna.md"_s,
+                         u"---\ntasks: ignore\nhidden:\n  - 2\n---\n- 🧑 Question\n- 🤖 Answer\n"_s}});
+        ChatMessageModel model;
+        model.setWorkspace(ws.get());
+        model.setPath(u"AI/2026-11-01 Stara.md"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(value(model, 1, "flag").toString(), QString());
+        QVERIFY(ws->chats()->setFlag(u"AI/2026-11-01 Stara.md"_s, 2, u"hidden"_s));
+        // (No frontmatter, no language of its own: the notebook's.)
+        QCOMPARE(ws->read(u"AI/2026-11-01 Stara.md"_s), u"---\nukryte: [2]\n---\n- 🧑 Pytanie\n- 🤖 Odpowiedź\n\t- punkt\n"_s);
+        model.refreshNow();
+        QCOMPARE(value(model, 1, "flag").toString(), u"hidden"_s);
+        QCOMPARE(value(model, 1, "markdown").toString(), u"Odpowiedź\n- punkt"_s);
+
+        model.setPath(u"AI/2026-11-02 Ręczna.md"_s);
+        model.refreshNow();
+        QCOMPARE(value(model, 1, "flag").toString(), u"hidden"_s);
+        QVERIFY(ws->chats()->setFlag(u"AI/2026-11-02 Ręczna.md"_s, 2, u"reported"_s));
+        QCOMPARE(ws->read(u"AI/2026-11-02 Ręczna.md"_s),
+                 u"---\ntasks: ignore\nreported: [2]\n---\n- 🧑 Question\n- 🤖 Answer\n"_s);
+    }
+
+    void aReportDraft()
+    {
+        shell::AiReportDraft draft;
+        QSignalSpy changed(&draft, &shell::AiReportDraft::changed);
+        QCOMPARE(draft.reasons(), (QStringList{u"offensive"_s, u"sexual"_s, u"violent"_s, u"harassment"_s,
+                                               u"misleading"_s, u"other"_s}));
+        QCOMPARE(draft.reasonLabel(u"misleading"_s), u"False or misleading"_s);
+        QCOMPARE(draft.reasonLabel(u"nieznany"_s), QString());
+        QVERIFY(!draft.ready());
+        draft.setReason(u"nieznany"_s);
+        QVERIFY(!draft.ready());
+        // This build names no address: a public issue on GitHub.
+        QCOMPARE(shell::AiReportDraft::buildAddress(), QString());
+        QVERIFY(!draft.byEmail());
+        QCOMPARE(draft.destination(), u"github.com/janusz-bit/brulion"_s);
+        QVERIFY(!draft.version().isEmpty());
+        QVERIFY(!draft.device().isEmpty());
+
+        draft.setReason(u"Offensive"_s);
+        QVERIFY(draft.ready());
+        QCOMPARE(draft.reason(), u"offensive"_s);
+        draft.setWhere(u"chat"_s);
+        draft.setModel(u"Brulion's AI assistant · Anthropic · claude-opus-5-5"_s);
+        draft.setResponse(u"Zażółć gęślą jaźń <script>"_s);
+        draft.setComment(u"Wulgarne"_s);
+        draft.setQuestion(u"Moje prywatne pytanie"_s);
+        QVERIFY(changed.size() >= 6);
+        QCOMPARE(draft.title(), u"AI response report: Offensive or hateful"_s);
+        QVERIFY(draft.body().contains(u"- Where: AI chat\n"_s));
+        QVERIFY(draft.body().contains(u"```\nZażółć gęślą jaźń <script>\n```"_s));
+        QVERIFY(draft.body().contains(u"```\nWulgarne\n```"_s));
+        QVERIFY(draft.body().contains(u"- App: Brulion "_s + draft.version() + u'\n'));
+        QVERIFY(draft.body().contains(u"- Device: "_s + draft.device() + u'\n'));
+        // The question only when added.
+        QVERIFY(!draft.body().contains(u"prywatne"_s));
+        draft.setIncludeQuestion(true);
+        QVERIFY(draft.body().contains(u"```\nMoje prywatne pytanie\n```"_s));
+        draft.setIncludeQuestion(false);
+        QVERIFY(!draft.body().contains(u"prywatne"_s));
+        // The link: GitHub's new issue with the same text.
+        QCOMPARE(draft.url().host(), u"github.com"_s);
+        QCOMPARE(draft.url().path(), u"/janusz-bit/brulion/issues/new"_s);
+        QCOMPARE(QUrlQuery(draft.url()).queryItemValue(u"body"_s, QUrl::FullyDecoded), draft.body());
+        QVERIFY(!draft.cut());
+        draft.setResponse(QString(30000, u'ż'));
+        QVERIFY(draft.cut());
+        QVERIFY(draft.url().toEncoded().size() <= aireport::MaxLinkLength);
     }
 
     void theMessagesAsShown()
