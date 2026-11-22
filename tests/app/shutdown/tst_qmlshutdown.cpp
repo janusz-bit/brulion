@@ -122,9 +122,11 @@ Run runScene(const QString &scene, int slices, const QString &mode)
         run.crashed = true;
         run.output = u"(timed out) "_s;
     }
-    run.crashed = run.crashed || child.exitStatus() == QProcess::CrashExit;
     run.exitCode = child.exitCode();
     run.output += QString::fromLocal8Bit(child.readAll());
+    // (In a sanitizer build the crash is the sanitizer's report and a plain exit code.)
+    run.crashed = run.crashed || child.exitStatus() == QProcess::CrashExit
+                  || (run.exitCode != 0 && run.output.contains(u"ERROR: AddressSanitizer"));
     for (const QString &line : run.output.split(u'\n')) {
         if (line.startsWith(u"incubating "))
             run.incubating = line.mid(11).toInt();

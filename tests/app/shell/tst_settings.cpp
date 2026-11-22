@@ -1368,6 +1368,7 @@ private Q_SLOTS:
         QFile secret(s.mcpServerPasswordFile());
         QVERIFY(secret.open(QIODevice::ReadOnly));
         QCOMPARE(QString::fromUtf8(secret.readAll()), u"zażółć gęślą jaźń"_s);
+        secret.close(); // (Windows removes no file that is open.)
         if (brulion::test::hasUnixPermissions()) {
             const QFileDevice::Permissions perms = QFile::permissions(s.mcpServerPasswordFile());
             QVERIFY(!(perms & (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::WriteGroup

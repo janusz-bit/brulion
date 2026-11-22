@@ -61,8 +61,13 @@ public:
     void setProgram(const QString &program, const QStringList &arguments);
     QString program() const { return m_program; }
     QStringList arguments() const { return m_arguments; }
-    /// Its environment (default: the app's).
-    void setEnvironment(const QProcessEnvironment &environment) { m_environment = environment; }
+    /// Its environment (default: the app's, inherited when it starts — never read here: another
+    /// thread may change the app's environment meanwhile, e.g. OCR's OMP_THREAD_LIMIT).
+    void setEnvironment(const QProcessEnvironment &environment)
+    {
+        m_environment = environment;
+        m_ownEnvironment = true;
+    }
     /// The waits before it is started again, after the first, second … failure in a row (the
     /// last repeats). Default 2, 5, 10, 30, 60 s.
     void setRetryDelays(const QList<int> &ms) { m_delays = ms; }
@@ -112,6 +117,7 @@ private:
     QString m_program;
     QStringList m_arguments;
     QProcessEnvironment m_environment;
+    bool m_ownEnvironment = false;
     QList<int> m_delays{2000, 5000, 10000, 30000, 60000};
     qint64 m_stableMs = 60000;
     int m_stopMs = 3000;

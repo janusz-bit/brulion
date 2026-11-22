@@ -20,6 +20,11 @@
 #include <csignal>
 #include <sys/types.h>
 #include <unistd.h>
+#elif defined(Q_OS_WIN)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #endif
 
 #include <algorithm>
@@ -36,6 +41,15 @@ bool alive(qint64 pid)
 {
 #ifdef Q_OS_UNIX
     return pid > 0 && ::kill(pid_t(pid), 0) == 0;
+#elif defined(Q_OS_WIN)
+    if (pid <= 0)
+        return false;
+    HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
+    if (!process)
+        return false;
+    const bool running = WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+    CloseHandle(process);
+    return running;
 #else
     Q_UNUSED(pid);
     return false;

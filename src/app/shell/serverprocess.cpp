@@ -37,8 +37,7 @@ qint64 nowMs()
 
 } // namespace
 
-ServerProcess::ServerProcess(const QString &name, QObject *parent)
-    : QObject(parent), m_name(name), m_environment(QProcessEnvironment::systemEnvironment())
+ServerProcess::ServerProcess(const QString &name, QObject *parent) : QObject(parent), m_name(name)
 {
     m_retry = new QTimer(this);
     m_retry->setSingleShot(true);
@@ -186,7 +185,8 @@ void ServerProcess::launch()
     m_announcement = {};
     auto *p = new QProcess(this);
     m_process = p;
-    p->setProcessEnvironment(m_environment);
+    if (m_ownEnvironment)
+        p->setProcessEnvironment(m_environment);
     p->setProgram(m_program);
     p->setArguments(m_arguments);
     connect(p, &QProcess::readyReadStandardOutput, this, &ServerProcess::readOutput);

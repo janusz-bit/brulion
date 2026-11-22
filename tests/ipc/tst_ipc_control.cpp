@@ -32,6 +32,7 @@
 
 #include <QElapsedTimer>
 
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #ifdef Q_OS_UNIX
@@ -45,6 +46,18 @@ using namespace Qt::StringLiterals;
 using namespace brulion::ipc;
 
 namespace {
+
+/// Sets a variable as a program's environment carries it: in Unicode on Windows, where qputenv()'s
+/// bytes are taken in the ANSI code page (which has no "Ż").
+void putEnvironment(const char *name, const QString &value)
+{
+#ifdef Q_OS_WIN
+    _wputenv_s(reinterpret_cast<const wchar_t *>(QString::fromLatin1(name).utf16()),
+               reinterpret_cast<const wchar_t *>(value.utf16()));
+#else
+    qputenv(name, value.toUtf8());
+#endif
+}
 
 QJsonObject obj(const char *json)
 {
@@ -793,7 +806,7 @@ private Q_SLOTS:
 
         // The environment of a program an agent started.
         qputenv(ControlClient::TokenVariable, token.toUtf8());
-        qputenv(ControlClient::ClientVariable, "Żółw\nbłotny");
+        putEnvironment(ControlClient::ClientVariable, u"Żółw\nbłotny"_s);
         ControlClient fromEnv(k);
         qunsetenv(ControlClient::TokenVariable);
         qunsetenv(ControlClient::ClientVariable);
