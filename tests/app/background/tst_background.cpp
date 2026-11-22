@@ -11,6 +11,7 @@
 
 #include "index/vaultindex.h"
 #include "reminders/reminders.h"
+#include "sync/folderstorage.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -127,6 +128,15 @@ private Q_SLOTS:
         QCOMPARE(Target::fromJson(json), std::optional<Target>(t));
         // The app password never travels with it.
         QVERIFY(!QJsonDocument(json).toJson().contains("password"));
+
+        // A folder of the device (a Syncthing folder picked in the system's dialog).
+        t.nextcloud.reset();
+        t.folder = Target::Folder{
+                u"content://com.android.externalstorage.documents/tree/primary%3ASyncthing%2FNotatki"_s, u"Telefon Łucji"_s};
+        QCOMPARE(Target::fromJson(t.toJson()), std::optional<Target>(t));
+        QVERIFY(!Target::fromJson(QJsonObject{{u"root"_s, u"/n"_s}, {u"stateDir"_s, u"/s"_s}, {u"vault"_s, u"v"_s},
+                                              {u"folder"_s, QJsonObject{{u"device"_s, u"x"_s}}}})
+                         ->folder); // no address: no folder
     }
 
     void targetJsonIsNormalised()
@@ -284,6 +294,48 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(target.root + u"/Z komputera.md"_s));
         // The sync bookkeeping is the app's: the same store in the notebook's state folder.
         QVERIFY(QFileInfo::exists(target.stateDir + u"/store.json"_s));
+    }
+
+    void aCheckSyncsWithTheFolderOfTheDevice()
+    {
+        // A reminder written on the computer reaches the phone's Syncthing folder; the notebook in
+        // the app's storage gets it from there.
+        QTemporaryDir folder;
+        QVERIFY(synctest::writeFileBehind(folder.path(), u"Z komputera.md"_s,
+                                          u"- Spotkanie z Łucją ⏰ 2026-10-14 15:45\n"_s.toUtf8()));
+        QTemporaryDir dir;
+        Target target = notebookIn(dir);
+        target.folder = Target::Folder{folder.path(), u"Telefon"_s};
+        Check check(target, {}, nullptr, [] { return kNow; });
+        QStringList opened;
+        check.setFolderOpener([&opened](const QString &address) {
+            opened.append(address);
+            return std::make_shared<sync::LocalFolderStorage>(address);
+        });
+        const QJsonObject result = run(check);
+        QVERIFY2(result.value(u"ok"_s).toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(opened, QStringList{folder.path()});
+        QCOMPARE(result.value(u"sync"_s).toString(), u"ok"_s);
+        QCOMPARE(result.value(u"downloaded"_s).toInt(), 1);
+        QCOMPARE(result.value(u"uploaded"_s).toInt(), 2);
+        QVERIFY(titles(result).contains(u"Spotkanie z Łucją"_s));
+        QVERIFY(QFileInfo::exists(target.root + u"/Z komputera.md"_s));
+        QVERIFY(QFileInfo::exists(folder.path() + u"/Zdrowie.md"_s));
+    }
+
+    void aCheckWithoutTheFolderSkipsTheSync()
+    {
+        // The folder cannot be reached from here (no opener, or the platform cannot): what the
+        // phone has still counts.
+        QTemporaryDir dir;
+        Target target = notebookIn(dir);
+        target.folder = Target::Folder{u"content://com.example.documents/tree/1"_s, u"Telefon"_s};
+        Check check(target, {}, nullptr, [] { return kNow; });
+        check.setFolderOpener([](const QString &) { return std::shared_ptr<sync::FolderStorage>(); });
+        const QJsonObject result = run(check);
+        QVERIFY(result.value(u"ok"_s).toBool());
+        QCOMPARE(result.value(u"sync"_s).toString(), u"skipped"_s);
+        QVERIFY(titles(result).contains(u"Pobudka — pociąg do Łodzi"_s));
     }
 
     void aCheckWhileTheAppSyncsOnlySkipsTheSync()

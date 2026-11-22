@@ -270,6 +270,18 @@ class AppSettings : public QObject {
     /// An app password is stored (its value is never exposed to QML).
     Q_PROPERTY(bool hasNextcloudPassword READ hasNextcloudPassword NOTIFY nextcloudPasswordChanged FINAL)
 
+    // ---- A folder of this device (docs/ANDROID.md "A folder picked in the system's dialog") ----
+    // A notebook in the app's own storage kept in sync with a folder of the device — on Android
+    // one picked in the system's dialog (its tree URI), the app for Google Play's way to a Syncthing
+    // folder. Per notebook, under the id of its folder ("sync/folder/notebooks/<Vault::idForPath>/
+    // address|name|where"). These three describe the current notebook's.
+    /// The current notebook syncs with a folder of this device.
+    Q_PROPERTY(bool deviceFolderLinked READ deviceFolderLinked NOTIFY deviceFolderChanged FINAL)
+    /// That folder's name ("Notatki"; "" without one).
+    Q_PROPERTY(QString deviceFolderName READ deviceFolderName NOTIFY deviceFolderChanged FINAL)
+    /// Where it is, as Android names it ("primary:Syncthing/Notatki"; a path elsewhere; "" unknown).
+    Q_PROPERTY(QString deviceFolderWhere READ deviceFolderWhere NOTIFY deviceFolderChanged FINAL)
+
 public:
     /// `settingsFile`: INI file (empty = the platform's default location for the app).
     /// `dataDir`: app data folder for the secrets file (empty = QStandardPaths::AppDataLocation).
@@ -562,6 +574,24 @@ public:
     /// without touching the settings file): Android's background check, in a process of its own.
     static QString storedNextcloudPassword(const QString &dataDir);
 
+    /// A notebook's folder of this device.
+    struct DeviceFolderLink {
+        QString address; ///< Android: the picked folder's tree URI; elsewhere its path
+        QString name;
+        QString where;
+        bool isEmpty() const { return address.isEmpty(); }
+        friend bool operator==(const DeviceFolderLink &, const DeviceFolderLink &) = default;
+    };
+    /// `notebook`'s folder of this device (empty: none).
+    DeviceFolderLink deviceFolderLink(const QString &notebook) const;
+    /// Link `notebook` to a folder of this device; an empty link removes it.
+    void setDeviceFolderLink(const QString &notebook, const DeviceFolderLink &link);
+    /// The notebook linked to the folder `address` ("" when none is): one folder, one notebook.
+    QString deviceFolderNotebook(const QString &address) const;
+    bool deviceFolderLinked() const { return !deviceFolderLink(currentVault()).isEmpty(); }
+    QString deviceFolderName() const { return deviceFolderLink(currentVault()).name; }
+    QString deviceFolderWhere() const { return deviceFolderLink(currentVault()).where; }
+
     /// Generic preference for other app areas (key with an area prefix, e.g. "views/tasks/x").
     /// The value comes back with the type of `defaultValue` (bool, int, double, …) — the INI
     /// file stores only text; one that does not convert gives `defaultValue`.
@@ -637,6 +667,8 @@ Q_SIGNALS:
     void notifyMissedChanged();
     void nextcloudChanged();
     void nextcloudPasswordChanged();
+    /// A notebook's folder of this device was linked or unlinked (also: another notebook is current).
+    void deviceFolderChanged();
     void valueChanged(const QString &key);
 
 private:

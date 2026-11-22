@@ -4,6 +4,7 @@
 
 #include "android/androidbridge.h" // src/platform
 #include "appsettings.h"           // the stored Nextcloud app password (src/app/shell)
+#include "devicefolder.h"           // a folder of the device the notebook syncs with (src/platform)
 #include "platform.h"
 
 #include "log/logger.h"
@@ -67,6 +68,9 @@ int runBackgroundCheck(int argc, char *argv[])
                                                QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
                                      : QString();
     Check check(*target, password, &transport);
+    // A notebook linked to a folder of the device (a Syncthing folder picked in the system's
+    // dialog): reached with the app's grant, this process being the app's too.
+    check.setFolderOpener([](const QString &address) { return platform::openDeviceFolder(address); });
     // CalDAV accounts' passwords: next to the app password (WorkspaceCalendars' files).
     const QString secrets = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + u"/secrets"_s;
     check.setCalendarPasswords([secrets](const QString &account) {

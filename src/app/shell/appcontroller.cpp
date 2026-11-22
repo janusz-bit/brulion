@@ -16,6 +16,8 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
+#include "devicefolderfirstsync.h"
+#include "workspacesync.h"
 #include "traypopup.h"
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -23,6 +25,7 @@
 #include "workspaceintegration.h"
 
 #include "autostart.h"  // src/platform
+#include "devicefolder.h" // src/platform
 #include "platform.h"   // src/platform
 #include "traywindow.h" // src/platform
 
@@ -1285,6 +1288,15 @@ bool AppController::playStore() const
     return platform::playStoreBuild();
 }
 
+bool AppController::deviceFoldersAvailable() const
+{
+#ifdef Q_OS_ANDROID
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool AppController::isAndroid() const
 {
 #ifdef Q_OS_ANDROID
@@ -1441,6 +1453,156 @@ QString AppController::deviceStatePath(const QString &vaultPath) const
 QString AppController::localPath(const QUrl &url) const
 {
     return url.isLocalFile() ? QDir::cleanPath(url.toLocalFile()) : cleanLocalPath(url.toString());
+}
+
+bool AppController::inAppStorage(const QString &rawPath) const
+{
+    const QString path = cleanLocalPath(rawPath);
+    if (path.isEmpty() || isWasm())
+        return false;
+    const QString data = QDir::cleanPath(m_dataDir);
+    return path == data || path.startsWith(data + u'/');
+}
+
+// ---- A folder of this device -----------------------------------------------------------------
+
+namespace {
+
+/// What a folder dialog gave, as the link keeps it: Android's tree URI exactly as the system wrote
+/// it (its grant is kept for that string), a local path elsewhere.
+QString pickedFolderAddress(const QUrl &picked)
+{
+    if (picked.scheme() == u"content")
+        return picked.toString(QUrl::FullyEncoded);
+    return picked.isLocalFile() ? picked.toLocalFile() : picked.toString();
+}
+
+/// A folder's name as a folder name in the app's storage: no separators or control characters.
+QString safeFolderName(const QString &name)
+{
+    QString out;
+    for (const QChar c : name.trimmed()) {
+        if (c == u'/' || c == u'\\' || c == u':' || c.category() == QChar::Other_Control)
+            out += u' ';
+        else
+            out += c;
+    }
+    out = out.simplified();
+    while (out.startsWith(u'.'))
+        out.remove(0, 1);
+    return out.isEmpty() ? u"Brulion"_s : out.left(80);
+}
+
+} // namespace
+
+QString AppController::deviceFolderNotebookPath(const QString &name) const
+{
+    const QString base = QDir::cleanPath(m_dataDir + u"/Folders/"_s + safeFolderName(name));
+    QString path = base;
+    for (int n = 2; QFileInfo::exists(path); ++n)
+        path = base + u' ' + QString::number(n);
+    return path;
+}
+
+void AppController::openDeviceFolder(const QUrl &picked)
+{
+    if (m_folderFirstSync)
+        return; // one at a time: the first one opens its notebook
+    const platform::DeviceFolderInfo info = platform::adoptDeviceFolder(pickedFolderAddress(picked));
+    if (!info.ok) {
+        toast(info.code == u"not-allowed" ? tr("Brulion got no lasting access to this folder. Choose it again.")
+                                          : tr("This folder cannot be used for a notebook."),
+              u"warning"_s);
+        return;
+    }
+    // The notebook that already syncs with this folder opens as it is.
+    const QString linked = m_settings->deviceFolderNotebook(info.address);
+    if (!linked.isEmpty() && QFileInfo(linked).isDir()) {
+        openVault(linked);
+        return;
+    }
+    const QString notebook = deviceFolderNotebookPath(info.name);
+    std::shared_ptr<sync::FolderStorage> storage = platform::openDeviceFolder(info.address);
+    if (!storage || !QDir().mkpath(notebook)) {
+        toast(tr("This folder cannot be used for a notebook."), u"warning"_s);
+        return;
+    }
+    m_settings->setDeviceFolderLink(notebook, {info.address, info.name, info.where});
+    qCInfo(lcApp).noquote() << u"A notebook for the folder %1 (%2): %3"_s.arg(info.name, info.where, notebook);
+    // Its notes first, then the notebook opens (nothing the app writes into a new notebook mixes
+    // with them).
+    m_folderFirstSync = std::make_unique<DeviceFolderFirstSync>(notebook, deviceStatePath(notebook), storage,
+                                                                 info.address, m_workspace->sync()->deviceName());
+    const QString name = info.name;
+    const auto setText = [this](const QString &text) {
+        if (assignIfChanged(m_loadingText, text))
+            Q_EMIT loadingTextChanged();
+    };
+    setText(tr("Copying the notes from the folder “%1”…").arg(name));
+    connect(m_folderFirstSync.get(), &DeviceFolderFirstSync::progress, this, [setText, name](int done, int total) {
+        setText(total > 0 ? tr("Copying the notes from the folder “%1”… %2 of %3").arg(name).arg(done).arg(total)
+                          : tr("Copying the notes from the folder “%1”…").arg(name));
+    });
+    connect(m_folderFirstSync.get(), &DeviceFolderFirstSync::finished, this,
+            [this, notebook, name, setText](bool ok, int, const QString &, const QString &) {
+                // (Deleted later: this is its own signal.)
+                m_folderFirstSync.release()->deleteLater();
+                setText(QString());
+                if (!ok)
+                    toast(tr("The notes of the folder “%1” could not be copied yet — Brulion tries again in the notebook.")
+                                  .arg(name),
+                          u"warning"_s);
+                openVault(notebook);
+            });
+    setStatus(u"loading"_s);
+    m_folderFirstSync->start();
+}
+
+bool AppController::linkDeviceFolder(const QUrl &picked)
+{
+    const QString notebook = m_workspace->rootPath();
+    if (notebook.isEmpty() || !inAppStorage(notebook)) {
+        toast(tr("Only a notebook in the app's storage can sync with a folder of the phone."), u"warning"_s);
+        return false;
+    }
+    const platform::DeviceFolderInfo info = platform::adoptDeviceFolder(pickedFolderAddress(picked));
+    if (!info.ok) {
+        toast(info.code == u"not-allowed" ? tr("Brulion got no lasting access to this folder. Choose it again.")
+                                          : tr("This folder cannot be used for a notebook."),
+              u"warning"_s);
+        return false;
+    }
+    const QString other = m_settings->deviceFolderNotebook(info.address);
+    if (!other.isEmpty() && QDir::cleanPath(other) != QDir::cleanPath(notebook)) {
+        toast(tr("The notebook “%1” already syncs with this folder.").arg(QFileInfo(other).fileName()), u"warning"_s);
+        return false;
+    }
+    const AppSettings::DeviceFolderLink previous = m_settings->deviceFolderLink(notebook);
+    // One way per notebook: Nextcloud's switch goes off for it.
+    if (m_settings->nextcloudEnabled())
+        m_settings->setNextcloudEnabled(false);
+    m_settings->setDeviceFolderLink(notebook, {info.address, info.name, info.where});
+    if (!previous.isEmpty() && previous.address != info.address)
+        platform::releaseDeviceFolder(previous.address);
+    toast(tr("This notebook syncs with the folder “%1” now.").arg(info.name), u"success"_s);
+    return true;
+}
+
+void AppController::unlinkDeviceFolder()
+{
+    const QString notebook = m_workspace->rootPath();
+    const AppSettings::DeviceFolderLink link = m_settings->deviceFolderLink(notebook);
+    if (link.isEmpty())
+        return;
+    m_settings->setDeviceFolderLink(notebook, {});
+    platform::releaseDeviceFolder(link.address);
+    toast(tr("This notebook no longer syncs with the folder “%1”. The notes stay in both.").arg(link.name));
+}
+
+bool AppController::deviceFolderAccessible() const
+{
+    const AppSettings::DeviceFolderLink link = m_settings->deviceFolderLink(m_workspace->rootPath());
+    return !link.isEmpty() && platform::deviceFolderAccessible(link.address);
 }
 
 bool AppController::needsStoragePermission(const QString &rawPath) const

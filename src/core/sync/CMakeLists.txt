@@ -1,7 +1,10 @@
 # sync — Nextcloud/WebDAV sync (HTTP transport abstraction, WebDAV client, three-way merge,
-# sync engine, scheduler) and Syncthing helpers (REST client, conflict copies, .stignore).
+# sync engine, scheduler), the sync with a folder of this device (a FolderStorage behind the
+# WebDAV client: folderstorage.h, foldertransport.h) and Syncthing helpers (REST client, conflict
+# copies, .stignore).
 # Public headers: sync.h (overview), http.h, errors.h, url.h, davxml.h, webdavclient.h, diff.h,
-# merge.h, conflicts.h, synctypes.h, syncengine.h, scheduler.h, syncthing.h, synchistory.h.
+# merge.h, conflicts.h, synctypes.h, syncengine.h, scheduler.h, syncthing.h, synchistory.h,
+# folderstorage.h, foldertransport.h.
 # Internal (*_p.h): request sending, job pool, one engine run, shared helpers.
 brulion_add_core_module(sync
     SOURCES
@@ -11,6 +14,8 @@ brulion_add_core_module(sync
         davxml.h davxml.cpp
         diff.h diff.cpp
         errors.h errors.cpp
+        folderstorage.h folderstorage.cpp
+        foldertransport.h foldertransport.cpp
         http.h http.cpp
         merge.h merge.cpp
         scheduler.h scheduler.cpp

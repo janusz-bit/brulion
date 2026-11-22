@@ -9,7 +9,8 @@
 # the clipboard's HTML of copied blocks and pasted HTML (core io), PDFs (workspacepdf.cpp: thumbnails,
 # "Open in another app", a drawing on a PDF page), reminders — WorkspaceReminders
 # over the notifiers of src/app/notify —, sync —
-# WorkspaceSync: Nextcloud, Syncthing, conflicts —, the notebook kept in a GitHub repository —
+# WorkspaceSync: Nextcloud, a folder of this device (Android's picked folders; DeviceFolderFirstSync
+# copies one's notes into a new notebook before it opens), Syncthing, conflicts —, the notebook kept in a GitHub repository —
 # WorkspaceGitHub: pull, commit, propose (core github) — and their wiring to the app,
 # workspaceintegration), AgentShare ("Share agents with the phone": `brulion-cli acp serve` run while
 # the app runs by ServerProcess, a reusable supervisor of brulion-cli servers), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
@@ -57,6 +58,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/webclippersetup.h ${_brulion_shell_dir}/webclippersetup.cpp
     ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
+    ${_brulion_shell_dir}/devicefolderfirstsync.h ${_brulion_shell_dir}/devicefolderfirstsync.cpp
     ${_brulion_shell_dir}/folderchoices.h ${_brulion_shell_dir}/folderchoices.cpp
     ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
     ${_brulion_shell_dir}/indexworkers.h

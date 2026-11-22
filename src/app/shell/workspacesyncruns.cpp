@@ -155,10 +155,11 @@ QString WorkspaceSync::triggerText(const QString &trigger) const
 
 QString WorkspaceSync::phaseText(const QString &phase) const
 {
+    const bool folder = usesDeviceFolder();
     if (phase == u"connect" || phase == u"connecting")
-        return tr("Connecting to the server");
+        return folder ? tr("Opening the folder") : tr("Connecting to the server");
     if (phase == u"list-remote" || phase == u"listing")
-        return tr("Checking files on the server");
+        return folder ? tr("Checking files in the folder") : tr("Checking files on the server");
     if (phase == u"list-local" || phase == u"listing-local")
         return tr("Checking files on this device");
     if (phase == u"compare" || phase == u"comparing")
@@ -172,6 +173,23 @@ QString WorkspaceSync::phaseText(const QString &phase) const
 
 QString WorkspaceSync::fileErrorText(const QString &code, int status) const
 {
+    if (usesDeviceFolder()) {
+        // The folder of this device (its storage's failures, foldertransport.h).
+        if (code == u"forbidden")
+            return tr("Brulion has no access to this file in the folder any more.");
+        if (code == u"server")
+            return tr("The file cannot be written or read in the folder — Brulion will try again.");
+        if (code == u"conflict")
+            return tr("A folder is missing in the synced folder — Brulion will create it again.");
+        if (code == u"insufficient-storage")
+            return tr("There is no space left on the folder's storage.");
+        if (code == u"remote-busy")
+            return tr("The file keeps changing in the folder — the next sync tries again.");
+        if (code == u"timeout" || code == u"network")
+            return tr("The folder did not answer — Brulion will try again.");
+        if (code == u"oversized")
+            return tr("The file in the folder is larger than Brulion accepts.");
+    }
     if (code == u"locked")
         return tr("The file is locked on the server (open in another app?).");
     if (code == u"forbidden")
@@ -227,6 +245,18 @@ QString WorkspaceSync::bytesText(qint64 bytes) const
 
 QString WorkspaceSync::shortErrorText(const QString &code) const
 {
+    if (usesDeviceFolder()) {
+        if (code == u"forbidden")
+            return tr("no access to the folder");
+        if (code == u"not-found")
+            return tr("the folder is gone");
+        if (code == u"server")
+            return tr("the folder cannot be reached");
+        if (code == u"timeout" || code == u"stalled")
+            return tr("the folder stopped answering");
+        if (code == u"remote-empty")
+            return tr("the folder is empty");
+    }
     if (code == u"network")
         return tr("cannot reach the server");
     if (code == u"timeout")
@@ -462,8 +492,10 @@ QString WorkspaceSync::folderCountsText(int created, int deleted, int moved, int
         parts.append(tr("%n new", "folders", created));
     if (deleted > 0)
         parts.append(tr("%n deleted", "folders", deleted));
-    if (moved > 0)
-        parts.append(tr("%n moved on the server", "folders", moved));
+    if (moved > 0) {
+        parts.append(usesDeviceFolder() ? tr("%n moved in the folder", "folders", moved)
+                                        : tr("%n moved on the server", "folders", moved));
+    }
     if (movedHere > 0)
         parts.append(tr("%n moved here", "folders", movedHere));
     return parts.isEmpty() ? QString() : tr("Folders: %1").arg(parts.join(u", "_s));
@@ -472,8 +504,10 @@ QString WorkspaceSync::folderCountsText(int created, int deleted, int moved, int
 QString WorkspaceSync::fileMovesText(int moved, int movedHere) const
 {
     QStringList parts;
-    if (moved > 0)
-        parts.append(tr("%n moved on the server", "files", moved));
+    if (moved > 0) {
+        parts.append(usesDeviceFolder() ? tr("%n moved in the folder", "files", moved)
+                                        : tr("%n moved on the server", "files", moved));
+    }
     if (movedHere > 0)
         parts.append(tr("%n moved here", "files", movedHere));
     return parts.isEmpty() ? QString() : tr("Files: %1").arg(parts.join(u", "_s));

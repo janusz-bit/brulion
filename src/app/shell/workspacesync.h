@@ -1,6 +1,14 @@
 // WorkspaceSync — sync of the open vault (QML: `Workspace.sync`): Nextcloud/WebDAV through the
-// core's WebDavClient + SyncEngine + SyncScheduler over a NetworkHttpTransport, the local
-// Syncthing daemon's status, and the conflict copies both leave in the vault.
+// core's WebDavClient + SyncEngine + SyncScheduler over a NetworkHttpTransport, or a folder of
+// this device the same way over a FolderDavTransport, the local Syncthing daemon's status, and the
+// conflict copies they leave in the vault.
+//
+//   Folder     a notebook in the app's own storage kept in sync with a folder of the device
+//              (setDeviceFolder(): AppSettings' link of the notebook; on Android a folder picked in
+//              the system's dialog, the app for Google Play's way to a Syncthing folder — docs/
+//              ANDROID.md "A folder picked in the system's dialog"). It takes Nextcloud's place for
+//              that notebook: the same engine, scheduler, history and conflicts, one request at a
+//              time, no network needed, a sync ~5 s after edits and every 5 minutes.
 //
 //   Nextcloud  set up from the app settings (setNextcloud(); the shell's integration passes
 //              AppSettings' server, user, folder, interval and the app password from its
@@ -78,6 +86,8 @@ class SyncScheduler;
 class SyncHistory;
 class SyncthingClient;
 class WebDavClient;
+class FolderDavTransport;
+class FolderStorage;
 struct SyncReport;
 struct SyncRunRecord;
 } // namespace brulion::sync
@@ -101,6 +111,14 @@ struct NextcloudSettings {
     /// Enabled, with a server, a user and a password.
     bool isComplete() const;
     friend bool operator==(const NextcloudSettings &, const NextcloudSettings &) = default;
+};
+
+/// A folder of this device the notebook syncs with (from AppSettings' DeviceFolderLink).
+struct DeviceFolderSettings {
+    QString address; ///< Android: a tree URI; elsewhere a path ("" = none)
+    QString name;    ///< the folder's name, for texts
+    bool isComplete() const { return !address.isEmpty(); }
+    friend bool operator==(const DeviceFolderSettings &, const DeviceFolderSettings &) = default;
 };
 
 /// Syncthing REST access (from AppSettings "sync/syncthingApiKey" / "sync/syncthingUrl").
@@ -139,6 +157,10 @@ class WorkspaceSync : public QObject {
     // ---- Nextcloud ----------------------------------------------------------------------
     /// The settings are complete (enabled, server, user, password).
     Q_PROPERTY(bool configured READ configured NOTIFY configurationChanged FINAL)
+    /// The notebook syncs with a folder of this device instead of Nextcloud (setDeviceFolder()).
+    Q_PROPERTY(bool deviceFolder READ usesDeviceFolder NOTIFY configurationChanged FINAL)
+    /// That folder's name ("" without one).
+    Q_PROPERTY(QString deviceFolderName READ deviceFolderName NOTIFY configurationChanged FINAL)
     /// A sync engine runs for the open vault ("Sync now" works).
     Q_PROPERTY(bool active READ active NOTIFY configurationChanged FINAL)
     /// WebDAV address the settings lead to ("" when incomplete).
@@ -217,6 +239,16 @@ public:
 
     void setNextcloud(const NextcloudSettings &settings);
     NextcloudSettings nextcloud() const { return m_nextcloud; }
+    /// A folder of this device: while complete it is what the notebook syncs with (not Nextcloud).
+    void setDeviceFolder(const DeviceFolderSettings &settings);
+    DeviceFolderSettings deviceFolderSettings() const { return m_deviceFolder; }
+    using FolderOpener = std::function<std::shared_ptr<sync::FolderStorage>(const QString &address)>;
+    /// How a folder's address becomes its storage (default platform::openDeviceFolder; tests).
+    void setFolderOpener(FolderOpener opener);
+    /// Answer the folder's requests on this thread instead of a worker (tests).
+    void setFolderSynchronous(bool on);
+    /// The base URL the folder's sync bookkeeping names ("" without a folder).
+    QString deviceFolderUrl() const;
     void setSyncthing(const SyncthingSettings &settings);
 
     void attach(Vault *vault);
@@ -232,6 +264,8 @@ public:
 
     // ---- state --------------------------------------------------------------------------
     bool configured() const { return m_nextcloud.isComplete(); }
+    bool usesDeviceFolder() const { return m_deviceFolder.isComplete(); }
+    QString deviceFolderName() const { return usesDeviceFolder() ? m_deviceFolder.name : QString(); }
     bool active() const { return m_scheduler != nullptr; }
     /// Complete settings whose server folder another notebook syncs with: nothing syncs.
     bool folderShared() const { return m_nextcloud.isComplete() && !m_nextcloud.sharedWith.isEmpty(); }
@@ -353,6 +387,8 @@ Q_SIGNALS:
 private:
     sync::HttpTransport *transport();
     void rebuild();
+    /// The engine and the scheduler over m_client (rebuild()).
+    void startEngine(qint64 intervalMs, qint64 debounceMs, bool needsNetwork);
     void teardown();
     void rebuildSyncthing();
     void refreshConflicts();
@@ -384,6 +420,11 @@ private:
     QPointer<Vault> m_vault;
     sync::HttpTransport *m_transport = nullptr;
     std::unique_ptr<sync::NetworkHttpTransport> m_ownTransport;
+    std::unique_ptr<sync::FolderDavTransport> m_folderTransport;
+    DeviceFolderSettings m_deviceFolder;
+    FolderOpener m_folderOpener;
+    bool m_folderSynchronous = false;
+    QString m_folderNotice; ///< the folder last warned about (not reachable)
     std::unique_ptr<sync::WebDavClient> m_client;
     std::unique_ptr<sync::SyncEngine> m_engine;
     std::unique_ptr<sync::SyncScheduler> m_scheduler;
