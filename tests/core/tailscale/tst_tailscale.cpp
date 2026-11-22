@@ -299,6 +299,18 @@ private Q_SLOTS:
         // A local program's header to a server not behind Serve, or one that listens beyond loopback.
         QVERIFY(!decide(facts(u"127.0.0.1"_s, true, false, kOwner), std::nullopt, allowed).trusted);
         QVERIFY(!decide(facts(u"127.0.0.1"_s, false, true, kOwner), std::nullopt, allowed).trusted);
+        // This computer itself — another of its users to its own tailnet address, or through its
+        // own Serve: tailscaled names its own node (its owner's login), never trusted.
+        Identity self = person(kOwner, u"nixos"_s);
+        self.nodeDnsName = u"nixos.tail1ea20e.ts.net"_s;
+        const Judgement own = decide(facts(u"100.108.227.25"_s), self, allowed, u"NixOS.tail1ea20e.ts.net."_s);
+        QVERIFY(!own.trusted);
+        QVERIFY(own.why.contains(u"this computer"_s));
+        QVERIFY(!decide(facts(u"127.0.0.1"_s, true, true, kOwner), self, allowed, u"nixos.tail1ea20e.ts.net"_s).trusted);
+        // Another node of the owner: trusted with the same computer named.
+        Identity phone = person(kOwner, u"pixel-9-pro-1"_s);
+        phone.nodeDnsName = u"pixel-9-pro-1.tail1ea20e.ts.net"_s;
+        QVERIFY(decide(facts(u"100.98.93.11"_s), phone, allowed, u"nixos.tail1ea20e.ts.net"_s).trusted);
     }
 
     // ---- the LocalAPI client ---------------------------------------------------------------------

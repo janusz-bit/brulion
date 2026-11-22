@@ -31,6 +31,9 @@ struct TailnetTrustOptions {
     bool behindServe = false;
     /// It listens on loopback alone (127.0.0.1, ::1).
     bool loopbackOnly = false;
+    /// This computer's MagicDNS name: a connection tailscaled says is this computer's own (any of
+    /// its users could have made it) never pairs without a code.
+    QString thisNode;
 };
 
 class TailnetTrust {

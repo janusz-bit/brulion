@@ -184,7 +184,7 @@ private Q_SLOTS:
     void moreUsers()
     {
         // --tailnet-user: Ola's phone too; the owner's stays; "tagged-devices" is never a user.
-        const TailnetTrust trust(m_api.get(), kOwner, {{u" OLA@github "_s, u"tagged-devices"_s, kOwner}, false, false});
+        const TailnetTrust trust(m_api.get(), kOwner, {{u" OLA@github "_s, u"tagged-devices"_s, kOwner}, false, false, {}});
         QCOMPARE(trust.allowedLogins(), (QStringList{kOwner, u"OLA@github"_s}));
         QVERIFY(verdict(trust, request(u"100.98.93.12"_s, 1)).trusted);
         QVERIFY(verdict(trust, request(u"100.98.93.11"_s, 1)).trusted);
@@ -194,7 +194,7 @@ private Q_SLOTS:
     void forgedHeaderRefused()
     {
         // Behind Serve, on loopback alone: a header from the LAN is someone's own writing.
-        const TailnetTrust trust(m_api.get(), kOwner, {{}, true, true});
+        const TailnetTrust trust(m_api.get(), kOwner, {{}, true, true, {}});
         const qsizetype asked = m_ts->targets.size();
         PairTrust v = verdict(trust, request(u"192.168.1.20"_s, 5000, loginHeader(kOwner)));
         QVERIFY(!v.trusted);
@@ -228,7 +228,7 @@ private Q_SLOTS:
         QFETCH(QString, login);
         QFETCH(bool, twice);
         QFETCH(bool, trusted);
-        const TailnetTrust trust(m_api.get(), kOwner, {{}, behindServe, loopbackOnly});
+        const TailnetTrust trust(m_api.get(), kOwner, {{}, behindServe, loopbackOnly, {}});
         QList<std::pair<QByteArray, QByteArray>> headers = loginHeader(login);
         if (twice)
             headers += loginHeader(kOwner);
@@ -242,12 +242,27 @@ private Q_SLOTS:
     {
         // A connection Serve proxied that tailscaled knows (its proxy map): Ola's, whatever the header.
         m_ts->whois.insert(u"127.0.0.1:6000"_s, FakeTailscaled::whoisJson(kOther, u"telefon-oli"_s, {}, 77));
-        const TailnetTrust trust(m_api.get(), kOwner, {{}, true, true});
+        const TailnetTrust trust(m_api.get(), kOwner, {{}, true, true, {}});
         QVERIFY(!verdict(trust, request(u"127.0.0.1"_s, 6000, loginHeader(kOwner))).trusted);
         m_ts->whois.insert(u"127.0.0.1:6001"_s, FakeTailscaled::whoisJson(kOwner, u"pixel-9-pro-1"_s));
         const PairTrust v = verdict(trust, request(u"127.0.0.1"_s, 6001));
         QVERIFY(v.trusted);
         QCOMPARE(v.node, u"pixel-9-pro-1"_s);
+    }
+
+    void thisComputerItself()
+    {
+        // Another user of this computer connecting to its own tailnet address: tailscaled says it is
+        // this computer (its owner's login) — never paired without a code.
+        m_ts->whois.insert(u"100.108.227.25"_s, FakeTailscaled::whoisJson(kOwner, u"nixos"_s));
+        TailnetTrustOptions o;
+        o.thisNode = u"nixos.tail1ea20e.ts.net"_s;
+        const TailnetTrust trust(m_api.get(), kOwner, o);
+        const PairTrust v = verdict(trust, request(u"100.108.227.25"_s, 40000));
+        QVERIFY(!v.trusted);
+        QVERIFY2(v.why.contains(u"this computer"_s), qPrintable(v.why));
+        // The owner's phone still is.
+        QVERIFY(verdict(trust, request(u"100.98.93.11"_s, 40000)).trusted);
     }
 
     void tailscaledDown()
@@ -284,7 +299,7 @@ private Q_SLOTS:
         QStringList log;
         AcpHost host(*m_ctx, nb, o);
         host.log = [&log](const QString &line) { log.append(line); };
-        const TailnetTrust trust(m_api.get(), kOwner, {{}, true, true});
+        const TailnetTrust trust(m_api.get(), kOwner, {{}, true, true, {}});
         QList<quint16> ports;
         host.setPairTrust([&trust, &ports](const http::Request &r, std::function<void(const PairTrust &)> done) {
             ports.append(r.peerPort);
@@ -361,6 +376,12 @@ private Q_SLOTS:
                 http(u"http://127.0.0.1:%1"_s.arg(port), "POST", u"pair"_s, R"({"device":"Pixel 9 Pro Ali"})"_ba);
         QCOMPARE(r.status, 200);
         QVERIFY(r.json.value(u"token"_s).toString().startsWith(u"bat_"_s));
+        // A connection tailscaled says is this computer's own (another local user): the code.
+        m_ts->whois.insert(u"127.0.0.1"_s, FakeTailscaled::whoisJson(kOwner, u"nixos"_s));
+        const HttpResult own =
+                http(u"http://127.0.0.1:%1"_s.arg(port), "POST", u"pair"_s, R"({"device":"inny użytkownik"})"_ba);
+        QCOMPARE(own.status, 403);
+        QCOMPARE(own.json.value(u"error"_s).toObject().value(u"code"_s).toString(), u"code_needed"_s);
         // Standard input ends: the server stops by itself.
         serve.closeWriteChannel();
         QVERIFY(QTest::qWaitFor([&serve] { return serve.state() == QProcess::NotRunning; }, kTimeoutMs));

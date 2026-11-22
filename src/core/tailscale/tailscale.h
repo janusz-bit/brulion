@@ -12,7 +12,8 @@
 //   connection from loopback to a server that listens on loopback alone and was told it sits behind
 //   Serve — any other peer could have written the header itself;
 // * whether that identity may pair without a code (judge()): a device of one of the allowed users
-//   (by default the computer's own login), never a tagged device (it belongs to no person).
+//   (by default the computer's own login), never a tagged device (it belongs to no person), never
+//   the computer itself (any of its local users could have made that connection).
 //
 // Pure, single-threaded; nothing here trusts a request by itself.
 
@@ -104,10 +105,14 @@ struct Judgement {
     QString why;   ///< English, for the log and the device: why not (or how it was trusted)
 };
 
-/// `identity` may pair without a code: one of `allowedLogins` (sameLogin()), no tags.
-Judgement judge(const Identity &identity, const QStringList &allowedLogins);
+/// `identity` may pair without a code: one of `allowedLogins` (sameLogin()), no tags, and not this
+/// computer itself (`thisNode`, its MagicDNS name: a connection from this computer — to its own
+/// tailnet address, or through its own Serve — is the computer's in tailscaled's eyes, whichever of
+/// its users made it).
+Judgement judge(const Identity &identity, const QStringList &allowedLogins, const QString &thisNode = QString());
 /// The whole decision: `whois` what tailscaled said of the peer (nullopt: nothing — not asked,
 /// unknown, or tailscaled not reached), `facts` the request.
-Judgement decide(const PeerFacts &facts, const std::optional<Identity> &whois, const QStringList &allowedLogins);
+Judgement decide(const PeerFacts &facts, const std::optional<Identity> &whois, const QStringList &allowedLogins,
+                 const QString &thisNode = QString());
 
 } // namespace brulion::tailscale

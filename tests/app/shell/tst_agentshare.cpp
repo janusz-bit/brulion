@@ -76,7 +76,7 @@ AgentShare::Launch launch(const QString &address = {}, bool tailscale = false, c
 
 QStringList base()
 {
-    return {u"--vault"_s, u"/home/ala/Notatki"_s, u"acp"_s, u"serve"_s, u"--agents"_s,
+    return {u"--vault"_s, u"/home/ala/Notatki"_s, u"--compact"_s, u"acp"_s, u"serve"_s, u"--agents"_s,
             u"/home/ala/.local/share/Brulion/agent-share/agents.json"_s, u"--stop-on-eof"_s};
 }
 

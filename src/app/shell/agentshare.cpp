@@ -18,7 +18,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocale>
-#include <QNetworkInterface>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
@@ -29,6 +28,9 @@
 
 #if QT_CONFIG(process)
 #include <QProcess>
+#endif
+#if QT_CONFIG(networkinterface)
+#include <QNetworkInterface>
 #endif
 
 using namespace Qt::StringLiterals;
@@ -242,7 +244,9 @@ void AgentShare::apply()
         if (!l.tailscale) {
             qCInfo(logging::lcApp, "AI agents for the phone: no Tailscale here (%s)",
                    qUtf8Printable(s ? s->backendState : why));
+#if QT_CONFIG(networkinterface)
             l.lan = lanAddress(QNetworkInterface::allAddresses());
+#endif
         }
         const QString port = QString::number(l.port);
         self->m_automatic = l.tailscale      ? u"http://"_s + s->dnsName + u':' + port
@@ -544,7 +548,9 @@ void AgentShare::removeOffer()
 
 QStringList AgentShare::serveArguments(const Launch &l, QString *error)
 {
-    QStringList args{u"--vault"_s, l.root, u"acp"_s, u"serve"_s, u"--agents"_s, l.agentsFile, u"--stop-on-eof"_s};
+    // (--compact: a refusal is one line of JSON, as the first line of a server that serves.)
+    QStringList args{u"--vault"_s, l.root, u"--compact"_s, u"acp"_s, u"serve"_s, u"--agents"_s, l.agentsFile,
+                     u"--stop-on-eof"_s};
     const QString port = QString::number(l.port);
     const auto trust = [&args, &l] {
         if (!l.trust)
@@ -618,14 +624,21 @@ QString AgentShare::lanAddress(const QList<QHostAddress> &addresses)
 
 QStringList AgentShare::defaultCommand()
 {
-    if (const QString cli = WorkspaceAgents::toolsProgram(); !cli.isEmpty())
-        return {cli};
-    // The AppImage has one entry point: `Brulion.AppImage cli …`.
+    // The same version as the app first: brulion-cli of its package, the AppImage's one entry point
+    // (`Brulion.AppImage cli …`), the app's own binary (`brulion cli …`); one on PATH last (it may
+    // be older and lack an option).
+    const QFileInfo self(QCoreApplication::applicationFilePath());
+    for (const QString &name : {u"brulion-cli"_s, u"brulion-cli.exe"_s}) {
+        const QFileInfo cli(self.absoluteDir().filePath(name));
+        if (cli.isFile() && cli.isExecutable())
+            return {QDir::cleanPath(cli.absoluteFilePath())};
+    }
     if (const QString image = qEnvironmentVariable("APPIMAGE"); !image.isEmpty() && QFileInfo(image).isExecutable())
         return {image, u"cli"_s};
-    const QFileInfo self(QCoreApplication::applicationFilePath());
     if (self.completeBaseName() == u"brulion")
         return {self.absoluteFilePath(), u"cli"_s};
+    if (const QString onPath = QStandardPaths::findExecutable(u"brulion-cli"_s); !onPath.isEmpty())
+        return {onPath};
     return {};
 }
 

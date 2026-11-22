@@ -897,7 +897,9 @@ knows it — never by what the request says of itself:
   knows the device whose connection Tailscale Serve proxied);
 * its device pairs when it belongs to the computer's own user (`Self`'s login in the status) or
   to a login named with `--tailnet-user ala@github,ola@github` (letter case aside); a tagged device
-  (`tag:…`, the user "tagged-devices") belongs to no person and never does; anyone else gets 403
+  (`tag:…`, the user "tagged-devices") belongs to no person and never does, nor does **this
+  computer itself** — a connection tailscaled names as this computer's own (to its own tailnet
+  address, or through its own Serve) may come from any of its local users; anyone else gets 403
   `code_needed` with why, and pairs with the code as without a tailnet;
 * `--tailscale-serve` is for a server behind the user's own Tailscale Serve (`tailscale serve --bg
   8790`): it listens on 127.0.0.1 only (another `--listen` is refused), gives the devices

@@ -121,6 +121,12 @@ private Q_SLOTS:
         QCOMPARE(server.errorCode(), u"bad_listen"_s);
         QTest::qWait(300);
         QCOMPARE(server.state(), ServerProcess::State::Failed);
+        // A refusal over several lines (an older brulion-cli without --compact): its words too.
+        server.setProgram(QStringLiteral(FAKE_SERVER), {u"--refuse"_s, u"2"_s, u"--indented"_s});
+        server.start();
+        QTRY_COMPARE_WITH_TIMEOUT(server.state(), ServerProcess::State::Failed, kTimeoutMs);
+        QCOMPARE(server.error(), u"Nieznana opcja: --stop-on-eof"_s);
+        QCOMPARE(server.errorCode(), u"unknown_option"_s);
         // Exit 5 (unavailable: it may work later): tried again.
         server.setProgram(QStringLiteral(FAKE_SERVER), {u"--refuse"_s, u"5"_s});
         server.start();

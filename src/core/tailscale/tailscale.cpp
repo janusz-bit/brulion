@@ -179,11 +179,16 @@ TrustPlan planTrust(const PeerFacts &facts)
     return plan;
 }
 
-Judgement judge(const Identity &identity, const QStringList &allowedLogins)
+Judgement judge(const Identity &identity, const QStringList &allowedLogins, const QString &thisNode)
 {
     Judgement j;
     j.login = identity.login;
     j.node = identity.node;
+    const QString self = withoutTrailingDot(thisNode.trimmed()).toLower();
+    if (!self.isEmpty() && identity.nodeDnsName == self) {
+        j.why = u"a connection from this computer itself (any of its users could have made it)"_s;
+        return j;
+    }
     if (!identity.tags.isEmpty()) {
         j.why = u"a tagged device (%1) belongs to no user"_s.arg(identity.tags.join(u", "_s));
         return j;
@@ -203,11 +208,12 @@ Judgement judge(const Identity &identity, const QStringList &allowedLogins)
     return j;
 }
 
-Judgement decide(const PeerFacts &facts, const std::optional<Identity> &whois, const QStringList &allowedLogins)
+Judgement decide(const PeerFacts &facts, const std::optional<Identity> &whois, const QStringList &allowedLogins,
+                 const QString &thisNode)
 {
     const TrustPlan plan = planTrust(facts);
     if (plan.askWhois && whois)
-        return judge(*whois, allowedLogins);
+        return judge(*whois, allowedLogins, thisNode);
     if (plan.serveHeader) {
         Identity fromHeader;
         fromHeader.login = facts.serveLogin.trimmed();

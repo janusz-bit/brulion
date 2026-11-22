@@ -123,6 +123,7 @@ private:
     QString m_errorCode;
     QString m_lastErrorLine;
     QByteArray m_out;
+    QByteArray m_early; ///< what it wrote before it served (a refusal over several lines)
     QByteArray m_err;
     int m_failures = 0;
     qint64 m_startedAt = 0;

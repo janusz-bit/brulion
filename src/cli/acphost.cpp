@@ -2394,6 +2394,7 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
         trustOptions.users = listArgument(args, u"tailnetUser"_s);
         trustOptions.behindServe = behindServe;
         trustOptions.loopbackOnly = loopbackOnly;
+        trustOptions.thisNode = self->dnsName;
         if (trusted)
             trust = std::make_unique<TailnetTrust>(tailscaleApi.get(), self->login, trustOptions);
         tailnetInfo = QJsonObject{{u"name"_s, self->dnsName},

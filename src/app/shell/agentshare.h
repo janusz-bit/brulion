@@ -151,8 +151,8 @@ public:
     /// (10/8, 172.16/12, 192.168/16) first, else another IPv4 that is no loopback, link-local or
     /// tailnet address ("" none).
     static QString lanAddress(const QList<QHostAddress> &addresses);
-    /// brulion-cli next to the app or on PATH; else the AppImage itself, or the app's binary,
-    /// with `cli` ({} none).
+    /// The command line of the app's own version first: brulion-cli next to the app, else the
+    /// AppImage itself or the app's binary with `cli`; else brulion-cli on PATH ({} none).
     static QStringList defaultCommand();
     /// The offers of `config` (config.json's object) this device can add: not its own computer's
     /// (`ownUrl`, `ownHost`), not an agent `added` already ({url, remote} of the agents here).

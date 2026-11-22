@@ -4,6 +4,7 @@
 //
 //   --announce URL    {"ok": true, "result": {"url": URL}} and serve
 //   --refuse CODE     {"ok": false, "error": {"code": "bad_listen", "message": …}}, exit CODE
+//   --indented        (with --refuse) the refusal over several lines, as without --compact
 //   --crash-after MS  serve, then abort() after MS
 //   --ignore-eof      keep serving when standard input ends (it has to be terminated)
 //   --mark FILE       write "stopped" into FILE when it stops by itself (its input ended)
@@ -27,9 +28,15 @@ int main(int argc, char *argv[])
     std::fputs("2026-11-22 10:30:00 starting the fake server\n", stderr);
     std::fflush(stderr);
     if (const QString code = value("--refuse"); !code.isEmpty()) {
-        std::fputs(R"({"ok": false, "error": {"code": "bad_listen", "message": "Nie można słuchać na tym adresie"}})"
-                   "\n",
-                   stdout);
+        // (--indented: as brulion-cli writes it without --compact, over several lines.)
+        if (args.contains(QStringLiteral("--indented")))
+            std::fputs("{\n    \"ok\": false,\n    \"error\": {\n        \"code\": \"unknown_option\",\n"
+                       "        \"message\": \"Nieznana opcja: --stop-on-eof\"\n    }\n}\n",
+                       stdout);
+        else
+            std::fputs(R"({"ok": false, "error": {"code": "bad_listen", "message": "Nie można słuchać na tym adresie"}})"
+                       "\n",
+                       stdout);
         std::fflush(stdout);
         return code.toInt();
     }

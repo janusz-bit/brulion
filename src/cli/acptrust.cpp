@@ -38,6 +38,7 @@ void TailnetTrust::check(const http::Request &request, std::function<void(const 
         facts.serveLogin = QString::fromUtf8(request.headers.value(header)).trimmed();
     const tailscale::TrustPlan plan = tailscale::planTrust(facts);
     const QStringList allowed = m_allowed;
+    const QString thisNode = m_options.thisNode;
     const auto answer = [done, plan](const tailscale::Judgement &j, const QString &error) {
         PairTrust verdict{j.trusted, j.login, j.node, j.why};
         if (!j.trusted && !error.isEmpty())
@@ -47,12 +48,13 @@ void TailnetTrust::check(const http::Request &request, std::function<void(const 
         done(verdict);
     };
     if (!plan.askWhois || !m_api) {
-        answer(tailscale::decide(facts, std::nullopt, allowed), QString());
+        answer(tailscale::decide(facts, std::nullopt, allowed, thisNode), QString());
         return;
     }
     m_api->whois(request.peer, request.peerPort,
-                 [facts, allowed, answer](const std::optional<tailscale::Identity> &who, const QString &error) {
-                     answer(tailscale::decide(facts, who, allowed), error);
+                 [facts, allowed, thisNode, answer](const std::optional<tailscale::Identity> &who,
+                                                    const QString &error) {
+                     answer(tailscale::decide(facts, who, allowed, thisNode), error);
                  });
 }
 

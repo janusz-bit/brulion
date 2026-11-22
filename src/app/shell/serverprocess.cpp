@@ -179,6 +179,7 @@ void ServerProcess::launch()
         return;
     }
     m_out.clear();
+    m_early.clear();
     m_err.clear();
     m_lastErrorLine.clear();
     m_announced = false;
@@ -227,6 +228,8 @@ void ServerProcess::readOutput()
             return;
         }
         const QByteArray line = m_out.left(nl).trimmed();
+        if (!m_announced && m_early.size() < kMaxLineBytes)
+            m_early += m_out.left(nl + 1);
         m_out.remove(0, nl + 1);
         if (m_announced || line.isEmpty())
             continue;
@@ -280,6 +283,12 @@ void ServerProcess::ended(int exitCode, bool crashed)
         return;
     readOutput();
     readErrors();
+    if (m_error.isEmpty() && !m_announced) {
+        // (A refusal as indented JSON over several lines: read whole.)
+        const QJsonObject e = QJsonDocument::fromJson(m_early + m_out).object().value(u"error"_s).toObject();
+        m_error = e.value(u"message"_s).toString();
+        m_errorCode = e.value(u"code"_s).toString();
+    }
     QProcess *p = std::exchange(m_process, nullptr);
     p->deleteLater();
     m_announcement = {};

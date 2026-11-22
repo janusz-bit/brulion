@@ -1440,7 +1440,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   not an agent added already, and only addresses of a tailnet (core `acp/hostoffer.h`). Read again
   when config.json changes (a sync) and when the agents change.
 * **Sharing them with the phone** (`acpShareSwitch`, desktop only — `AgentShare.available`: programs
-  run here and brulion-cli is found, else the AppImage or the app's binary as `brulion cli`;
+  run here and the command line is found — the same version first: brulion-cli of the app's
+  package, else the AppImage or the app's own binary as `brulion cli`, else a brulion-cli on PATH;
   `Workspace.chats.share`, `src/app/shell/agentshare.h`): "Share agents with the phone"
   (`AppSettings.acpShare`, key `ai/share`, off by default) runs `brulion-cli acp serve` for the
   notebook that is open — never the documentation — with this device's agents (programs only; their
