@@ -59,7 +59,9 @@ Embedder) — the last two run a real model when `BRULION_SEMANTIC_MODEL` names 
   (`VectorIndex::save`: "BRSV", the format version, the model's id, `ChunkerVersion`, the dimension,
   then per note its id, key and chunks — line, language, half-precision vector; ~770 bytes a chunk:
   0.8 MB for a 1,000-chunk notebook). Written when the queue empties, every minute of a long build and
-  when the notebook closes; read with bounds checks — another model, version or a damaged file is
+  when the notebook closes — the first two on the index thread, the last at once, together with a
+  save still waiting there, so nothing older is written after the notebook closed
+  (`SemanticPendingWrite`); read with bounds checks — another model, version or a damaged file is
   built again.
 * **Calibration** — the shipped query mean of the model (`queryMeanOf`: 519 short training queries of
   the experiments) with the passage mean and the language direction estimated from the notebook's own

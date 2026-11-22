@@ -195,6 +195,35 @@ private:
     std::shared_ptr<SemanticRunnerHolder> m_runner;
 };
 
+/// The kept index's newest bytes not written yet. save(false) leaves them here for the index
+/// thread; save(true) — the notebook closing — writes them itself. Both write under the lock, so
+/// no older bytes land after newer ones, and nothing lands after the notebook closed (an index
+/// thread busy embedding would otherwise write a moment later, over what came meanwhile).
+struct SemanticPendingWrite {
+    std::mutex mutex;
+    QString file;
+    QByteArray bytes;
+    bool waiting = false;
+
+    void put(const QString &to, QByteArray newest)
+    {
+        const std::scoped_lock lock(mutex);
+        file = to;
+        bytes = std::move(newest);
+        waiting = true;
+    }
+    /// Writes what waits; nothing when it was written already.
+    void flush()
+    {
+        const std::scoped_lock lock(mutex);
+        if (!waiting)
+            return;
+        waiting = false;
+        SemanticIndexWorker::write(file, bytes);
+        bytes.clear();
+    }
+};
+
 /// Embedding queries, on the query thread.
 class SemanticQueryWorker : public QObject {
 public:
@@ -218,7 +247,8 @@ private:
     std::shared_ptr<SemanticRunnerHolder> m_runner;
 };
 
-SemanticSearch::SemanticSearch(QObject *parent) : QObject(parent)
+SemanticSearch::SemanticSearch(QObject *parent)
+    : QObject(parent), m_pendingWrite(std::make_shared<SemanticPendingWrite>())
 {
     m_startTimer.setSingleShot(true);
     connect(&m_startTimer, &QTimer::timeout, this, &SemanticSearch::begin);
@@ -817,15 +847,21 @@ void SemanticSearch::save(bool now)
 {
     m_saveTimer.stop();
     const QString file = indexFile();
-    if (!m_dirty || file.isEmpty() || !m_loaded || !model())
-        return;
-    m_dirty = false;
-    QByteArray bytes = m_index.save(model()->id);
-    if (now || !m_indexWorker) {
-        SemanticIndexWorker::write(file, bytes);
-        return;
+    if (m_dirty && !file.isEmpty() && m_loaded && model()) {
+        m_dirty = false;
+        m_pendingWrite->put(file, m_index.save(model()->id));
+        if (!now && m_indexWorker) {
+            QMetaObject::invokeMethod(m_indexWorker, [pending = m_pendingWrite, hold = m_options.beforeQueuedWrite] {
+                if (hold)
+                    hold();
+                pending->flush();
+            });
+            return;
+        }
     }
-    QMetaObject::invokeMethod(m_indexWorker, [file, bytes = std::move(bytes)] { SemanticIndexWorker::write(file, bytes); });
+    // (Now: also an earlier save the index thread has not written yet.)
+    if (now || !m_indexWorker)
+        m_pendingWrite->flush();
 }
 
 void SemanticSearch::touchRunner()

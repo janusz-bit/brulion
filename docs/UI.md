@@ -2853,8 +2853,9 @@ Tests: `tst_semantic` (core: chunks, calibration, the vector index — increment
 the calibrated search against calibrated vectors, save/load and damaged files —, keys, the diff,
 encrypted text masked, fusion with notes the index lacks, the hybrid search, the model's entry),
 `tst_content_semantic` (the app with a fake model: full text without the plugin, the model or the
-setting; the notebook embedded and fused; edits, deletions, the vectors kept and read back; a
-failing model; removal; the download), `tst_semantic_embedder` (the real model through llama.cpp,
+setting; the notebook embedded and fused; edits, deletions, the vectors kept and read back; a save
+still on the index thread written by the close and never after it; a failing model; removal; the
+download), `tst_semantic_embedder` (the real model through llama.cpp,
 skipped unless `BRULION_SEMANTIC_MODEL` names its GGUF file).
 
 ## Spell checking

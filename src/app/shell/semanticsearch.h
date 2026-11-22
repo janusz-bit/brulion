@@ -55,6 +55,7 @@ class VaultIndex;
 namespace brulion::shell {
 
 class SemanticIndexWorker;
+struct SemanticPendingWrite;
 class SemanticQueryWorker;
 class SemanticRunnerHolder;
 struct SemanticBatch;
@@ -106,6 +107,8 @@ public:
         int idleMs = 5 * 60 * 1000;   ///< the model leaves memory after this long without work
         int startDelayMs = 3000;      ///< after the notebook's index is ready
         int changeDelayMs = 1500;     ///< after the last change of a note (typing)
+        /// Tests: on the index thread, before it writes the kept index (to hold it there).
+        std::function<void()> beforeQueuedWrite;
         /// The settings (the shell: AppSettings' keys).
         std::function<QVariant(const QString &key, const QVariant &fallback)> setting;
         std::function<void(const QString &key, const QVariant &value)> setSetting;
@@ -240,6 +243,7 @@ private:
     QThread m_indexThread;
     QThread m_queryThread;
     SemanticIndexWorker *m_indexWorker = nullptr; ///< lives in m_indexThread
+    std::shared_ptr<SemanticPendingWrite> m_pendingWrite; ///< the kept index's bytes on their way
     SemanticQueryWorker *m_queryWorker = nullptr; ///< lives in m_queryThread
 };
 

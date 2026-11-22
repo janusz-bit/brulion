@@ -22,6 +22,8 @@
 #include <QDir>
 #include <QFile>
 #include <QRegularExpression>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -393,6 +395,51 @@ private Q_SLOTS:
         auto ws4 = open(options(true));
         waitReady(ws4->semantic());
         QCOMPARE(ws4->semantic()->embeddedNotes(), 5);
+    }
+
+    // The notebook closes while the index thread has not written the last change yet (busy, or at
+    // its idle priority on a loaded machine): the close writes it, and the index thread writes
+    // nothing after — not over what came meanwhile (CI's Nix builder, 2026-11-22: a damaged file
+    // written after the close was overwritten by the earlier save).
+    void closeWritesWhatIsOnItsWay()
+    {
+        m_settings.insert(u"search/semantic"_s, true);
+        auto hold = std::make_shared<std::atomic<bool>>(false);
+        auto held = std::make_shared<QSemaphore>();
+        auto go = std::make_shared<QSemaphore>();
+        SemanticSearch::Options o = options(true);
+        o.beforeQueuedWrite = [hold, held, go] {
+            if (!hold->load())
+                return;
+            held->release();
+            go->acquire();
+        };
+        auto ws = open(o);
+        const auto letGo = qScopeGuard([go] { go->release(100); }); // (a failed check: no hang)
+        SemanticSearch *s = ws->semantic();
+        waitReady(s);
+        const QString file = s->indexFile();
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(file), brulion::test::kRoomyMs);
+        const auto read = [&file] {
+            QFile f(file);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        const QByteArray before = read();
+
+        hold->store(true);
+        QVERIFY(ws->write(u"Zakupy.md"_s, u"- opony na zimę\n"_s));
+        QTRY_VERIFY_WITH_TIMEOUT(s->embeddedNotes() == 6 && s->idle(), brulion::test::kRoomyMs);
+        QVERIFY(held->tryAcquire(1, brulion::test::kRoomyMs)); // its save waits on the index thread
+        QCOMPARE(read(), before);
+        ws->close();
+        const QByteArray closed = read();
+        QVERIFY(!closed.isEmpty());
+        QVERIFY(closed != before); // the change, written by the close
+
+        QVERIFY(writeRaw(file, "BRSV and then nothing useful"));
+        go->release(100);
+        ws.reset(); // (its threads end: whatever was queued there ran)
+        QCOMPARE(read(), QByteArray("BRSV and then nothing useful"));
     }
 
     // A model that fails to load: the state says why, search is the full text.
