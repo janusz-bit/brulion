@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Shapes
 import Brulion
 
 // BAvatar — a notebook's (or anything's) round mark: its first letter on the accent's solid fill,
@@ -9,20 +10,38 @@ import Brulion
 //   BAvatar { name: Workspace.name; size: 32; active: button.hovered }
 //
 // The letter is plain text (a notebook's name comes from its folder: anything).
-Rectangle {
+//
+// The fill is a Shape, not a Rectangle: a Rectangle's antialiased corners snap to the device's
+// pixels, so at a fractional scale (an interface size of 125 %) a circle at a fractional device
+// position came out flattened on one side. The curve renderer draws it round wherever it lands.
+Item {
     id: avatar
 
     /// The name whose first letter it shows ("" → "B").
     property string name
     property int size: 32
     property bool active: false
+    property real radius: active ? Math.round(size * 0.3) : size / 2
 
     implicitWidth: size
     implicitHeight: size
-    radius: active ? Math.round(size * 0.3) : size / 2
-    antialiasing: true
-    color: Theme.accentSolid
     Behavior on radius { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
+
+    Shape {
+        anchors.fill: parent
+        antialiasing: true
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+            strokeColor: "transparent"
+            fillColor: Theme.accentSolid
+            PathRectangle {
+                width: avatar.width
+                height: avatar.height
+                radius: avatar.radius
+            }
+        }
+    }
 
     BText {
         anchors.centerIn: parent
