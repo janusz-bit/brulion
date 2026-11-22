@@ -160,6 +160,8 @@ void addRemoteMcpCommands(QList<Command> &out);
 /// `acp serve`, `acp pair`, `acp clients`, `acp revoke` (acphost.cpp; addMetaCommands adds them
 /// after the MCP commands).
 void addAcpHostCommands(QList<Command> &out);
+/// `acp agent` (acpagent.cpp; after the acp serve commands).
+void addAcpAgentCommands(QList<Command> &out);
 
 /// Options for the whole run (docs/CLI.md "Global options").
 struct Globals {
@@ -352,6 +354,11 @@ int serveRemoteMcp(Context &context, const Command &command, const QJsonObject &
 /// a problem on the way printed with `output`.
 int serveAcpHost(Context &context, const Command &command, const QJsonObject &args,
                  const std::function<int(const Command *, const Result &)> &output);
+
+/// `acp agent` (acpagent.cpp): the AI assistant as an ACP agent on standard input and output, until
+/// the editor closes it.
+int serveAcpAgent(Context &context, const Command &command, const QJsonObject &args,
+                  const std::function<int(const Command *, const Result &)> &output);
 
 /// Shell completion script for bash, fish or zsh ("" for another shell).
 QString completionScript(const QString &shell, const QString &program);

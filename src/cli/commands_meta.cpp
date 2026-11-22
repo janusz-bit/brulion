@@ -197,6 +197,7 @@ void addMetaCommands(QList<Command> &out)
     out.append(c);
     addRemoteMcpCommands(out);
     addAcpHostCommands(out);
+    addAcpAgentCommands(out);
 }
 
 } // namespace brulion::cli

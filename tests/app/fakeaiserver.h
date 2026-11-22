@@ -1,8 +1,9 @@
 // FakeAiServer — an OpenAI-compatible chat API on 127.0.0.1 for the tests of the app's AI (the
 // chat's turns side by side, the editor's writing assistant): POST /v1/chat/completions answered
 // with the next of `answers` (a text; "" a turn with no words; "tool:<name> <json arguments>" a call
-// of that tool), as one JSON completion or — a request with "stream": true — as server-sent events
-// a word at a time; `hold` keeps the answers until release(). The requests' bodies are recorded.
+// of that tool; "think:<thoughts>\n<text>" a text the model thought about first, its thoughts as
+// `reasoning_content`), as one JSON completion or — a request with "stream": true — as server-sent
+// events a word at a time; `hold` keeps the answers until release(). The requests' bodies are recorded.
 // Header-only; link Qt6::Network.
 //
 //   FakeAiServer server;
@@ -31,6 +32,8 @@ public:
     bool hold = false;
     /// The bodies of the requests as they came (parsed JSON).
     QList<QJsonObject> requests;
+    /// Their Authorization headers, in the same order ("" none).
+    QList<QByteArray> authorizations;
 
     FakeAiServer()
     {
@@ -92,9 +95,12 @@ private:
         if (headerEnd < 0)
             return;
         qsizetype length = 0;
+        QByteArray authorization;
         for (const QByteArray &line : buffer.left(headerEnd).split('\n')) {
             if (line.toLower().startsWith("content-length:"))
                 length = line.mid(15).trimmed().toLongLong();
+            else if (line.toLower().startsWith("authorization:"))
+                authorization = line.mid(14).trimmed();
         }
         if (buffer.size() < headerEnd + 4 + length)
             return;
@@ -102,6 +108,7 @@ private:
         m_buffers.remove(socket);
         const QJsonObject request = QJsonDocument::fromJson(body).object();
         requests.append(request);
+        authorizations.append(authorization);
         const QString answer = answers.isEmpty() ? QStringLiteral("Dobrze.") : answers.takeFirst();
         const bool stream = request.value(QStringLiteral("stream")).toBool();
         if (hold) {
@@ -149,14 +156,27 @@ private:
             body = QJsonDocument(completion).toJson(QJsonDocument::Compact);
         } else if (stream) {
             type = "text/event-stream";
-            const QStringList words = answer.split(QLatin1Char(' '));
+            QString text = answer;
+            if (text.startsWith(QStringLiteral("think:"))) {
+                const qsizetype end = text.indexOf(QLatin1Char('\n'));
+                const QStringList thoughts = text.mid(6, end < 0 ? -1 : end - 6).split(QLatin1Char(' '));
+                for (qsizetype i = 0; i < thoughts.size(); ++i)
+                    body += chunk(QJsonObject{{QStringLiteral("reasoning_content"),
+                                               QString(thoughts.at(i) + (i + 1 < thoughts.size() ? QStringLiteral(" ") : QString()))}});
+                text = end < 0 ? QString() : text.mid(end + 1);
+            }
+            const QStringList words = text.split(QLatin1Char(' '));
             for (qsizetype i = 0; i < words.size(); ++i)
                 body += chunk(QJsonObject{{QStringLiteral("content"), QString(words.at(i) + (i + 1 < words.size() ? QStringLiteral(" ") : QString()))}});
             body += chunk(QJsonObject(), QStringLiteral("stop"));
             body += "data: [DONE]\n\n";
         } else {
-            const QJsonObject message{{QStringLiteral("role"), QStringLiteral("assistant")},
-                                       {QStringLiteral("content"), answer}};
+            QJsonObject message{{QStringLiteral("role"), QStringLiteral("assistant")}, {QStringLiteral("content"), answer}};
+            if (answer.startsWith(QStringLiteral("think:"))) {
+                const qsizetype end = answer.indexOf(QLatin1Char('\n'));
+                message.insert(QStringLiteral("reasoning_content"), answer.mid(6, end < 0 ? -1 : end - 6));
+                message.insert(QStringLiteral("content"), end < 0 ? QString() : answer.mid(end + 1));
+            }
             const QJsonObject completion{
                     {QStringLiteral("model"), QStringLiteral("fake")},
                      {QStringLiteral("choices"), QJsonArray{QJsonObject{{QStringLiteral("index"), 0},

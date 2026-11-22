@@ -60,3 +60,17 @@ target_compile_definitions(tst_cli_acp_host PRIVATE FAKE_ACP_AGENT="$<TARGET_FIL
 add_dependencies(tst_cli_acp_host cli_fake_acp_agent)
 math(EXPR _acp_host_timeout "300 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_cli_acp_host PROPERTIES TIMEOUT ${_acp_host_timeout})
+
+# `acp agent` (src/cli/acpagent.h): the AI assistant as an ACP agent, talked to by core acp/acp.h's
+# client as an editor would, its b.ai answered by tests/app/fakeaiserver.h — in process (a
+# conversation, tool calls, thoughts, a change allowed, declined or allowed for the whole question,
+# a turn cancelled, no key, no notebook, the prompt's links and files) and as a process reading the
+# app's settings and key from a private home.
+brulion_add_test(tst_cli_acp_agent SOURCES tst_cli_acp_agent.cpp ${PROJECT_SOURCE_DIR}/tests/app/fakeaiserver.h
+    LIBS brulion_cli brulion_core_acp brulion_core_ai brulion_core_chat brulion_core_sync brulion_core_notebook
+         Qt6::Network Qt6::Core)
+target_include_directories(tst_cli_acp_agent PRIVATE ${PROJECT_SOURCE_DIR}/tests/app)
+target_compile_definitions(tst_cli_acp_agent PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
+add_dependencies(tst_cli_acp_agent brulion-cli)
+math(EXPR _acp_agent_timeout "180 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_cli_acp_agent PROPERTIES TIMEOUT ${_acp_agent_timeout})

@@ -291,6 +291,22 @@ AppController::AppController(const Options &options, QObject *parent)
                 },
                 Qt::QueuedConnection);
     }
+    // The remote MCP server (Settings → Extensions → claude.ai and ChatGPT): the notebook open now
+    // — while the documentation is on screen, the user's own last one — with its settings.
+    m_mcpServer = std::make_unique<McpServerSupervisor>();
+    const auto mcpConfig = [this] {
+        McpServerSupervisor::Config c;
+        c.enabled = m_settings->mcpServerEnabled() && McpServerSupervisor::available();
+        c.vault = inDocsVault() ? lastUserVault() : m_settings->currentVault();
+        c.port = m_settings->mcpServerPort();
+        c.publicUrl = m_settings->mcpServerPublicUrl();
+        c.readOnly = m_settings->mcpServerReadOnly();
+        c.passwordFile = m_settings->hasMcpServerPassword() ? m_settings->mcpServerPasswordFile() : QString();
+        m_mcpServer->setConfig(c);
+    };
+    mcpConfig();
+    connect(m_settings.get(), &AppSettings::mcpServerChanged, this, mcpConfig);
+    connect(m_settings.get(), &AppSettings::currentVaultChanged, this, mcpConfig);
     m_tabsSaveTimer = new QTimer(this);
     m_tabsSaveTimer->setSingleShot(true);
     m_tabsSaveTimer->setInterval(500ms);

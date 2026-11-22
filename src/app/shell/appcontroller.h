@@ -67,6 +67,7 @@
 #include "appsettings.h"
 #include "appupdates.h"
 #include "localai.h"
+#include "mcpserversupervisor.h"
 #include "navigation.h"
 #include "recentnotebooks.h"
 #include "tabs.h"
@@ -130,6 +131,9 @@ class AppController : public QObject {
     Q_PROPERTY(brulion::media::Transcriber *speech READ speech CONSTANT FINAL)
     /// The app lock (applockcontroller.h; QML: the singleton AppLock).
     Q_PROPERTY(brulion::shell::AppLockController *appLock READ appLock CONSTANT FINAL)
+    /// The remote MCP server for claude.ai and ChatGPT while the app runs (mcpserversupervisor.h;
+    /// desktop): run for the notebook open now with AppSettings' mcpServer* settings.
+    Q_PROPERTY(brulion::shell::McpServerSupervisor *mcpServer READ mcpServer CONSTANT FINAL)
 
     // ---- Navigation ---------------------------------------------------------------------
     Q_PROPERTY(QVariantMap currentRoute READ currentRoute NOTIFY currentRouteChanged FINAL)
@@ -297,6 +301,7 @@ public:
     LocalAi *localAi() const { return m_localAi.get(); }
     media::Transcriber *speech() const { return m_speech.get(); }
     AppLockController *appLock() const { return m_appLock.get(); }
+    McpServerSupervisor *mcpServer() const { return m_mcpServer.get(); }
     /// The app as extensions and live clients change it (b.app; appscripting.h). QML: AppScripting.
     AppScripting *scripting() const { return m_scripting.get(); }
     CommandModel *commands() const { return m_commands.get(); }
@@ -871,6 +876,7 @@ private:
     std::unique_ptr<media::Transcriber> m_speech;
     std::unique_ptr<AppLockController> m_appLock;
     std::unique_ptr<AppScripting> m_scripting;
+    std::unique_ptr<McpServerSupervisor> m_mcpServer;
     std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<ShortcutMap> m_shortcuts;
     std::unique_ptr<CommandModel> m_commands;

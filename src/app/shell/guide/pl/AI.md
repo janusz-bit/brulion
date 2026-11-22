@@ -17,7 +17,7 @@ Otwórz **Ustawienia → Rozszerzenia → AI** i wybierz:
 Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 
 > [!note] Subskrypcje
-> Subskrypcja Claude Pro/Max albo ChatGPT Plus działa tylko w aplikacjach tych firm; inne programy używają klucza API, rozliczanego osobno, za użycie. Pytanie o jedną notatkę kosztuje ułamek grosza. Z subskrypcją możesz zamiast tego dać tym aplikacjom dostęp do notatek: [[Wiersz poleceń i agenci AI#Twoje notatki w claude.ai i ChatGPT]] — albo pozwolić ich własnemu agentowi odpowiadać w czacie z AI, na komputerze albo, przez Twój komputer, na telefonie: [[#Własny agent AI (ACP)]].
+> Subskrypcja Claude Pro/Max albo ChatGPT Plus działa tylko w aplikacjach tych firm; inne programy używają klucza API, rozliczanego osobno, za użycie. Pytanie o jedną notatkę kosztuje ułamek grosza. Z subskrypcją możesz zamiast tego dać tym aplikacjom dostęp do notatek — na komputerze robi to **Ustawienia → Rozszerzenia → claude.ai i ChatGPT**: [[Wiersz poleceń i agenci AI#Twoje notatki w claude.ai i ChatGPT]] — albo pozwolić ich własnemu agentowi odpowiadać w czacie z AI, na komputerze albo, przez Twój komputer, na telefonie: [[#Własny agent AI (ACP)]].
 
 Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacji, nie w dziennikach zdarzeń). Notatki trafiają do dostawcy tylko wtedy, gdy o to poprosisz, albo gdy zrobi to rozszerzenie zatwierdzone przez Ciebie z uprawnieniem `ai`.
 
@@ -111,6 +111,9 @@ Telefon nie uruchamia programów, ale może to zrobić za niego Twój komputer �
 2. Na telefonie: zeskanuj kod QR aparatem — Brulion otworzy parowanie z wpisanym adresem i kodem — i stuknij **Sparuj**. Albo **Ustawienia → Rozszerzenia → Agenci AI → Dodaj → Agent na innym komputerze…**, adres komputera (np. `https://agent.example.com`) i kod wpisane ręcznie. Jego agenci pojawiają się na liście („Na raspberry-pi-4 …”), a w czacie z AI jako ten, **kto odpowiada**.
 
 Wszystko opisane wyżej działa tak samo — plan i kroki, porównania zmian, pytania, chipy — ale pliki, które czyta i zmienia, polecenia, które uruchamia, i narzędzia Brulionu są **tamtego komputera**: synchronizuj jego kopię notatnika z telefonem (Syncthing albo Nextcloud: `acp serve --nextcloud …` synchronizuje ją przed każdą turą i po niej). Telefon może zasnąć, a Ty możesz przejść do innej aplikacji, gdy agent pracuje: ciche powiadomienie („Claude Code odpowiada…”, z przyciskiem **Zatrzymaj**) sprawia, że Brulion dalej pobiera to, co agent mówi, więc odpowiedź czeka w rozmowie, gdy wrócisz (aby je widzieć, zezwól na powiadomienia w **Ustawienia → Rozszerzenia → Agenci AI**). Nawet gdy telefon w tym czasie zamknie Brulion, agent kończy pracę tam, a komputer przechowuje jego odpowiedź: przy następnym uruchomieniu Brulionu rozmowa pokazuje „… nadal pracuje na …”, a potem odpowiedź. Na Ciebie czeka tam też **pytanie** agenta (czy może zmienić plik, uruchomić polecenie): Brulion uruchomiony ponownie pokazuje je w rozmowie, a Twoja odpowiedź trafia na komputer — odrzucone zostaje tam tylko pytanie, na które nikt nie odpowiedział przez godzinę. `brulion-cli acp revoke` od razu odłącza telefon ([[Wiersz poleceń i agenci AI#Twój agent dla telefonu]]).
+
+### W drugą stronę: asystent w Twoim edytorze
+Zed i środowiska JetBrains rozmawiają z agentami tak samo — a asystent AI Brulionu może być jednym z nich, z Twoimi notatkami i modelem wybranym wyżej: `brulion-cli acp agent` ([[Wiersz poleceń i agenci AI#Asystent Brulionu w edytorze]]).
 
 ## We własnych rozszerzeniach
 Strona rozszerzenia z `ai` wśród uprawnień może pytać model:

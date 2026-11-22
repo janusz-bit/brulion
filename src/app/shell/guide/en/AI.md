@@ -17,7 +17,7 @@ Open **Settings → Extensions → AI** and choose:
 Press **Check**: the model answers "OK", or you see what is wrong.
 
 > [!note] Subscriptions
-> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent. With a subscription, let those apps reach your notes instead: [[Command line and AI agents#Your notes in claude.ai and ChatGPT]] — or let their own agent answer in the AI chat, on the computer or, through a computer of yours, on the phone: [[#An AI agent of your own (ACP)]].
+> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent. With a subscription, let those apps reach your notes instead — on the computer **Settings → Extensions → claude.ai and ChatGPT** does it: [[Command line and AI agents#Your notes in claude.ai and ChatGPT]] — or let their own agent answer in the AI chat, on the computer or, through a computer of yours, on the phone: [[#An AI agent of your own (ACP)]].
 
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 
@@ -111,6 +111,9 @@ A phone starts no programs, but a computer of yours — a home server, a laptop 
 2. On the phone: scan the QR code with the camera — Brulion opens the pairing with the address and the code filled in — and tap **Pair**. Or **Settings → Extensions → AI agents → Add → An agent on another computer…**, the computer's address (e.g. `https://agent.example.com`) and the code typed. Its agents appear in the list ("On raspberry-pi-4 …"), and in the AI chat as **who answers**.
 
 Everything above works the same — its plan and steps, the diffs, its questions, the chips — but the files it reads and changes, the commands it runs and Brulion's tools are that **computer's**: keep its copy of the notebook in sync with the phone (Syncthing, or Nextcloud: `acp serve --nextcloud …` syncs it before and after every turn). The phone may sleep and you may switch to another app while the agent works: a quiet notification ("Claude Code is answering…", with **Stop**) keeps Brulion fetching what it says, so the answer is in the conversation when you come back (allow notifications in **Settings → Extensions → AI agents** to see it). Even when the phone ends Brulion meanwhile, the agent finishes there and the computer keeps its answer: the next time Brulion starts, the conversation shows "… is still working on …" and then the answer. A **question** of the agent (may it change a file, run a command) waits there for you as well: Brulion started again shows it in the conversation, and your answer goes to the computer — only one nobody answered for an hour is declined there. `brulion-cli acp revoke` unpairs the phone at once ([[Command line and AI agents#Your agent for the phone]]).
+
+### The other way: the assistant in your editor
+Zed and the JetBrains IDEs talk to agents the same way — and Brulion's AI assistant can be one of them, with your notes and the model chosen above: `brulion-cli acp agent` ([[Command line and AI agents#Brulion's assistant in your editor]]).
 
 ## In your own extensions
 An extension page with `ai` among its permissions can ask a model:

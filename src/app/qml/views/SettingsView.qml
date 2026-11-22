@@ -2182,6 +2182,150 @@ Item {
                 }
             }
 
+            // The remote MCP server for claude.ai and ChatGPT (desktop: AppController.mcpServer,
+            // shell/mcpserversupervisor.h; docs/CLI.md "Remote MCP server"): `brulion-cli mcp
+            // serve` in the background while Brulion runs, for the notebook open now; its password
+            // stays in the app's secrets.
+            SettingsGroup {
+                id: mcpGroup
+                objectName: "mcpServerSettings"
+                visible: AppController.mcpServer.available
+                heading: qsTr("claude.ai and ChatGPT")
+                note: qsTr("Their apps can search and change this notebook while Brulion runs.")
+
+                readonly property string serverState: AppController.mcpServer.state
+                readonly property string endpoint: AppController.mcpServer.endpoint
+
+                SettingSwitch {
+                    objectName: "mcpServerSetting"
+                    text: qsTr("Connector server")
+                    description: mcpGroup.serverState === "running" ? qsTr("Running.")
+                                 : mcpGroup.serverState === "starting" ? qsTr("Starting…")
+                                 : mcpGroup.serverState === "waiting" ? qsTr("Stopped: %1 Starting it again…").arg(AppController.mcpServer.error)
+                                 : mcpGroup.serverState === "failed" ? qsTr("Not running: %1").arg(AppController.mcpServer.error)
+                                 : qsTr("Off.")
+                    iconName: "server"
+                    checked: AppSettings.mcpServerEnabled
+                    onToggled: AppSettings.mcpServerEnabled = checked
+                }
+                ShellSettingRow {
+                    objectName: "mcpServerAddressRow"
+                    visible: mcpGroup.endpoint !== ""
+                    title: qsTr("Connector URL")
+                    description: AppController.mcpServer.reachable
+                                 ? qsTr("claude.ai: Settings → Connectors → Add custom connector. ChatGPT: Developer mode → Create app.")
+                                 : qsTr("Only this computer reaches it: set a public https address below.")
+                    BText {
+                        objectName: "mcpServerEndpoint"
+                        Layout.maximumWidth: Theme.compact ? -1 : 320
+                        text: mcpGroup.endpoint
+                        variant: "mono"
+                        elide: Text.ElideMiddle
+                    }
+                    BButton {
+                        objectName: "mcpServerCopy"
+                        size: "small"
+                        variant: "secondary"
+                        iconName: "copy"
+                        text: qsTr("Copy")
+                        onClicked: {
+                            if (AppController.mcpServer.copy(mcpGroup.endpoint))
+                                AppController.toast(qsTr("Copied."), "success")
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Password")
+                    description: AppSettings.hasMcpServerPassword ? qsTr("Set. You type it when an app connects.")
+                                                                  : qsTr("Needed: at least 8 characters, typed when an app connects.")
+                    BTextField {
+                        id: mcpPasswordField
+                        objectName: "mcpServerPassword"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        echoMode: TextInput.Password
+                        placeholderText: AppSettings.hasMcpServerPassword ? "••••••••" : qsTr("New password")
+                        accessibleName: qsTr("Password")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                        onEditingFinished: {
+                            if (mcpPasswordField.text === "")
+                                return
+                            if (AppSettings.setMcpServerPassword(mcpPasswordField.text)) {
+                                mcpPasswordField.errorText = ""
+                                AppController.toast(qsTr("The password is saved on this device."), "success")
+                            } else {
+                                mcpPasswordField.errorText = qsTr("At least 8 characters.")
+                            }
+                            mcpPasswordField.text = ""
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Public address")
+                    description: qsTr("An https address that reaches the port, e.g. from tailscale funnel %1.").arg(AppSettings.mcpServerPort)
+                    BTextField {
+                        objectName: "mcpServerPublicUrl"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: AppSettings.mcpServerPublicUrl
+                        placeholderText: "https://notes.example.com"
+                        accessibleName: qsTr("Public address")
+                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase
+                        onEditingFinished: AppSettings.mcpServerPublicUrl = text
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Port")
+                    description: qsTr("Where it listens on this computer (127.0.0.1).")
+                    BTextField {
+                        id: mcpPortField
+                        objectName: "mcpServerPort"
+                        Layout.preferredWidth: Theme.compact ? -1 : 120
+                        Layout.fillWidth: Theme.compact
+                        text: "" + AppSettings.mcpServerPort
+                        accessibleName: qsTr("Port")
+                        inputMethodHints: Qt.ImhDigitsOnly
+                        validator: IntValidator { bottom: 1024; top: 65535 }
+                        onEditingFinished: {
+                            AppSettings.mcpServerPort = Js.parseInt(mcpPortField.text)
+                            mcpPortField.text = "" + AppSettings.mcpServerPort
+                        }
+                    }
+                }
+                SettingSwitch {
+                    objectName: "mcpServerReadOnly"
+                    text: qsTr("Only reading")
+                    description: qsTr("The apps can search and read, never change a note.")
+                    checked: AppSettings.mcpServerReadOnly
+                    onToggled: AppSettings.mcpServerReadOnly = checked
+                }
+                // What it did lately: one line per request (the event log has them too).
+                ShellSettingRow {
+                    objectName: "mcpServerLogRow"
+                    visible: AppController.mcpServer.log.length > 0
+                    title: qsTr("Requests")
+                    description: qsTr("Its last lines; also in the event log.")
+                    BButton {
+                        size: "small"
+                        variant: "ghost"
+                        iconName: mcpLog.visible ? "chevron-up" : "chevron-down"
+                        text: mcpLog.visible ? qsTr("Hide") : qsTr("Show")
+                        onClicked: mcpLog.visible = !mcpLog.visible
+                    }
+                }
+                BText {
+                    id: mcpLog
+                    objectName: "mcpServerLog"
+                    Layout.fillWidth: true
+                    visible: false
+                    variant: "mono"
+                    font.pixelSize: Theme.textSm
+                    wrapMode: Text.WrapAnywhere
+                    textFormat: Text.PlainText
+                    text: Js.joinNonEmpty(AppController.mcpServer.log, "\n")
+                }
+            }
+
             // Speech recognition on this device for voice notes (qml/media/MediaSpeechSettings).
             MediaSpeechSettings {}
 

@@ -7,8 +7,11 @@ exit code says what went wrong. The same set of commands works as an MCP server 
 for AI agents such as Hermes or Claude Code, and over HTTPS with sign-in (`brulion-cli mcp serve`)
 for the providers' own apps — claude.ai, the Claude app on the phone, ChatGPT — which then search,
 read and (if you allow it) change the notebook on your own computer ("Remote MCP server" below).
-`brulion-cli acp serve` runs an AI agent of the computer — Claude Code, Codex — for the app on a
-phone, which cannot start one itself ("AI agents for other devices" below).
+The desktop app runs that server itself while it runs: Settings → Extensions → claude.ai and
+ChatGPT ("From the app" below). `brulion-cli acp serve` runs an AI agent of the computer — Claude
+Code, Codex — for the app on a phone, which cannot start one itself ("AI agents for other devices"
+below); `brulion-cli acp agent` goes the other way: Brulion's own AI assistant answers in an editor
+that talks to agents, Zed or a JetBrains IDE ("The assistant in Zed and JetBrains" below).
 The agent gets the notes as a plain folder (Syncthing, the Nextcloud client). The agent's changes go into the version history described as "Replaced from
 the command line (agent)", commands that delete or overwrite something need `--allow-destructive`,
 and deleted pages go to the trash. When you turn on "Allow agents to control the app" in the app
@@ -365,6 +368,7 @@ Never compute a hash yourself.
 | `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url, link}` — 10 minutes, one device, five wrong tries; `--format text` shows the link as a QR code | |
 | `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
 | `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
+| `acp agent` | | Brulion's AI assistant as an agent of the Agent Client Protocol on standard input and output, for an editor (Zed, JetBrains; "The assistant in Zed and JetBrains" below) | |
 <!-- /commands -->
 
 The `habit` commands are run by the app's built-in habits extension (`nawyki.luau`, its commands
@@ -722,6 +726,39 @@ query, the status and the time; never a token, password, code or query string �
 stopped. A problem at start is the usual envelope (exit 5 `cannot_serve`: no password, a port in
 use, a bad certificate or public URL).
 
+### From the app
+
+The desktop app runs `mcp serve` in the background while it runs, for the notebook open in it
+(while the documentation is open: the last notebook of the user's) — Settings → Extensions →
+**claude.ai and ChatGPT** (`src/app/shell/mcpserversupervisor.h`):
+
+* **Connector server** switches it on (off by default) and says its state: starting, running, not
+  running and why — the server's own message: no password, the port in use, a public address that
+  is no https — or stopped and starting again.
+* **Password**: the sign-in password (8 characters at least), kept in the app's secrets
+  (`<app data>/secrets/mcp-password`, owner-only, never in the notebook or the settings file) and
+  given to the server with `--password-file`. The connections it signs in are the command line's
+  (`mcp-remote.json` of the notebook's device state): `mcp clients` lists them, `mcp revoke` ends
+  them, also while the app runs the server.
+* **Public address** (`--public-url`): the https address that reaches the port — a tunnel
+  (`tailscale funnel --bg 8780`, `cloudflared tunnel --url http://127.0.0.1:8780`) or a proxy, as
+  in "Setting it up". Without one the server answers on this computer only: the address shown
+  says so.
+* **Port** (`--port`, 1024 … 65535, 8780 by default; it listens on `127.0.0.1`), **Only reading**
+  (`--read-only`).
+* **Connector URL**: the endpoint the server printed when it listened (`<public address>/mcp`),
+  with **Copy** and where to paste it (claude.ai's custom connector, ChatGPT's MCP app).
+* **Requests**: the server's last lines (one per request, standard error); every one of them is
+  in the event log too (`brulion.net`, "mcp serve: …").
+
+The program is `brulion-cli` next to the app's binary, else the app's binary itself (`brulion cli
+mcp serve …`, as an AppImage runs it). A change of a setting or of the notebook starts it again; a
+server that refuses to start (its first line is an error envelope) is not started again until a
+setting changes; one that ends by itself after it listened is started again after 1, 2, 4 … 60
+seconds (after a minute of running the count starts again; five ends in a row before it ever
+listened leave it off with the last reason). Quitting the app stops it; closing the window to the
+tray does not.
+
 ### Authorization
 
 The server is its own authorization server (one issuer: the public URL):
@@ -911,6 +948,83 @@ brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agen
 * The pairing link and its QR code carry the code: show them only to yourself, as the code.
 * Note text is untrusted data for the agent as for any model: a note can carry instructions. What
   an agent may do without asking is its own setting (its mode), as in the app.
+
+## The assistant in Zed and JetBrains
+
+`brulion-cli acp agent` makes Brulion's AI assistant (docs/EXTENSIONS.md "AI", the built-in
+extension `asystent`) an agent of the [Agent Client Protocol](https://agentclientprotocol.com) for
+an editor that talks to agents — Zed, JetBrains' IDEs (AI Assistant), any ACP client. The editor
+starts it and speaks JSON-RPC 2.0 with it, one message per line on its standard input and output;
+each of the editor's conversations is one with the assistant over the notebook, as in the app's
+AI chat: it searches, queries and reads the notes, looks things up and asks before it changes
+anything (`src/cli/acpagent.h`).
+
+* **The model** is the one of the app on this computer: Settings → Extensions → AI — the
+  provider, the model and the address from the app's settings file, the key from its secrets
+  (`<app data>/secrets/ai-key`), read when it starts. Claude or an OpenAI-compatible API (a server
+  of your own too); the model on the device runs only in the app. Without a key (or, for an
+  OpenAI-compatible API, a model) every prompt fails with what is missing and nothing is sent.
+* **The notebook**: `--vault`, else `BRULION_VAULT`, else the app's current one, as for every
+  command; the editor's own folder (`cwd`) does not change it. Without one, a new session fails
+  with the reason.
+* **Changes**: before the assistant adds to a page or a day, writes a page or changes a block, the
+  editor asks (`session/request_permission`, the change as a tool call of kind `edit` with what it
+  would write): **Allow** (`allow_once`), **Allow every change of this question** (`allow_always`,
+  the rest of the turn) or **No** (`reject_once`). A change declined or a question cancelled is not
+  written, and the model is told so. Written as the command line writes: "Replaced from the
+  command line (agent)" in a page's history.
+* **What it does meanwhile**: each step it says (b.status: "Searching the notes: “trip”…") is a
+  tool call of kind `read`, completed when the next one starts; the model's thoughts come as
+  `agent_thought_chunk` while it writes them; its answer is one `agent_message_chunk` when the turn
+  ends (with `✏️ Changed: [[…]]` after a change), `stopReason` `end_turn`. A failure — the model's
+  or the provider's message ("AI: …"), a time limit — is the prompt's JSON-RPC error.
+* **Cancel** (`session/cancel`) stops the model's request at once (nothing more of it is
+  paid for) and ends the turn with `stopReason` `cancelled`.
+* **The prompt**: its text; a link to a file of the notebook as a link to its page (`[[Projekty/Dom]]`),
+  another link as a Markdown link; an embedded file's text after the message (30 000 characters
+  at most each). No pictures or sound (`promptCapabilities`: `embeddedContext` only).
+* **Conversations are kept in memory** while it runs (no `session/load`): each turn sends the
+  conversation so far, from a later turn on when it is too long for the model (120 000
+  characters, whole turns from the oldest left out). Nothing is written into `AI/`.
+* **Language**: what the assistant writes and asks follows the app's language (Settings →
+  General); its failures the system's ("Language" above). Its log, on standard error, says when a
+  session starts and how each turn ended — never a note's text or the key.
+* It needs no sign-in (`authMethods` is empty), offers no modes, models or commands, and starts no
+  MCP servers the editor names. It runs the built-in assistant's code, not a page that overrides
+  it (the app runs that only once it is approved on this device).
+
+**Zed** (`~/.config/zed/settings.json`; the agent panel's **+** → Brulion):
+
+```json
+{
+  "agent_servers": {
+    "Brulion": {
+      "type": "custom",
+      "command": "brulion-cli",
+      "args": ["acp", "agent", "--vault", "/home/ala/Notatki"],
+      "env": {}
+    }
+  }
+}
+```
+
+**JetBrains** IDEs (AI Assistant's chat → **Add Custom Agent**, which opens `~/.jetbrains/acp.json`):
+
+```json
+{
+  "agent_servers": {
+    "Brulion": {
+      "command": "/run/current-system/sw/bin/brulion-cli",
+      "args": ["acp", "agent", "--vault", "/home/ala/Notatki"],
+      "env": {}
+    }
+  }
+}
+```
+
+An AppImage: `"command": "/home/ala/Apps/Brulion.AppImage", "args": ["cli", "acp", "agent", …]`.
+A separate profile of the app (its settings and key): `"args": ["--profile", "praca", "acp",
+"agent"]`.
 
 ## The running app
 

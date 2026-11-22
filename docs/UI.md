@@ -1184,7 +1184,18 @@ with the model runner), the API key (a password field; saved when editing finish
 show the defaults), "Check" (`Workspace.extensions.testAi()`: the model's "OK" or the error as a
 toast; busy while `aiPending`). The group's note says what it costs and where the notes go (and,
 where AI agents run, that a subscription works with one). Under it the group **AI agents**
-(`acpAgentsSettings`, docs "AI agents (ACP)" below).
+(`acpAgentsSettings`, docs "AI agents (ACP)" below), and on the desktop the group **claude.ai and
+ChatGPT** (`mcpServerSettings`, `AppController.mcpServer`: `src/app/shell/mcpserversupervisor.h`;
+docs/CLI.md "Remote MCP server", "From the app"): the remote MCP server run in the background while
+the app runs — **Connector server** (`mcpServerSetting` → `AppSettings.mcpServerEnabled`; its
+description is the state: off, starting, running, "Not running: <the server's reason>", "Stopped:
+… Starting it again…"), **Connector URL** while it runs (`mcpServerAddressRow`: the endpoint in
+mono, `mcpServerEndpoint`, **Copy** — `mcpServerCopy`, a toast —, and where to paste it, or that
+only this computer reaches a plain http one), **Password** (`mcpServerPassword`, a password field
+saved when editing finishes, then emptied: `AppSettings.setMcpServerPassword`, the field's error
+below 8 characters), **Public address** (`mcpServerPublicUrl`), **Port** (`mcpServerPort`, 1024 …
+65535), **Only reading** (`mcpServerReadOnly`), and **Requests** (`mcpServerLogRow`: Show / Hide the
+server's last lines, `mcpServerLog`).
 With **On this device** the key, model and address rows give way to the model's own
 (`AppController.localAi`, `src/app/shell/localai.h` — typed `FINAL` properties about the chosen
 model, so the bindings compile): **Model** (`aiLocalModelSetting`: Brulion / LFM3 1.7B /
