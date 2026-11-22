@@ -29,8 +29,8 @@ import Brulion
 //
 // One section at a time: wide windows list the sections on the left, choosing one replaces the
 // route's section (no history entry). Narrow ones (phones) start on a list of the sections in
-// groups — the notebook's card on top, each section a row with its icon on a coloured tile (as
-// FluffyChat's or a phone's own settings); a row opens its section as a step of the history, so
+// groups drawn as the page's menu sheet — the notebook's row on top, each section a row with its
+// line icon, a thin line between groups; a row opens its section as a step of the history, so
 // Back returns to the list.
 Item {
     id: root
@@ -60,11 +60,8 @@ Item {
     function enterSection(key: string): void {
         AppController.navigate({ view: "settings", section: key })
     }
-    /// The list's groups of sections (narrow windows): their titles, and their sections' keys
-    /// (comma-separated, in the same order). Keyboard shortcuts only with a keyboard (not on
-    /// touch UIs).
-    readonly property list<string> homeGroupTitles: [qsTr("Look and writing"), qsTr("Notes"), qsTr("Your data"),
-                                                    qsTr("More", "settings group")]
+    /// The list's groups of sections (narrow windows): their sections' keys (comma-separated, in
+    /// order). Keyboard shortcuts only with a keyboard (not on touch UIs).
     readonly property list<string> homeGroupKeys: ["appearance,editor", "reminders,search,extensions", "sync,backups,privacy",
                                                   Theme.touchUi ? "general,automation,app" : "general,shortcuts,automation,app"]
     /// Section `i`'s `field` ("" for none).
@@ -79,25 +76,6 @@ Item {
     function sectionIcon(key: string): string {
         return root.sectionField(root.indexOfSection(key), "iconName")
     }
-    /// The colour of a section's icon tile in the list (white icons on it).
-    function sectionTint(key: string): color {
-        switch (key) {
-        case "appearance": return "#7c5cff"
-        case "editor": return "#2f80ed"
-        case "vault": return "#e8833a"
-        case "reminders": return "#d4890c"
-        case "search": return "#0e9f9f"
-        case "extensions": return "#e2574c"
-        case "sync": return "#22a06b"
-        case "backups": return "#0b86b0"
-        case "privacy": return "#5b6475"
-        case "automation": return "#9b59d0"
-        case "shortcuts": return "#6b7280"
-        case "app": return "#4b6cb7"
-        }
-        return "#6b7280"
-    }
-
     /// The sections ({ key, title, iconName }).
     readonly property list<var> sections: [
         { key: "general", title: qsTr("General"), iconName: "settings" },
@@ -638,150 +616,100 @@ Item {
         }
     }
 
-    // The list of sections (narrow windows): the notebook's card, then the sections in groups.
+    // The list of sections (narrow windows), drawn as the page's menu sheet (BMenu.sheet, its
+    // BMenuItems): plain rows with a line icon, the notebook's row first, the groups apart by
+    // a thin line — no cards, no coloured tiles.
+    component HomeRow: T.AbstractButton {
+        id: homeRow
+        /// The row's section (its objectName), title and icon.
+        property string key
+        property string label
+        property string iconName
+        /// A muted text before the arrow ("" = none).
+        property string hint
+        objectName: "settingsHomeRow-" + key
+        Layout.fillWidth: true
+        implicitHeight: Math.max(homeRowContent.implicitHeight + topPadding + bottomPadding,
+                                 Theme.touchUi ? Theme.touchTarget : 36)
+        leftPadding: 10
+        rightPadding: 10
+        hoverEnabled: !Theme.touchUi
+        Accessible.role: Accessible.Button
+        Accessible.name: label
+        Accessible.description: hint
+        background: Rectangle {
+            radius: Theme.radius
+            color: homeRow.pressed ? Theme.bgPressed : homeRow.hovered ? Theme.bgHover : "transparent"
+        }
+        contentItem: RowLayout {
+            id: homeRowContent
+            spacing: 10
+            BIcon {
+                name: homeRow.iconName
+                size: Theme.iconSize
+                color: Theme.fgMuted
+            }
+            BText {
+                Layout.fillWidth: true
+                text: homeRow.label
+                font.pixelSize: Theme.textControl
+                elide: Text.ElideRight
+            }
+            BText {
+                visible: homeRow.hint !== ""
+                Layout.maximumWidth: homeRow.width / 2
+                text: homeRow.hint
+                variant: "muted"
+                font.pixelSize: Theme.textSm
+                elide: Text.ElideRight
+            }
+            BIcon {
+                name: "chevron-right"
+                size: Theme.iconSizeSm
+                color: Theme.fgMuted
+            }
+        }
+    }
     Component {
         id: settingsHome
         ColumnLayout {
             objectName: "settingsHome"
-            spacing: Theme.space5
+            spacing: 0
 
-            // The notebook: its mark, name and folder; a tap opens its settings.
-            T.AbstractButton {
-                id: notebookCard
-                objectName: "settingsHomeRow-vault"
-                Layout.fillWidth: true
-                implicitHeight: notebookRow.implicitHeight + 2 * Theme.space4
-                Accessible.role: Accessible.Button
-                Accessible.name: qsTr("Notebook")
-                Accessible.description: Workspace.name
+            // The notebook's own settings, its name beside.
+            HomeRow {
+                key: "vault"
+                label: root.sectionTitle("vault")
+                iconName: root.sectionIcon("vault")
+                hint: Workspace.name
                 onClicked: root.enterSection("vault")
-                background: Rectangle {
-                    radius: Theme.radiusXl
-                    color: notebookCard.pressed ? Theme.bgPressed : Theme.bgElevated
-                    border.width: Theme.dark ? 0 : 1
-                    border.color: Theme.borderSubtle
-                }
-                contentItem: Item {
-                    RowLayout {
-                        id: notebookRow
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.space4
-                        anchors.rightMargin: Theme.space4
-                        spacing: Theme.space4
-                        BAvatar {
-                            size: 52
-                            name: Workspace.name
-                        }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            BText {
-                                Layout.fillWidth: true
-                                text: Workspace.name
-                                variant: "title"
-                                elide: Text.ElideRight
-                            }
-                            BText {
-                                Layout.fillWidth: true
-                                text: qsTr("%n page(s)", "", Workspace.pageCount)
-                                variant: "muted"
-                                font.pixelSize: Theme.textSm
-                                elide: Text.ElideRight
-                            }
-                        }
-                        BIcon {
-                            name: "chevron-right"
-                            size: Theme.iconSize
-                            color: Theme.fgFaint
-                        }
-                    }
-                }
             }
 
             Repeater {
-                model: root.homeGroupTitles.length
+                model: root.homeGroupKeys.length
                 delegate: ColumnLayout {
                     id: homeGroup
                     required property int index
-                    readonly property string title: root.homeGroupTitles[homeGroup.index]
                     readonly property list<string> keys: Js.split(root.homeGroupKeys[homeGroup.index], ",")
                     Layout.fillWidth: true
-                    spacing: Theme.space2
-                    BText {
-                        Layout.leftMargin: Theme.space4
-                        text: homeGroup.title
-                        variant: "faint"
-                        font.pixelSize: Theme.textSm
-                        font.weight: Theme.weightSemiBold
-                        Accessible.role: Accessible.Heading
-                    }
+                    spacing: 0
+                    // The line between groups (as BMenuSeparator).
                     Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: homeRows.implicitHeight
-                        radius: Theme.radiusXl
-                        color: Theme.bgElevated
-                        border.width: Theme.dark ? 0 : 1
-                        border.color: Theme.borderSubtle
-                        clip: true
-                        Column {
-                            id: homeRows
-                            width: parent.width
-                            Repeater {
-                                model: homeGroup.keys
-                                delegate: T.AbstractButton {
-                                    id: homeRow
-                                    required property string modelData
-                                    required property int index
-                                    objectName: "settingsHomeRow-" + modelData
-                                    width: homeRows.width
-                                    implicitHeight: Math.max(Theme.touchTarget + 8, 52)
-                                    Accessible.role: Accessible.Button
-                                    Accessible.name: root.sectionTitle(homeRow.modelData)
-                                    onClicked: root.enterSection(homeRow.modelData)
-                                    background: Rectangle {
-                                        color: homeRow.pressed ? Theme.bgPressed : homeRow.hovered ? Theme.bgHover : "transparent"
-                                        // The hairline between rows, from the text's edge.
-                                        Rectangle {
-                                            visible: homeRow.index > 0
-                                            x: Theme.space4 + 30 + Theme.space3
-                                            width: parent.width - x
-                                            height: 1
-                                            color: Theme.borderSubtle
-                                        }
-                                    }
-                                    contentItem: Item {
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: Theme.space4
-                                            anchors.rightMargin: Theme.space4
-                                            spacing: Theme.space3
-                                            Rectangle {
-                                                implicitWidth: 30
-                                                implicitHeight: 30
-                                                radius: 9
-                                                color: root.sectionTint(homeRow.modelData)
-                                                BIcon {
-                                                    anchors.centerIn: parent
-                                                    name: root.sectionIcon(homeRow.modelData)
-                                                    size: 17
-                                                    color: "#ffffff"
-                                                }
-                                            }
-                                            BText {
-                                                Layout.fillWidth: true
-                                                text: root.sectionTitle(homeRow.modelData)
-                                                font.pixelSize: Theme.textMd
-                                                elide: Text.ElideRight
-                                            }
-                                            BIcon {
-                                                name: "chevron-right"
-                                                size: Theme.iconSize
-                                                color: Theme.fgFaint
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        implicitHeight: 1
+                        color: Theme.border
+                    }
+                    Repeater {
+                        model: homeGroup.keys
+                        delegate: HomeRow {
+                            id: homeSectionRow
+                            required property string modelData
+                            key: modelData
+                            label: root.sectionTitle(modelData)
+                            iconName: root.sectionIcon(modelData)
+                            onClicked: root.enterSection(homeSectionRow.modelData)
                         }
                     }
                 }

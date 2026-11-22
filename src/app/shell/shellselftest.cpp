@@ -5220,7 +5220,7 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     app->goHome();
 }
 
-/// Narrow windows: the settings start on the list of their sections (the notebook's card, the
+/// Narrow windows: the settings start on the list of their sections (the notebook's row, the
 /// sections in groups); a tap on a row opens its section as a step of the history — Back returns
 /// to the list, and Back again leaves the settings; a route to a section shows it at once.
 void checkSettingsHome(QQuickWindow *window, AppController *app, const Check &check)
