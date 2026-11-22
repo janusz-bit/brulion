@@ -9,6 +9,9 @@
 #                   the fingerprint of its key
 #   OUT/app/        the browser version of the same release (its brulion-web-X.Y.Z.zip unpacked,
 #                   docs/WEB.md): Brulion opened right from the page, nothing to download
+#   OUT/privacy.html  the privacy policy, docs/PRIVACY.md rendered (scripts/markdown-page.py into
+#                   packaging/fdroid-repo/privacy.html): the address Google Play and the app link
+#                   (docs/GOOGLE_PLAY.md "Privacy policy")
 #   OUT/repo/       the repository (`fdroid update`): the APKs of the last releases, the signed
 #                   index (index-v1.jar, index-v2.json + entry.jar), icon, screenshots and texts
 #                   (fastlane/metadata/android, packaging/fdroid-repo/io.github.januszbit.brulion.yml)
@@ -28,8 +31,8 @@
 #      FDROID_KEYSTORE_BASE64, FDROID_KEYSTORE_PASS, FDROID_KEY_ALIAS [brulion-fdroid];
 #      GH_REPO [janusz-bit/brulion]; GH_TOKEN for gh (downloads).
 # Needs fdroidserver (`fdroid`, 2.4), keytool (JDK 17+), apksigner (on PATH or in the Android SDK's
-# build-tools of $ANDROID_HOME), curl, unzip and gh (also with -a: the page's release and its
-# browser version). On NixOS:
+# build-tools of $ANDROID_HOME), curl, unzip, gh (also with -a: the page's release and its browser
+# version) and python3 (the privacy policy's page, its standard library only). On NixOS:
 #   nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner nixpkgs#gh nixpkgs#unzip \
 #     -c scripts/fdroid-repo.sh
 set -euo pipefail
@@ -243,6 +246,9 @@ sed -e "s|@REPO_URL@|$repo_url|g" -e "s|@FINGERPRINT@|$fingerprint|g" \
   -e "s|@SOURCE_URL@|https://github.com/$GH_REPO|g" "${page_subst[@]}" \
   "$ROOT/packaging/fdroid-repo/index.html" >"$out/index.html"
 grep -q '@[A-Z0-9_]*@' "$out/index.html" && die "unreplaced placeholder in index.html"
+# The privacy policy: the same text as docs/PRIVACY.md at every rebuild of the site.
+python3 -I "$ROOT/scripts/markdown-page.py" "$ROOT/packaging/fdroid-repo/privacy.html" \
+  "$ROOT/docs/PRIVACY.md" >"$out/privacy.html" || die "cannot render docs/PRIVACY.md into privacy.html"
 
 log "done: $out ($(du -sh -- "$out" | cut -f1); $versions)"
 echo "repository: $repo_url?fingerprint=$fingerprint"

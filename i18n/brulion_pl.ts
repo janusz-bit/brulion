@@ -19123,34 +19123,39 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellAboutDialog</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="8"/>
+        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="10"/>
         <source>About Brulion</source>
         <translation>O Brulionie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="10"/>
+        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="12"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="33"/>
+        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="35"/>
         <source>Version %1</source>
         <translation>Wersja %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="40"/>
+        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="42"/>
         <source>Offline-first notes in plain Markdown files: an outliner with daily journals, a calendar, tasks, reminders and alarms, calculations, Syncthing and Nextcloud sync.</source>
         <translation>Notatki w zwykłych plikach Markdown, działające bez internetu: konspekt z codziennym dziennikiem, kalendarz, zadania, przypomnienia i alarmy, obliczenia, synchronizacja przez Syncthing i Nextcloud.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="45"/>
+        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="47"/>
         <source>Free software under the GNU Affero General Public License, version 3 or later. Icons: Lucide (ISC licence). Emoji and symbols: Noto Emoji and Noto Sans Math (SIL Open Font License).</source>
         <translation>Wolne oprogramowanie na licencji GNU Affero General Public License w wersji 3 lub nowszej. Ikony: Lucide (licencja ISC). Emoji i symbole: Noto Emoji i Noto Sans Math (licencja SIL Open Font License).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="51"/>
+        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="56"/>
         <source>Source code on GitHub</source>
         <translation>Kod źródłowy w serwisie GitHub</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellAboutDialog.qml" line="63"/>
+        <source>Privacy policy</source>
+        <translation>Polityka prywatności</translation>
     </message>
 </context>
 <context>
@@ -20721,314 +20726,329 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellPrivacySettings</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="37"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="60"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="38"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="61"/>
         <source>Brulion unlocks with the phone&apos;s own lock</source>
         <translation>Brulion odblokowuje się blokadą telefonu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="44"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="59"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="45"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="60"/>
         <source>The app lock is off</source>
         <translation>Blokada aplikacji jest wyłączona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="61"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="62"/>
         <source>The PIN is set</source>
         <translation>PIN jest ustawiony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="70"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="97"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="71"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="98"/>
         <source>App lock</source>
         <translation>Blokada aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="79"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="80"/>
         <source>Brulion hides your notes behind a lock screen on this device. Anyone with the notebook&apos;s folder can still read them: encrypt pages for that.</source>
         <translation>Brulion ukrywa notatki za ekranem blokady na tym urządzeniu. Kto ma folder notatnika, nadal je przeczyta: do tego służy szyfrowanie stron.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="98"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="99"/>
         <source>Off</source>
         <translation>Wyłączona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="99"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="100"/>
         <source>On: the phone&apos;s fingerprint, face or screen lock</source>
         <translation>Włączona: odcisk palca, twarz lub blokada ekranu telefonu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="100"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="101"/>
         <source>On: a PIN</source>
         <translation>Włączona: PIN</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="103"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="104"/>
         <source>Change PIN…</source>
         <translation>Zmień PIN…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="103"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="104"/>
         <source>Set a PIN…</source>
         <translation>Ustaw PIN…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="111"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="304"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="112"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="328"/>
         <source>Turn off</source>
         <translation>Wyłącz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="123"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="124"/>
         <source>Unlock with the phone&apos;s lock</source>
         <translation>Odblokowanie blokadą telefonu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="124"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="125"/>
         <source>Your fingerprint, face or the phone&apos;s own PIN, pattern or password instead of a PIN for Brulion.</source>
         <translation>Odcisk palca, twarz albo PIN, wzór lub hasło telefonu zamiast PIN-u Brulionu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="125"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="126"/>
         <source>Set a screen lock in the phone&apos;s settings first (Android 10 or newer).</source>
         <translation>Najpierw ustaw blokadę ekranu w ustawieniach telefonu (Android 10 lub nowszy).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="131"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="299"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="132"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="323"/>
         <source>Use the phone&apos;s lock</source>
         <translation>Użyj blokady telefonu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="143"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="144"/>
         <source>Use a PIN instead…</source>
         <translation>Użyj zamiast tego PIN-u…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="149"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="150"/>
         <source>Lock when Brulion starts</source>
         <translation>Blokuj przy uruchomieniu Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="158"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="163"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="159"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="164"/>
         <source>Lock after leaving Brulion</source>
         <translation>Blokuj po wyjściu z Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="159"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="160"/>
         <source>After switching to another app or turning the screen off.</source>
         <translation>Po przejściu do innej aplikacji albo wyłączeniu ekranu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="160"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="161"/>
         <source>After the window has been in the background, minimised or hidden in the tray.</source>
         <translation>Gdy okno było w tle, zminimalizowane lub schowane w zasobniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="164"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="165"/>
         <source>At once</source>
         <translation>Od razu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="164"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="265"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="165"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="266"/>
         <source>1 min</source>
         <translation>1 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="165"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="178"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="265"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="166"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="179"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="266"/>
         <source>5 min</source>
         <translation>5 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="165"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="179"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="266"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="166"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="180"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="267"/>
         <source>15 min</source>
         <translation>15 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="166"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="180"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="266"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="167"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="181"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="267"/>
         <source>1 h</source>
         <translation>1 godz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="173"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="177"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="174"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="178"/>
         <source>Lock after no activity</source>
         <translation>Blokuj po bezczynności</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="174"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="175"/>
         <source>While Brulion is in front, without a key, a click or a touch.</source>
         <translation>Gdy Brulion jest na wierzchu, bez klawisza, kliknięcia ani dotyku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="178"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="179"/>
         <source>Never</source>
         <translation>Nigdy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="179"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="180"/>
         <source>30 min</source>
         <translation>30 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="187"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="193"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="188"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="194"/>
         <source>Hide Brulion&apos;s screen</source>
         <translation>Ukrywaj ekran Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="189"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="190"/>
         <source>Always: no screenshots, screen recordings or previews in recent apps.</source>
         <translation>Zawsze: bez zrzutów ekranu, nagrań ekranu i podglądu w ostatnich aplikacjach.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="190"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="191"/>
         <source>While locked, and in the recent apps&apos; preview (Android 13 and newer; older Android: choose Always).</source>
         <translation>Gdy zablokowany oraz w podglądzie ostatnich aplikacji (Android 13 i nowszy; na starszym wybierz „Zawsze”).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="194"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="195"/>
         <source>While locked</source>
         <translation>Gdy zablokowany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="194"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="195"/>
         <source>Always</source>
         <translation>Zawsze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="201"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="202"/>
         <source>Hide the note&apos;s text in notifications</source>
         <translation>Ukrywaj treść notatki w powiadomieniach</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="202"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="203"/>
         <source>Reminders say only “Reminder” and the time.</source>
         <translation>Przypomnienia pokazują tylko „Przypomnienie” i godzinę.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="211"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="212"/>
         <source>Hide notes in widgets</source>
         <translation>Ukrywaj notatki w widżetach</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="212"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="213"/>
         <source>The home screen&apos;s widgets say “Brulion is locked”; quick add still works.</source>
         <translation>Widżety na ekranie głównym pokazują „Brulion jest zablokowany”; szybkie dodawanie nadal działa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="221"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="224"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="222"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="225"/>
         <source>Lock now</source>
         <translation>Zablokuj teraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="235"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="236"/>
         <source>Encrypted notes</source>
         <translation>Zaszyfrowane notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="244"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="245"/>
         <source>Pages and parts of pages locked with a password, readable in Obsidian too. Encrypt a page from its menu, or type /encrypt.</source>
         <translation>Strony i fragmenty stron zamknięte hasłem, czytelne także w Obsidianie. Zaszyfruj stronę z jej menu albo wpisz /encrypt.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="260"/>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="264"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="261"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="265"/>
         <source>Lock encrypted notes after</source>
         <translation>Blokuj zaszyfrowane notatki po</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="261"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="262"/>
         <source>Without use: passwords typed are forgotten and open encrypted pages lock.</source>
         <translation>Bez używania: wpisane hasła zostaną zapomniane, a otwarte zaszyfrowane strony zablokowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="272"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="273"/>
         <source>Remember passwords between pages</source>
         <translation>Pamiętaj hasła między stronami</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="273"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="274"/>
         <source>A password typed once opens the notebook&apos;s other encrypted text with the same password until they lock.</source>
         <translation>Raz wpisane hasło otwiera inne zaszyfrowane teksty notatnika z tym samym hasłem, dopóki się nie zablokują.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="281"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="282"/>
         <source>Lock encrypted notes now</source>
         <translation>Zablokuj teraz zaszyfrowane notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="282"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="283"/>
         <source>Something is unlocked now.</source>
         <translation>Coś jest teraz odblokowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="282"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="283"/>
         <source>Nothing is unlocked.</source>
         <translation>Nic nie jest odblokowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="285"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="286"/>
         <source>Lock</source>
         <translation>Zablokuj</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="298"/>
+        <source>Privacy policy</source>
+        <translation>Polityka prywatności</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="307"/>
+        <source>Brulion sends nothing to its makers. Your notes stay on this device and go only where you send them: your sync server, the AI provider you chose, GitHub.</source>
+        <translation>Brulion nie wysyła niczego swoim twórcom. Notatki zostają na tym urządzeniu i trafiają tylko tam, dokąd je wyślesz: na Twój serwer synchronizacji, do wybranego dostawcy AI, na GitHuba.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="312"/>
+        <source>Read the privacy policy</source>
+        <translation>Przeczytaj politykę prywatności</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="322"/>
         <source>Turn the app lock off</source>
         <translation>Wyłącz blokadę aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="300"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="324"/>
         <source>Change PIN</source>
         <translation>Zmień PIN</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="300"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="324"/>
         <source>Set a PIN</source>
         <translation>Ustaw PIN</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="304"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="328"/>
         <source>OK</source>
         <translation>OK</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="325"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="349"/>
         <source>Current PIN</source>
         <translation>Obecny PIN</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="339"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="363"/>
         <source>New PIN (4 to 16 digits)</source>
         <translation>Nowy PIN (od 4 do 16 cyfr)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="341"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="365"/>
         <source>A PIN is 4 to 16 digits.</source>
         <translation>PIN to od 4 do 16 cyfr.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="351"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="375"/>
         <source>Repeat the PIN</source>
         <translation>Powtórz PIN</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="353"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="377"/>
         <source>The PINs differ.</source>
         <translation>PIN-y się różnią.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="361"/>
+        <location filename="../src/app/qml/shell/ShellPrivacySettings.qml" line="385"/>
         <source>A forgotten PIN can be removed only by clearing Brulion&apos;s settings on this device; the notes stay.</source>
         <translation>Zapomniany PIN da się usunąć tylko, czyszcząc ustawienia Brulionu na tym urządzeniu; notatki zostaną.</translation>
     </message>

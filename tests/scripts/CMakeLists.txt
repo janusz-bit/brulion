@@ -61,6 +61,16 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/fastlane/metadata/android ${PROJECT_SOURCE_DIR}/CMakeLists.txt)
 endif()
 
+# The privacy policy's page (docs/PRIVACY.md -> privacy.html of the site, docs/GOOGLE_PLAY.md):
+# scripts/markdown-page.py on Markdown it knows and must refuse, then on the real policy; needs
+# python3 (skipped without it).
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_markdown_page
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_markdown_page.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/markdown-page.py ${PROJECT_SOURCE_DIR})
+    set_tests_properties(tst_scripts_markdown_page PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # The draft F-Droid recipe (packaging/fdroid) against the Android build scripts it calls and the
 # project version (docs/ANDROID.md, "The F-Droid recipe").
 if(BRULION_BASH)

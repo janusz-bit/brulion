@@ -9,7 +9,8 @@ import Brulion
 // when it locks, what it hides: the recent apps' preview and screenshots on Android, the note's text
 // in notifications, the widgets) and the encrypted notes' session (Workspace.encryption: how long a
 // password and an open encrypted page stay unlocked, whether passwords are remembered between pages,
-// "Lock now"). Everything here is this device's setting, never synced.
+// "Lock now"). Everything here is this device's setting, never synced. Last, the privacy policy
+// (docs/PRIVACY.md on the project's GitHub Pages; also in the About dialog).
 ColumnLayout {
     id: section
 
@@ -289,6 +290,29 @@ ColumnLayout {
                 }
             }
         }
+    }
+
+    BText {
+        Layout.fillWidth: true
+        Layout.topMargin: Theme.space6
+        text: qsTr("Privacy policy")
+        variant: "heading"
+        wrapMode: Text.Wrap
+        Accessible.role: Accessible.Heading
+    }
+    BText {
+        Layout.fillWidth: true
+        wrapMode: Text.Wrap
+        variant: "muted"
+        text: qsTr("Brulion sends nothing to its makers. Your notes stay on this device and go only where you send them: your sync server, the AI provider you chose, GitHub.")
+    }
+    BButton {
+        objectName: "privacyPolicy"
+        Layout.topMargin: Theme.space1
+        text: qsTr("Read the privacy policy")
+        iconName: "external-link"
+        variant: "secondary"
+        onClicked: Workspace.openUrl("https://janusz-bit.github.io/brulion/privacy.html")
     }
 
     BDialog {
