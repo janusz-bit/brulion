@@ -157,6 +157,30 @@ assert acpRefused {
 assert lib.assertMsg (
   acpFailed { } == [ ]
 ) "services.brulion-acp: the example must pass its assertions";
+# In the tailnet: --tailscale instead of --listen, no publicUrl needed, the port open on tailscale0 only.
+assert lib.assertMsg (
+  acpFailed {
+    tailscale = true;
+    publicUrl = lib.mkForce null;
+  } == [ ]
+) "services.brulion-acp: tailscale needs no publicUrl";
+assert
+  let
+    tailnet = acpSystem {
+      tailscale = true;
+      tailnetUsers = [ "ola@github" ];
+      openFirewall = true;
+      publicUrl = lib.mkForce null;
+    };
+    exec = toString tailnet.config.systemd.services.brulion-acp.serviceConfig.ExecStart;
+  in
+  lib.assertMsg (
+    lib.hasInfix "--tailscale" exec
+    && lib.hasInfix "ola@github" exec
+    && !lib.hasInfix "--listen" exec
+    && tailnet.config.networking.firewall.interfaces.tailscale0.allowedTCPPorts == [ 8790 ]
+    && !lib.elem 8790 tailnet.config.networking.firewall.allowedTCPPorts
+  ) "services.brulion-acp: tailscale = true must serve with --tailscale on tailscale0 only";
 assert mcpRefused {
   listenAddress = "0.0.0.0";
   publicUrl = lib.mkForce null;

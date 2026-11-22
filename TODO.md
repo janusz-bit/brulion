@@ -14,11 +14,15 @@ done in the repository simply disappears from the list.
   documents) — also as the desktop app runs it (Settings → Extensions → claude.ai and ChatGPT) —.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
-  OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's, on
-  the phone and in the browser (docs/CLI.md "AI agents for other devices", services.brulion-acp).
-  Missing: a try with a real agent from a real phone (its foreground service with the screen off
-  included; a question that comes while the phone is in a pocket only changes that quiet
-  notification's text — it could alert), a try with
+  OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
+  desktop app's "Share agents with the phone", found in the notebook and paired without a code in a
+  tailnet —, on the phone and in the browser (docs/CLI.md "AI agents for other devices",
+  services.brulion-acp). Missing: a try from a real phone in a real tailnet (the offer in the
+  notebook, the pairing by tailnet identity, the firewall's port; Tailscale Serve's header only
+  against the fake tailscaled), tailscaled's LocalAPI on Windows (its named pipe) and macOS (the
+  `tailscale` program answers there: untried), a try with a real agent from a real phone (its
+  foreground service with the screen off included; a question that comes while the phone is in a
+  pocket only changes that quiet notification's text — it could alert), a try with
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
   /c`) and macOS; and a try of the other direction, Brulion's assistant as an ACP agent
   (`brulion-cli acp agent`, docs/CLI.md "The assistant in Zed and JetBrains"), in a real Zed and a

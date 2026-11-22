@@ -10,8 +10,10 @@ read and (if you allow it) change the notebook on your own computer ("Remote MCP
 The desktop app runs that server itself while it runs: Settings → Extensions → claude.ai and
 ChatGPT ("From the app" below). `brulion-cli acp serve` runs an AI agent of the computer — Claude
 Code, Codex — for the app on a phone, which cannot start one itself ("AI agents for other devices"
-below); `brulion-cli acp agent` goes the other way: Brulion's own AI assistant answers in an editor
-that talks to agents, Zed or a JetBrains IDE ("The assistant in Zed and JetBrains" below).
+below); the desktop app runs it by itself with one switch, "Share agents with the phone", and in a
+tailnet the phone finds it and pairs without a code. `brulion-cli acp agent` goes the other way:
+Brulion's own AI assistant answers in an editor that talks to agents, Zed or a JetBrains IDE ("The
+assistant in Zed and JetBrains" below).
 The agent gets the notes as a plain folder (Syncthing, the Nextcloud client). The agent's changes go into the version history described as "Replaced from
 the command line (agent)", commands that delete or overwrite something need `--allow-destructive`,
 and deleted pages go to the trash. When you turn on "Allow agents to control the app" in the app
@@ -364,7 +366,7 @@ Never compute a hash yourself.
 | `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
 | `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
 | `mcp revoke [<connection>]` | `[--all] [--auth-file F]` | end a connection (`bgr_…`) or all of a client's (`bcl_…`, an https client ID); takes effect in a running server at once | |
-| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--question-wait S] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
+| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--question-wait S] [--tailscale \| --tailscale-serve] [--tailnet-user L] [--no-tailnet-trust] [--allow-http] [--stop-on-eof] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
 | `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url, link}` — 10 minutes, one device, five wrong tries; `--format text` shows the link as a QR code | |
 | `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
 | `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
@@ -842,6 +844,13 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   optionally `:Name`, `=` the command), several separated by `;`, or `--agents agents.json`
   (`[{id, name, command}]`). A device asks for an agent by its id: the commands are this
   computer's, never the device's.
+* **From the desktop app**: Settings → Extensions → AI agents → **Share agents with the phone**
+  runs this server for the notebook the app has open, with the agents set up there, while the app
+  runs (docs/UI.md "AI agents (ACP)" → "Sharing them with the phone"): `brulion-cli --vault
+  <notebook> acp serve --agents <app data>/agent-share/agents.json --stop-on-eof` and, found by
+  itself, `--tailscale` (below) or this computer's address in its network (`--listen <address>
+  --public-url http://<address>:8790 --allow-http`). No terminal, no copy of the notebook, no
+  service to set up; its pairing code is a button there, shown as a QR code.
 * **Pairing**: `acp pair` prints a code (`K7QM-2XRP`: 8 letters and digits none of which can be
   mistaken for another), the server's address and a link that holds both
   (`brulion://pair?url=https%3A%2F%2Fagent.example.com&code=K7QM-2XRP`, docs/UI.md "Automation") —
@@ -910,12 +919,74 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   Chrome's Private Network Access preflight: a public page that calls an address of your own
   network). Any other page is refused.
 * **Language**: English, as `mcp serve` — the app words the agent's ends and failures itself.
+* **`--stop-on-eof`**: the server stops when its standard input ends — how a program that runs it
+  (the app's switch) stops it, its agents with it; and when that program ends anyhow, a crash too,
+  the server goes with it.
+
+### In a tailnet
+
+`--tailscale` puts the server in this computer's tailnet (Tailscale, or headscale behind the
+Tailscale client): it asks tailscaled for this computer (its LocalAPI over its local socket, `GET
+/localapi/v0/status`: `/run/tailscale/tailscaled.sock` on Linux, the named pipe on Windows,
+`BRULION_TAILSCALE_SOCKET` another; else `tailscale status --json`, as on macOS), listens on its
+tailnet IPv4 address (unless `--listen`), gives the devices its MagicDNS name
+(`http://nixos.tail1ea20e.ts.net:8790`, unless `--public-url`) and, without `--no-tailnet-trust`,
+**pairs the devices of its own user without a code**. Plain http is fine there: the tailnet's
+WireGuard tunnel encrypts it end to end. Without a running tailscaled it does not start (exit 5
+`no_tailscale`). Its first line says `tailnet: {name, login, serve, trust, users}`.
+
+A pairing request without a code (`POST pair {device}`) is judged by who sent it, as tailscaled
+knows it — never by what the request says of itself:
+
+* a connection from a tailnet address (100.64.0.0/10, fd7a:115c:a1e0::/48) or from loopback is
+  looked up with `GET /localapi/v0/whois?addr=<peer ip:port>` (for a loopback connection tailscaled
+  knows the device whose connection Tailscale Serve proxied);
+* its device pairs when it belongs to the computer's own user (`Self`'s login in the status) or
+  to a login named with `--tailnet-user ala@github,ola@github` (letter case aside); a tagged device
+  (`tag:…`, the user "tagged-devices") belongs to no person and never does, nor does **this
+  computer itself** — a connection tailscaled names as this computer's own (to its own tailnet
+  address, or through its own Serve) may come from any of its local users; anyone else gets 403
+  `code_needed` with why, and pairs with the code as without a tailnet;
+* `--tailscale-serve` is for a server behind the user's own Tailscale Serve (`tailscale serve --bg
+  8790`): it listens on 127.0.0.1 only (another `--listen` is refused), gives the devices
+  `https://<MagicDNS name>`, and — only when whois knows nobody at a loopback peer — takes the login
+  Serve writes into `Tailscale-User-Login`. That header is never taken from any other peer, nor by
+  a server that is not behind Serve or that listens beyond loopback: anyone could write it into a
+  request (the log says when one was ignored). Any program of this computer can reach a loopback
+  port too, so use Serve only on a computer of your own.
+* A request with a code is a pairing with a code, whatever its peer.
+
+The app on the phone tries without a code first (its pairing dialog's code field may stay empty;
+an offer in the notebook, below, is one tap) and asks for the code when it gets `code_needed`.
+The device is paired as by a code — a token kept as a hash, `acp clients`, `acp revoke` — so a
+device that leaves the tailnet keeps its pairing until it is revoked.
+
+### A phone finds the computer
+
+A device that has the same notebook (synced: Syncthing, Nextcloud) needs nothing typed: while the
+app shares its agents in a tailnet, it writes where it is reached into the notebook's synced
+settings, `.brulion/config.json` (docs/SYNTAX.md §1):
+
+```json
+"agentHosts": [{"url": "http://nixos.tail1ea20e.ts.net:8790", "host": "nixos",
+                "agents": [{"id": "claude", "name": "Claude Code"}]}]
+```
+
+Every other device lists those agents in Settings → Extensions → AI agents; **Add** on one pairs —
+without a code where the computer knows the device as its user's, else the dialog asks for the
+code — and adds that agent (another agent of the same computer later uses the same pairing).
+Turned off, the app removes its entry. What it writes is no secret: an address and names, no
+token, no code, no command. Because the notebook comes from anywhere (a shared folder, an import),
+a device offers only an address of a tailnet (a MagicDNS name or a tailnet address, which only a
+device of the user's own tailnet reaches), never pairs with an offer by itself, and shows the
+address next to the agent's name. A computer outside a tailnet writes nothing there: its devices
+pair once with its code (the QR code of the app, or `acp pair`).
 
 The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side):
 
 | Request | Body / query | Answer |
 |---|---|---|
-| `POST pair` | `{code, device}` (no token) | `{token, device: {id, name}}`; 403 `no_code`, `bad_code`, `too_many_devices`; 429 `too_many_tries` |
+| `POST pair` | `{code, device}` (no token; without `code`: by the device's tailnet identity) | `{token, device: {id, name}}`; 403 `no_code`, `bad_code`, `code_needed`, `too_many_devices`; 429 `too_many_tries` |
 | `GET info` | | `{protocol: 1, version, host, root, tools, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` |
 | `POST streams` | `{agent}` | 201 `{stream, root}`; 404 `unknown_agent`, 429 `too_many_streams` |
 | `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
@@ -941,7 +1012,12 @@ brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agen
   else to lose (the NixOS module does: docs/NIXOS.md "AI agents for the phone"), and reach it only
   in your own network — a tailnet (Tailscale, headscale) or a VPN — never from the open internet.
 * It listens on `127.0.0.1` by default, for a reverse proxy that adds HTTPS; without TLS it refuses
-  a public URL that is not https. `Host` is checked on every request (DNS rebinding) and a request
+  a public URL that is not https — but one on this computer, one in a tailnet (WireGuard encrypts
+  it) or, with `--allow-http`, one the user chose in their own network (not encrypted on the way:
+  anyone on that network can read the token, prompts and answers; fine at home only).
+* Pairing without a code trusts tailscaled alone (above): never a header from a peer that could
+  have written it. A firewall may keep the phone from the port of the tailnet address (NixOS:
+  `networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 8790 ];`). `Host` is checked on every request (DNS rebinding) and a request
   with an `Origin` — a web page's — is refused unless `--allowed-origin` names it: only the app talks to it.
 * The HTTP limits are those of `mcp serve` ("Remote MCP server": connections, header fields,
   timeouts), a body of a send at most 16 MiB (pictures of a prompt).

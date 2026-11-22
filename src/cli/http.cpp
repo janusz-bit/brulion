@@ -712,6 +712,7 @@ void Connection::process()
             m_headersSeen = true;
             Request &head = m_parser.request();
             head.peer = m_socket->peerAddress();
+            head.peerPort = m_socket->peerPort();
             head.secure = m_server->tls();
             m_logMethod = head.method;
             m_logPath = head.path;

@@ -1432,7 +1432,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2702"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2849"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1440,7 +1440,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2567"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2714"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1480,7 +1480,15 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2391"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2090"/>
+        <source>%n device(s) paired. Another one scans a code.</source>
+        <translation>
+            <numerusform>%n device paired. Another one scans a code.</numerusform>
+            <numerusform>%n devices paired. Another one scans a code.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2538"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1488,7 +1496,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2569"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2716"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1720,7 +1728,7 @@
 <context>
     <name>ShellSemanticSettings</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellSemanticSettings.qml" line="32"/>
+        <location filename="../src/app/qml/shell/ShellSemanticSettings.qml" line="34"/>
         <source>%n note(s) can be found by meaning.</source>
         <translation>
             <numerusform>%n note can be found by meaning.</numerusform>

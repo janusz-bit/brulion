@@ -251,8 +251,12 @@ public:
 
     /// Pairs this device with a computer that runs `brulion-cli acp serve` at `address`, with a
     /// code of its `acp pair`: paired(true, what it says, its agents — each an AgentConfig with
-    /// url, remote, host, root, token and a name; no id yet) or paired(false, why, {}).
-    void pair(const QString &address, const QString &code);
+    /// url, remote, host, root, token and a name; no id yet) or paired(false, why, {}). Without a
+    /// code the computer may know this device by itself (its user's in their tailnet: `acp serve
+    /// --tailscale`) — or a token for it is here already (another of its agents) —, else it asks
+    /// for the code: codeNeeded(address), then paired(false, "", {}). `only`: of its agents just
+    /// that one (its id there).
+    void pair(const QString &address, const QString &code, const QString &only = QString());
     /// Tests: the transport to other computers (default one over the network of its own).
     void setTransport(sync::HttpTransport *transport) { m_transport = transport; }
     /// Tests: every agent left as an app the system ended leaves them — no stream ended, no
@@ -283,6 +287,8 @@ Q_SIGNALS:
     /// as running.
     void recovering(const QString &path);
     void paired(bool ok, const QString &text, const QList<brulion::shell::AgentConfig> &agents);
+    /// A pairing without a code: the computer at `address` wants its code (pair()).
+    void codeNeeded(const QString &address);
 
 private:
     struct Process;

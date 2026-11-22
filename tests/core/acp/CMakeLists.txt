@@ -8,3 +8,6 @@ brulion_add_test(tst_acp SOURCES tst_acp.cpp LIBS brulion_core_acp)
 # only from what the host lacks, messages in order and never twice, the agent's end, a device
 # unpaired, a stream forgotten, a host unreachable for too long, stop(), deletion mid-request.
 brulion_add_test(tst_acp_remote SOURCES tst_acp_remote.cpp LIBS brulion_core_acp)
+# A computer's agents offered in the notebook's config.json (hostoffer.h): only tailnet addresses,
+# names cut, odd ids dropped, the limits; the same computer replaced, the other keys kept.
+brulion_add_test(tst_acp_hostoffer SOURCES tst_acp_hostoffer.cpp LIBS brulion_core_acp)

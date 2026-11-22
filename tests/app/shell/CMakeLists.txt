@@ -315,3 +315,25 @@ if(TARGET brulion-cli)
     target_compile_definitions(tst_shell_agents PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
     add_dependencies(tst_shell_agents brulion-cli)
 endif()
+# A brulion-cli server run while the app runs (serverprocess.h) with a server of the test's own
+# (fakeserver.cpp): Running on its first line, stopped by the end of its input (terminated when it
+# ignores it), started again after a crash with growing waits, a refusal final, new arguments.
+qt_add_executable(fake_server fakeserver.cpp)
+target_link_libraries(fake_server PRIVATE Qt6::Core)
+brulion_set_warnings(fake_server)
+brulion_add_test(tst_shell_serverprocess SOURCES tst_serverprocess.cpp LIBS brulion_shell)
+target_compile_definitions(tst_shell_serverprocess PRIVATE FAKE_SERVER="$<TARGET_FILE:fake_server>")
+add_dependencies(tst_shell_serverprocess fake_server)
+# "Share agents with the phone" (agentshare.h): brulion-cli's arguments for each address, the
+# network's address, the notebook's offers; and the real `brulion-cli acp serve` started by the
+# switch against a fake tailscaled (tests/common/faketailscaled.h): its tailnet name, the offer in
+# config.json, a pairing without a code from the app's client, a code and its link, unpairing,
+# the code asked for without the trust, turned off.
+brulion_add_test(tst_shell_agentshare SOURCES tst_agentshare.cpp ${PROJECT_SOURCE_DIR}/tests/common/faketailscaled.h
+    LIBS brulion_shell brulion_core_tailscale brulion_core_vault Qt6::Network)
+if(TARGET brulion-cli)
+    target_compile_definitions(tst_shell_agentshare PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
+    add_dependencies(tst_shell_agentshare brulion-cli)
+endif()
+math(EXPR _agentshare_timeout "180 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_shell_agentshare PROPERTIES TIMEOUT ${_agentshare_timeout})

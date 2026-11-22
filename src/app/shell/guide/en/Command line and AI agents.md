@@ -78,9 +78,9 @@ On a server without the app:
 Details, and how to set up a proxy or a tunnel: “Remote MCP server” in `docs/CLI.md` in the repository; the NixOS service in `docs/NIXOS.md`.
 
 ## Your agent for the phone
-`brulion-cli acp serve` runs an AI agent of this computer — Claude Code, Codex, OpenCode — for Brulion on your phone, which cannot start one itself ([[AI#An agent on another computer]]). The agent works here, in this computer's copy of the notebook: its files, its commands and Brulion's tools are this computer's, and it signs in here (your subscription).
+`brulion-cli acp serve` runs an AI agent of this computer — Claude Code, Codex, OpenCode — for Brulion on your phone, which cannot start one itself ([[AI#An agent on another computer]]). The agent works here, in this computer's copy of the notebook: its files, its commands and Brulion's tools are this computer's, and it signs in here (your subscription). The desktop app runs it by itself: **Settings → Extensions → AI agents → Share agents with the phone**; on a computer without the app:
 
-1. Start it: `brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agent.example.com` — on NixOS the service `services.brulion-acp`. It listens on `127.0.0.1:8790`, for a reverse proxy that adds HTTPS **in your own network only** (a tailnet, a VPN): a paired phone drives an agent that runs commands here.
+1. Start it: `brulion-cli --vault ~/Notatki acp serve --agent claude --tailscale` — in your tailnet: it listens on this computer's tailnet address, names itself by its tailnet name, and your own devices there pair **without a code** (Tailscale vouches for them); on NixOS the service `services.brulion-acp` with `tailscale = true`. Without a tailnet: `--public-url https://agent.example.com`, listening on `127.0.0.1:8790` for a reverse proxy that adds HTTPS **in your own network only** (a VPN): a paired phone drives an agent that runs commands here.
 2. `brulion-cli --format text acp pair` shows a QR code for the phone's camera (it opens the pairing in Brulion, filled in) and the code — 10 minutes, one device, five wrong tries; or in Brulion on the phone: **Settings → Extensions → AI agents → Add → An agent on another computer…**.
 3. `brulion-cli acp clients` lists the paired devices, `brulion-cli acp revoke <dev_…>` (or `--all`) unpairs one at once, its agents stop.
 

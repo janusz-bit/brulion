@@ -1944,8 +1944,8 @@ Item {
                     }
                 }
                 note: AppSettings.acpProgramsAvailable
-                      ? qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI …) can answer in the AI chat, with its own subscription. It asks before it changes a file or runs a command. An agent on another computer of yours (brulion-cli acp serve) can answer too.")
-                      : qsTr("An AI agent on a computer of yours (Claude Code, Codex …) can answer in the AI chat here: the computer runs it with brulion-cli acp serve, in its copy of this notebook, and this device pairs with it once with a code of acp pair. It signs in there by itself, so a Claude or ChatGPT subscription works. Each change it makes to a file and each command it runs there is shown in the conversation for your yes, as the agent asks for it.")
+                      ? qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI …) can answer in the AI chat, with its own subscription. It asks before it changes a file or runs a command. Shared, it answers on your phone too.")
+                      : qsTr("An AI agent on a computer of yours (Claude Code, Codex …) can answer here, with its own subscription: turn on Share agents with the phone there. In your tailnet it shows up below by itself; else pair it once with a code. Each change and command it makes waits for your yes.")
 
                 Repeater {
                     model: AppSettings.acpAgents
@@ -2046,18 +2046,165 @@ Item {
                         onTriggered: hostDialog.open()
                     }
                 }
+                // The agents other computers of the user offer in this notebook (AgentShare.offers:
+                // their address in the tailnet, from .brulion/config.json): one tap adds one.
+                Repeater {
+                    model: Workspace.chats.share.offers
+                    delegate: ShellSettingRow {
+                        id: offerRow
+                        required property var modelData
+                        readonly property string url: AppController.routeText(offerRow.modelData, "url")
+                        readonly property string agent: AppController.routeText(offerRow.modelData, "agent")
+                        readonly property string host: AppController.routeText(offerRow.modelData, "host")
+                        objectName: "acpOfferRow"
+                        Layout.fillWidth: true
+                        title: AppController.routeText(offerRow.modelData, "name")
+                        description: qsTr("On %1 (%2)").arg(offerRow.host).arg(offerRow.url)
+                        BButton {
+                            objectName: "acpOfferAdd"
+                            size: "small"
+                            iconName: "plus"
+                            text: qsTr("Add")
+                            enabled: !Workspace.chats.agentPairing
+                            onClicked: Workspace.chats.addOfferedAgent(offerRow.url, offerRow.agent)
+                        }
+                    }
+                }
+                // "Share agents with the phone" (AgentShare): this computer runs its agents for the
+                // user's other devices while the app runs.
+                SettingSwitch {
+                    id: shareSwitch
+                    objectName: "acpShareSwitch"
+                    visible: Workspace.chats.share.available
+                    text: qsTr("Share agents with the phone")
+                    description: Workspace.chats.share.status
+                    iconName: "smartphone"
+                    checked: AppSettings.acpShare
+                    onToggled: AppSettings.acpShare = shareSwitch.checked
+                }
+                ShellSettingRow {
+                    objectName: "acpSharePairRow"
+                    visible: Workspace.chats.share.available && AppSettings.acpShare
+                    title: qsTr("Pair a device")
+                    description: Workspace.chats.share.devices > 0
+                                 ? qsTr("%n device(s) paired. Another one scans a code.", "", Workspace.chats.share.devices)
+                                 : qsTr("A device outside your tailnet scans a code.")
+                    BButton {
+                        objectName: "acpSharePair"
+                        size: "small"
+                        iconName: "qr-code"
+                        text: qsTr("Show code")
+                        busy: Workspace.chats.share.pairing
+                        enabled: Workspace.chats.share.state === "running"
+                        onClicked: Workspace.chats.share.newPairing()
+                    }
+                    BButton {
+                        objectName: "acpShareUnpair"
+                        size: "small"
+                        variant: "ghost"
+                        visible: Workspace.chats.share.devices > 0
+                        text: qsTr("Unpair all")
+                        onClicked: Workspace.chats.share.unpairAll()
+                    }
+                }
+                ShellSettingRow {
+                    objectName: "acpShareAddressRow"
+                    visible: Workspace.chats.share.available && AppSettings.acpShare
+                    title: qsTr("Address")
+                    description: Workspace.chats.share.unencrypted
+                                 ? qsTr("Not encrypted on your network: fine at home. Tailscale encrypts it.")
+                                 : qsTr("Empty: found by itself (Tailscale, else this computer's address).")
+                    BTextField {
+                        objectName: "acpShareAddress"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: AppSettings.acpShareAddress
+                        placeholderText: Workspace.chats.share.automaticAddress !== ""
+                                         ? Workspace.chats.share.automaticAddress : "http://192.168.1.10:8790"
+                        accessibleName: qsTr("Address")
+                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase
+                        onEditingFinished: AppSettings.acpShareAddress = text
+                    }
+                }
+                SettingSwitch {
+                    objectName: "acpShareTrust"
+                    visible: Workspace.chats.share.available && AppSettings.acpShare
+                             && (Workspace.chats.share.tailnet || !AppSettings.acpShareTrust)
+                    text: qsTr("Pair my devices without a code")
+                    description: Workspace.chats.share.owner !== ""
+                                 ? qsTr("Devices of %1 in the tailnet: Tailscale vouches for them.").arg(Workspace.chats.share.owner)
+                                 : qsTr("Your devices in the tailnet: Tailscale vouches for them.")
+                    checked: AppSettings.acpShareTrust
+                    onToggled: AppSettings.acpShareTrust = checked
+                }
+                Connections {
+                    target: Workspace.chats.share
+                    function onPairingChanged(): void {
+                        if (Workspace.chats.share.pairCode !== "" && !shareCodeDialog.opened)
+                            shareCodeDialog.open()
+                    }
+                }
+                // A pairing code of this computer: its brulion://pair link as a QR code for the phone's
+                // camera (Brulion opens the pairing filled in there), the code to type, until when.
+                BDialog {
+                    id: shareCodeDialog
+                    objectName: "acpShareCodeDialog"
+                    title: qsTr("Pair a device")
+                    subtitle: qsTr("Scan it with the phone's camera: Brulion opens the pairing.")
+                    iconName: "qr-code"
+                    showReject: false
+                    acceptText: qsTr("Close")
+                    onClosed: Workspace.chats.share.closePairing()
+                    QrCodeView {
+                        objectName: "acpShareQr"
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: Math.min(260, shareCodeDialog.availableWidth)
+                        Layout.preferredHeight: Math.min(260, shareCodeDialog.availableWidth)
+                        text: Workspace.chats.share.pairLink
+                    }
+                    BText {
+                        objectName: "acpShareCode"
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Code %1 · valid until %2, once").arg(Workspace.chats.share.pairCode)
+                                                                    .arg(Workspace.chats.share.pairExpires)
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: Workspace.chats.share.url
+                        variant: "caption"
+                        wrapMode: Text.WrapAnywhere
+                    }
+                }
+                // A pairing without a code the computer did not take (not in its tailnet, another
+                // user's device): the dialog with its address, for its code.
+                Connections {
+                    target: Workspace.chats
+                    function onAgentHostNeedsCode(address: string): void {
+                        hostAddressField.text = address
+                        hostCodeField.text = ""
+                        hostDialog.needsCode = true
+                        hostDialog.open()
+                    }
+                }
                 // Pairing with a computer that runs `brulion-cli acp serve` (WorkspaceAgents::pair):
-                // its address and a code of its `acp pair`; the result comes as a toast.
+                // its address and a code of its `acp pair` — none in the user's own tailnet; the
+                // result comes as a toast.
                 BDialog {
                     id: hostDialog
                     objectName: "acpHostDialog"
+                    property bool needsCode: false
                     title: qsTr("An agent on another computer")
-                    subtitle: qsTr("On the computer: brulion-cli acp serve runs the agents (on NixOS: services.brulion-acp), and brulion-cli acp pair shows a code valid for 10 minutes.")
+                    subtitle: hostDialog.needsCode
+                              ? qsTr("That computer wants its code: Settings → AI agents → Pair a device there.")
+                              : qsTr("On the computer: Settings → AI agents → Share agents with the phone. In your tailnet no code is needed.")
                     iconName: "sparkles"
                     acceptText: qsTr("Pair")
-                    acceptEnabled: Js.trim(hostAddressField.text) !== "" && Js.trim(hostCodeField.text) !== ""
-                                   && !Workspace.chats.agentPairing
+                    acceptEnabled: Js.trim(hostAddressField.text) !== "" && !Workspace.chats.agentPairing
+                                   && (!hostDialog.needsCode || Js.trim(hostCodeField.text) !== "")
                     initialFocusItem: hostAddressField.text === "" ? hostAddressField : hostCodeField
+                    onClosed: hostDialog.needsCode = false
                     onAccepted: {
                         Workspace.chats.pairAgentHost(hostAddressField.text, hostCodeField.text)
                         hostCodeField.text = ""
@@ -2085,7 +2232,7 @@ Item {
                         id: hostCodeField
                         objectName: "acpHostCode"
                         Layout.fillWidth: true
-                        placeholderText: "K7QM-2XRP"
+                        placeholderText: hostDialog.needsCode ? "K7QM-2XRP" : qsTr("None in your tailnet")
                         accessibleName: qsTr("Pairing code")
                         inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhPreferUppercase
                     }

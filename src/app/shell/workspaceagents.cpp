@@ -1546,7 +1546,7 @@ void WorkspaceAgents::check(const QString &id)
 
 // ---- an agent on another computer: pairing ---------------------------------------------------------------
 
-void WorkspaceAgents::pair(const QString &address, const QString &code)
+void WorkspaceAgents::pair(const QString &address, const QString &code, const QString &only)
 {
     const QUrl base = acp::normalizeRemoteBase(address);
     if (!base.isValid() || base.isEmpty()) {
@@ -1557,62 +1557,85 @@ void WorkspaceAgents::pair(const QString &address, const QString &code)
                 {});
         return;
     }
-    if (acp::normalizePairingCode(code).isEmpty()) {
-        Q_EMIT paired(false, tr("Type the code that acp pair shows on the computer."), {});
-        return;
-    }
     if (!remoteAvailable()) {
         Q_EMIT paired(false, tr("An AI agent on another computer cannot be reached from here."), {});
         return;
     }
     const QString shown = base.toString();
     QPointer<WorkspaceAgents> self(this);
-    acp::pairRemote(
-            transport(), base, code, deviceName(),
-            [self, base, shown](const acp::RemotePairing &pairing, const acp::RemoteError &error) {
-                if (!self)
-                    return;
-                if (error.failed()) {
-                    Q_EMIT self->paired(false, remoteErrorText(shown, error), {});
-                    return;
-                }
-                const QString token = pairing.token;
-                acp::fetchRemoteInfo(
-                        self->transport(), base, token,
-                        [self, base, shown, token](const acp::RemoteInfo &info, const acp::RemoteError &e) {
-                            if (!self)
-                                return;
-                            if (e.failed()) {
-                                Q_EMIT self->paired(false, remoteErrorText(shown, e), {});
+    // The agents of that computer, with this device's token for it (`only`: just that one).
+    const auto added = [self, base, shown, only](const QString &token) {
+        acp::fetchRemoteInfo(
+                self->transport(), base, token,
+                [self, base, shown, token, only](const acp::RemoteInfo &info, const acp::RemoteError &e) {
+                    if (!self)
+                        return;
+                    if (e.failed()) {
+                        Q_EMIT self->paired(false, remoteErrorText(shown, e), {});
+                        return;
+                    }
+                    if (info.agents.isEmpty()) {
+                        Q_EMIT self->paired(false, tr("%1 offers no agent: start acp serve there with --agent.").arg(shown),
+                                            {});
+                        return;
+                    }
+                    const QString host = info.host.isEmpty() ? base.host() : info.host;
+                    QList<AgentConfig> agents;
+                    QStringList names;
+                    for (const acp::RemoteAgent &a : info.agents) {
+                        if (!only.isEmpty() && a.id != only)
+                            continue;
+                        AgentConfig c;
+                        c.name = a.name;
+                        c.command = a.command;
+                        c.tools = info.tools;
+                        c.url = base.toString();
+                        c.remote = a.id;
+                        c.host = host;
+                        c.root = info.root;
+                        c.token = token;
+                        agents << c;
+                        names << a.name;
+                    }
+                    if (agents.isEmpty()) {
+                        Q_EMIT self->paired(false, tr("%1 no longer offers that agent.").arg(host), {});
+                        return;
+                    }
+                    qCInfo(logging::lcApp, "AI agents: paired with %s (%s): %s", qUtf8Printable(host),
+                           qUtf8Printable(shown), qUtf8Printable(names.join(u", "_s)));
+                    Q_EMIT self->paired(true, tr("Paired with %1: %2.").arg(host, names.join(u", "_s)), agents);
+                });
+    };
+    // Paired with that computer already (another of its agents is here): its token again.
+    if (code.trimmed().isEmpty()) {
+        for (const AgentConfig &a : std::as_const(m_agents)) {
+            if (a.isRemote() && !a.token.isEmpty() && acp::normalizeRemoteBase(a.url) == base) {
+                added(a.token);
+                return;
+            }
+        }
+    }
+    // Without a code the computer judges this device by who it is in their tailnet (`acp serve
+    // --tailscale`): its own user's pairs at once, any other is asked for the code.
+    acp::pairRemote(transport(), base, code, deviceName(),
+                    [self, shown, code, added](const acp::RemotePairing &pairing, const acp::RemoteError &error) {
+                        if (!self)
+                            return;
+                        if (error.failed()) {
+                            const bool needsCode = code.trimmed().isEmpty() && error.kind == acp::RemoteError::Kind::Refused
+                                                   && (error.code == u"code_needed" || error.code == u"bad_request");
+                            if (needsCode) {
+                                qCInfo(logging::lcApp, "AI agents: %s asks for its pairing code (%s)",
+                                       qUtf8Printable(shown), qUtf8Printable(error.detail));
+                                Q_EMIT self->codeNeeded(shown);
+                                Q_EMIT self->paired(false, QString(), {});
                                 return;
                             }
-                            if (info.agents.isEmpty()) {
-                                Q_EMIT self->paired(
-                                        false, tr("%1 offers no agent: start acp serve there with --agent.").arg(shown),
-                                        {});
-                                return;
-                            }
-                            const QString host = info.host.isEmpty() ? base.host() : info.host;
-                            QList<AgentConfig> agents;
-                            QStringList names;
-                            for (const acp::RemoteAgent &a : info.agents) {
-                                AgentConfig c;
-                                c.name = a.name;
-                                c.command = a.command;
-                                c.tools = info.tools;
-                                c.url = base.toString();
-                                c.remote = a.id;
-                                c.host = host;
-                                c.root = info.root;
-                                c.token = token;
-                                agents << c;
-                                names << a.name;
-                            }
-                            qCInfo(logging::lcApp, "AI agents: paired with %s (%s): %s", qUtf8Printable(host),
-                                   qUtf8Printable(shown), qUtf8Printable(names.join(u", "_s)));
-                            Q_EMIT self->paired(true, tr("Paired with %1: %2.").arg(host, names.join(u", "_s)), agents);
-                        });
-            });
+                            Q_EMIT self->paired(false, remoteErrorText(shown, error), {});
+                            return;
+                        }
+                        added(pairing.token);
+                    });
 }
 
 // ---- what the agent asks of the app: files, terminals ----------------------------------------------------

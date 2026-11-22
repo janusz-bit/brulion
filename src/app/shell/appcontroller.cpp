@@ -402,8 +402,23 @@ AppController::AppController(const Options &options, QObject *parent)
     // on another computer): kept in the settings, their token in the app's secrets.
     connect(m_workspace->chats(), &WorkspaceChats::agentsPaired, this,
             [this](const QList<AgentConfig> &agents) { m_settings->addRemoteAcpAgents(agents); });
-    connect(m_workspace->chats(), &WorkspaceChats::agentHostPaired, this,
-            [this](bool ok, const QString &text) { toast(text, ok ? u"success"_s : u"error"_s); });
+    connect(m_workspace->chats(), &WorkspaceChats::agentHostPaired, this, [this](bool ok, const QString &text) {
+        if (!text.isEmpty()) // ("": the computer asks for its code, the dialog says so)
+            toast(text, ok ? u"success"_s : u"error"_s);
+    });
+    // "Share agents with the phone" (agentshare.h): the switch and its address, and the notebook it
+    // serves — the open one, never the documentation.
+    AgentShare *share = m_workspace->chats()->share();
+    const auto shareSettings = [this, share] {
+        share->setSettings(m_settings->acpShare(), m_settings->acpShareAddress(), m_settings->acpShareTrust());
+    };
+    shareSettings();
+    connect(m_settings.get(), &AppSettings::acpShareChanged, this, shareSettings);
+    const auto shareNotebook = [this, share] { share->setNotebook(m_workspace->rootPath(), !inDocsVault()); };
+    shareNotebook();
+    connect(m_workspace.get(), &Workspace::openChanged, this, shareNotebook);
+    connect(this, &AppController::inDocsVaultChanged, this, shareNotebook);
+    connect(share, &AgentShare::message, this, [this](const QString &text, const QString &kind) { toast(text, kind); });
     // An agent's question in a conversation no chat view shows: a toast whose Open shows it.
     connect(m_workspace->chats(), &WorkspaceChats::questionWaiting, this, [this](const QString &path, const QString &text) {
         const int id = toastWithAction(text, u"info"_s, tr("Open"));
