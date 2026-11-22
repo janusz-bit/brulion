@@ -417,6 +417,18 @@ public:
     Q_INVOKABLE QString forkedFrom(const QString &path) const;
     /// A message as a quote for the field ("> …" lines and a blank line).
     Q_INVOKABLE QString quote(const QString &markdown) const;
+    /// The page being named at `caret` of the field's `text` (as T3 Code's @-mentions): "@" and
+    /// the start of a name (not inside a word, an address), or "[[" and anything but "]": the
+    /// pages it may be ({title, path, folder, start, end} — `start`..`end` the text replaced by
+    /// the link), at most `limit`; [] when no name is being written.
+    Q_INVOKABLE QVariantList mentions(const QString &text, int caret, int limit = 8) const;
+    /// Where a page's name being written at `caret` starts and what it is so far ({start, query};
+    /// start -1: none). Pure.
+    static std::pair<int, QString> mentionAt(const QString &text, int caret);
+    /// `text` with the page's name being written at `caret` replaced by a link to `title` and a
+    /// space ("" when none is being written), and where the caret goes then.
+    Q_INVOKABLE QString withMention(const QString &text, int caret, const QString &title) const;
+    Q_INVOKABLE int mentionEnd(const QString &text, int caret, const QString &title) const;
 
     /// The notebook closed: no turn runs.
     void reset();

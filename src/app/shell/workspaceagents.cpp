@@ -16,6 +16,7 @@
 #include <QLocale>
 #if QT_CONFIG(process) // (not in the browser: AI agents run in the desktop app)
 #include <QProcess>
+#include <QRegularExpression>
 #endif
 #include <QStandardPaths>
 #include <QSysInfo>
@@ -956,9 +957,29 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         else
             input.prompt << acp::Block::link(url, QFileInfo(picture).fileName());
     }
+    // The pages the message names ([[…]], as T3 Code's @-mentions): their text where the agent
+    // takes it (at most 5, not the conversation itself nor the page it is about).
+    const QString pagePath = page.isEmpty() ? QString() : m_workspace->resolveLink(page, path);
+    {
+        static const QRegularExpression wiki(u"(?<!!)\\[\\[([^\\[\\]|#^\\n]+)(?:[|#^][^\\[\\]\\n]*)?\\]\\]"_s);
+        QStringList named;
+        for (auto it = wiki.globalMatch(newest.value(u"content"_s).toString()); it.hasNext() && named.size() < 5;) {
+            const QString target = m_workspace->resolveLink(it.next().captured(1).trimmed(), path);
+            if (target.isEmpty() || named.contains(target) || target.compare(path, Qt::CaseInsensitive) == 0
+                || target == pagePath || !target.endsWith(u".md"_s, Qt::CaseInsensitive))
+                continue;
+            named << target;
+            bool ok = false;
+            const QString text = markdown::isEncryptedNotePath(target) ? QString() : m_workspace->read(target, &ok);
+            const QString url = fileUrl(root, target);
+            if (ok)
+                input.prompt << acp::Block::resource(url, QFileInfo(target).fileName(), text, u"text/markdown"_s);
+            else
+                input.prompt << acp::Block::link(url, QFileInfo(target).fileName(), u"text/markdown"_s);
+        }
+    }
     // A new session: what the agent needs to know first, the page (its text where the agent takes
     // it), the conversation so far.
-    const QString pagePath = page.isEmpty() ? QString() : m_workspace->resolveLink(page, path);
     // (That computer's server gives each session Brulion's tools there, unless it was started
     // without them: its info said so at pairing.)
     const bool tools = agent->isRemote() ? agent->tools : !input.mcpServers.isEmpty();

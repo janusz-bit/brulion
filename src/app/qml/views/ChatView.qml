@@ -243,6 +243,17 @@ FocusScope {
         input.cursorPosition = input.length
         return true
     }
+    /// A page named at the caret: its link in place of what was typed ("@Do" → "[[Dom]] ").
+    function insertMention(title: string): void {
+        const caret = 0 + input.cursorPosition
+        const typed = "" + input.text
+        const next = "" + root.chats.withMention(typed, caret, title)
+        if (next === "")
+            return
+        input.text = next
+        input.cursorPosition = root.chats.mentionEnd(typed, caret, title)
+        input.forceActiveFocus()
+    }
     /// A message's text as a quote at the field's start.
     function quoteMessage(markdown: string): void {
         const quote = root.chats.quote(markdown)
@@ -1696,6 +1707,31 @@ FocusScope {
                     }
                 }
 
+                // A page being named ("@Dom", "[[Do"): the pages it may be; a tap (or Tab: the
+                // first) writes its link — an AI agent gets the pages a message names.
+                Flow {
+                    id: mentionList
+                    objectName: "chatMentions"
+                    readonly property list<var> pages: root.chats.mentions(input.text, input.cursorPosition, 8)
+                    Layout.fillWidth: true
+                    visible: mentionList.pages.length > 0
+                    spacing: Theme.space1
+                    Repeater {
+                        model: mentionList.pages
+                        delegate: BChip {
+                            id: mentionChip
+                            required property var modelData
+                            objectName: "chatMention"
+                            size: "small"
+                            interactive: true
+                            iconName: "file-text"
+                            text: AppController.routeText(mentionChip.modelData, "title")
+                            Accessible.name: qsTr("Name the page %1").arg(mentionChip.text)
+                            onClicked: root.insertMention(mentionChip.text)
+                        }
+                    }
+                }
+
                 // The pictures going with the message.
                 Flow {
                     objectName: "chatAttached"
@@ -1833,6 +1869,9 @@ FocusScope {
                                     } else if ((key === Qt.Key_Up || key === Qt.Key_Down) && !shift && !control
                                                && root.recall(key === Qt.Key_Up)) {
                                         event.accepted = true
+                                    } else if (key === Qt.Key_Tab && mentionList.pages.length > 0) {
+                                        event.accepted = true
+                                        root.insertMention(AppController.routeText(mentionList.pages[0], "title"))
                                     }
                                 }
                             }

@@ -1434,4 +1434,61 @@ QString WorkspaceChats::quote(const QString &markdown) const
     return chat::quoted(markdown);
 }
 
+std::pair<int, QString> WorkspaceChats::mentionAt(const QString &text, int caret)
+{
+    if (caret < 0 || caret > text.size())
+        return {-1, {}};
+    // "[[" and the name so far (no "]", no line break).
+    for (qsizetype i = caret - 1; i >= 1; --i) {
+        const QChar c = text.at(i);
+        if (c == u']' || c == u'\n' || (c == u'[' && text.at(i - 1) != u'['))
+            break;
+        if (c == u'[' && text.at(i - 1) == u'[') {
+            if (i >= 2 && text.at(i - 2) == u'!')
+                break; // (an embed)
+            return {int(i - 1), text.mid(i + 1, caret - i - 1)};
+        }
+    }
+    // "@" and a word: letters, digits, "-", "_", "/" and ".", at the start or after a space.
+    qsizetype at = caret;
+    while (at > 0) {
+        const QChar c = text.at(at - 1);
+        if (!(c.isLetterOrNumber() || c == u'-' || c == u'_' || c == u'/' || c == u'.' || c.isMark()))
+            break;
+        --at;
+    }
+    if (at > 0 && text.at(at - 1) == u'@' && (at == 1 || text.at(at - 2).isSpace() || text.at(at - 2) == u'('))
+        return {int(at - 1), text.mid(at, caret - at)};
+    return {-1, {}};
+}
+
+QString WorkspaceChats::withMention(const QString &text, int caret, const QString &title) const
+{
+    const int start = mentionAt(text, caret).first;
+    if (start < 0 || title.trimmed().isEmpty())
+        return {};
+    return text.left(start) + u"[["_s + title.trimmed() + u"]] "_s + text.mid(caret);
+}
+
+int WorkspaceChats::mentionEnd(const QString &text, int caret, const QString &title) const
+{
+    const int start = mentionAt(text, caret).first;
+    return start < 0 ? caret : start + int(title.trimmed().size()) + 5;
+}
+
+QVariantList WorkspaceChats::mentions(const QString &text, int caret, int limit) const
+{
+    const auto [start, query] = mentionAt(text, caret);
+    if (start < 0 || !m_workspace->ready())
+        return {};
+    QVariantList out;
+    for (const QVariant &v : m_workspace->suggestPages(query, limit)) {
+        QVariantMap m = v.toMap();
+        m.insert(u"start"_s, start);
+        m.insert(u"end"_s, caret);
+        out.append(m);
+    }
+    return out;
+}
+
 } // namespace brulion::shell

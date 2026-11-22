@@ -1369,6 +1369,14 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   stopped **holds** them (`chatHeld`: "2 messages wait: the answer before them stopped." with
   **Resume**, `chatResume` → `resumeQueue()`); they are kept in the notebook's device state
   (LocalStore `chat/queued`), so a restart keeps them, held, and they follow a rename.
+* **Naming a page** (as T3 Code's @-mentions): "@" and the start of a name (at the start or after a
+  space — not an address), or "[[" and anything but "]", offers the pages it may be as chips above
+  the field (`chatMentions`, `chatMention`: `WorkspaceChats.mentions()` through
+  `Workspace.suggestPages`, at most 8); a tap or Tab (the first) writes its link, `[[Zakupy]] `
+  (`withMention()`, `mentionEnd()`). An AI agent gets the pages its newest message names — at most
+  5, not the conversation nor the page it is about — with the message: their text where it takes
+  embedded context, else links (an encrypted page: a link); the built-in assistant reads them with
+  its own tools.
 * **Questions asked before**: Up in an empty field brings back the user's questions of the
   conversation, newest first (Down goes forward again, to an empty field; editing one makes it a
   new message — `WorkspaceChats.prompts()`, core `chat::prompts`: without their pictures and the

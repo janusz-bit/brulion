@@ -1068,6 +1068,66 @@ private Q_SLOTS:
         QCOMPARE(isKnown, known);
     }
 
+    void mentionAt_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<int>("caret");
+        QTest::addColumn<int>("start");
+        QTest::addColumn<QString>("query");
+        QTest::newRow("@ at the start") << u"@Do"_s << 3 << 0 << u"Do"_s;
+        QTest::newRow("@ after a space") << u"Zobacz @Zakupy"_s << 14 << 7 << u"Zakupy"_s;
+        QTest::newRow("@ alone") << u"Zobacz @"_s << 8 << 7 << QString();
+        QTest::newRow("@ with diacritics") << u"@Łódź"_s << 5 << 0 << u"Łódź"_s;
+        QTest::newRow("an address is none") << u"ja@poczta.pl"_s << 12 << -1 << QString();
+        QTest::newRow("after the word: none") << u"@Dom i"_s << 6 << -1 << QString();
+        QTest::newRow("[[ with spaces") << u"Patrz [[Moje zak"_s << 16 << 6 << u"Moje zak"_s;
+        QTest::newRow("[[ empty") << u"[["_s << 2 << 0 << QString();
+        QTest::newRow("a closed link: none") << u"[[Dom]] i"_s << 9 << -1 << QString();
+        QTest::newRow("an embed: none") << u"![[foto"_s << 7 << -1 << QString();
+        QTest::newRow("caret inside") << u"@Dom dalej"_s << 2 << 0 << u"D"_s;
+        QTest::newRow("caret out of range") << u"@Dom"_s << 9 << -1 << QString();
+    }
+    void mentionAt()
+    {
+        QFETCH(QString, text);
+        QFETCH(int, caret);
+        QFETCH(int, start);
+        QFETCH(QString, query);
+        const auto [at, typed] = WorkspaceChats::mentionAt(text, caret);
+        QCOMPARE(at, start);
+        QCOMPARE(typed, query);
+    }
+
+    /// The pages a message names go to the agent with it (their text), the page names offered
+    /// while one is written.
+    void mentionedPages()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        QVERIFY(ws->write(u"Zakupy.md"_s, u"- mleko\n- chleb\n"_s));
+        ws->finishIndexing();
+        const QVariantList offered = chats->mentions(u"Spójrz na @Zak"_s, 14);
+        QCOMPARE(offered.size(), 1);
+        QCOMPARE(offered.first().toMap().value(u"title"_s).toString(), u"Zakupy"_s);
+        QCOMPARE(offered.first().toMap().value(u"start"_s).toInt(), 10);
+        QCOMPARE(offered.first().toMap().value(u"end"_s).toInt(), 14);
+        QCOMPARE(chats->withMention(u"Spójrz na @Zak dalej"_s, 14, u"Zakupy"_s), u"Spójrz na [[Zakupy]]  dalej"_s);
+        QCOMPARE(chats->mentionEnd(u"Spójrz na @Zak dalej"_s, 14, u"Zakupy"_s), 21);
+        QCOMPARE(chats->withMention(u"nic"_s, 3, u"Zakupy"_s), QString());
+        const QString path = chats->send(QString(), u"Porównaj [[Zakupy]] i [[Dom]] i [[Brak]]"_s, QString(), {}, u"acp:fake"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        const QJsonArray prompt = promptOf(logged(u"session/prompt"_s).last());
+        QStringList resources;
+        for (const QJsonValue &b : prompt) {
+            const QJsonObject o = b.toObject();
+            if (o.value(u"type"_s).toString() == u"resource_link"_s)
+                resources << QFileInfo(QUrl(o.value(u"uri"_s).toString()).toLocalFile()).fileName();
+        }
+        // (The fake agent takes no embedded context: links, the missing page none.)
+        QCOMPARE(resources, (QStringList{u"Zakupy.md"_s, u"Dom.md"_s}));
+    }
+
     void autoAnswers()
     {
         acp::Permission edit{u"Edit Dom.md"_s, QString(), {{u"a"_s, u"Allow"_s, u"allow_once"_s}, {u"r"_s, u"Reject"_s, u"reject_once"_s}}};
