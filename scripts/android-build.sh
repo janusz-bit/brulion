@@ -590,7 +590,7 @@ for component in BrulionActivity AlarmActivity ShareActivity ReminderReceiver Ac
 done
 dex_classes=$(unzip -p "$apk" 'classes*.dex' | grep -a -o 'Lio/github/januszbit/brulion/android/[A-Za-z]*;' | sort -u)
 for class in BrulionAndroid BrulionActivity ImeInsets AlarmScheduler ReminderNotifier AlarmActivity BootReceiver \
-  ShareActivity ShareIntent; do
+  ShareActivity ShareIntent TreeFolder; do
   grep -q "/$class;" <<<"$dex_classes" || die "class $class missing from classes.dex (Kotlin not compiled?)"
 done
 echo "Kotlin classes in dex: $(wc -l <<<"$dex_classes")"

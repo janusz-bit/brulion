@@ -367,7 +367,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
         fail "$component missing from the merged manifest"
     done
     dex=$(unzip -p "$apk" 'classes*.dex' | ${gnugrep}/bin/grep -a -o 'Lio/github/januszbit/brulion/android/[A-Za-z]*;' | sort -u)
-    for class in BrulionAndroid BrulionActivity AlarmScheduler ReminderNotifier AlarmActivity BootReceiver; do
+    for class in BrulionAndroid BrulionActivity AlarmScheduler ReminderNotifier AlarmActivity BootReceiver TreeFolder; do
       [[ $dex == *"/$class;"* ]] || fail "class $class missing from classes.dex"
     done
     # R8 (android/settings.gradle) must keep the Java classes C++ calls by name.
