@@ -106,8 +106,9 @@ else()
 endif()
 
 add_subdirectory(src/core)
-# llama.cpp for the model on the device (BRULION_LOCAL_AI, 3rdparty/llama): after the core modules,
-# whose semantic search prototype may have found another llama.cpp of the system (its own targets).
+# llama.cpp for the model on the device and search by meaning (BRULION_LOCAL_AI, 3rdparty/llama):
+# after the core modules, whose runners and plugins (src/core/ai, speech, semantic) it gives the
+# names of its processor plugins and its output folder.
 if(BRULION_LOCAL_AI_ENABLED)
     add_subdirectory(3rdparty/llama)
 endif()

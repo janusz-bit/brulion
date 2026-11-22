@@ -1,4 +1,4 @@
-# Search quality experiments (semantic search prototype)
+# Search quality experiments (search by meaning, docs/SEMANTIC.md)
 
 Python scripts behind the numbers in docs/SEMANTIC.md. Not part of the build; run with
 `uv run python <script>` (pyproject.toml: torch with CUDA 12.8, sentence-transformers;

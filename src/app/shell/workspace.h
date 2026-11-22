@@ -55,6 +55,7 @@
 #include "notebook/pages.h"
 #include "queryhost.h"
 #include "replacesession.h"
+#include "semanticsearch.h"
 #include "types.h"
 #include "workspacebackups.h"
 #include "workspacecalendars.h"
@@ -145,6 +146,9 @@ class Workspace : public EditorHost, public QueryHost {
     /// The text of the notebook's PDFs and pictures for the search (src/app/attachments; docs/UI.md
     /// "Searching attachments"): progress, pause, OCR's state, the picture view's highlights.
     Q_PROPERTY(brulion::attachsearch::AttachmentIndexer *attachments READ attachments CONSTANT FINAL)
+    /// Search by meaning in the notebook (semanticsearch.h; docs/UI.md "Search by meaning"): the
+    /// model's file, the setting, the vectors being built.
+    Q_PROPERTY(brulion::shell::SemanticSearch *semantic READ semantic CONSTANT FINAL)
     /// The conversations with the AI assistant (pages in AI/; docs/UI.md "AI chat").
     Q_PROPERTY(brulion::shell::WorkspaceChats *chats READ chats CONSTANT FINAL)
     /// Find and replace in the whole notebook (replacesession.h).
@@ -238,6 +242,7 @@ public:
     WorkspaceBackups *backups() const { return m_backups; }
     WorkspaceExtensions *extensions() const { return m_extensions; }
     attachsearch::AttachmentIndexer *attachments() const { return m_attachments; }
+    SemanticSearch *semantic() const { return m_semantic; }
     /// The attachments' text cache (tests; default: <app cache>/attachment-text).
     void setAttachmentCacheDir(const QString &dir) { m_attachmentCacheDir = dir; }
     WorkspaceChats *chats() const { return m_chats; }
@@ -944,6 +949,8 @@ private:
     QString m_pdfThumbnailDir;
     /// The attachments' text for the search (a child; workspacepdf.cpp wires it).
     attachsearch::AttachmentIndexer *m_attachments = nullptr;
+    /// Search by meaning (a child; AppController configures it).
+    SemanticSearch *m_semantic = nullptr;
     QString m_attachmentCacheDir;
     void attachAttachments();
     /// A PDF changed or went: its open readers are closed, its thumbnails drawn again on the next ask.

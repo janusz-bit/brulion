@@ -57,26 +57,44 @@ Vector Calibration::apply(const Vector &v, bool query) const
 Calibration Calibration::estimate(const QList<Vector> &passages, const QList<bool> &english,
                                   const Vector &queryMean, int minPerLanguage)
 {
+    if (passages.isEmpty()) {
+        Calibration c;
+        c.queryMean = queryMean;
+        return c;
+    }
+    const qsizetype dim = passages.first().size();
+    return estimate(
+            passages.size(), int(dim),
+            [&passages, dim](qsizetype k) { return passages.at(k).size() == dim ? passages.at(k).constData() : nullptr; },
+            [&english](qsizetype k) { return k < english.size() && english.at(k); }, queryMean, minPerLanguage);
+}
+
+Calibration Calibration::estimate(qsizetype count, int dim, const std::function<const float *(qsizetype)> &vector,
+                                  const std::function<bool(qsizetype)> &english, const Vector &queryMean,
+                                  int minPerLanguage)
+{
     Calibration c;
     c.queryMean = queryMean;
-    if (passages.isEmpty())
+    if (count <= 0 || dim <= 0)
         return c;
-    const qsizetype dim = passages.first().size();
-    std::vector<double> all(size_t(dim), 0.0), pl(size_t(dim), 0.0), en(size_t(dim), 0.0);
+    const size_t d = size_t(dim);
+    std::vector<double> all(d, 0.0), pl(d, 0.0), en(d, 0.0);
     int nPl = 0, nEn = 0;
-    for (qsizetype k = 0; k < passages.size(); ++k) {
-        const Vector &v = passages.at(k);
-        if (v.size() != dim)
+    for (qsizetype k = 0; k < count; ++k) {
+        const float *v = vector(k);
+        if (!v)
             continue;
-        const bool isEn = k < english.size() && english.at(k);
+        const bool isEn = english(k);
         std::vector<double> &lang = isEn ? en : pl;
         (isEn ? nEn : nPl)++;
-        for (qsizetype i = 0; i < dim; ++i) {
-            all[size_t(i)] += v.at(i);
-            lang[size_t(i)] += v.at(i);
+        for (size_t i = 0; i < d; ++i) {
+            all[i] += v[i];
+            lang[i] += v[i];
         }
     }
-    const int n = nPl + nEn; // > 0: the first passage always counts
+    const int n = nPl + nEn;
+    if (n == 0)
+        return c;
     c.passageMean.resize(dim);
     for (qsizetype i = 0; i < dim; ++i)
         c.passageMean[i] = float(all[size_t(i)] / n);

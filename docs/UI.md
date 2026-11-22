@@ -1909,7 +1909,7 @@ panel keeps none.
 | `tasks` | `TasksView` — quick add, filters, sections (Overdue, Today, Tomorrow, This week, Later, No date, Done), "Show as query"; subtasks under their task (`TaskListModel.nestSubtasks`, docs/SYNTAX.md §5 "Subtasks": indented by their depth in the note's order, done ones too; one more urgent than its task's section — an overdue step of a task for later, an open step of a done task — is listed in its own section; the filters apply to them, the home screen widget lists every task on its own); a task with subtasks under it folds them with its progress chip, a chevron before "3/5" (or "2 subtasks" when none counts), and with Left / Right on its row (`TaskListModel.toggleSubtasks`: view state kept while Tasks is open, nothing written; the fold follows its task when an edit moves it in its note, the section counts keep the folded ones); a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filter by tag, Open tag page, Tag overview, Open in side panel, Copy tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
 | `habits` | `HabitsView` — the habits (docs/SYNTAX.md §5 "Habits"; the built-in extension `nawyki`), each a card: today's check, schedule, streaks, completion rate, the month grid ("Habits" below) | `month?` ("YYYY-MM"), `open?` (`add`: Add habit's form) |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates. The layout is computed on a worker thread (in slices between frames in the browser) and unfolds over about a second at the display's frame rate (phones 60 fps): pan, zoom, select and drag work from the first frame, a dragged node follows the finger at once. Reduced motion: the layout is computed without animation and shown once; a fresh one shows a spinner (`graphModel.settling`) instead of a spiral that jumps — also when a filter, the local graph or the index changes before it is shown. Drawn through the scene graph (GPU) | `path?`, `depth?`, `select?` |
-| `search` | `SearchView` — notes and the notebook's PDFs and pictures ("Searching attachments"); results in a folder of any depth with `folder` (the tree's "Search in folder"; the route follows its renames and moves). Shown (made, built ahead and shown, or shown again), its field takes the keys with the query selected, and on touch it asks for the on-screen keyboard (`DeviceInfo.showInputMethod()`: focus alone does not raise it on Android). The filters are one row; on compact windows (< 600 px) two — the scope (All / Pages / Journals / Attachments, without icons) alone across the width, then Replace…, the folder and the result count —, so they never make the view wider than a phone (one row needed ~426 px in Polish) | `query?`, `folder?` |
+| `search` | `SearchView` — notes and the notebook's PDFs and pictures ("Searching attachments"), with search by meaning on also the notes closest in meaning ("Search by meaning"); results in a folder of any depth with `folder` (the tree's "Search in folder"; the route follows its renames and moves). Shown (made, built ahead and shown, or shown again), its field takes the keys with the query selected, and on touch it asks for the on-screen keyboard (`DeviceInfo.showInputMethod()`: focus alone does not raise it on Android). The filters are one row; on compact windows (< 600 px) two — the scope (All / Pages / Journals / Attachments, without icons) alone across the width, then Replace…, the folder and the result count —, so they never make the view wider than a phone (one row needed ~426 px in Polish) | `query?`, `folder?` |
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves; a path part of a link naming a folder opens it (below) | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Open page" or "Create page", "Tasks with this tag"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
 | `sync` | `SyncView` — Overview, Syncthing, Nextcloud (live progress, history of runs), GitHub (a notebook kept in a GitHub repository: "Notebooks from GitHub" below; `{tab: "github"}` is where a notebook opened from GitHub lands), Calendars (ICS subscriptions and CalDAV accounts: "Calendars" below; `{tab: "calendars"}`), Conflicts (merge; drawings element by element). Conflicts: the list beside the resolver on wide windows; on narrow ones (< 900 px) one at a time, and a conflict opens through the route (`{tab: "conflicts", copy}`, the entry before it showing the list, also when the tab was chosen here), so the top bar's ← and Android's Back return to the list — the resolver has no ← of its own — and a resolved one goes back to it too. `copy` is read on every route change: a route without one shows the list | `tab?`, `copy?`, `run?` (open a run's details) |
@@ -2745,6 +2745,68 @@ indexer on a notebook: text layers, the cache reused, renames, changes, OCR, pau
 viewer's lookup; `largePdf` measures — BRULION_ATTACHMENT_BENCH=1), `tst_content_models` (the
 search model's attachment rows and filters), `--selftest-shell` (`checkAttachmentSearch`: a PDF's
 page found and opened highlighted, a picture's recognized words framed).
+
+## Search by meaning (`shell/semanticsearch.h`, core `semantic`)
+
+With **search by meaning** on, the whole-notebook search also finds notes by what they mean, not
+only by their words: "apple cake" finds "Szarlotka babci", an English query a Polish note,
+"kupiłem opony" the note "Kupić oponę" (no stemmer needed). A small multilingual embedding model
+runs on the device; nothing leaves it. User guide: the documentation's page "Search" ("Szukanie"),
+"Search by meaning". Design, model and measurements: docs/SEMANTIC.md.
+
+* **Off by default** — Settings → Search → **Search by meaning** (`qml/shell/ShellSemanticSettings.qml`,
+  `Workspace.semantic`, the device setting `search/semantic`). Turning it on downloads the model when
+  it is not here yet: Multilingual E5 Small (Microsoft, MIT), 8-bit GGUF, 126 MB (132 million bytes)
+  (`semantic::semanticModels()`), into `<app data>/models/semantic` with `ai::LocalModelFiles` — the
+  same resumable, checksummed download as the assistant's and the speech models (Download / Stop /
+  Remove, the progress, "Checking the downloaded file…"). **Remove** (with a confirmation) deletes the
+  file and every notebook's vectors on the device and turns it off. Hidden where the build has no
+  plugin (`available`: the browser, a build without BRULION_LOCAL_AI) — search is full text there.
+* **What runs it:** the plugin `brulion_semantic` (core `semantic::SemanticRunner`: llama.cpp of
+  3rdparty/llama, CPU), loaded the first time a note or a query is embedded and kept next to the
+  model runner's plugin — the app links no llama.cpp. The model leaves memory five minutes after its
+  last use. A model that cannot be opened stops it with the state "failed" and the reason (Settings
+  says it; off and on again tries anew); search is full text meanwhile.
+* **Notes read in the background** (`SemanticSearch`, owned by `Workspace`): a few seconds after the
+  notebook's index is ready, every note is compared with the vectors kept for it — each note's
+  `semantic::noteKey` (FNV-1a of its title and text) — and the new and changed ones are embedded on a
+  worker thread at the lowest priority (`QThread::IdlePriority`: SCHED_IDLE on Linux), the newest
+  journals first, up to 16 notes / 8,000 characters per call of the model. A note is cut into chunks
+  of ≤ 120 words (`semantic::noteChunks`: encrypted fragments blanked, frontmatter skipped, at most
+  256 chunks). Edits follow the notebook's index (`VaultIndex::changed` + `changesSince`, 1.5 s after
+  the typing stops): a changed note is embedded again first, a deleted one forgotten. While notes are
+  read, the search view says "Reading notes by meaning: 120 of 900" under the filters, and Settings
+  ("In this notebook") the same or "900 notes can be found by meaning"; a note not read yet is found
+  by its words alone meanwhile.
+* **Kept on the device, never in the notebook:** `<app cache>/semantic/<notebook id>-<model>.vectors`
+  (`VectorIndex::save`: half-precision vectors, ~770 bytes a chunk, checked against the model, the
+  format and the chunker's version — anything else is built again), written when the queue is empty,
+  every minute of a long build and when the notebook closes. Opening the notebook again reads it on
+  the worker thread; only the notes changed since are embedded.
+* **Calibration** (core `semantic::Calibration`): the model's shipped query mean, the mean of the
+  notebook's chunks and its Polish–English direction, estimated from the notebook whenever the index
+  is up to date after a change; applied to queries of up to five words.
+* **The search** (`SearchResultModel`, so the search view and the quick switcher's "Search the notes
+  for …"): the full-text hits of notes and attachments are fused with the notes closest in meaning
+  (core `semantic::hybridSearch`: 0.8 meaning + 0.2 words, each min-max scaled — never meaning
+  alone; a PDF, a picture or a note not read yet ranks by its words alone). Every full-text hit stays;
+  of the notes found by meaning alone the best 20 (`MeaningAloneHits`) join them, marked **Close in
+  meaning** (sparkles icon; `byMeaning`), their excerpt and line where their closest chunk starts. A
+  query's vector is embedded on a thread of its own with a context of its own (a query never waits for
+  the indexing; ~10–20 ms on a laptop's CPU, 6 ms on a Pixel 9 Pro): the list waits for it up to
+  150 ms (`MeaningWaitMs`), else shows the full-text order and is re-sorted when it comes; the last 32
+  queries' vectors are kept. Scopes, folders and `in:` filters apply as before (`in:pdf` asks nothing
+  of the model).
+* **Platforms:** the desktop and Android (64-bit) have the plugin; **the browser** has none — search
+  is full text there. brulion-cli: `search --semantic` reads the same vectors (docs/CLI.md).
+
+Tests: `tst_semantic` (core: chunks, calibration, the vector index — incremental changes, compaction,
+the calibrated search against calibrated vectors, save/load and damaged files —, keys, the diff,
+encrypted text masked, fusion with notes the index lacks, the hybrid search, the model's entry),
+`tst_content_semantic` (the app with a fake model: full text without the plugin, the model or the
+setting; the notebook embedded and fused; edits, deletions, the vectors kept and read back; a
+failing model; removal; the download), `tst_semantic_embedder` (the real model through llama.cpp,
+skipped unless `BRULION_SEMANTIC_MODEL` names its GGUF file).
 
 ## Spell checking
 

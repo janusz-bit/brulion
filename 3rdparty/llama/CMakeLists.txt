@@ -175,3 +175,15 @@ set_target_properties(brulion_localai PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
     BUILD_WITH_INSTALL_RPATH ON
     INSTALL_RPATH "$ORIGIN")
+
+# The embedding model's runner and plugin for search by meaning (src/core/semantic: brulion_semantic),
+# the same way: next to llama.cpp's libraries, the processor plugins known by their file names.
+if(TARGET brulion_semantic_llama)
+    target_compile_definitions(brulion_semantic_llama PRIVATE "BRULION_LLAMA_CPU_VARIANTS=\"${_variant_files}\"")
+    add_dependencies(brulion_semantic_llama ${BRULION_LLAMA_CPU_VARIANTS})
+    set_target_properties(brulion_semantic PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
+        RUNTIME_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
+        BUILD_WITH_INSTALL_RPATH ON
+        INSTALL_RPATH "$ORIGIN")
+endif()

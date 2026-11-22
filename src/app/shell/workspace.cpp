@@ -167,6 +167,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     connect(m_reminders, &WorkspaceReminders::errorOccurred, this, &Workspace::errorOccurred);
     m_backups = new WorkspaceBackups([this] { return now(); }, this);
     m_attachments = new attachsearch::AttachmentIndexer(this);
+    m_semantic = new SemanticSearch(this);
     m_extensions = new WorkspaceExtensions([this] { return now(); }, this);
     m_extensions->setNotifier([this](const QString &title, const QString &body) {
         m_reminders->showNotification(u"brulion-rest-timer"_s, title, body);
@@ -212,6 +213,7 @@ Workspace::~Workspace()
     m_reminders->blockSignals(true);
     m_backups->blockSignals(true);
     m_attachments->blockSignals(true);
+    m_semantic->blockSignals(true);
     m_extensions->blockSignals(true);
     m_chats->blockSignals(true);
     blockSignals(true);
@@ -323,6 +325,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
         m_backups->attach(m_vault.get(), backups);
     }
     attachAttachments();
+    m_semantic->attach(m_index.get(), m_vault->id());
     if (!m_loader->isDone())
         m_indexTimer.start();
 
@@ -356,6 +359,7 @@ void Workspace::close()
     m_chats->reset();
     m_backups->detach(); // before sync: it releases its hold there
     m_attachments->detach(); // (its worker reads the vault's files)
+    m_semantic->detach(); // (it reads the index; what it has not saved yet is written now)
     m_sync->detach();
     m_github->detach();
     m_calendars->detach();
@@ -617,9 +621,12 @@ void Workspace::setReady(bool wasReady)
 {
     if (wasReady != ready())
         Q_EMIT readyChanged();
-    // The attachments' text is read once the notes are indexed (a few seconds later).
-    if (ready())
+    // The attachments' text is read once the notes are indexed (a few seconds later), and the
+    // notes are embedded for search by meaning.
+    if (ready()) {
         m_attachments->start();
+        m_semantic->start();
+    }
 }
 
 void Workspace::bumpRevisions(bool names, bool properties)

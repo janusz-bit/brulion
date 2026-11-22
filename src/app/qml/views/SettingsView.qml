@@ -18,7 +18,7 @@ import Brulion
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
 // names, attachments, templates, default reminder time, first day of the week), Search
 // (qml/attachments/AttachmentSettings: PDFs and pictures in the search, OCR and its languages, the
-// device's cache), Reminders (on/off, permissions on Android and in the
+// device's cache; qml/shell/ShellSemanticSettings: search by meaning and its model), Reminders (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
 // length, Android's background check of the notes, test notification), Sync (qml/io/SyncSettings: status,
 // the sync center, the Nextcloud account), Backups (qml/shell/ShellBackupSettings), Privacy
@@ -2622,7 +2622,12 @@ Item {
 
     Component {
         id: searchSection
-        AttachmentSettings {}
+        ColumnLayout {
+            spacing: Theme.space8
+            AttachmentSettings {}
+            // Search by meaning (qml/shell/ShellSemanticSettings: the model on this device).
+            ShellSemanticSettings {}
+        }
     }
 
     Component {

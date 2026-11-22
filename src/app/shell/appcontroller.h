@@ -285,6 +285,9 @@ public:
         /// folder <dataDir>/models, the model runner's plugin of this build, the device's memory.
         /// Tests give small models and a fake runner.
         LocalAi::Options localAi;
+        /// Search by meaning (Workspace.semantic): its folders, plugin and opener (tests: a fake
+        /// model); empty fields as the app has them.
+        SemanticSearch::Options semantic;
     };
 
     explicit AppController(const Options &options, QObject *parent = nullptr);

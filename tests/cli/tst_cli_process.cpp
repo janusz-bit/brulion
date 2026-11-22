@@ -19,6 +19,8 @@
 #include "controlserver.h"
 #include "notebook/journals.h"
 #include "notebook/session.h"
+#include "semantic/models.h"
+#include "semantic/vectorindex.h"
 #include "singleinstance.h"
 #include "vault/vault.h"
 
@@ -1047,6 +1049,65 @@ private Q_SLOTS:
         QVERIFY(!r.result().contains(u"attachments"_s));
         r = run(dir, {u"search"_s, u"in:pdf"_s});
         QVERIFY(r.code != 0);
+    }
+
+    // search --semantic (docs/CLI.md): without what it needs — the plugin, the model, the app's
+    // vectors of the notebook, a model that opens — the words' hits as they are, with a warning
+    // saying which; never a crash. (A real model: tst_semantic_plugin; the fused results:
+    // tst_content_semantic and tst_semantic.)
+    void searchSemantic()
+    {
+        const QString dir = vault({{u"Szarlotka babci.md"_s, "- jabłka i kruszonka\n"},
+                                   {u"Notatka.md"_s, "- żółw w notatce\n- żółw je sałatę\n"}});
+        const Run plain = run(dir, {u"search"_s, u"zolw"_s});
+        QCOMPARE(plain.code, 0);
+        QString reasonGiven;
+        const auto expect = [&](const QString &reason) {
+            const Run r = run(dir, {u"search"_s, u"--semantic"_s, u"zolw"_s});
+            QCOMPARE(r.code, 0);
+            QCOMPARE(r.result().value(u"hits"_s).toArray().size(), plain.result().value(u"hits"_s).toArray().size());
+            QCOMPARE(r.result().value(u"hits"_s).toArray().first().toObject().value(u"path"_s),
+                     plain.result().value(u"hits"_s).toArray().first().toObject().value(u"path"_s));
+            const QJsonObject semantic = r.result().value(u"semantic"_s).toObject();
+            QCOMPARE(semantic.value(u"used"_s).toBool(true), false);
+            if (!reason.isEmpty())
+                QCOMPARE(semantic.value(u"reason"_s).toString(), reason);
+            QVERIFY(r.warnings().contains(semantic.value(u"reason"_s).toString()));
+            reasonGiven = semantic.value(u"reason"_s).toString();
+        };
+        expect(QString());
+        const QString first = reasonGiven;
+        QVERIFY2(first == u"semantic_unavailable"_s || first == u"semantic_no_model"_s, qPrintable(first));
+        if (first == u"semantic_unavailable"_s)
+            return; // (a build without the plugin: nothing more to find)
+        // The model's file (in size and marked downloaded; its bytes matter only once it is opened),
+        // the app's vectors of the notebook missing.
+        const brulion::ai::LocalModel *model = brulion::semantic::semanticModel(QString());
+        const QString models = appDataDir() + u"/models/semantic"_s;
+        QVERIFY(QDir().mkpath(models));
+        QFile file(models + u'/' + model->file.name);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.resize(model->file.bytes)); // (sparse)
+        file.close();
+        QFile marker(models + u'/' + model->id + u".downloaded"_s);
+        QVERIFY(marker.open(QIODevice::WriteOnly));
+        marker.close();
+        expect(u"semantic_not_indexed"_s);
+        // Vectors as the app keeps them, but a model file that is no model: it fails to open.
+        brulion::semantic::VectorIndex vectors;
+        brulion::semantic::Vector v(384, 0.0f);
+        v[0] = 1;
+        vectors.set(u"Notatka.md"_s, {brulion::semantic::Chunk{u"Notatka\nżółw"_s, 0}}, {v}, 1);
+        const QString kept = cacheDir() + u"/semantic/"_s
+                             + brulion::semantic::indexFileName(brulion::Vault::idForPath(dir), model->id);
+        QVERIFY(QDir().mkpath(QFileInfo(kept).absolutePath()));
+        QFile f(kept);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(vectors.save(model->id));
+        f.close();
+        expect(u"semantic_failed"_s);
+        QFile::remove(file.fileName());
+        QFile::remove(kept);
     }
 
     void indexCommands()

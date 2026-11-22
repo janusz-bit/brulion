@@ -11,8 +11,7 @@ done in the repository simply disappears from the list.
   reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: a try of the
   remote MCP server (`brulion-cli mcp serve`, docs/CLI.md "Remote MCP server") from claude.ai and
   ChatGPT themselves (it passes the official MCP Python SDK and reads their published client
-  documents) — also as the desktop app runs it (Settings → Extensions → claude.ai and ChatGPT) —,
-  and search by meaning rather than words (docs/SEMANTIC.md).
+  documents) — also as the desktop app runs it (Settings → Extensions → claude.ai and ChatGPT) —.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's, on

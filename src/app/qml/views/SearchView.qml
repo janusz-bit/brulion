@@ -13,8 +13,12 @@ import Brulion
 // searches when the field is empty. A note's result opens its page at the matching line; a PDF's
 // opens the PDF viewer at its page with the hit highlighted (route open "search"), a picture's the
 // picture with the places of the words framed. While attachments are being read, a line under the
-// filters says so, with Pause / Resume (Workspace.attachments). The query and the folder are kept in
-// the route (back from a page returns to the results; a folder renamed or moved is followed).
+// filters says so, with Pause / Resume (Workspace.attachments). With search by meaning on
+// (Workspace.semantic, docs/UI.md "Search by meaning") the notes closest in meaning come in too —
+// those without the words typed marked "Close in meaning" —, and while the notes are read by
+// meaning a line says how far ("Reading notes by meaning: 120 of 900"). The query and the folder
+// are kept in the route (back from a page returns to the results; a folder renamed or moved is
+// followed).
 //
 // Keys: the field has the focus whenever the view is shown, its query selected (on phones the
 // keyboard comes up); Up/Down move through the results, Enter opens (Ctrl+Enter in
@@ -87,6 +91,18 @@ FocusScope {
             return qsTr("Reading attachments waits for the sync to end.")
         case "paused":
             return qsTr("Reading attachments is paused: they are found only as far as they were read.")
+        default:
+            return ""
+        }
+    }
+    /// Search by meaning: the notes being embedded, for the line under the filters ("" when nothing).
+    readonly property SemanticSearch semantic: Workspace.semantic
+    readonly property string semanticStatus: {
+        switch (root.semantic.state) {
+        case "indexing":
+            return qsTr("Reading notes by meaning: %1 of %2").arg(root.semantic.notesDone).arg(root.semantic.notesTotal)
+        case "failed":
+            return qsTr("Search by meaning stopped: %1").arg(root.semantic.error)
         default:
             return ""
         }
@@ -314,6 +330,36 @@ FocusScope {
             }
         }
 
+        // ---- Notes being read by meaning ----------------------------------------------------------------
+        // (Until they are, the notes not read yet are found by their words alone.)
+        RowLayout {
+            objectName: "searchMeaningProgress"
+            visible: root.query !== "" && root.semanticStatus !== "" && results.scope !== "attachments"
+            Layout.fillWidth: true
+            Layout.leftMargin: root.sideMargin
+            Layout.rightMargin: root.sideMargin
+            spacing: Theme.space2
+            BSpinner {
+                visible: root.semantic.state === "indexing"
+                running: visible
+                size: Theme.iconSizeSm
+            }
+            BIcon {
+                visible: root.semantic.state !== "indexing"
+                name: "sparkles"
+                size: Theme.iconSizeSm
+                color: Theme.fgFaint
+            }
+            BText {
+                objectName: "searchMeaningStatus"
+                Layout.fillWidth: true
+                text: root.semanticStatus
+                variant: "caption"
+                color: Theme.fgMuted
+                wrapMode: Text.Wrap
+            }
+        }
+
         // ---- Results -----------------------------------------------------------------------------------
         ListView {
             id: list
@@ -346,6 +392,7 @@ FocusScope {
                 required property int pageCount
                 required property int matchedPages
                 required property bool ocr
+                required property bool byMeaning
                 readonly property bool journal: hit.journalDate !== ""
                 readonly property bool attachment: hit.kind !== "note"
                 readonly property string heading: hit.journal ? DatesHelper.formatLong(hit.journalDate) : hit.title
@@ -374,7 +421,8 @@ FocusScope {
                 highlighted: ListView.isCurrentItem
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.ListItem
-                Accessible.name: hit.heading + (hit.pageInfo !== "" ? ", " + hit.pageInfo : "") + ": " + hit.excerpt
+                Accessible.name: hit.heading + (hit.pageInfo !== "" ? ", " + hit.pageInfo : "")
+                                 + (hit.byMeaning ? ", " + qsTr("Close in meaning") : "") + ": " + hit.excerpt
                 // Ctrl+click: a new tab (OpenIn).
                 onClicked: root.openResult(hit.index, false, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
                 TapHandler {
@@ -430,6 +478,25 @@ FocusScope {
                         font.pixelSize: Theme.textBase
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
+                    }
+                    // A note found by meaning alone: none of the words typed are in it.
+                    RowLayout {
+                        objectName: "searchHitMeaning"
+                        visible: hit.byMeaning
+                        Layout.fillWidth: true
+                        spacing: Theme.space1
+                        BIcon {
+                            name: "sparkles"
+                            size: Theme.iconSizeSm
+                            color: hit.highlighted ? Theme.fgMuted : Theme.fgFaint
+                        }
+                        BText {
+                            Layout.fillWidth: true
+                            text: qsTr("Close in meaning")
+                            variant: "caption"
+                            color: hit.highlighted ? Theme.fgMuted : Theme.fgFaint
+                            elide: Text.ElideRight
+                        }
                     }
                     // An attachment's page, its other pages, text read by OCR.
                     RowLayout {

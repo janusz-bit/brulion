@@ -7,6 +7,7 @@
 //   AppLock          singleton — AppController.appLock (the app lock: applockcontroller.h)
 //   LocalAi          uncreatable — AppController.localAi (the model on the device)
 //   McpServerSupervisor uncreatable — AppController.mcpServer (the remote MCP server while the app runs)
+//   SemanticSearch   uncreatable — Workspace.semantic (search by meaning)
 //   RecentNotebooks  uncreatable — AppController.recentNotebooks (the start screen's list)
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
 //   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceCalendars, WorkspaceBackups, WorkspaceExtensions,
@@ -171,6 +172,13 @@ struct McpServerSupervisorForeign {
     QML_FOREIGN(brulion::shell::McpServerSupervisor)
     QML_NAMED_ELEMENT(McpServerSupervisor)
     QML_UNCREATABLE("Use AppController.mcpServer")
+};
+
+struct SemanticSearchForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::SemanticSearch)
+    QML_NAMED_ELEMENT(SemanticSearch)
+    QML_UNCREATABLE("Use Workspace.semantic")
 };
 
 struct RecentNotebooksForeign {

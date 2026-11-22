@@ -11,7 +11,12 @@
 #include "notebook/json.h"
 #include "notebook/pages.h"
 #include "notebook/views.h"
+#include "ai/localfiles.h"
 #include "reminders/calendar.h"
+#include "semantic/fusion.h"
+#include "semantic/models.h"
+#include "semantic/notes.h"
+#include "semantic/semanticrunner.h"
 #include "singleinstance.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -262,6 +267,124 @@ QJsonArray attachmentHits(Call &call, const QString &text, int limit, attachment
     return hits;
 }
 
+/// Where the plugin of search by meaning may be (semantic/semanticrunner.h): as the app looks for it
+/// (shell/appcontroller.cpp localAiPluginDirs) — BRULION_LOCALAI_DIR, the build folder of a debug
+/// build, <lib>/brulion of the installed app, next to the program.
+QStringList semanticPluginDirs()
+{
+    QStringList dirs;
+    if (const QString dir = qEnvironmentVariable("BRULION_LOCALAI_DIR"); !dir.isEmpty())
+        dirs << dir;
+#ifdef BRULION_LOCAL_AI
+#ifdef BRULION_LOCALAI_BUILD_DIR
+    dirs << QString::fromUtf8(BRULION_LOCALAI_BUILD_DIR);
+#endif
+    const QString bin = QCoreApplication::applicationDirPath();
+#ifdef BRULION_LOCALAI_RELATIVE_DIR
+    dirs << QDir::cleanPath(bin + u'/' + QString::fromUtf8(BRULION_LOCALAI_RELATIVE_DIR));
+#endif
+    dirs << bin;
+#endif
+    return dirs;
+}
+
+/// A hit of search, found by its words or (search --semantic) by meaning alone.
+struct FoundNote {
+    SearchHit hit;
+    bool byMeaning = false;
+};
+
+/// `found` (the full-text hits, best first) fused with the notes close in meaning to `text`, as the
+/// app's search does it (semantic::hybridSearch over the vectors the app keeps on this device for the
+/// notebook, docs/SEMANTIC.md): `found` as it is, with `info` saying why, when it cannot be — no
+/// plugin in this build, the model not on this device, the notebook not read by meaning here yet. A
+/// note changed since the app read it is found by its words alone.
+QList<FoundNote> byMeaning(Call &call, const VaultIndex &index, const QString &text, const QList<SearchHit> &found,
+                           int want, QJsonObject *info)
+{
+    QList<FoundNote> words;
+    for (const SearchHit &hit : found)
+        words.append({hit, false});
+    const auto unavailable = [&](const QString &code, const QString &message) {
+        info->insert(u"used"_s, false);
+        info->insert(u"reason"_s, code);
+        call.warn(code, message);
+        return words;
+    };
+    const ai::LocalModel *model = semantic::semanticModel(QString());
+    const QStringList dirs = semanticPluginDirs();
+    if (!model || !semantic::hasSemanticRunner(dirs))
+        return unavailable(u"semantic_unavailable"_s, tr("This build searches by words only: it has no search by meaning."));
+    const ai::LocalModelFiles files(QDir(call.ctx.appDataDir()).filePath(u"models/semantic"_s));
+    if (!files.has(*model))
+        return unavailable(u"semantic_no_model"_s,
+                           tr("The model of search by meaning is not on this device: Brulion downloads it in "
+                              "Settings → Search → Search by meaning."));
+    const Vault *vault = call.vault();
+    const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    QFile kept(QDir(cache).filePath(u"semantic/"_s + semantic::indexFileName(vault ? vault->id() : QString(), model->id)));
+    std::optional<semantic::VectorIndex> vectors;
+    if (vault && !cache.isEmpty() && kept.open(QIODevice::ReadOnly))
+        vectors = semantic::VectorIndex::load(kept.readAll(), model->id);
+    if (!vectors || vectors->size() == 0)
+        return unavailable(u"semantic_not_indexed"_s,
+                           tr("This notebook has not been read by meaning on this device yet: Brulion does it in "
+                              "the background with search by meaning on."));
+    // Notes changed since the app read them (or gone): by their words alone.
+    int stale = 0;
+    for (const QString &id : vectors->ids()) {
+        const ParsedNote *note = index.note(id);
+        // (The title as the app takes it: shell/semanticsearch.cpp.)
+        const QString title = note && !note->title.isEmpty() ? note->title : paths::pageTitle(id);
+        if (!note || semantic::noteKey(title, index.content(id)) != vectors->key(id)) {
+            vectors->remove(id);
+            ++stale;
+        }
+    }
+    semantic::SemanticRunner::Options options;
+    options.modelPath = files.pathOf(model->file);
+    QString error;
+    const std::unique_ptr<semantic::SemanticRunner> runner = semantic::loadSemanticRunner(dirs, options, &error);
+    const semantic::Vector query = runner ? runner->embedQuery(text) : semantic::Vector();
+    if (query.isEmpty())
+        return unavailable(u"semantic_failed"_s, tr("Search by meaning failed: %1").arg(error));
+    const semantic::Vector queryMean = semantic::queryMeanOf(model->id);
+    if (!queryMean.isEmpty() && vectors->chunkCount() > 0)
+        vectors->setCalibration(vectors->estimateCalibration(queryMean));
+
+    QList<semantic::ScoredId> lexical;
+    QHash<QString, SearchHit> byPath;
+    for (const SearchHit &hit : found) {
+        lexical.append({hit.path, hit.score});
+        byPath.insert(hit.path, hit);
+    }
+    QList<FoundNote> out;
+    for (const semantic::HybridHit &h :
+         semantic::hybridSearch(lexical, *vectors, query, vectors->calibration().appliesTo(text), want)) {
+        if (const auto it = byPath.constFind(h.id); it != byPath.cend()) {
+            SearchHit hit = it.value();
+            hit.score = h.score;
+            out.append({hit, false});
+            continue;
+        }
+        const ParsedNote *note = index.note(h.id);
+        if (!note)
+            continue;
+        SearchHit hit;
+        hit.path = h.id;
+        hit.title = note->title.isEmpty() ? paths::pageTitle(h.id) : note->title;
+        hit.line = h.line;
+        hit.score = h.score;
+        // Where its closest chunk starts.
+        hit.excerpt = semantic::passageExcerpt(index.content(h.id), h.line, 200);
+        out.append({hit, true});
+    }
+    info->insert(u"used"_s, true);
+    info->insert(u"notes"_s, qint64(vectors->size()));
+    info->insert(u"changedSince"_s, stale);
+    return out;
+}
+
 Result search(Call &call)
 {
     VaultIndex *index = call.index();
@@ -278,12 +401,25 @@ Result search(Call &call)
     const int limit = std::clamp(call.integer(u"limit"_s, 20), 1, 500);
     QJsonArray hits;
     QString out;
+    QJsonObject meaning;
     if (filters.scopes & attachments::NoteScopes) {
         // (Asked for more when only some notes may come.)
         const bool some = (filters.scopes & attachments::NoteScopes) != attachments::NoteScopes;
+        const int want = some ? std::min(1000, limit * 4) : limit;
+        // By meaning too (--semantic): the words' hits fused with the notes close in meaning — more of
+        // the words' hits first, as the app's search takes them, for the fusion to choose from.
+        const bool semantic = call.flag(u"semantic"_s);
+        const QList<SearchHit> found = index->search(text, semantic ? std::max(want, 100) : want);
+        const QList<FoundNote> notes = semantic ? byMeaning(call, *index, text, found, std::max(want, 100), &meaning)
+                                                : QList<FoundNote>();
+        QList<FoundNote> listedNotes = notes;
+        if (!semantic) {
+            for (const SearchHit &hit : found)
+                listedNotes.append({hit, false});
+        }
         int listed = 0;
-        for (const QList<SearchHit> found = index->search(text, some ? std::min(1000, limit * 4) : limit);
-             const SearchHit &hit : found) {
+        for (const FoundNote &f : std::as_const(listedNotes)) {
+            const SearchHit &hit = f.hit;
             const ParsedNote *note = index->note(hit.path);
             const bool journal = note && note->journalDate;
             if (!filters.scopes.testFlag(journal ? attachments::Scope::Journals : attachments::Scope::Pages))
@@ -293,12 +429,16 @@ Result search(Call &call)
             QJsonObject o = notebook::searchHitJson(hit, index->config());
             if (hit.line >= 0)
                 o.insert(u"ref"_s, Call::lineRef(hit.path, noteText(call, hit.path), hit.line));
+            if (semantic)
+                o.insert(u"byMeaning"_s, f.byMeaning);
             hits.append(o);
             out += hit.path + (hit.line >= 0 ? u':' + QString::number(hit.line + 1) : QString()) + u"  "_s
-                   + hit.excerpt.simplified() + u'\n';
+                   + (f.byMeaning ? u"≈ "_s : QString()) + hit.excerpt.simplified() + u'\n';
         }
     }
     QJsonObject result{{u"query"_s, query}, {u"hits"_s, hits}};
+    if (!meaning.isEmpty())
+        result.insert(u"semantic"_s, meaning);
     // Attachments when asked for (--attachments) or named by a filter (in:pdf).
     const attachments::Scopes kinds = filters.scopes & attachments::AttachmentScopes;
     if (kinds && (call.flag(u"attachments"_s) || (filters.filtered && kinds == filters.scopes)))
@@ -527,7 +667,10 @@ void addIndexCommands(QList<Command> &out)
              option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most this many hits (default 20)")),
              option(u"attachments"_s, ArgType::Bool,
                     QT_TRANSLATE_NOOP("brulion::cli", "Also the text of PDFs and pictures the app has read on "
-                                                      "this device"))}));
+                                                      "this device")),
+             option(u"semantic"_s, ArgType::Bool,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Also by meaning, as the app's search: the notes the app has "
+                                                      "read by meaning on this device (its model and plugin)"))}));
     out.append(make(
             u"tags"_s, QT_TRANSLATE_NOOP("brulion::cli", "Every tag, most used first, with the page it names"), tags,
             {option(u"prefix"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Only tags starting with this"))}));
