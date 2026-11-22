@@ -140,6 +140,9 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool acpShare READ acpShare WRITE setAcpShare NOTIFY acpShareChanged FINAL)
     Q_PROPERTY(QString acpShareAddress READ acpShareAddress WRITE setAcpShareAddress NOTIFY acpShareChanged FINAL)
     Q_PROPERTY(bool acpShareTrust READ acpShareTrust WRITE setAcpShareTrust NOTIFY acpShareChanged FINAL)
+    /// "Notify when the AI answers" (key `ai/chatNotify`; WorkspaceChats::setNotifyMode): "always",
+    /// "background" (only while the app is not in front: the default) or "never".
+    Q_PROPERTY(QString aiChatNotify READ aiChatNotify WRITE setAiChatNotify NOTIFY aiChatNotifyChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
@@ -370,6 +373,8 @@ public:
     void setAcpShareAddress(const QString &address);
     bool acpShareTrust() const;
     void setAcpShareTrust(bool on);
+    QString aiChatNotify() const;
+    void setAiChatNotify(const QString &mode);
     bool acpAvailable() const;
     bool acpProgramsAvailable() const;
     bool mcpServerEnabled() const;
@@ -608,6 +613,7 @@ Q_SIGNALS:
     void acpAgentsChanged();
     void mcpServerChanged();
     void acpShareChanged();
+    void aiChatNotifyChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();

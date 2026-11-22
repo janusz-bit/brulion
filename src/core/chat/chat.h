@@ -43,6 +43,11 @@
 //
 // A conversation too long for the model (a small one on the device) is sent from a later turn on:
 // firstSent() — whole turns from the oldest left out, the latest always sent.
+//
+// The list of conversations reads two marks of the frontmatter (setMark()): `przypięta: tak` /
+// `pinned: true` puts the conversation among the pinned ones on top, `zarchiwizowana: tak` /
+// `archived: true` out of the list into its folded "Archived" (either language's key read, the
+// values true / yes / tak / 1 / on). They only sort: a page that says so by itself is harmless.
 #pragma once
 
 #include <QDate>
@@ -88,6 +93,15 @@ struct Conversation {
     /// Who answers: the frontmatter's `partner:` ("pirat/rozmowa": an extension and its chat
     /// command, "pirat": its first one); "" the built-in assistant.
     QString partner;
+    /// The frontmatter's marks (setMark()): pinned on top of the list / archived out of it.
+    bool pinned = false;
+    bool archived = false;
+};
+
+/// A mark of a conversation's frontmatter that sorts the list of conversations.
+enum class Mark {
+    Pinned,  ///< `przypięta: tak` / `pinned: true`
+    Archived ///< `zarchiwizowana: tak` / `archived: true`
 };
 
 /// "AI": the folder of conversation pages (the same in every language).
@@ -127,6 +141,14 @@ QString newConversation(QStringView question, QStringView page, QStringView lang
 /// line replaced, or added at the frontmatter's end, or a frontmatter made for it; the rest byte
 /// for byte, its line endings kept.
 QString setPartner(const QString &content, QStringView partner);
+
+/// `content` with the frontmatter's `mark` set (`on`) or taken out: its line — in the page's
+/// language (its time's key, else its frontmatter's word for the tasks), else `language` ("pl":
+/// `przypięta: tak`, `zarchiwizowana: tak`; else `pinned: true`, `archived: true`) — replaces
+/// the mark's line in either language where it is (another one of it goes), or comes at the
+/// frontmatter's end, or a frontmatter is made for it; off takes every line of it out. The rest
+/// byte for byte, the line endings kept; unchanged when it says so already.
+QString setMark(const QString &content, Mark mark, bool on, QStringView language = u"pl");
 
 /// The pictures a message's Markdown embeds (Message::pictures), in order, each once.
 QStringList picturesIn(QStringView markdown);

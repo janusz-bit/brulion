@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1231"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1232"/>
         <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1284"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1286"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1294"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1296"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1295"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1297"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -342,7 +342,7 @@
 <context>
     <name>ChatView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/ChatView.qml" line="727"/>
+        <location filename="../src/app/qml/views/ChatView.qml" line="974"/>
         <source>The model on this device does not get the %n message(s) above: too long for it</source>
         <translation>
             <numerusform>The model on this device does not get the %n message above: too long for it</numerusform>
@@ -350,7 +350,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/ChatView.qml" line="728"/>
+        <location filename="../src/app/qml/views/ChatView.qml" line="975"/>
         <source>The AI does not get the %n message(s) above: too long</source>
         <translation>
             <numerusform>The AI does not get the %n message above: too long</numerusform>
@@ -1432,7 +1432,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2858"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2871"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1440,7 +1440,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2723"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2736"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1480,7 +1480,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2099"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2112"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1488,7 +1488,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2547"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2560"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1496,7 +1496,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2725"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2738"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1740,7 +1740,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8522"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8578"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -2418,7 +2418,7 @@
 <context>
     <name>brulion::notify::DesktopNotifier</name>
     <message numerus="yes">
-        <location filename="../src/app/notify/desktopnotifier.cpp" line="43"/>
+        <location filename="../src/app/notify/desktopnotifier.cpp" line="51"/>
         <source>Snooze %n min</source>
         <translation>
             <numerusform>Snooze %n min</numerusform>
@@ -2540,7 +2540,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="341"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="369"/>
         <source>%n task(s) changed both here and on the server — see the sync center</source>
         <translation>
             <numerusform>%n task changed both here and on the server — see the sync center</numerusform>
@@ -2548,7 +2548,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="347"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="375"/>
         <source>%n deletion(s) of synced tasks wait for a confirmation in the sync center</source>
         <translation>
             <numerusform>%n deletion of a synced task waits for a confirmation in the sync center</numerusform>
@@ -2685,7 +2685,7 @@
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="302"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="330"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>

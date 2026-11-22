@@ -1696,6 +1696,7 @@ Item {
                 readonly property bool local: AppSettings.aiProvider === "local"
                 readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
                 readonly property list<var> providersWithLocal: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }, { value: "local", text: qsTr("On this device") }]
+                readonly property list<var> notifyModes: [{ value: "always", text: qsTr("Always") }, { value: "background", text: qsTr("In the background") }, { value: "never", text: qsTr("Never") }]
 
                 SettingSwitch {
                     objectName: "assistantSetting"
@@ -1915,6 +1916,18 @@ Item {
                         busy: Workspace.extensions.aiPending > 0
                         text: qsTr("Check")
                         onClicked: Workspace.extensions.testAi()
+                    }
+                }
+                // The AI chat's notifications (WorkspaceChats::setNotifyMode; docs/UI.md "AI chat").
+                ShellSettingRow {
+                    title: qsTr("Notify when the AI answers")
+                    description: qsTr("A notification when a conversation is answered, fails or asks you something — never for one on screen. A click opens it.")
+                    BSegmented {
+                        objectName: "aiChatNotifySetting"
+                        accessibleName: qsTr("Notify when the AI answers")
+                        model: aiGroup.notifyModes
+                        currentValue: AppSettings.aiChatNotify
+                        onActivated: (value) => AppSettings.aiChatNotify = "" + value
                     }
                 }
             }

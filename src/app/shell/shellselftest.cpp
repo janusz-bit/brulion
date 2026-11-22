@@ -7397,7 +7397,9 @@ void clearToasts(QQuickWindow *window);
 /// menu on a phone —, the dialog offers the presets, "Shorter" asks the model (the request says so)
 /// and shows its answer, Replace changes the block — one undo step: Undo brings the text back.
 /// Then a conversation in the chat's list: renamed through its row's menu (a right-click, a long
-/// press) — the toast's Undo renames it back — and moved to the trash, Undo bringing it back.
+/// press) — the toast's Undo renames it back —, moved to the trash, Undo bringing it back, pinned
+/// (its Pinned section; Undo unpins it), archived (out of the list, the folded Archived unfolds it)
+/// and found by the search field with a word of its answer typed without diacritics.
 void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -7607,6 +7609,62 @@ void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check
     check(waitFor([&] { return !ws->exists(chatPath); }), "the conversation goes to the trash");
     check(tapToastAction(window, app, u"chat"_s, touch), "with Undo");
     check(waitFor([&] { return ws->exists(chatPath); }), "Undo brings it back");
+    // Pinned on top (its page's frontmatter), with Undo.
+    const auto rowMenuOf = [&](const QString &title) {
+        clearToasts(window);
+        QQuickItem *item = steadyItem(window, [&] { return rowOf(title); }, &at);
+        mouseMove(window, QPointF(2, 2));
+        if (!item)
+            return false;
+        if (touch)
+            longPressForMenu(window, at);
+        else
+            mouseClick(window, at, Qt::RightButton);
+        return true;
+    };
+    check(rowMenuOf(u"Test rozmowy"_s), "the conversation is in the list again");
+    QQuickItem *pin = steadyItem(window, [&] { return named(u"chatPin"_s); }, &at);
+    check(pin != nullptr, "its menu has Pin");
+    if (pin)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return ws->read(chatPath).contains(u"przypięta: tak"_s); }), "pinned: its page says so");
+    check(waitFor([&] { return named(u"chatSection_pinned"_s) != nullptr; }), "the list has its Pinned section");
+    check(tapToastAction(window, app, u"chat"_s, touch), "the toast's Undo is there");
+    check(waitFor([&] { return !ws->read(chatPath).contains(u"przypięta"_s); }), "Undo unpins it");
+    // Archived: out of the list, into the folded "Archived" at its end, which unfolds.
+    check(rowMenuOf(u"Test rozmowy"_s), "its menu opens again");
+    QQuickItem *archive = steadyItem(window, [&] { return named(u"chatArchive"_s); }, &at);
+    check(archive != nullptr, "its menu has Archive");
+    if (archive)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] {
+              return ws->read(chatPath).contains(u"zarchiwizowana: tak"_s) && rowOf(u"Test rozmowy"_s) == nullptr;
+          }),
+          "archived: out of the list");
+    QQuickItem *folded = steadyItem(window, [&] { return named(u"chatArchived"_s); }, &at);
+    check(folded != nullptr, "the folded Archived is at the list's end");
+    if (folded)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return rowOf(u"Test rozmowy"_s) != nullptr && named(u"chatSection_archived"_s) != nullptr; }),
+          "unfolded: the archived conversation under its header");
+    closeMenus(window);
+    ws->chats()->setArchived(chatPath, false);
+    // Search: a word of a message, without its diacritics, finds it; another word nothing.
+    QQuickItem *search = steadyItem(window, [&] { return named(u"chatSearch"_s); }, &at);
+    check(search != nullptr, "the list has its search field");
+    if (search) {
+        tapOrClick(window, at, touch);
+        check(waitFor([&] { return search->hasActiveFocus(); }), "the search field takes the keys");
+        typeChars(window, u"odpowiedz"_s);
+        check(waitFor([&] { return rowOf(u"Test rozmowy"_s) != nullptr && named(u"chatNoMatch"_s) == nullptr; }),
+              "a word of its answer finds the conversation");
+        uidriver::callQml(search, "selectAll");
+        typeChars(window, u"żyrafa"_s);
+        check(waitFor([&] { return rowOf(u"Test rozmowy"_s) == nullptr && named(u"chatNoMatch"_s) != nullptr; }),
+              "a word nowhere: nothing found, and said so");
+        uidriver::sendKey(window, Qt::Key_Escape, Qt::NoModifier, QString(), 50); // (clears it)
+        check(waitFor([&] { return rowOf(u"Test rozmowy"_s) != nullptr; }), "the field emptied: all of them again");
+    }
     closeMenus(window);
     mouseMove(window, QPointF(2, 2)); // (no tooltip left open over the chat's buttons)
     settle(100);

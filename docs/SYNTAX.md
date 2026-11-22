@@ -2601,6 +2601,16 @@ zadania: ignoruj
   partners"); `partner: acp:claude` an AI agent set up on the device (docs/UI.md "AI agents
   (ACP)"); without it the built-in AI assistant. The chat writes it when another partner is
   chosen and takes it out for the assistant.
+* **Pinned, archived**: the frontmatter's `przypięta: tak` (`pinned: true`) puts the conversation
+  among the pinned on top of the chat's list, `zarchiwizowana: tak` (`archived: true`) out of it
+  into its folded "Archived" (docs/UI.md "AI chat"). Either language's key is read, in any letter
+  case, at a line's start (not indented), with `true` / `yes` / `tak` / `1` / `on` (quoted or not)
+  — anything else is no mark, the last line of a key says it; a page that says so by itself is
+  harmless: they only sort. The list's menu writes them (`chat::setMark`): in the page's language
+  (its times' key, else its frontmatter's word for the tasks), else the notebook's, in place of
+  the mark's line where there is one (another one goes), else at the frontmatter's end (with its
+  first line's line ending), else in a frontmatter made for it; taken out, every line of it goes.
+  The rest byte for byte.
 * **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
   notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),
   messages appended at the end of the page with their time (its line ending kept, everything
@@ -2615,7 +2625,7 @@ zadania: ignoruj
   the oldest left out, the latest always sent; the chat says so above the first message the model
   gets.
 * Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `formatMessage`,
-  `newConversation`, `setPartner`, `picturesIn`, `withPictures`, `withoutPictures`, `pageTitle`,
+  `newConversation`, `setPartner`, `setMark`, `picturesIn`, `withPictures`, `withoutPictures`, `pageTitle`,
   `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`), tested in `tests/core/chat`.
 
 ## 15. Flashcards

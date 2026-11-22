@@ -22,6 +22,7 @@
 //   Workspace.chats.turn(path).running / queued / status / partial / thoughts / failure
 //   Workspace.chats.stop(path) / retry(path) / dismissFailure(path)
 //   Workspace.chats.rename(path, "Nowa nazwa") / remove(path)        // the list's menu
+//   Workspace.chats.setPinned(path, true) / setArchived(path, true)   // its frontmatter's marks
 //   Workspace.chats.partners() / asking(path, questionSerial) / answer(path, option)
 //
 // Single-threaded (the GUI thread).
@@ -40,6 +41,7 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include <functional>
 #include <utility>
 
 namespace brulion::shell {
@@ -135,6 +137,8 @@ private:
     QString m_speed;
     QVariantList m_tools;
     QVariantList m_plan;
+    bool m_asking = false; // its question was seen (questionsMoved)
+    qint64 m_cameBack = 0; // when its failure or question came (ms since the epoch), 0 none
     QString m_nextPartial; // what comes, said by m_partialTimer
     QString m_nextThoughts;
     QList<std::pair<qint64, int>> m_samples; // the request's {writing ms, tokens}, for its speed
@@ -249,6 +253,30 @@ public:
     /// Moves the conversation to the trash (its turn stops); the trash's path ("" on failure), for
     /// Undo (Workspace::restore).
     Q_INVOKABLE QString remove(const QString &path);
+    /// Pins the conversation on top of the list (`on`) or unpins it / archives it (out of the
+    /// list, into its folded "Archived") or brings it back: its page's frontmatter (chat::setMark,
+    /// the notebook's language), so the user's other devices sort it so too. False when it could
+    /// not be written.
+    Q_INVOKABLE bool setPinned(const QString &path, bool on);
+    Q_INVOKABLE bool setArchived(const QString &path, bool on);
+
+    // ---- what needs the user: unread answers, failures, questions; notifications ----------------
+    /// An answer came while no chat view showed the conversation — until one shows it. Kept in the
+    /// notebook's device state (LocalStore "chat/unread"), never in the page: it syncs no change.
+    bool isUnread(const QString &path) const;
+    /// When the conversation came back to the user (its unread answer, its failure, its question;
+    /// ms since the epoch), 0 when nothing of it waits: the list puts such ones first.
+    qint64 cameBack(const QString &path) const;
+    /// Why its last turn failed ("" none), without making a ChatTurn.
+    QString failureOf(const QString &path) const;
+    /// When the user hears of an answer, a failure or a question by a system notification
+    /// (AppSettings::aiChatNotify): "always" (also while the app is in front, when no chat view
+    /// shows the conversation), "background" (only while the app is not active: the default) or
+    /// "never". Never for a conversation shown in an active window.
+    void setNotifyMode(const QString &mode);
+    QString notifyMode() const { return m_notifyMode; }
+    /// Whether the app is active now (tests; default: QGuiApplication::applicationState()).
+    void setAppActive(std::function<bool()> active) { m_appActive = std::move(active); }
 
     // ---- who answers ----------------------------------------------------------------------------
     /// Who may answer: the built-in assistant, the extensions' chat commands
@@ -366,6 +394,13 @@ Q_SIGNALS:
     /// An AI agent asks something in the conversation `path`, which no chat view shows: `text`
     /// says who asks what (AppController shows it as a toast with Open).
     void questionWaiting(const QString &path, const QString &text);
+    /// isUnread() or cameBack() of a conversation changed.
+    void attentionChanged();
+    /// A turn of `path` was answered, failed or asks something, and the user hears of it
+    /// (setNotifyMode()): a system notification with `title`, the conversation's name, and
+    /// `text` — the answer's first line, why it failed, what it asks (workspaceintegration.cpp
+    /// shows it; a click opens the conversation).
+    void notificationWanted(const QString &path, const QString &title, const QString &text);
     void agentChecked(const QString &id, bool ok, const QString &text);
     /// A pairing ended: `text` says with whom and which agents, or why not ("" nothing to say:
     /// agentHostNeedsCode() came).
@@ -402,6 +437,13 @@ private:
     void setFailure(ChatTurn *turn, const QString &failure);
     void endTurn(ChatTurn *turn);
     void updateRunningShown();
+    bool setMark(const QString &path, int mark, bool on);
+    void setUnread(const QString &path, bool unread);
+    /// notificationWanted() when the mode and what is on screen say so.
+    void notifyUser(const QString &path, const QString &text);
+    /// Now, for cameBack(): ms since the epoch, later than the one before.
+    qint64 stamp();
+    qint64 m_lastStamp = 0;
 
     Workspace *m_workspace = nullptr;
     WorkspaceExtensions *m_extensions = nullptr;
@@ -417,6 +459,8 @@ private:
     QHash<QString, int> m_shown; // by path, lower case: the chat views showing it
     QStringList m_added;         // pictures added and not sent yet (dropPicture deletes only those)
     bool m_runningShown = false;
+    QString m_notifyMode = QStringLiteral("background");
+    std::function<bool()> m_appActive;
     QPointer<QObject> m_speech; // the recognizer connected to (platform::SpeechRecognizer)
     /// Connects the recognizer of now (it may come later: one of the app's own).
     void connectSpeech();

@@ -62,7 +62,11 @@ The AI **searches and reads the whole notebook** by itself — pages, the journa
 
 **Long conversations.** A small model reads only so much: when a conversation gets too long for it, the AI gets it from a later question on — whole questions and answers from the beginning are left out, never your last one — and a line in the conversation shows where it starts reading.
 
-**Rename or delete** a conversation from its menu in the list (right-click, or a long press on the phone): the day stays in front of its name, and **Undo** in the message brings the old name or the deleted conversation back.
+**Rename, pin, archive or delete** a conversation from its menu in the list (right-click, or a long press on the phone): the day stays in front of its name, **Pin** keeps it on top of the list, **Archive** puts it away into the folded **Archived** at the bottom (tap it to see them), and **Undo** in the message takes each of these back. Pinned and archived are written in the conversation's page (`pinned: true`, `archived: true`), so your other devices sort it the same way.
+
+**What needs you comes first.** A conversation that asks you something (may it change a page, sign in) shows a question mark and what it asks; one that failed, its reason in red; one with an answer you have not seen yet, a dot — opening it reads it. They come to the top of the list. **Search** above the list finds conversations by their names and by what was said in them: the row shows the matching line, and opening it shows that message (Ctrl+F, ↑ ↓ and Enter, Alt+1…9 for the first nine, F2 to rename: [[Keyboard shortcuts#AI chat]]).
+
+**Notifications.** When a conversation is answered, fails or asks something while Brulion is in the background, a notification says so; a click opens the conversation. **Settings → Extensions → AI → Notify when the AI answers**: **Always** (also when you are elsewhere in Brulion), **In the background** (the default) or **Never** — never for the conversation on your screen.
 
 The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the ✨ button spins. An answer goes on while you look at other pages and lands in its conversation.
 

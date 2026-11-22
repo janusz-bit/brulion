@@ -163,6 +163,24 @@ private Q_SLOTS:
         QCOMPARE(d.expireTimeout, -1);
     }
 
+    void messageOfTheApp()
+    {
+        // An AI chat's answer (notify::isMessage()): Open and OK, nothing to snooze or mark done.
+        ScheduledNotification n = taskReminder();
+        n.id = MessageIdPrefix.toString() + u"AI/2026-11-15 Co jutro.md"_s;
+        n.title = u"Co jutro"_s;
+        n.body = u"Zapłać czynsz <dziś>"_s;
+        QVERIFY(isMessage(n));
+        QVERIFY(!isMessage(reminder()));
+        const DesktopNotification d = buildDesktopNotification(n, {u"actions"_s, u"body-markup"_s}, 10);
+        QCOMPARE(d.summary, u"Co jutro"_s);
+        QCOMPARE(d.body, u"Zapłać czynsz &lt;dziś&gt;"_s);
+        QCOMPARE(d.actions, (QStringList{u"default"_s, u"Open"_s, u"ok"_s, u"OK"_s}));
+        const Toast toast = readToast(buildToastXml(buildDesktopNotification(n, ToastCaps, 10), 13));
+        QVERIFY(toast.wellFormed);
+        QCOMPARE(toast.labels, (QStringList{u"OK"_s}));
+    }
+
     void messageForTaskReminder()
     {
         // Done between Snooze and OK (GNOME shows three buttons).

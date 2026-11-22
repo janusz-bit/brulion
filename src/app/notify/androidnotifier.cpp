@@ -114,6 +114,19 @@ void AndroidNotifier::showNow(const ScheduledNotification &notification)
     arm(all);
 }
 
+void AndroidNotifier::showMessage(const ScheduledNotification &notification)
+{
+    ScheduledNotification now = notification;
+    now.at = QDateTime::currentDateTime().addSecs(1);
+    if (now.nativeId <= 0)
+        now.nativeId = nativeIdFor(now.id);
+    const platform::ScheduleResult result = platform::AndroidBridge::instance()->scheduleTimer(androidTimerItem(now));
+    if (!result.ok) {
+        qCWarning(lcAndroidNotify) << "Could not show the message as a timer's end:" << result.error;
+        showNow(notification);
+    }
+}
+
 bool AndroidNotifier::armTimer(const ScheduledNotification &notification)
 {
     Notifier::armTimer(notification);

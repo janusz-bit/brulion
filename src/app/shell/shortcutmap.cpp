@@ -70,6 +70,8 @@ const QHash<QString, QString> &reservedKeys()
                         "Ctrl+PgUp", "Ctrl+PgDown"});
         // Menus: the menu key's and the context menu's.
         add(u"menus"_s, {"F10", "Shift+F10"});
+        // The AI chat's list: its first nine conversations (docs/UI.md "AI chat").
+        add(u"chat"_s, {"Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5", "Alt+6", "Alt+7", "Alt+8", "Alt+9"});
         return out;
     }();
     return keys;
@@ -108,6 +110,8 @@ QString areaName(const QString &area)
         return ShortcutMap::tr("the canvas");
     if (area == u"tabs")
         return ShortcutMap::tr("switching tabs");
+    if (area == u"chat")
+        return ShortcutMap::tr("opening the AI chat's conversations");
     return ShortcutMap::tr("menus");
 }
 

@@ -62,7 +62,11 @@ AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z t
 
 **Długie rozmowy.** Mały model przeczyta tylko tyle, ile się w nim zmieści: gdy rozmowa robi się dla niego za długa, AI dostaje ją od późniejszego pytania — całe pytania z odpowiedziami od początku zostają pominięte, nigdy Twoje ostatnie — a linia w rozmowie pokazuje, od którego miejsca czyta.
 
-**Zmień nazwę albo usuń** rozmowę z jej menu na liście (prawy przycisk albo długie przytrzymanie na telefonie): data zostaje przed nazwą, a **Cofnij** w komunikacie przywraca dawną nazwę albo usuniętą rozmowę.
+**Zmień nazwę, przypnij, zarchiwizuj albo usuń** rozmowę z jej menu na liście (prawy przycisk albo długie przytrzymanie na telefonie): data zostaje przed nazwą, **Przypnij** trzyma ją na górze listy, **Zarchiwizuj** odkłada ją do zwiniętego **Archiwum** na dole (dotknij go, by je zobaczyć), a **Cofnij** w komunikacie odwraca każdą z tych zmian. Przypięcie i archiwum są zapisane na stronie rozmowy (`przypięta: tak`, `zarchiwizowana: tak`), więc Twoje inne urządzenia układają ją tak samo.
+
+**Najpierw to, co czeka na Ciebie.** Rozmowa, która o coś pyta (czy może zmienić stronę, zalogować się), ma znak zapytania i treść pytania; nieudana — powód na czerwono; z nieprzeczytaną odpowiedzią — kropkę, którą otwarcie rozmowy gasi. Takie rozmowy wędrują na górę listy. **Szukaj** nad listą znajduje rozmowy po nazwach i po tym, co w nich padło: wiersz pokazuje pasującą linię, a otwarta rozmowa — tę wiadomość (Ctrl+F, ↑ ↓ i Enter, Alt+1…9 dla pierwszych dziewięciu, F2 zmienia nazwę: [[Skróty klawiszowe#Czat z AI]]).
+
+**Powiadomienia.** Gdy rozmowa dostanie odpowiedź, nie powiedzie się albo o coś pyta, a Brulion jest w tle, powiadomienie o tym mówi; kliknięcie otwiera rozmowę. **Ustawienia → Rozszerzenia → AI → Powiadamiaj o odpowiedziach AI**: **Zawsze** (także gdy jesteś gdzie indziej w Brulionie), **W tle** (domyślnie) albo **Nigdy** — nigdy o rozmowie, którą masz na ekranie.
 
 Asystent pracuje narzędziami (szukanie, czytanie, zapis): na własnym serwerze wybierz model, który je obsługuje (np. Qwen 3 albo Llama 3.1); Claude je obsługuje. Gdy model odpowiada, przycisk ✨ się kręci. Odpowiedź pisze się dalej, gdy oglądasz inne strony, i trafia do swojej rozmowy.
 
