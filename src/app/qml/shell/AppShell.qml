@@ -487,7 +487,7 @@ FocusScope {
                 opacity: shell.sidebarReveal
                 sourceComponent: ShellSidebar {
                     // (Its header's name starts after the panel's button, which stays over it.)
-                    leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.width
+                    leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.layoutWidth
                     topInset: shell.SafeArea.margins.top
                     // (The navigation bar's part the keyboard's room leaves.)
                     bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
@@ -668,7 +668,8 @@ FocusScope {
         id: sidebarToggle
         objectName: "shellSidebarToggle"
         visible: !Theme.narrow && !shell.focusMode
-        x: rail.width + Theme.space2
+        // (Beside the narrow rail: the widened one lies over it, nothing moves.)
+        x: rail.layoutWidth + Theme.space2
         y: split.y + topBar.topInset + Math.round((topBar.height - topBar.topInset - height) / 2)
         iconName: "panel-left"
         label: shell.sidebarVisible ? qsTr("Hide sidebar") : qsTr("Show sidebar")

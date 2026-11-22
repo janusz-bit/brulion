@@ -9868,15 +9868,29 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         QQuickItem *tree = shownItem(u"sidebarTree"_s);
         if (!touch && railItem && railSurface && calendarEntry && tree) {
             const qreal narrowWidth = railItem->width();
-            const qreal treeX = tree->mapToScene(QPointF(0, 0)).x();
+            // (Where the page panel rests: it may still be ending its slide back above.)
+            qreal treeX = -1;
+            uidriver::waitFor(
+                    [&] {
+                        const qreal now = tree->mapToScene(QPointF(0, 0)).x();
+                        const bool still = now == treeX;
+                        treeX = now;
+                        if (!still)
+                            uidriver::settle(100);
+                        return still;
+                    },
+                    3000);
             const QPointF onCalendar = calendarEntry->mapToScene(QPointF(calendarEntry->width() / 2, calendarEntry->height() / 2));
             // (It must move over the rail: one event is where it came in.)
             mouseMove(window, onCalendar - QPointF(0, 6));
             mouseMove(window, onCalendar);
             check(waitFor([&] { return railSurface->width() >= 200 && calendarEntry->width() > narrowWidth; }),
                   "the pointer resting on the rail widens it with the views' names");
-            check(tree->mapToScene(QPointF(0, 0)).x() == treeX,
-                  "the widened rail lies over the page panel: nothing beside it moves");
+            const qreal treeNow = tree->mapToScene(QPointF(0, 0)).x();
+            if (treeNow != treeX)
+                std::fprintf(stderr, "selftest: the page panel's tree at x %.2f, was %.2f (the rail %.1f wide)\n",
+                             treeNow, treeX, railItem->width());
+            check(treeNow == treeX, "the widened rail lies over the page panel: nothing beside it moves");
             // A click on a name over the page panel is the rail's (its items take the pointer
             // there, not the page panel under them).
             const QPointF onName = calendarEntry->mapToScene(QPointF(calendarEntry->width() - 30, calendarEntry->height() / 2));

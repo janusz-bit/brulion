@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1185"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1231"/>
         <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1238"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1284"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1239"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1248"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1250"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1294"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1296"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -1424,7 +1424,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1295"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1296"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1432,7 +1432,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2857"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2858"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1440,7 +1440,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2722"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2723"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1480,7 +1480,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2098"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2099"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1488,7 +1488,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2546"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2547"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1496,7 +1496,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2724"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2725"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1674,7 +1674,7 @@
 <context>
     <name>ShellRail</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellRail.qml" line="497"/>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="508"/>
         <source>%n to study now</source>
         <translation>
             <numerusform>%n to study now</numerusform>
