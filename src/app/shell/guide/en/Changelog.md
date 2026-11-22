@@ -7,6 +7,24 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.28.0 — November 22, 2026
+
+**New**
+- **A new look** — graphite instead of black: layers of grey, softer shapes and the accent on each view's main button (black and blue-grey stay: **Settings → Appearance → Dark background**). On a phone: a floating navigation bar that names the view you are in, the notebook's round mark in place of ☰, the drawer's icons with names, the page menus as sheets from the bottom edge, the settings as a list of sections; reading mode and the side panel in **⋮**. Shorter texts in the settings, the journals and templates folders shown as Journal and Templates.
+- **Interface size** — **Settings → Appearance → Interface size**: Automatic (larger on large screens — a 1440p monitor 115 %, 4K at 100 % 150 %) or 90–175 %; also **Larger interface** (Ctrl+Alt+=), **Smaller interface** (Ctrl+Alt+-) and **Interface size: automatic** (Ctrl+Alt+0) in the palette. On the computer; phones keep their sizes.
+- **Share agents with the phone** — **Settings → Extensions → AI agents → Share agents with the phone**: the computer runs its agents for your other devices on the notebook it has open and shows the pairing QR code. In a tailnet the address comes from Tailscale, the phone finds the agents in the notebook's settings (**Add** beside each) and your own devices pair without a code ([[AI#An agent on another computer]]).
+- **The agent works while the phone sleeps** — on Android a quiet notification ("Claude Code is answering…", with **Stop**) keeps the answer coming with the screen off; the agent's question waits for the phone (an hour, `acp serve --question-wait`).
+- **Brulion's assistant in Zed and JetBrains** — `brulion-cli acp agent` ([[Command line and AI agents#Brulion's assistant in your editor]]).
+- **claude.ai and ChatGPT from the app** — **Settings → Extensions → claude.ai and ChatGPT** runs the remote MCP server while Brulion runs.
+- **The app as code** — `b.app` lets extensions set the theme and settings and add buttons and entries to the app's bars; AI agents change the running app live, each change undoable ([[Extension API]]).
+- **The gym's exercise pictures**, fetched when an exercise opens.
+- **Tables** — `<br>` in a cell breaks its line (a header up to three lines); a scroll bar under a table wider than the page.
+- **AI agents' options** say what they set: "Model: Opus 5.5", "Effort: high", "Mode: auto"; an Off/On option is a switch (**Fast mode**).
+
+**Fixes**
+- A rare crash when quitting (a list still being built as the window closed).
+- The autosave after typing in Markdown source no longer pauses the window.
+
 ## 0.27.0 — November 21, 2026
 
 **New**

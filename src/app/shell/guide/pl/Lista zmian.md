@@ -7,6 +7,24 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.28.0 — 22 listopada 2026
+
+**Nowe**
+- **Nowy wygląd** — grafit zamiast czerni: warstwy szarości, łagodniejsze kształty i kolor akcentu na głównym przycisku każdego widoku (czarne i szaroniebieskie tło zostają: **Ustawienia → Wygląd → Ciemne tło**). Na telefonie: pływający pasek nawigacji, który podpisuje widok, w którym jesteś, okrągły znak notatnika zamiast ☰, podpisane ikony w szufladzie, menu strony wysuwane od dołu, ustawienia jako lista sekcji; tryb czytania i panel boczny w **⋮**. Krótsze opisy w ustawieniach, foldery journals i templates pokazane jako Dziennik i Szablony.
+- **Rozmiar interfejsu** — **Ustawienia → Wygląd → Rozmiar interfejsu**: Automatyczny (większy na dużych ekranach — monitor 1440p 115 %, 4K przy 100 % 150 %) albo 90–175 %; także **Powiększ interfejs** (Ctrl+Alt+=), **Pomniejsz interfejs** (Ctrl+Alt+-) i **Rozmiar interfejsu: automatyczny** (Ctrl+Alt+0) w palecie. Na komputerze; telefony zachowują swoje rozmiary.
+- **Udostępnij agentów telefonowi** — **Ustawienia → Rozszerzenia → Agenci AI → Udostępnij agentów telefonowi**: komputer uruchamia swoich agentów dla innych urządzeń na otwartym notatniku i pokazuje kod QR do sparowania. W tailnecie adres pochodzi z Tailscale, telefon znajduje agentów w ustawieniach notatnika (**Dodaj** przy każdym), a Twoje własne urządzenia parują się bez kodu ([[AI#Agent na innym komputerze]]).
+- **Agent pracuje, gdy telefon śpi** — na Androidzie ciche powiadomienie („Claude Code odpowiada…”, z przyciskiem **Zatrzymaj**) sprawia, że odpowiedź przychodzi przy wygaszonym ekranie; pytanie agenta czeka na telefon (godzinę, `acp serve --question-wait`).
+- **Asystent Brulionu w Zed i JetBrains** — `brulion-cli acp agent` ([[Wiersz poleceń i agenci AI#Asystent Brulionu w edytorze]]).
+- **claude.ai i ChatGPT z aplikacji** — **Ustawienia → Rozszerzenia → claude.ai i ChatGPT** uruchamia zdalny serwer MCP, dopóki działa Brulion.
+- **Aplikacja jako kod** — `b.app` pozwala rozszerzeniom ustawiać motyw i ustawienia oraz dodawać przyciski i pozycje do pasków aplikacji; agenci AI zmieniają działającą aplikację na żywo, każdą zmianę można cofnąć ([[API rozszerzeń]]).
+- **Zdjęcia ćwiczeń w Siłowni**, pobierane po otwarciu ćwiczenia.
+- **Tabele** — `<br>` w komórce łamie wiersz (nagłówek do trzech linii); pasek przewijania pod tabelą szerszą niż strona.
+- **Opcje agentów AI** mówią, co ustawiają: „Model: Opus 5.5”, „Wysiłek: wysoki”, „Tryb: auto”; opcja wł./wył. jest przełącznikiem (**Tryb szybki**).
+
+**Poprawki**
+- Rzadka awaria przy zamykaniu (lista budowana jeszcze w chwili zamknięcia okna).
+- Zapis po pisaniu w źródle Markdown już nie zatrzymuje okna.
+
 ## 0.27.0 — 21 listopada 2026
 
 **Nowe**
