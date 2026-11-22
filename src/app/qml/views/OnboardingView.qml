@@ -48,7 +48,7 @@ Rectangle {
     readonly property bool pending: AppController.pendingVaultPath !== ""
     /// The app for Google Play: a folder of the phone only through the system's dialog (synced
     /// with a notebook in the app's storage), no path to type.
-    readonly property bool pickedFolders: AppController.isAndroid && AppController.playStore
+    readonly property bool pickedFolders: AppController.deviceFoldersAvailable && AppController.playStore
     /// What Brulion is ({ icon, title, text }).
     readonly property list<var> features: [
         { icon: "file-text", title: qsTr("Plain files"),
@@ -713,8 +713,9 @@ Rectangle {
                                 onClicked: root.openChosen()
                             }
                             BButton {
+                                objectName: "onboardingAppStorage"
                                 Layout.fillWidth: true
-                                visible: AppController.isAndroid && !root.pending
+                                visible: (AppController.isAndroid || root.pickedFolders) && !root.pending
                                 fill: true
                                 text: qsTr("Use app storage")
                                 iconName: "smartphone"

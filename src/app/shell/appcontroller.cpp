@@ -1283,9 +1283,26 @@ QString AppController::platform() const
 #endif
 }
 
+namespace {
+
+/// BRULION_TEST_PLAY=1 on a computer: the interface of the app for Google Play — its start
+/// screen, the folders of the device (local folders there) — to look at and drive it without a
+/// phone (screenshots, the remote control). Nothing else of that build changes.
+bool testPlayUi()
+{
+#ifdef Q_OS_ANDROID
+    return false;
+#else
+    static const bool on = qEnvironmentVariable("BRULION_TEST_PLAY") == u"1";
+    return on;
+#endif
+}
+
+} // namespace
+
 bool AppController::playStore() const
 {
-    return platform::playStoreBuild();
+    return platform::playStoreBuild() || testPlayUi();
 }
 
 bool AppController::deviceFoldersAvailable() const
@@ -1293,7 +1310,7 @@ bool AppController::deviceFoldersAvailable() const
 #ifdef Q_OS_ANDROID
     return true;
 #else
-    return false;
+    return testPlayUi();
 #endif
 }
 

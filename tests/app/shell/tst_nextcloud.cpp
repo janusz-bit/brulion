@@ -136,6 +136,83 @@ class TestNextcloud : public QObject {
     }
 
 private Q_SLOTS:
+    /// A folder picked in the system's dialog (here a local one): a notebook in the app's storage
+    /// named after it gets its notes first, opens, and syncs with it from then on — never with
+    /// Nextcloud; the same folder again opens the same notebook.
+    void pickedFolderBecomesANotebook()
+    {
+        FakeWebDavServer server;
+        const Paths p = freshPaths();
+        QTemporaryDir folder;
+        QVERIFY(synctest::writeFileBehind(folder.path(), u"Dziennik/2026-10-14.md"_s, u"- [ ] kupić chleb ⏰ 2026-10-14 18:00\n"_s.toUtf8()));
+        QVERIFY(synctest::writeFileBehind(folder.path(), u".brulion/config.json"_s, R"({"journalsFolder": "Dziennik"})"));
+        auto app = makeApp(p, &server);
+        app->openDeviceFolder(QUrl::fromLocalFile(folder.path()));
+        const QString notebook = QDir::cleanPath(p.data + u"/Folders/"_s + QFileInfo(folder.path()).fileName());
+        QVERIFY(synctest::waitFor([&] { return app->status() == u"ready" && app->workspace()->rootPath() == notebook; }));
+        QVERIFY(app->loadingText().isEmpty());
+        QVERIFY(QFileInfo::exists(notebook + u"/Dziennik/2026-10-14.md"_s));
+        QCOMPARE(app->workspace()->vault()->config().journalsFolder, u"Dziennik"_s); // the folder's, not a new notebook's
+        QVERIFY(app->inAppStorage(notebook));
+        AppSettings *settings = app->settings();
+        QVERIFY(settings->deviceFolderLinked());
+        QCOMPARE(settings->deviceFolderLink(notebook).address, folder.path());
+        WorkspaceSync *sync = app->workspace()->sync();
+        QVERIFY(sync->usesDeviceFolder());
+        QVERIFY(sync->active());
+
+        // An edit here reaches the folder; nothing goes to the server.
+        QVERIFY(app->workspace()->write(u"Z telefonu.md"_s, u"- napisane w aplikacji: żółw\n"_s));
+        QVERIFY(syncAndWait(sync));
+        QVERIFY(QFileInfo::exists(folder.path() + u"/Z telefonu.md"_s));
+        QVERIFY(server.requests().isEmpty());
+
+        // The same folder again: the same notebook, no second copy.
+        app->closeVault();
+        QVERIFY(synctest::waitFor([&] { return app->workspace()->rootPath().isEmpty(); }));
+        app->openDeviceFolder(QUrl::fromLocalFile(folder.path()));
+        QVERIFY(synctest::waitFor([&] { return app->status() == u"ready" && app->workspace()->rootPath() == notebook; }));
+        QVERIFY(!QFileInfo::exists(notebook + u" 2"_s));
+
+        // Stopped: the notes stay on both sides.
+        app->unlinkDeviceFolder();
+        QVERIFY(!settings->deviceFolderLinked());
+        QVERIFY(!sync->usesDeviceFolder());
+        QVERIFY(QFileInfo::exists(notebook + u"/Z telefonu.md"_s));
+        QVERIFY(QFileInfo::exists(folder.path() + u"/Z telefonu.md"_s));
+    }
+
+    /// The open notebook (in the app's storage) linked to a folder: its Nextcloud switch goes off;
+    /// a notebook elsewhere, or a folder another notebook syncs with, is refused.
+    void linkingTheOpenNotebook()
+    {
+        FakeWebDavServer server;
+        const Paths p = freshPaths();
+        QTemporaryDir folder;
+        QTemporaryDir outside;
+        auto app = makeApp(p, &server);
+        const QString own = p.data + u"/Brulion"_s;
+        QVERIFY(openAndWait(app.get(), own));
+        app->settings()->setNextcloudUrl(server.options().origin);
+        app->settings()->setNextcloudUser(server.options().username);
+        app->settings()->setNextcloudEnabled(true);
+        QVERIFY(app->linkDeviceFolder(QUrl::fromLocalFile(folder.path())));
+        QVERIFY(!app->settings()->nextcloudEnabled());
+        QVERIFY(app->workspace()->sync()->usesDeviceFolder());
+
+        // Another notebook may not take the same folder.
+        const QString second = p.data + u"/Folders/Drugi"_s;
+        QVERIFY(openAndWait(app.get(), second));
+        QVERIFY(!app->linkDeviceFolder(QUrl::fromLocalFile(folder.path())));
+        QVERIFY(!app->settings()->deviceFolderLinked());
+
+        // A notebook outside the app's storage never syncs with a folder this way.
+        QVERIFY(openAndWait(app.get(), outside.path()));
+        QVERIFY(!app->inAppStorage(outside.path()));
+        QVERIFY(!app->linkDeviceFolder(QUrl::fromLocalFile(folder.path())));
+        QVERIFY(!app->settings()->deviceFolderLinked());
+    }
+
     void initTestCase()
     {
         QVERIFY(m_tmp.isValid());

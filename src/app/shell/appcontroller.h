@@ -183,7 +183,9 @@ class AppController : public QObject {
     /// folder of the device is one picked in the system's dialog, kept in sync with the app's copy.
     Q_PROPERTY(bool playStore READ playStore CONSTANT FINAL)
     /// A notebook in the app's storage can sync with a folder of this device picked in the
-    /// system's dialog (Android: openDeviceFolder(), linkDeviceFolder(); docs/ANDROID.md).
+    /// system's dialog (Android: openDeviceFolder(), linkDeviceFolder(); docs/ANDROID.md). On a
+    /// computer with BRULION_TEST_PLAY=1 too (local folders), which also sets playStore: the
+    /// interface of the app for Google Play without a phone.
     Q_PROPERTY(bool deviceFoldersAvailable READ deviceFoldersAvailable CONSTANT FINAL)
     /// What the splash says while a notebook opens ("" = the usual "Opening the notebook…"): the
     /// first copy of a picked folder's notes, with its progress.

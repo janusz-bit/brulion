@@ -5872,7 +5872,10 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   files in the folder “Notatki”…", "Brulion no longer has access to the folder “Notatki”. Choose it
   again in Settings → Sync.", "deleted … in the folder", "Operations in the folder" in a run's
   details); the Nextcloud tab says that Nextcloud is off for this notebook (one way per notebook)
-  and hides its form; the overview's Syncthing card carries the folder's state.
+  and hides its form; the overview's Syncthing card carries the folder's state. On a computer,
+  `BRULION_TEST_PLAY=1` in the environment shows this interface and the start screen of the app for
+  Google Play (`AppController.deviceFoldersAvailable`, `playStore`) with local folders — to look at
+  it and drive it with the remote control without a phone; nothing else changes.
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Checking files on the server…", "Sending and
