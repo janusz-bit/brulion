@@ -1987,6 +1987,15 @@ Item {
                         }
                     }
                 }
+                // (Android: the notification of a foreground service while an agent on another
+                // computer answers — docs/ANDROID.md "An AI agent on another computer".)
+                PermissionRow {
+                    objectName: "acpAgentNotifications"
+                    visible: AppController.isAndroid
+                    name: "notifications"
+                    title: qsTr("Notifications")
+                    description: qsTr("While an agent on another computer answers, a notification says so, with Stop; Brulion keeps fetching its answer with the screen off.")
+                }
                 ShellSettingRow {
                     title: qsTr("Add an agent")
                     description: qsTr("Who answers is chosen in each conversation of the AI chat.")

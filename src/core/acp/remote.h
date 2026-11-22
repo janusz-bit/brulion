@@ -20,8 +20,10 @@
 //          messages after N (those up to N are dropped on the host), at once or within S seconds (a
 //          long poll)
 //   DELETE streams/<id>                       → the agent's process ends
-//   GET    sessions/<id>/turn?wait=S          → {turn, state, text, tools, stopReason, error, asking} — the last
-//          turn of a session, for a device that lost the stream it ran in (RemoteTurn)
+//   GET    sessions/<id>/turn?wait=S          → {turn, state, text, tools, stopReason, error, asking, question} —
+//          the last turn of a session, for a device that lost the stream it ran in (RemoteTurn)
+//   POST   sessions/<id>/turn {question, optionId} → the turn — the device's answer to the question
+//          of the agent that waits in it (RemoteTurn::question)
 //   DELETE sessions/<id>/turn                 → the agent stops that turn
 //
 // Every request but pair carries "Authorization: Bearer <token>". A stream survives a phone that
@@ -128,6 +130,15 @@ void pairRemote(sync::HttpTransport *transport, const QUrl &base, const QString 
 void fetchRemoteInfo(sync::HttpTransport *transport, const QUrl &base, const QString &token,
                      std::function<void(const RemoteInfo &info, const RemoteError &error)> done);
 
+/// A question of the agent (session/request_permission) that waits on the host for this device's
+/// answer, in a turn whose stream this device lost.
+struct RemoteQuestion {
+    QString id;          ///< the host's id of it (answerRemoteQuestion())
+    QJsonObject request; ///< what the agent asks: {toolCall, options}, as for acp::readPermission()
+    bool isEmpty() const { return id.isEmpty(); }
+    friend bool operator==(const RemoteQuestion &, const RemoteQuestion &) = default;
+};
+
 /// The last turn of a session on the host (GET sessions/<id>/turn): how a turn went on whose stream
 /// this device lost — Android ended the app meanwhile, the network was gone for long.
 struct RemoteTurn {
@@ -139,17 +150,29 @@ struct RemoteTurn {
     QString stopReason; ///< Done: the agent's ("end_turn", "cancelled" …)
     QString error;      ///< Failed: why (the host's words)
     bool asking = false;
+    /// Running: the question that waits for this device (an older host keeps none: it answers
+    /// "cancelled" while `asking`).
+    RemoteQuestion question{};
     static std::optional<RemoteTurn> fromJson(const QJsonObject &o);
 };
 
-/// GET sessions/<session>/turn, waiting up to `waitSeconds` (≤ RemoteWaitSeconds) while it runs. The
-/// host takes it that this device lost the stream of the turn: questions of the agent in it are
-/// answered "cancelled" from now on, and the stream ends with the turn. A turn the host does not
-/// know (it was started again, an old host): RemoteError::Kind::Refused, status 404.
+/// GET sessions/<session>/turn, waiting up to `waitSeconds` (≤ RemoteWaitSeconds) while it runs (an
+/// answer comes sooner when the turn changes: it ends, or the agent asks). The host takes it that
+/// this device lost the stream of the turn: the stream ends with the turn, and questions of the
+/// agent in it wait for this device in the turn (`question`) — answered "cancelled" there only once
+/// nobody asked for them for a while (an hour by default: `acp serve --question-wait`). A turn the
+/// host does not know (it was started again, an old host): RemoteError::Kind::Refused, status 404.
 void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session,
                      int waitSeconds, std::function<void(const RemoteTurn &turn, const RemoteError &error)> done);
 /// DELETE sessions/<session>/turn: the agent stops it.
 void cancelRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session);
+/// POST sessions/<session>/turn {question, optionId}: this device's answer to the question `question`
+/// (RemoteQuestion::id) of that turn — `optionId` one of the agent's options, "" declines it
+/// ("cancelled"). `done` gets the turn as it is then; a question that waits no more (answered, or it
+/// waited too long) is RemoteError::Kind::Refused, status 404, code "no_question".
+void answerRemoteQuestion(sync::HttpTransport *transport, const QUrl &base, const QString &token,
+                          const QString &session, const QString &question, const QString &optionId,
+                          std::function<void(const RemoteTurn &turn, const RemoteError &error)> done);
 
 /// One agent's process on the host and the protocol's lines to and from it.
 class RemoteStream : public QObject {

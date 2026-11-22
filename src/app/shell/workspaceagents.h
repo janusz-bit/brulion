@@ -200,9 +200,24 @@ public:
     /// (also after the stream of a turn that runs ended: the computer was not reached for long,
     /// or it no longer knew the stream).
     void recover(const QString &path);
-    /// A turn of an agent on another computer runs: on Android the app keeps the screen on
-    /// meanwhile (AppController), so that the system does not stop its network while it waits.
+    /// A turn of an agent on another computer runs: on Android a foreground service keeps the app
+    /// working meanwhile with the screen off or behind another app (AppController →
+    /// platform::setAgentWork(): its notification says remoteWork()).
     bool remoteWorking() const { return m_remoteWorking; }
+    /// What those turns do, for that notification: its title ("Claude Code is answering…", "2 AI
+    /// agents are answering…", or the first question waiting: "Claude Code asks: Write Dom.md"), its
+    /// line (the computer and the conversation), and whether every one of them waits on the user's
+    /// answer (nothing comes from that computer meanwhile). Empty while none runs.
+    struct RemoteWork
+    {
+        QString title;
+        QString text;
+        bool waiting = false;
+        friend bool operator==(const RemoteWork &, const RemoteWork &) = default;
+    };
+    RemoteWork remoteWork() const;
+    /// The conversations whose turn an agent on another computer answers (recovered ones too).
+    QStringList remoteTurns() const;
 
     /// The question the turn of `path` waits on: its text (a line of title, then what it would
     /// do) and options; "" / {} none.
@@ -262,6 +277,8 @@ Q_SIGNALS:
     void remembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     void checked(const QString &id, bool ok, const QString &text);
     void remoteWorkingChanged();
+    /// remoteWork() may have changed.
+    void remoteWorkChanged();
     /// A turn of `path` is recovered (recover(), or its stream ended while it ran): the chat shows it
     /// as running.
     void recovering(const QString &path);
@@ -277,7 +294,12 @@ private:
         QStringList ids; ///< the agent's option ids (a permission), the methods' (a sign-in)
         bool signIn = false;
         acp::Diff diff;  ///< the change of a file it would make (path "": none)
+        /// A question of a turn recovered from another computer: the computer's id of it (it is
+        /// answered there: acp::answerRemoteQuestion()).
+        QString remote{};
     };
+    /// A question as the chat shows it: "<name> asks: <title>", what it would do, its options.
+    static Question permissionQuestion(const QString &name, const acp::Permission &permission);
 
     Process *processFor(const AgentConfig &config);
     void connectClient(Process *p);
@@ -317,9 +339,14 @@ private:
         QString turn; ///< the turn's id (acp::TurnInput::turnId)
         int failures = 0;
         qint64 failingSince = -1;
+        /// The computer's id of the question answered here last (a poll that crossed the answer
+        /// does not ask it again).
+        QString answered{};
     };
     void pollRecovery(const QString &path);
     void recovered(const QString &path, const acp::RemoteTurn &turn, const acp::RemoteError &error);
+    /// The user answered the question `q` of the recovered turn of `path` with `optionId` ("": no).
+    void answerRecovered(const QString &path, const Question &q, const QString &optionId);
     // The device's record of conversations' sessions (LocalStore "acp/sessions").
     struct Stored
     {

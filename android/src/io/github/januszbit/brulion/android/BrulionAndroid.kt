@@ -146,6 +146,9 @@ object BrulionAndroid {
   /** The phone's biometrics or screen lock answered [requestDeviceAuth] ([error] "": cancelled). */
   @JvmStatic external fun nativeDeviceAuth(ok: Boolean, error: String)
 
+  /** Stop in the notification of an AI agent at work ([AgentService]): its turns end. */
+  @JvmStatic external fun nativeAgentStop()
+
   // -----------------------------------------------------------------------------------------
   // Lifecycle (C++)
   // -----------------------------------------------------------------------------------------
@@ -189,6 +192,31 @@ object BrulionAndroid {
   fun setKeepScreenOn(on: Boolean) {
     keepScreenOn = on
     onMain { applyKeepScreenOn() }
+  }
+
+  /**
+   * An AI agent on another computer works for this device (C++ `platform::setAgentWork()`): the
+   * foreground service [AgentService] with its quiet notification — [title], [text], the button
+   * [stop]; the CPU kept awake unless [waiting] (every turn waits on the user's answer) — or, with
+   * an empty [title], none any more.
+   */
+  @JvmStatic
+  fun setAgentWork(context: Context, title: String, text: String, stop: String, waiting: Boolean) {
+    AgentService.update(context, title, text, stop, waiting)
+  }
+
+  /** Hands the notification's Stop to C++ ([nativeAgentStop]); false when C++ does not listen. */
+  internal fun agentStopRequested(): Boolean {
+    synchronized(lock) {
+      if (!nativeAttached) return false
+      return try {
+        nativeAgentStop()
+        true
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native agent-stop callback not registered", e)
+        false
+      }
+    }
   }
 
   /**

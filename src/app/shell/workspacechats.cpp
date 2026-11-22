@@ -700,6 +700,12 @@ void WorkspaceChats::stopAll()
     }
 }
 
+void WorkspaceChats::stopRemoteAgents()
+{
+    for (const QString &path : m_agents->remoteTurns())
+        stop(path);
+}
+
 void WorkspaceChats::dismissFailure(const QString &path)
 {
     setFailure(find(path), QString());

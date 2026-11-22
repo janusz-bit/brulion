@@ -955,6 +955,8 @@ private:
     QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
     QHash<int, std::pair<QString, QString>> m_renameToasts; ///< toastUndoRename()'s ids → {path, old title}
     QHash<int, QString> m_chatToasts; ///< an AI agent's question off screen: the toast's id → its conversation
+    /// What platform::setAgentWork() was given last: title, text, "waiting" or "".
+    QStringList m_agentWork{QString(), QString(), QString()};
     QHash<int, QJSValue> m_functionToasts;   ///< toastAction()'s ids → the function
     QHash<int, int> m_extensionToasts;       ///< toastWithAction()'s ids → an extension's button
 #ifdef Q_OS_WASM

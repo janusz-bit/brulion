@@ -286,6 +286,12 @@ void JNICALL nativeDeviceAuth(JNIEnv *env, jclass, jboolean ok, jstring error)
     });
 }
 
+/// Stop in the notification of an AI agent at work (AgentService.kt), queued to Qt's thread.
+void JNICALL nativeAgentStop(JNIEnv *, jclass)
+{
+    postToBridge([](AndroidBridge *bridge) { Q_EMIT bridge->agentStopRequested(); });
+}
+
 } // namespace
 
 AndroidBridge *AndroidBridge::instance()
@@ -316,6 +322,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
             {"nativeImeChanged", "(IZZ)V", reinterpret_cast<void *>(&nativeImeChanged)},
             {"nativeGestureInsetsChanged", "(II)V", reinterpret_cast<void *>(&nativeGestureInsetsChanged)},
             {"nativeDeviceAuth", "(ZLjava/lang/String;)V", reinterpret_cast<void *>(&nativeDeviceAuth)},
+            {"nativeAgentStop", "()V", reinterpret_cast<void *>(&nativeAgentStop)},
     };
     QJniEnvironment env;
     if (env.registerNativeMethods(kClass, methods, int(std::size(methods))))
@@ -805,6 +812,20 @@ void AndroidBridge::setKeepScreenOn(bool on)
 {
     QJniObject::callStaticMethod<void>(kClass, "setKeepScreenOn", "(Z)V", jboolean(on));
     failed("setKeepScreenOn");
+}
+
+void AndroidBridge::setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return;
+    QJniObject::callStaticMethod<void>(kClass, "setAgentWork",
+                                       "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/"
+                                       "String;Z)V",
+                                       context.object(), QJniObject::fromString(title).object<jstring>(),
+                                       QJniObject::fromString(text).object<jstring>(),
+                                       QJniObject::fromString(stop).object<jstring>(), jboolean(waiting));
+    failed("setAgentWork");
 }
 
 void AndroidBridge::setSecureWindow(bool secure, bool hideRecents)

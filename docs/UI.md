@@ -1419,7 +1419,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   (https://agent.example.com) · with Brulion's tools"; pairing again keeps its name and options.
   Edit… changes only its name there. A `brulion://pair?url=…&code=…` address ("Automation" below:
   the QR code `acp pair` shows, opened by the phone's camera) opens this section with
-  `acpHostDialog` filled in (the route's `pairUrl` and `pairCode`, taken once); the user pairs. Kept in the device's settings (`AppSettings::acpAgents`, key
+  `acpHostDialog` filled in (the route's `pairUrl` and `pairCode`, taken once); the user pairs. On
+  Android the section also has **Notifications** (`acpAgentNotifications`, the reminders' permission
+  row): the notification of an agent on another computer at work (below) shows only with it. Kept in the device's settings (`AppSettings::acpAgents`, key
   `ai/agents`: rows {id, name, command, tools, app, options, known} and, for an agent on another
   computer, {url, remote, host, root}; at most 20, malformed rows left out) — never in the
   notebook, which comes from anywhere: a page may only name an agent set up here. The token a
@@ -1451,9 +1453,14 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   agent, the computer ends an older one of this device), its client offering no files or
   terminals (the computer serves them), the session's `cwd` and the context naming that computer's
   folder (`AgentConfig::root`, from its info), no MCP server from here (the computer gives its own).
-  What the agent says waits there while the phone sleeps; while a turn of it runs, Android keeps the
-  screen on (`WorkspaceAgents::remoteWorking()`, as for the model on the device), so that the system
-  does not stop the app's network meanwhile. Its ends in words, after "The AI agent
+  What the agent says waits there while the phone sleeps; while a turn of it runs (or one this
+  device lost is fetched: below), Android runs a foreground service (`WorkspaceAgents::remoteWorking()`
+  → `platform::setAgentWork()`, docs/ANDROID.md "An AI agent on another computer"), so the stream
+  goes on with the screen off and Brulion behind another app: a quiet ongoing notification
+  (`WorkspaceAgents::remoteWork()`: "Claude Code is answering…", "2 AI agents are answering…", or
+  the first question waiting — "Claude Code asks: Write Dom.md" —; under it "On raspberry-pi-4 ·
+  <the conversation>") whose **Stop** stops those turns (`WorkspaceChats::stopRemoteAgents`) and
+  whose tap brings Brulion to the front. Its ends in words, after "The AI agent
   “…” stopped: " (`WorkspaceAgents::remoteEndText`): unpaired ("pair it again"), the computer
   started again ("try again"), not reached for 15 minutes ("is it on, and is this device in its
   network?"), the agent not started there, the agent's own end; a sign-in in a terminal is named
@@ -1469,12 +1476,18 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   (`WorkspaceChats::recoverAgentTurns` → `WorkspaceAgents::recover`): "Claude Code is still working
   on raspberry-pi-4…" while `acp::fetchRemoteTurn` long-polls the computer, then the answer is
   written as if the phone had been there (its text, else "Done:" and its tool calls), the
-  session's record goes on (the next message resumes it), and the screen stays on meanwhile as for
-  a turn. The same when the stream of a running turn ends (the computer not reached for 15
-  minutes, or it gave the stream up). Stop asks the computer to stop it (`acp::cancelRemoteTurn`).
-  A question the agent asked meanwhile is answered "cancelled" there (nobody was here to say yes):
-  "… stopped on raspberry-pi-4 without an answer: a question it asked could not reach this device.
-  Ask again."; a computer whose last turn of the session has another id never got the question
+  session's record goes on (the next message resumes it), and the foreground service runs
+  meanwhile as for a turn. The same when the stream of a running turn ends (the computer not
+  reached for 15 minutes, or it gave the stream up). Stop asks the computer to stop it
+  (`acp::cancelRemoteTurn`). A question the agent asked meanwhile — also one this device showed
+  before Android ended it — waits there (docs/CLI.md "Questions wait for the device"): the turn
+  brings it (`acp::RemoteTurn::question`), and it is the conversation's question as any (its title,
+  the diff, the agent's options; "… on raspberry-pi-4 waits for your answer…"), answered there
+  (`acp::answerRemoteQuestion`; not sent: asked again, "Your answer did not reach …"). One nobody
+  answered in time (an hour by default: `acp serve --question-wait`) is answered "cancelled" there:
+  "… stopped on raspberry-pi-4 without an answer: a question it asked got no answer from this device
+  in time. Ask again." (an older computer answers it so at once, "… a question it asked meanwhile is
+  answered “cancelled”…"); a computer whose last turn of the session has another id never got the question
   ("… did not get the question: Brulion was ended before it was sent. Ask again."); one started
   meanwhile knows no turn: "The answer of Claude Code was lost … Ask again.".
 * **Its program** (`shell/workspaceagents.h`, the protocol `src/core/acp/acp.h`): one process per

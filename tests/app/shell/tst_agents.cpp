@@ -15,7 +15,9 @@
 // chat view shows; Windows' batch files, fs/read_text_file's lines, a terminal's output kept. An
 // agent on another computer: the real brulion-cli acp serve with the same fake agent — paired with
 // a code of its acp pair, a conversation answered there (its folder as the agent's cwd and in the
-// context, that computer's files read), unpaired there (the turn says so); the settings' remote
+// context, that computer's files read), what Android's notification says meanwhile, a turn the app
+// lost fetched from there afterwards — also one whose question waits there, answered from the app
+// started again —, unpaired there (the turn says so); the settings' remote
 // agents (their token in the app's secrets, never in the settings; paired again: the same agent);
 // the words for a stream's ends and a pairing's errors. "Let it change the app": its tools get
 // --app-control and a grant's token in their environment only (BRULION_APP_TOKEN, the agent's name
@@ -30,6 +32,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1025,7 +1028,12 @@ private Q_SLOTS:
         QSignalSpy working(chats->agents(), &WorkspaceAgents::remoteWorkingChanged);
         const QString path = chats->send(QString(), u"Cześć z telefonu"_s, QString(), {}, u"acp:komputer-fake"_s);
         shell::ChatTurn *turn = chats->turn(path);
-        QVERIFY(chats->agents()->remoteWorking()); // (the screen stays on meanwhile)
+        QVERIFY(chats->agents()->remoteWorking()); // (Android's foreground service runs meanwhile)
+        QCOMPARE(chats->agents()->remoteTurns(), QStringList{path});
+        const WorkspaceAgents::RemoteWork work = chats->agents()->remoteWork();
+        QCOMPARE(work.title, u"Fałszywy is answering…"_s);
+        QCOMPARE(work.text, u"On %1 · %2"_s.arg(agent.host, QFileInfo(path).completeBaseName()));
+        QVERIFY(!work.waiting);
         QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 30000);
         QCOMPARE(turn->failure(), QString());
         QVERIFY(!chats->agents()->remoteWorking());
@@ -1064,6 +1072,35 @@ private Q_SLOTS:
         QCOMPARE(chats->send(slow, u"sesja"_s), slow);
         QTRY_VERIFY_WITH_TIMEOUT(!again->running(), 30000);
         QVERIFY2(ws->read(slow).contains(u"- 🤖 Sesja: s"_s), qPrintable(ws->read(slow)));
+        QVERIFY(chats->agents()->remoteWork().title.isEmpty());
+
+        // Ended while a question of the agent is on screen: started again, the app gets it from that
+        // computer (where it waited), and the answer goes there — the agent writes its copy.
+        QFile::remove(computer + u"/Zgoda.md"_s);
+        const QString asking = chats->send(QString(), u"pozwolenie"_s, QString(), {}, u"acp:komputer-fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->questionOptions(asking).isEmpty(), 30000);
+        QCOMPARE(chats->agents()->remoteWork().title, u"Fałszywy asks: Write Zgoda.md"_s);
+        QVERIFY(chats->agents()->remoteWork().waiting);
+        chats->agents()->abandon();
+        ws.reset();
+        ws = open({agent}, root);
+        chats = ws->chats();
+        shell::ChatTurn *asked = chats->turn(asking);
+        QVERIFY(asked->running());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->questionOptions(asking).isEmpty(), 30000);
+        QCOMPARE(chats->questionOptions(asking), (QStringList{u"Allow"_s, u"Reject"_s}));
+        QVERIFY2(chats->questionText(asking).startsWith(u"Fałszywy asks: Write Zgoda.md"_s),
+                 qPrintable(chats->questionText(asking)));
+        QCOMPARE(chats->questionDiff(asking).value(u"newText"_s).toString(), u"- zgoda"_s);
+        QVERIFY(chats->agents()->remoteWork().waiting);
+        QVERIFY(!QFile::exists(computer + u"/Zgoda.md"_s));
+        chats->answer(asking, u"Allow"_s);
+        QVERIFY(chats->questionOptions(asking).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!asked->running(), 30000);
+        QCOMPARE(asked->failure(), QString());
+        QVERIFY2(ws->read(asking).contains(u"- 🤖 Zapisano."_s), qPrintable(ws->read(asking)));
+        QVERIFY(QFile::exists(computer + u"/Zgoda.md"_s));
+        QVERIFY(!chats->agents()->remoteWorking());
         turn = chats->turn(path); // (the first conversation's, in the app started again)
 
         // Unpaired there: the next turn says so.

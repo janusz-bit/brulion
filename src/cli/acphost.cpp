@@ -101,6 +101,8 @@ QJsonObject HostTurn::toJson() const
                   {u"tools"_s, QJsonArray::fromStringList(tools)},
                   {u"asking"_s, asking},
                   {u"started"_s, timeText(started)}};
+    if (!question.isEmpty())
+        o.insert(u"question"_s, question);
     if (state == State::Done)
         o.insert(u"stopReason"_s, stopReason);
     if (state == State::Failed)
@@ -504,8 +506,15 @@ struct AcpHost::Stream {
     QTimer *waitTimer = nullptr;
     QDateTime lastSeen;
     QSet<QString> prompts;            // the ids of the device's session/prompt requests not answered yet
-    // The agent's session/request_permission not answered yet: their ids and sessions.
-    QHash<QString, std::pair<QJsonValue, QString>> asked;
+    // The agent's session/request_permission not answered yet, in the order asked.
+    struct Asked {
+        QString key; // idKey() of its id: the device answers it by this (HostTurn::question)
+        QJsonValue id;
+        QString session;
+        QJsonObject params;
+        QDateTime heard; // when it was asked, or the device last fetched its stream or turn since
+    };
+    QList<Asked> asked;
     bool retired = false; // nobody fetches from it: it ends after its turns
     QString retiredWhy;
     QDateTime retiredAt;
@@ -817,8 +826,9 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
         return std::nullopt;
     }
     if (parts.size() == 3 && parts.at(0) == u"sessions" && parts.at(2) == u"turn") {
-        if (head.method != "GET" && head.method != "DELETE")
+        if (head.method != "GET" && head.method != "DELETE" && head.method != "POST")
             return apiError(405, u"method"_s, u"Method not allowed"_s);
+        *maxBody = head.method == "POST" ? 4096 : 0;
         return std::nullopt;
     }
     return apiError(404, u"not_found"_s, u"Not found"_s);
@@ -1149,9 +1159,20 @@ void AcpHost::retire(Stream *s, const QString &why)
     s->retiredWhy = why;
     s->retiredAt = now();
     say(u"%1: %2; it ends after its turn"_s.arg(s->id, why));
-    // The questions its agent waits on, and what nobody will fetch.
-    for (const auto &asked : std::exchange(s->asked, {}))
-        respond(s, asked.first, QJsonObject{{u"outcome"_s, QJsonObject{{u"outcome"_s, u"cancelled"_s}}}});
+    // The questions its agent waits on wait for the device with their turns (or, without a wait,
+    // nobody is there to answer them); what nobody will fetch goes.
+    if (m_options.questionWaitMs <= 0) {
+        QSet<QString> sessions;
+        while (!s->asked.isEmpty()) {
+            sessions.insert(s->asked.constFirst().session);
+            answerQuestion(s, 0, QJsonObject{{u"outcome"_s, u"cancelled"_s}});
+        }
+        for (const QString &session : std::as_const(sessions))
+            questionsChanged(s, session);
+    } else {
+        for (Stream::Asked &q : s->asked)
+            q.heard = now(); // (its device was there just now)
+    }
     s->out.clear();
     s->outSizes.clear();
     s->outBytes = 0;
@@ -1204,9 +1225,14 @@ void AcpHost::turnUpdate(Stream *s, const QJsonObject &params)
         const QJsonObject content = update.value(u"content"_s).toObject();
         if (content.value(u"type"_s).toString() == u"text" && it->text.size() < kMaxTurnTextChars)
             it->text += content.value(u"text"_s).toString().left(kMaxTurnTextChars - it->text.size());
-    } else if (kind == u"tool_call" && it->tools.size() < kMaxTurnTools) {
-        if (const QString title = update.value(u"title"_s).toString().trimmed(); !title.isEmpty())
-            it->tools.append(title.left(500));
+    } else if (kind == u"tool_call" || kind == u"tool_call_update") {
+        const QString title = update.value(u"title"_s).toString().trimmed().left(500);
+        if (kind == u"tool_call" && !title.isEmpty() && it->tools.size() < kMaxTurnTools)
+            it->tools.append(title);
+        const QString call = update.value(u"toolCallId"_s).toString().left(200);
+        if (!title.isEmpty() && !call.isEmpty()
+            && (it->toolTitles.size() < 4 * kMaxTurnTools || it->toolTitles.contains(call)))
+            it->toolTitles.insert(call, title);
     }
 }
 
@@ -1217,6 +1243,9 @@ void AcpHost::turnEnded(Stream *s, const QString &prompt, const QJsonObject &res
             continue;
         it->ended = now();
         it->asking = false;
+        it->question = {};
+        // (Its questions went with it: the agent waits on none of them any more.)
+        s->asked.removeIf([&it](const Stream::Asked &q) { return q.session == it->session; });
         if (response.contains(u"error"_s)) {
             const QJsonObject e = response.value(u"error"_s).toObject();
             it->state = HostTurn::State::Failed;
@@ -1241,6 +1270,7 @@ void AcpHost::turnsFailed(Stream *s, const QString &why)
         it->error = why;
         it->ended = now();
         it->asking = false;
+        it->question = {};
         turnChanged(it.key());
     }
 }
@@ -1280,6 +1310,100 @@ void AcpHost::answerTurnWaiter(QTimer *timer)
     }
 }
 
+void AcpHost::questionsChanged(Stream *s, const QString &session)
+{
+    const auto it = m_turns.find(turnKey(s->device, session));
+    if (it == m_turns.end() || it->stream != s->id || it->state != HostTurn::State::Running)
+        return;
+    const auto first = std::ranges::find(s->asked, session, &Stream::Asked::session);
+    const bool asking = first != s->asked.cend();
+    QJsonObject question;
+    if (asking) {
+        // (Its call's title as the turn knows it, where the question names none: "Write Dom.md".)
+        QJsonObject call = first->params.value(u"toolCall"_s).toObject();
+        if (call.value(u"title"_s).toString().trimmed().isEmpty()) {
+            if (const QString title = it->toolTitles.value(call.value(u"toolCallId"_s).toString()); !title.isEmpty())
+                call.insert(u"title"_s, title);
+        }
+        question = QJsonObject{
+                {u"id"_s, first->key}, {u"toolCall"_s, call}, {u"options"_s, first->params.value(u"options"_s)}};
+    }
+    if (it->asking == asking && it->question == question)
+        return;
+    it->asking = asking;
+    it->question = question;
+    turnChanged(it.key());
+}
+
+void AcpHost::answerQuestion(Stream *s, qsizetype index, const QJsonObject &outcome)
+{
+    const Stream::Asked q = s->asked.takeAt(index);
+    respond(s, q.id, QJsonObject{{u"outcome"_s, outcome}});
+    // (A turn nobody fetches from gets its time again: it did not work while it waited.)
+    if (s->retired)
+        s->retiredAt = now();
+}
+
+http::Response AcpHost::answerTurnQuestion(const QString &key, const http::Request &request)
+{
+    const auto it = m_turns.constFind(key);
+    Stream *s = it == m_turns.cend() ? nullptr : m_streams.value(it->stream);
+    const QJsonObject body = QJsonDocument::fromJson(request.body).object();
+    const QString question = body.value(u"question"_s).toString();
+    qsizetype index = -1;
+    if (s && !s->closed && it->state == HostTurn::State::Running) {
+        for (qsizetype i = 0; i < s->asked.size() && index < 0; ++i) {
+            if (s->asked.at(i).key == question && s->asked.at(i).session == it->session)
+                index = i;
+        }
+    }
+    if (index < 0)
+        return apiError(404, u"no_question"_s,
+                        u"That question does not wait any more: it was answered, or it waited too long"_s);
+    // One of the options the agent offered, else declined ("cancelled"), as the app's client answers.
+    const QString option = body.value(u"optionId"_s).toString();
+    const QJsonArray offered = s->asked.at(index).params.value(u"options"_s).toArray();
+    const bool known = !option.isEmpty() && std::ranges::any_of(offered, [&option](const QJsonValue &o) {
+        return o.toObject().value(u"optionId"_s).toString() == option;
+    });
+    const QString session = it->session;
+    answerQuestion(s, index,
+                   known ? QJsonObject{{u"outcome"_s, u"selected"_s}, {u"optionId"_s, option}}
+                         : QJsonObject{{u"outcome"_s, u"cancelled"_s}});
+    say(u"%1: the device answered a question of session %2 (%3)"_s.arg(s->id, session.left(100),
+                                                                       known ? option.left(100) : u"cancelled"_s));
+    questionsChanged(s, session);
+    const auto current = m_turns.constFind(key);
+    return http::Response::json(200, current == m_turns.cend() ? QJsonObject() : current->toJson());
+}
+
+void AcpHost::expireQuestions(Stream *s)
+{
+    if (s->closed || s->asked.isEmpty())
+        return;
+    const QDateTime t = now();
+    // The device is there while it fetches the stream (not one it lost) or waits for the turn.
+    const bool fetching = !s->retired && s->waiter.alive();
+    QSet<QString> changed;
+    for (qsizetype i = s->asked.size() - 1; i >= 0; --i) {
+        Stream::Asked &q = s->asked[i];
+        const QString key = turnKey(s->device, q.session);
+        if (fetching || std::ranges::any_of(m_turnWaiters, [&key](const TurnWaiter &w) {
+                return w.key == key && w.reply.alive();
+            }))
+            q.heard = t;
+        const QDateTime heard = s->retired ? q.heard : std::max(q.heard, s->lastSeen);
+        if (heard.msecsTo(t) <= m_options.questionWaitMs)
+            continue;
+        say(u"%1: a question of the agent waited %2 minutes for the device: answered \"cancelled\""_s.arg(s->id).arg(
+                heard.msecsTo(t) / 60000));
+        changed.insert(q.session);
+        answerQuestion(s, i, QJsonObject{{u"outcome"_s, u"cancelled"_s}});
+    }
+    for (const QString &session : std::as_const(changed))
+        questionsChanged(s, session);
+}
+
 void AcpHost::forgetTurns()
 {
     const QDateTime t = now();
@@ -1312,15 +1436,30 @@ void AcpHost::sessionTurn(const PairedDevice &device, const QString &session, co
     }
     Stream *s = m_streams.value(it->stream);
     if (request.method == "DELETE") {
-        // The device stops the turn.
+        // The device stops the turn (its questions too, as a client's cancel answers them).
         if (it->state == HostTurn::State::Running && s && !s->closed) {
             deliver(s, QJsonObject{{u"jsonrpc"_s, u"2.0"_s},
                                    {u"method"_s, u"session/cancel"_s},
                                    {u"params"_s, QJsonObject{{u"sessionId"_s, session}}}});
+            for (qsizetype i = s->asked.size() - 1; i >= 0; --i) {
+                if (s->asked.at(i).session == session)
+                    answerQuestion(s, i, QJsonObject{{u"outcome"_s, u"cancelled"_s}});
+            }
+            questionsChanged(s, session);
             say(u"%1: the turn of session %2 stopped by the device"_s.arg(s->id, session.left(100)));
         }
         reply.send(http::Response::empty(204));
         return;
+    }
+    if (request.method == "POST") {
+        reply.send(answerTurnQuestion(key, request));
+        return;
+    }
+    if (s) {
+        for (Stream::Asked &q : s->asked) {
+            if (q.session == session)
+                q.heard = now(); // (the device is there: its question waits for it)
+        }
     }
     // The device asks because it lost the stream that runs the turn: nobody fetches from it now.
     if (s && it->state == HostTurn::State::Running)
@@ -1379,11 +1518,13 @@ void AcpHost::maintain()
                 waiting.send(apiError(401, u"unauthorized"_s, u"This device is not paired (any more)"_s));
             continue;
         }
+        expireQuestions(s);
         // (A stream that ended is kept a while for its device to hear why, then given up.)
         const qint64 quiet = s->lastSeen.msecsTo(t);
         const bool idle = s->closed ? quiet > std::min<qint64>(m_options.streamIdleMs, 5 * 60 * 1000)
                                     : quiet > m_options.streamIdleMs && s->prompts.isEmpty();
-        if (s->retired && !s->closed && (s->prompts.isEmpty() || s->retiredAt.msecsTo(t) > m_options.retiredTurnMs)) {
+        if (s->retired && !s->closed
+            && (s->prompts.isEmpty() || (s->asked.isEmpty() && s->retiredAt.msecsTo(t) > m_options.retiredTurnMs))) {
             // (A turn nobody waits for gets a while to end, not forever.)
             closeStream(s, s->prompts.isEmpty() ? s->retiredWhy : u"its turn did not end in time"_s);
             removeStream(s);
@@ -1493,17 +1634,17 @@ void AcpHost::fromAgent(Stream *s, const QByteArray &line)
     if (method == u"session/update") {
         turnUpdate(s, o.value(u"params"_s).toObject());
     } else if (method == u"session/request_permission" && o.contains(u"id"_s)) {
-        if (s->retired) {
+        if (s->retired && m_options.questionWaitMs <= 0) {
             // Nobody is there to answer.
             respond(s, o.value(u"id"_s), QJsonObject{{u"outcome"_s, QJsonObject{{u"outcome"_s, u"cancelled"_s}}}});
             return;
         }
-        const QString session = o.value(u"params"_s).toObject().value(u"sessionId"_s).toString();
-        s->asked.insert(idKey(o.value(u"id"_s)), {o.value(u"id"_s), session});
-        if (const auto it = m_turns.find(turnKey(s->device, session)); it != m_turns.end() && it->stream == s->id) {
-            it->asking = true;
-            turnChanged(it.key());
-        }
+        const QJsonObject params = o.value(u"params"_s).toObject();
+        const QString session = params.value(u"sessionId"_s).toString();
+        s->asked.append({idKey(o.value(u"id"_s)), o.value(u"id"_s), session, params, now()});
+        questionsChanged(s, session);
+        if (s->retired)
+            return; // (it waits for the device with its turn: GET sessions/<id>/turn)
     } else if (method.isEmpty() && o.contains(u"id"_s) && s->prompts.remove(idKey(o.value(u"id"_s)))) {
         // A turn ended: what the agent changed goes to the other devices.
         turnEnded(s, idKey(o.value(u"id"_s)), o);
@@ -1540,14 +1681,11 @@ void AcpHost::toAgent(Stream *s, const QJsonObject &message)
     const QString method = rewritten->value(u"method"_s).toString();
     if (method.isEmpty() && rewritten->contains(u"id"_s)) {
         // The device's answer to a question of the agent.
-        if (const auto asked = s->asked.take(idKey(rewritten->value(u"id"_s))); !asked.second.isEmpty()) {
-            const bool still =
-                    std::ranges::any_of(s->asked, [&asked](const auto &a) { return a.second == asked.second; });
-            const auto it = m_turns.find(turnKey(s->device, asked.second));
-            if (!still && it != m_turns.end() && it->stream == s->id && it->asking) {
-                it->asking = false;
-                turnChanged(it.key());
-            }
+        const QString key = idKey(rewritten->value(u"id"_s));
+        if (const auto asked = std::ranges::find(s->asked, key, &Stream::Asked::key); asked != s->asked.cend()) {
+            const QString session = asked->session;
+            s->asked.erase(asked);
+            questionsChanged(s, session);
         }
     }
     if (method == u"session/prompt" && rewritten->contains(u"id"_s)) {
@@ -2106,6 +2244,10 @@ void addAcpHostCommands(QList<Command> &out)
                                       "reverse proxy)")),
              stateFileOption(),
              flag(u"noTools"_s, QT_TRANSLATE_NOOP("brulion::cli", "Sessions get no Brulion MCP server")),
+             option(u"questionWait"_s, ArgType::Int,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "Seconds an agent's question waits for a device that is gone before it is "
+                                      "answered \"cancelled\" (default 3600; 0: at once)")),
              option(u"nextcloud"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli",
                                       "Keep the notebook in sync with this Nextcloud (its address, or the WebDAV "
@@ -2198,6 +2340,14 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
     options.allowedOrigins = listArgument(args, u"allowedOrigin"_s);
     options.tools = !args.value(u"noTools"_s).toBool();
     options.toolsProgram = toolsProgram();
+    if (const QJsonValue wait = args.value(u"questionWait"_s); !wait.isUndefined()) {
+        bool waitOk = true;
+        const qint64 seconds = wait.isDouble() ? wait.toInteger(-1) : wait.toString().toLongLong(&waitOk);
+        if (!waitOk || seconds < 0 || seconds > 7LL * 24 * 60 * 60)
+            return fail(ExitUsage, u"bad_question_wait"_s,
+                        QCoreApplication::translate("brulion::cli", "--question-wait takes 0 … 604800 seconds"));
+        options.questionWaitMs = seconds * 1000;
+    }
     QString agentError;
     options.agents = agentsOf(args, &agentError);
     if (!agentError.isEmpty())

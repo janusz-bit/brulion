@@ -13,7 +13,9 @@
   the Quick Settings tiles), the home-screen widgets (TasksWidget,
   CalendarWidget, NotesWidget, their list service and receiver, QuickAddActivity), the background
   check of the notes (BackgroundCheckJob, BackgroundCheckService in the process ":background"), the
-  launcher icons.
+  launcher icons, and AgentService (a foreground service while an AI agent on another computer
+  answers: the app keeps fetching what it writes with the screen off; its event loop runs in the
+  background, android.app.background_running).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -56,6 +58,11 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- An AI agent on another computer answers (AgentService): a foreground service of type
+         dataSync — the app fetches what the agent writes from that computer — and a wake lock
+         (WAKE_LOCK above) while it works. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- The app lock's "Use the phone's lock": BiometricPrompt (a normal permission: no prompt). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
@@ -125,6 +132,16 @@
             <meta-data
                 android:name="android.app.arguments"
                 android:value="-- %%INSERT_APP_ARGUMENTS%% --" />
+
+            <!-- Qt's event loop goes on while the activity is in the background (Qt's default
+                 stops it until the activity is back): an AI agent on another computer answers
+                 with the screen off (AgentService), and what the app does in the background — the
+                 "Done" of a notification, a model downloading — is not held up. Android freezes a
+                 cached app anyway; the app's own periodic work pauses outside
+                 Qt::ApplicationActive, as on a computer whose window is minimised. -->
+            <meta-data
+                android:name="android.app.background_running"
+                android:value="true" />
         </activity>
 
         <!-- A reminder came due (AlarmManager). -->
@@ -246,6 +263,18 @@
                 android:name="android.app.arguments"
                 android:value="--automation" />
         </service>
+
+        <!-- An AI agent on another computer at work for this device (docs/ANDROID.md "An AI agent
+             on another computer"): a foreground service in the app's own process with a quiet
+             notification and Stop, started and stopped by the app (AgentService.update). -->
+        <service
+            android:name="io.github.januszbit.brulion.android.AgentService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <!-- Its notification's Stop. -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.AgentStopReceiver"
+            android:exported="false" />
 
         <!-- Quick Settings tiles (docs/ANDROID.md "Quick Settings tiles and app shortcuts"): quick
              add's window for a note or a task, without starting Qt. Only the system binds them. -->

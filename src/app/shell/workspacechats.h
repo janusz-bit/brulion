@@ -219,6 +219,9 @@ public:
     Q_INVOKABLE void stop(const QString &path);
     /// Stops every turn.
     Q_INVOKABLE void stopAll();
+    /// Stops every turn an AI agent on another computer answers (Android's notification of them:
+    /// its Stop).
+    void stopRemoteAgents();
     /// Forgets the failure shown in `path`.
     Q_INVOKABLE void dismissFailure(const QString &path);
     /// The page `path` is a conversation: in the folder AI/ with a message.

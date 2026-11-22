@@ -78,6 +78,18 @@ void keepScreenOn(bool on)
 #endif
 }
 
+void setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting)
+{
+#ifdef Q_OS_ANDROID
+    AndroidBridge::setAgentWork(title, text, stop, waiting);
+#else
+    Q_UNUSED(title);
+    Q_UNUSED(text);
+    Q_UNUSED(stop);
+    Q_UNUSED(waiting);
+#endif
+}
+
 void setSecureWindow(bool secure, bool hideRecents)
 {
 #ifdef Q_OS_ANDROID

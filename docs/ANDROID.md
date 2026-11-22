@@ -13,7 +13,9 @@ native part in Kotlin (`android/src/io/github/januszbit/brulion/android/`) that:
 * accepts text and `.md`/`.txt` files from the **Share** menu of other apps
   ([Share → Brulion](#share--brulion)),
 * provides home-screen **widgets**: today's tasks with quick add, a calendar and notes
-  ([Widgets](#widgets)).
+  ([Widgets](#widgets)),
+* keeps an AI agent on another computer answering in the AI chat while the screen is off (a
+  foreground service: [An AI agent on another computer](#an-ai-agent-on-another-computer)).
 
 C++ talks to it over JNI (`src/platform/android/androidbridge.{h,cpp}`), see
 [JNI bridge](#jni-bridge-c--kotlin).
@@ -264,7 +266,11 @@ How it works:
 
 * **Notifications** (Android 13+): Brulion asks for consent with a system dialog. When the system
   no longer asks (denied "for good" or notifications turned off by hand), asking again opens
-  Brulion's notification settings.
+  Brulion's notification settings. Reminders need it, and the notification of an AI agent on
+  another computer at work shows only with it ([An AI agent on another computer](#an-ai-agent-on-another-computer);
+  Settings → Extensions → AI agents asks for it too).
+* **Foreground service** (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`: granted at install,
+  no prompt): while an AI agent on another computer answers.
 * **Alarms & reminders** (exact alarms):
   * Android 13+ — granted at install time (`USE_EXACT_ALARM`), nothing to do;
   * Android 12 — *Settings → Apps → Special app access → Alarms & reminders* (Brulion opens this
@@ -1204,6 +1210,51 @@ Still to be checked: a mid-range phone (its speed, and whether Android stops the
 another one while a model is loaded), a download that the app's leaving the screen interrupted,
 a photo straight from the camera.
 
+## An AI agent on another computer
+
+An AI agent of a computer of yours answers in the AI chat on the phone (`brulion-cli acp serve`
+there: docs/CLI.md "AI agents for other devices", docs/UI.md "AI agents (ACP)"); the phone only
+fetches what it says, a long poll at a time. While a turn of it runs — or one the app lost is
+fetched from the computer — Brulion runs a **foreground service** (`AgentService.kt`, in the
+app's own process: it is not a Qt service), so the stream goes on with the screen off and Brulion
+behind another app, and the answer is written into the conversation as it comes (before, the app
+kept the screen on, and an answer the app lost came only when Brulion ran again):
+
+* **Its notification** (channel "AI agents", quiet: no sound, no vibration, no heads-up) says what
+  runs — "Claude Code is answering…", "2 AI agents are answering…", or the first question waiting
+  for your answer ("Claude Code asks: Write Dom.md") — and under it the computer and the
+  conversation; **Stop** stops those turns (on the computer too), a tap brings Brulion to the front.
+  Android 12+ shows a foreground service's notification after a few seconds, so a short turn shows
+  none. Without the notification permission (Android 13+: [Permissions](#permissions), Settings →
+  Extensions → AI agents → Notifications) the service runs all the same, its notification only in
+  the system's list of running apps.
+* **What keeps it going**: the service's priority (Android does not end the process, and its
+  network works in Doze), Qt's event loop running in the background (`android.app.background_running`
+  on the activity: Qt's default stops the loop as soon as the activity is not on screen — what the
+  app does in the background otherwise is held up until it returns; the app's own periodic work —
+  sync, Syncthing's status, calendars — pauses outside `Qt::ApplicationActive` anyway, as on a
+  computer whose window is minimised, and Android freezes a cached app), and a partial wake lock
+  (`Brulion:agent`, 15 minutes at a time, renewed every 10 while the agent works) — released while
+  every turn waits on your answer to a question, when nothing comes from the computer.
+* **Started and stopped by the app** (`AppController` → `platform::setAgentWork(title, text, stop,
+  waiting)` → `BrulionAndroid.setAgentWork` → `AgentService.update`): started when such a turn
+  begins (the app is in front then: Android 12+ refuses a foreground service started from the
+  background, and the app only logs it — the turn goes on on the computer, which keeps it),
+  updated as the turns and their questions change, stopped 3 s after the last one ends or fails
+  (a turn that follows at once — a message that waited — keeps it).
+* **Type `dataSync`** (Android 14+: `FOREGROUND_SERVICE_DATA_SYNC`; the app fetches what the agent
+  writes from that computer). Android 15+ allows that type 6 hours a day: `onTimeout` ends the
+  service then, and the next turn starts it again (the turns go on on the computer meanwhile).
+* **When Android ends the app anyway** (swiped away from the recent apps: Qt ends the process with
+  its activity), the computer finishes the turn and keeps it: Brulion fetches it when it starts
+  again, also a question the agent asked meanwhile, which waits there for your answer (an hour by
+  default: `acp serve --question-wait`).
+* **Tested** by `scripts/android-emulator-test.sh` (the bridge self-test, last): the service in the
+  foreground with type dataSync, its notification on the channel `agents`, the self-test's ticks
+  going on while Qt says the app is suspended (sent home), **Zatrzymaj** reaching C++, the service
+  and its notification gone — verified on the emulator (Android 16) 2026-11-22. A real agent from
+  a real phone with the screen off is still to be tried.
+
 ## New version
 
 Android does not update an app installed from an APK file, so Brulion tells you about a new
@@ -2012,9 +2063,9 @@ taps, swipes and types, and `adb exec-out screencap -p > ekran.png` takes a scre
 
 | Path | Contents |
 |---|---|
-| `android/AndroidManifest.xml` | manifest based on the Qt 6.11.2 template (`androiddeployqt` fills in the `%%INSERT_…%%` markers: package, version, name, library and the permissions of the Qt modules): permissions, `BrulionActivity`, receivers, `AlarmActivity`, `ShareActivity` (filters `ACTION_SEND`/`ACTION_SEND_MULTIPLE` for `text/*`), `AutomationActivity` (VIEW of `brulion:` and the `RUN` action), `AutomationReceiver`, `AutomationService`, the Quick Settings tiles, icons |
+| `android/AndroidManifest.xml` | manifest based on the Qt 6.11.2 template (`androiddeployqt` fills in the `%%INSERT_…%%` markers: package, version, name, library and the permissions of the Qt modules): permissions, `BrulionActivity`, receivers, `AlarmActivity`, `ShareActivity` (filters `ACTION_SEND`/`ACTION_SEND_MULTIPLE` for `text/*`), `AutomationActivity` (VIEW of `brulion:` and the `RUN` action), `AutomationReceiver`, `AutomationService`, `AgentService` (`dataSync`) and `AgentStopReceiver`, the activity's `android.app.background_running`, the Quick Settings tiles, icons |
 | `android/res/` | strings (`values` — English, the default; `values-pl`), the notification icon `ic_stat_brulion`, the app icons (`mipmap-*` from the logo, the adaptive `mipmap-anydpi` with the `#283045` background and a monochrome layer), the alarm screen theme; widgets: layouts `layout/widget_*.xml` (also the previews for the widget picker), `xml/widget_*_info.xml`, colours `widget_colors.xml` (`values` light, `values-night` dark), the corner radius (`values-v31`: the system's), the theme of the quick add window |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (JNI facade), `BrulionActivity` (`QtActivity` + taps/permissions/ringtone choice) + `StartupRelaunch` (recreated before Qt started: restart of the app), `ImeInsets` (on-screen keyboard: how much of the Qt view it covers), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (sounds: `SoundChoice`, channel versions `SoundChannel`, `SoundStore`, sample, ringtone picker), `RingTimeout`, `Receivers` (fire, buttons, boot/time change), `DoneQueue` (the "Done" queue for C++), `AlarmActivity` + `AlarmSlider` (the alarm screen and its slider; `SlideGesture`: its arithmetic), `Documents` (chosen documents and document trees for the import), `ShareActivity` + `ShareIntent` ("Share → Brulion": receiving, copies in `files/share-in/`, JSON for C++), widgets: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews and list rows), `WidgetSnapshot` (the snapshot, moving tasks to the new day), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (storing, refreshing, midnight, month buttons), `WidgetDates` (the app's day and month names), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (quick add, writing to the journal), `WidgetInbox` (the queue of entries for C++), background check of the notes: `BackgroundCheck` (target, job, decision on the result), `BackgroundCheckJob` (JobScheduler job in the main process), `BackgroundCheckService` (`QtService` in the `:background` process), automation: `Automation` (the request from an intent, the target, the background run, the result broadcast, the provisional reminder), `AutomationActivity`, `AutomationReceiver`, `AutomationService` (`QtService` in the `:automation` process), `QuickTiles` (the Quick Settings tiles and the launcher's shortcuts), `AppLock` (the app lock: the window's FLAG_SECURE and recent apps' preview, BiometricPrompt, the sensitive clipboard copy) |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (JNI facade), `BrulionActivity` (`QtActivity` + taps/permissions/ringtone choice) + `StartupRelaunch` (recreated before Qt started: restart of the app), `ImeInsets` (on-screen keyboard: how much of the Qt view it covers), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (sounds: `SoundChoice`, channel versions `SoundChannel`, `SoundStore`, sample, ringtone picker), `RingTimeout`, `Receivers` (fire, buttons, boot/time change), `DoneQueue` (the "Done" queue for C++), `AlarmActivity` + `AlarmSlider` (the alarm screen and its slider; `SlideGesture`: its arithmetic), `Documents` (chosen documents and document trees for the import), `ShareActivity` + `ShareIntent` ("Share → Brulion": receiving, copies in `files/share-in/`, JSON for C++), widgets: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews and list rows), `WidgetSnapshot` (the snapshot, moving tasks to the new day), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (storing, refreshing, midnight, month buttons), `WidgetDates` (the app's day and month names), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (quick add, writing to the journal), `WidgetInbox` (the queue of entries for C++), background check of the notes: `BackgroundCheck` (target, job, decision on the result), `BackgroundCheckJob` (JobScheduler job in the main process), `BackgroundCheckService` (`QtService` in the `:background` process), automation: `Automation` (the request from an intent, the target, the background run, the result broadcast, the provisional reminder), `AutomationActivity`, `AutomationReceiver`, `AutomationService` (`QtService` in the `:automation` process), `QuickTiles` (the Quick Settings tiles and the launcher's shortcuts), `AppLock` (the app lock: the window's FLAG_SECURE and recent apps' preview, BiometricPrompt, the sensitive clipboard copy), `AgentService` + `AgentStopReceiver` (the foreground service while an AI agent on another computer answers: its notification, its Stop, the wake lock — [An AI agent on another computer](#an-ai-agent-on-another-computer)) |
 | `android/tests/` | Kotlin unit tests (JVM) + a Gradle init script that adds them |
 | `android/lint.xml` | Android lint configuration (exceptions for `res/values/libs.xml` generated by Qt) |
 | `android/settings.gradle`, `android/proguard-rules.pro` | R8 in release builds and its rules (classes called through JNI) — [APK size](#apk-size) |
@@ -2116,6 +2167,8 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
 | `static bool deviceAuthAvailable()` | `deviceAuthAvailable(Context): Boolean` — Android 10+ and `KeyguardManager.isDeviceSecure` |
 | `bool requestDeviceAuth(title, subtitle, cancel)` | `requestDeviceAuth(Context, String, String, String): Boolean` — `BiometricPrompt` over the running activity; the answer: native `nativeDeviceAuth(Boolean, String)` → signal `deviceAuthFinished(bool ok, QString error)` ("" cancelled) |
 | `static bool copySensitiveText(const QString &)` (`platform::copySensitiveText()`) | `copySensitive(Context, String): Boolean` — the clip marked sensitive |
+| `static void setAgentWork(title, text, stop, waiting)` (`platform::setAgentWork()`) | `setAgentWork(Context, String, String, String, Boolean)` — `AgentService.update`: the foreground service while an AI agent on another computer works, its notification's title, text and button; the wake lock unless `waiting`; `title` "" stops it ([An AI agent on another computer](#an-ai-agent-on-another-computer)) |
+| signal `agentStopRequested()` | native `nativeAgentStop()` (the notification's **Stop**: `AgentStopReceiver`) |
 | `platform::PdfReader::open(file)` (`src/platform/pdfpages_android.cpp`, not `AndroidBridge`; any thread) | `pdfOpen(String): String` — `{"session", "pages", "size": [w, h] (first page, points), "locked", "error"}` (`PdfPages.kt`: a session of the system's `android.graphics.pdf.PdfRenderer`; `session` 0 — not opened) |
 | `PdfReader::pageSize(page)` (as above, 64 pages at a time) | `pdfPageSizes(Int, Int, Int): String` — `[[w, h], …]` |
 | `PdfReader::render(page, full, clip)` (as above) | `pdfRenderInto(Int, Int, Int, Int, Int, Int, Int, Int, ByteBuffer): Boolean` — the page scaled to `full`, its part `clip` on a white background straight into the RGBA_8888 pixels of the C++ image |
@@ -2170,11 +2223,12 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
   `{key, local, path, line, title, day, vault}` (`day` — the local date of the tap, `vault` — the notebook id, `Vault::id()`, from the
   reminder's data) to the queue in SharedPreferences (`DoneQueue`, at most 100 entries, tapping the
   same occurrence again replaces the entry, written with `commit()`), then calls
-  `nativeDoneQueued` if C++ is listening. The signal reaches C++ at once only when the app is in
-  the foreground: without `android.app.background_running` Qt for Android pauses the event loop
-  while the activity is in the background (the process lives, the queue waits), and takes the
-  queue when it returns to the front (`applicationStateChanged`). Verified on the emulator
-  2026-10-28 (`--done` and the bridge test). `AndroidNotifier` takes the queue
+  `nativeDoneQueued` if C++ is listening. The signal reaches C++ at once while Qt's event loop
+  runs — also in the background since the activity's `android.app.background_running` is on ([An
+  AI agent on another computer](#an-ai-agent-on-another-computer)), until Android freezes or ends
+  the cached app (the process lives, the queue waits) —, and the queue is taken again when the app
+  returns to the front (`applicationStateChanged`). Verified on the emulator 2026-10-28 (`--done`
+  and the bridge test, before `background_running`). `AndroidNotifier` takes the queue
   (`takeDoneRequests(vault)`) only when the notebook is ready (`Notifier::setDoneTarget` from
   `WorkspaceReminders::doneTarget()`: from `start()` after full indexing until the notebook is
   closed; a notebook with paused reminders, e.g. the documentation, takes nothing): when it becomes

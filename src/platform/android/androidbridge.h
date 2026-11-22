@@ -269,6 +269,11 @@ public:
 
     /// The screen does not turn off by itself while `on` (the activity's window keeps it on).
     static void setKeepScreenOn(bool on);
+    /// An AI agent on another computer works for this device (platform::setAgentWork()): the
+    /// foreground service AgentService.kt with its quiet ongoing notification (`title`, `text`, the
+    /// button `stop`) keeps the process, its network and the CPU (but while `waiting`: every turn
+    /// waits on the user's answer) going; `title` "" ends it. Its button: agentStopRequested().
+    static void setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting);
 
     // A photo from the camera (kind 0) and dictation (kind 1) for the AI chat: the system's camera
     // app and speech recognizer (MediaCapture.kt; src/platform/capture.h).
@@ -327,6 +332,8 @@ Q_SIGNALS:
     /// The system keeps `left` and `right` physical pixels of Qt's view at its edges for its own
     /// swipes (gesture navigation's "back"; 0 with buttons) (ImeInsets.kt; GestureInsets).
     void systemGesturesChanged(int left, int right);
+    /// Stop in the notification of setAgentWork(): the turns of agents on another computer end.
+    void agentStopRequested();
 
 private:
     explicit AndroidBridge(QObject *parent);

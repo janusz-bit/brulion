@@ -25,6 +25,15 @@ QString deviceDescription();
 /// it. Nothing elsewhere: a computer goes on working behind a dark screen.
 void keepScreenOn(bool on);
 
+/// An AI agent on another computer works for this device (docs/UI.md "AI agents (ACP)": a turn of
+/// it runs, or one this device lost is fetched) — Android: a foreground service (AgentService.kt)
+/// with a quiet ongoing notification of `title` and `text` and a button `stop` keeps the app's
+/// process, its network and its event loop going with the screen off or another app in front, the
+/// CPU too unless `waiting` (every turn waits on the user's answer: nothing comes meanwhile).
+/// Called again it updates the notification; `title` "" ends it. The button comes back as
+/// AndroidBridge::agentStopRequested(). Nothing elsewhere: a computer keeps the app running anyway.
+void setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting);
+
 /// The app lock's hold on the window (docs/UI.md "App lock") — Android: `secure` sets FLAG_SECURE
 /// (nothing of the window on screenshots, screen recordings, a cast screen or the recent apps'
 /// preview), `hideRecents` only leaves the recent apps' preview out (Android 13+:

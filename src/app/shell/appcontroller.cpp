@@ -383,15 +383,20 @@ AppController::AppController(const Options &options, QObject *parent)
     // app is on screen, and many phones turn the screen off after 30 seconds without a touch.
     setUpSpeech();
     // (… and while a recording is transcribed.)
-    // (An agent on another computer works there, but the phone waits for what it says: a screen
-    // that stays on keeps the system from stopping the app's network meanwhile.)
-    const auto keepScreenOn = [this] {
-        platform::keepScreenOn(m_localAi->working() || m_speech->busy()
-                               || m_workspace->chats()->agents()->remoteWorking());
-    };
+    const auto keepScreenOn = [this] { platform::keepScreenOn(m_localAi->working() || m_speech->busy()); };
     connect(m_localAi.get(), &LocalAi::workingChanged, this, keepScreenOn);
     connect(m_speech.get(), &media::Transcriber::jobsChanged, this, keepScreenOn);
-    connect(m_workspace->chats()->agents(), &WorkspaceAgents::remoteWorkingChanged, this, keepScreenOn);
+    // An agent on another computer works there, but the phone waits for what it says: Android's
+    // foreground service keeps the app going meanwhile with the screen off or behind another app,
+    // its notification saying what runs (and a question waiting), its Stop ending those turns.
+    connect(m_workspace->chats()->agents(), &WorkspaceAgents::remoteWorkChanged, this, [this] {
+        const WorkspaceAgents::RemoteWork work = m_workspace->chats()->agents()->remoteWork();
+        const QStringList shown{work.title, work.text, work.waiting ? u"waiting"_s : QString()};
+        if (shown == m_agentWork)
+            return;
+        m_agentWork = shown;
+        platform::setAgentWork(work.title, work.text, tr("Stop"), work.waiting);
+    });
     connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
             [this](const QString &text, const QString &kind) { toast(text, kind); });
     // A result with a button (the habits' Undo, "Open"): a toast whose button the extensions press.
@@ -476,6 +481,8 @@ AppController::AppController(const Options &options, QObject *parent)
 
 #ifdef Q_OS_ANDROID
     auto *bridge = platform::AndroidBridge::instance();
+    connect(bridge, &platform::AndroidBridge::agentStopRequested, this,
+            [this] { m_workspace->chats()->stopRemoteAgents(); });
     connect(bridge, &platform::AndroidBridge::permissionsChanged, this, [this] {
         Q_EMIT permissionsChanged();
         // Granted "All files access" in the system settings: continue opening the vault.

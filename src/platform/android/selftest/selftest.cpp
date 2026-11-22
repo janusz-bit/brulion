@@ -11,7 +11,10 @@
 // 60 s armed before the two scheduleReminders() rounds (which must not drop it), 202 cancelled,
 // one in the past refused, 203 in 240 s, after the script killed the process. A PDF
 // page through Android's PdfRenderer (pdfpages.h: a 1-page PDF written here with a red square, its
-// page count, its size and two pixels).
+// page count, its size and two pixels). An AI agent on another computer at work (setAgentWork():
+// AgentService.kt, the foreground service), started by a tap whose path is "selftest/agent": a
+// tick a second with the app's state while it runs — Qt's event loop goes on in the background —,
+// its notification's Stop (agentStopRequested()) ending it.
 
 #include "android/androidbridge.h"
 #include "pdfpages.h"
@@ -26,6 +29,7 @@
 #include <QPainter>
 #include <QPdfWriter>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include <algorithm>
 #include <memory>
@@ -63,8 +67,26 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     AndroidBridge *bridge = AndroidBridge::instance();
 
-    QObject::connect(bridge, &AndroidBridge::activated, &app, [](const QString &path, int line) {
+    // An AI agent at work: started by a "tap" (the script's am start), a tick a second meanwhile.
+    auto *ticks = new QTimer(&app);
+    ticks->setInterval(1000);
+    int tick = 0;
+    QObject::connect(ticks, &QTimer::timeout, &app, [&tick] {
+        qCWarning(lcSelfTest, "SELFTEST agent-tick n=%d state=%d", ++tick, int(QGuiApplication::applicationState()));
+    });
+    QObject::connect(bridge, &AndroidBridge::activated, &app, [ticks](const QString &path, int line) {
         qCWarning(lcSelfTest, "SELFTEST activated path=%s line=%d", qUtf8Printable(path), line);
+        if (path != u"selftest/agent")
+            return;
+        AndroidBridge::setAgentWork(u"Udawany agent odpowiada…"_s, u"Na raspberry-pi-4 · Zażółć gęślą jaźń"_s,
+                                    u"Zatrzymaj"_s, false);
+        ticks->start();
+        qCWarning(lcSelfTest, "SELFTEST agent-work started");
+    });
+    QObject::connect(bridge, &AndroidBridge::agentStopRequested, &app, [ticks] {
+        ticks->stop();
+        AndroidBridge::setAgentWork(QString(), QString(), QString(), false);
+        qCWarning(lcSelfTest, "SELFTEST agent-stop");
     });
     QObject::connect(bridge, &AndroidBridge::doneRequestsQueued, &app, [bridge] {
         for (const QJsonValue &value : bridge->takeDoneRequests()) {

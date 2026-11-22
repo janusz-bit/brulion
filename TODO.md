@@ -17,10 +17,9 @@ done in the repository simply disappears from the list.
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's, on
   the phone and in the browser (docs/CLI.md "AI agents for other devices", services.brulion-acp).
-  Missing: a foreground service instead of the screen kept on while an agent on another computer
-  works (a turn the app lost is fetched from the computer afterwards, but the answer comes only
-  when Brulion runs again), the agent's questions while the phone was gone (answered "cancelled"
-  there now: they could wait for the phone instead), a try with a real agent from a real phone, a try with
+  Missing: a try with a real agent from a real phone (its foreground service with the screen off
+  included; a question that comes while the phone is in a pocket only changes that quiet
+  notification's text — it could alert), a try with
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
   /c`) and macOS; and the other direction — Brulion's assistant as an ACP agent for Zed and
   JetBrains (`brulion-cli acp agent`, which needs `b.ai` in brulion-cli).

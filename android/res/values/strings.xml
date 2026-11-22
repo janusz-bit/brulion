@@ -35,4 +35,8 @@
     <string name="brulion_shortcut_task">New task</string>
     <string name="brulion_shortcut_today">Today\'s journal</string>
     <string name="brulion_shortcut_search">Search</string>
+    <!-- An AI agent on another computer at work for the phone (AgentService.kt) -->
+    <string name="brulion_channel_agents">AI agents</string>
+    <string name="brulion_channel_agents_description">An AI agent on another computer answers: Brulion keeps fetching what it writes while the screen is off</string>
+    <string name="brulion_agent_working">An AI agent is answering…</string>
 </resources>

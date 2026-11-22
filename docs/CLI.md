@@ -361,7 +361,7 @@ Never compute a hash yourself.
 | `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
 | `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
 | `mcp revoke [<connection>]` | `[--all] [--auth-file F]` | end a connection (`bgr_…`) or all of a client's (`bcl_…`, an https client ID); takes effect in a running server at once | |
-| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
+| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--question-wait S] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
 | `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url, link}` — 10 minutes, one device, five wrong tries; `--format text` shows the link as a QR code | |
 | `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
 | `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
@@ -839,17 +839,26 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   does one the device ends (`DELETE`: the app closed the agent), or whose agent exits (its last
   line of standard error says why — kept for the device to hear for 5 minutes). A stream ended by
   its device that runs a turn — replaced, `DELETE`, or lost (below) — finishes that turn first,
-  an hour at most, the agent's questions in it answered `cancelled` and its other requests with
-  an error.
+  an hour at most (the time its questions wait not counted), the agent's questions in it waiting
+  for the device with the turn (below) and its other requests answered with an error.
 * **Turns are kept**: the last turn of every session a device prompted — running, or how it ended:
   the agent's answer (its `agent_message_chunk` text, at most 1 Mi characters), the titles of its
   tool calls, its stop reason or why it failed — for 24 hours after its end, 64 sessions a device.
   A phone that lost the stream a turn runs in — Android ended the app while it waited, the network
   was gone for longer than the app waits — asks for it (`GET sessions/<id>/turn`) and writes the
   answer into the conversation as if it had been there. Asking so says the device lost that
-  stream: nobody fetches from it any more, questions its agent asks in that turn are answered
-  `cancelled` (nobody is there to say yes), and it ends with the turn. Only in memory: a server
+  stream: nobody fetches from it any more, and it ends with the turn. Only in memory: a server
   started again knows no turns.
+* **Questions wait for the device**: a question of the agent (`session/request_permission`: may
+  it write a file, run a command) that the device has not answered waits — also while the device
+  is gone, and also one the agent asks after the device lost the stream. The turn carries it
+  (`question`: `{id, toolCall, options}`, the call's title filled in from the turn where the
+  question names none), so the device that asks for the turn shows it and answers it there
+  (`POST sessions/<id>/turn`); the agent goes on with that answer. Only once nobody fetched the
+  stream or the turn for `--question-wait` seconds (3600 by default; at most 604800, a week) is it
+  answered `cancelled`, as a client answers a question it cannot ask — the agent then usually ends
+  its turn so. `--question-wait 0`: answered `cancelled` as soon as the device lost the stream.
+  Stopping the turn (`DELETE sessions/<id>/turn`) answers its questions `cancelled` too.
 * **Sync**: with `--nextcloud https://cloud.example.com --nextcloud-user jan --nextcloud-folder
   Brulion --nextcloud-password-file F` (a Nextcloud app password) the notebook here is one more
   device of a notebook synced through Nextcloud, with the app's sync engine (three-way merges,
@@ -875,8 +884,9 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
 | `GET streams/<id>/receive` | `?after=N&wait=S` (S ≤ 30) | `{messages [{seq, message}], closed, why}` — the messages after `N` (those up to `N` are dropped here), at once or within S seconds; at most 4 MiB at a time |
 | `DELETE streams/<id>` | | 204: the agent's process ends |
-| `GET sessions/<id>/turn` | `?wait=S` (S ≤ 30) | `{session, turn, state: running \| done \| failed, text, tools, stopReason, error, asking, started, ended}` (`turn`: the id the device gave the turn in its prompt's `_meta`, `brulion/turn`) — the last turn of the device's session, at once or when it ends within S seconds; 404 `no_turn` |
-| `DELETE sessions/<id>/turn` | | 204: the agent stops that turn (`session/cancel`) |
+| `GET sessions/<id>/turn` | `?wait=S` (S ≤ 30) | `{session, turn, state: running \| done \| failed, text, tools, stopReason, error, asking, question, started, ended}` (`turn`: the id the device gave the turn in its prompt's `_meta`, `brulion/turn`; `question` while one waits: `{id, toolCall, options}`) — the last turn of the device's session, at once or when it changes (it ends, the agent asks) within S seconds; 404 `no_turn` |
+| `POST sessions/<id>/turn` | `{question, optionId}` | the turn, as `GET` gives it — the device's answer to the question `question` waiting in it: `optionId` one of its options, anything else (`""`) `cancelled`; 404 `no_question` (it was answered, or it waited too long) |
+| `DELETE sessions/<id>/turn` | | 204: the agent stops that turn (`session/cancel`; its questions `cancelled`) |
 
 Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a
 paired one). Errors are `{error: {code, message}}`. A stream of another device, or one that ended

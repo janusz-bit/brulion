@@ -162,7 +162,11 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
 * **Everywhere** (`platform.h`): `logDirectory()` (Linux `$XDG_STATE_HOME/Brulion/Brulion/logs`,
   Android the app's files dir + `/logs`, the browser none: memory only) and `deviceDescription()`
   for the event log; `keepScreenOn(on)` — Android: the activity's window keeps the screen on while
-  a model on the device is downloaded or answers (`LocalAi::working()`; nothing elsewhere); the app
+  a model on the device is downloaded or answers (`LocalAi::working()`; nothing elsewhere);
+  `setAgentWork(title, text, stop, waiting)` — Android: a foreground service with a quiet
+  notification while an AI agent on another computer answers, so the app goes on fetching it with
+  the screen off (docs/ANDROID.md "An AI agent on another computer"; its Stop as
+  `AndroidBridge::agentStopRequested`; nothing elsewhere); the app
   lock's (docs/UI.md "App lock"): `setSecureWindow(secure, hideRecents)` (Android: FLAG_SECURE, the
   recent apps' preview on Android 13+), `deviceAuthAvailable()` / `requestDeviceAuth()` (Android
   10+: BiometricPrompt, the answer as `AndroidBridge::deviceAuthFinished`), `copySensitiveText()`

@@ -3,8 +3,11 @@
 // a host the test plays — the agent started, lines sent in order and in batches, a batch sent again
 // after a lost answer only from what the host lacks, messages received in order (none twice), the
 // agent's end, a device unpaired, a stream the host forgot, a host unreachable for too long, stop(),
-// and a stream deleted while a request is on its way.
+// and a stream deleted while a request is on its way; a turn the device lost read back with the
+// question that waits in it, and that question answered (or declined) there.
 #include "acp/remote.h"
+
+#include "acp/acp.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -219,6 +222,92 @@ private Q_SLOTS:
         e = remoteErrorOf(FakeHost::json(200, QJsonObject{{u"received"_s, 3}}), &o);
         QVERIFY(!e.failed());
         QCOMPARE(o.value(u"received"_s).toInt(), 3);
+    }
+
+    void turnQuestion()
+    {
+        // A turn whose question waits for this device: the question read back as the agent asked it.
+        const QJsonObject call{{u"toolCallId"_s, u"w1"_s},
+                               {u"title"_s, u"Write Zakupy.md"_s},
+                               {u"content"_s, QJsonArray{QJsonObject{{u"type"_s, u"diff"_s},
+                                                                     {u"path"_s, u"Zakupy.md"_s},
+                                                                     {u"oldText"_s, u"- chleb\n"_s},
+                                                                     {u"newText"_s, u"- chleb\n- żółty ser\n"_s}}}}};
+        const QJsonArray options{
+                QJsonObject{{u"optionId"_s, u"allow"_s}, {u"name"_s, u"Zezwól"_s}, {u"kind"_s, u"allow_once"_s}},
+                QJsonObject{{u"optionId"_s, u"reject"_s}, {u"name"_s, u"Odrzuć"_s}, {u"kind"_s, u"reject_once"_s}}};
+        const QJsonObject running{
+                {u"session"_s, u"sesja-1"_s},
+                {u"turn"_s, u"tura-1"_s},
+                {u"state"_s, u"running"_s},
+                {u"text"_s, u"Sprawdzam…"_s},
+                {u"asking"_s, true},
+                {u"question"_s, QJsonObject{{u"id"_s, u"s:perm-7"_s}, {u"toolCall"_s, call}, {u"options"_s, options}}}};
+        std::optional<RemoteTurn> turn = RemoteTurn::fromJson(running);
+        QVERIFY(turn);
+        QVERIFY(turn->asking);
+        QCOMPARE(turn->question.id, u"s:perm-7"_s);
+        const std::optional<Permission> permission = readPermission(turn->question.request, {});
+        QVERIFY(permission);
+        QCOMPARE(permission->title, u"Write Zakupy.md"_s);
+        QCOMPARE(permission->options.size(), 2);
+        QCOMPARE(permission->options.at(0).name, u"Zezwól"_s);
+        QCOMPARE(permission->diffs.size(), 1);
+        QCOMPARE(permission->diffs.at(0).newText, u"- chleb\n- żółty ser\n"_s);
+        // An older host: asking, no question kept (it answers "cancelled"); one without an id, or a
+        // turn that ended, carries none either.
+        QJsonObject old = running;
+        old.remove(u"question"_s);
+        turn = RemoteTurn::fromJson(old);
+        QVERIFY(turn && turn->asking && turn->question.isEmpty());
+        QJsonObject noId = running;
+        noId.insert(u"question"_s, QJsonObject{{u"toolCall"_s, call}, {u"options"_s, options}});
+        QVERIFY(RemoteTurn::fromJson(noId)->question.isEmpty());
+        QJsonObject ended = running;
+        ended.insert(u"state"_s, u"done"_s);
+        QVERIFY(RemoteTurn::fromJson(ended)->question.isEmpty());
+
+        // Answered there: POST sessions/<id>/turn {question, optionId}, the turn as it is then.
+        FakeHost host;
+        RemoteTurn after;
+        RemoteError error;
+        bool done = false;
+        answerRemoteQuestion(&host, m_base, u"bat_xyz"_s, u"sesja ą 1"_s, u"s:perm-7"_s, u"allow"_s,
+                             [&](const RemoteTurn &t, const RemoteError &e) {
+                                 after = t;
+                                 error = e;
+                                 done = true;
+                             });
+        std::optional<FakeHost::Pending> post = host.take(u"/turn"_s);
+        QVERIFY(post);
+        QCOMPARE(post->request.method, "POST"_ba);
+        QVERIFY2(post->request.url.toString(QUrl::FullyDecoded).endsWith(u"/acp/v1/sessions/sesja ą 1/turn"_s),
+                 qPrintable(post->request.url.toString()));
+        QCOMPARE(post->body().value(u"question"_s).toString(), u"s:perm-7"_s);
+        QCOMPARE(post->body().value(u"optionId"_s).toString(), u"allow"_s);
+        QJsonObject going = running;
+        going.insert(u"asking"_s, false);
+        going.remove(u"question"_s);
+        post->done(FakeHost::json(200, going));
+        QVERIFY(done);
+        QVERIFY(!error.failed());
+        QCOMPARE(after.state, RemoteTurn::State::Running);
+        QVERIFY(after.question.isEmpty());
+        // A question that waits no more (answered, or it waited too long there).
+        done = false;
+        answerRemoteQuestion(&host, m_base, u"bat_xyz"_s, u"sesja-1"_s, u"s:perm-7"_s, QString(),
+                             [&](const RemoteTurn &, const RemoteError &e) {
+                                 error = e;
+                                 done = true;
+                             });
+        post = host.take(u"/turn"_s);
+        QVERIFY(post);
+        QCOMPARE(post->body().value(u"optionId"_s).toString(), QString()); // (declined: "cancelled")
+        post->done(FakeHost::error(404, u"no_question"_s, u"That question does not wait any more"_s));
+        QVERIFY(done);
+        QCOMPARE(error.kind, RemoteError::Kind::Refused);
+        QCOMPARE(error.status, 404);
+        QCOMPARE(error.code, u"no_question"_s);
     }
 
     void pairAndInfo()

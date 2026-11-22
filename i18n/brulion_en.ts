@@ -1432,7 +1432,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2544"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2553"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1440,7 +1440,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2414"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2423"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1480,7 +1480,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2238"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2247"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1488,7 +1488,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2416"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2425"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2453,6 +2453,17 @@
         <translation>
             <numerusform>%n card to study now</numerusform>
             <numerusform>%n cards to study now</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::WorkspaceAgents</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspaceagents.cpp" line="1027"/>
+        <source>%n AI agents are answering…</source>
+        <translation>
+            <numerusform>%n AI agent is answering…</numerusform>
+            <numerusform>%n AI agents are answering…</numerusform>
         </translation>
     </message>
 </context>

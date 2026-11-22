@@ -7,6 +7,9 @@
 // agent's end, pairing (a wrong code, a used one, too many tries), tokens refused, unpairing a device
 // that has an agent running, an idle stream given up, sends that come twice, Host and Origin
 // refused, and the notebook synced with Nextcloud (an in-memory server) before a turn and after it.
+// The turns kept for a device that lost its stream: their answers, and the agent's questions that
+// wait for the device there (answered from the turn, asked after the device was gone, answered
+// "cancelled" once nobody fetched them for --question-wait, or at once with 0).
 #include "acphost.h"
 #include "cli_p.h"
 #include "hostsync.h"
@@ -91,6 +94,7 @@ class TestCliAcpHost : public QObject {
     QString m_stateFile;
     QStringList m_log;
     int m_hosts = 0;
+    QDateTime m_now; ///< the server's clock where a test sets it
 
     AcpHostOptions options() const
     {
@@ -192,6 +196,35 @@ class TestCliAcpHost : public QObject {
         if (!QTest::qWaitFor([&done] { return done; }, kTimeoutMs))
             out.second.kind = acp::RemoteError::Kind::Network;
         return out;
+    }
+
+    /// The device's answer to the question `question` of its turn (acp::answerRemoteQuestion).
+    std::pair<acp::RemoteTurn, acp::RemoteError> answerQuestion(const QString &token, const QString &session,
+                                                                const QString &question, const QString &option)
+    {
+        std::pair<acp::RemoteTurn, acp::RemoteError> out;
+        bool done = false;
+        acp::answerRemoteQuestion(m_transport.get(), QUrl(m_base), token, session, question, option,
+                                  [&](const acp::RemoteTurn &t, const acp::RemoteError &e) {
+                                      out = {t, e};
+                                      done = true;
+                                  });
+        if (!QTest::qWaitFor([&done] { return done; }, kTimeoutMs))
+            out.second.kind = acp::RemoteError::Kind::Network;
+        return out;
+    }
+
+    /// A question asked in the turn `key` of `t` (the device had it), then the device gone without a
+    /// word (an app Android ended): the session.
+    QString askedAndGone(std::unique_ptr<Talk> &t, const QString &key, const QString &text)
+    {
+        if (!t->client->prompt(key, turn(text)))
+            return {};
+        if (!QTest::qWaitFor([&t] { return !t->questions.isEmpty(); }, kTimeoutMs))
+            return {};
+        const QString session = t->client->sessionId(key);
+        t.reset();
+        return session;
     }
 
     std::unique_ptr<Talk> talk(const QString &token, const QString &agent = u"fake"_s)
@@ -757,37 +790,172 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(m_host->streamCount(), 0, kTimeoutMs);
     }
 
-    void turnQuestionsCancelled()
+    void turnQuestionWaits()
     {
-        // A question of the agent while the device is gone: answered "cancelled" once the device
-        // says it lost the stream; a turn the device stops from afar.
+        // A question of the agent while the device is gone waits for it with the turn: the device
+        // that fetches the turn gets it and answers it there, and the agent goes on.
         startHost(*m_ctx, options());
         QFile::remove(m_vault + u"/Zgoda.md"_s);
         const auto [token, device] = pairDevice();
         std::unique_ptr<Talk> t = talk(token);
-        QVERIFY(t->client->prompt(u"AI/Pytanie.md"_s, turn(u"pozwolenie"_s)));
-        QTRY_VERIFY_WITH_TIMEOUT(!t->questions.isEmpty(), kTimeoutMs);
-        const QString session = t->client->sessionId(u"AI/Pytanie.md"_s);
+        const QString session = askedAndGone(t, u"AI/Pytanie.md"_s, u"pozwolenie"_s);
+        QVERIFY(!session.isEmpty());
         QVERIFY(m_host->turn(device, session)->asking);
-        t.reset();
+        const auto [first, e1] = fetchTurn(token, session, 0);
+        QVERIFY2(!e1.failed(), qPrintable(e1.detail));
+        QCOMPARE(first.state, acp::RemoteTurn::State::Running);
+        QVERIFY(first.asking);
+        QVERIFY(!first.question.isEmpty());
+        const std::optional<acp::Permission> permission = acp::readPermission(first.question.request, {});
+        QVERIFY(permission);
+        QCOMPARE(permission->title, u"Write Zgoda.md"_s); // (its call's, from the turn: the question names none)
+        QCOMPARE(permission->options.size(), 2);
+        QCOMPARE(permission->options.at(0).id, u"allow"_s);
+        QCOMPARE(permission->diffs.size(), 1);
+        QCOMPARE(permission->diffs.at(0).newText, u"- zgoda"_s);
+        // (Nobody answers it "cancelled" meanwhile: the device lost the stream, not the question.)
+        QTest::qWait(400);
+        QVERIFY(m_host->turn(device, session)->asking);
+        QVERIFY(!QFile::exists(m_vault + u"/Zgoda.md"_s));
+        // Allowed from the turn: the agent writes the file and ends its turn.
+        const auto [answered, e2] = answerQuestion(token, session, first.question.id, u"allow"_s);
+        QVERIFY2(!e2.failed(), qPrintable(e2.detail));
+        QVERIFY(answered.question.isEmpty());
+        const auto [done, e3] = fetchTurn(token, session, 25);
+        QVERIFY(!e3.failed());
+        QCOMPARE(done.state, acp::RemoteTurn::State::Done);
+        QCOMPARE(done.stopReason, u"end_turn"_s);
+        QCOMPARE(done.text, u"Zapisano."_s);
+        QVERIFY(QFile::exists(m_vault + u"/Zgoda.md"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->streamCount(), 0, kTimeoutMs);
+        // The same question again, or one that never was: it waits no more.
+        auto [none, e4] = answerQuestion(token, session, first.question.id, u"allow"_s);
+        QCOMPARE(e4.kind, acp::RemoteError::Kind::Refused);
+        QCOMPARE(e4.status, 404);
+        QCOMPARE(e4.code, u"no_question"_s);
+        QCOMPARE(answerQuestion(token, u"nieznana"_s, first.question.id, u"allow"_s).second.status, 404);
+
+        // Asked after the device lost the stream: it waits for the device as well, and the long
+        // poll of the turn hears it at once. Declined there: the agent hears so.
+        QFile::remove(m_vault + u"/Zgoda.md"_s);
+        std::unique_ptr<Talk> late = talk(token);
+        const QString key = u"AI/Później.md"_s;
+        QVERIFY(late->client->prompt(key, turn(u"pozwolenie później"_s)));
+        QTRY_VERIFY_WITH_TIMEOUT(!late->client->sessionId(key).isEmpty(), kTimeoutMs);
+        const QString later = late->client->sessionId(key);
+        // (Every process of the fake agent numbers its sessions from s1: the turn of this one.)
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, later)
+                                         && m_host->turn(device, later)->state == HostTurn::State::Running,
+                                 kTimeoutMs);
+        late.reset();
+        acp::RemoteTurn asked;
+        QElapsedTimer waited;
+        waited.start();
+        while (asked.question.isEmpty() && waited.elapsed() < kTimeoutMs) {
+            const auto [now, e] = fetchTurn(token, later, 25);
+            QVERIFY2(!e.failed(), qPrintable(e.detail));
+            QCOMPARE(now.state, acp::RemoteTurn::State::Running);
+            asked = now;
+        }
+        QVERIFY(!asked.question.isEmpty());
+        QVERIFY(!answerQuestion(token, later, asked.question.id, u"reject"_s).second.failed());
+        const auto [declined, e5] = fetchTurn(token, later, 25);
+        QVERIFY(!e5.failed());
+        QCOMPARE(declined.state, acp::RemoteTurn::State::Done);
+        QCOMPARE(declined.text, u"Nie zapisano."_s);
+        QVERIFY(!QFile::exists(m_vault + u"/Zgoda.md"_s));
+
+        // Stopped from afar while its question waits: the question goes too ("cancelled").
+        std::unique_ptr<Talk> stopped = talk(token);
+        const QString waiting = askedAndGone(stopped, u"AI/Zatrzymana.md"_s, u"pozwolenie"_s);
+        QVERIFY(!waiting.isEmpty());
+        QVERIFY(!fetchTurn(token, waiting, 0).first.question.isEmpty());
+        acp::cancelRemoteTurn(m_transport.get(), QUrl(m_base), token, waiting);
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->turn(device, waiting)->state, HostTurn::State::Done, kTimeoutMs);
+        QCOMPARE(m_host->turn(device, waiting)->stopReason, u"cancelled"_s);
+        QVERIFY(m_host->turn(device, waiting)->question.isEmpty());
+
+        // A turn the device stops from afar.
+        std::unique_ptr<Talk> u = talk(token);
+        QVERIFY(u->client->prompt(u"AI/Czekam.md"_s, turn(u"czekaj"_s)));
+        QTRY_VERIFY_WITH_TIMEOUT(!u->client->sessionId(u"AI/Czekam.md"_s).isEmpty(), kTimeoutMs);
+        const QString cancelled = u->client->sessionId(u"AI/Czekam.md"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, cancelled)
+                                         && m_host->turn(device, cancelled)->state == HostTurn::State::Running,
+                                 kTimeoutMs);
+        acp::cancelRemoteTurn(m_transport.get(), QUrl(m_base), token, cancelled);
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->turn(device, cancelled)->state, HostTurn::State::Done, kTimeoutMs);
+        QCOMPARE(m_host->turn(device, cancelled)->stopReason, u"cancelled"_s);
+    }
+
+    void turnQuestionExpires()
+    {
+        // A question nobody fetches — not its stream, not its turn — for --question-wait: answered
+        // "cancelled", and the turn ends so. A device that keeps asking for the turn keeps it waiting.
+        // (The server's clock is the test's: a stalled machine moves nothing.)
+        AcpHostOptions o = options();
+        o.questionWaitMs = 10LL * 60 * 1000;
+        startHost(*m_ctx, o);
+        m_now = QDateTime::currentDateTimeUtc();
+        m_host->setClock([this] { return m_now; });
+        QFile::remove(m_vault + u"/Zgoda.md"_s);
+        const auto [token, device] = pairDevice();
+        std::unique_ptr<Talk> t = talk(token);
+        t->stream->setWaitSeconds(1); // (its last receive, left behind, ends soon)
+        const QString session = askedAndGone(t, u"AI/Bez odpowiedzi.md"_s, u"pozwolenie"_s);
+        QVERIFY(!session.isEmpty());
+        QTest::qWait(300);
+        QVERIFY(m_host->turn(device, session)->asking); // (not yet: the wait is ten minutes)
+        // A minute more at each look: answered "cancelled" ten minutes after the last receive.
+        const auto aMinuteLater = [this] {
+            m_now = m_now.addSecs(60);
+            return true;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(aMinuteLater() && m_host->turn(device, session)->state == HostTurn::State::Done,
+                                 kTimeoutMs);
+        QCOMPARE(m_host->turn(device, session)->stopReason, u"cancelled"_s);
+        QVERIFY2(m_log.join(u'\n').contains(u"waited"_s), qPrintable(m_log.join(u'\n')));
+        QVERIFY(!QFile::exists(m_vault + u"/Zgoda.md"_s));
+
+        std::unique_ptr<Talk> u = talk(token);
+        const QString kept = askedAndGone(u, u"AI/Pilnowana.md"_s, u"pozwolenie"_s);
+        QVERIFY(!kept.isEmpty());
+        // Asked for every six minutes, 24 in all: it waits all along.
+        acp::RemoteTurn now;
+        for (int i = 0; i < 4; ++i) {
+            m_now = m_now.addSecs(6 * 60);
+            const auto [turnNow, e] = fetchTurn(token, kept, 0);
+            QVERIFY2(!e.failed(), qPrintable(e.detail));
+            now = turnNow;
+            QCOMPARE(now.state, acp::RemoteTurn::State::Running);
+            QVERIFY(!now.question.isEmpty());
+            QTest::qWait(150); // (the server looks meanwhile)
+        }
+        QVERIFY(!answerQuestion(token, kept, now.question.id, u"allow"_s).second.failed());
+        QCOMPARE(fetchTurn(token, kept, 25).first.text, u"Zapisano."_s);
+        m_host->setClock({});
+    }
+
+    void turnQuestionWithoutWait()
+    {
+        // --question-wait 0: a question of a stream its device lost is answered "cancelled" at once.
+        AcpHostOptions o = options();
+        o.questionWaitMs = 0;
+        startHost(*m_ctx, o);
+        QFile::remove(m_vault + u"/Zgoda.md"_s);
+        const auto [token, device] = pairDevice();
+        std::unique_ptr<Talk> t = talk(token);
+        const QString session = askedAndGone(t, u"AI/Pytanie.md"_s, u"pozwolenie"_s);
+        QVERIFY(!session.isEmpty());
+        QVERIFY(m_host->turn(device, session)->asking);
         const auto [first, e1] = fetchTurn(token, session, 0);
         QVERIFY(!e1.failed());
         QCOMPARE(first.state, acp::RemoteTurn::State::Running);
-        QVERIFY(first.asking);
         const auto [done, e2] = fetchTurn(token, session, 25);
         QVERIFY(!e2.failed());
         QCOMPARE(done.state, acp::RemoteTurn::State::Done);
         QCOMPARE(done.stopReason, u"cancelled"_s);
         QVERIFY(!QFile::exists(m_vault + u"/Zgoda.md"_s)); // (not allowed: not written)
-
-        std::unique_ptr<Talk> u = talk(token);
-        QVERIFY(u->client->prompt(u"AI/Czekam.md"_s, turn(u"czekaj"_s)));
-        QTRY_VERIFY_WITH_TIMEOUT(!u->client->sessionId(u"AI/Czekam.md"_s).isEmpty(), kTimeoutMs);
-        const QString waiting = u->client->sessionId(u"AI/Czekam.md"_s);
-        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device, waiting), kTimeoutMs);
-        acp::cancelRemoteTurn(m_transport.get(), QUrl(m_base), token, waiting);
-        QTRY_COMPARE_WITH_TIMEOUT(m_host->turn(device, waiting)->state, HostTurn::State::Done, kTimeoutMs);
-        QCOMPARE(m_host->turn(device, waiting)->stopReason, u"cancelled"_s);
     }
 
     void browserOrigin()

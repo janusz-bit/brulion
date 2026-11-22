@@ -13,7 +13,10 @@
 #      with the app on screen, at the next start when the app's process was gone (queued); the
 #      ends of extensions' timers (b.timer: scheduleTimer, TimerAlarms.kt) armed apart from the
 #      reminders — the reminder rounds keep them —, ringing with "OK" alone, a cancelled one never,
-#      one with the app's process gone.
+#      one with the app's process gone; an AI agent on another computer at work (AgentService.kt):
+#      a foreground service of type dataSync with its notification on the channel "agents", Qt's
+#      event loop going on with the app in the background, "Zatrzymaj" in the notification reaching
+#      C++, which ends it.
 # Needs an x86_64 Linux host with KVM. Build both APKs first:
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
 # With --keyboard instead: the editing toolbar on the on-screen keyboard (docs/ANDROID.md,
@@ -3449,10 +3452,8 @@ check "reminder 101 fired on channel 'reminders'" wait_for $((60 - (SECONDS - st
 never_shown() { ! adb shell dumpsys notification --noredact | grep -E "pkg=$PKG .*id=$1 " >/dev/null; } # <id>
 check "the cancelled timer 202 never fired" never_shown 202
 # "Done" in the notification of the task reminder 101 with the app on screen (the shade pulled
-# over it: Qt's event loop runs): the tap is queued natively and taken by C++ at once, the
-# notification goes. (With the app in the background Qt's event loop is paused — no
-# android.app.background_running — and C++ takes the queue when the app is back in front; with
-# the process gone, at its next start: reminder 104 below.)
+# over it): the tap is queued natively and taken by C++ at once, the notification goes. (With the
+# process gone C++ takes the queue at its next start: reminder 104 below.)
 today=$(adb shell date +%Y-%m-%d | tr -d '\r')
 tap_done() { # <reminder id>: "Done" in its notification in the shade
   adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
@@ -3506,8 +3507,45 @@ check "the next start hands the queued tap to C++ (the day of the tap)" wait_for
 if adb shell run-as "$PKG" true 2>/dev/null; then
   check "… and empties the queue" bash -c "! '$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.done.xml 2>/dev/null | grep -q selftest-"
 fi
+# An AI agent on another computer at work (AgentService.kt, docs/ANDROID.md "An AI agent on another
+# computer"): started by a "tap" on selftest/agent — a foreground service of type dataSync, its
+# quiet notification on the channel "agents" —, the app sent home: the self-test's ticks go on
+# while Qt says the app is suspended (android.app.background_running); "Zatrzymaj" in the
+# notification reaches C++, which ends it. Last, the shade cleared: beside another notification
+# of the app its buttons would be hidden.
+adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+sleep 2
+ui_tap 'Clear all|CLEAR ALL|Wyczyść wszystko|WYCZYŚĆ WSZYSTKO' >/dev/null || true
+adb shell cmd statusbar collapse >/dev/null 2>&1 || true
+agent_dump() { adb shell dumpsys activity services "$PKG" >"$OUT/dumpsys-agent-service.txt"; }
+agent_foreground() { agent_dump && grep -A 40 'AgentService' "$OUT/dumpsys-agent-service.txt" | grep -q 'isForeground=true'; }
+agent_data_sync() { grep -A 40 'AgentService' "$OUT/dumpsys-agent-service.txt" | grep -qE 'types=0x0*1([^0-9a-f]|$)|foregroundServiceType=0x0*1([^0-9a-f]|$)'; }
+agent_gone() { agent_dump && ! grep -q 'AgentService' "$OUT/dumpsys-agent-service.txt"; }
+agent_ticks() { adb logcat -d | grep -c 'SELFTEST agent-tick n=[0-9]* state=0' || true; } # (while suspended)
+agent_notification_gone() { ! adb shell dumpsys notification --noredact | grep -qE "pkg=$PKG .*id=-16928 "; }
+adb shell am start -n "$ACTIVITY" --es "$EXTRA.PATH" selftest/agent --ei "$EXTRA.LINE" 1 >/dev/null
+check "an AI agent's work started (setAgentWork)" wait_for 10 log_has "SELFTEST agent-work started"
+check "AgentService runs in the foreground" wait_for 10 agent_foreground
+check "… as a foreground service of type dataSync" agent_data_sync
+check "… its notification on the channel 'agents'" wait_for 20 notification_on -16928 agents
+adb shell input keyevent 3 # home: the app in the background
+sleep 3
+ticks_before=$(agent_ticks)
+sleep 8
+ticks_after=$(agent_ticks)
+check "Qt's event loop goes on in the background (ticks while suspended: $ticks_before → $ticks_after)" \
+  test "$((ticks_after - ticks_before))" -ge 5
+check "… the service still in the foreground" agent_foreground
+adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+sleep 2
+app_shot shade-agent
+check "'Zatrzymaj' tapped in the agent's notification" ui_tap 'Zatrzymaj|ZATRZYMAJ'
+adb shell cmd statusbar collapse >/dev/null 2>&1 || true
+check "Stop reached C++" wait_for 10 log_has "SELFTEST agent-stop"
+check "AgentService stopped" wait_for 10 agent_gone
+check "… its notification gone" wait_for 6 agent_notification_gone
 adb logcat -d >"$OUT/selftest-logcat.txt"
-grep -E 'SELFTEST|BrulionAndroid:|brulion\.android:|AndroidRuntime:' "$OUT/selftest-logcat.txt" >"$OUT/selftest-summary.txt" || true
+grep -E 'SELFTEST|BrulionAndroid:|brulion\.android:|AndroidRuntime:|BrulionAgent' "$OUT/selftest-logcat.txt" >"$OUT/selftest-summary.txt" || true
 check "no crash in the self-test" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/selftest-logcat.txt'"
 
 info "Result"

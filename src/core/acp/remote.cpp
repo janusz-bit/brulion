@@ -222,6 +222,12 @@ std::optional<RemoteTurn> RemoteTurn::fromJson(const QJsonObject &o)
     t.stopReason = o.value(u"stopReason"_s).toString();
     t.error = o.value(u"error"_s).toString();
     t.asking = o.value(u"asking"_s).toBool();
+    const QJsonObject question = o.value(u"question"_s).toObject();
+    if (t.state == State::Running && !question.value(u"id"_s).toString().isEmpty()) {
+        t.question.id = question.value(u"id"_s).toString();
+        t.question.request = QJsonObject{{u"toolCall"_s, question.value(u"toolCall"_s)},
+                                         {u"options"_s, question.value(u"options"_s)}};
+    }
     return t;
 }
 
@@ -251,6 +257,27 @@ void cancelRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QS
 {
     const QString endpoint = u"sessions/%1/turn"_s.arg(session);
     transport->send(apiRequest("DELETE", base, endpoint, token, nullptr), [](const sync::HttpResponse &) { });
+}
+
+void answerRemoteQuestion(sync::HttpTransport *transport, const QUrl &base, const QString &token,
+                          const QString &session, const QString &question, const QString &optionId,
+                          std::function<void(const RemoteTurn &, const RemoteError &)> done)
+{
+    const QJsonObject body{{u"question"_s, question}, {u"optionId"_s, optionId}};
+    transport->send(apiRequest("POST", base, u"sessions/%1/turn"_s.arg(session), token, &body),
+                    [done](const sync::HttpResponse &response) {
+                        QJsonObject o;
+                        RemoteError e = remoteErrorOf(response, &o);
+                        RemoteTurn turn;
+                        if (!e.failed()) {
+                            if (std::optional<RemoteTurn> read = RemoteTurn::fromJson(o))
+                                turn = *read;
+                            else
+                                e = RemoteError{RemoteError::Kind::Malformed, response.status, QString(),
+                                                u"no turn in the answer"_s};
+                        }
+                        done(turn, e);
+                    });
 }
 
 // ---- RemoteStream ---------------------------------------------------------------------------------------

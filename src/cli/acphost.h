@@ -23,8 +23,11 @@
 // * The last turn of each session a device prompted is kept here (HostTurn: how it ended, the
 //   agent's answer): a device that lost its stream — Android ended the app, the network was gone
 //   for long — asks for it (GET sessions/<id>/turn) and writes the answer into the conversation. A
-//   stream that runs a turn is never cut off for a new one of its device: it ends after the turn,
-//   the agent's questions in it answered "cancelled" (nobody is there to answer them).
+//   stream that runs a turn is never cut off for a new one of its device: it ends after the turn.
+// * A question of the agent (session/request_permission) the device has not answered waits for it
+//   with the turn, also when the device lost the stream: the turn kept carries it, and the device
+//   answers it there (POST sessions/<id>/turn). Only once nobody fetched the stream or the turn for
+//   questionWaitMs is it answered "cancelled" (0: at once, when the device lost the stream).
 //
 // Plain HTTP on 127.0.0.1 behind a reverse proxy that adds HTTPS (in the user's own network, a
 // tailnet — the agents can run commands here), or HTTPS itself with --tls-cert / --tls-key. Host
@@ -164,10 +167,15 @@ struct HostTurn {
     QString stopReason;  ///< Done: the agent's ("end_turn", "cancelled" …)
     QString error;       ///< Failed: why
     bool asking = false; ///< the agent waits on a question of it to the device
+    /// The first question of the agent that waits for the device's answer: {id, toolCall, options}
+    /// (session/request_permission's params, `id` the server's for answering it); {} none.
+    QJsonObject question;
+    /// The titles of its tool calls by their ids (a question names its call, often without one).
+    QHash<QString, QString> toolTitles;
     QDateTime started;
     QDateTime ended;
     /// {session, turn, state: "running" | "done" | "failed", text, tools, stopReason, error, asking,
-    /// started, ended}.
+    /// question (while one waits), started, ended}.
     QJsonObject toJson() const;
 };
 /// The most of an answer and of its tool calls a turn keeps; the turns kept for one device (the
@@ -193,8 +201,13 @@ struct AcpHostOptions {
     int maxStreams = 16;
     int maxStreamsPerDevice = 8;
     qint64 streamIdleMs = 30LL * 60 * 1000;
-    /// How long a turn of a stream nobody fetches from (retired) may still run.
+    /// How long a turn of a stream nobody fetches from (retired) may still run (the time its
+    /// questions wait for the device not counted).
     qint64 retiredTurnMs = 60LL * 60 * 1000;
+    /// How long a question of the agent waits for a device that is gone — nobody fetched its stream
+    /// or its turn meanwhile — before it is answered "cancelled" (--question-wait; 0: at once, when
+    /// the device lost the stream).
+    qint64 questionWaitMs = 60LL * 60 * 1000;
     qint64 maxBufferBytes = 32LL * 1024 * 1024;
     int maxWaitSeconds = 30;
     qint64 maxBodyBytes = 16LL * 1024 * 1024;
@@ -252,7 +265,8 @@ private:
     void closeStream(Stream *s, const QString &why);
     void removeStream(Stream *s);
     /// Nobody fetches from `s` any more (a new stream of its device for the agent, or its device
-    /// lost it): it ends now, or after its turns — its agent's questions answered "cancelled".
+    /// lost it): it ends now, or after its turns — its agent's questions wait for the device with
+    /// their turns (questionWaitMs 0: answered "cancelled").
     void retire(Stream *s, const QString &why);
     /// Removes `s` once the event loop goes on (not while its process's output is read).
     void removeLater(Stream *s);
@@ -266,6 +280,15 @@ private:
     /// Every running turn of `s` failed: `why`.
     void turnsFailed(Stream *s, const QString &why);
     void turnChanged(const QString &key);
+    /// The turn of `session` in `s` carries its first question waiting (HostTurn::asking, question).
+    void questionsChanged(Stream *s, const QString &session);
+    /// Answers the agent's question `index` of `s` (its outcome: {outcome: selected, optionId} or
+    /// {outcome: cancelled}) and forgets it.
+    void answerQuestion(Stream *s, qsizetype index, const QJsonObject &outcome);
+    /// The device's answer to a question of its turn (POST sessions/<id>/turn {question, optionId}).
+    http::Response answerTurnQuestion(const QString &key, const http::Request &request);
+    /// Questions nobody fetched for questionWaitMs: answered "cancelled".
+    void expireQuestions(Stream *s);
     void answerTurnWaiter(QTimer *timer);
     void forgetTurns();
     bool originAllowed(const QByteArray &origin) const;

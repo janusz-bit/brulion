@@ -2,7 +2,9 @@
 // tst_shell_agents: what it answers depends on the last paragraph of the user's newest message.
 //
 //   "… pozwolenie …"  asks whether it may write Zgoda.md (session/request_permission); allowed: it
-//                     writes the file and says "Zapisano.", else "Nie zapisano."
+//                     writes the file and says "Zapisano.", else "Nie zapisano."; answered
+//                     "cancelled": ends the turn with that stop reason. "… później …" too: it asks
+//                     1.5 s later (the device may be gone by then)
 //   "… czekaj …"      answers nothing until the turn is cancelled (session/cancel)
 //   "… powoli …"      a tool call ("Read Dom.md"), "Powoli: ", 1.5 s later "gotowe."
 //   "… koniec …"      writes "fake agent: koniec" to its standard error and exits with code 3
@@ -256,6 +258,8 @@ int main(int argc, char **argv)
             if (text.contains(u"pozwolenie"_s)) {
                 waiting = id;
                 waitingSession = session;
+                if (text.contains(u"później"_s))
+                    QThread::msleep(1500);
                 update(session, {{u"sessionUpdate"_s, u"tool_call"_s}, {u"toolCallId"_s, u"w1"_s},
                                  {u"title"_s, u"Write Zgoda.md"_s}, {u"kind"_s, u"edit"_s}, {u"status"_s, u"pending"_s}});
                 write({{u"id"_s, u"perm-1"_s},

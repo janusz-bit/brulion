@@ -603,18 +603,7 @@ void WorkspaceAgents::connectClient(Process *p)
     });
     connect(client, &acp::Client::permissionAsked, this,
             [this, name](const QString &path, const acp::Permission &permission) {
-                Question q;
-                q.text = permission.title.isEmpty() ? tr("%1 asks for your permission.").arg(name())
-                                                    : tr("%1 asks: %2").arg(name(), permission.title);
-                if (!permission.details.isEmpty())
-                    q.text += u'\n' + permission.details;
-                for (const acp::PermissionOption &o : permission.options) {
-                    q.options << o.name;
-                    q.ids << o.id;
-                }
-                if (!permission.diffs.isEmpty())
-                    q.diff = permission.diffs.first();
-                setQuestion(path, q);
+                setQuestion(path, permissionQuestion(name(), permission));
             });
     connect(client, &acp::Client::authRequired, this,
             [this, id, p, name](const QString &path, const QList<acp::AuthMethod> &methods, const QString &message) {
@@ -987,21 +976,65 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
 
 void WorkspaceAgents::noteWorking()
 {
-    bool remote = !m_recovering.isEmpty();
-    for (auto it = m_turns.cbegin(); it != m_turns.cend() && !remote; ++it) {
-        const AgentConfig *a = config(it.value());
-        remote = a && a->isRemote();
-    }
+    const bool remote = !remoteTurns().isEmpty();
+    // (Its notification follows the turns, their questions too: AppController asks remoteWork().)
+    Q_EMIT remoteWorkChanged();
     if (remote == m_remoteWorking)
         return;
     m_remoteWorking = remote;
     Q_EMIT remoteWorkingChanged();
 }
 
+QStringList WorkspaceAgents::remoteTurns() const
+{
+    QStringList out = m_recovering.keys();
+    for (auto it = m_turns.cbegin(); it != m_turns.cend(); ++it) {
+        if (const AgentConfig *a = config(it.value()); a && a->isRemote())
+            out << it.key();
+    }
+    out.sort();
+    return out;
+}
+
+WorkspaceAgents::RemoteWork WorkspaceAgents::remoteWork() const
+{
+    RemoteWork work;
+    const QStringList paths = remoteTurns();
+    if (paths.isEmpty())
+        return work;
+    QStringList conversations;
+    QString asked;
+    int waiting = 0;
+    for (const QString &path : paths) {
+        conversations << QFileInfo(path).completeBaseName();
+        if (const auto q = m_questions.constFind(path); q != m_questions.cend()) {
+            ++waiting;
+            if (asked.isEmpty())
+                asked = q->text.section(u'\n', 0, 0);
+        }
+    }
+    work.waiting = waiting == paths.size();
+    const QString first = paths.first();
+    const AgentConfig *agent =
+            config(m_recovering.contains(first) ? m_recovering.value(first).agent : m_turns.value(first));
+    const QString name = agent ? agent->name : tr("The AI agent");
+    const QString host = agent ? (agent->host.isEmpty() ? QUrl(agent->url).host() : agent->host) : QString();
+    if (!asked.isEmpty())
+        work.title = asked;
+    else if (paths.size() == 1)
+        work.title = tr("%1 is answering…").arg(name);
+    else
+        work.title = tr("%n AI agents are answering…", nullptr, int(paths.size()));
+    work.text = paths.size() == 1 && !host.isEmpty() ? tr("On %1 · %2").arg(host, conversations.first())
+                                                     : conversations.join(u" · "_s);
+    return work;
+}
+
 void WorkspaceAgents::stop(const QString &path)
 {
     if (m_recovering.contains(path)) {
         const Recovery r = m_recovering.take(path);
+        clearQuestion(path);
         noteWorking();
         if (const AgentConfig *a = config(r.agent); a && a->isRemote())
             acp::cancelRemoteTurn(transport(), QUrl(a->url), a->token, r.session);
@@ -1104,6 +1137,7 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
     const QString host = agent ? agent->host : QString();
     const auto end = [this, &path](const Recovery &done, int seen) {
         m_recovering.remove(path);
+        clearQuestion(path);
         noteWorking();
         store(path, Stored{done.agent, done.session, seen, 0});
     };
@@ -1153,10 +1187,29 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
         return;
     }
     if (turn.state == acp::RemoteTurn::State::Running) {
-        Q_EMIT status(path, turn.asking ? tr("%1 is still working on %2 (a question it asked meanwhile is "
+        // A question the agent asked meanwhile waits there for this device: the conversation's
+        // question, answered there (answer()). (An older computer keeps none: it answers it
+        // "cancelled".)
+        const std::optional<acp::Permission> permission = turn.question.isEmpty() || turn.question.id == r.answered
+                                                                  ? std::nullopt
+                                                                  : acp::readPermission(turn.question.request, {});
+        if (permission) {
+            Question q = permissionQuestion(name, *permission);
+            q.remote = turn.question.id;
+            const auto shown = m_questions.constFind(path);
+            if (shown == m_questions.cend() || shown->remote != q.remote) {
+                setQuestion(path, q);
+                Q_EMIT status(path, tr("%1 on %2 waits for your answer…").arg(name, host));
+            }
+        } else {
+            if (const auto shown = m_questions.constFind(path); shown != m_questions.cend() && !shown->remote.isEmpty())
+                clearQuestion(path); // (answered: here, or by the time limit there)
+            Q_EMIT status(path, turn.asking && turn.question.isEmpty() && r.answered.isEmpty()
+                                        ? tr("%1 is still working on %2 (a question it asked meanwhile is "
                                              "answered “cancelled”)…")
                                                   .arg(name, host)
                                         : tr("%1 is still working on %2…").arg(name, host));
+        }
         pollRecovery(path);
         return;
     }
@@ -1169,8 +1222,8 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
     }
     if (turn.stopReason == u"cancelled" && turn.text.trimmed().isEmpty()) {
         end(done, done.seen);
-        Q_EMIT failed(path, tr("%1 stopped on %2 without an answer: a question it asked could not reach this "
-                               "device. Ask again.")
+        Q_EMIT failed(path, tr("%1 stopped on %2 without an answer: a question it asked got no answer from this "
+                               "device in time. Ask again.")
                                     .arg(name, host));
         return;
     }
@@ -1215,6 +1268,11 @@ void WorkspaceAgents::answer(const QString &path, const QString &option)
     if (index < 0)
         return;
     clearQuestion(path);
+    if (m_recovering.contains(path)) {
+        if (!q.remote.isEmpty())
+            answerRecovered(path, q, q.ids.at(index));
+        return;
+    }
     Process *p = m_processes.value(m_turns.value(path));
     if (!p)
         return;
@@ -1233,18 +1291,67 @@ void WorkspaceAgents::answer(const QString &path, const QString &option)
     p->client->authenticate(path, q.ids.at(index));
 }
 
+WorkspaceAgents::Question WorkspaceAgents::permissionQuestion(const QString &name, const acp::Permission &permission)
+{
+    Question q;
+    q.text = permission.title.isEmpty() ? tr("%1 asks for your permission.").arg(name)
+                                        : tr("%1 asks: %2").arg(name, permission.title);
+    if (!permission.details.isEmpty())
+        q.text += u'\n' + permission.details;
+    for (const acp::PermissionOption &o : permission.options) {
+        q.options << o.name;
+        q.ids << o.id;
+    }
+    if (!permission.diffs.isEmpty())
+        q.diff = permission.diffs.first();
+    return q;
+}
+
+void WorkspaceAgents::answerRecovered(const QString &path, const Question &q, const QString &optionId)
+{
+    Recovery &r = m_recovering[path];
+    const AgentConfig *agent = config(r.agent);
+    if (!agent || !agent->isRemote())
+        return;
+    r.answered = q.remote;
+    const QString name = agent->name;
+    const QString host = agent->host;
+    Q_EMIT status(path, tr("%1 is still working on %2…").arg(name, host));
+    const std::weak_ptr<bool> alive = m_alive;
+    const QString session = r.session;
+    acp::answerRemoteQuestion(
+            transport(), QUrl(agent->url), agent->token, session, q.remote, optionId,
+            [this, alive, path, session, q, name, host](const acp::RemoteTurn &, const acp::RemoteError &error) {
+                if (alive.expired() || m_recovering.value(path).session != session || !error.failed())
+                    return; // (the turn's poll tells how it goes on)
+                qCInfo(logging::lcApp, "AI agent %s: the answer to its question did not reach %s: %s",
+                       qUtf8Printable(name), qUtf8Printable(host), qUtf8Printable(error.detail));
+                if (error.kind == acp::RemoteError::Kind::Refused && error.status == 404)
+                    return; // (it waits no more there: answered "cancelled" — the turn says how it ended)
+                // Not sent (the network): asked again, for another try.
+                m_recovering[path].answered.clear();
+                setQuestion(path, q);
+                Q_EMIT status(path, tr("Your answer did not reach %1: answer again.").arg(host));
+            });
+}
+
 void WorkspaceAgents::setQuestion(const QString &path, const Question &question)
 {
-    if (!m_turns.contains(path))
+    if (!m_turns.contains(path) && !m_recovering.contains(path))
         return;
     m_questions.insert(path, question);
     Q_EMIT questionChanged(path);
+    if (m_remoteWorking)
+        Q_EMIT remoteWorkChanged();
 }
 
 void WorkspaceAgents::clearQuestion(const QString &path)
 {
-    if (m_questions.remove(path))
-        Q_EMIT questionChanged(path);
+    if (!m_questions.remove(path))
+        return;
+    Q_EMIT questionChanged(path);
+    if (m_remoteWorking)
+        Q_EMIT remoteWorkChanged();
 }
 
 void WorkspaceAgents::finish(const QString &path)
