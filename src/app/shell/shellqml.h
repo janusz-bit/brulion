@@ -12,6 +12,7 @@
 //   WorkspaceChats   uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
 //                                       / .chats
 //   ChatTurn         uncreatable — Workspace.chats.turn(path): one conversation's turn
+//   AgentShare       uncreatable — Workspace.chats.share ("Share agents with the phone")
 //   WritingSession   creatable — WritingSession { workspace: Workspace } (the editor's AI assistant)
 //   WorkspaceEncryption uncreatable — Workspace.encryption (encrypted notes)
 //   EncryptedPageHost creatable — PageView's EditorHost (encryptedpagehost.h)
@@ -250,6 +251,13 @@ struct WorkspaceChatsForeign {
     QML_FOREIGN(brulion::shell::WorkspaceChats)
     QML_NAMED_ELEMENT(WorkspaceChats)
     QML_UNCREATABLE("Use Workspace.chats")
+};
+
+struct AgentShareForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AgentShare)
+    QML_NAMED_ELEMENT(AgentShare)
+    QML_UNCREATABLE("Use Workspace.chats.share")
 };
 
 struct WritingSessionForeign {

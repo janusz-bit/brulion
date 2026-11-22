@@ -1,5 +1,7 @@
 #include "workspacechats.h"
 
+#include "agentshare.h"
+
 #include "workspace.h"
 #include "workspaceagents.h"
 #include "workspaceextensions.h"
@@ -81,7 +83,8 @@ void ChatTurn::clearPartial()
 // ---- WorkspaceChats -------------------------------------------------------------------------------
 
 WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent)
-    : QObject(parent), m_workspace(workspace), m_extensions(extensions), m_agents(new WorkspaceAgents(workspace, this))
+    : QObject(parent), m_workspace(workspace), m_extensions(extensions), m_agents(new WorkspaceAgents(workspace, this)),
+      m_share(new AgentShare(workspace, m_agents, this))
 {
     connect(m_extensions, &WorkspaceExtensions::chatAnswered, this, &WorkspaceChats::answered);
     connect(m_extensions, &WorkspaceExtensions::chatFailed, this, &WorkspaceChats::failed);
@@ -124,6 +127,8 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
                 Q_EMIT agentHostPaired(ok, text);
             });
     connect(m_agents, &WorkspaceAgents::remembered, this, &WorkspaceChats::agentRemembered);
+    // A pairing without a code the computer did not take: its code is asked for.
+    connect(m_agents, &WorkspaceAgents::codeNeeded, this, &WorkspaceChats::agentHostNeedsCode);
     // A turn an agent on another computer went on with while this device was gone (Android ended
     // the app): running here again until that computer says how it ended.
     connect(m_agents, &WorkspaceAgents::recovering, this, [this](const QString &path) {
@@ -219,6 +224,7 @@ void WorkspaceChats::setAgents(const QList<AgentConfig> &agents)
     if (agents == m_agents->agents())
         return;
     m_agents->setAgents(agents);
+    m_share->agentsChanged();
     Q_EMIT partnersChanged();
     recoverAgentTurns();
 }
@@ -296,6 +302,15 @@ void WorkspaceChats::pairAgentHost(const QString &address, const QString &code)
     m_agentPairing = true;
     Q_EMIT agentPairingChanged();
     m_agents->pair(address, code);
+}
+
+void WorkspaceChats::addOfferedAgent(const QString &address, const QString &agent)
+{
+    if (m_agentPairing)
+        return;
+    m_agentPairing = true;
+    Q_EMIT agentPairingChanged();
+    m_agents->pair(address, QString(), agent);
 }
 
 bool WorkspaceChats::asking(const QString &path, int) const

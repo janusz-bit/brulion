@@ -67,6 +67,9 @@ constexpr auto kAiModel = "ai/model"_L1;
 constexpr auto kAiLocalModel = "ai/localModel"_L1;
 constexpr auto kAiBaseUrl = "ai/baseUrl"_L1;
 constexpr auto kAcpAgents = "ai/agents"_L1;
+constexpr auto kAcpShare = "ai/share"_L1;
+constexpr auto kAcpShareAddress = "ai/shareAddress"_L1;
+constexpr auto kAcpShareTrust = "ai/shareTrust"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
 constexpr auto kEditorMonoFamily = "editor/monoFamily"_L1;
@@ -606,6 +609,39 @@ void AppSettings::setAssistantEnabled(bool on)
 {
     if (store(kAssistant, on, assistantEnabled()))
         Q_EMIT assistantEnabledChanged();
+}
+
+bool AppSettings::acpShare() const
+{
+    return acpProgramsAvailable() && m_settings->value(kAcpShare, false).toBool();
+}
+
+void AppSettings::setAcpShare(bool on)
+{
+    if (store(kAcpShare, on, acpShare()))
+        Q_EMIT acpShareChanged();
+}
+
+QString AppSettings::acpShareAddress() const
+{
+    return m_settings->value(kAcpShareAddress).toString().trimmed();
+}
+
+void AppSettings::setAcpShareAddress(const QString &address)
+{
+    if (store(kAcpShareAddress, address.trimmed(), acpShareAddress()))
+        Q_EMIT acpShareChanged();
+}
+
+bool AppSettings::acpShareTrust() const
+{
+    return m_settings->value(kAcpShareTrust, true).toBool();
+}
+
+void AppSettings::setAcpShareTrust(bool on)
+{
+    if (store(kAcpShareTrust, on, acpShareTrust()))
+        Q_EMIT acpShareChanged();
 }
 
 bool AppSettings::flashcardsEnabled() const

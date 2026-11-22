@@ -26,6 +26,8 @@
 //
 // Single-threaded (the GUI thread).
 
+#include "agentshare.h"
+
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -169,6 +171,9 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(bool agentsAvailable READ agentsAvailable CONSTANT FINAL)
     /// A pairing with another computer is on its way (pairAgentHost()).
     Q_PROPERTY(bool agentPairing READ agentPairing NOTIFY agentPairingChanged FINAL)
+    /// "Share agents with the phone": this computer's agents for the user's other devices, and the
+    /// agents other computers offer in the notebook (agentshare.h).
+    Q_PROPERTY(brulion::shell::AgentShare *share READ share CONSTANT FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -277,6 +282,12 @@ public:
     /// `address` with a code of its `brulion-cli acp pair` — agentsPaired() (its agents, for
     /// AppSettings) and agentHostPaired(ok, what it says) follow.
     Q_INVOKABLE void pairAgentHost(const QString &address, const QString &code);
+    /// Settings → AI agents → an agent another computer offers in the notebook (AgentShare::offers):
+    /// pairs without a code — that computer knows this device in their tailnet, or this device
+    /// has a token for it already — and adds just that agent; agentHostNeedsCode(address) when the
+    /// computer wants its code.
+    Q_INVOKABLE void addOfferedAgent(const QString &address, const QString &agent);
+    AgentShare *share() const { return m_share; }
     /// The answers of agents on another computer that went on with a turn while this device was
     /// gone (Android ended the app): fetched from there (WorkspaceAgents::recover()). When the
     /// notebook is ready and when the agents change.
@@ -353,8 +364,11 @@ Q_SIGNALS:
     /// says who asks what (AppController shows it as a toast with Open).
     void questionWaiting(const QString &path, const QString &text);
     void agentChecked(const QString &id, bool ok, const QString &text);
-    /// A pairing ended: `text` says with whom and which agents, or why not.
+    /// A pairing ended: `text` says with whom and which agents, or why not ("" nothing to say:
+    /// agentHostNeedsCode() came).
     void agentHostPaired(bool ok, const QString &text);
+    /// A pairing without a code: the computer at `address` wants its pairing code.
+    void agentHostNeedsCode(const QString &address);
     /// The agents of a computer this device was just paired with (AppSettings::addRemoteAcpAgents).
     void agentsPaired(const QList<brulion::shell::AgentConfig> &agents);
     void agentPairingChanged();
@@ -392,6 +406,7 @@ private:
     int m_questionSerial = 0;
     int m_agentSerial = 0;
     bool m_agentPairing = false;
+    AgentShare *m_share = nullptr;
     QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
     QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order

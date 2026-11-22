@@ -121,6 +121,13 @@ class AppSettings : public QObject {
     /// Agents that are programs of this device can be added (the desktop app), not only ones on
     /// another computer.
     Q_PROPERTY(bool acpProgramsAvailable READ acpProgramsAvailable CONSTANT FINAL)
+    /// "Share agents with the phone" (agentshare.h; key `ai/share`): this computer runs `brulion-cli
+    /// acp serve` for its agents while the app runs. Off by default. The address the devices are
+    /// given ("" found by itself: Tailscale, else this computer's in its network; `ai/shareAddress`)
+    /// and whether the user's own devices in the tailnet pair without a code (`ai/shareTrust`, on).
+    Q_PROPERTY(bool acpShare READ acpShare WRITE setAcpShare NOTIFY acpShareChanged FINAL)
+    Q_PROPERTY(QString acpShareAddress READ acpShareAddress WRITE setAcpShareAddress NOTIFY acpShareChanged FINAL)
+    Q_PROPERTY(bool acpShareTrust READ acpShareTrust WRITE setAcpShareTrust NOTIFY acpShareChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
@@ -343,6 +350,12 @@ public:
     QString aiKey() const;
     QList<AgentConfig> acpAgents() const;
     QVariantList acpAgentRows() const;
+    bool acpShare() const;
+    void setAcpShare(bool on);
+    QString acpShareAddress() const;
+    void setAcpShareAddress(const QString &address);
+    bool acpShareTrust() const;
+    void setAcpShareTrust(bool on);
     bool acpAvailable() const;
     bool acpProgramsAvailable() const;
     /// Agents of another computer this device was paired with (WorkspaceAgents::paired): each
@@ -564,6 +577,7 @@ Q_SIGNALS:
     void flashcardsSettingsChanged();
     void aiChanged();
     void acpAgentsChanged();
+    void acpShareChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();

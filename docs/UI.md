@@ -1411,10 +1411,15 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   Gemini CLI and OpenCode started with `npx -y …`, or "Another agent…", `acpAgentOwn`, which opens the
   dialog), and **An agent on another computer…** (`acpAgentRemote`, the one entry where no
   programs run) — `acpHostDialog`: the computer's address (`acpHostAddress`) and the code of its
-  `acp pair` (`acpHostCode`); **Pair** pairs (`WorkspaceChats::pairAgentHost` →
-  `WorkspaceAgents::pair`: `acp::pairRemote`, then `acp::fetchRemoteInfo`), the Add button busy
-  meanwhile, and a toast says with whom and which agents, or why not (a wrong or expired code,
-  the computer not reached). Each agent of that computer becomes a row (`raspberry-pi-4-claude`:
+  `acp pair` (`acpHostCode`: none needed in the user's own tailnet, "None in your tailnet"); **Pair**
+  pairs (`WorkspaceChats::pairAgentHost` → `WorkspaceAgents::pair`: `acp::pairRemote` — without a
+  code the computer judges the device by its tailnet identity —, then `acp::fetchRemoteInfo`), the
+  Add button busy meanwhile, and a toast says with whom and which agents, or why not (a wrong or
+  expired code, the computer not reached). A computer that wants its code after all (403
+  `code_needed`: the device is not its user's in their tailnet) opens the dialog again with the
+  address and "That computer wants its code: Settings → AI agents → Pair a device there."
+  (`WorkspaceAgents::codeNeeded` → `WorkspaceChats::agentHostNeedsCode`, `hostDialog.needsCode`;
+  no toast). Each agent of that computer becomes a row (`raspberry-pi-4-claude`:
   the computer's name and the agent's id there) whose line says "On raspberry-pi-4
   (https://agent.example.com) · with Brulion's tools"; pairing again keeps its name and options.
   Edit… changes only its name there. A `brulion://pair?url=…&code=…` address ("Automation" below:
@@ -1425,6 +1430,41 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   notebook, which comes from anywhere: a page may only name an agent set up here. The token a
   computer gave this device is in the app's secrets (`<app data>/secrets/acp-<id>`, owner-only,
   masked in every log line), never in the settings; removing the agent removes it.
+* **Agents of the user's other computers, from the notebook** (`acpOfferRow`, under the agents;
+  `AgentShare.offers`): a computer that shares its agents in a tailnet writes its address and their
+  names into the notebook's `.brulion/config.json` (`agentHosts`, docs/CLI.md "A phone finds the
+  computer"), and every other device lists them — "Claude Code", "On nixos (http://nixos.tail…
+  .ts.net:8790)" — with **Add** (`acpOfferAdd` → `WorkspaceChats::addOfferedAgent`: pairs without a
+  code, or with the token of another agent of that computer already here, and adds just that
+  agent; the code is asked for when the computer wants it, above). Not this computer's own offer,
+  not an agent added already, and only addresses of a tailnet (core `acp/hostoffer.h`). Read again
+  when config.json changes (a sync) and when the agents change.
+* **Sharing them with the phone** (`acpShareSwitch`, desktop only — `AgentShare.available`: programs
+  run here and brulion-cli is found, else the AppImage or the app's binary as `brulion cli`;
+  `Workspace.chats.share`, `src/app/shell/agentshare.h`): "Share agents with the phone"
+  (`AppSettings.acpShare`, key `ai/share`, off by default) runs `brulion-cli acp serve` for the
+  notebook that is open — never the documentation — with this device's agents (programs only; their
+  list in `<app data>/agent-share/agents.json`) while the app runs (`ServerProcess`,
+  `src/app/shell/serverprocess.h`: started again after a crash with waits of 2 s … 1 min, a refusal
+  left as it is, stopped with its standard input — `--stop-on-eof` — when it is turned off, the
+  notebook or the agents change, or the app quits; every line of its log in the event log). The
+  switch's line says what it does: "On at http://nixos.tail1ea20e.ts.net:8790 · your devices in the
+  tailnet pair by themselves", "On at http://192.168.1.10:8790 · not encrypted on your network",
+  "Starting…", "Add an agent of this computer first.", "Open a notebook of yours: the open one is
+  shared.", "Stopped: … — trying again soon". Where it is reached: found by itself — Tailscale when
+  tailscaled runs here (`--tailscale`, the computer's MagicDNS name), else this computer's address in
+  its network (`--allow-http`) — or **Address** (`acpShareAddress`, `AppSettings.acpShareAddress`,
+  its placeholder the address found): an address of this computer, a tailnet name (with https:
+  behind the user's own Tailscale Serve), an https:// address of their own proxy. **Pair my devices
+  without a code** (`acpShareTrust`, `AppSettings.acpShareTrust`, on; shown in a tailnet): the
+  owner's devices there pair by themselves (docs/CLI.md "In a tailnet"). **Pair a device**
+  (`acpSharePairRow`: how many are paired, `AgentShare.devices` from `acp clients`, counted again
+  when one pairs) — **Show code** (`acpSharePair` → `AgentShare.newPairing()`: `acp pair`) opens
+  `acpShareCodeDialog`: the brulion://pair link as a QR code (`acpShareQr`, `QrCodeView`), "Code
+  K7QM-2XRP · valid until 10:42, once" (`acpShareCode`) and the address; **Unpair all**
+  (`acpShareUnpair`: `acp revoke --all`). In a tailnet it writes its offer into the notebook's
+  config.json (above; never over a config.json that is no JSON object) and removes it when turned
+  off.
 * **Who answers**: an agent is offered among the partners (`acp:<id>`, its name, "AI agent") and the
   conversation's page keeps it (`partner: acp:claude`, docs/SYNTAX.md §14); an agent not set up on
   this device fails the turn with what to do.

@@ -395,7 +395,9 @@ call filter, only IP and local sockets, no capabilities. `brulion-mcp` (the admi
 | `enable` | `false` | runs `brulion-cli mcp serve` as `brulion-mcp.service` |
 | `package` | the flake's `brulion-cli` | a package with `bin/brulion-cli` (the app's package has it too) |
 | `vault` | — | the notebook folder; the service user must read it (and write it unless `readOnly`) |
-| `listenAddress` | `"127.0.0.1"` | the address it listens on; another one needs `publicUrl` |
+| `listenAddress` | `"127.0.0.1"` | the address it listens on; another one needs `publicUrl` (not used with `tailscale`) |
+| `tailscale` | `false` | serve in the machine's tailnet (`--tailscale`): its tailnet address and name, its own user's devices paired without a code |
+| `tailnetUsers` | `[ ]` | more tailnet logins whose devices pair without a code |
 | `port` | `8780` | the port |
 | `publicUrl` | `null` | the address the apps reach (`https://…`; the endpoint is this + `/mcp`); `null`: this machine only |
 | `passwordFile` | `null` | a file with the password or its hash (`brulion-cli mcp password --print-hash`), outside the Nix store; `null`: `sudo brulion-mcp password` |
@@ -405,7 +407,7 @@ call filter, only IP and local sockets, no capabilities. `brulion-mcp` (the admi
 | `allowedOrigins` | `[ ]` | origins of browser-based MCP clients (CORS), e.g. the MCP Inspector |
 | `allowedHosts` | `[ ]` | more `Host` names, for a proxy that rewrites it |
 | `user`, `group` | `"brulion-mcp"` | who it runs as (the default user and group are created) |
-| `openFirewall` | `false` | open `port` |
+| `openFirewall` | `false` | open `port` (with `tailscale`: on `tailscale0` only) |
 | `extraArgs` | `[ ]` | more options of `mcp serve` |
 
 The flake's check `checks.<system>.nixos-module` evaluates the module with the server and builds
@@ -462,6 +464,27 @@ internet. On a tailnet with MagicDNS and an ACME certificate (as Nextcloud is se
   networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 443 ];
 }
 ```
+
+Simpler in a tailnet, without a proxy and without a code for your own devices
+(`acp serve --tailscale`, [CLI.md](CLI.md#in-a-tailnet)): it listens on the machine's tailnet
+address, gives the phone its MagicDNS name, and a phone of the machine's own tailnet user pairs with
+nothing typed — tailscaled vouches for it (plain HTTP: the tailnet encrypts it):
+
+```nix
+{
+  services.tailscale.enable = true;
+  services.brulion-acp = {
+    enable = true;
+    agents.claude = { name = "Claude Code"; command = lib.getExe pkgs.claude-agent-acp; };
+    tailscale = true;              # http://<machine>.<tailnet>.ts.net:8790
+    # tailnetUsers = [ "ola@github" ];   # more users whose devices pair without a code
+    openFirewall = true;           # port 8790 on tailscale0 only
+  };
+}
+```
+
+On a desktop the app does the same without a service: Settings → Extensions → AI agents → **Share
+agents with the phone** (docs/UI.md "AI agents (ACP)").
 
 Then, once:
 

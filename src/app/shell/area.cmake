@@ -11,7 +11,8 @@
 # over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts —, the notebook kept in a GitHub repository —
 # WorkspaceGitHub: pull, commit, propose (core github) — and their wiring to the app,
-# workspaceintegration), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
+# workspaceintegration), AgentShare ("Share agents with the phone": `brulion-cli acp serve` run while
+# the app runs by ServerProcess, a reusable supervisor of brulion-cli servers), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
 # placement (traypopup.h, pure). SingleInstance is in
 # src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
 # shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
@@ -79,6 +80,8 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appscripting.h ${_brulion_shell_dir}/appscripting.cpp
     ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
+    ${_brulion_shell_dir}/agentshare.h ${_brulion_shell_dir}/agentshare.cpp
+    ${_brulion_shell_dir}/serverprocess.h ${_brulion_shell_dir}/serverprocess.cpp
     ${_brulion_shell_dir}/writingsession.h ${_brulion_shell_dir}/writingsession.cpp
     ${_brulion_shell_dir}/workspaceencryption.h ${_brulion_shell_dir}/workspaceencryption.cpp
     ${_brulion_shell_dir}/encryptedpagehost.h ${_brulion_shell_dir}/encryptedpagehost.cpp
@@ -111,7 +114,7 @@ target_link_libraries(brulion_shell
            brulion_core_extensions brulion_core_ai brulion_core_acp brulion_core_chat brulion_core_automation brulion_planning
            brulion_core_writing
            brulion_core_encryption brulion_core_applock
-    PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
+    PRIVATE Qt6::Network brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_github brulion_core_caldav brulion_core_clipper
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking

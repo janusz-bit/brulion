@@ -345,12 +345,22 @@ let
       "serve"
       "--agents"
       acpAgentsFile
+    ]
+    # (In the tailnet it listens on this machine's tailnet address by itself.)
+    ++ lib.optionals (!acpCfg.tailscale) [
       "--listen"
       acpCfg.listenAddress
+    ]
+    ++ [
       "--port"
       (toString acpCfg.port)
       "--state-file"
       acpStateFile
+    ]
+    ++ lib.optional acpCfg.tailscale "--tailscale"
+    ++ lib.optionals (acpCfg.tailscale && acpCfg.tailnetUsers != [ ]) [
+      "--tailnet-user"
+      (lib.concatStringsSep "," acpCfg.tailnetUsers)
     ]
     ++ lib.optionals (acpCfg.publicUrl != null) [
       "--public-url"
@@ -934,7 +944,28 @@ in
       description = ''
         The address to listen on: keep the default behind a reverse proxy that adds HTTPS and is
         reachable only in your own network (a tailnet, a VPN) — the agents run commands here.
+        Not used with {option}`services.brulion-acp.tailscale`.
       '';
+    };
+
+    tailscale = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Serve in this machine's tailnet (`acp serve --tailscale`, needs `services.tailscale`):
+        listen on its tailnet address, give the devices its MagicDNS name (unless
+        {option}`services.brulion-acp.publicUrl`), and pair the devices of the machine's own
+        tailnet user without a code — tailscaled vouches for them. Plain HTTP: the tailnet
+        encrypts it. Open the port on `tailscale0` with
+        {option}`services.brulion-acp.openFirewall`.
+      '';
+    };
+
+    tailnetUsers = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = [ "ola@github" ];
+      description = "More tailnet logins whose devices pair without a code (with `tailscale`).";
     };
 
     port = mkOption {
@@ -1003,7 +1034,10 @@ in
     openFirewall = mkOption {
       type = types.bool;
       default = false;
-      description = "Open the port in the firewall (only when it listens on another address than loopback).";
+      description = ''
+        Open the port in the firewall (only when it listens on another address than loopback;
+        with {option}`services.brulion-acp.tailscale` on `tailscale0` only).
+      '';
     };
 
     extraArgs = mkOption {
@@ -1177,7 +1211,7 @@ in
           message = "services.brulion-acp: name at least one agent in `agents`.";
         }
         {
-          assertion = acpLoopback || acpCfg.publicUrl != null;
+          assertion = acpLoopback || acpCfg.tailscale || acpCfg.publicUrl != null;
           message = "services.brulion-acp: listening on ${acpCfg.listenAddress} needs publicUrl (the address the devices reach).";
         }
         {
@@ -1267,7 +1301,11 @@ in
         };
       };
 
-      networking.firewall.allowedTCPPorts = mkIf acpCfg.openFirewall [ acpCfg.port ];
+      networking.firewall.allowedTCPPorts = mkIf (acpCfg.openFirewall && !acpCfg.tailscale) [ acpCfg.port ];
+      # (In the tailnet: there only.)
+      networking.firewall.interfaces.tailscale0.allowedTCPPorts = mkIf (acpCfg.openFirewall && acpCfg.tailscale) [
+        acpCfg.port
+      ];
     })
   ];
 }

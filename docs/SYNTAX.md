@@ -93,6 +93,14 @@ and the folder is an Obsidian vault (`.obsidian/`), `journalsFolder`, `journalFi
 to Obsidian's settings (`daily-notes.json`, `templates.json`, `app.json`; docs/IMPORT.md "Obsidian folder without importing") — in memory, until the settings are saved. `weeklyFolder` /
 `monthlyFolder` missing from the file follow `journalsFolder` (also one taken from Obsidian).
 
+`agentHosts` (written by the desktop app while it shares its AI agents in a tailnet, docs/CLI.md
+"A phone finds the computer"): `[{"url": "http://nixos.tail1ea20e.ts.net:8790", "host": "nixos",
+"agents": [{"id": "claude", "name": "Claude Code"}]}]` — where a computer of the user's offers its
+agents to the notebook's other devices, which list them in Settings → AI agents. Never a secret
+(no token, code or command). Read defensively (`acp/hostoffer.h`): only an http(s) address of a
+tailnet, at most 8 computers and 16 agents each, names cut to one line of 80 characters; nothing
+pairs by itself.
+
 ### Weekly and monthly notes
 
 Periodic pages next to the daily ones (`src/core/periodic/periodic.h`, creating them:

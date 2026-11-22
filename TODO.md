@@ -15,9 +15,13 @@ done in the repository simply disappears from the list.
   words (docs/SEMANTIC.md).
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
-  OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's, on
-  the phone and in the browser (docs/CLI.md "AI agents for other devices", services.brulion-acp).
-  Missing: a foreground service instead of the screen kept on while an agent on another computer
+  OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
+  desktop app's "Share agents with the phone", found in the notebook and paired without a code in a
+  tailnet —, on the phone and in the browser (docs/CLI.md "AI agents for other devices",
+  services.brulion-acp). Missing: a try from a real phone in a real tailnet (the offer in the
+  notebook, the pairing by tailnet identity, the firewall's port; Tailscale Serve's header only
+  against the fake tailscaled), tailscaled's LocalAPI on Windows (its named pipe) and macOS (the
+  `tailscale` program answers there: untried), a foreground service instead of the screen kept on while an agent on another computer
   works (a turn the app lost is fetched from the computer afterwards, but the answer comes only
   when Brulion runs again), the agent's questions while the phone was gone (answered "cancelled"
   there now: they could wait for the phone instead), a try with a real agent from a real phone, a try with
