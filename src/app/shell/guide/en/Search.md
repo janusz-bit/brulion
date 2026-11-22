@@ -19,7 +19,7 @@ brulion: document
 - The **Folder** button (or “Search in folder” in a folder's menu) — only one folder and its subfolders.
 
 ## Search by meaning
-Search can also find notes by **what they mean**, not only by their words: “apple cake” finds “Szarlotka babci”, an English query finds a Polish note, and “kupiłem opony” finds a note about “kupić oponę” — other forms of a word, other languages, related words. It is **off by default**: turn it on in **Settings → Search → Search by meaning**. The first time it downloads a small model (Multilingual E5 Small, 126 MB, best over Wi-Fi), which then runs **on this device, offline** — nothing about your notes is sent anywhere.
+Search can also find notes by **what they mean**, not only by their words: “apple cake” finds “Szarlotka babci”, an English query finds a Polish note, and “kupiłem opony” finds a note about “kupić oponę” — other forms of a word, other languages, related words. **Not offered yet in this version:** Brulion cannot download its model yet, so the setting shows only on a device that already has the model's file. Once offered, it is **off by default**: turn it on in **Settings → Search → Search by meaning**. The first time it downloads a small model (Multilingual E5 Small, 126 MB, best over Wi-Fi), which then runs **on this device, offline** — nothing about your notes is sent anywhere.
 
 - Results by meaning join the results by words, in Search and in **Search the notes for “…”** of the quick switcher (Ctrl+O). What you typed exactly still counts: a note with your words stays among the results.
 - A note that holds none of your words but is close in meaning is marked **Close in meaning** ✨; it opens at the passage closest to your query.

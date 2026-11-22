@@ -2748,6 +2748,9 @@ page found and opened highlighted, a picture's recognized words framed).
 
 ## Search by meaning (`shell/semanticsearch.h`, core `semantic`)
 
+While the model is not published (docs/SEMANTIC.md "The model file", `SemanticSearch.downloadable`
+false), `ShellSemanticSettings` shows only where the model's file is on the device already.
+
 With **search by meaning** on, the whole-notebook search also finds notes by what they mean, not
 only by their words: "apple cake" finds "Szarlotka babci", an English query a Polish note,
 "kupiłem opony" the note "Kupić oponę" (no stemmer needed). A small multilingual embedding model

@@ -30,6 +30,7 @@
 
 #include "ai/local.h"
 #include "ai/localfiles.h"
+#include "semantic/models.h"
 #include "semantic/semanticrunner.h"
 #include "semantic/vectorindex.h"
 
@@ -63,6 +64,9 @@ class SemanticSearch : public QObject {
 
     /// This build can search by meaning (it has the plugin).
     Q_PROPERTY(bool available READ available NOTIFY configured FINAL)
+    /// The model can be downloaded (semantic::semanticModelPublished()); until then the settings
+    /// offer search by meaning only where the model is on the device already.
+    Q_PROPERTY(bool downloadable READ downloadable CONSTANT FINAL)
     /// Search by meaning is on (AppSettings' "search/semantic"; off by default). Turning it on
     /// downloads the model when it is not here yet.
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged FINAL)
@@ -124,6 +128,7 @@ public:
     void detach();
 
     bool available() const { return m_available; }
+    bool downloadable() const { return semantic::semanticModelPublished(); }
     bool enabled() const;
     void setEnabled(bool on);
     QString modelName() const;

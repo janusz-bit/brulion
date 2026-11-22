@@ -15,6 +15,8 @@ namespace {
 // from — one constant to change when it moves.
 const QString kRepository = u"https://huggingface.co/janusz-bit/multilingual-e5-small-gguf"_s;
 const QString kRevision = u"main"_s;
+/// The file is not published at kRepository yet (see semanticModelPublished()): true once it is.
+constexpr bool kPublished = false;
 /// The Hugging Face model it was converted from, at the revision converted.
 const QString kSource = u"https://huggingface.co/intfloat/multilingual-e5-small"_s;
 
@@ -92,6 +94,11 @@ QList<ai::LocalModel> knownModels()
 }
 
 } // namespace
+
+bool semanticModelPublished()
+{
+    return kPublished;
+}
 
 const QList<ai::LocalModel> &semanticModels()
 {

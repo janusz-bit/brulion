@@ -86,6 +86,11 @@ Embedder) — the last two run a real model when `BRULION_SEMANTIC_MODEL` names 
 
 ## The model file
 
+**Not published yet** (`kPublished` false in `src/core/semantic/models.cpp`, `SemanticSearch.downloadable`):
+until the file is uploaded, Settings offers search by meaning only on a device whose models folder
+(`<app data>/models/semantic`) holds the file already — no Download that would fail. Upload it,
+pin `kRevision` and set `kPublished` (TODO.md).
+
 The app downloads `multilingual-e5-small-q8_0.gguf` — 132,440,544 bytes, SHA-256
 `3a98dd889ee152d923991c60df2fad21e39f7441a5ee302a0a050d5137993b60` — from
 `https://huggingface.co/janusz-bit/multilingual-e5-small-gguf/resolve/main/` (`kRepository` /
