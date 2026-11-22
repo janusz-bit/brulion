@@ -88,6 +88,9 @@ struct Conversation {
     /// Who answers: the frontmatter's `partner:` ("pirat/rozmowa": an extension and its chat
     /// command, "pirat": its first one); "" the built-in assistant.
     QString partner;
+    /// The conversation it was forked from: the frontmatter's `fork: "[[AI/…]]"` ("AI/…"; ""
+    /// none) — forked().
+    QString fork{};
 };
 
 /// "AI": the folder of conversation pages (the same in every language).
@@ -168,6 +171,35 @@ int firstSent(const Conversation &conversation, int budget);
 
 /// What firstSent() counts for the message: its text's length and PictureChars a picture.
 int cost(const Message &message);
+
+/// `content` without the messages from index `from` on — "Edit from here" takes them back:
+/// everything before that message's first line byte for byte; `content` as it is when there is
+/// no such message.
+QString truncated(const QString &content, int from);
+
+/// A conversation that goes on from `content`'s message `upTo` (its index) in a page of its own
+/// ("Fork from here"): `content` up to that message's last line — its frontmatter, `partner:`,
+/// times and pictures as they are, line endings kept — with `fork: "[[source]]"` in its
+/// frontmatter (`source`: the page forked, its path with or without ".md"; "" none). "" when there
+/// is no such message.
+QString forked(const QString &content, int upTo, QStringView source);
+
+/// `fork:`'s value for `source` ("AI/2026-11-15 Dom.md" → `"[[AI/2026-11-15 Dom]]"`).
+QString forkLink(QStringView source);
+
+/// `content` with its frontmatter's `key:` set to `value` ("" takes the line out): the line
+/// replaced (its key matched without regard to case), or added at the frontmatter's end, or a
+/// frontmatter made for it; the rest byte for byte, its line endings kept.
+QString setFrontmatterValue(const QString &content, QStringView key, QStringView value);
+
+/// The user's questions, newest first, as the field gets them back (Up in an empty field): their
+/// text without the pictures they embed and without the first question's link to the page it is
+/// about, each once.
+QStringList prompts(const Conversation &conversation);
+
+/// A message as a quote for the next one: its lines after "> " (pictures out), a blank line after
+/// it; "" for a message of nothing but pictures.
+QString quoted(QStringView markdown);
 
 /// One line of plain text for a list of conversations: the message's text with Markdown's marks
 /// taken out ([[Page|alias]] → alias, `code` → code, **bold** → bold, list markers, a page link at

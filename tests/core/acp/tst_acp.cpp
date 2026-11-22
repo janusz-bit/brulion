@@ -329,6 +329,48 @@ private Q_SLOTS:
         QCOMPARE(readPermission(params, {})->title, QString());
     }
 
+    void readPermissionPlanAndKind()
+    {
+        // Claude Code leaving its plan mode: the plan to approve, as the details too; the kind the
+        // turn knows for the call when the request does not say it.
+        const QString plan = u"# Porządki w notatkach\n\n1. Połączyć „Zakupy” i „Lista”\n2. Usunąć duplikaty"_s;
+        const QJsonObject params{
+                {u"toolCall"_s, QJsonObject{{u"toolCallId"_s, u"p1"_s},
+                                            {u"title"_s, u"Ready to code?"_s},
+                                            {u"rawInput"_s, QJsonObject{{u"plan"_s, plan}, {u"planFilePath"_s, u"/tmp/p.md"_s}}}}},
+                {u"options"_s, QJsonArray{QJsonObject{{u"optionId"_s, u"default"_s}, {u"name"_s, u"Yes"_s}, {u"kind"_s, u"allow_once"_s}},
+                                          QJsonObject{{u"optionId"_s, u"plan"_s}, {u"name"_s, u"No, keep planning"_s}, {u"kind"_s, u"reject_once"_s}}}}};
+        const std::optional<Permission> p = readPermission(params, {}, {{u"p1"_s, u"switch_mode"_s}});
+        QVERIFY(p);
+        QCOMPARE(p->plan, plan);
+        QCOMPARE(p->details, plan);
+        QCOMPARE(p->kind, u"switch_mode"_s);
+        // The request's own kind wins; no plan: none.
+        QJsonObject edit = params;
+        edit.insert(u"toolCall"_s, QJsonObject{{u"toolCallId"_s, u"p1"_s}, {u"kind"_s, u"edit"_s},
+                                              {u"rawInput"_s, QJsonObject{{u"plan"_s, 3}}}});
+        const std::optional<Permission> e = readPermission(edit, {}, {{u"p1"_s, u"switch_mode"_s}});
+        QCOMPARE(e->kind, u"edit"_s);
+        QCOMPARE(e->plan, QString());
+    }
+
+    void toolCallPaths()
+    {
+        // The files a call works on: its locations and its diffs' paths, each once.
+        TurnState state;
+        state.apply({{u"sessionUpdate"_s, u"tool_call"_s}, {u"toolCallId"_s, u"t"_s}, {u"title"_s, u"Edit Dom.md"_s},
+                     {u"kind"_s, u"edit"_s}, {u"status"_s, u"pending"_s},
+                     {u"locations"_s, QJsonArray{QJsonObject{{u"path"_s, u"/n/Dom.md"_s}, {u"line"_s, 3}}}}});
+        state.apply({{u"sessionUpdate"_s, u"tool_call_update"_s}, {u"toolCallId"_s, u"t"_s}, {u"status"_s, u"completed"_s},
+                     {u"content"_s, QJsonArray{QJsonObject{{u"type"_s, u"diff"_s}, {u"path"_s, u"/n/Dom.md"_s},
+                                                           {u"oldText"_s, u"a"_s}, {u"newText"_s, u"b"_s}},
+                                               QJsonObject{{u"type"_s, u"diff"_s}, {u"path"_s, u"/n/Ogród.md"_s},
+                                                           {u"newText"_s, u"ż"_s}}}}});
+        QCOMPARE(state.tools.size(), 1);
+        QCOMPARE(state.tools.first().paths, (QStringList{u"/n/Dom.md"_s, u"/n/Ogród.md"_s}));
+        QCOMPARE(state.tools.first().status, u"completed"_s);
+    }
+
     void cancel()
     {
         Agent agent;

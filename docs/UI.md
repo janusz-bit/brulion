@@ -1308,7 +1308,18 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   the first message of a day that day (`chatDay`: "Today", "Yesterday", "15 Nov"); a click on a link
   follows it (page:, tag:, ext: through `PageTools.openLink`, from the conversation's page), a long
   press or right-click has Copy (the message's Markdown) and "Show in the page" (the page at its
-  line). Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
+  line), **Quote** (`chatMessageQuote`: its text as a quote, "> …" lines, at the start of the field —
+  `WorkspaceChats.quote()`, core `chat::quoted`), **Edit from here** (`chatMessageEdit`, the user's
+  messages: as T3 Code's rewind — the message and every one after it come out of the page
+  (`WorkspaceChats.rewind()`, core `chat::truncated`: the page before it byte for byte), its turn
+  and its waiting messages stop, its text and pictures go back into the field; an AI agent's next
+  turn is a new session with what is left; a toast's **Undo** puts the page back while it did not
+  change since — `undoRewind()`, AppController's `m_rewindToasts`) and **Fork from here**
+  (`chatMessageFork`: a new conversation, today's, a copy of this one up to that message —
+  `WorkspaceChats.fork()`, core `chat::forked`, its journal line too — that goes on by itself with
+  the same partner and a session of its own; its frontmatter's `fork:` names the source,
+  docs/SYNTAX.md §14, and its header has a chip "Forked from …", `chatForkSource`, that opens it).
+  Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
   or the page names one: its menu, `chatPartnerMenu`, changes it for the next turns —
   `WorkspaceChats.setPartner()` writes the page's `partner:`), the page it is about (a chip that
   opens it), "Open the conversation as a page" (`chatOpenPage`) and, without the list, "New
@@ -1347,8 +1358,23 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   **Stop** (`chatStop`: `Workspace.chats.stop(path)`: nothing is written for that turn, the question
   stays for Try again, and the request itself ends — the model on the device stops writing, a
   provider's connection is closed —, so it holds up no other question).
+* **Writing on while it answers** (as T3 Code's queue): the field stays open; Enter (or the send
+  button, a clock then: `chatQueue`) puts the message in line — it waits under the answer as a
+  bubble with the accent's outline (`chatWaiting`) with **Send now** (`chatWaitingNow`), **Edit**
+  (`chatWaitingEdit`: back into the field, its pictures too) and **Remove** (`chatWaitingRemove`),
+  and goes by itself, a turn of its own, when the answer is written (`WorkspaceChats.queue()`,
+  `queued()`, `unqueue()`, `sendNow()`). **Ctrl+Enter** sends it now (`steer()`: the turn stops — an
+  agent takes no message in the middle of one — and it is answered first, with the question the
+  stopped turn did not answer). With an empty field the button is Stop. A turn that fails or is
+  stopped **holds** them (`chatHeld`: "2 messages wait: the answer before them stopped." with
+  **Resume**, `chatResume` → `resumeQueue()`); they are kept in the notebook's device state
+  (LocalStore `chat/queued`), so a restart keeps them, held, and they follow a rename.
+* **Questions asked before**: Up in an empty field brings back the user's questions of the
+  conversation, newest first (Down goes forward again, to an empty field; editing one makes it a
+  new message — `WorkspaceChats.prompts()`, core `chat::prompts`: without their pictures and the
+  first one's link to the page it is about).
 * **Several conversations at once**: every conversation has a turn of its own — one per
-  conversation (its field waits while its own turn runs, "The AI is answering…") —, and with a
+  conversation (a message written meanwhile waits for it: above) —, and with a
   provider on the network they all answer side by side. **The model on the device** answers one turn
   at a time: the others wait in line, in the order they were sent (`ChatTurn.queued`, its `place`):
   the conversation shows an hourglass and "Waiting for the model on this device: it answers another
@@ -1633,6 +1659,36 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
 * **Stop** (`WorkspaceChats.stop`): `session/cancel`, a question waiting answered "cancelled", the
   turn's commands ended, nothing more of that turn; a message sent meanwhile waits for the agent to
   end the cancelled turn.
+* **Approvals** (`chatApprovals` in the conversation's row, `chatNewApprovals` before a new one's
+  first message; menu `chatApprovalsMenu`; as T3 Code's permission modes): how the agent's
+  questions are answered — **Ask first** (`ask`, each one shown), **Allow note edits** (`edits`: a
+  change of a file — the call's kind `edit` or `move` — and reads go by themselves, commands and the
+  rest ask) or **Allow everything** (`all`); a plan to approve and a sign-in always ask
+  (`WorkspaceAgents::autoAnswer()`: the question's first `allow_once` option, else `allow_always`;
+  what was allowed shows as the turn's status, "Allowed by your approvals: Write Zgoda.md"). Kept
+  per conversation in the notebook's device state (LocalStore `chat/approvals`, following a rename)
+  — never in the page, which syncs from anywhere —; a new conversation gets the mode chosen last.
+* **A plan to approve** (Claude Code leaving its plan mode: a `switch_mode` call with the plan in
+  its input — acp::Permission::plan): the question shows the plan rendered as a message
+  (`chatQuestionPlan`, `WorkspaceChats.questionPlan()` through ChatMessageModel.render — escaped,
+  never the agent's HTML) instead of the input as JSON, with **Save the plan as a page**
+  (`chatSavePlan`: "Plan – <the conversation's name>.md" in the notebook's top folder, a link back
+  to the conversation under it — `savePlan()`), and the agent's options ("Yes", "No, keep planning").
+* **What a turn changed** (`chatChanges`, `ChatChanges.qml`, under the last answer once the turn
+  ended; as T3 Code's turn diff): "Changed 3 files" with **Undo these changes** (`chatChangesUndo`)
+  and × (`chatChangesDismiss`: kept as they are), a row per file (`chatChange`: its path — a tap
+  opens it —, changed / new / deleted, **Show the change** with a unified diff of its text before the
+  turn and now, `chatChangeDiff`). Followed by `WorkspaceAgents` while an agent of this device
+  answers (`m_tracking`): a file is kept as it was the moment the app first sees it named — a
+  question about its change (before the agent can make it), a tool call of the kinds edit, move or
+  delete naming it (`locations`, its diff's path: Claude Code changes files with tools of its own,
+  never asking the app) or the agent's `fs/write_text_file`; a snapshot that already holds the
+  call's change (the app saw the call late) is turned back with the call's diff
+  (`WorkspaceAgents::textBefore()`), or marked "not known before". Undo writes each file back as it
+  was (a file the turn made goes to the trash) unless it changed since — those stay, said in the
+  toast (`undoChanges()`). In memory until the conversation's next turn starts; not for an agent
+  on another computer (its files are there), nor for Brulion's own MCP tools (another process:
+  their writes are in the pages' history).
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
   program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one).
 

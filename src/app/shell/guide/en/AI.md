@@ -64,6 +64,10 @@ The AI **searches and reads the whole notebook** by itself — pages, the journa
 
 **Rename or delete** a conversation from its menu in the list (right-click, or a long press on the phone): the day stays in front of its name, and **Undo** in the message brings the old name or the deleted conversation back.
 
+**Write on while it answers.** A message you send meanwhile waits under the answer and goes by itself when the answer is written — several go one after another. **Send now** (or Ctrl+Enter) stops the answer and asks that one first; **Edit** puts it back in the field, **×** takes it away. When you stop an answer the waiting messages stay, with **Resume**. **Up** in an empty field brings back your earlier questions.
+
+**A message's menu** (right-click, or a long press): **Quote** puts its text as a quote into the field; **Edit from here** takes your message and everything after it out of the conversation and puts the message back in the field, to ask it differently (**Undo** in the message brings it all back); **Fork from here** starts a new conversation that continues from that message — try another way without losing this one (it links back: "Forked from …").
+
 The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the ✨ button spins. An answer goes on while you look at other pages and lands in its conversation.
 
 ## AI in the editor
@@ -98,6 +102,8 @@ On the computer, the AI chat can also be answered by an AI agent you run yoursel
 2. In the AI chat choose it as **who answers** a conversation.
 
 The agent works in the notebook's folder: it reads and changes your notes through Brulion — a page it changes is in the editor at once and in the page's **history** — and runs commands whose output you see in the conversation, with its plan and each step it takes. With **Brulion's tools** on (the default) it also gets `brulion-cli mcp` — search, queries, tasks, journals ([[Command line and AI agents]]). Before it changes a file or runs a command it asks — as its own settings say — and the question shows in the conversation, a file's change as a diff, with its answers (**Allow**, **Reject** …); when you are elsewhere in Brulion, a message says so, with **Open**. When it wants you to sign in, the conversation asks too; a sign-in in a terminal is named in the message (e.g. run `claude` and type `/login`). **Stop** cancels its turn.
+
+**Approvals.** The shield chip above the conversation says how its questions are answered: **Ask first** (each one waits for you), **Allow note edits** (changes of notes go by themselves, commands still ask) or **Allow everything**. A plan it asks you to approve (Claude Code's plan mode) always waits: it shows as a readable plan with **Save the plan as a page**. After a turn that changed notes, a card lists them — **Show the change** for each, and **Undo these changes** puts them back as they were (a note you changed since stays as you left it).
 
 Above the conversation, its **model**, **mode** (how much it may do without asking), **effort** and the rest are chips: tap one to choose — the agent remembers it for its next conversations, also before their first message. Next to them, how much of its memory the conversation uses and what it cost. Type `/` in the field for the agent's own commands (`/review`, `/compact` …). A conversation goes on in the same session of the agent even after Brulion is started again; one that changed meanwhile (written on the phone, answered by the assistant) starts a new session that gets all of it.
 

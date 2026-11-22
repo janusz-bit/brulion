@@ -73,6 +73,8 @@ namespace {
 /// The key of an agent's check (no conversation's path starts with it).
 const QString CheckKey = u"\x1f" "check"_s;
 const QString StoreKey = u"acp/sessions"_s;
+/// The approvals of conversations ({path → mode}) and the mode chosen last ("" key).
+const QString ApprovalsKey = u"chat/approvals"_s;
 
 /// The last line of `errors` that says something ("" none).
 [[maybe_unused]] QString lastLine(const QString &errors)
@@ -203,8 +205,29 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
         for (Process *p : std::as_const(m_processes))
             p->client->close(path);
         store(path, std::nullopt);
+        if (m_changes.remove(path))
+            Q_EMIT changesChanged(path);
+        if (LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr) {
+            QJsonObject all = local->get(ApprovalsKey).toObject();
+            if (all.contains(path)) {
+                all.remove(path);
+                local->set(ApprovalsKey, all);
+            }
+        }
     });
     connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
+        // (Its approvals and the changes of its last turn go along, also while it answers.)
+        if (LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr) {
+            QJsonObject all = local->get(ApprovalsKey).toObject();
+            if (all.contains(from)) {
+                all.insert(to, all.take(from));
+                local->set(ApprovalsKey, all);
+            }
+        }
+        if (m_changes.contains(from)) {
+            m_changes.insert(to, m_changes.take(from));
+            Q_EMIT changesChanged(to);
+        }
         if (m_turns.contains(from))
             return;
         for (Process *p : std::as_const(m_processes))
@@ -570,9 +593,11 @@ void WorkspaceAgents::connectClient(Process *p)
         if (m_turns.contains(path))
             Q_EMIT status(path, text);
     });
-    connect(client, &acp::Client::activityChanged, this, [this](const QString &path) {
-        if (m_turns.contains(path))
-            activityDue(path);
+    connect(client, &acp::Client::activityChanged, this, [this, client](const QString &path) {
+        if (!m_turns.contains(path))
+            return;
+        followTools(client, path); // (at once: a file is kept before the agent changes it)
+        activityDue(path);
     });
     connect(client, &acp::Client::sessionChanged, this, [this, id](const QString &path) {
         learn(id, path);
@@ -602,7 +627,18 @@ void WorkspaceAgents::connectClient(Process *p)
         Q_EMIT checked(id, true, text);
     });
     connect(client, &acp::Client::permissionAsked, this,
-            [this, name](const QString &path, const acp::Permission &permission) {
+            [this, name, client](const QString &path, const acp::Permission &permission) {
+                // The files it would change, as they are before it does (it waits for the answer).
+                for (const acp::Diff &d : permission.diffs)
+                    snapshot(path, notebookPath(d.path));
+                // The conversation's approvals may answer it by themselves (never a plan or a sign-in).
+                if (const QString option = autoAnswer(approvals(path), permission);
+                    !option.isEmpty() && m_turns.contains(path)) {
+                    client->answer(path, option);
+                    Q_EMIT autoAnswered(path, tr("Allowed by your approvals: %1")
+                                                      .arg(permission.title.isEmpty() ? name() : permission.title));
+                    return;
+                }
                 setQuestion(path, permissionQuestion(name(), permission));
             });
     connect(client, &acp::Client::authRequired, this,
@@ -960,10 +996,17 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     }
     m_turns.insert(path, id);
     m_seen.insert(path, int(history.size()) + 1);
+    // What this turn changes in the notebook (of this device's agents: one on another computer
+    // changes that computer's files).
+    if (m_changes.remove(path))
+        Q_EMIT changesChanged(path);
+    if (!agent->isRemote())
+        m_tracking.insert(path, {});
     noteWorking();
     Q_EMIT status(path, tr("%1 is working…").arg(agent->name));
     if (!p->client->prompt(path, input)) {
         m_turns.remove(path);
+        m_tracking.remove(path);
         m_remoteTurns.remove(path);
         noteWorking();
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
@@ -1046,6 +1089,7 @@ void WorkspaceAgents::stop(const QString &path)
         store(path, record);
     }
     m_released.removeIf([&path](const auto &entry) { return entry.value().first == path; });
+    settleChanges(path);
     const QString id = m_turns.take(path);
     m_remoteTurns.remove(path);
     noteWorking();
@@ -1304,6 +1348,7 @@ WorkspaceAgents::Question WorkspaceAgents::permissionQuestion(const QString &nam
     }
     if (!permission.diffs.isEmpty())
         q.diff = permission.diffs.first();
+    q.plan = permission.plan;
     return q;
 }
 
@@ -1356,6 +1401,7 @@ void WorkspaceAgents::clearQuestion(const QString &path)
 
 void WorkspaceAgents::finish(const QString &path)
 {
+    settleChanges(path);
     m_remoteTurns.remove(path);
     m_released.removeIf([&path](const auto &entry) { return entry.value().first == path; });
     m_turns.remove(path);
@@ -1646,7 +1692,7 @@ void WorkspaceAgents::handle(Process *p, const QString &key, const QJsonValue &i
     if (method == u"fs/read_text_file")
         readFile(p->client, id, params);
     else if (method == u"fs/write_text_file")
-        writeFile(p->client, id, params);
+        writeFile(p->client, key, id, params);
     else if (method.startsWith(u"terminal/"_s))
         terminalRequest(p, key, id, method, params);
     else
@@ -1690,7 +1736,7 @@ void WorkspaceAgents::readFile(acp::Client *client, const QJsonValue &id, const 
     client->respond(id, QJsonObject{{u"content"_s, lines(text, params.value(u"line"_s).toInt(), params.value(u"limit"_s).toInt())}});
 }
 
-void WorkspaceAgents::writeFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params)
+void WorkspaceAgents::writeFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params)
 {
     const QString path = notebookPath(params.value(u"path"_s).toString());
     if (path.isEmpty()) {
@@ -1701,6 +1747,7 @@ void WorkspaceAgents::writeFile(acp::Client *client, const QJsonValue &id, const
         client->respondError(id, acp::InvalidParams, u"%1 is an encrypted page: it is changed only in Brulion"_s.arg(path));
         return;
     }
+    snapshot(key, path); // (the turn's changes: undone from here)
     if (!m_workspace->write(path, params.value(u"content"_s).toString())) {
         client->respondError(id, -32603, u"%1 could not be written"_s.arg(path));
         return;
@@ -1851,6 +1898,211 @@ void WorkspaceAgents::endTerminals(const QString &agent, const QString &key)
         delete t;
     }
 #endif
+}
+
+
+// ---- approvals ------------------------------------------------------------------------------------------
+
+QString WorkspaceAgents::approvals(const QString &path) const
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local)
+        return u"ask"_s;
+    const QJsonObject all = local->get(ApprovalsKey).toObject();
+    const QString mode = all.value(path.isEmpty() ? QString() : path).toString();
+    const QString chosen = !mode.isEmpty() ? mode : all.value(QString()).toString();
+    return chosen == u"edits" || chosen == u"all" ? chosen : u"ask"_s;
+}
+
+void WorkspaceAgents::setApprovals(const QString &path, const QString &mode)
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local)
+        return;
+    const QString value = mode == u"edits" || mode == u"all" ? mode : u"ask"_s;
+    QJsonObject all = local->get(ApprovalsKey).toObject();
+    all.insert(QString(), value);
+    if (!path.isEmpty())
+        all.insert(path, value);
+    // (At most the newest 500 conversations: the oldest by their names' dates go first.)
+    while (all.size() > 501) {
+        const QStringList keys = all.keys();
+        all.remove(keys.value(keys.first().isEmpty() ? 1 : 0));
+    }
+    local->set(ApprovalsKey, all);
+    Q_EMIT approvalsChanged();
+}
+
+QString WorkspaceAgents::autoAnswer(const QString &mode, const acp::Permission &permission)
+{
+    if (mode != u"edits" && mode != u"all")
+        return {};
+    // A plan is the user's to approve, whatever the mode.
+    if (!permission.plan.isEmpty() || permission.kind == u"switch_mode")
+        return {};
+    static const QStringList edits{u"edit"_s, u"move"_s, u"read"_s, u"search"_s, u"think"_s};
+    if (mode == u"edits" && !edits.contains(permission.kind))
+        return {};
+    for (const char *kind : {"allow_once", "allow_always"}) {
+        for (const acp::PermissionOption &o : permission.options) {
+            if (o.kind == QLatin1StringView(kind))
+                return o.id;
+        }
+    }
+    return {};
+}
+
+QString WorkspaceAgents::questionPlan(const QString &path) const
+{
+    return m_questions.value(path).plan;
+}
+
+// ---- the files a turn changes ---------------------------------------------------------------------------
+
+QString WorkspaceAgents::textBefore(const QString &snapshot, const std::optional<acp::Diff> &diff, bool done,
+                                    bool *known)
+{
+    if (known)
+        *known = true;
+    if (!diff || diff->newText.isEmpty() || diff->oldText == diff->newText)
+        return snapshot;
+    // (A diff cut short tells nothing sure.)
+    const bool whole = diff->oldText.size() < acp::MaxDiffChars && diff->newText.size() < acp::MaxDiffChars;
+    const bool hasNew = snapshot.contains(diff->newText);
+    const bool hasOld = !diff->oldText.isEmpty() && snapshot.contains(diff->oldText);
+    if (!hasNew || hasOld) {
+        // Not changed yet — unless the call is done and the file says nothing either way.
+        if (done && !hasNew && !hasOld && known)
+            *known = false;
+        return snapshot;
+    }
+    if (!whole || snapshot.count(diff->newText) != 1) {
+        if (known)
+            *known = !done;
+        return snapshot;
+    }
+    QString before = snapshot;
+    before.replace(before.indexOf(diff->newText), diff->newText.size(), diff->oldText);
+    return before;
+}
+
+void WorkspaceAgents::snapshot(const QString &path, const QString &file, const std::optional<acp::Diff> &diff, bool done)
+{
+    const auto it = m_tracking.find(path);
+    if (it == m_tracking.end() || file.isEmpty() || file.compare(path, Qt::CaseInsensitive) == 0)
+        return;
+    if (std::ranges::any_of(*it, [&file](const FileChange &c) { return c.path == file; }))
+        return;
+    FileChange change;
+    change.path = file;
+    change.existed = QFileInfo::exists(m_workspace->absoluteFilePath(file));
+    bool ok = false;
+    const QString text = change.existed ? m_workspace->read(file, &ok) : QString();
+    if (change.existed && !ok)
+        return; // (no text: nothing to put back)
+    change.before = textBefore(text, diff, done, &change.known);
+    // A file the call made already (its diff has no old text, the file is its new one).
+    if (diff && diff->oldText.isEmpty() && change.existed && text == diff->newText && done)
+        change.existed = false;
+    it->append(change);
+}
+
+void WorkspaceAgents::followTools(acp::Client *client, const QString &path)
+{
+    if (!m_tracking.contains(path))
+        return;
+    const acp::TurnState *turn = client->turn(path);
+    if (!turn)
+        turn = client->lastTurn(path); // (it just ended)
+    if (!turn)
+        return;
+    static const QStringList changing{u"edit"_s, u"delete"_s, u"move"_s};
+    for (const acp::ToolCall &call : turn->tools) {
+        if (!changing.contains(call.kind) && !call.diff)
+            continue;
+        const bool done = call.status == u"completed" || call.status == u"failed";
+        for (const QString &file : call.paths) {
+            const QString inNotebook = notebookPath(file);
+            snapshot(path, inNotebook, call.diff && call.diff->path == file ? call.diff : std::nullopt, done);
+        }
+    }
+}
+
+void WorkspaceAgents::settleChanges(const QString &path)
+{
+    const auto it = m_tracking.find(path);
+    if (it == m_tracking.end())
+        return;
+    // (The calls' last updates: a file named only when the call ended.)
+    if (Process *p = m_processes.value(m_turns.value(path)))
+        followTools(p->client, path);
+    QList<FileChange> changed;
+    for (FileChange c : m_tracking.take(path)) {
+        c.exists = QFileInfo::exists(m_workspace->absoluteFilePath(c.path));
+        bool ok = false;
+        c.after = c.exists ? m_workspace->read(c.path, &ok) : QString();
+        if (c.exists && !ok)
+            continue;
+        if (c.exists == c.existed && c.after == c.before)
+            continue; // (nothing changed in the end)
+        changed.append(c);
+    }
+    if (changed.isEmpty() && !m_changes.contains(path))
+        return;
+    if (changed.isEmpty())
+        m_changes.remove(path);
+    else
+        m_changes.insert(path, changed);
+    Q_EMIT changesChanged(path);
+}
+
+QVariantList WorkspaceAgents::changes(const QString &path) const
+{
+    QVariantList out;
+    for (const FileChange &c : m_changes.value(path))
+        out.append(QVariantMap{{u"path"_s, c.path},
+                               {u"oldText"_s, c.before},
+                               {u"newText"_s, c.after},
+                               {u"existed"_s, c.existed},
+                               {u"exists"_s, c.exists},
+                               {u"known"_s, c.known}});
+    return out;
+}
+
+QVariantMap WorkspaceAgents::undoChanges(const QString &path)
+{
+    int undone = 0;
+    QStringList skipped;
+    const QList<FileChange> list = m_changes.take(path);
+    for (auto it = list.crbegin(); it != list.crend(); ++it) {
+        const FileChange &c = *it;
+        const bool exists = QFileInfo::exists(m_workspace->absoluteFilePath(c.path));
+        bool ok = false;
+        const QString now = exists ? m_workspace->read(c.path, &ok) : QString();
+        // Only what is still as the turn left it (the user's own changes since stay).
+        if (!c.known || exists != c.exists || (exists && (!ok || now != c.after))) {
+            skipped << c.path;
+            continue;
+        }
+        bool done = false;
+        if (c.existed)
+            done = m_workspace->write(c.path, c.before);
+        else
+            done = !m_workspace->deletePage(c.path).isEmpty();
+        if (done)
+            ++undone;
+        else
+            skipped << c.path;
+    }
+    if (!list.isEmpty())
+        Q_EMIT changesChanged(path);
+    return {{u"undone"_s, undone}, {u"skipped"_s, skipped}};
+}
+
+void WorkspaceAgents::forgetChanges(const QString &path)
+{
+    if (m_changes.remove(path))
+        Q_EMIT changesChanged(path);
 }
 
 // ---- the record of sessions ---------------------------------------------------------------------------

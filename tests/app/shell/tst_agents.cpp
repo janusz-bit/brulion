@@ -400,6 +400,227 @@ private Q_SLOTS:
         QCOMPARE(ws->read(path), before);
     }
 
+    /// Messages written while a turn runs wait for it (as T3 Code's queue): they go one by one
+    /// when it answers; a stop holds them until Resume; Send now stops the turn and goes first;
+    /// they are kept in the notebook's device state over a restart, held then.
+    void queue()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        const QString path = chats->send(QString(), u"Proszę czekaj"_s, QString(), {}, u"acp:fake"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        QTRY_VERIFY_WITH_TIMEOUT(logged(u"session/prompt"_s).size() == 1, 20000);
+        QVERIFY(turn->running());
+        // (send() itself waits for no turn: it refuses.)
+        QCOMPARE(chats->send(path, u"Nie teraz"_s), QString());
+        QVERIFY(chats->queue(path, u"Po pierwsze: zażółć"_s));
+        QVERIFY(chats->queue(path, u"Po drugie: gęślą jaźń"_s));
+        QCOMPARE(chats->queued(path).size(), 2);
+        QCOMPARE(chats->queued(path).first().toMap().value(u"text"_s).toString(), u"Po pierwsze: zażółć"_s);
+        QVERIFY(!chats->queueHeld(path));
+        // Stopped: they are held.
+        chats->stop(path);
+        QVERIFY(!turn->running());
+        QVERIFY(chats->queueHeld(path));
+        QCOMPARE(chats->queued(path).size(), 2);
+        // Kept over a restart (held then too).
+        const QString root = ws->rootPath();
+        ws.reset();
+        ws = open({fake()}, root);
+        chats = ws->chats();
+        turn = chats->turn(path);
+        QCOMPARE(chats->queued(path).size(), 2);
+        QVERIFY(chats->queueHeld(path));
+        // Resumed: the first goes, its answer sends the second, then nothing waits.
+        QVERIFY(chats->resumeQueue(path));
+        QVERIFY(turn->running());
+        QCOMPARE(chats->queued(path).size(), 1);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->queued(path).isEmpty() && !turn->running(), 20000);
+        const QString page = ws->read(path);
+        QVERIFY2(page.contains(u"- 🧑 Po pierwsze: zażółć\n  czas:: 2026-11-20 09:15\n- 🤖 Odpowiedź na: Po pierwsze: zażółć\n"_s), qPrintable(page));
+        QVERIFY2(page.endsWith(u"- 🧑 Po drugie: gęślą jaźń\n  czas:: 2026-11-20 09:15\n- 🤖 Odpowiedź na: Po drugie: gęślą jaźń\n  czas:: 2026-11-20 09:15\n"_s),
+                 qPrintable(page));
+
+        // Send now: the turn stops, that one is answered first; one taken out goes back with its text.
+        QCOMPARE(chats->send(path, u"Znowu czekaj"_s), path);
+        QTRY_VERIFY(turn->running());
+        QVERIFY(chats->queue(path, u"Pierwsza w kolejce"_s));
+        QVERIFY(chats->queue(path, u"Druga w kolejce"_s));
+        const int second = chats->queued(path).at(1).toMap().value(u"id"_s).toInt();
+        QCOMPARE(chats->unqueue(path, chats->queued(path).first().toMap().value(u"id"_s).toInt(), true),
+                 u"Pierwsza w kolejce"_s);
+        QVERIFY(chats->sendNow(path, second));
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running() && chats->queued(path).isEmpty(), 20000);
+        QVERIFY2(ws->read(path).endsWith(u"- 🧑 Druga w kolejce\n  czas:: 2026-11-20 09:15\n- 🤖 Odpowiedź na: Druga w kolejce\n  czas:: 2026-11-20 09:15\n"_s),
+                 qPrintable(ws->read(path)));
+        // Steer with nothing running: sent at once.
+        QVERIFY(chats->steer(path, u"Od razu"_s));
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QVERIFY(ws->read(path).endsWith(u"- 🤖 Odpowiedź na: Od razu\n  czas:: 2026-11-20 09:15\n"_s));
+        // A conversation renamed: its waiting messages go along.
+        QCOMPARE(chats->send(path, u"Trzecie czekaj"_s), path);
+        QTRY_VERIFY(turn->running());
+        QVERIFY(chats->queue(path, u"Za nazwą"_s));
+        chats->stop(path);
+        const QString renamed = chats->rename(path, u"Nowa nazwa"_s);
+        QCOMPARE(renamed, u"AI/2026-11-20 Nowa nazwa.md"_s);
+        QCOMPARE(chats->queued(renamed).size(), 1);
+        QVERIFY(chats->queued(path).isEmpty());
+        QVERIFY(chats->queueHeld(renamed));
+    }
+
+    /// "Edit from here" takes the message and the rest out (an agent's next turn: a new session
+    /// with what is left; Undo puts them back while nothing changed since); "Fork from here" copies
+    /// the conversation up to a message into one that goes on by itself.
+    void rewindAndFork()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        const QString path = chats->send(QString(), u"Co mam jutro?"_s, u"Dom"_s, {}, u"acp:fake"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QCOMPARE(chats->send(path, u"A pojutrze?"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QCOMPARE(logged(u"session/new"_s).size(), 1);
+        QCOMPARE(chats->prompts(path), (QStringList{u"A pojutrze?"_s, u"Co mam jutro?"_s}));
+
+        const QString full = ws->read(path);
+        const chat::Conversation c = chat::parse(full);
+        QCOMPARE(c.messages.size(), 4);
+        QSignalSpy rewound(chats, &WorkspaceChats::rewound);
+        // Only a user's message: an answer is no place to edit from.
+        QCOMPARE(chats->rewind(path, c.messages.at(1).line), QString());
+        QCOMPARE(chats->rewind(path, c.messages.at(2).line), u"A pojutrze?"_s);
+        QCOMPARE(rewound.size(), 1);
+        QCOMPARE(chat::parse(ws->read(path)).messages.size(), 2);
+        // Undo while nothing changed: all back.
+        QVERIFY(chats->undoRewind(path));
+        QCOMPARE(ws->read(path), full);
+        QVERIFY(!chats->undoRewind(path)); // (once)
+        // Again, and on: the agent gets a new session with what is left.
+        QCOMPARE(chats->rewind(path, c.messages.at(2).line), u"A pojutrze?"_s);
+        QCOMPARE(chats->send(path, u"A w niedzielę?"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QCOMPARE(logged(u"session/new"_s).size(), 2);
+        const QJsonArray prompt = promptOf(logged(u"session/prompt"_s).last());
+        QString all;
+        for (const QJsonValue &b : prompt)
+            all += b.toObject().value(u"text"_s).toString() + u'\n';
+        QVERIFY2(all.contains(u"Co mam jutro?"_s) && !all.contains(u"A pojutrze?"_s), qPrintable(all));
+        // Not undone once the page changed.
+        QVERIFY(!chats->undoRewind(path));
+
+        // Fork from the first answer: a copy up to it, the same partner, the source named.
+        const chat::Conversation now = chat::parse(ws->read(path));
+        const QString forked = chats->fork(path, now.messages.at(1).line);
+        QCOMPARE(forked, u"AI/2026-11-20 Co mam jutro 2.md"_s);
+        QCOMPARE(chats->forkedFrom(forked), path);
+        QCOMPARE(chats->partnerOf(forked), u"acp:fake"_s);
+        QCOMPARE(chat::parse(ws->read(forked)).messages.size(), 2);
+        QVERIFY(ws->read(ws->journalPath(u"2026-11-20"_s)).contains(u"[[AI/2026-11-20 Co mam jutro 2]]"_s));
+        // It goes on by itself: a session of its own.
+        QCOMPARE(chats->send(forked, u"A w poniedziałek?"_s), forked);
+        shell::ChatTurn *forkTurn = chats->turn(forked);
+        QTRY_VERIFY_WITH_TIMEOUT(!forkTurn->running(), 20000);
+        QCOMPARE(logged(u"session/new"_s).size(), 3);
+        QCOMPARE(chat::parse(ws->read(path)).messages.size(), 4); // (the source as it was)
+        QCOMPARE(chats->quote(u"Pierwsza\n![[a.png]]"_s), u"> Pierwsza\n\n"_s);
+    }
+
+    /// Approvals: "edits" lets a change of a file go by itself, "all" too, never a plan; "ask"
+    /// shows each question. A plan to approve is the question's plan, saved as a page on request.
+    void approvalsAndPlans()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        QCOMPARE(chats->approvals(QString()), u"ask"_s);
+        chats->setApprovals(QString(), u"edits"_s);
+        QCOMPARE(chats->approvals(QString()), u"edits"_s);
+        const QString path = chats->send(QString(), u"Daj mi pozwolenie"_s, QString(), {}, u"acp:fake"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        // (A new conversation has the mode chosen last.)
+        QCOMPARE(chats->approvals(path), u"edits"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QVERIFY2(ws->read(path).contains(u"- 🤖 Zapisano."_s), qPrintable(ws->read(path)));
+        QVERIFY(!chats->asking(path));
+        // Asked again with "ask".
+        chats->setApprovals(path, u"ask"_s);
+        QCOMPARE(chats->approvals(path), u"ask"_s);
+        QCOMPARE(chats->send(path, u"Jeszcze pozwolenie"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->asking(path), 20000);
+        chats->answer(path, u"Reject"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        // A plan asks whatever the mode: as a plan, saved as a page.
+        chats->setApprovals(path, u"all"_s);
+        QCOMPARE(chats->send(path, u"Proszę zatwierdź"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->asking(path), 20000);
+        QCOMPARE(chats->questionPlan(path), u"# Porządki\n\n1. Połączyć notatki\n2. Usunąć duplikaty"_s);
+        QVERIFY(chats->questionText(path).startsWith(u"Fałszywy asks: Ready to code?\n# Porządki"_s));
+        const QString saved = chats->savePlan(path);
+        QCOMPARE(saved, u"Plan – Daj mi pozwolenie.md"_s);
+        QVERIFY(ws->read(saved).startsWith(u"# Porządki\n\n1. Połączyć notatki\n2. Usunąć duplikaty\n\n"_s));
+        QVERIFY(ws->read(saved).contains(u"[[AI/2026-11-20 Daj mi pozwolenie]]"_s));
+        chats->answer(path, u"Yes"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QVERIFY(ws->read(path).contains(u"- 🤖 Plan przyjęty."_s));
+        QCOMPARE(chats->questionPlan(path), QString());
+        // Kept per conversation in the device state, following a rename.
+        const QString renamed = chats->rename(path, u"Zgody"_s);
+        QCOMPARE(chats->approvals(renamed), u"all"_s);
+    }
+
+    /// The files a turn changed (as T3 Code's turn diff), whichever way the agent changed them —
+    /// a change it asked for, its own edit of a file it names, fs/write_text_file —, and Undo:
+    /// each back as it was, unless it changed since.
+    void turnChanges()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        const QString dom = ws->read(u"Dom.md"_s);
+        // Its own edit of a file it names (Claude Code's Edit).
+        const QString path = chats->send(QString(), u"Proszę edytuj"_s, QString(), {}, u"acp:fake"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QVERIFY(ws->read(u"Dom.md"_s).contains(u"Zapłacić czynsz i prąd"_s));
+        QVariantList changes = chats->changes(path);
+        QCOMPARE(changes.size(), 1);
+        QVariantMap change = changes.first().toMap();
+        QCOMPARE(change.value(u"path"_s).toString(), u"Dom.md"_s);
+        QCOMPARE(change.value(u"oldText"_s).toString(), dom);
+        QVERIFY(change.value(u"known"_s).toBool());
+        QVERIFY(change.value(u"existed"_s).toBool());
+        QVERIFY(!chats->undoChanges(path).isEmpty());
+        QCOMPARE(ws->read(u"Dom.md"_s), dom);
+        QVERIFY(chats->changes(path).isEmpty());
+
+        // A change it asked for (a new file): undone to the trash.
+        chats->setApprovals(path, u"edits"_s);
+        QCOMPARE(chats->send(path, u"Daj pozwolenie"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        changes = chats->changes(path);
+        QCOMPARE(changes.size(), 1);
+        change = changes.first().toMap();
+        QCOMPARE(change.value(u"path"_s).toString(), u"Zgoda.md"_s);
+        QVERIFY(!change.value(u"existed"_s).toBool());
+        QVERIFY(change.value(u"exists"_s).toBool());
+        QCOMPARE(change.value(u"newText"_s).toString(), u"- zgoda\n"_s);
+        // Changed since by the user: left as it is.
+        QVERIFY(ws->write(u"Zgoda.md"_s, u"- moja zmiana\n"_s));
+        chats->undoChanges(path);
+        QCOMPARE(ws->read(u"Zgoda.md"_s), u"- moja zmiana\n"_s);
+
+        // Written through the client; a new turn forgets the last one's.
+        QCOMPARE(chats->send(path, u"Proszę zapisz"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        changes = chats->changes(path);
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(changes.first().toMap().value(u"path"_s).toString(), u"Od agenta.md"_s);
+        QCOMPARE(chats->send(path, u"Coś innego"_s), path);
+        QVERIFY(chats->changes(path).isEmpty() || turn->running());
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QVERIFY(chats->changes(path).isEmpty());
+    }
+
     void stop()
     {
         auto ws = open({fake()});
@@ -809,6 +1030,68 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 1);
         chats->setAgents({fake()});
         QCOMPARE(changed.size(), 1);
+    }
+
+    void textBefore_data()
+    {
+        QTest::addColumn<QString>("snapshot");
+        QTest::addColumn<QString>("oldText");
+        QTest::addColumn<QString>("newText");
+        QTest::addColumn<bool>("hasDiff");
+        QTest::addColumn<bool>("done");
+        QTest::addColumn<QString>("before");
+        QTest::addColumn<bool>("known");
+        QTest::newRow("no diff") << u"- a\n"_s << QString() << QString() << false << false << u"- a\n"_s << true;
+        QTest::newRow("before the change") << u"- zapłacić czynsz\n"_s << u"czynsz"_s << u"czynsz i prąd"_s << true << false
+                                           << u"- zapłacić czynsz\n"_s << true;
+        QTest::newRow("after it: turned back") << u"- zapłacić prąd\n"_s << u"czynsz"_s << u"prąd"_s << true << true
+                                               << u"- zapłacić czynsz\n"_s << true;
+        QTest::newRow("a whole file written") << u"- nowe\n"_s << u"- stare\n"_s << u"- nowe\n"_s << true << true
+                                              << u"- stare\n"_s << true;
+        QTest::newRow("the new text twice: not sure") << u"ż ż"_s << u"a"_s << u"ż"_s << true << true << u"ż ż"_s << false;
+        QTest::newRow("done, neither text there") << u"inne"_s << u"a"_s << u"b"_s << true << true << u"inne"_s << false;
+        QTest::newRow("pending, neither there yet") << u"inne"_s << u"a"_s << u"b"_s << true << false << u"inne"_s << true;
+    }
+    void textBefore()
+    {
+        QFETCH(QString, snapshot);
+        QFETCH(QString, oldText);
+        QFETCH(QString, newText);
+        QFETCH(bool, hasDiff);
+        QFETCH(bool, done);
+        QFETCH(QString, before);
+        QFETCH(bool, known);
+        bool isKnown = false;
+        const std::optional<acp::Diff> diff = hasDiff ? std::optional<acp::Diff>(acp::Diff{u"x.md"_s, oldText, newText})
+                                                      : std::nullopt;
+        QCOMPARE(WorkspaceAgents::textBefore(snapshot, diff, done, &isKnown), before);
+        QCOMPARE(isKnown, known);
+    }
+
+    void autoAnswers()
+    {
+        acp::Permission edit{u"Edit Dom.md"_s, QString(), {{u"a"_s, u"Allow"_s, u"allow_once"_s}, {u"r"_s, u"Reject"_s, u"reject_once"_s}}};
+        edit.kind = u"edit"_s;
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"ask"_s, edit), QString());
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"edits"_s, edit), u"a"_s);
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, edit), u"a"_s);
+        acp::Permission run = edit;
+        run.kind = u"execute"_s;
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"edits"_s, run), QString());
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, run), u"a"_s);
+        // Only allow_always offered: that one.
+        acp::Permission always{u"Fetch"_s, QString(), {{u"aa"_s, u"Always"_s, u"allow_always"_s}, {u"r"_s, u"No"_s, u"reject_once"_s}}};
+        always.kind = u"fetch"_s;
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, always), u"aa"_s);
+        // Never a plan, never without an allow.
+        acp::Permission plan = edit;
+        plan.kind = u"switch_mode"_s;
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, plan), QString());
+        plan.kind = u"edit"_s;
+        plan.plan = u"# Plan"_s;
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, plan), QString());
+        acp::Permission rejectOnly{u"x"_s, QString(), {{u"r"_s, u"No"_s, u"reject_once"_s}}};
+        QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, rejectOnly), QString());
     }
 
     void pureParts()

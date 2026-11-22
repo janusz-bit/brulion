@@ -399,13 +399,18 @@ Conversation parse(QStringView content)
     // answers.
     if (!lines.isEmpty() && lines.first().trimmed() == u"---") {
         static const QRegularExpression partner(u"^partner:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
-        QString named;
+        static const QRegularExpression fork(u"^fork:[ \\t]*[\"']?\\[\\[([^\\[\\]|#]+)(?:[|#][^\\[\\]]*)?\\]\\][\"']?[ \\t]*$"_s,
+                                             QRegularExpression::CaseInsensitiveOption);
+        QString named, forkedFrom;
         for (qsizetype j = 1; j < lines.size(); ++j) {
             if (lines.at(j).trimmed() == u"---" || lines.at(j).trimmed() == u"...") {
                 i = j + 1;
                 conversation.partner = named;
+                conversation.fork = forkedFrom;
                 break;
             }
+            if (const auto m = fork.matchView(lines.at(j)); m.hasMatch())
+                forkedFrom = m.captured(1).trimmed();
             if (const auto m = partner.matchView(lines.at(j)); m.hasMatch()) {
                 named = m.captured(1).trimmed();
                 if (named.size() >= 2 && (named.front() == u'"' || named.front() == u'\'')
@@ -777,6 +782,128 @@ QString preview(QStringView markdown, int max)
     if (out.size() > max)
         out = cutAt(out, std::max(1, max - 1)).trimmed() + u'…';
     return out;
+}
+
+// ---- rewinding and forking ------------------------------------------------------------------------
+
+namespace {
+
+/// Where line `line` (0-based) of `content` starts; content.size() past its last line.
+qsizetype lineStart(QStringView content, int line)
+{
+    qsizetype at = 0;
+    for (int i = 0; i < line; ++i) {
+        const qsizetype end = content.indexOf(u'\n', at);
+        if (end < 0)
+            return content.size();
+        at = end + 1;
+    }
+    return at;
+}
+
+} // namespace
+
+QString truncated(const QString &content, int from)
+{
+    const Conversation conversation = parse(content);
+    if (from < 0 || from >= conversation.messages.size())
+        return content;
+    return content.left(lineStart(content, conversation.messages.at(from).line));
+}
+
+QString setFrontmatterValue(const QString &content, QStringView key, QStringView value)
+{
+    const QString name = key.trimmed().toString();
+    const QString text = value.trimmed().toString();
+    if (name.isEmpty())
+        return content;
+    const QString newline = content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+    const auto lineEnd = [&](qsizetype from) {
+        const qsizetype end = content.indexOf(u'\n', from);
+        return end < 0 ? content.size() : end + 1;
+    };
+    const auto bare = [&](qsizetype from, qsizetype to) {
+        QStringView line = QStringView(content).mid(from, to - from);
+        while (line.endsWith(u'\n') || line.endsWith(u'\r'))
+            line.chop(1);
+        return line;
+    };
+    const QString entry = name + u": "_s + text;
+    if (bare(0, lineEnd(0)).trimmed() == u"---") {
+        const QRegularExpression own(u"^"_s + QRegularExpression::escape(name) + u"[ \\t]*:"_s,
+                                     QRegularExpression::CaseInsensitiveOption);
+        qsizetype at = lineEnd(0);
+        while (at < content.size()) {
+            const qsizetype end = lineEnd(at);
+            const QStringView line = bare(at, end);
+            if (line.trimmed() == u"---" || line.trimmed() == u"...")
+                return text.isEmpty() ? content : content.left(at) + entry + newline + content.mid(at);
+            if (own.matchView(line).hasMatch()) {
+                if (text.isEmpty())
+                    return content.left(at) + content.mid(end);
+                return content.left(at) + entry + content.mid(at + line.size(), end - at - line.size())
+                       + content.mid(end);
+            }
+            at = end;
+        }
+    }
+    if (text.isEmpty())
+        return content;
+    return u"---"_s + newline + entry + newline + u"---"_s + newline + content;
+}
+
+QString forkLink(QStringView source)
+{
+    QString title = source.trimmed().toString();
+    if (title.endsWith(u".md"_s, Qt::CaseInsensitive))
+        title.chop(3);
+    return u"\"[["_s + title + u"]]\""_s;
+}
+
+QString forked(const QString &content, int upTo, QStringView source)
+{
+    const Conversation conversation = parse(content);
+    if (upTo < 0 || upTo >= conversation.messages.size())
+        return {};
+    QString out = content.left(lineStart(content, conversation.messages.at(upTo).endLine + 1));
+    if (!out.isEmpty() && !out.endsWith(u'\n'))
+        out += content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+    return source.trimmed().isEmpty() ? out : setFrontmatterValue(out, u"fork", forkLink(source));
+}
+
+QStringList prompts(const Conversation &conversation)
+{
+    QStringList out;
+    static const QRegularExpression about(u"[ \\t]*\\(\\[\\[[^\\[\\]]+\\]\\]\\)[ \\t]*$"_s);
+    for (qsizetype i = conversation.messages.size() - 1; i >= 0; --i) {
+        const Message &m = conversation.messages.at(i);
+        if (m.role != Role::User)
+            continue;
+        QString text = withoutPictures(m.text);
+        if (i == 0 || std::none_of(conversation.messages.cbegin(), conversation.messages.cbegin() + i,
+                                   [](const Message &before) { return before.role == Role::User; })) {
+            // (The first question's link to the page it is about went along by itself.)
+            const qsizetype end = text.indexOf(u'\n');
+            QString first = text.left(end < 0 ? text.size() : end);
+            first.remove(about);
+            text = end < 0 ? first : first + text.mid(end);
+        }
+        text = text.trimmed();
+        if (!text.isEmpty() && !out.contains(text))
+            out.append(text);
+    }
+    return out;
+}
+
+QString quoted(QStringView markdown)
+{
+    const QString text = withoutPictures(markdown).trimmed();
+    if (text.isEmpty())
+        return {};
+    QStringList lines;
+    for (const QStringView line : splitLines(text))
+        lines.append(line.trimmed().isEmpty() ? u">"_s : u"> "_s + line.toString());
+    return lines.join(u'\n') + u"\n\n"_s;
 }
 
 } // namespace brulion::chat

@@ -464,6 +464,12 @@ int TurnState::apply(const QJsonObject &update)
         call->kind = update.value(u"kind"_s).toString();
     if (!state.isEmpty())
         call->status = state;
+    const auto addPath = [&call](const QString &path) {
+        if (!path.isEmpty() && !call->paths.contains(path))
+            call->paths.append(path);
+    };
+    for (const QJsonValue &v : update.value(u"locations"_s).toArray())
+        addPath(v.toObject().value(u"path"_s).toString());
     if (update.contains(u"content"_s)) {
         QStringList texts;
         for (const QJsonValue &v : update.value(u"content"_s).toArray()) {
@@ -475,6 +481,7 @@ int TurnState::apply(const QJsonObject &update)
                 texts << textOf(c.value(u"content"_s));
             else if (type == u"diff") {
                 texts << c.value(u"path"_s).toString();
+                addPath(c.value(u"path"_s).toString());
                 if (!call->diff)
                     call->diff = Diff{c.value(u"path"_s).toString(), c.value(u"oldText"_s).toString().left(MaxDiffChars),
                                       c.value(u"newText"_s).toString().left(MaxDiffChars)};
@@ -540,13 +547,21 @@ bool SessionInfo::apply(const QJsonObject &update)
 
 // ---- reading the agent's messages ---------------------------------------------------------------------
 
-std::optional<Permission> readPermission(const QJsonObject &params, const QHash<QString, QString> &titles)
+std::optional<Permission> readPermission(const QJsonObject &params, const QHash<QString, QString> &titles,
+                                         const QHash<QString, QString> &kinds)
 {
     const QJsonObject call = params.value(u"toolCall"_s).toObject();
     Permission p;
     p.title = call.value(u"title"_s).toString().simplified();
     if (p.title.isEmpty())
         p.title = titles.value(call.value(u"toolCallId"_s).toString());
+    p.kind = call.value(u"kind"_s).toString();
+    if (p.kind.isEmpty())
+        p.kind = kinds.value(call.value(u"toolCallId"_s).toString());
+    // A plan to approve (Claude Code's ExitPlanMode: `switch_mode`, the plan in its input).
+    if (const QJsonValue plan = call.value(u"rawInput"_s).toObject().value(u"plan"_s);
+        plan.isString() && !plan.toString().trimmed().isEmpty())
+        p.plan = capped(plan.toString().trimmed(), MaxDetailChars * 4);
     QStringList details;
     for (const QJsonValue &v : call.value(u"content"_s).toArray()) {
         const QJsonObject c = v.toObject();
@@ -559,7 +574,9 @@ std::optional<Permission> readPermission(const QJsonObject &params, const QHash<
             details << textOf(c.value(u"content"_s));
         }
     }
-    if (details.isEmpty()) {
+    if (!p.plan.isEmpty()) {
+        details = {p.plan};
+    } else if (details.isEmpty()) {
         const QJsonValue input = call.value(u"rawInput"_s);
         if (input.isObject() && !input.toObject().isEmpty())
             details << QString::fromUtf8(QJsonDocument(input.toObject()).toJson(QJsonDocument::Indented)).trimmed();
@@ -1217,7 +1234,10 @@ void Client::onRequest(const QJsonValue &id, const QString &method, const QJsonO
         m_connection.respond(id, cancelledOutcome());
         return;
     }
-    const std::optional<Permission> permission = readPermission(params, it->turn->state.titles);
+    QHash<QString, QString> kinds;
+    for (const ToolCall &t : std::as_const(it->turn->state.tools))
+        kinds.insert(t.id, t.kind);
+    const std::optional<Permission> permission = readPermission(params, it->turn->state.titles, kinds);
     if (!permission) {
         m_connection.respond(id, cancelledOutcome());
         return;

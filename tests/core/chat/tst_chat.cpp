@@ -543,6 +543,129 @@ private Q_SLOTS:
         QFETCH(QString, preview);
         QCOMPARE(chat::preview(markdown, max), preview);
     }
+    // ---- rewinding, forking, prompts, quotes ----------------------------------------------------
+
+    void truncates_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("from");
+        QTest::addColumn<QString>("expected");
+        const QString page = u"---\nzadania: ignoruj\n---\n- 🧑 Co mam jutro? ([[Dom]])\n  czas:: 2026-11-15 09:12\n"
+                             "- 🤖 Trzy zadania:\n\n  - zapłacić czynsz\n- 🧑 A pojutrze?\n- 🤖 Nic.\n"_s;
+        QTest::newRow("from the second question") << page << 2
+                                                  << u"---\nzadania: ignoruj\n---\n- 🧑 Co mam jutro? ([[Dom]])\n  czas:: 2026-11-15 09:12\n"
+                                                     "- 🤖 Trzy zadania:\n\n  - zapłacić czynsz\n"_s;
+        QTest::newRow("from the first") << page << 0 << u"---\nzadania: ignoruj\n---\n"_s;
+        QTest::newRow("the last") << page << 3 << page.left(page.indexOf(u"- 🤖 Nic."_s));
+        QTest::newRow("no such message") << page << 4 << page;
+        QTest::newRow("negative") << page << -1 << page;
+        QTest::newRow("crlf kept") << u"- 🧑 Pytanie\r\n- 🤖 Odpowiedź\r\n- 🧑 Źle\r\n"_s << 2
+                                   << u"- 🧑 Pytanie\r\n- 🤖 Odpowiedź\r\n"_s;
+        QTest::newRow("no final break") << u"- 🧑 A\n- 🤖 B"_s << 1 << u"- 🧑 A\n"_s;
+        QTest::newRow("a fenced look-alike is no message")
+                << u"- 🧑 Kod?\n- 🤖 Proszę:\n  ```\n- 🧑 nie wiadomość\n  ```\n- 🧑 Dzięki\n"_s << 2
+                << u"- 🧑 Kod?\n- 🤖 Proszę:\n  ```\n- 🧑 nie wiadomość\n  ```\n"_s;
+    }
+    void truncates()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, from);
+        QFETCH(QString, expected);
+        QCOMPARE(truncated(content, from), expected);
+    }
+
+    void forks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("upTo");
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<QString>("expected");
+        const QString page = u"---\nzadania: ignoruj\npartner: acp:claude\n---\n- 🧑 Plan podróży ([[Kraków]])\n"
+                             "  czas:: 2026-11-15 09:12\n- 🤖 Pociąg o 7:15.\n  czas:: 2026-11-15 09:13\n- 🧑 A autobus?\n"_s;
+        QTest::newRow("up to the answer")
+                << page << 1 << u"AI/2026-11-15 Plan podróży.md"_s
+                << u"---\nzadania: ignoruj\npartner: acp:claude\nfork: \"[[AI/2026-11-15 Plan podróży]]\"\n---\n"
+                   "- 🧑 Plan podróży ([[Kraków]])\n  czas:: 2026-11-15 09:12\n- 🤖 Pociąg o 7:15.\n  czas:: 2026-11-15 09:13\n"_s;
+        QTest::newRow("the whole") << page << 2 << u"AI/x"_s
+                                   << u"---\nzadania: ignoruj\npartner: acp:claude\nfork: \"[[AI/x]]\"\n---\n"
+                                      "- 🧑 Plan podróży ([[Kraków]])\n  czas:: 2026-11-15 09:12\n- 🤖 Pociąg o 7:15.\n"
+                                      "  czas:: 2026-11-15 09:13\n- 🧑 A autobus?\n"_s;
+        QTest::newRow("no frontmatter, crlf, no final break")
+                << u"- 🧑 Ąę\r\n- 🤖 Óź"_s << 1 << u"AI/b.md"_s
+                << u"---\r\nfork: \"[[AI/b]]\"\r\n---\r\n- 🧑 Ąę\r\n- 🤖 Óź\r\n"_s;
+        QTest::newRow("a fork of a fork: its link replaced")
+                << u"---\nfork: \"[[AI/a]]\"\n---\n- 🧑 X\n"_s << 0 << u"AI/b"_s
+                << u"---\nfork: \"[[AI/b]]\"\n---\n- 🧑 X\n"_s;
+        QTest::newRow("no such message") << page << 3 << u"AI/x"_s << QString();
+    }
+    void forks()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, upTo);
+        QFETCH(QString, source);
+        QFETCH(QString, expected);
+        const QString out = forked(content, upTo, source);
+        QCOMPARE(out, expected);
+        if (!expected.isEmpty()) {
+            QString title = source;
+            if (title.endsWith(u".md"_s))
+                title.chop(3);
+            QCOMPARE(parse(out).fork, title);
+            QCOMPARE(parse(out).messages.size(), upTo + 1);
+        }
+    }
+
+    void frontmatterValues_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QString>("value");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("added") << u"---\nzadania: ignoruj\n---\n- 🧑 A\n"_s << u"fork"_s << u"x"_s
+                               << u"---\nzadania: ignoruj\nfork: x\n---\n- 🧑 A\n"_s;
+        QTest::newRow("replaced, case") << u"---\nFork: y\n---\n"_s << u"fork"_s << u"x"_s << u"---\nfork: x\n---\n"_s;
+        QTest::newRow("removed") << u"---\nfork: y\nzadania: ignoruj\n---\n"_s << u"fork"_s << QString()
+                                 << u"---\nzadania: ignoruj\n---\n"_s;
+        QTest::newRow("removing what is not there") << u"- 🧑 A\n"_s << u"fork"_s << QString() << u"- 🧑 A\n"_s;
+        QTest::newRow("made") << u"- 🧑 A\n"_s << u"fork"_s << u"x"_s << u"---\nfork: x\n---\n- 🧑 A\n"_s;
+        QTest::newRow("a key that only starts alike stays") << u"---\nforkage: 1\n---\n"_s << u"fork"_s << u"2"_s
+                                                            << u"---\nforkage: 1\nfork: 2\n---\n"_s;
+        QTest::newRow("crlf") << u"---\r\na: b\r\n---\r\n"_s << u"c"_s << u"d"_s << u"---\r\na: b\r\nc: d\r\n---\r\n"_s;
+    }
+    void frontmatterValues()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, key);
+        QFETCH(QString, value);
+        QFETCH(QString, expected);
+        QCOMPARE(setFrontmatterValue(content, key, value), expected);
+    }
+
+    void promptsBack()
+    {
+        const Conversation c = parse(u"- 🧑 Co mam jutro? ([[Dom]])\n- 🤖 Nic.\n- 🧑 A pojutrze?\n  ![[foto.png]]\n"
+                                     "- 🤖 Też nic.\n- 🧑 A pojutrze?\n- 🧑 Zażółć\n  gęślą jaźń\n"_s);
+        QCOMPARE(prompts(c), (QStringList{u"Zażółć\ngęślą jaźń"_s, u"A pojutrze?"_s, u"Co mam jutro?"_s}));
+        QCOMPARE(prompts(parse(u"- 🧑 ![[x.png]]\n"_s)), QStringList());
+        QCOMPARE(prompts(parse(u"- 🤖 Cześć\n- 🧑 Pytanie ([[Strona]]) dalej\n"_s)),
+                 QStringList{u"Pytanie ([[Strona]]) dalej"_s});
+    }
+
+    void quotes_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("one line") << u"Pociąg o 7:15."_s << u"> Pociąg o 7:15.\n\n"_s;
+        QTest::newRow("lines, a blank one") << u"Pierwsza\n\n- druga"_s << u"> Pierwsza\n>\n> - druga\n\n"_s;
+        QTest::newRow("pictures out") << u"Zdjęcie:\n![[a.png]]"_s << u"> Zdjęcie:\n\n"_s;
+        QTest::newRow("only a picture") << u"![[a.png]]"_s << QString();
+    }
+    void quotes()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QString, expected);
+        QCOMPARE(quoted(markdown), expected);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestChat)

@@ -71,6 +71,22 @@ FocusScope {
     readonly property list<var> noVars: []
     readonly property string failure: root.turn !== null ? root.turn.failure : ""
     readonly property bool failedHere: root.failure !== ""
+    /// Messages written while this conversation's turn runs: they wait for it ({id, text,
+    /// pictures}); held after a stop or a failure (Resume).
+    readonly property list<var> waitingHere: root.path !== "" ? root.chats.queued(root.path, root.chats.queueSerial) : root.noVars
+    readonly property bool heldHere: root.path !== "" && root.chats.queueHeld(root.path, root.chats.queueSerial)
+    /// A plan an AI agent asks to approve (Markdown; "" none).
+    readonly property string planHere: root.asking ? root.chats.questionPlan(root.path, root.questionSerial) : ""
+    /// The files the agent's last turn changed ({path, oldText, newText, existed, exists, known}).
+    readonly property list<var> changesHere: root.path !== "" && !root.busyHere ? root.chats.changes(root.path, root.chats.changesSerial) : root.noVars
+    /// How an agent's questions are answered here: "ask", "edits", "all".
+    readonly property string approvalsHere: root.chats.approvals(root.path, root.chats.agentSerial)
+    /// The conversation this one was forked from ("" none).
+    property string forkSource
+    /// Up in an empty field: the questions asked before, newest first (recallIndex: the one
+    /// shown, -1 none).
+    property list<string> recallList
+    property int recallIndex: -1
 
     /// The list follows the answer being written while it is at its end (scrolled up: it stays).
     property bool following: true
@@ -135,6 +151,18 @@ FocusScope {
         target: root.chats
         function onPartnersChanged() { root.refreshPartners() }
     }
+    /// A list of strings of a map (a result's).
+    function routeList(map: var, key: string): list<string> {
+        return AppController.routeStrings(map, key)
+    }
+    /// `pictures` go with the message too.
+    function attachAll(pictures: list<string>): void {
+        root.attached = Js.uniqueStrings(Js.concatStrings(root.attached, pictures))
+    }
+    /// The approvals' mode in words ("ask", "edits", "all").
+    function approvalsLabel(mode: string): string {
+        return mode === "all" ? qsTr("Allow everything") : mode === "edits" ? qsTr("Allow note edits") : qsTr("Ask first")
+    }
     /// A partner's name as the chat shows it (one not running: its id).
     function partnerName(id: string): string {
         const label = root.chats.partnerLabel(id)
@@ -152,14 +180,19 @@ FocusScope {
     }
     function send(): void {
         const text = Js.trim(input.typedText)
-        if ((text === "" && root.attached.length === 0) || root.busyHere)
+        if (text === "" && root.attached.length === 0)
             return
+        // While a turn runs (or messages wait): it waits for the answer, then goes.
+        if (root.path !== "" && (root.busyHere || root.waitingHere.length > 0)) {
+            if (root.chats.queue(root.path, text, root.attached))
+                root.clearField()
+            return
+        }
         const sent = root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
                                      root.path === "" ? root.newPartner : "")
         if (sent === "")
             return
-        input.text = ""
-        root.attached = root.noStrings
+        root.clearField()
         root.following = true
         if (root.path === "") {
             root.path = sent
@@ -174,6 +207,85 @@ FocusScope {
     function suggest(text: string): void {
         input.text = text
         root.send()
+    }
+    function clearField(): void {
+        input.text = ""
+        root.attached = root.noStrings
+        root.recallIndex = -1
+        toEnd.restart()
+    }
+    /// Ctrl+Enter while a turn runs: the message now — the turn stops, it is answered first.
+    function steer(): void {
+        const text = Js.trim(input.typedText)
+        if (text === "" && root.attached.length === 0)
+            return
+        if (root.chats.steer(root.path, text, root.attached))
+            root.clearField()
+    }
+    /// Up / Down in the field: the questions asked before (Up from an empty field, or from one
+    /// brought back).
+    function recall(older: bool): bool {
+        if (root.path === "")
+            return false
+        const shown = root.recallIndex >= 0 && root.recallIndex < root.recallList.length
+                      && input.text === root.recallList[root.recallIndex]
+        if (input.text !== "" && !shown)
+            return false
+        if (!shown)
+            root.recallList = root.chats.prompts(root.path)
+        const next = older ? (shown ? root.recallIndex + 1 : 0) : root.recallIndex - 1
+        if (older && next >= root.recallList.length)
+            return shown // (the oldest: it stays)
+        if (!older && !shown)
+            return false
+        root.recallIndex = next
+        input.text = next >= 0 ? root.recallList[next] : ""
+        input.cursorPosition = input.length
+        return true
+    }
+    /// A message's text as a quote at the field's start.
+    function quoteMessage(markdown: string): void {
+        const quote = root.chats.quote(markdown)
+        if (quote === "")
+            return
+        input.insert(0, quote)
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
+    /// "Edit from here": the message and those after it out of the conversation, its text back in
+    /// the field (Undo in the toast).
+    function rewindTo(line: int): void {
+        const text = "" + root.chats.rewind(root.path, line)
+        if (text === "")
+            return
+        input.text = Js.trim(text)
+        root.attached = root.chats.takenPictures()
+        root.recallIndex = -1
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
+    /// A waiting message back in the field, to change it (sent again with Enter).
+    function editWaiting(id: int): void {
+        const text = "" + root.chats.unqueue(root.path, id, true)
+        const before = "" + Js.trim(input.text)
+        input.text = before === "" ? text : before + "\n\n" + text
+        root.attachAll(root.chats.takenPictures())
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
+    /// The files of the agent's last turn back as they were.
+    function undoChanges(): void {
+        AppController.toast(root.chats.undoChanges(root.path), "info")
+    }
+    /// "Fork from here": a new conversation up to the message, opened.
+    function forkAt(line: int): void {
+        const forked = "" + root.chats.fork(root.path, line)
+        if (forked === "") {
+            AppController.toast(qsTr("The conversation could not be forked."), "error")
+            return
+        }
+        AppController.toast(qsTr("Forked: the new conversation goes on by itself"), "success")
+        root.open(forked, false)
     }
 
     // ---- Pictures with the message --------------------------------------------------------------
@@ -400,7 +512,10 @@ FocusScope {
             neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
         })
         onCountChanged: toEnd.restart()
-        onLoaded: root.partnerHere = root.path !== "" ? root.chats.partnerOf(root.path) : ""
+        onLoaded: {
+            root.partnerHere = root.path !== "" ? root.chats.partnerOf(root.path) : ""
+            root.forkSource = root.path !== "" ? root.chats.forkedFrom(root.path) : ""
+        }
     }
     ChatListModel {
         id: conversations
@@ -576,6 +691,28 @@ FocusScope {
                     Accessible.name: qsTr("Answered by %1").arg(partnerChip.text)
                     onClicked: partnerMenu.popup(partnerChip, 0, partnerChip.height)
                 }
+                // How an AI agent's questions are answered here (T3 Code's permission modes).
+                BChip {
+                    id: approvalsChip
+                    objectName: "chatApprovals"
+                    visible: root.chats.isAgent(root.partnerHere)
+                    iconName: "shield-check"
+                    text: root.approvalsLabel(root.approvalsHere)
+                    interactive: true
+                    outlined: false
+                    Accessible.name: qsTr("Approvals: %1").arg(approvalsChip.text)
+                    onClicked: approvalsMenu.popup(approvalsChip, 0, approvalsChip.height)
+                }
+                BChip {
+                    objectName: "chatForkSource"
+                    visible: root.forkSource !== ""
+                    Layout.maximumWidth: 220
+                    iconName: "git-branch"
+                    text: qsTr("Forked from %1").arg(root.chats.nameOf(root.forkSource))
+                    interactive: true
+                    outlined: false
+                    onClicked: root.open(root.forkSource, false)
+                }
                 Item {
                     Layout.fillWidth: true
                 }
@@ -612,6 +749,31 @@ FocusScope {
                 Layout.topMargin: Theme.space1
                 path: root.path
                 partner: root.partnerHere
+            }
+            BMenu {
+                id: approvalsMenu
+                objectName: "chatApprovalsMenu"
+                BMenuItem {
+                    objectName: "chatApprovalsAsk"
+                    text: root.approvalsLabel("ask")
+                    hint: qsTr("each change and command waits for your answer")
+                    iconName: root.approvalsHere === "ask" ? "check" : ""
+                    onTriggered: root.chats.setApprovals(root.path, "ask")
+                }
+                BMenuItem {
+                    objectName: "chatApprovalsEdits"
+                    text: root.approvalsLabel("edits")
+                    hint: qsTr("changes of notes go by themselves; commands ask")
+                    iconName: root.approvalsHere === "edits" ? "check" : ""
+                    onTriggered: root.chats.setApprovals(root.path, "edits")
+                }
+                BMenuItem {
+                    objectName: "chatApprovalsAll"
+                    text: root.approvalsLabel("all")
+                    hint: qsTr("nothing asks but a plan and a sign-in")
+                    iconName: root.approvalsHere === "all" ? "check" : ""
+                    onTriggered: root.chats.setApprovals(root.path, "all")
+                }
             }
             BMenu {
                 id: partnerMenu
@@ -826,6 +988,28 @@ FocusScope {
                                 BMenu {
                                     id: messageMenu
                                     BMenuItem {
+                                        objectName: "chatMessageQuote"
+                                        text: qsTr("Quote")
+                                        iconName: "quote"
+                                        onTriggered: root.quoteMessage(message.markdown)
+                                    }
+                                    BMenuItem {
+                                        objectName: "chatMessageEdit"
+                                        visible: message.mine
+                                        height: visible ? implicitHeight : 0
+                                        text: qsTr("Edit from here")
+                                        hint: qsTr("this and what follows come out")
+                                        iconName: "pencil"
+                                        onTriggered: root.rewindTo(message.line)
+                                    }
+                                    BMenuItem {
+                                        objectName: "chatMessageFork"
+                                        text: qsTr("Fork from here")
+                                        hint: qsTr("a new conversation")
+                                        iconName: "git-branch"
+                                        onTriggered: root.forkAt(message.line)
+                                    }
+                                    BMenuItem {
                                         objectName: "chatMessageCopy"
                                         text: qsTr("Copy")
                                         iconName: "copy"
@@ -867,6 +1051,18 @@ FocusScope {
                             y: Theme.space2
                             width: parent.width
                             spacing: Theme.space2
+
+                            // The files the agent's last turn changed, with Undo (T3 Code's turn diff).
+                            ChatChanges {
+                                objectName: "chatChanges"
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: 640
+                                visible: root.changesHere.length > 0
+                                changes: root.changesHere
+                                onOpenFile: (file) => AppController.openPage(file)
+                                onUndo: root.undoChanges()
+                                onDismiss: root.chats.forgetChanges(root.path)
+                            }
 
                             // The answer as the model writes it — above it, what the model thinks.
                             Rectangle {
@@ -1094,9 +1290,43 @@ FocusScope {
                                         oldLabel: AppController.routeText(root.questionDiff, "path")
                                         newLabel: AppController.routeText(root.questionDiff, "path")
                                     }
+                                    // A plan to approve: as a message, with "Save as a page".
+                                    Rectangle {
+                                        objectName: "chatQuestionPlan"
+                                        Layout.fillWidth: true
+                                        visible: root.planHere !== ""
+                                        implicitHeight: planText.implicitHeight + 2 * Theme.space3
+                                        radius: Theme.radius
+                                        color: Theme.bgSunken
+                                        BRichText {
+                                            id: planText
+                                            x: Theme.space3
+                                            y: Theme.space3
+                                            width: parent.width - 2 * Theme.space3
+                                            html: root.planHere !== "" ? messages.render(root.planHere) : ""
+                                            font.family: Theme.fontEditor
+                                            font.pixelSize: Theme.textBase
+                                            color: Theme.fg
+                                        }
+                                    }
+                                    BButton {
+                                        objectName: "chatSavePlan"
+                                        visible: root.planHere !== ""
+                                        size: "small"
+                                        variant: "ghost"
+                                        iconName: "file-output"
+                                        text: qsTr("Save the plan as a page")
+                                        onClicked: {
+                                            const saved = root.chats.savePlan(root.path)
+                                            if (saved === "")
+                                                AppController.toast(qsTr("The plan could not be saved."), "error")
+                                            else
+                                                AppController.toast(qsTr("Saved as “%1”").arg(Workspace.pageTitle(saved)), "success")
+                                        }
+                                    }
                                     Rectangle {
                                         Layout.fillWidth: true
-                                        visible: root.questionTitleEnd >= 0 && !root.questionHasDiff
+                                        visible: root.questionTitleEnd >= 0 && !root.questionHasDiff && root.planHere === ""
                                         implicitHeight: questionDetails.implicitHeight + 2 * Theme.space2
                                         radius: Theme.radius
                                         color: Theme.bgSunken
@@ -1175,6 +1405,107 @@ FocusScope {
                                         label: qsTr("Dismiss")
                                         iconName: "x"
                                         onClicked: root.chats.dismissFailure(root.path)
+                                    }
+                                }
+                            }
+
+                            // Messages written meanwhile: they wait for the answer (held after a
+                            // stop or a failure: Resume).
+                            RowLayout {
+                                objectName: "chatHeld"
+                                Layout.fillWidth: true
+                                visible: root.heldHere && !root.busyHere
+                                spacing: Theme.space2
+                                Item { Layout.fillWidth: true }
+                                BText {
+                                    text: qsTr("%n message(s) wait: the answer before them stopped.", "", root.waitingHere.length)
+                                    variant: "muted"
+                                    wrapMode: Text.Wrap
+                                }
+                                BButton {
+                                    objectName: "chatResume"
+                                    size: "small"
+                                    iconName: "play"
+                                    text: qsTr("Resume")
+                                    onClicked: root.chats.resumeQueue(root.path)
+                                }
+                            }
+                            Repeater {
+                                model: root.waitingHere
+                                delegate: Item {
+                                    id: waiting
+                                    required property var modelData
+                                    readonly property int waitingId: AppController.routeInt(waiting.modelData, "id", -1)
+                                    readonly property string text: AppController.routeText(waiting.modelData, "text")
+                                    readonly property list<string> pictures: root.routeList(waiting.modelData, "pictures")
+                                    readonly property int pictureCount: waiting.pictures.length
+                                    objectName: "chatWaiting"
+                                    Layout.fillWidth: true
+                                    implicitHeight: waitingBubble.height
+                                    Rectangle {
+                                        id: waitingBubble
+                                        readonly property real maxWidth: Math.min(parent.width * 0.82, 720)
+                                        x: parent.width - width
+                                        width: Math.min(waitingBubble.maxWidth, Math.max(waitingText.implicitWidth, waitingActions.implicitWidth) + 2 * Theme.space3)
+                                        height: waitingColumn.implicitHeight + 2 * Theme.space2
+                                        radius: Theme.radiusXl
+                                        color: "transparent"
+                                        border.color: Theme.accent
+                                        border.width: 1
+                                        opacity: 0.85
+                                        ColumnLayout {
+                                            id: waitingColumn
+                                            x: Theme.space3
+                                            y: Theme.space2
+                                            width: parent.width - 2 * Theme.space3
+                                            spacing: Theme.space1
+                                            BText {
+                                                id: waitingText
+                                                Layout.fillWidth: true
+                                                // Plain text: what the user wrote, as written.
+                                                text: waiting.text + (waiting.pictureCount > 0 ? (waiting.text !== "" ? "  " : "") + qsTr("[%n picture(s)]", "", waiting.pictureCount) : "")
+                                                textFormat: Text.PlainText
+                                                wrapMode: Text.Wrap
+                                                maximumLineCount: 8
+                                                elide: Text.ElideRight
+                                            }
+                                            RowLayout {
+                                                id: waitingActions
+                                                Layout.alignment: Qt.AlignRight
+                                                spacing: Theme.space1
+                                                BIcon {
+                                                    name: "clock"
+                                                    size: Theme.iconSizeSm
+                                                    color: Theme.fgFaint
+                                                }
+                                                BText {
+                                                    text: root.heldHere ? qsTr("held") : qsTr("waits")
+                                                    variant: "caption"
+                                                    color: Theme.fgFaint
+                                                }
+                                                BIconButton {
+                                                    objectName: "chatWaitingNow"
+                                                    size: "small"
+                                                    label: qsTr("Send now")
+                                                    iconName: "zap"
+                                                    onClicked: root.chats.sendNow(root.path, waiting.waitingId)
+                                                }
+                                                BIconButton {
+                                                    objectName: "chatWaitingEdit"
+                                                    size: "small"
+                                                    label: qsTr("Edit")
+                                                    iconName: "pencil"
+                                                    onClicked: root.editWaiting(waiting.waitingId)
+                                                }
+                                                BIconButton {
+                                                    objectName: "chatWaitingRemove"
+                                                    size: "small"
+                                                    label: qsTr("Remove")
+                                                    iconName: "x"
+                                                    onClicked: root.chats.unqueue(root.path, waiting.waitingId, false)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1286,7 +1617,7 @@ FocusScope {
                 // A new conversation: the page that goes along, who answers.
                 Flow {
                     Layout.fillWidth: true
-                    visible: root.path === "" && (root.page !== "" || root.choosesPartner)
+                    visible: root.path === "" && (root.page !== "" || root.choosesPartner || root.chats.isAgent(root.newPartner))
                     spacing: Theme.space2
                     BChip {
                         objectName: "chatPage"
@@ -1304,6 +1635,16 @@ FocusScope {
                         text: qsTr("goes along with the question")
                         variant: "caption"
                         color: Theme.fgFaint
+                    }
+                    BChip {
+                        id: newApprovalsChip
+                        objectName: "chatNewApprovals"
+                        visible: root.chats.isAgent(root.newPartner)
+                        iconName: "shield-check"
+                        text: root.approvalsLabel(root.approvalsHere)
+                        interactive: true
+                        Accessible.name: qsTr("Approvals: %1").arg(newApprovalsChip.text)
+                        onClicked: approvalsMenu.popup(newApprovalsChip, 0, newApprovalsChip.height)
                     }
                     BChip {
                         id: newPartnerChip
@@ -1470,7 +1811,7 @@ FocusScope {
                                 wrapMode: TextEdit.Wrap
                                 placeholderText: root.chats.listening && root.dictating ? qsTr("Listening…")
                                                  : root.queuedHere ? qsTr("Waiting for the model on this device…")
-                                                 : root.busyHere ? qsTr("The AI is answering…")
+                                                 : root.busyHere ? qsTr("Write on: it waits for the answer (Ctrl+Enter: now)")
                                                  : qsTr("Ask, or ask to do something…")
                                 accessibleName: qsTr("Message to the AI")
                                 onCursorRectangleChanged: inputFlick.keepCaret()
@@ -1480,10 +1821,17 @@ FocusScope {
                                 Keys.onPressed: (event) => {
                                     const key = event.key
                                     const shift = (event.modifiers & Qt.ShiftModifier) !== 0
-                                    if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && !Theme.touchUi) {
+                                    const control = (event.modifiers & Qt.ControlModifier) !== 0
+                                    if ((key === Qt.Key_Return || key === Qt.Key_Enter) && control && root.busyHere) {
+                                        event.accepted = true
+                                        root.steer()
+                                    } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && !Theme.touchUi) {
                                         event.accepted = true
                                         root.send()
                                     } else if (event.matches(StandardKey.Paste) && root.pastePicture()) {
+                                        event.accepted = true
+                                    } else if ((key === Qt.Key_Up || key === Qt.Key_Down) && !shift && !control
+                                               && root.recall(key === Qt.Key_Up)) {
                                         event.accepted = true
                                     }
                                 }
@@ -1502,14 +1850,18 @@ FocusScope {
                         onClicked: root.toggleDictation()
                     }
                     BButton {
-                        objectName: root.busyHere ? "chatStop" : "chatSend"
+                        id: sendButton
+                        /// A message being written while a turn runs: it waits (Stop shows with an empty field).
+                        readonly property bool hasText: Js.trim(input.typedText) !== "" || root.attached.length > 0
+                        readonly property bool stops: root.busyHere && !sendButton.hasText
+                        objectName: sendButton.stops ? "chatStop" : root.busyHere ? "chatQueue" : "chatSend"
                         Layout.alignment: Qt.AlignBottom
-                        variant: root.busyHere ? "secondary" : "primary"
-                        iconName: root.busyHere ? "square" : "arrow-up"
-                        enabled: root.busyHere || Js.trim(input.typedText) !== "" || root.attached.length > 0
-                        Accessible.name: root.busyHere ? qsTr("Stop") : qsTr("Send")
+                        variant: sendButton.stops ? "secondary" : "primary"
+                        iconName: sendButton.stops ? "square" : root.busyHere ? "clock" : "arrow-up"
+                        enabled: sendButton.stops || sendButton.hasText
+                        Accessible.name: sendButton.stops ? qsTr("Stop") : root.busyHere ? qsTr("Send after the answer") : qsTr("Send")
                         onClicked: {
-                            if (root.busyHere)
+                            if (sendButton.stops)
                                 root.chats.stop(root.path)
                             else
                                 root.send()

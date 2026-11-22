@@ -2601,6 +2601,10 @@ zadania: ignoruj
   partners"); `partner: acp:claude` an AI agent set up on the device (docs/UI.md "AI agents
   (ACP)"); without it the built-in AI assistant. The chat writes it when another partner is
   chosen and takes it out for the assistant.
+* **A fork**: the frontmatter's `fork: "[[AI/2026-11-15 Co mam jutro do zrobienia]]"` — the
+  conversation it was forked from ("Fork from here" on a message: docs/UI.md "AI chat"). The fork
+  is a copy of that page up to the message chosen (its frontmatter, `partner:`, times and pictures
+  as they were) and goes on by itself; its view links back to the source.
 * **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
   notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),
   messages appended at the end of the page with their time (its line ending kept, everything
@@ -2615,8 +2619,9 @@ zadania: ignoruj
   the oldest left out, the latest always sent; the chat says so above the first message the model
   gets.
 * Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `formatMessage`,
-  `newConversation`, `setPartner`, `picturesIn`, `withPictures`, `withoutPictures`, `pageTitle`,
-  `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`), tested in `tests/core/chat`.
+  `newConversation`, `setPartner`, `setFrontmatterValue`, `picturesIn`, `withPictures`,
+  `withoutPictures`, `pageTitle`, `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`,
+  `truncated` — "Edit from here" —, `forked`, `prompts`, `quoted`), tested in `tests/core/chat`.
 
 ## 15. Flashcards
 

@@ -64,6 +64,10 @@ AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z t
 
 **Zmień nazwę albo usuń** rozmowę z jej menu na liście (prawy przycisk albo długie przytrzymanie na telefonie): data zostaje przed nazwą, a **Cofnij** w komunikacie przywraca dawną nazwę albo usuniętą rozmowę.
 
+**Pisz dalej, gdy odpowiada.** Wiadomość wysłana w międzyczasie czeka pod odpowiedzią i idzie sama, gdy odpowiedź zostanie zapisana — kilka idzie po kolei. **Wyślij teraz** (albo Ctrl+Enter) przerywa odpowiedź i najpierw pyta o tę wiadomość; **Edytuj** wkłada ją z powrotem do pola, **×** ją zabiera. Gdy zatrzymasz odpowiedź, czekające wiadomości zostają, z przyciskiem **Wznów**. **Strzałka w górę** w pustym polu przywraca wcześniejsze pytania.
+
+**Menu wiadomości** (prawy przycisk albo długie przytrzymanie): **Cytuj** wstawia jej tekst do pola jako cytat; **Edytuj od tego miejsca** wyjmuje z rozmowy Twoją wiadomość i wszystko po niej, a wiadomość wraca do pola, żeby zapytać inaczej (**Cofnij** w komunikacie przywraca całość); **Rozgałęź od tego miejsca** zaczyna nową rozmowę, która toczy się dalej od tej wiadomości — spróbuj innej drogi, nie tracąc tej rozmowy (nowa prowadzi do niej: „Rozgałęzienie z …”).
+
 Asystent pracuje narzędziami (szukanie, czytanie, zapis): na własnym serwerze wybierz model, który je obsługuje (np. Qwen 3 albo Llama 3.1); Claude je obsługuje. Gdy model odpowiada, przycisk ✨ się kręci. Odpowiedź pisze się dalej, gdy oglądasz inne strony, i trafia do swojej rozmowy.
 
 ## AI w edytorze
@@ -98,6 +102,8 @@ Na komputerze w czacie z AI może też odpowiadać agent AI, którego uruchamias
 2. W czacie z AI wybierz go jako tego, **kto odpowiada** w rozmowie.
 
 Agent pracuje w folderze notatnika: czyta i zmienia notatki przez Brulion — zmienioną stronę od razu widać w edytorze i w **historii** strony — i uruchamia polecenia, których wynik widać w rozmowie, razem z jego planem i każdym krokiem. Z włączonymi **Narzędziami Brulionu** (domyślnie) dostaje też `brulion-cli mcp` — szukanie, zapytania, zadania, dzienniki ([[Wiersz poleceń i agenci AI]]). Zanim zmieni plik albo uruchomi polecenie, pyta — tak, jak każą jego własne ustawienia — a pytanie pojawia się w rozmowie, zmiana pliku jako porównanie wersji, z odpowiedziami (**Allow**, **Reject** …); gdy jesteś gdzie indziej w Brulionie, mówi o tym komunikat z przyciskiem **Otwórz**. Gdy agent prosi o zalogowanie, też pyta w rozmowie; logowanie w terminalu jest nazwane w komunikacie (np. uruchom `claude` i wpisz `/login`). **Zatrzymaj** przerywa jego turę.
+
+**Zgody.** Chip z tarczą nad rozmową mówi, jak odpowiadać na pytania agenta: **Najpierw pytaj** (każde czeka na Ciebie), **Pozwól zmieniać notatki** (zmiany notatek idą same, polecenia dalej pytają) albo **Pozwól na wszystko**. Plan, który agent prosi zatwierdzić (tryb planowania Claude Code), zawsze czeka: widać go jako czytelny plan z przyciskiem **Zapisz plan jako stronę**. Po turze, która zmieniła notatki, karta je wymienia — przy każdej **Pokaż zmianę**, a **Cofnij te zmiany** przywraca je takie, jakie były (notatka zmieniona w międzyczasie zostaje bez zmian).
 
 Nad rozmową jego **model**, **tryb** (ile może zrobić bez pytania), **wysiłek** i reszta to chipy: stuknij, żeby wybrać — agent zapamięta wybór na kolejne rozmowy, także przed ich pierwszą wiadomością. Obok widać, ile jego pamięci zajmuje rozmowa i ile kosztowała. Wpisz `/` w polu, żeby zobaczyć polecenia agenta (`/review`, `/compact` …). Rozmowa toczy się dalej w tej samej sesji agenta także po ponownym uruchomieniu Brulionu; rozmowa zmieniona w międzyczasie (pisana na telefonie, z odpowiedzią asystenta) zaczyna nową sesję, która dostaje całą jej treść.
 

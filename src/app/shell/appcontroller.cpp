@@ -424,6 +424,10 @@ AppController::AppController(const Options &options, QObject *parent)
         const int id = toastWithAction(text, u"info"_s, tr("Open"));
         m_chatToasts.insert(id, path);
     });
+    // "Edit from here" took messages out of a conversation: a toast whose Undo puts them back.
+    connect(m_workspace->chats(), &WorkspaceChats::rewound, this, [this](const QString &path, const QString &text) {
+        m_rewindToasts.insert(toastWithAction(text, u"info"_s, tr("Undo")), path);
+    });
     // The model chosen in the settings is the one Settings → Extensions → AI downloads and removes.
     m_localAi->setChosen(m_settings->aiLocalModel());
     connect(m_settings.get(), &AppSettings::aiChanged, this,
@@ -2319,6 +2323,11 @@ void AppController::hostToastActionTriggered(int hostId)
         navigate(QVariantMap{{u"view"_s, u"chat"_s}, {u"path"_s, m_chatToasts.take(id)}});
         return;
     }
+    if (m_rewindToasts.contains(id)) {
+        if (!m_workspace->chats()->undoRewind(m_rewindToasts.take(id)))
+            toast(tr("The conversation changed since: nothing was put back."), u"info"_s);
+        return;
+    }
     Q_EMIT toastActionTriggered(id);
 }
 
@@ -2329,6 +2338,7 @@ void AppController::hostToastRemoved(int hostId)
     m_renameToasts.remove(id);
     m_functionToasts.remove(id);
     m_chatToasts.remove(id);
+    m_rewindToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));
 }
