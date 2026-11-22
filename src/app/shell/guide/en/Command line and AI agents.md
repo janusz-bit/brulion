@@ -27,6 +27,7 @@ brulion-cli habit tick Meditation                  # check a habit off for today
 brulion-cli --format text card due                 # flashcards to study now
 brulion-cli card review 1a2b3c4d good              # grade one (again, hard, good, easy)
 brulion-cli search cafe                            # also finds “café”
+brulion-cli search "apple cake" --semantic         # also by meaning (see Search)
 brulion-cli clip install                           # connect the browsers' Web Clipper (see Import and export)
 brulion-cli publish run Blog                       # publish a target's pages again (see Import and export)
 brulion-cli help                                   # all commands

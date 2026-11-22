@@ -6,6 +6,8 @@
 #include <QList>
 #include <QStringView>
 
+#include <functional>
+
 namespace brulion::semantic {
 
 using Vector = QList<float>;
@@ -40,6 +42,11 @@ struct Calibration {
     /// direction is left empty when either language has fewer than `minPerLanguage` chunks.
     static Calibration estimate(const QList<Vector> &passages, const QList<bool> &english,
                                 const Vector &queryMean, int minPerLanguage = 5);
+    /// The same over `count` vectors of `dim` floats that `vector(k)` points to, `english(k)`
+    /// telling their language (VectorIndex: its contiguous arrays, without a copy).
+    static Calibration estimate(qsizetype count, int dim, const std::function<const float *(qsizetype)> &vector,
+                                const std::function<bool(qsizetype)> &english, const Vector &queryMean,
+                                int minPerLanguage = 5);
 
     /// {"queryMean": [...], "passageMean": [...], "direction": [...]}; missing keys stay empty.
     QJsonObject toJson() const;

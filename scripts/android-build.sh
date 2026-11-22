@@ -632,10 +632,12 @@ if [[ $LOCAL_AI == on ]]; then
     done
     grep -q "lib/$abi/libbrulion_speech.so" <<<"$listing" ||
       die "lib/$abi/libbrulion_speech.so missing from the APK: no transcripts of voice notes"
+    grep -q "lib/$abi/libbrulion_semantic.so" <<<"$listing" ||
+      die "lib/$abi/libbrulion_semantic.so missing from the APK: no search by meaning"
   done
   libs_xml=$BUILD_DIR/src/app/android-build/res/values/libs.xml
   [[ -f $libs_xml ]] || die "$libs_xml not found: cannot tell what the app loads when it starts"
-  if grep -E 'brulion_localai|brulion_speech|llama|mtmd|ggml' "$libs_xml"; then
+  if grep -E 'brulion_localai|brulion_semantic|brulion_speech|llama|mtmd|ggml' "$libs_xml"; then
     die "the model runner's libraries are loaded when the app starts ($libs_xml): they are for the first question to a model (src/app/CMakeLists.txt)"
   fi
   echo "the model on the device: llama.cpp's libraries are in the APK, none loaded when the app starts"

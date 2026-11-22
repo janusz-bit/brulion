@@ -1,4 +1,4 @@
-// brulion-searchbench — search quality and speed of the semantic search prototype against the
+// brulion-searchbench — search quality and speed of search by meaning (docs/SEMANTIC.md) against the
 // full-text SearchIndex, on a folder of Markdown notes and a file of queries.
 //
 //   brulion-searchbench --corpus <dir> --queries <file.jsonl> --model <model.gguf> --out <runs.json>
@@ -7,7 +7,9 @@
 //
 // Without --model only the full-text run is made. Every *.md file below <dir> is a note (id = path relative to <dir>, title = file name without
 // .md). Queries: one JSON object per line with "query" (other keys are ignored). The output holds,
-// per system ("bm25", "semantic", "hybrid"), the ranked [id, score] lists of every query, plus
+// per system ("bm25", "semantic", "hybrid", "app" — semantic::hybridSearch as the app searches,
+// with the shipped query mean and these notes' calibration), the ranked [id, score] lists of every
+// query, plus
 // timings; tools/…/eval scripts compute the metrics. --cache keeps chunk vectors between runs
 // (keyed by model file name and chunk text).
 #include "index/searchindex.h"
@@ -242,11 +244,15 @@ int main(int argc, char **argv)
             calibration.direction = own.direction;
         calibration.passageMean = own.passageMean;
     }
+    // As the app searches (semantic::hybridSearch: the model's shipped query mean, the passage mean
+    // and the language direction of these notes, at most MeaningAloneHits notes by meaning alone).
+    VectorIndex appVectors = vectors;
+    appVectors.setCalibration(appVectors.estimateCalibration(queryMeanOf(u"multilingual-e5-small"_s)));
     vectors.setCalibration(calibration);
     stats.insert(u"vectorIndexMs"_s, double(t.elapsed()));
 
     // Queries.
-    QJsonObject bm25Run, semRun, hybridRun;
+    QJsonObject bm25Run, semRun, hybridRun, appRun;
     qint64 bmNs = 0, qEmbedNs = 0, vecNs = 0, fuseNs = 0;
     QElapsedTimer q;
     for (const QString &query : std::as_const(queries)) {
@@ -271,6 +277,13 @@ int main(int argc, char **argv)
         bm25Run.insert(query, toJson(lexical));
         semRun.insert(query, toJson(sem));
         hybridRun.insert(query, toJson(hybrid));
+        if (!qv.isEmpty()) {
+            QList<ScoredId> appHits;
+            for (const HybridHit &h : hybridSearch(lexical, appVectors, qv.first(),
+                                                   appVectors.calibration().appliesTo(query), limit))
+                appHits.append({h.id, h.score});
+            appRun.insert(query, toJson(appHits));
+        }
     }
     const double nq = qMax<qsizetype>(1, queries.size());
     stats.insert(u"queryBm25Ms"_s, double(bmNs) / 1e6 / nq);
@@ -282,7 +295,8 @@ int main(int argc, char **argv)
     stats.insert(u"batchTokens"_s, options.batchTokens);
     stats.insert(u"batchTexts"_s, options.maxSequences);
 
-    QJsonObject out{{u"bm25"_s, bm25Run}, {u"semantic"_s, semRun}, {u"hybrid"_s, hybridRun}, {u"stats"_s, stats},
+    QJsonObject out{{u"bm25"_s, bm25Run}, {u"semantic"_s, semRun}, {u"hybrid"_s, hybridRun}, {u"app"_s, appRun},
+                    {u"stats"_s, stats},
                     {u"calibration"_s, calibration.toJson()}};
     QFile f(p.value(u"out"_s));
     if (!f.open(QIODevice::WriteOnly)) {

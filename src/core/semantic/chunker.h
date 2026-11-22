@@ -17,6 +17,10 @@ struct Chunk {
 /// Default chunk size in words: about 200 tokens of Polish text, well inside the model's 512.
 inline constexpr int DefaultChunkWords = 120;
 
+/// Bump when chunkNote() (or noteChunks(), semantic/notes.h) cuts notes differently: an index kept
+/// on the device (VectorIndex::save) of another version is built again.
+inline constexpr quint32 ChunkerVersion = 1;
+
 /// Cut a note into chunks of at most `maxWords` words. Parts end at blank lines and before
 /// headings ('#') and top-level bullets ("- "); consecutive parts are joined while they fit, and a
 /// part longer than `maxWords` is split by words. YAML frontmatter is skipped. Never empty: a note

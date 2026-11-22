@@ -14,17 +14,27 @@
 // Results follow vault changes (re-run 300 ms after the index or the attachments' text changed
 // while a query is set).
 //
+// Search by meaning (Workspace.semantic active: on, its model on this device, the notebook's
+// vectors there — docs/UI.md "Search by meaning"): the notes' and attachments' full-text hits are
+// fused with the notes closest in meaning (core semantic::hybridSearch: 0.8 meaning + 0.2 words,
+// never meaning alone; an attachment or a note not embedded yet ranks by its words), and up to
+// semantic::MeaningAloneHits notes without the query's words join them (byMeaning). The query's
+// vector comes from another thread: the list waits for it a moment (MeaningWaitMs), then shows the
+// full-text results and is re-sorted when it arrives. Without it: exactly the full-text search.
+//
 // Roles: path, title, folder, line (0-based first matching body line; -1 when only the title or
 // an alias matched), excerpt (plain text around the match), excerptMatches / titleMatches
 // (UTF-16 positions of matched characters), journalDate ("YYYY-MM-DD" for daily notes, else ""),
 // score; kind ("note" | "pdf" | "picture"), page (an attachment's best page, 1-based; 0 for a note),
 // pageCount, matchedPages (an attachment's pages that match; 0: only its name), ocr (that page's
-// text came from OCR), find (what the PDF viewer or the picture view searches for to show the hit).
+// text came from OCR), find (what the PDF viewer or the picture view searches for to show the hit),
+// byMeaning (a note found by meaning alone: none of the query's words in it).
 #pragma once
 
 #include "workspacemodel.h"
 
 #include <QStringList>
+#include <QTimer>
 #include <QVariantList>
 
 namespace brulion::content {
@@ -64,8 +74,13 @@ public:
         MatchedPagesRole,
         OcrRole,
         FindRole,
+        ByMeaningRole,
     };
     Q_ENUM(Role)
+
+    /// How long a new query's results wait for its vector (search by meaning) before the
+    /// full-text ones show.
+    static constexpr int MeaningWaitMs = 150;
 
     explicit SearchResultModel(QObject *parent = nullptr);
 
@@ -115,6 +130,7 @@ private:
         int matchedPages = 0;
         bool ocr = false;
         QString find;
+        bool byMeaning = false;
         /// (Merging notes and attachments: SearchIndex::Hit::literal.)
         int literal = 0;
 
@@ -122,6 +138,12 @@ private:
     };
     void connectAttachments();
     QList<Hit> m_rows;
+    /// The query whose vector the list waits for (MeaningWaitMs), and that wait.
+    QString m_meaningWait;
+    QTimer m_meaningTimer;
+    QMetaObject::Connection m_semanticContent;
+    QMetaObject::Connection m_semanticQuery;
+    QMetaObject::Connection m_semanticState;
     QString m_query;
     QString m_scope = QStringLiteral("all");
     QString m_folder;

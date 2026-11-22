@@ -1378,7 +1378,7 @@
 <context>
     <name>SearchView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="268"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="284"/>
         <source>%1 of %n result(s)</source>
         <translation>
             <numerusform>%1 of %n result</numerusform>
@@ -1386,7 +1386,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="269"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="285"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -1394,7 +1394,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="359"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="406"/>
         <source>%n more page(s) match</source>
         <translation>
             <numerusform>%n more page matches</numerusform>
@@ -1402,7 +1402,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="474"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="541"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>The filters hide %n result.</numerusform>
@@ -1432,7 +1432,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2544"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2549"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1714,6 +1714,17 @@
         <translation>
             <numerusform>Renamed to “%1”, %n link updated</numerusform>
             <numerusform>Renamed to “%1”, %n links updated</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ShellSemanticSettings</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellSemanticSettings.qml" line="32"/>
+        <source>%n note(s) can be found by meaning.</source>
+        <translation>
+            <numerusform>%n note can be found by meaning.</numerusform>
+            <numerusform>%n notes can be found by meaning.</numerusform>
         </translation>
     </message>
 </context>

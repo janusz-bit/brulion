@@ -55,7 +55,7 @@
             abi = "arm64-v8a";
             withAab = true;
           };
-          # The semantic search prototype's embedding speed on a phone (nix/android/embedbench.nix).
+          # Search by meaning: the embedding model's speed on a phone (nix/android/embedbench.nix).
           embedbench-android = pkgs.callPackage ./nix/android/embedbench.nix { };
         };
     in
@@ -115,7 +115,7 @@
             ccache
             clang-tools
             gdb
-            llama-cpp-vulkan # the semantic search prototype's model runner, GPU through Vulkan (src/core/semantic)
+            llama-cpp-vulkan # embedbench on the GPU (scripts/semantic/embedbench, docs/SEMANTIC.md); the app builds its own (3rdparty/llama)
             qt6.qttools
             nixfmt
           ];

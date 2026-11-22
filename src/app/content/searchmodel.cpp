@@ -4,6 +4,9 @@
 #include "attachments/searchfilters.h"
 #include "contentutil.h"
 #include "index/vaultindex.h"
+#include "semantic/fusion.h"
+#include "semantic/notes.h"
+#include "semanticsearch.h"
 #include "util/paths.h"
 #include "workspace.h"
 
@@ -29,6 +32,9 @@ SearchResultModel::SearchResultModel(QObject *parent) : WorkspaceListModel(paren
 {
     setRefreshDelay(300);
     connect(this, &WorkspaceListModel::workspaceChanged, this, &SearchResultModel::connectAttachments);
+    m_meaningTimer.setSingleShot(true);
+    m_meaningTimer.setInterval(MeaningWaitMs);
+    connect(&m_meaningTimer, &QTimer::timeout, this, [this] { scheduleRefresh(0); });
 }
 
 void SearchResultModel::connectAttachments()
@@ -41,6 +47,24 @@ void SearchResultModel::connectAttachments()
                     if (!m_query.trimmed().isEmpty())
                         markContentChanged();
                 });
+    }
+    disconnect(m_semanticContent);
+    disconnect(m_semanticQuery);
+    disconnect(m_semanticState);
+    if (workspace() && workspace()->semantic()) {
+        shell::SemanticSearch *semantic = workspace()->semantic();
+        // Notes embedded (the index being built), the model turned on or off: the results follow.
+        const auto follow = [this] {
+            if (!m_query.trimmed().isEmpty())
+                markContentChanged();
+        };
+        m_semanticContent = connect(semantic, &shell::SemanticSearch::contentChanged, this, follow);
+        m_semanticState = connect(semantic, &shell::SemanticSearch::stateChanged, this, follow);
+        // The query's vector: the list sorted by meaning at once.
+        m_semanticQuery = connect(semantic, &shell::SemanticSearch::queryReady, this, [this](const QString &text) {
+            if (text == attachments::parseSearchFilters(m_query).text.simplified())
+                scheduleRefresh(0);
+        });
     }
 }
 
@@ -150,6 +174,62 @@ void SearchResultModel::refresh()
                 return a.literal > b.literal;
             return a.score > b.score;
         });
+        // By meaning too (Workspace.semantic): the hits fused with the notes closest in meaning, a
+        // few notes without the words among them. Its vector a moment late: the list waits for it
+        // (MeaningWaitMs), else shows the words' order and is sorted again when it comes.
+        shell::SemanticSearch *semantic = workspace()->semantic();
+        if (semantic && semantic->active() && (filters.scopes & attachments::NoteScopes) && m_scope != u"attachments") {
+            const QString key = text.simplified();
+            const std::optional<semantic::Vector> vector = semantic->queryVector(key);
+            if (!vector && m_meaningWait != key) {
+                m_meaningWait = key;
+                m_meaningTimer.start();
+                return; // (the rows stay as they are a moment)
+            }
+            if (!vector && m_meaningTimer.isActive())
+                return;
+            if (vector) {
+                m_meaningTimer.stop();
+                QList<semantic::ScoredId> lexical;
+                lexical.reserve(found.size());
+                QHash<QString, qsizetype> byPath;
+                for (qsizetype i = 0; i < found.size(); ++i) {
+                    lexical.append({found.at(i).path, found.at(i).score});
+                    byPath.insert(found.at(i).path, i);
+                }
+                const semantic::VectorIndex &vectors = semantic->index();
+                const QList<semantic::HybridHit> fused = semantic::hybridSearch(
+                        lexical, vectors, *vector, vectors.calibration().appliesTo(key), want);
+                QList<Hit> sorted;
+                sorted.reserve(fused.size());
+                for (const semantic::HybridHit &h : fused) {
+                    if (const auto it = byPath.constFind(h.id); it != byPath.cend()) {
+                        Hit row = found.at(it.value());
+                        row.score = h.score;
+                        sorted.append(std::move(row));
+                        continue;
+                    }
+                    // Found by meaning alone: where its closest chunk starts.
+                    const ParsedNote *note = idx->note(h.id);
+                    if (!note)
+                        continue;
+                    const bool journal = note->journalDate.has_value();
+                    if (!filters.scopes.testFlag(journal ? Scope::Journals : Scope::Pages))
+                        continue;
+                    Hit row;
+                    row.path = h.id;
+                    row.title = note->title.isEmpty() ? paths::pageTitle(h.id) : note->title;
+                    row.folder = paths::dirname(h.id);
+                    row.line = h.line;
+                    row.excerpt = oneLine(plainText(semantic::passageExcerpt(idx->content(h.id), h.line, 400), idx), 260);
+                    row.journalDate = journal ? isoDate(*note->journalDate) : QString();
+                    row.score = h.score;
+                    row.byMeaning = true;
+                    sorted.append(std::move(row));
+                }
+                found = std::move(sorted);
+            }
+        }
         for (Hit &hit : found) {
             ++total;
             const bool attachment = hit.kind != u"note"_s;
@@ -213,6 +293,7 @@ QVariant SearchResultModel::data(const QModelIndex &index, int role) const
     case MatchedPagesRole: return h.matchedPages;
     case OcrRole: return h.ocr;
     case FindRole: return h.find;
+    case ByMeaningRole: return h.byMeaning;
     }
     return {};
 }
@@ -233,7 +314,8 @@ QHash<int, QByteArray> SearchResultModel::roleNames() const
                                               {PageCountRole, "pageCount"},
                                               {MatchedPagesRole, "matchedPages"},
                                               {OcrRole, "ocr"},
-                                              {FindRole, "find"}};
+                                              {FindRole, "find"},
+                                              {ByMeaningRole, "byMeaning"}};
     return names;
 }
 

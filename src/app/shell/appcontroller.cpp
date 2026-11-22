@@ -244,6 +244,24 @@ AppController::AppController(const Options &options, QObject *parent)
     m_workspace->attachments()->setUiLanguage(m_settings->language());
     applyAttachmentSettings();
     connect(m_settings.get(), &AppSettings::attachmentSearchChanged, this, applyAttachmentSettings);
+    // Search by meaning (Settings → Search): its model in the app's data next to the others, the
+    // notebooks' vectors in the device's cache (never in a notebook), the plugin next to the model
+    // runner's, the switch in AppSettings' "search/semantic".
+    {
+        SemanticSearch::Options semantic = options.semantic;
+        if (semantic.folder.isEmpty())
+            semantic.folder = m_dataDir + u"/models/semantic"_s;
+        if (semantic.cacheDir.isEmpty()) {
+            const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+            if (!cache.isEmpty())
+                semantic.cacheDir = cache + u"/semantic"_s;
+        }
+        if (semantic.pluginDirs.isEmpty() && !semantic.open)
+            semantic.pluginDirs = localAiPluginDirs();
+        semantic.setting = [this](const QString &key, const QVariant &fallback) { return m_settings->value(key, fallback); };
+        semantic.setSetting = [this](const QString &key, const QVariant &value) { m_settings->setValue(key, value); };
+        m_workspace->semantic()->configure(semantic);
+    }
     // Encrypted notes and the app lock (docs/UI.md "Encrypted notes", "App lock"): their settings
     // are this device's; the lock starts closed before the first window shows when it should, and
     // every time it closes the encrypted notes lock too.

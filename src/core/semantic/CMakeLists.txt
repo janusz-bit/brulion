@@ -1,30 +1,32 @@
-# semantic — search by meaning (prototype; semantic/semantic.h). The module itself (chunks,
-# calibration, vector index, fusion) has no dependencies beyond QtCore and builds everywhere.
+# semantic — search by meaning (docs/SEMANTIC.md, semantic/semantic.h). The module itself (chunks,
+# calibration, vector index, fusion, the models, the plugin's interface) needs no llama.cpp and
+# builds everywhere.
 brulion_add_core_module(semantic
     SOURCES
         semantic.h
         chunker.h chunker.cpp
         calibration.h calibration.cpp
         vectorindex.h vectorindex.cpp
-        fusion.h fusion.cpp)
+        fusion.h fusion.cpp
+        models.h models.cpp
+        notes.h notes.cpp
+        semanticrunner.h semanticrunner.cpp
+    DEPS ai markdown)
 
-# The model runner needs llama.cpp (nixpkgs#llama-cpp in the dev shell). It is a separate library
-# outside brulion_core: the app and brulion-cli do not link it (yet).
-find_package(llama CONFIG QUIET)
-if(llama_FOUND)
+# The model runner (embedder.h: llama.cpp behind semanticrunner.h) and the plugin with it that the
+# app and brulion-cli load on first use — only in builds with BRULION_LOCAL_AI
+# (cmake/BrulionLocalAi.cmake), over the same pinned llama.cpp as the model on the device
+# (3rdparty/llama). Neither is part of brulion_core: the app and brulion-cli link no llama.cpp.
+# llama.cpp's own targets are added after the core modules; their names resolve when the build
+# files are generated, and 3rdparty/llama/CMakeLists.txt gives the runner the processor plugins'
+# names and puts the plugin next to them.
+if(BRULION_LOCAL_AI_ENABLED)
     qt_add_library(brulion_semantic_llama STATIC embedder.h embedder.cpp)
-    target_link_libraries(brulion_semantic_llama PUBLIC brulion_core_semantic PRIVATE llama ggml::ggml-base ggml::ggml)
+    target_link_libraries(brulion_semantic_llama PUBLIC brulion_core_semantic PRIVATE llama ggml)
+    set_target_properties(brulion_semantic_llama PROPERTIES POSITION_INDEPENDENT_CODE ON)
     brulion_set_warnings(brulion_semantic_llama)
-    # A GGML_BACKEND_DL build (nixpkgs) loads its CPU variants (AVX2, AVX-512…) at run time from
-    # the directory of the llama.cpp programs; ggml_backend_load_all() looks only next to our
-    # executable. BRULION_GGML_BACKEND_DIR in the environment overrides.
-    get_target_property(_ggml_lib ggml::ggml IMPORTED_LOCATION)
-    if(_ggml_lib)
-        get_filename_component(_ggml_dir "${_ggml_lib}" DIRECTORY)
-        get_filename_component(_ggml_bin "${_ggml_dir}/../bin" ABSOLUTE)
-        target_compile_definitions(brulion_semantic_llama PRIVATE BRULION_GGML_BACKEND_DIR="${_ggml_bin}")
-    endif()
-    message(STATUS "semantic: llama.cpp ${llama_VERSION} found — building brulion_semantic_llama")
-else()
-    message(STATUS "semantic: llama.cpp not found — brulion_semantic_llama (the model runner) is not built")
+
+    add_library(brulion_semantic MODULE semanticplugin.cpp)
+    target_link_libraries(brulion_semantic PRIVATE brulion_semantic_llama Qt6::Core)
+    brulion_set_warnings(brulion_semantic)
 endif()

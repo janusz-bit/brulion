@@ -50,8 +50,20 @@ target_link_libraries(brulion_cli
            brulion_core_markdown brulion_core_dates brulion_core_vault brulion_core_text brulion_core_util
            brulion_core_extensions
     PRIVATE brulion_core_acp brulion_core_qr brulion_core_attachments brulion_core_sync brulion_core_automation brulion_core_clipper brulion_core_publish
-            brulion_core_io brulion_core_cloudimport brulion_ipc Qt6::Network)
+            brulion_core_io brulion_core_cloudimport brulion_core_semantic brulion_core_ai brulion_ipc Qt6::Network)
 target_compile_definitions(brulion_cli PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
+# `search --semantic` (commands_index.cpp): the plugin of search by meaning where the app has it —
+# <lib>/brulion from the program's folder, and in a debug build also where it was built
+# (src/app/shell/area.cmake does the same for the app). A build without it defines nothing.
+if(BRULION_LOCAL_AI_ENABLED)
+    include(GNUInstallDirs)
+    file(RELATIVE_PATH _brulion_cli_localai_dir "${CMAKE_INSTALL_FULL_BINDIR}" "${CMAKE_INSTALL_FULL_LIBDIR}/brulion")
+    target_compile_definitions(brulion_cli PRIVATE BRULION_LOCAL_AI
+        BRULION_LOCALAI_RELATIVE_DIR="${_brulion_cli_localai_dir}")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_definitions(brulion_cli PRIVATE BRULION_LOCALAI_BUILD_DIR="${BRULION_LOCAL_AI_OUTPUT_DIR}")
+    endif()
+endif()
 brulion_set_warnings(brulion_cli)
 
 qt_add_executable(brulion-cli main.cpp)

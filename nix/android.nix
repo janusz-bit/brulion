@@ -133,6 +133,7 @@ let
   # What the APK then has in lib/<abi>/ (3rdparty/llama: the processor plugins packaged for Android).
   localAiLibs = [
     "libbrulion_localai.so"
+    "libbrulion_semantic.so"
     "libbrulion_speech.so"
     "libllama.so"
     "libmtmd.so"
@@ -373,7 +374,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       for lib in ${lib.concatStringsSep " " localAiLibs}; do
         [[ $listing == *"lib/${abi}/$lib"* ]] || fail "$lib missing: no model on the device"
       done
-      if ${gnugrep}/bin/grep -E 'brulion_localai|brulion_speech|llama|mtmd|ggml' ${androidBuildDir}/res/values/libs.xml; then
+      if ${gnugrep}/bin/grep -E 'brulion_localai|brulion_semantic|brulion_speech|llama|mtmd|ggml' ${androidBuildDir}/res/values/libs.xml; then
         fail "the model runner's libraries are loaded when the app starts (libs.xml)"
       fi
     ''}

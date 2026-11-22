@@ -1,28 +1,111 @@
-# Semantic search (prototype)
+# Search by meaning
 
 Search by meaning next to the full-text `SearchIndex`: a query such as "ciasto z jabłkami" finds
 the note "Szarlotka babci", an English query finds a Polish note, and inflected forms
-("kupiłem opony" / "kupić oponę") match without a stemmer. Status: a prototype on the branch
-`semantic-search-prototype` — core module, model runner, tests and benchmark tools; no UI, and
-neither the app nor `brulion-cli` links it yet.
+("kupiłem opony" / "kupić oponę") match without a stemmer. Shipped: Settings → Search → **Search by
+meaning** (off by default; docs/UI.md "Search by meaning" for the UI, the user guide's page "Search"),
+`brulion-cli search --semantic` (docs/CLI.md). This page: the pieces, how the app runs them, the model
+file, and the measurements behind the choices.
 
 ## Pieces
 
 | Piece | Where | What |
 |---|---|---|
-| chunks | `src/core/semantic/chunker.h` | `chunkNote()`: a note in chunks of ≤ 120 words (blank lines, headings and top-level bullets end parts; frontmatter skipped), each prefixed with the title |
+| chunks | `src/core/semantic/chunker.h`, `notes.h` | `chunkNote()`: a note in chunks of ≤ 120 words (blank lines, headings and top-level bullets end parts; frontmatter skipped), each prefixed with the title; `noteChunks()`: encrypted fragments blanked first, at most 256 chunks; `ChunkerVersion` |
+| keys, diff | `notes.h` | `noteKey()` (FNV-1a 64 of the title and the text: a note whose key changed is embedded again), `diffIndex()` (what to embed, what to drop), `passageExcerpt()` (a result's text where its chunk starts) |
 | calibration | `calibration.h` | `Calibration`: subtract the mean query / passage vector and project out the Polish–English direction; `estimate()` from the notebook's own chunks |
-| vector index | `vectorindex.h` | `VectorIndex`: raw and calibrated unit vectors, brute-force cosine, a note scores as its best chunk |
-| fusion | `fusion.h` | `fuseConvex()`: 0.8 × semantic + 0.2 × full text, each min-max scaled |
-| model runner | `embedder.h` (library `brulion_semantic_llama`) | `Embedder`: GGUF model through llama.cpp, several texts per call, GPU when there is one |
-| conversion | `scripts/semantic/convert_e5_gguf.py` | Hugging Face e5-style model → GGUF (see below) |
-| benchmark | `tests/searchbench` (`brulion-searchbench`) | quality runs (BM25 / semantic / hybrid) and timings on a folder of notes + queries |
+| vector index | `vectorindex.h` | `VectorIndex`: raw unit vectors, brute-force cosine, a note scores as its best chunk; incremental (`set` / `remove` with lazy compaction), the calibrated search without a calibrated copy (below), `save()` / `load()` in half floats |
+| fusion | `fusion.h` | `fuseConvex()`: 0.8 × semantic + 0.2 × full text, each min-max scaled; with `known`: a result without vectors ranks by its words alone; `hybridSearch()`: what the app and the CLI list |
+| models | `models.h` | `semanticModels()`: Multilingual E5 Small, q8_0 GGUF, as an `ai::LocalModel` (URL, SHA-256, size, licence); `queryMeanOf()`: its shipped query mean; `indexFileName()` |
+| plugin interface | `semanticrunner.h` | `SemanticRunner` (passages and queries, each on its own model context and thread), `hasSemanticRunner()` / `loadSemanticRunner()` (`QLibrary`, as the model runner's and the speech recognizer's) |
+| model runner | `embedder.h` (library `brulion_semantic_llama`, plugin `brulion_semantic`) | `Embedder`: GGUF model through the pinned llama.cpp (`3rdparty/llama`), several texts per call; built only with `BRULION_LOCAL_AI` |
+| the app | `src/app/shell/semanticsearch.h` (`Workspace.semantic`), `src/app/content/searchmodel.h`, `qml/shell/ShellSemanticSettings.qml` | the model's download, the setting, the notebook's vectors built and kept, the search view's and the quick switcher's hybrid search |
+| the CLI | `src/cli/commands_index.cpp` | `search --semantic`: the app's vectors of the notebook, the plugin for the query |
+| conversion | `scripts/semantic/convert_e5_gguf.py` | Hugging Face e5-style model → GGUF ("The model file") |
+| benchmark | `tests/searchbench` (`brulion-searchbench`) | quality runs (BM25 / semantic / hybrid / the app's `hybridSearch`) and timings on a folder of notes + queries |
 | device benchmark | `scripts/semantic/embedbench`, `nix build .#embedbench-android` | model speed on CPU and GPU, also on a phone |
 
-The core module (`brulion_core_semantic`) has no dependencies beyond QtCore and builds on every
-platform; only `brulion_semantic_llama` needs llama.cpp (`llama-cpp-vulkan` in the dev shell).
-Tests: `tst_semantic` (pure logic) and `tst_semantic_embedder` (skipped unless
-`BRULION_SEMANTIC_MODEL` names a GGUF file).
+The core module (`brulion_core_semantic`, deps `ai` and `markdown`) builds on every platform; only
+`brulion_semantic_llama` and the plugin need llama.cpp. Tests: `tst_semantic` (pure logic),
+`tst_content_semantic` (the app with a fake model), `tst_cli_process` (`searchSemantic`: the CLI's
+fallbacks), `tst_semantic_plugin` (the plugin as the app loads it) and `tst_semantic_embedder` (the
+Embedder) — the last two run a real model when `BRULION_SEMANTIC_MODEL` names its GGUF file.
+
+## In the app
+
+* **The model** — Multilingual E5 Small (`intfloat/multilingual-e5-small`, MIT), 8-bit, 126 MB (132 million bytes):
+  downloaded into `<app data>/models/semantic` with `ai::LocalModelFiles` when the user turns the
+  setting on (resumable, checked against its SHA-256, the same UI as the speech models). **Remove**
+  deletes it and every notebook's vectors on the device.
+* **The plugin** — `brulion_semantic` next to llama.cpp's libraries (`<lib>/brulion`, the APK's
+  `lib/<abi>/`), loaded the first time a note or a query is embedded; the app and brulion-cli link no
+  llama.cpp. It loads the processor plugin the model on the device or the speech recognizer loaded
+  already, else the best one this processor runs. The model leaves memory five minutes after its last
+  use (`SemanticRunnerHolder`, shared by the two threads below). The browser and builds without
+  `BRULION_LOCAL_AI` have no plugin: `available` false, search is full text, exactly as before.
+* **Two threads, two model contexts** — notes are embedded on `brulion-semantic`, started with
+  `QThread::IdlePriority` (SCHED_IDLE on Linux; llama.cpp's own threads, started from it, inherit it):
+  4 threads (one fewer than the fast physical cores — `ai::computeCores` — at most 4: 3 on a Pixel 9
+  Pro), up to 16 notes / 8,000 characters per call so a notebook closing or the setting turned off
+  waits for at most a second or two. Queries are embedded on `brulion-semantic-query` at normal
+  priority with a context of their own and one thread: a query never waits for the indexing.
+* **Building the index** — 3 s after the notebook's index is ready: the kept vectors are read on the
+  worker thread, every note's `noteKey` is compared with the stored one (`diffIndex`), the new and
+  changed notes are queued — the newest journal days first, then the pages by path — and notes gone
+  are dropped. Edits follow `VaultIndex::changed` through `changesSince()` 1.5 s after the last change:
+  a changed note is queued first, a deleted one forgotten; an incomplete change log (a config change, a
+  big sync) compares every note again. A note edited while it was being embedded is embedded again.
+* **Kept on the device, never in the notebook** — `<app cache>/semantic/<notebook id>-<model id>.vectors`
+  (`VectorIndex::save`: "BRSV", the format version, the model's id, `ChunkerVersion`, the dimension,
+  then per note its id, key and chunks — line, language, half-precision vector; ~770 bytes a chunk:
+  0.8 MB for a 1,000-chunk notebook). Written when the queue empties, every minute of a long build and
+  when the notebook closes; read with bounds checks — another model, version or a damaged file is
+  built again.
+* **Calibration** — the shipped query mean of the model (`queryMeanOf`: 519 short training queries of
+  the experiments) with the passage mean and the language direction estimated from the notebook's own
+  chunks whenever the index is up to date after a change; applied to queries of ≤ 5 words. The index
+  keeps only raw vectors: with q′ the calibrated query, P the projection without the language
+  direction d and m the passage mean, a chunk's calibrated cosine is
+  q′·unit(P(v − m)) = (q′·v − q′·m) / ‖P(v − m)‖ (P q′ = q′), so the index keeps one length per chunk
+  instead of a calibrated copy of every vector.
+* **The search** — `SearchResultModel` (the search view and the quick switcher's "Search the notes for
+  …") asks `SemanticSearch::queryVector()` for the query's vector: known (the last 32 are kept) — the
+  hybrid list at once; not yet — it is asked of the query thread and the list waits up to 150 ms
+  (`MeaningWaitMs`), then shows the full-text order and is sorted again when it comes. `hybridSearch`:
+  the full-text hits (notes and attachments, as many as the full-text search lists) fused with the same
+  number of notes closest in meaning (`fuseConvex`, 0.8 meaning; an attachment or a note not embedded
+  yet ranks by its words alone — so a notebook being indexed is searched sensibly); every full-text hit
+  stays, of the notes found by meaning alone the best 20 (`MeaningAloneHits`: a query of words no note
+  has lists a few close notes, not a page of them) — marked "Close in meaning", their line and excerpt
+  where their closest chunk starts. Scopes, folders and `in:` filters apply as before; `in:pdf` asks
+  nothing of the model.
+* **brulion-cli** — `search --semantic` reads the same vectors file (read-only; a note whose key no
+  longer matches is searched by its words alone), loads the plugin and the model for the query (about
+  a second), estimates the calibration and runs the same `hybridSearch`. Without the plugin, the model or
+  the app's vectors it lists the full-text hits with a warning.
+
+## The model file
+
+The app downloads `multilingual-e5-small-q8_0.gguf` — 132,440,544 bytes, SHA-256
+`3a98dd889ee152d923991c60df2fad21e39f7441a5ee302a0a050d5137993b60` — from
+`https://huggingface.co/janusz-bit/multilingual-e5-small-gguf/resolve/main/` (`kRepository` /
+`kRevision` in `src/core/semantic/models.cpp`; the checksum pins the bytes whatever the repository
+does). Made from `intfloat/multilingual-e5-small` at revision
+`614241f622f53c4eeff9890bdc4f31cfecc418b3` with the llama.cpp release `3rdparty/llama/pin.json` pins
+(v0.9.0; the dev shell's `llama-quantize` is the same release):
+
+```sh
+rev=614241f622f53c4eeff9890bdc4f31cfecc418b3
+for f in config.json model.safetensors sentencepiece.bpe.model special_tokens_map.json tokenizer.json \
+         tokenizer_config.json modules.json sentence_bert_config.json 1_Pooling/config.json; do
+  curl -sSfL --create-dirs -o e5/$f https://huggingface.co/intfloat/multilingual-e5-small/resolve/$rev/$f
+done
+nix shell --impure --expr 'with (builtins.getFlake "nixpkgs").legacyPackages.x86_64-linux;
+  python3.withPackages (p: with p; [torch transformers sentencepiece protobuf numpy safetensors pyyaml requests])' \
+  -c python3 scripts/semantic/convert_e5_gguf.py --llama-src "$BRULION_LLAMA_SOURCE_DIR" e5 e5-small-f16.gguf
+nix develop -c llama-quantize e5-small-f16.gguf multilingual-e5-small-q8_0.gguf q8_0
+sha256sum multilingual-e5-small-q8_0.gguf
+```
 
 ## Models
 
@@ -37,11 +120,7 @@ SentencePiece vocabulary and unshifted positions; token ids match the Hugging Fa
 exactly. Sizes: f16 242 MB, q8_0 132 MB (82% of the weights are the 250k-token vocabulary; keeping
 only Latin-script tokens would bring q8_0 to about 70 MB — not done yet).
 
-```sh
-src=$(nix build --no-link --print-out-paths nixpkgs#llama-cpp.src)   # same version as libllama
-python scripts/semantic/convert_e5_gguf.py --llama-src $src <hf model dir> e5-small-f16.gguf
-llama-quantize e5-small-f16.gguf e5-small-q8_0.gguf q8_0
-```
+(The commands: "The model file" above.)
 
 Fidelity: on the synthetic benchmark the C++ prototype gives the same ranking as PyTorch for every
 query (top hit identical for 341/341 queries, scores within 2·10⁻⁴); q8_0 loses nothing measurable.
@@ -52,8 +131,15 @@ query (top hit identical for 341/341 queries, scores within 2·10⁻⁴); q8_0 l
 the CPU; `Device::AnyGpu` also takes an integrated GPU. CPU runs pass llama.cpp an empty device
 list and turn `op_offload` off: otherwise llama.cpp sets up every GPU anyway and moves big
 operations there — the "CPU" run silently used the laptop's NVIDIA GPU, and on the phone it copied
-the weights to the Mali GPU on every call (3x slower). Threads: passages at most 4 (half the
-logical cores), queries 1 — SMT siblings and little cores slow llama.cpp's barriers down.
+the weights to the Mali GPU on every call (3x slower). Threads: passages at most 4 (one fewer than
+the fast physical cores, else half the logical cores), queries 1 — SMT siblings and little cores slow
+llama.cpp's barriers down.
+
+The app's llama.cpp (`3rdparty/llama`) is built with its CPU backends only, so `Auto` runs on the
+CPU there — the measurements below show why that is enough on phones and integrated GPUs; a discrete
+GPU would index a big notebook 10–20x faster (a Vulkan build of the plugin: not done, see the
+backends). The GPU numbers come from the prototype's runs with nixpkgs' `llama-cpp-vulkan` (the dev
+shell's, which `scripts/semantic/embedbench` builds against).
 
 Measured with e5-small q8_0 (`embedbench`; GPU vectors equal the CPU's, cosine ≥ 0.9999):
 
@@ -93,8 +179,8 @@ Backends:
 
   Size: the Vulkan backend's compiled shaders add about 35 MB to the executable (the CPU-only
   build is a few MB) — a real cost next to a 100 MB APK.
-* **Browser (WebAssembly):** no model, or CPU only (ggml builds for WebAssembly; its WebGPU backend
-  is experimental). Search falls back to full text alone.
+* **Browser (WebAssembly):** no model (ggml builds for WebAssembly, its WebGPU backend is
+  experimental; the app's browser build has no llama.cpp at all). Search is full text alone.
 
 ## Calibration
 
@@ -142,3 +228,34 @@ Findings:
   query embedding on the laptop's CPU).
 * The C++ prototype reproduces Python (q8_0 on Vulkan against f16 PyTorch): MRR within 0.004, the
   same top hit for 97–99% of queries.
+
+## The shipped pipeline, measured
+
+Quality — the synthetic test notes (`scripts/semantic/bench/data`, MRR@10, `brulion-searchbench`'s
+"app" run: `hybridSearch` exactly as the app calls it, the shipped query mean and each set's own
+calibration, the GGUF above through the pinned llama.cpp):
+
+| Set | BM25 (today's full text) | e5-small alone | the app's hybrid |
+|---|---|---|---|
+| testA (70 notes, 173 queries) | 0.543 | 0.792 | 0.787 |
+| testB (70 notes, 169 queries) | 0.560 | 0.823 | 0.824 |
+
+The same as the prototype's hybrid with the calibration file of the experiments, to the third
+decimal: the conversion, the half-precision index and the calibrated search without a calibrated
+copy change nothing measurable. By kind (testA / testB): exact words 0.978 / 1.000 (BM25 1.000 /
+1.000), typos 1.000 / 1.000, inflected forms 0.913 / 1.000 (BM25 0.569 / 0.721), the other language
+0.748 / 0.530 (BM25 0.176 / 0.078), synonyms 0.454 / 0.574 (BM25 0.099 / 0.077).
+
+Speed — the laptop's i5-13450HX (Debug build, the machine shared with other builds: load 5–7):
+
+* Indexing: 173 notes (the synthetic notes and the user guide, 1,102 chunks, 174k tokens) in 46 s at
+  normal priority, 4 threads (~3,800 tokens/s — the prototype's 3,900–4,200 on the idle machine; at
+  load 12–30 it fell to ~2,000). The app itself, at SCHED_IDLE in calls of 16 notes: 1,063 chunks in
+  68 s (218 s under the heavier load). The next start reads the kept vectors (0.83 MB) in a few
+  milliseconds and embeds nothing.
+* A query: 10.6 ms to embed (one thread), 1.8 ms to scan 1,102 chunks (the core at -O0), BM25 9 ms;
+  the model opens in 0.4–1.0 s (the first query after it left memory). `brulion-cli search
+  --semantic`: about 1 s in all, most of it loading the model.
+* The Pixel 9 Pro's numbers above (1,600 tokens/s with 3 threads, 6 ms a query) put a 1,000-note
+  notebook at about 10 minutes of background work, once.
+

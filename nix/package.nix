@@ -294,7 +294,9 @@ stdenv.mkDerivation (finalAttrs: {
       # The model on the device: the plugin, llama.cpp's libraries and a processor plugin beside
       # it, each finding the others there (no library left unresolved).
       test -f $out/lib/brulion/libbrulion_localai.so
-      # … and the speech recognizer's plugin, over the same ggml.
+      # … the embedding model's plugin for search by meaning, and the speech recognizer's, over
+      # the same ggml.
+      test -f $out/lib/brulion/libbrulion_semantic.so
       test -f $out/lib/brulion/libbrulion_speech.so
       ls $out/lib/brulion/libggml-cpu-*.so >/dev/null
       # … where the app looks for it: lib/brulion, from its program's folder.
