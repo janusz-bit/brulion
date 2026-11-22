@@ -1,0 +1,13 @@
+Nowości w 0.28.0:
+• Nowy wygląd
+• Rozmiar interfejsu
+• Udostępnij agentów telefonowi
+• Agent pracuje, gdy telefon śpi
+• Asystent Brulionu w Zed i JetBrains
+• claude.ai i ChatGPT z aplikacji
+• Aplikacja jako kod
+• Zdjęcia ćwiczeń w Siłowni
+• Tabele i agenci
+• Poprawki
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.28.0

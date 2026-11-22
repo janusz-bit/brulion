@@ -1,0 +1,13 @@
+What's new in 0.28.0:
+• A new look
+• Interface size
+• Share agents with the phone
+• The agent keeps working while the phone sleeps
+• Brulion's assistant in Zed and JetBrains
+• claude.ai and ChatGPT from the app
+• The app as code
+• The gym's exercise pictures
+• Tables and agents
+• Fixes
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.28.0
