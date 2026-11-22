@@ -79,7 +79,8 @@
 //                  QueryCache, reminders' CalendarCache and NotificationCache are built on
 //
 //   loading elsewhere (notebook::IndexLoader): VaultIndex::prepare(path, content, config) /
-//                  prepareParsed() -> PreparedNote (any thread), updatePrepared(prepared,
+//                  prepareParsed() / prepareSave() (an editor's save: also the tags as written,
+//                  compared with the old version) -> PreparedNote (any thread), updatePrepared(prepared,
 //                  sequence), reserveSequence(n), adoptSearch(SearchIndex) (documents kept by
 //                  content key), setSearchBuiltElsewhere(on), contentKey(text), parseFingerprint;
 //                  SearchIndex::prepare(title, aliases, content) -> Document, set(id, doc, key);

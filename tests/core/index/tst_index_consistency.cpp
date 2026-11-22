@@ -12,6 +12,7 @@
 #include <QRandomGenerator>
 #include <QTest>
 
+#include <algorithm>
 #include <thread>
 #include <vector>
 
@@ -319,9 +320,14 @@ private Q_SLOTS:
                 const QString content = isNote(path) ? trickyContent(rng) : QString();
                 files.insert(path, content);
                 if (step % 2 == 0 && isNote(path)) {
+                    // Every other one as an editor's save (prepareSave(): the tags as written too).
                     PreparedNote prepared;
                     const VaultConfig config = index.config();
-                    std::thread worker([&] { prepared = VaultIndex::prepare(path, content, config); });
+                    const bool save = step % 4 == 0;
+                    std::thread worker([&] {
+                        prepared = save ? VaultIndex::prepareSave(path, content, config)
+                                        : VaultIndex::prepare(path, content, config);
+                    });
                     worker.join();
                     QVERIFY(prepared.isValid());
                     QCOMPARE(prepared.path(), path);
@@ -346,6 +352,29 @@ private Q_SLOTS:
             if (QTest::currentTestFailed())
                 return;
         }
+    }
+
+    // An editor's save prepared on the writer (prepareSave()): the tags' spellings as written
+    // reach tags() and the change log as through update() — a changed spelling of the same tags in
+    // the same blocks, then a change elsewhere in a tagged page.
+    void preparedSaveKeepsTagSpellings()
+    {
+        VaultIndex byUpdate;
+        VaultIndex byPrepared;
+        const QStringList versions = {u"- zakupy #Żółw\n- mleko #praca\n"_s, u"- zakupy #ŻÓŁW\n- mleko #praca\n"_s,
+                                      u"- zakupy, chleb #ŻÓŁW\n- mleko #praca\n"_s,
+                                      u"---\ntags: [Łódź]\n---\n- zakupy #żółw\n- mleko #praca #łódź\n"_s};
+        const QStringList spelled = {u"Żółw"_s, u"ŻÓŁW"_s, u"ŻÓŁW"_s, u"żółw"_s};
+        for (qsizetype i = 0; i < versions.size(); ++i) {
+            byUpdate.update(u"Zakupy.md"_s, versions[i]);
+            byPrepared.updatePrepared(VaultIndex::prepareSave(u"Zakupy.md"_s, versions[i], byPrepared.config()));
+            QCOMPARE(describeTags(byPrepared.tags()), describeTags(byUpdate.tags()));
+            const QList<TagCount> tags = byPrepared.tags();
+            const auto turtle = std::ranges::find(tags, u"żółw"_s, &TagCount::tag);
+            QVERIFY(turtle != tags.cend());
+            QCOMPARE(turtle->display, spelled[i]);
+        }
+        compareIndexes(byPrepared, byUpdate, u"tag spellings"_s);
     }
 
     void updatePreparedRules()

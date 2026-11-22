@@ -21,9 +21,9 @@ GUI thread's time goes" below).
 | `bench-matrix.sh` | the whole matrix for several labelled builds (`BINS="base=… cur=…"`; `ENVS="cur=VAR=value"`: one label's environment, e.g. the same binary with `BRULION_PAGE_ITEM=1`), group by group (`startup-big-short`: first + warm starts only, for slow machines; `page-scroll`, `page-resize`: the 300-block and 5000-block pages) |
 | `analyze.py <dir>…` | metrics per run → median / min / max / p25 / p75 per metric and label (`--csv`, `--json`) |
 | `timeline.py run.jsonl` | one run's events in time order (marks, input, stalls with their CPU, model signals, signal spans ≥ `--span-ms`, the GUI thread's file system calls, frame gaps) |
-| `perf-scenario.sh` + `perf-slice.py` | a scenario under `perf record` (CLOCK_MONOTONIC) and the GUI thread's samples sliced by the probe's windows (`after_ready`, `stalls:100@content:ready`, `autosave`, `save`, `fanout`, `keys`, …) |
+| `perf-scenario.sh` + `perf-slice.py` | a scenario under `perf record` (CLOCK_MONOTONIC; user space only, `EVENT` default `cycles:u` with `--user-callchains` — what `perf_event_paranoid=2` allows —, `FREQ` or `PERIOD`) and the GUI thread's samples sliced by the probe's windows (`after_ready`, `stalls:100@content:ready`, `autosave`, `save`, `merge` — a background save's result merged —, `fanout`, `keys`, …) |
 | `perf-attach.sh` | `perf record -p` attached only once the probe writes a given mark, for N seconds (slow machines: the Pi), then `perf script` + per-thread/DSO summary |
-| `profile-cases.sh` | named attribution runs: perf cases (`typing-outline`, `startup-big`, `views`, `switcher`, …: `perf-scenario.sh` + `perf-slice.py` with the right windows), qmlprofiler cases (`qml-*`) and heaptrack (`heap-startup-big`) |
+| `profile-cases.sh` | named attribution runs: perf cases (`typing-outline`, `source-typing-outline`, `startup-big`, `views`, `switcher`, …: `perf-scenario.sh` + `perf-slice.py` with the right windows), qmlprofiler cases (`qml-*`) and heaptrack (`heap-startup-big`) |
 | `qtd-summary.py` | a qmlprofiler trace summarised (build with `-DCMAKE_CXX_FLAGS=-DQT_QML_DEBUG`) |
 | `laptop-build.sh` | Release(+`-g`) builds of a source tree on the x86_64 laptop (`rel`, `qmldbg`) |
 

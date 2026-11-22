@@ -299,7 +299,8 @@ public:
     void setReadOnly(bool on);
     bool active() const { return m_active; }
     void setActive(bool active);
-    /// An index change is waiting for the controller to be active again.
+    /// An index change is waiting for the rows to be shown again (the controller active again,
+    /// source mode left).
     bool indexStale() const { return m_indexStale; }
     void setAllowNewBlockIds(bool allow);
     /// Colours the renderer uses (from `palette`).
@@ -1235,10 +1236,13 @@ private:
     void onFileChanged(const QString &path);
     void onEditsDiscarded(const QString &path);
     void onWebPictureChanged(const QString &url);
-    /// EditorHost::indexChanged: followed now while active, else when active again.
+    /// EditorHost::indexChanged: followed now while the rows are shown (active, not in source
+    /// mode), else when they are again.
     void onIndexChanged();
     /// EditorHost::macrosChanged: the rows that show a macro ask what it shows now (when shown).
     void onMacrosChanged();
+    /// What onIndexChanged() / onMacrosChanged() left for later, now that the rows may be shown.
+    void followStaleRows();
     /// TemplateVars::variable for a template filled on this page: the host's templateVariable()
     /// with {page, path, date, template}.
     std::function<std::optional<QString>(const QString &, const QString &, const QString &)>
@@ -1500,8 +1504,8 @@ private:
     bool m_allowNewBlockIds = true;
     bool m_readOnly = false;
     bool m_active = true;
-    bool m_indexStale = false; ///< an index change not followed yet (inactive)
-    bool m_macrosStale = false; ///< macrosChanged() while hidden: followed when shown
+    bool m_indexStale = false;  ///< an index change not followed yet (inactive, source mode)
+    bool m_macrosStale = false; ///< macrosChanged() while hidden or in source mode: followed when shown
     QVariantMap m_pageProperties;
     QString m_pagePropertiesText; ///< the text pageProperties was read from
     Properties m_lookProperties;  ///< the page properties `look` is read from (keys lower case)

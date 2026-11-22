@@ -13,6 +13,7 @@
 #
 # perf cases:  startup-demo startup-big typing-small typing-outline typing-document open-outline
 #              open-document views search switcher journal-scroll switch-pages idle-edit
+#              source-typing-medium source-typing-outline (source mode, Ctrl+E)
 # qml cases:   qml-startup-demo qml-startup-big qml-open-outline qml-views qml-jscroll qml-typing
 #              qml-switcher qml-search
 # memory:      heap-startup-big (heaptrack on PATH: nix shell nixpkgs#heaptrack)
@@ -63,6 +64,10 @@ for c in "$@"; do
         --env "BENCH_PAGE=Bench/Mała strona.md" --env BENCH_ROW=3 ;;
     typing-outline) perf_case $c keys autosave save fanout -- --vault "$big" --scenario typing --env "BENCH_PAGE=Bench/Konspekt 5000.md" ;;
     typing-document) perf_case $c keys autosave save fanout -- --vault "$big" --scenario typing --env "BENCH_PAGE=Bench/Dokument 5000.md" ;;
+    source-typing-medium) perf_case $c keys autosave save merge fanout -- --vault "$big" --scenario source-typing \
+        --env "BENCH_PAGE=Bench/Średnia strona.md" ;;
+    source-typing-outline) perf_case $c keys autosave save merge fanout -- --vault "$big" --scenario source-typing \
+        --env "BENCH_PAGE=Bench/Konspekt 5000.md" ;;
     open-outline) perf_case $c "mark:nav_start:1..page_content:1" "mark:page_content:1..page_settled:1" \
         "mark:nav_start:2..page_settled:2" -- --vault "$big" --scenario open-page --env "BENCH_PAGE=Bench/Konspekt 5000.md" ;;
     open-document) perf_case $c "mark:nav_start:1..page_content:1" "mark:page_content:1..page_settled:1" -- \

@@ -402,6 +402,12 @@ public:
     static quint64 contentKey(QStringView text);
     /// Parse note `path` (a Markdown path) on any thread: ParsedNote and lookup keys.
     static PreparedNote prepare(const VaultPath &path, const QString &content, const VaultConfig &config);
+    /// prepare() for a new version of a note the index holds (an editor's save, on the vault's
+    /// writer): also what updatePrepared() compares with the version it replaces — the tags as
+    /// written, an inline parse of every block with a tag — so the index's thread does not compute
+    /// it (25 of the 42 M instructions of a 5000-block outline's merge; docs/PERFORMANCE.md "Source
+    /// mode's autosave").
+    static PreparedNote prepareSave(const VaultPath &path, const QString &content, const VaultConfig &config);
     /// The same from a ParsedNote parsed elsewhere (the index cache: no parsing).
     static PreparedNote prepareParsed(const VaultPath &path, const QString &content, ParsedNote note,
                                       const VaultConfig &config);

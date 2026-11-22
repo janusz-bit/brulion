@@ -232,6 +232,49 @@ private Q_SLOTS:
         QCOMPARE(changes(changed, *f.model()), QStringList());
     }
 
+    // Source mode shows the page's text, not its rows (the list behind it is hidden): index
+    // changes — an autosave of the source among them — render no row; leaving source mode
+    // catches up once with all of them, also after an edit of the source.
+    void sourceModeGoesStaleThenCatchesUp_data()
+    {
+        QTest::addColumn<bool>("edited");
+        QTest::newRow("source unchanged") << false;
+        QTest::newRow("source edited") << true;
+    }
+    void sourceModeGoesStaleThenCatchesUp()
+    {
+        QFETCH(bool, edited);
+        Fixture f(u"- ((inny1))\n- ![[Trzecia]]\n- [[Obca]]\n"_s);
+        f.page.setSourceMode(true);
+        QVERIFY(f.page.sourceMode());
+        QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
+        QVERIFY(f.change(u"Inna.md"_s, u"- Blok zmieniony podczas edycji, ćma ^inny1\n"_s));
+        QVERIFY(f.change(u"Trzecia.md"_s, u"- trzecia, zmieniona podczas edycji źródła\n"_s));
+        if (edited) {
+            // The source edited and autosaved meanwhile (the page's own change in the index).
+            QSignalSpy index(&f.host, &EditorHost::indexChanged);
+            f.page.setSourceText(f.page.sourceText() + u"- nowy blok, żółw\n"_s);
+            QVERIFY(f.page.save());
+            QVERIFY(index.size() > 0 || index.wait());
+        }
+        QVERIFY(f.page.indexStale());
+        QCOMPARE(changes(changed, *f.model()), QStringList());
+        f.page.setSourceMode(false);
+        QVERIFY(!f.page.indexStale());
+        QVERIFY(f.html(0).contains(u"Blok zmieniony podczas edycji, ćma"_s));
+        QVERIFY(shownText(f.transclusions(1)).contains(u"zmieniona podczas edycji źródła"_s));
+        if (edited)
+            QVERIFY(f.html(3).contains(u"nowy blok, żółw"_s));
+        else
+            QCOMPARE(changes(changed, *f.model()), (QStringList{u"0-0:html,renderedText"_s, u"1-1:transclusions"_s}));
+        // Source mode again without a change in between: nothing to do on the way out.
+        f.renderAll();
+        changed.clear();
+        f.page.setSourceMode(true);
+        f.page.setSourceMode(false);
+        QCOMPARE(changes(changed, *f.model()), QStringList());
+    }
+
     // A full invalidation (another palette, language, host) and the index followed after it.
     void fullInvalidationThenFollowing()
     {
