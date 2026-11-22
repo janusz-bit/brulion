@@ -425,8 +425,9 @@ public:
     /// The page being named at `caret` of the field's `text` (as T3 Code's @-mentions): "@" and
     /// the start of a name (not inside a word, an address), or "[[" and anything but "]": the
     /// pages it may be ({title, path, folder, start, end} — `start`..`end` the text replaced by
-    /// the link), at most `limit`; [] when no name is being written.
-    Q_INVOKABLE QVariantList mentions(const QString &text, int caret, int limit = 8) const;
+    /// the link), at most `limit` — not the conversation `path` itself; [] when no name is being
+    /// written.
+    Q_INVOKABLE QVariantList mentions(const QString &path, const QString &text, int caret, int limit = 8) const;
     /// Where a page's name being written at `caret` starts and what it is so far ({start, query};
     /// start -1: none). Pure.
     static std::pair<int, QString> mentionAt(const QString &text, int caret);

@@ -461,12 +461,26 @@ private Q_SLOTS:
         QCOMPARE(chats->send(path, u"Trzecie czekaj"_s), path);
         QTRY_VERIFY(turn->running());
         QVERIFY(chats->queue(path, u"Za nazwą"_s));
+        const int cancels = int(logged(u"session/cancel"_s).size());
         chats->stop(path);
+        // (Renamed once the agent ended the cancelled turn: a session is not renamed while a turn
+        // of it is on its way.)
+        QTRY_VERIFY(logged(u"session/cancel"_s).size() > cancels);
+        QTest::qWait(300 * BRULION_TEST_SLOWDOWN);
         const QString renamed = chats->rename(path, u"Nowa nazwa"_s);
         QCOMPARE(renamed, u"AI/2026-11-20 Nowa nazwa.md"_s);
         QCOMPARE(chats->queued(renamed).size(), 1);
         QVERIFY(chats->queued(path).isEmpty());
         QVERIFY(chats->queueHeld(renamed));
+        // A new message while they are held: they go on, it after them.
+        QVERIFY(chats->queue(renamed, u"I jeszcze to"_s));
+        shell::ChatTurn *renamedTurn = chats->turn(renamed);
+        QVERIFY(renamedTurn->running());
+        QVERIFY(!chats->queueHeld(renamed));
+        QTRY_VERIFY_WITH_TIMEOUT(!renamedTurn->running(), 20000);
+        QVERIFY2(chats->queued(renamed).isEmpty(), qPrintable(ws->read(renamed) + u"\nfailure: "_s + renamedTurn->failure()));
+        QVERIFY2(ws->read(renamed).endsWith(u"- 🤖 Odpowiedź na: I jeszcze to\n  czas:: 2026-11-20 09:15\n"_s),
+                 qPrintable(ws->read(renamed)));
     }
 
     /// "Edit from here" takes the message and the rest out (an agent's next turn: a new session
@@ -1117,7 +1131,7 @@ private Q_SLOTS:
         WorkspaceChats *chats = ws->chats();
         QVERIFY(ws->write(u"Zakupy.md"_s, u"- mleko\n- chleb\n"_s));
         ws->finishIndexing();
-        const QVariantList offered = chats->mentions(u"Spójrz na @Zak"_s, 14);
+        const QVariantList offered = chats->mentions(QString(), u"Spójrz na @Zak"_s, 14);
         QCOMPARE(offered.size(), 1);
         QCOMPARE(offered.first().toMap().value(u"title"_s).toString(), u"Zakupy"_s);
         QCOMPARE(offered.first().toMap().value(u"start"_s).toInt(), 10);

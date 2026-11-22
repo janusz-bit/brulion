@@ -1730,7 +1730,7 @@ FocusScope {
                 Flow {
                     id: mentionList
                     objectName: "chatMentions"
-                    readonly property list<var> pages: root.chats.mentions(input.text, input.cursorPosition, 8)
+                    readonly property list<var> pages: root.chats.mentions(root.path, input.text, input.cursorPosition, 8)
                     Layout.fillWidth: true
                     visible: mentionList.pages.length > 0
                     spacing: Theme.space1

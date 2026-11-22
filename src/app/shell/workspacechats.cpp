@@ -1183,8 +1183,12 @@ bool WorkspaceChats::queue(const QString &path, const QString &text, const QStri
     m_queued[key].append(Waiting{m_nextQueued++, text.trimmed(), sent});
     for (const QString &picture : std::as_const(sent))
         m_added.removeAll(picture); // (the queue keeps them now)
-    // (Nothing runs — after a restart, a failure — and the user writes on: they go now.)
-    if (!isRunning(path) && !m_held.contains(key)) {
+    // (Nothing runs — after a restart, a stop, a failure — and the user writes on: what was held
+    // goes on, this one after it, as T3 Code's queue resumes with a new message.)
+    if (!isRunning(path)) {
+        m_held.remove(key);
+        if (ChatTurn *t = find(path))
+            setFailure(t, QString());
         saveQueue();
         queueMoved();
         sendNextQueued(path);
@@ -1516,14 +1520,16 @@ int WorkspaceChats::mentionEnd(const QString &text, int caret, const QString &ti
     return start < 0 ? caret : start + int(title.trimmed().size()) + 5;
 }
 
-QVariantList WorkspaceChats::mentions(const QString &text, int caret, int limit) const
+QVariantList WorkspaceChats::mentions(const QString &path, const QString &text, int caret, int limit) const
 {
     const auto [start, query] = mentionAt(text, caret);
     if (start < 0 || !m_workspace->ready())
         return {};
     QVariantList out;
-    for (const QVariant &v : m_workspace->suggestPages(query, limit)) {
+    for (const QVariant &v : m_workspace->suggestPages(query, limit + 1)) {
         QVariantMap m = v.toMap();
+        if (m.value(u"path"_s).toString().compare(path, Qt::CaseInsensitive) == 0 || out.size() >= limit)
+            continue;
         m.insert(u"start"_s, start);
         m.insert(u"end"_s, caret);
         out.append(m);
