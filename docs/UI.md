@@ -1367,7 +1367,8 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   agent takes no message in the middle of one — and it is answered first, with the question the
   stopped turn did not answer). With an empty field the button is Stop. A turn that fails or is
   stopped **holds** them (`chatHeld`: "2 messages wait: the answer before them stopped." with
-  **Resume**, `chatResume` → `resumeQueue()`); they are kept in the notebook's device state
+  **Resume**, `chatResume` → `resumeQueue()`; a new message resumes them too, and waits after
+  them); they are kept in the notebook's device state
   (LocalStore `chat/queued`), so a restart keeps them, held, and they follow a rename.
 * **Naming a page** (as T3 Code's @-mentions): "@" and the start of a name (at the start or after a
   space — not an address), or "[[" and anything but "]", offers the pages it may be as chips above
