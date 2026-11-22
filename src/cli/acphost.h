@@ -26,8 +26,12 @@
 //   stream that runs a turn is never cut off for a new one of its device: it ends after the turn,
 //   the agent's questions in it answered "cancelled" (nobody is there to answer them).
 //
+// * Pairing without a code (setPairTrust(); acptrust.h): in a tailnet (--tailscale) a device of the
+//   computer's own user pairs with nothing typed, tailscaled vouching for who it is.
+//
 // Plain HTTP on 127.0.0.1 behind a reverse proxy that adds HTTPS (in the user's own network, a
-// tailnet — the agents can run commands here), or HTTPS itself with --tls-cert / --tls-key. Host
+// tailnet — the agents can run commands here), plain HTTP on this computer's tailnet address
+// (--tailscale: WireGuard encrypts it), or HTTPS itself with --tls-cert / --tls-key. Host
 // is checked (DNS rebinding); a request with an Origin (a browser's page) is refused, unless that
 // origin is the app's own in a browser named with --allowed-origin (CORS).
 #pragma once
@@ -44,6 +48,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
@@ -177,10 +182,23 @@ inline constexpr int kMaxTurnTools = 100;
 inline constexpr int kMaxTurnsPerDevice = 64;
 inline constexpr qint64 kTurnKeptMs = 24LL * 60 * 60 * 1000;
 
+/// The answer to a pairing request without a code (AcpHost::setPairTrust(); acptrust.h: the
+/// device's identity in a tailnet).
+struct PairTrust {
+    bool trusted = false;
+    QString login; ///< whose device it is ("" unknown)
+    QString node;  ///< its name in the tailnet ("" unknown)
+    QString why;   ///< English, for the log and the device: how it was trusted, or why not
+};
+
 struct AcpHostOptions {
     QHostAddress address = QHostAddress(QHostAddress::LocalHost);
     quint16 port = 8790;
-    QString publicUrl; ///< "" = http(s)://<address>:<port>
+    QString publicUrl;  ///< "" = http(s)://<publicHost, else address>:<port>
+    QString publicHost; ///< the host name of that default ("nixos.tail1ea20e.ts.net"; "" the address)
+    /// A plain http:// public URL beyond this computer and a tailnet (a LAN address: not encrypted
+    /// on the way, --allow-http).
+    bool allowHttp = false;
     QString stateFile;
     QList<HostAgent> agents;
     bool tools = true;    ///< sessions get Brulion's MCP server
@@ -212,6 +230,12 @@ public:
 
     /// Keep the notebook in sync with Nextcloud (before start()); not owned.
     void setSync(HostSync *sync) { m_sync = sync; }
+    /// A pairing request without a code is judged by `check` (the device's tailnet identity,
+    /// acptrust.h): trusted, it pairs; else it is refused with 403 `code_needed`. Unset: a code
+    /// is always needed.
+    using PairTrustCheck =
+            std::function<void(const http::Request &request, std::function<void(const PairTrust &verdict)> done)>;
+    void setPairTrust(PairTrustCheck check) { m_pairTrust = std::move(check); }
 
     bool start(QString *error);
     quint16 port() const;
@@ -243,7 +267,10 @@ private:
     const PairedDevice *authenticate(const http::Request &request, http::Response *refusal);
     void maintain();
 
-    http::Response pair(const http::Request &request);
+    void pair(const http::Request &request, const http::Reply &reply);
+    http::Response pairWithCode(const QString &code, const QString &name, const QString &peer, const QDateTime &t);
+    /// A device paired without a code (its identity trusted: `how`).
+    http::Response addTrustedDevice(const QString &name, const QString &how);
     http::Response info() const;
     http::Response openStream(const PairedDevice &device, const http::Request &request);
     http::Response send(Stream *s, const http::Request &request);
@@ -290,6 +317,7 @@ private:
     notebook::Notebook *m_notebook = nullptr;
     AcpHostOptions m_options;
     HostSync *m_sync = nullptr;
+    PairTrustCheck m_pairTrust;
     std::unique_ptr<http::Server> m_http;
     std::unique_ptr<HostStateStore> m_store;
     QString m_root;

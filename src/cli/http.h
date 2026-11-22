@@ -67,7 +67,8 @@ struct Request {
     Headers headers;
     QByteArray body;
     QHostAddress peer;
-    bool secure = false; ///< came over TLS
+    quint16 peerPort = 0; ///< the peer's port (tailscaled's whois asks for address and port)
+    bool secure = false;  ///< came over TLS
 };
 
 struct Response {

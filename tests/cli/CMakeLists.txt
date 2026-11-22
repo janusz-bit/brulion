@@ -60,3 +60,13 @@ target_compile_definitions(tst_cli_acp_host PRIVATE FAKE_ACP_AGENT="$<TARGET_FIL
 add_dependencies(tst_cli_acp_host cli_fake_acp_agent)
 math(EXPR _acp_host_timeout "300 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_cli_acp_host PROPERTIES TIMEOUT ${_acp_host_timeout})
+# Pairing without a code in a tailnet (`acp serve --tailscale`, src/cli/acptrust.h) against a fake
+# tailscaled over a real local socket (tests/common/faketailscaled.h): whois allowed and denied, the
+# Serve header only from loopback behind Serve, forged ones refused, the host pairing by identity
+# over HTTP, and brulion-cli as a process (--tailscale, --stop-on-eof, its refusals).
+brulion_add_test(tst_cli_acp_trust SOURCES tst_cli_acp_trust.cpp ${PROJECT_SOURCE_DIR}/tests/common/faketailscaled.h
+    LIBS brulion_cli brulion_core_tailscale brulion_core_notebook Qt6::Network Qt6::Core)
+target_compile_definitions(tst_cli_acp_trust PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
+add_dependencies(tst_cli_acp_trust brulion-cli)
+math(EXPR _acp_trust_timeout "120 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_cli_acp_trust PROPERTIES TIMEOUT ${_acp_trust_timeout})

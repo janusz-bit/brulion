@@ -2,6 +2,8 @@
 // docs/CLI.md "AI agents for other devices").
 #include "acphost.h"
 
+#include "acptrust.h"
+
 #include "acp/acp.h"
 #include "acp/remote.h"
 #include "automation/uri.h"
@@ -10,12 +12,15 @@
 #include "markdown/encrypted.h"
 #include "notebook/session.h"
 #include "qr/qrcode.h"
+#include "tailscale/localapi.h"
+#include "tailscale/tailscale.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -39,6 +44,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <thread>
 
 using namespace Qt::StringLiterals;
 
@@ -640,16 +646,21 @@ bool AcpHost::start(QString *error)
     }
     const quint16 port = m_http->port();
     if (publicUrl.isEmpty()) {
-        const QString host = m_options.address.protocol() == QAbstractSocket::IPv6Protocol
+        const QString host = !m_options.publicHost.isEmpty() ? m_options.publicHost
+                             : m_options.address.protocol() == QAbstractSocket::IPv6Protocol
                                      ? u'[' + m_options.address.toString() + u']'
                                      : m_options.address.toString();
         publicUrl = (tls ? u"https://"_s : u"http://"_s) + host + u':' + QString::number(port);
     }
     const QUrl url(publicUrl, QUrl::StrictMode);
     const bool loopbackHost = url.host() == u"localhost" || QHostAddress(url.host()).isLoopback();
+    // (Plain http to a tailnet's name or address goes through its WireGuard tunnel, encrypted.)
+    const bool plainAllowed = loopbackHost || tailscale::isTailnetHost(url.host()) || m_options.allowHttp;
     if (!url.isValid() || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()
-        || (url.scheme() != u"https" && !(url.scheme() == u"http" && loopbackHost))) {
-        *error = tr("--public-url must be an https:// address (http:// only on this computer): %1").arg(publicUrl);
+        || (url.scheme() != u"https" && !(url.scheme() == u"http" && plainAllowed))) {
+        *error = tr("--public-url must be an https:// address (http:// only on this computer, in a tailnet or with "
+                    "--allow-http): %1")
+                         .arg(publicUrl);
         return false;
     }
     QString path = url.path(QUrl::FullyEncoded);
@@ -854,7 +865,7 @@ void AcpHost::onRequest(const http::Request &request, const http::Reply &rawRepl
     }
     const QString endpoint = r.mid(1 + acp::RemoteApiPrefix.size());
     if (endpoint == u"pair") {
-        reply.send(pair(request));
+        pair(request, reply);
         return;
     }
     http::Response refusal;
@@ -895,19 +906,82 @@ void AcpHost::onRequest(const http::Request &request, const http::Reply &rawRepl
     }
 }
 
-http::Response AcpHost::pair(const http::Request &request)
+void AcpHost::pair(const http::Request &request, const http::Reply &reply)
 {
     const QDateTime t = now();
     m_pairTries.removeIf([&t](const QDateTime &when) { return when.secsTo(t) >= 60; });
-    if (m_pairTries.size() >= kMaxPairsPerMinute)
-        return apiError(429, u"too_many_tries"_s, u"Too many pairing tries: wait a minute"_s);
+    if (m_pairTries.size() >= kMaxPairsPerMinute) {
+        reply.send(apiError(429, u"too_many_tries"_s, u"Too many pairing tries: wait a minute"_s));
+        return;
+    }
     m_pairTries.append(t);
     const QJsonDocument doc = QJsonDocument::fromJson(request.body);
     const QJsonObject body = doc.object();
     const QString code = acp::normalizePairingCode(body.value(u"code"_s).toString());
     const QString name = deviceName(body.value(u"device"_s).toString());
-    if (!doc.isObject() || code.isEmpty())
-        return apiError(400, u"bad_request"_s, u"A pairing code is needed"_s);
+    if (!doc.isObject()) {
+        reply.send(apiError(400, u"bad_request"_s, u"A pairing code is needed"_s));
+        return;
+    }
+    if (code.isEmpty()) {
+        // Without a code: the device's identity decides (in a tailnet, acptrust.h), else the code
+        // is needed.
+        if (!m_pairTrust) {
+            reply.send(apiError(403, u"code_needed"_s, u"A pairing code is needed: run acp pair on the computer"_s));
+            return;
+        }
+        const QString peer = request.peer.toString();
+        QPointer<AcpHost> self(this);
+        m_pairTrust(request, [self, reply, name, peer](const PairTrust &verdict) {
+            if (!self)
+                return;
+            if (!verdict.trusted) {
+                self->say(u"%1 pairing without a code refused: %2"_s.arg(peer, verdict.why));
+                reply.send(apiError(403, u"code_needed"_s, u"A pairing code is needed: %1"_s.arg(verdict.why)));
+                return;
+            }
+            reply.send(self->addTrustedDevice(name.isEmpty() ? verdict.node : name,
+                                              u"%1 without a code: %2"_s.arg(peer, verdict.why)));
+        });
+        return;
+    }
+    reply.send(pairWithCode(code, name, request.peer.toString(), t));
+}
+
+http::Response AcpHost::addTrustedDevice(const QString &name, const QString &how)
+{
+    const QString token = newDeviceToken();
+    const QDateTime t = now();
+    PairedDevice paired;
+    bool tooMany = false;
+    QString error;
+    const bool written = m_store->update(
+            [&](HostState &s) {
+                if (s.devices.size() >= kMaxDevices) {
+                    tooMany = true;
+                    return false;
+                }
+                paired = PairedDevice{u"dev_"_s + randomString(10), name.isEmpty() ? u"device"_s : deviceName(name),
+                                      secretHash(token), t, t};
+                s.devices.append(paired);
+                return true;
+            },
+            &error);
+    if (!written) {
+        say(u"pairing not saved: %1"_s.arg(error));
+        return apiError(500, u"state"_s, u"The server cannot save the pairing"_s);
+    }
+    if (tooMany)
+        return apiError(403, u"too_many_devices"_s, u"Too many devices are paired: end some with acp revoke"_s);
+    say(u"paired %1 (%2): %3"_s.arg(paired.name, paired.id, how));
+    return http::Response::json(
+            200, QJsonObject{{u"token"_s, token},
+                             {u"device"_s, QJsonObject{{u"id"_s, paired.id}, {u"name"_s, paired.name}}}});
+}
+
+http::Response AcpHost::pairWithCode(const QString &code, const QString &name, const QString &peer,
+                                     const QDateTime &t)
+{
     const QString token = newDeviceToken();
     PairedDevice paired;
     QString outcome;
@@ -948,7 +1022,7 @@ http::Response AcpHost::pair(const http::Request &request)
     if (outcome == u"no_code")
         return apiError(403, u"no_code"_s, u"No pairing code is valid now: run acp pair on the computer"_s);
     if (outcome == u"bad_code") {
-        say(u"%1 pairing refused: a wrong code"_s.arg(request.peer.toString()));
+        say(u"%1 pairing refused: a wrong code"_s.arg(peer));
         return apiError(403, u"bad_code"_s, u"That is not the pairing code"_s);
     }
     if (outcome == u"too_many_devices")
@@ -2128,14 +2202,36 @@ void addAcpHostCommands(QList<Command> &out)
                                       "More host names it answers to (a proxy that rewrites Host; comma-separated)")),
              option(u"allowedOrigin"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli",
-                                      "Brulion in a browser at these sites may use it (origins, comma-separated)"))},
+                                      "Brulion in a browser at these sites may use it (origins, comma-separated)")),
+             flag(u"tailscale"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "This computer's tailnet: listen on its tailnet address, give the devices its "
+                                    "tailnet name, and pair its own user's devices there without a code")),
+             flag(u"tailscaleServe"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "Behind Tailscale Serve: listen on 127.0.0.1, give the devices "
+                                    "https://<tailnet name>, and pair the devices of the user Serve names without a "
+                                    "code")),
+             option(u"tailnetUser"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "More tailnet users (logins, comma-separated) whose devices pair without a code")),
+             flag(u"noTailnetTrust"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli", "In the tailnet too, every device pairs with a code")),
+             flag(u"allowHttp"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "Allow a plain http:// public URL in your own network (not encrypted on the way)")),
+             flag(u"stopOnEof"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "Stop when standard input ends (a program running the server stops it so, and "
+                                    "when it ends itself)"))},
             QT_TRANSLATE_NOOP("brulion::cli",
                               "The app on a device pairs with a code of acp pair, then talks to an agent here over "
                               "the Agent Client Protocol: the agent works in this notebook (its files, commands and "
                               "Brulion's MCP tools are this computer's), signs in by itself, and what it says waits "
                               "for a device that sleeps. Plain HTTP on 127.0.0.1 behind a reverse proxy that adds "
-                              "HTTPS in your own network (the agents run commands here). Prints one JSON line when "
-                              "it listens, logs on standard error and serves until stopped."));
+                              "HTTPS in your own network (the agents run commands here), or on this computer's "
+                              "tailnet address with --tailscale. Prints one JSON line when it listens, logs on "
+                              "standard error and serves until stopped."));
     c.needsVault = true;
     out.append(c);
     out.append(make(u"acp.pair"_s, QT_TRANSLATE_NOOP("brulion::cli", "A pairing code for a device of acp serve"),
@@ -2170,6 +2266,12 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
         return output(&command, r);
     }
     AcpHostOptions options;
+    const bool tailnet = args.value(u"tailscale"_s).toBool();
+    const bool behindServe = args.value(u"tailscaleServe"_s).toBool();
+    if (tailnet && behindServe)
+        return fail(ExitUsage, u"bad_tailscale"_s,
+                    QCoreApplication::translate("brulion::cli", "--tailscale and --tailscale-serve exclude each other"));
+    const bool listenGiven = !args.value(u"listen"_s).toString().trimmed().isEmpty();
     const QString listen = args.value(u"listen"_s).toString(u"127.0.0.1"_s).trimmed();
     if (listen == u"localhost")
         options.address = QHostAddress(QHostAddress::LocalHost);
@@ -2198,6 +2300,7 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
     options.allowedOrigins = listArgument(args, u"allowedOrigin"_s);
     options.tools = !args.value(u"noTools"_s).toBool();
     options.toolsProgram = toolsProgram();
+    options.allowHttp = args.value(u"allowHttp"_s).toBool();
     QString agentError;
     options.agents = agentsOf(args, &agentError);
     if (!agentError.isEmpty())
@@ -2241,10 +2344,77 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
         if (!sync->start(&syncError))
             return fail(ExitUsage, u"bad_sync"_s, syncError);
     }
+    // This computer's tailnet (--tailscale, --tailscale-serve): its address, its name, its user.
+    std::unique_ptr<tailscale::LocalApi> tailscaleApi;
+    std::unique_ptr<TailnetTrust> trust;
+    std::optional<tailscale::Status> self;
+    QJsonObject tailnetInfo;
+    if (tailnet || behindServe) {
+        tailscaleApi = std::make_unique<tailscale::LocalApi>();
+        QString statusError;
+        QEventLoop wait;
+        bool answered = false;
+        tailscaleApi->status([&](const std::optional<tailscale::Status> &s, const QString &e) {
+            self = s;
+            statusError = e;
+            answered = true;
+            wait.quit();
+        });
+        if (!answered)
+            wait.exec();
+        if (!self || !self->running() || self->dnsName.isEmpty() || self->addresses.isEmpty()) {
+            const QString why = !self ? statusError
+                                : !self->running()
+                                        ? u"tailscaled is %1"_s.arg(self->backendState.isEmpty() ? u"not running"_s
+                                                                                                  : self->backendState)
+                                        : u"this computer has no tailnet name (MagicDNS) or address"_s;
+            return fail(ExitUnavailable, u"no_tailscale"_s,
+                        QCoreApplication::translate("brulion::cli", "Tailscale is not usable here: %1").arg(why));
+        }
+        if (behindServe) {
+            if (listenGiven && !options.address.isLoopback())
+                return fail(ExitUsage, u"bad_listen"_s,
+                            QCoreApplication::translate("brulion::cli",
+                                                        "--tailscale-serve listens on this computer only (127.0.0.1)"));
+            if (!listenGiven)
+                options.address = QHostAddress(QHostAddress::LocalHost);
+            if (options.publicUrl.trimmed().isEmpty())
+                options.publicUrl = u"https://"_s + self->dnsName;
+        } else {
+            if (!listenGiven)
+                options.address = self->ipv4().isNull() ? self->addresses.first() : self->ipv4();
+            if (options.publicUrl.trimmed().isEmpty())
+                options.publicHost = self->dnsName;
+        }
+        // (A proxy or a client may name the computer by its tailnet name without the port.)
+        options.allowedHosts.append(self->dnsName);
+        const bool loopbackOnly = options.address.isLoopback();
+        const bool trusted = !args.value(u"noTailnetTrust"_s).toBool();
+        TailnetTrustOptions trustOptions;
+        trustOptions.users = listArgument(args, u"tailnetUser"_s);
+        trustOptions.behindServe = behindServe;
+        trustOptions.loopbackOnly = loopbackOnly;
+        if (trusted)
+            trust = std::make_unique<TailnetTrust>(tailscaleApi.get(), self->login, trustOptions);
+        tailnetInfo = QJsonObject{{u"name"_s, self->dnsName},
+                                  {u"login"_s, self->login},
+                                  {u"serve"_s, behindServe},
+                                  {u"trust"_s, trusted},
+                                  {u"users"_s, QJsonArray::fromStringList(trust ? trust->allowedLogins() : QStringList())}};
+    } else if (!args.value(u"tailnetUser"_s).toString().trimmed().isEmpty()) {
+        return fail(ExitUsage, u"bad_tailscale"_s,
+                    QCoreApplication::translate("brulion::cli", "--tailnet-user needs --tailscale or --tailscale-serve"));
+    }
     nb->index();
     AcpHost host(context, nb, options);
     host.log = logLine;
     host.setSync(sync.get());
+    if (trust) {
+        TailnetTrust *t = trust.get();
+        host.setPairTrust([t](const http::Request &request, std::function<void(const PairTrust &)> done) {
+            t->check(request, std::move(done));
+        });
+    }
     QString startError;
     if (!host.start(&startError))
         return fail(ExitUnavailable, u"cannot_serve"_s, startError);
@@ -2262,6 +2432,8 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
                                                         {u"agents"_s, agents},
                                                         {u"tools"_s, options.tools},
                                                         {u"sync"_s, sync != nullptr},
+                                                        {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue()
+                                                                                             : QJsonValue(tailnetInfo)},
                                                         {u"stateFile"_s, options.stateFile}}},
                               {u"warnings"_s, QJsonArray()}};
     const QByteArray line = QJsonDocument(started).toJson(QJsonDocument::Compact) + '\n';
@@ -2270,6 +2442,19 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
     logLine(u"serving %1 at %2 (listening on %3 port %4%5%6)"_s.arg(
             context.vaultRoot(), host.publicUrl(), options.address.toString(), QString::number(host.port()),
             host.server()->tls() ? u", HTTPS"_s : QString(), sync ? u", synced with Nextcloud"_s : QString()));
+    if (trust)
+        logLine(u"devices of %1 in the tailnet pair without a code"_s.arg(trust->allowedLogins().join(u", "_s)));
+    if (args.value(u"stopOnEof"_s).toBool()) {
+        // (A program that runs the server — the app's "Share agents with the phone" — closes its
+        // standard input to stop it, and so does its own end, a crash too: the server never outlives
+        // it. The reader is left blocked on its read when the server stops for another reason.)
+        QCoreApplication *app = QCoreApplication::instance();
+        std::thread([app] {
+            char buffer[256];
+            while (std::fread(buffer, 1, sizeof buffer, stdin) > 0) { }
+            QMetaObject::invokeMethod(app, [] { QCoreApplication::quit(); }, Qt::QueuedConnection);
+        }).detach();
+    }
     return QCoreApplication::exec();
 }
 
