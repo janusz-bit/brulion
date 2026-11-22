@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Checks the store texts and pictures that F-Droid and IzzyOnDroid read from
-# fastlane/metadata/android (docs/ANDROID.md, "F-Droid and IzzyOnDroid") against their limits:
-#   * every locale (en-US and pl, or those given with -l) has title.txt (at most 50 characters),
-#     short_description.txt (at most 80) and full_description.txt (at most 4000), none of them
-#     empty, short_description.txt a single line;
+# Checks the store texts and pictures that F-Droid, IzzyOnDroid and Google Play read from
+# fastlane/metadata/android (docs/ANDROID.md, "F-Droid and IzzyOnDroid"; docs/GOOGLE_PLAY.md,
+# "Store listing") against their limits — the stricter one where the stores differ:
+#   * every locale (en-US and pl, or those given with -l) has title.txt (at most 30 characters:
+#     Google Play's limit, F-Droid's is 50), short_description.txt (at most 80) and
+#     full_description.txt (at most 4000), none of them empty, short_description.txt a single line;
 #   * every changelogs/<versionCode>.txt has at most 500 characters, and with -v X.Y.Z each locale
 #     has the changelog of that version (versionCode = major*1000000 + minor*1000 + patch, written
 #     by scripts/release.sh);
-#   * en-US (the fallback of the other locales) has images/icon.png, a PNG of 512 × 512 pixels;
-#     every picture in images/ (also phoneScreenshots/ and the other screenshot folders) is a PNG
-#     or a JPEG.
-# Characters are counted as UTF-8 characters (not bytes); a final newline does not count.
+#   * en-US (the fallback of the other locales) has images/icon.png, a PNG of 512 × 512 pixels, and
+#     images/featureGraphic.png (Google Play's feature graphic, scripts/play-feature-graphic.sh),
+#     a PNG of 1024 × 500 pixels without alpha — so has any other locale that has a feature graphic;
+#   * every picture in images/ (also phoneScreenshots/ and the other screenshot folders) is a PNG
+#     or a JPEG; Google Play's rules for screenshots: at most 8 in a folder, at least 2 phone
+#     screenshots in en-US, and a PNG screenshot has no alpha, sides of 320 to 3840 pixels and its
+#     long side at most 2.3 times its short side.
+# Characters are counted as UTF-8 characters (not bytes); a final newline does not count. A PNG's
+# alpha is its colour type (4 or 6) or a tRNS chunk.
 # Needs only coreutils (od, tr, wc).
 #
 # Usage: scripts/check-fastlane-metadata.sh [-v X.Y.Z] [-l "en-US pl"] [metadata dir]
@@ -96,7 +102,7 @@ for locale in $locales; do
     problem "$d: missing"
     continue
   fi
-  text "$d/title.txt" 50
+  text "$d/title.txt" 30
   text "$d/short_description.txt" 80
   if [[ -f $d/short_description.txt ]] && (($(tr -cd '\n' <"$d/short_description.txt" | wc -c) > 1)); then
     problem "$d/short_description.txt: more than one line"
@@ -123,17 +129,86 @@ while IFS= read -r -d '' f; do
   esac
 done < <(find "$dir" -path '*/images/*' -type f -print0)
 
+# png_size <file>: "<width> <height>" from the IHDR chunk (32-bit big-endian numbers at bytes 16
+# and 20).
+png_size() {
+  local b
+  read -r -a b <<<"$(bytes "$1" 16 8)"
+  echo "$(((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3])) $(((b[4] << 24) | (b[5] << 16) | (b[6] << 8) | b[7]))"
+}
+# png_alpha <file>: what gives the PNG transparency — its colour type (byte 25: 4 grey + alpha,
+# 6 RGBA) or a tRNS chunk before the image data — or nothing.
+png_alpha() {
+  local type offset=8 size n=0 head
+  type=$(bytes "$1" 25 1)
+  if [[ $type == 4 || $type == 6 ]]; then
+    echo "colour type $type (with alpha)"
+    return
+  fi
+  size=$(wc -c <"$1")
+  while ((offset + 8 <= size && n++ < 64)); do
+    read -r -a head <<<"$(bytes "$1" "$offset" 8)"
+    case "${head[4]} ${head[5]} ${head[6]} ${head[7]}" in
+      '116 82 78 83') # tRNS
+        echo "a tRNS chunk (transparency)"
+        return
+        ;;
+      '73 68 65 84' | '73 69 78 68') return ;; # IDAT, IEND: no tRNS after them
+    esac
+    offset=$((offset + 12 + ((head[0] << 24) | (head[1] << 16) | (head[2] << 8) | head[3])))
+  done
+}
+is_png() { [[ $(bytes "$1" 0 8) == "$png_signature" ]]; }
+
 icon=$dir/en-US/images/icon.png
 if [[ ! -f $icon ]]; then
   problem "$icon: missing"
-elif [[ $(bytes "$icon" 0 8) != "$png_signature" ]]; then
+elif ! is_png "$icon"; then
   problem "$icon: not a PNG"
 else
-  # The IHDR chunk: width and height as 32-bit big-endian numbers at bytes 16 and 20.
-  read -r -a size <<<"$(bytes "$icon" 16 8)"
-  width=$(((size[0] << 24) | (size[1] << 16) | (size[2] << 8) | size[3]))
-  height=$(((size[4] << 24) | (size[5] << 16) | (size[6] << 8) | size[7]))
-  ((width == 512 && height == 512)) || problem "$icon: $width × $height pixels, not 512 × 512"
+  size=$(png_size "$icon")
+  [[ $size == '512 512' ]] || problem "$icon: ${size/ / × } pixels, not 512 × 512"
+fi
+
+# Google Play's feature graphic: "JPEG or 24-bit PNG (no alpha)", 1024 × 500 (a PNG here: the
+# script that makes it writes one, and only a PNG's size is read).
+for locale in $locales; do
+  feature=$dir/$locale/images/featureGraphic.png
+  for other in "$dir/$locale"/images/featureGraphic.*; do
+    [[ ! -e $other || $other == "$feature" ]] ||
+      problem "$other: the feature graphic is featureGraphic.png (scripts/play-feature-graphic.sh)"
+  done
+  if [[ ! -f $feature ]]; then
+    [[ $locale != en-US ]] || problem "$feature: missing (scripts/play-feature-graphic.sh)"
+  elif ! is_png "$feature"; then
+    problem "$feature: not a PNG"
+  else
+    size=$(png_size "$feature")
+    [[ $size == '1024 500' ]] || problem "$feature: ${size/ / × } pixels, not 1024 × 500"
+    alpha=$(png_alpha "$feature")
+    [[ -z $alpha ]] || problem "$feature: has alpha, $alpha (Google Play: no alpha)"
+  fi
+done
+
+# Screenshots (Google Play's limits; F-Droid has none of its own).
+while IFS= read -r -d '' folder; do
+  count=$(find "$folder" -maxdepth 1 -type f | wc -l)
+  ((count <= 8)) || problem "$folder: $count screenshots, at most 8"
+  while IFS= read -r -d '' f; do
+    is_png "$f" || continue
+    read -r width height <<<"$(png_size "$f")"
+    short=$((width < height ? width : height)) long=$((width < height ? height : width))
+    ((short >= 320 && long <= 3840)) ||
+      problem "$f: $width × $height pixels, each side must be 320 to 3840"
+    ((long * 10 <= short * 23)) ||
+      problem "$f: $width × $height pixels, the long side more than 2.3 times the short one"
+    alpha=$(png_alpha "$f")
+    [[ -z $alpha ]] || problem "$f: has alpha, $alpha (Google Play: no alpha)"
+  done < <(find "$folder" -maxdepth 1 -type f -print0)
+done < <(find "$dir" -path '*/images/*Screenshots' -type d -print0)
+phone=$dir/en-US/images/phoneScreenshots
+if [[ -d $dir/en-US ]] && (($(find "$phone" -maxdepth 1 -type f 2>/dev/null | wc -l) < 2)); then
+  problem "$phone: fewer than 2 screenshots (Google Play needs at least 2)"
 fi
 
 if ((problems)); then
