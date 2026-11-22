@@ -88,7 +88,7 @@ void ChatTurn::clearPartial()
 
 WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent)
     : QObject(parent), m_workspace(workspace), m_extensions(extensions), m_agents(new WorkspaceAgents(workspace, this)),
-      m_share(new AgentShare(workspace, m_agents, this))
+      m_share(new AgentShare(workspace, m_agents, this)), m_limits(new AgentLimits(m_agents, this))
 {
     connect(m_extensions, &WorkspaceExtensions::chatAnswered, this, &WorkspaceChats::answered);
     connect(m_extensions, &WorkspaceExtensions::chatFailed, this, &WorkspaceChats::failed);
@@ -250,6 +250,7 @@ void WorkspaceChats::setAgents(const QList<AgentConfig> &agents)
         return;
     m_agents->setAgents(agents);
     m_share->agentsChanged();
+    m_limits->agentsChanged();
     Q_EMIT partnersChanged();
     recoverAgentTurns();
 }
@@ -1022,6 +1023,36 @@ bool WorkspaceChats::listening() const
     return speech && speech->listening();
 }
 
+bool WorkspaceChats::dictationReady() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech && speech->ready();
+}
+
+bool WorkspaceChats::recognizing() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech && speech->recognizing();
+}
+
+int WorkspaceChats::dictationElapsed() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech ? int(speech->elapsedMs()) : -1;
+}
+
+int WorkspaceChats::dictationLimit() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech ? int(speech->maxMs()) : 0;
+}
+
+void WorkspaceChats::useSpeechRecognizer()
+{
+    connectSpeech();
+    Q_EMIT dictationChanged();
+}
+
 bool WorkspaceChats::takePhoto()
 {
     const QPointer<WorkspaceChats> self(this);
@@ -1053,6 +1084,8 @@ void WorkspaceChats::connectSpeech()
     connect(speech, &platform::SpeechRecognizer::recognized, this, &WorkspaceChats::dictated);
     connect(speech, &platform::SpeechRecognizer::failed, this, &WorkspaceChats::dictationFailed);
     connect(speech, &platform::SpeechRecognizer::listeningChanged, this, &WorkspaceChats::dictationChanged);
+    connect(speech, &platform::SpeechRecognizer::readyChanged, this, &WorkspaceChats::dictationChanged);
+    connect(speech, &platform::SpeechRecognizer::elapsedChanged, this, &WorkspaceChats::dictationElapsedChanged);
 }
 
 bool WorkspaceChats::startDictation()

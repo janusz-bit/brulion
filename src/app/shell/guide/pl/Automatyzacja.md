@@ -32,6 +32,7 @@ Spacje i polskie litery zapisuje się jako `%20`, `%C5%BC` itd. — każda aplik
 - **new** — nowa strona: `title=`, `folder=`, `template=` (strona z Twojego folderu szablonów), `text=`. Strona o tej nazwie nigdy nie zostanie nadpisana — po prostu się otworzy.
 - **search**, **view** — szukanie albo widok: `journals`, `calendar`, `tasks`, `habits`, `graph`, `pages`, `tags`, `settings`.
 - **run** — polecenie rozszerzenia, które zatwierdzono na tym urządzeniu (`extension=` i `command=`).
+- **chat** — nowa rozmowa czatu AI z promptem w polu (`prompt=`, najwyżej 8000 znaków), o stronie (`page=`), z odpowiedzią agenta albo rozszerzenia ustawionego na tym urządzeniu (`partner=acp:claude`). **Nigdy nie wysyła się sama**: czytasz ją i naciskasz Wyślij. Znaki, których nie widać (o zerowej szerokości, znaczniki kierunku, znaczniki Unicode), są najpierw usuwane, a rozmowa ostrzega, że mogły ukrywać polecenia. Taki link robi **Kopiuj link z promptem** w menu wiadomości (prawy przycisk albo długie przytrzymanie) i **AI: Kopiuj link z promptem** w palecie poleceń.
 
 Przy kilku notatnikach `vault=` wybiera jeden po nazwie albo folderze. Pełna lista parametrów jest w dokumentacji dla programistów (docs/UI.md, „Automation”).
 
@@ -41,7 +42,7 @@ Link może przyjść skądkolwiek — ze strony internetowej, z wiadomości, z n
 - Link, który **zapisuje**, najpierw pokazuje **„Zapisać z linku?”**: gdzie i co dokładnie zapisze. Nic nie zostaje zapisane przed naciśnięciem **Zapisz**.
 - Twoje własne automatyzacje pomijają to pytanie dzięki **kluczowi automatyzacji** notatnika: **Ustawienia → Automatyzacja → Utwórz klucz**, potem dopisz do linku `&key=…` (albo zaznacz „Z kluczem” w kreatorze linków). Trzymaj klucz w tajemnicy jak hasło. Zostaje na tym urządzeniu i nigdy się nie synchronizuje; **Nowy klucz** unieważnia stary.
 - **Linki bez klucza** w tych samych ustawieniach: **Pytaj** (domyślnie), **Tylko otwieranie** (zapis tylko z kluczem) albo **Wyłączone**.
-- Link nigdy niczego nie usuwa ani nie nadpisuje strony: tylko dodaje blok albo tworzy stronę o wolnej nazwie. Polecenie rozszerzenia działa tylko wtedy, gdy zatwierdzono to rozszerzenie.
+- Link nigdy niczego nie usuwa ani nie nadpisuje strony: tylko dodaje blok albo tworzy stronę o wolnej nazwie. Polecenie rozszerzenia działa tylko wtedy, gdy zatwierdzono to rozszerzenie. Link z promptem tylko wypełnia pole czatu.
 
 ## Na komputerze
 - **Linux**: wpis Brulionu w menu przyjmuje linki brulion://, więc działa `xdg-open 'brulion://daily'`, a także skrót klawiszowy GNOME albo KDE z tym poleceniem. Uruchomiony Brulion wychodzi na wierzch i robi swoje.

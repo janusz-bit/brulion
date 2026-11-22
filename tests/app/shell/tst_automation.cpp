@@ -6,9 +6,12 @@
 // another notebook named by `vault` (opened first), go back from the documentation to the user's
 // notebook; a second launch's `uri` message and a brulion:// link clicked in a note arrive the
 // same way; a new page is never written over an existing one; an extension command that is not
-// approved never runs; the keys are per notebook; automationLink() builds addresses that read back.
+// approved never runs; the keys are per notebook; automationLink() builds addresses that read back;
+// prompt links open a draft that is never sent.
 #include "appcontroller.h"
 #include "workspace.h"
+#include "workspaceagents.h"
+#include "workspacechats.h"
 
 #include "automation/policy.h"
 #include "automation/uri.h"
@@ -295,6 +298,40 @@ private Q_SLOTS:
         QVERIFY(app->automationLink(u"nonsense"_s, {}, false).isEmpty());
         QCOMPARE(app->pageAutomationLink(u"Zakupy.md"_s, u"Jutro"_s),
                  u"brulion://open?page=Zakupy&heading=Jutro&vault=M%C3%B3j%20notatnik"_s);
+    }
+
+    // Prompt links (brulion://chat): a new conversation's draft, never sent — the partner only when
+    // it is set up here (by its id or name), the page only when the notebook has it, what nobody
+    // sees taken out; nothing is written.
+    void promptLinks()
+    {
+        const QString root = notebook(u"prompty"_s);
+        auto app = openApp(root);
+        app->workspace()->chats()->setAgents({AgentConfig{u"claude"_s, u"Claude Code"_s, u"claude-agent-acp"_s}});
+        app->receiveUri(u"brulion://chat?prompt=Co%20mam%20kupi%C4%87%3F%E2%80%8B&page=zakupy&partner=acp%3Aclaude"_s);
+        QVariantMap route = app->currentRoute();
+        QCOMPARE(route.value(u"view"_s).toString(), u"chat"_s);
+        QVERIFY(route.value(u"new"_s).toBool());
+        QVERIFY(route.value(u"fromLink"_s).toBool());
+        QCOMPARE(route.value(u"draft"_s).toString(), u"Co mam kupić?"_s);
+        QCOMPARE(route.value(u"hidden"_s).toInt(), 1);
+        QCOMPARE(route.value(u"page"_s).toString(), u"Zakupy"_s);
+        QCOMPARE(route.value(u"partner"_s).toString(), u"acp:claude"_s);
+        QVERIFY(!route.contains(u"prompt"_s)); // (`prompt` would send it at once)
+        // By its name too; one not set up here: the default, said.
+        app->receiveUri(u"brulion://chat?prompt=Hej&partner=claude%20code"_s);
+        QCOMPARE(app->currentRoute().value(u"partner"_s).toString(), u"acp:claude"_s);
+        app->receiveUri(u"brulion://chat?prompt=Hej&partner=acp%3Agemini&page=Brak"_s);
+        route = app->currentRoute();
+        QVERIFY(!route.contains(u"partner"_s));
+        QCOMPARE(route.value(u"partnerMissing"_s).toString(), u"acp:gemini"_s);
+        QCOMPARE(route.value(u"pageMissing"_s).toString(), u"Brak"_s);
+        // Nothing written: no conversation.
+        QVERIFY(!QFileInfo::exists(root + u"/AI"_s));
+        // Built for a message or a draft: no notebook named, so it opens in anyone's.
+        const QString link = app->chatPromptLink(u"Podsumuj „Zakupy”"_s, u"acp:claude"_s, u"Zakupy"_s);
+        QCOMPARE(link, u"brulion://chat?prompt=Podsumuj%20%E2%80%9EZakupy%E2%80%9D&partner=acp%3Aclaude&page=Zakupy"_s);
+        QVERIFY(!link.contains(u"vault="_s));
     }
 };
 

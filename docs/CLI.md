@@ -301,7 +301,7 @@ Never compute a hash yourself.
 | `extension diff <name>` | | an extension page's code against the version approved on this device (what the app's "Read and run" shows): `{lines [{kind, text, line, count}], added, removed, approvedBefore, approved}`; approves nothing | |
 | `extension settings <name>` | `[--set key=value] [--reset]` | the settings it declares (`b.settings`) with their values on this device; `--set` changes one (checked against its kind), `--reset` puts all back — kept as the app keeps them, never synced | yes |
 | `extension copy <name>` | `--to DIR [--replace]` | copy an extension page, with the extension pages its code requires (`b.require`), into another notebook at the same paths; a page there with other text is a conflict (exit 4) unless `--replace` (its text stays in that notebook's history). Approves nothing there | yes |
-| `uri build <action>` | `[--page P] [--title T] [--heading H] [--date D] [--text T \| --stdin] [--due D] [--remind D] [--query Q] [--params JSON] [--named] [--with-key] [--web]` | a brulion:// address (docs/UI.md "Automation"): `{uri, action}`; `--with-key` adds the notebook's automation key from this device (exit 3 `no_key` without one) and its name | |
+| `uri build <action>` | `[--page P] [--title T] [--heading H] [--date D] [--text T \| --stdin] [--due D] [--remind D] [--query Q] [--partner P] [--params JSON] [--named] [--with-key] [--web]` | a brulion:// address (docs/UI.md "Automation"): `{uri, action}`; `--with-key` adds the notebook's automation key from this device (exit 3 `no_key` without one) and its name. `chat` — a prompt link — takes the text as its `prompt` (what nobody sees taken out, at most 8 000 characters: `{hidden, capped}` say so) and `--partner` (`acp:claude`) | |
 | `uri parse <uri>` | `[--stdin]` | what an address asks: `{action, access (open, write, run), scheme, params, vault?, source?, id?, xSuccess?, xError?, hasKey}` — never the key itself | |
 | `uri run <uri>` | `[--stdin]` | carry an address out in the notebook (below "brulion:// addresses"): a write's `{ok, action, path, line, block, kind, reminder?, created, changed, hashBefore, hashAfter, diff?}`, an opening's `route` | yes |
 | `uri open <uri>` | `[--stdin]` | hand an address to the running app (exit 5 when none runs), which checks it as any link's: a write without the key asks the user | yes |
@@ -1138,6 +1138,8 @@ to reach Brulion (docs/UI.md "Automation" lists the actions and their parameters
 ```sh
 brulion-cli uri build task --text "Zadzwonić do mamy" --remind "jutro o 18" --with-key
 # {"uri": "brulion://task?text=Zadzwoni%C4%87%20do%20mamy&remind=jutro%20o%2018&vault=Notatki&key=…"}
+brulion-cli uri build chat --text "Co mam jutro do zrobienia?" --partner acp:claude
+# {"uri": "brulion://chat?prompt=Co%20mam%20jutro%20do%20zrobienia%3F&partner=acp%3Aclaude"}
 brulion-cli uri run 'brulion://append?page=Zakupy&heading=Dzi%C5%9B&text=Mleko'
 brulion-cli uri open 'brulion://open?page=Zakupy%23Jutro'   # the running app shows it
 ```

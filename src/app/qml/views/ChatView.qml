@@ -21,6 +21,9 @@ import Brulion
 //   {view: "chat"}                          the conversations (a wide window: beside a new one)
 //   {view: "chat", path: "AI/….md"}         one conversation
 //   {view: "chat", new: true, page, prompt} a new one about `page`; `prompt` is sent at once
+//   {view: "chat", new: true, fromLink, draft, partner, page, hidden, capped, pageMissing,
+//    partnerMissing}                        a prompt link's (brulion://chat): `draft` in the field,
+//                                           never sent; a note says what the link brought
 //
 // Wide windows (≥ 720 px, not in the side panel) show the list beside the conversation; narrow
 // ones one of them (the list → a conversation is a step of the history, Back returns). The first
@@ -102,6 +105,12 @@ FocusScope {
     /// The field waits for dictation's text / a photo from the camera (this view asked for it).
     property bool dictating: false
     property bool takingPhoto: false
+    /// Dictation records or makes what it heard into text for this view (the field waits).
+    readonly property bool dictationBusy: root.dictating && (root.chats.listening || root.chats.recognizing)
+    /// What a prompt link brought, said above the field ("" none) — with the warning tint when it
+    /// had hidden characters.
+    property string linkNote
+    property bool linkWarning: false
 
     /// The conversation this view tells Workspace.chats it shows ("" none).
     property string registered
@@ -135,13 +144,40 @@ FocusScope {
         root.page = AppController.routeText(root.route, "page")
         root.starting = root.path === "" && AppController.routeFlag(root.route, "new")
         root.thoughtsOpen = false
+        root.linkNote = ""
         const prompt = AppController.routeText(root.route, "prompt")
-        if (root.starting && prompt !== "") {
+        if (root.starting && AppController.routeFlag(root.route, "fromLink")) {
+            // A prompt link: its prompt in the field, never sent — the user reads it first.
+            // (Typed through this file's functions: values a later call cannot change.)
+            const hidden = root.routeNumber("hidden")
+            const capped = root.routeBool("capped")
+            const pageMissing = root.routeString("pageMissing")
+            const partnerMissing = root.routeString("partnerMissing")
+            const partner = root.routeString("partner")
+            const draft = root.routeString("draft")
+            const note = root.linkNoteText(hidden, capped, pageMissing, partnerMissing)
+            // (Its partner, or the default: not the one an earlier draft had.)
+            root.newPartner = partner
+            input.text = draft
+            input.cursorPosition = input.length
+            root.linkWarning = hidden > 0
+            root.linkNote = note
+            focusLater.restart()
+        } else if (root.starting && prompt !== "") {
             input.text = prompt
             sendLater.restart()
         } else if (root.conversationShown && (root.starting || !Theme.touchUi)) {
             focusLater.restart()
         }
+    }
+    function routeString(key: string): string {
+        return AppController.routeText(root.route, key)
+    }
+    function routeNumber(key: string): int {
+        return AppController.routeInt(root.route, key, 0)
+    }
+    function routeBool(key: string): bool {
+        return AppController.routeFlag(root.route, key)
     }
     onRouteChanged: root.syncRoute()
     Component.onCompleted: {
@@ -183,6 +219,12 @@ FocusScope {
             AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path })
     }
     function send(): void {
+        // Dictating: Enter and Send finish it (what was heard goes into the field).
+        if (root.dictationBusy) {
+            if (root.chats.listening)
+                root.chats.stopDictation()
+            return
+        }
         const text = Js.trim(input.typedText)
         if (text === "" && root.attached.length === 0)
             return
@@ -230,6 +272,7 @@ FocusScope {
         input.text = ""
         root.attached = root.noStrings
         root.recallIndex = -1
+        root.linkNote = ""
         toEnd.restart()
     }
     /// Ctrl+Enter while a turn runs: the message now — the turn stops, it is answered first.
@@ -316,6 +359,40 @@ FocusScope {
         AppController.toast(qsTr("Forked: the new conversation goes on by itself"), "success")
         root.open(forked, false)
     }
+    /// What a prompt link brought, in sentences: its hidden characters (or that it came from a
+    /// link), a prompt cut short, a page or a partner not here.
+    function linkNoteText(hidden: int, capped: bool, pageMissing: string, partnerMissing: string): string {
+        let note = hidden > 0
+                ? qsTr("This prompt came from a link with %n hidden character(s), taken out now: they can hide instructions. Read it before you send it.", "", hidden)
+                : qsTr("This prompt came from a link: read it before you send it.")
+        if (capped)
+            note += "\n" + qsTr("It was longer than 8,000 characters: the rest was left out.")
+        if (pageMissing !== "")
+            note += "\n" + qsTr("The page “%1” is not in this notebook: the conversation is about no page.").arg(pageMissing)
+        if (partnerMissing !== "")
+            note += "\n" + qsTr("“%1” is not set up on this device: the AI assistant answers instead.").arg(partnerMissing)
+        return note
+    }
+    /// The prompt link of `text` (brulion://chat: it opens a new conversation with it, never sent)
+    /// to the clipboard, with who answers and the page it is about.
+    function copyPromptLink(text: string, partner: string, page: string): void {
+        if (Js.trim(text) === "") {
+            AppController.toast(qsTr("Write the prompt first"), "info")
+            return
+        }
+        if (tools.copyText(AppController.chatPromptLink(text, partner, page)))
+            AppController.toast(qsTr("Prompt link copied: it opens a new conversation with this prompt, never sends it"), "success")
+    }
+    Connections {
+        target: AppController
+        // The palette's "AI: Copy prompt link": the draft being written.
+        function onUiActionRequested(action: string) {
+            if (action !== "chat:copyPromptLink" || !root.visible || !root.conversationShown)
+                return
+            root.copyPromptLink(input.text, root.path !== "" ? root.partnerHere : root.newPartner,
+                                root.path === "" ? root.page : "")
+        }
+    }
 
     // ---- Pictures with the message --------------------------------------------------------------
     function attach(path: string): void {
@@ -348,9 +425,29 @@ FocusScope {
             root.chats.stopDictation()
             return
         }
+        if (root.chats.recognizing)
+            return
+        // The app's own recognizer without a speech model: its download first.
+        if (!root.chats.dictationReady) {
+            dictationSetup.open()
+            return
+        }
         root.dictating = root.chats.startDictation()
         if (!root.dictating)
             AppController.toast(qsTr("Dictation could not start"), "error")
+    }
+    /// Esc while dictating: nothing goes into the field, the recording is thrown away.
+    function cancelDictation(): void {
+        if (!root.dictationBusy)
+            return
+        root.dictating = false
+        root.chats.cancelDictation()
+    }
+    /// "1:05" of `ms`.
+    function clockText(ms: int): string {
+        const seconds = Math.floor(Math.max(0, ms) / 1000)
+        const rest = seconds % 60
+        return Math.floor(seconds / 60) + ":" + (rest < 10 ? "0" : "") + rest
     }
     Connections {
         target: root.chats
@@ -485,6 +582,80 @@ FocusScope {
             Layout.fillWidth: true
             placeholderText: qsTr("Name")
             onAccepted: if (renameDialog.acceptEnabled) renameDialog.accept()
+        }
+    }
+
+    // Dictating with the focus elsewhere (the microphone's button): Esc still throws it away.
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.dictationBusy && root.visible
+        onActivated: root.cancelDictation()
+    }
+    // Dictation needs a speech model first: the voice notes' (Settings → Extensions → Speech),
+    // downloaded from here.
+    BDialog {
+        id: dictationSetup
+        objectName: "chatDictationSetup"
+        title: AppController.speech.ready ? qsTr("Dictation is ready") : qsTr("Dictation needs a speech model")
+        iconName: "mic"
+        acceptText: AppController.speech.ready ? qsTr("Dictate") : qsTr("Close")
+        showReject: AppController.speech.ready
+        onAccepted: {
+            if (AppController.speech.ready)
+                root.toggleDictation()
+        }
+        BText {
+            Layout.fillWidth: true
+            text: AppController.speech.ready
+                  ? qsTr("Press the microphone, speak, and press it again or Enter: what you said goes into the field at the caret. Esc throws it away. At most five minutes.")
+                  : qsTr("Brulion makes what you say into text on this device with OpenAI's Whisper, the model voice notes use: %1 (%2) to download once, best over Wi-Fi. No sound leaves the device.").arg(AppController.speech.modelName).arg(AppController.speech.modelSize)
+            variant: "muted"
+            wrapMode: Text.Wrap
+        }
+        BText {
+            objectName: "chatDictationSetupState"
+            Layout.fillWidth: true
+            visible: !AppController.speech.ready && text !== ""
+            text: AppController.speech.checking ? qsTr("Checking the downloaded file…")
+                  : AppController.speech.downloading ? qsTr("Downloading: %1").arg(AppController.speech.progressText)
+                  : AppController.speech.downloadError !== "" ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.speech.downloadError)
+                  : ""
+            wrapMode: Text.Wrap
+        }
+        BProgressBar {
+            Layout.fillWidth: true
+            visible: AppController.speech.downloading
+            indeterminate: AppController.speech.checking
+            value: AppController.speech.progress
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: !AppController.speech.ready
+            spacing: Theme.space2
+            BButton {
+                objectName: "chatDictationDownload"
+                visible: !AppController.speech.downloading
+                enabled: !AppController.speech.downloadingOther
+                variant: "primary"
+                iconName: "download"
+                text: qsTr("Download")
+                onClicked: AppController.speech.download()
+            }
+            BButton {
+                visible: AppController.speech.downloading
+                text: qsTr("Stop")
+                onClicked: AppController.speech.cancelDownload()
+            }
+            BButton {
+                objectName: "chatDictationSettings"
+                variant: "ghost"
+                iconName: "settings"
+                text: qsTr("Speech settings")
+                onClicked: {
+                    dictationSetup.close()
+                    AppController.navigate({ view: "settings", section: "extensions" })
+                }
+            }
         }
     }
 
@@ -1046,6 +1217,16 @@ FocusScope {
                                             if (tools.copyText(message.markdown))
                                                 AppController.toast(qsTr("Copied"), "success")
                                         }
+                                    }
+                                    // A link that opens a new conversation with this message in
+                                    // its field (brulion://chat; never sent by itself).
+                                    BMenuItem {
+                                        objectName: "chatCopyPromptLink"
+                                        visible: message.mine
+                                        height: visible ? implicitHeight : 0
+                                        text: qsTr("Copy prompt link")
+                                        iconName: "link"
+                                        onTriggered: root.copyPromptLink(message.markdown, root.partnerHere, "")
                                     }
                                     BMenuItem {
                                         text: qsTr("Show in the page")
@@ -1643,6 +1824,45 @@ FocusScope {
                 Layout.margins: Theme.narrow ? Theme.space2 : Theme.space3
                 spacing: Theme.space2
 
+                // What a prompt link brought: read it before sending (hidden characters taken out,
+                // a page or a partner not here).
+                Rectangle {
+                    objectName: "chatLinkNote"
+                    Layout.fillWidth: true
+                    visible: root.linkNote !== "" && root.path === ""
+                    implicitHeight: linkNoteRow.implicitHeight + 2 * Theme.space2
+                    radius: Theme.radius
+                    color: root.linkWarning ? Theme.warningBg : Theme.bgSunken
+                    border.color: root.linkWarning ? Theme.warningText : Theme.borderSubtle
+                    RowLayout {
+                        id: linkNoteRow
+                        anchors.fill: parent
+                        anchors.margins: Theme.space2
+                        spacing: Theme.space2
+                        BIcon {
+                            Layout.alignment: Qt.AlignTop
+                            name: root.linkWarning ? "triangle-alert" : "link"
+                            size: Theme.iconSizeSm
+                            color: root.linkWarning ? Theme.warningText : Theme.fgMuted
+                        }
+                        BText {
+                            objectName: "chatLinkNoteText"
+                            Layout.fillWidth: true
+                            text: root.linkNote
+                            variant: "caption"
+                            color: root.linkWarning ? Theme.warningText : Theme.fgMuted
+                            wrapMode: Text.Wrap
+                        }
+                        BIconButton {
+                            Layout.alignment: Qt.AlignTop
+                            size: "small"
+                            label: qsTr("Close")
+                            iconName: "x"
+                            onClicked: root.linkNote = ""
+                        }
+                    }
+                }
+
                 // A new conversation: the page that goes along, who answers.
                 Flow {
                     Layout.fillWidth: true
@@ -1863,7 +2083,10 @@ FocusScope {
                                 width: inputFlick.width
                                 background: null
                                 wrapMode: TextEdit.Wrap
+                                // (Read-only while dictation records: its text goes in at the caret.)
+                                readOnly: root.dictationBusy
                                 placeholderText: root.chats.listening && root.dictating ? qsTr("Listening…")
+                                                 : root.chats.recognizing && root.dictating ? qsTr("Making what you said into text…")
                                                  : root.queuedHere ? qsTr("Waiting for the model on this device…")
                                                  : root.busyHere ? qsTr("Write on: it waits for the answer (Ctrl+Enter: now)")
                                                  : qsTr("Ask, or ask to do something…")
@@ -1876,7 +2099,14 @@ FocusScope {
                                     const key = event.key
                                     const shift = (event.modifiers & Qt.ShiftModifier) !== 0
                                     const control = (event.modifiers & Qt.ControlModifier) !== 0
-                                    if ((key === Qt.Key_Return || key === Qt.Key_Enter) && control && root.busyHere) {
+                                    // Dictating: Enter finishes, Esc throws it away.
+                                    if (root.dictationBusy && (key === Qt.Key_Return || key === Qt.Key_Enter || key === Qt.Key_Escape)) {
+                                        event.accepted = true
+                                        if (key === Qt.Key_Escape)
+                                            root.cancelDictation()
+                                        else if (root.chats.listening)
+                                            root.chats.stopDictation()
+                                    } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && control && root.busyHere) {
                                         event.accepted = true
                                         root.steer()
                                     } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && !Theme.touchUi) {
@@ -1895,15 +2125,35 @@ FocusScope {
                             }
                         }
                     }
+                    // How long dictation has recorded (of its five minutes), then that it is heard.
+                    BText {
+                        id: dictationTime
+                        objectName: "chatDictationTime"
+                        Layout.alignment: Qt.AlignBottom
+                        Layout.bottomMargin: Theme.space2
+                        visible: root.dictationBusy && (root.chats.recognizing || root.chats.dictationElapsed >= 0)
+                        text: root.chats.recognizing
+                              ? qsTr("Transcribing…")
+                              : root.chats.dictationLimit > 0
+                                ? qsTr("%1 / %2", "dictation: recorded / at most").arg(root.clockText(root.chats.dictationElapsed)).arg(root.clockText(root.chats.dictationLimit))
+                                : root.clockText(root.chats.dictationElapsed)
+                        variant: "caption"
+                        color: root.chats.recognizing ? Theme.fgMuted : Theme.dangerText
+                        font.features: { "tnum": 1 }
+                        Accessible.name: root.chats.recognizing ? dictationTime.text : qsTr("Recorded %1").arg(dictationTime.text)
+                    }
                     // Dictation: the system's speech recognizer (or the app's own).
                     BIconButton {
                         objectName: "chatDictate"
                         Layout.alignment: Qt.AlignBottom
                         visible: root.chats.dictationAvailable
+                        enabled: !(root.chats.recognizing && root.dictating)
                         variant: root.chats.listening && root.dictating ? "secondary" : "ghost"
                         iconColor: root.chats.listening && root.dictating ? Theme.danger : Theme.fgMuted
-                        label: root.chats.listening && root.dictating ? qsTr("Stop dictating") : qsTr("Dictate")
-                        iconName: "mic"
+                        label: root.chats.listening && root.dictating ? qsTr("Stop dictating (Enter); Esc throws it away")
+                               : root.chats.recognizing && root.dictating ? qsTr("Transcribing…")
+                               : qsTr("Dictate")
+                        iconName: root.chats.listening && root.dictating ? "square" : "mic"
                         onClicked: root.toggleDictation()
                     }
                     BButton {

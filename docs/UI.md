@@ -1276,7 +1276,14 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
 
 * **Routes**: `{view: "chat"}` the conversations; `{view: "chat", path}` one; `{view: "chat", new:
   true, page?, prompt?}` a new one about `page` (a page name as a link names it), `prompt` sent at
-  once ("Summarise this page"). The first message of a new one replaces the route with the
+  once ("Summarise this page"); `{view: "chat", new: true, fromLink, draft, partner?, page?, hidden?,
+  capped?, pageMissing?, partnerMissing?}` a prompt link's ("Automation" below: `brulion://chat`) —
+  `draft` put into the field and **never sent** (the user reads it and presses Send), `partner` who
+  answers, and a note above the field (`chatLinkNote`, `chatLinkNoteText`; × closes it, a sent message
+  takes it away) that says it came from a link — with the warning tint "This prompt came from a link
+  with N hidden characters, taken out now: they can hide instructions. Read it before you send it."
+  when it had some —, that it was cut at 8 000 characters, that its page is not in this notebook or
+  its partner not set up here (the AI assistant answers instead). The first message of a new one replaces the route with the
   conversation's (`AppController.replaceRoute`; in the side panel, where the view also opens, it
   pins the conversation there again). Title: the conversation's name without its date, else "AI
   chat".
@@ -1318,7 +1325,11 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   (`chatMessageFork`: a new conversation, today's, a copy of this one up to that message —
   `WorkspaceChats.fork()`, core `chat::forked`, its journal line too — that goes on by itself with
   the same partner and a session of its own; its frontmatter's `fork:` names the source,
-  docs/SYNTAX.md §14, and its header has a chip "Forked from …", `chatForkSource`, that opens it).
+  docs/SYNTAX.md §14, and its header has a chip "Forked from …", `chatForkSource`, that opens it),
+  and on the user's own messages **Copy prompt link** (`chatCopyPromptLink`: a `brulion://chat`
+  link with the message and the conversation's partner, no notebook named —
+  `AppController.chatPromptLink()`; the palette's **AI: Copy prompt link**, `ai.copyPromptLink` while
+  the chat shows, copies the draft's with its page through the uiAction `chat:copyPromptLink`).
   Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
   or the page names one: its menu, `chatPartnerMenu`, changes it for the next turns —
   `WorkspaceChats.setPartner()` writes the page's `partner:`), the page it is about (a chip that
@@ -1428,9 +1439,25 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   (`WorkspaceChats.seesPictures`).
 * **Dictation** (`chatDictate`, the microphone, shown while `WorkspaceChats.dictationAvailable`):
   Android's speech recognizer through its intent (the system's dialog listens; no microphone
-  permission of Brulion's own); what it heard goes into the field at the caret. Elsewhere there is
-  none yet: a recognizer of the app's own (on-device speech recognition) registers itself with
-  `platform::setSpeechRecognizer()` and the button appears (`platform/capture.h`).
+  permission of Brulion's own); what it heard goes into the field at the caret. On the desktop
+  (Linux, Windows) the app's own: `media::Dictation` (`src/app/media/dictation.h`), registered by
+  `AppController::setUpSpeech()` with `platform::setSpeechRecognizer()` where this build transcribes
+  (`Transcriber.available`) and records — a `VoiceRecorder` (the system's default microphone, WAV into
+  the cache's `dictation` folder) heard on the device by the voice notes' Whisper model
+  (`Transcriber::transcribeFile()` → `heard()`: nothing placed in a note; in the dictation's language,
+  the UI's, unless Settings → Speech names one). Pressed, it records: the button becomes a stop square
+  in the danger colour, the field's frame red and read-only ("Listening…"), and beside the button the
+  time recorded of its five minutes (`chatDictationTime`, "0:12 / 5:00", `WorkspaceChats.dictationElapsed`
+  / `dictationLimit`); pressed again, **Enter** or Send finish it ("Transcribing…",
+  `WorkspaceChats.recognizing`), and the text goes in at the caret; **Esc** (in the field, or a
+  `Shortcut` while the focus is elsewhere) throws it away. At five minutes it stops by itself and is
+  heard. The recording is deleted when heard or cancelled, and leftovers of an app that ended
+  meanwhile when the next dictation starts. Without a speech model (`WorkspaceChats.dictationReady`
+  false) the microphone opens `chatDictationSetup`: what it needs (the model's name and size), its
+  download with the progress (`chatDictationDownload`, the voice notes' `AppController.speech`), and
+  **Speech settings** (`chatDictationSettings`); once the model is there "Dictation is ready" with
+  **Dictate**. A recognizer tells `SpeechRecognizer::ready()`, `elapsedMs()`, `maxMs()`,
+  `recognizing()` (`platform/capture.h`; the system's: ready, no time). Tests: `tst_media_dictation`.
 * **The field** (`chatInput`, a `BTextArea` in a frame that grows to 168 px, then scrolls with the
   caret kept in view): with a keyboard Enter sends and Shift+Enter is a new line; on touch the
   keyboard's Enter is a new line and the round button sends (`chatSend`, an arrow up, disabled
@@ -1450,7 +1477,9 @@ page deleted meanwhile ends the turn), `chatFailed` keeps the reason in the conv
 `showing()` / `isShown()`, `rename()`, `remove()`, `nameOf()`, `partnerOf()` / `setPartner()`, the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
 `picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
-`stopDictation` / `cancelDictation` → `dictated`), `historyBudget`, `seesPictures`, `onDevice`,
+`stopDictation` / `cancelDictation` → `dictated`; `dictationReady`, `recognizing`, `dictationElapsed`,
+`dictationLimit`, `useSpeechRecognizer()`), the agents' subscription limits (`limits`: AgentLimits,
+"AI agents (ACP)" → "Its limits"), `historyBudget`, `seesPictures`, `onDevice`,
 `runningCount`, `runningShown`; a turn's partial answer and thoughts (`ChatTurn.partialChanged`,
 coalesced to ten a second; `thoughtsTail()`: the last 240 characters from a word on) from
 `WorkspaceExtensions::chatPartial` — every request of a chat's turn goes out with an
@@ -1567,7 +1596,39 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   a switch chip: the option's name, highlighted while on, a click toggles it (no bare "Off"). A choice is remembered for the agent (`AgentConfig::options`, with the options
   its last session offered, `known`) and set on every new session before its first prompt — so a
   model the account cannot use is chosen once (Codex on a ChatGPT Free plan). After them the
-  session's usage (`chatAgentUsage`: "4.3 % of the context · 0.21 USD", the agent's `usage_update`).
+  session's usage (`chatAgentUsage`: "4.3 % of the context · 0.21 USD", the agent's `usage_update`)
+  and the subscription's limits (below).
+* **Its limits** (`chatAgentLimits`, `ChatAgentLimits.qml`; `Workspace.chats.limits`,
+  `src/app/shell/agentlimits.h`; core `agentlimits/`): for an agent **of this computer** that is
+  Claude Code or Codex — known by its command (`agentlimits::providerOf()`: the presets,
+  `claude-agent-acp`, `claude-code-acp`, `codex-acp`, a program named `claude` or `codex`) or by the
+  name its program gave in `initialize` (`WorkspaceAgents::programName()`) — how much of the
+  signed-in account's windows is used: a pill "5 h: 12 % · week: 68 %" (a month where neither is:
+  Codex Free), in the warning colours above 80 % and the danger colours at 100 % of any window; its
+  tooltip the plan, each window — the five hours, the week, a model's own week ("Week, Opus", Codex's
+  "GPT-5.3-Codex-Spark, 5-hour window"), Claude's extra usage this month — with its reset in local
+  time ("resets at 18:40", "resets Fri 08:00", "resets 2 Dec 09:00") and when they were read; a click
+  opens them as a menu (`chatAgentLimitsMenu`, `chatAgentLimitsWindow`) with **Refresh**
+  (`chatAgentLimitsRefresh`). Also on the agent's row in Settings → AI agents (`acpAgentLimits`).
+  Read when shown and every five minutes while shown, **at most every five minutes per account**
+  (`agentlimits::LimitsReader`; an account is its sign-in file: two agents of one share a reading),
+  Refresh at once; a reading that needed no request (no sign-in file, an expired token) is tried
+  again the next time. Claude: `GET https://api.anthropic.com/api/oauth/usage` with the access token
+  of `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json` (`claudeAiOauth.accessToken`, its
+  `expiresAt`, `subscriptionType`), `anthropic-beta: oauth-2025-04-20` and Claude Code's user agent;
+  Codex: `GET https://chatgpt.com/backend-api/wham/usage` with `tokens.access_token` of
+  `${CODEX_HOME:-~/.codex}/auth.json` and `Chatgpt-Account-Id` (`tokens.account_id`) — the folders as
+  the agent's command sets them (`VAR=… prog`, `env VAR=… prog`), else the app's environment. The
+  token is read for each request, kept only in memory for it (registered with the event log's
+  redaction meanwhile: `logging::ScopedSecret`), sent only to that provider's host over https (the
+  transport follows no redirect to another server), never refreshed (that would rotate the agent's
+  own sign-in) and never logged — the log says "claude limits read: 4 windows" or why not. What to do
+  when they cannot be shown, in the pill's few words ("Limits: not signed in", "Limits: sign in
+  again", "Limits: offline", "Limits: not available") and the tooltip's sentence: run `claude` and
+  `/login`, or `codex login`, in a terminal; an API key's sign-in has no limits; an expired token is
+  renewed by using the agent once; asked too often, try again in a few minutes. Not for an agent on
+  another computer (its sign-in is that computer's) nor where no programs run. Tests: `tst_agentlimits`
+  (recorded answers, malformed ones, the requests, the reader's rhythm), `tst_shell_agentlimits`.
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that
   match are chips above it (`chatCommands`, `chatCommand`: `available_commands_update` of the
   session, or of the agent's last one); a tap writes "/name " — the agent reads it as it is.
@@ -2211,6 +2272,7 @@ brulion://<action>[/<page path>]?<parameter>=<value>&…
 | `view` | `name` (journals, calendar, tasks, habits, graph, search, allPages / pages, tags, sync, importExport, trash, cleanup, settings, logs, chat) and its parameters: `date` (journals, calendar), `mode` (calendar), `query` (tasks, search), `folder` (search, allPages), `tab` (sync, importExport), `section` (settings) | shows the view |
 | `run` (`command`) | `extension`, `command` (or `extension=silownia/rekord`), `args` (a JSON object: the command's `ctx.args`), `page` (its `ctx` page) | runs the command of an extension **approved on this device** (docs/EXTENSIONS.md); an extension waiting for approval, off or without that command is an error (`not_approved`) — an address never approves code |
 | `pair` | `url` (also `address`: a computer that runs `brulion-cli acp serve`), `code` (its `acp pair` code) | Settings → Extensions → AI agents with the pairing dialog filled in ("AI agents (ACP)"); the user pairs — a link never pairs by itself. `acp pair` shows it as a QR code the phone's camera opens |
+| `chat` | `prompt` (at most 8 000 characters once what nobody sees is taken out; the rest left out), `partner` (who answers: `acp:<id>`, an extension's `id/command`, or the name the chat shows — only one set up on this device, else the default with a note), `page` (the page it is about, when the notebook has it) | a **prompt link**: a new conversation of the AI chat with the prompt in its field — **never sent**, the user reads it and presses Send ("AI chat": `fromLink`, `draft`). Zero-width characters, bidirectional marks and controls, Unicode tag characters, variation selectors that hide bytes and every other format character are taken out first (core `automation/chatlink.h`: `cleanPrompt()`; an emoji's own joiners and presentation selector stay), and the view warns that they can hide instructions. Made by "Copy prompt link" and `brulion-cli uri build chat` |
 
 Common parameters: `vault` (also `notebook`: a notebook of this device by its name or its folder's,
 or its absolute folder; another one than the open is opened first; a name several notebooks share
@@ -2221,8 +2283,8 @@ link says), `id` (echoed in results), `x-success` / `x-error` / `x-cancel` (call
 
 Any web page, any app and any program of the device can fire an address, so (`policy.h`):
 
-* **Opening** — `open`, `daily`, `search`, `view`, `capture` without text, `pair` — **runs at once**; it
-  changes nothing.
+* **Opening** — `open`, `daily`, `search`, `view`, `capture` without text, `pair`, `chat` — **runs at
+  once**; it changes nothing (a prompt link only fills the chat's field).
 * **Writing** (`new`, `append`, `prepend`, `task`, `capture` with text) and **running an
   extension's command** need the notebook's **automation key** in the address (`key=…`) — or the
   user's **Write** in the dialog **"Write from a link?"** (`ShellAutomationDialog`), which says where
@@ -4888,7 +4950,9 @@ failure says why with **Try again**. It stops by itself after three hours.
   works the player's card says so ("Reading the recording…", "Opening the speech model…",
   "Transcribing… 42 %") with **Stop**; a toast says when it is done or why not (no speech heard, the
   note no longer has the recording). The model stays in memory five minutes after the last one.
-  Absent in builds without the model on the device (`BRULION_LOCAL_AI` / `BRULION_SPEECH`).
+  The AI chat's dictation on the desktop hears its recordings with the same model
+  (`Transcriber::transcribeFile()`: "AI chat" → Dictation). Absent in builds without the model on the
+  device (`BRULION_LOCAL_AI` / `BRULION_SPEECH`).
 * **Tests without a microphone**: with `BRULION_TEST_MICROPHONE` set every recorder hears a made-up
   voice (a tone that swells and fades) — the shell self-test's voice note, screenshots.
 

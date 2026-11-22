@@ -669,6 +669,10 @@ public:
     /// notebook: the page menu's "Copy Brulion link".
     Q_INVOKABLE QString pageAutomationLink(const QString &path, const QString &heading = QString(),
                                            const QString &blockId = QString()) const;
+    /// The prompt link of `prompt` (brulion://chat: a new conversation with it in the field, never
+    /// sent; docs/UI.md "Automation") with who answers (`partner`, "" the default) and the page it
+    /// is about — no notebook named, so it opens in anyone's.
+    Q_INVOKABLE QString chatPromptLink(const QString &prompt, const QString &partner, const QString &page) const;
     /// The browser: ask it to open web+brulion: links with this Brulion
     /// (navigator.registerProtocolHandler; the browser asks the user). Nothing elsewhere.
     Q_INVOKABLE void registerWebLinks();

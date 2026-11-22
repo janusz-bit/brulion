@@ -26,6 +26,7 @@
 //
 // Single-threaded (the GUI thread).
 
+#include "agentlimits.h"
 #include "agentshare.h"
 
 #include <QHash>
@@ -162,6 +163,13 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(bool dictationAvailable READ dictationAvailable NOTIFY dictationChanged FINAL)
     /// Dictation listens now.
     Q_PROPERTY(bool listening READ listening NOTIFY dictationChanged FINAL)
+    /// Dictation can listen now (false: the app's own recognizer has no speech model yet).
+    Q_PROPERTY(bool dictationReady READ dictationReady NOTIFY dictationChanged FINAL)
+    /// What dictation heard is being made into text (the app's own recognizer).
+    Q_PROPERTY(bool recognizing READ recognizing NOTIFY dictationChanged FINAL)
+    /// How long dictation has listened and the longest it listens, in ms (-1 / 0: not told).
+    Q_PROPERTY(int dictationElapsed READ dictationElapsed NOTIFY dictationElapsedChanged FINAL)
+    Q_PROPERTY(int dictationLimit READ dictationLimit NOTIFY dictationChanged FINAL)
     /// Changes whenever a question of a turn comes or goes (asking() and the rest ask again).
     Q_PROPERTY(int questionSerial READ questionSerial NOTIFY questionsChanged FINAL)
     /// Changes whenever an AI agent's session options, commands or usage change (agentOptions()
@@ -180,6 +188,8 @@ class WorkspaceChats : public QObject {
     /// "Share agents with the phone": this computer's agents for the user's other devices, and the
     /// agents other computers offer in the notebook (agentshare.h).
     Q_PROPERTY(brulion::shell::AgentShare *share READ share CONSTANT FINAL)
+    /// The subscription limits of the agents that are Claude Code or Codex (agentlimits.h).
+    Q_PROPERTY(brulion::shell::AgentLimits *limits READ limits CONSTANT FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -297,6 +307,7 @@ public:
     /// computer wants its code.
     Q_INVOKABLE void addOfferedAgent(const QString &address, const QString &agent);
     AgentShare *share() const { return m_share; }
+    AgentLimits *limits() const { return m_limits; }
     /// The answers of agents on another computer that went on with a turn while this device was
     /// gone (Android ended the app): fetched from there (WorkspaceAgents::recover()). When the
     /// notebook is ready and when the agents change.
@@ -361,6 +372,13 @@ public:
     bool cameraAvailable() const;
     bool dictationAvailable() const;
     bool listening() const;
+    bool dictationReady() const;
+    bool recognizing() const;
+    int dictationElapsed() const;
+    int dictationLimit() const;
+    /// A recognizer of the app's own was registered (platform::setSpeechRecognizer()): the chat's
+    /// microphone follows it from now on.
+    void useSpeechRecognizer();
     /// Asks the camera app for a photo: photoTaken(its vault path, stored as addPicture() stores a
     /// file) or captureFailed(why) follow (nothing when none was taken). False: no camera here.
     Q_INVOKABLE bool takePhoto();
@@ -475,6 +493,7 @@ Q_SIGNALS:
     void photoTaken(const QString &path);
     void captureFailed(const QString &why);
     void dictationChanged();
+    void dictationElapsedChanged();
     /// What dictation heard so far (a recognizer that tells), and at the end.
     void dictationPartial(const QString &text);
     void dictated(const QString &text);
@@ -503,6 +522,7 @@ private:
     int m_agentSerial = 0;
     bool m_agentPairing = false;
     AgentShare *m_share = nullptr;
+    AgentLimits *m_limits = nullptr;
     QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
     QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order

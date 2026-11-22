@@ -21,7 +21,8 @@ Access accessOf(const Request &request)
     case Action::Daily:
     case Action::Search:
     case Action::View:
-    case Action::Pair: return Access::Open;
+    case Action::Pair:
+    case Action::Chat: return Access::Open;
     case Action::Capture: return request.value({u"text"}).trimmed().isEmpty() ? Access::Open : Access::Write;
     case Action::New:
     case Action::Append:

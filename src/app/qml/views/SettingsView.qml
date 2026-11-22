@@ -1969,6 +1969,11 @@ Item {
                         Layout.fillWidth: true
                         title: AppController.routeText(agentRow.modelData, "name")
                         description: AppController.routeText(agentRow.modelData, "summary")
+                        // Claude Code's and Codex's subscription limits.
+                        ChatAgentLimits {
+                            objectName: "acpAgentLimits"
+                            partner: agentRow.remote ? "" : "acp:" + agentRow.agentId
+                        }
                         BButton {
                             objectName: "acpAgentCheck"
                             size: "small"

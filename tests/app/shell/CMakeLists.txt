@@ -315,6 +315,9 @@ if(TARGET brulion-cli)
     target_compile_definitions(tst_shell_agents PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
     add_dependencies(tst_shell_agents brulion-cli)
 endif()
+# Claude Code's and Codex's subscription limits as the chat shows them (agentlimits.h): which agents
+# have them, their texts in local time, read when shown or refreshed over a fake transport.
+brulion_add_test(tst_shell_agentlimits SOURCES tst_agentlimits.cpp LIBS brulion_shell brulion_core_agentlimits)
 # A brulion-cli server run while the app runs (serverprocess.h) with a server of the test's own
 # (fakeserver.cpp): Running on its first line, stopped by the end of its input (terminated when it
 # ignores it), started again after a crash with growing waits, a refusal final, new arguments.

@@ -128,6 +128,10 @@ public:
     /// into `page` under the block that embeds `target` nearest to `line`. False when it cannot (no
     /// plugin, no model here, no such file, already queued).
     Q_INVOKABLE bool transcribe(const QString &attachment, const QString &page, const QString &target, int line);
+    /// Transcribes the recording `file` (an absolute path) of no note — dictation's (dictation.h):
+    /// heard() when it is done, nothing placed anywhere, the file left for the caller. `language`
+    /// ("pl", "en"; "" the setting's) is the language it is heard as. False when it cannot.
+    bool transcribeFile(const QString &file, const QString &language = QString());
     /// `attachment` is queued or being heard.
     Q_INVOKABLE bool isQueued(const QString &attachment) const;
     /// Stops the transcription of `attachment` (waiting or being heard).
@@ -145,6 +149,8 @@ Q_SIGNALS:
     /// A transcription ended: `ok` with the text placed (`text`), else `error` ("" cancelled).
     void transcribed(const QString &attachment, const QString &page, bool ok, const QString &text,
                      const QString &error);
+    /// A transcription of transcribeFile() ended: `ok` with its text, else `error` ("" cancelled).
+    void heard(const QString &file, bool ok, const QString &text, const QString &error);
 
 private:
     struct Job {
@@ -154,7 +160,11 @@ private:
         QString target;
         int line = -1;
         std::shared_ptr<std::atomic<bool>> cancel;
+        bool place = true;  ///< a voice note's (placed in its page); false: transcribeFile()'s
+        QString language{}; ///< "" the setting's
     };
+    /// The end of `job` said: transcribed() of a voice note, heard() of a file.
+    void tell(const Job &job, bool ok, const QString &text, const QString &error);
     const ai::LocalModel *model(const QString &id) const;
     /// The model a transcription uses: the chosen one when here, else the first one here.
     const ai::LocalModel *usable() const;

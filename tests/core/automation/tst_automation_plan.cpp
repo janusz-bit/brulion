@@ -4,6 +4,7 @@
 // pages from templates, never over an existing one; the routes of open, daily, search and view;
 // commands of extensions; unknown parameters refused; the outcome's JSON and callback parameters;
 // the notebook chosen by name or folder.
+#include "automation/chatlink.h"
 #include "automation/plan.h"
 
 #include "index/vaultindex.h"
@@ -143,6 +144,32 @@ private Q_SLOTS:
         QTest::newRow("settings section") << u"brulion://view?name=settings&section=automation"_s
                                           << QJsonObject{{u"view"_s, u"settings"_s}, {u"section"_s, u"automation"_s}};
         QTest::newRow("capture dialog") << u"brulion://capture"_s << QJsonObject{{u"view"_s, u"capture"_s}};
+        // A prompt link: a new conversation's draft, never sent (no `prompt`, which sends at once).
+        const QJsonObject chat{{u"view"_s, u"chat"_s}, {u"new"_s, true}, {u"fromLink"_s, true}};
+        QJsonObject draft = chat;
+        draft.insert(u"draft"_s, u"Co mam jutro do zrobienia?"_s);
+        QTest::newRow("chat") << u"brulion://chat?prompt=Co%20mam%20jutro%20do%20zrobienia%3F"_s << draft;
+        QTest::newRow("chat, empty") << u"brulion://chat"_s << chat;
+        QJsonObject about = draft;
+        about.insert(u"page"_s, u"Dom i ogród"_s);
+        about.insert(u"partner"_s, u"acp:claude"_s);
+        QTest::newRow("chat about a page, with a partner")
+                << u"brulion://chat?prompt=Co+mam+jutro+do+zrobienia%3F&page=Ogr%C3%B3d&partner=acp%3Aclaude"_s << about;
+        QJsonObject missing = draft;
+        missing.insert(u"pageMissing"_s, u"Nieistniejąca"_s);
+        QTest::newRow("chat about a page not here")
+                << u"brulion://chat?prompt=Co+mam+jutro+do+zrobienia%3F&page=Nieistniej%C4%85ca"_s << missing;
+        QJsonObject hidden = chat;
+        hidden.insert(u"draft"_s, u"Podsumuj tę stronę"_s);
+        hidden.insert(u"hidden"_s, 4);
+        // A zero-width space, a right-to-left override and two tag characters ("hi" no one sees).
+        QTest::newRow("chat, hidden characters")
+                << u"brulion://chat?prompt=Podsumuj%E2%80%8B%20t%C4%99%20%E2%80%AEstron%C4%99%F3%A0%81%A8%F3%A0%81%A9"_s
+                << hidden;
+        QJsonObject capped = chat;
+        capped.insert(u"draft"_s, QString(MaxPromptLength, u'ż'));
+        capped.insert(u"capped"_s, true);
+        QTest::newRow("chat, too long") << u"brulion://chat?prompt="_s + QString(MaxPromptLength + 100, u'ż') << capped;
     }
 
     void opens()
@@ -196,6 +223,7 @@ private Q_SLOTS:
         QTest::newRow("new, bad mode") << u"brulion://new?title=X&mode=tabela"_s << u"unknown_parameter"_s;
         QTest::newRow("run without a command") << u"brulion://run?extension=silownia"_s << u"missing_parameter"_s;
         QTest::newRow("run, bad args") << u"brulion://run?extension=a&command=b&args=%5B1%5D"_s << u"bad_args"_s;
+        QTest::newRow("chat, a typo") << u"brulion://chat?promt=Cze%C5%9B%C4%87"_s << u"unknown_parameter"_s;
     }
 
     void refuses()
