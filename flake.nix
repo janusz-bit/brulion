@@ -55,6 +55,11 @@
             abi = "arm64-v8a";
             withAab = true;
           };
+          # The app for Google Play (docs/GOOGLE_PLAY.md): its APK and AAB, arm64-v8a.
+          brulion-android-play = apk {
+            abi = "arm64-v8a";
+            play = true;
+          };
           # Search by meaning: the embedding model's speed on a phone (nix/android/embedbench.nix).
           embedbench-android = pkgs.callPackage ./nix/android/embedbench.nix { };
         };
@@ -65,6 +70,7 @@
       # nix build .#brulion-android         Android APK, arm64-v8a, unsigned (x86_64-linux hosts)
       # nix build .#brulion-android-x86_64  Android APK for the emulator, unsigned
       # nix build .#brulion-android-aab     arm64-v8a APK + Android App Bundle, unsigned
+      # nix build .#brulion-android-play    the app for Google Play: APK + AAB, unsigned (docs/GOOGLE_PLAY.md)
       # nix run .#brulion-android-sign -- result/*.apk   signs an APK with the release key
       packages = forAllSystems (
         pkgs:

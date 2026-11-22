@@ -178,6 +178,9 @@ class AppController : public QObject {
     Q_PROPERTY(bool isAndroid READ isAndroid CONSTANT FINAL)
     Q_PROPERTY(bool isWasm READ isWasm CONSTANT FINAL)
     Q_PROPERTY(bool isDesktop READ isDesktop CONSTANT FINAL)
+    /// The app for Google Play (platform::playStoreBuild()): no "All files access"; a notebook
+    /// folder of the device is one picked in the system's dialog, kept in sync with the app's copy.
+    Q_PROPERTY(bool playStore READ playStore CONSTANT FINAL)
     /// Touch-first platform (Android).
     Q_PROPERTY(bool touch READ touch CONSTANT FINAL)
     Q_PROPERTY(QString version READ version CONSTANT FINAL)
@@ -432,6 +435,7 @@ public:
     bool isAndroid() const;
     bool isWasm() const;
     bool isDesktop() const;
+    bool playStore() const;
     bool touch() const { return isAndroid(); }
     QString version() const;
     bool trayAvailable() const { return m_trayAvailable; }

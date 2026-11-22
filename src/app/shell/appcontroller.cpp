@@ -1280,6 +1280,11 @@ QString AppController::platform() const
 #endif
 }
 
+bool AppController::playStore() const
+{
+    return platform::playStoreBuild();
+}
+
 bool AppController::isAndroid() const
 {
 #ifdef Q_OS_ANDROID
@@ -1441,6 +1446,10 @@ QString AppController::localPath(const QUrl &url) const
 bool AppController::needsStoragePermission(const QString &rawPath) const
 {
 #ifdef Q_OS_ANDROID
+    // The app for Google Play has no such permission: its notebooks are in the app's storage, a
+    // folder of the device one picked in the system's dialog (kept in sync with the app's copy).
+    if (platform::playStoreBuild())
+        return false;
     const QString path = cleanLocalPath(rawPath);
     // App-private storage needs no permission; everything else on the device does.
     return !path.startsWith(m_dataDir) && !path.startsWith(QDir::homePath());
@@ -1876,7 +1885,9 @@ QVariantMap AppController::permissions() const
     p.insert(u"notifications"_s, bridge->notificationPermission());
     p.insert(u"exactAlarms"_s, bridge->canScheduleExact());
     p.insert(u"fullScreenAlarms"_s, bridge->canUseFullScreenIntent());
-    p.insert(u"storagePermissionNeeded"_s, true);
+    // The app for Google Play has no "All files access" to ask for: a folder of the device is one
+    // picked in the system's dialog (no permission), kept in sync with the app's copy.
+    p.insert(u"storagePermissionNeeded"_s, !platform::playStoreBuild());
     p.insert(u"exactAlarmsNeeded"_s, true);
     p.insert(u"fullScreenNeeded"_s, true);
 #elif defined(Q_OS_WASM)

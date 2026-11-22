@@ -306,6 +306,17 @@ if(ANDROID)
         # download either way.
         QT_ANDROID_LEGACY_PACKAGING ON
     )
+    # What android/settings.gradle needs to know of this configuration, next to the Gradle project
+    # androiddeployqt makes (<this build folder>/android-build): `store=play` for the app for Google
+    # Play (BRULION_PLAY) — its package io.github.januszbit.brulion.play and the permissions Play
+    # keeps for other kinds of apps left out (android/play/AndroidManifest.xml).
+    if(BRULION_PLAY)
+        set(_brulion_store play)
+    else()
+        set(_brulion_store "")
+    endif()
+    file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/brulion-android.properties
+        CONTENT "# Written by src/app/CMakeLists.txt, read by android/settings.gradle.\nstore=${_brulion_store}\n")
 
     # Shipped APKs (Release, MinSizeRel) without the QML debugging plugins (qmltooling, 12
     # libraries, 1 MB per ABI) that androiddeployqt would deploy with QtQml: they only serve a QML

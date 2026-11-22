@@ -7,6 +7,10 @@ namespace brulion::platform {
 
 /// "linux", "windows", "android" or "wasm" — the target this binary was built for.
 QString targetName();
+/// The app for Google Play (the CMake option BRULION_PLAY, Android only): no "All files access" —
+/// a notebook folder outside the app's own storage is one picked in the system's dialog and kept in
+/// sync with the app's copy (sync/foldertransport.h) — and no check for a newer version.
+bool playStoreBuild();
 
 /// Folder of the event log files (brulion.log, brulion.log.1): Linux QStandardPaths::
 /// StateLocation + "/logs" ($XDG_STATE_HOME/Brulion/Brulion/logs, ~/.local/state/… by default),

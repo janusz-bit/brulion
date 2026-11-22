@@ -44,6 +44,11 @@
 #                                For a phone that has the release: no key but the release's can
 #                                update that one, and uninstalling it deletes its notes. Not with
 #                                BRULION_ANDROID_AAB (a bundle is for a store)
+#   BRULION_ANDROID_PLAY=1       the app for Google Play (CMake option BRULION_PLAY, docs/GOOGLE_PLAY.md):
+#                                the package io.github.januszbit.brulion.play, without "All files
+#                                access" and USE_EXACT_ALARM, no check for a newer version; implies
+#                                BRULION_ANDROID_AAB=1. Its APK installs beside the release (a
+#                                package of its own): brulion-<version>-<abis>-play.apk / .aab
 #   BRULION_UPDATE_CHECK=OFF     no check for a newer version on GitHub, no message or switch about
 #                                it (CMake option BRULION_UPDATE_CHECK, default ON): for builds that a
 #                                store updates (F-Droid, IzzyOnDroid; docs/ANDROID.md)
@@ -155,6 +160,16 @@ QT_ROOT=$(realpath -m -- "$QT_ROOT")
 [[ -z ${BRULION_OPENSSL_OUT:-} ]] || BRULION_OPENSSL_OUT=$(realpath -m -- "$BRULION_OPENSSL_OUT")
 SIGN=${BRULION_ANDROID_SIGN:-1}
 [[ $SIGN == 0 || $SIGN == 1 ]] || die "BRULION_ANDROID_SIGN must be 0 or 1, not '$SIGN'"
+PLAY=${BRULION_ANDROID_PLAY:-0}
+[[ $PLAY == 0 || $PLAY == 1 ]] || die "BRULION_ANDROID_PLAY must be 0 or 1, not '$PLAY'"
+if ((PLAY)); then
+  [[ -z ${BRULION_ANDROID_ID_SUFFIX:-} ]] ||
+    die "BRULION_ANDROID_ID_SUFFIX: not with BRULION_ANDROID_PLAY=1 (the app for Google Play has a package of its own, .play)"
+  [[ ${BRULION_ANDROID_SELFTEST:-0} != 1 ]] ||
+    die "BRULION_ANDROID_SELFTEST: not with BRULION_ANDROID_PLAY=1 (the self-test APK has the release's package)"
+  # Google Play takes bundles only.
+  BRULION_ANDROID_AAB=1
+fi
 # Gradle reads it from the environment (android/settings.gradle): what follows the package name.
 ID_SUFFIX=${BRULION_ANDROID_ID_SUFFIX:-}
 if [[ -n $ID_SUFFIX ]]; then
@@ -167,6 +182,8 @@ else
   unset BRULION_ANDROID_ID_SUFFIX
 fi
 PACKAGE=io.github.januszbit.brulion$ID_SUFFIX
+# The app for Google Play: settings.gradle adds ".play" (CMake tells it, not the environment).
+((PLAY)) && PACKAGE=io.github.januszbit.brulion.play
 NDK_VERSION=${NDK_VERSION:-27.2.12479018}
 SDK_PLATFORM=android-36
 BUILD_TOOLS=36.0.0
@@ -193,6 +210,7 @@ qt_arch() { # ABI -> aqt arch / Qt directory name
 
 info "Brulion $VERSION for Android: Qt $QT_VERSION ($QT_SOURCE), OpenSSL ($OPENSSL_SOURCE), ABIs ${ABIS[*]}, $BUILD_TYPE"
 [[ -z $ID_SUFFIX ]] || echo "Package $PACKAGE: installs beside a released Brulion, with data of its own"
+((PLAY)) && echo "The app for Google Play: package $PACKAGE (docs/GOOGLE_PLAY.md), an APK and an AAB"
 
 # --- JDK ----------------------------------------------------------------------------------------
 
@@ -404,6 +422,7 @@ cmake_args=(
   -DBRULION_WERROR="${BRULION_WERROR:-OFF}"
   -DBRULION_ANDROID_VERSION_CODE="${BRULION_ANDROID_VERSION_CODE:-}"
   -DBRULION_UPDATE_CHECK="${BRULION_UPDATE_CHECK:-ON}"
+  -DBRULION_PLAY="$( ((PLAY)) && echo ON || echo OFF)"
 )
 [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]] && cmake_args+=(-DBRULION_ANDROID_SELFTEST=ON)
 [[ -n ${BRULION_ANDROID_OPENSSL_DIR:-} ]] && cmake_args+=(-DBRULION_ANDROID_OPENSSL_DIR="$BRULION_ANDROID_OPENSSL_DIR")
@@ -498,6 +517,7 @@ apk_in=$(newest_apk "$android_build")
 unsigned_suffix=
 ((SIGN)) || unsigned_suffix=-unsigned
 id_tag=${ID_SUFFIX//./-} # ".test": "-test"
+((PLAY)) && id_tag=-play
 apk=$OUT_DIR/brulion-$VERSION-$abi_tag$id_tag$unsigned_suffix.apk
 sign_apk "$apk_in" "$apk"
 selftest_apk=
@@ -512,7 +532,7 @@ aab=
 if [[ ${BRULION_ANDROID_AAB:-0} == 1 ]]; then
   aab_in=$(find "$android_build/build/outputs/bundle" -type f -name '*.aab' | sort | head -n 1)
   [[ -n $aab_in ]] || die "no AAB under $android_build/build/outputs/bundle"
-  aab=$OUT_DIR/brulion-$VERSION-$abi_tag$unsigned_suffix.aab
+  aab=$OUT_DIR/brulion-$VERSION-$abi_tag$id_tag$unsigned_suffix.aab
   cp -- "$aab_in" "$aab"
   if ((SIGN)); then
     jarsigner -keystore "$QT_ANDROID_KEYSTORE_PATH" -storepass:env QT_ANDROID_KEYSTORE_STORE_PASS \
@@ -537,8 +557,22 @@ grep -q "^package: name='$PACKAGE'" <<<"$badging" || die "wrong package name (no
 label=Brulion
 [[ -z $ID_SUFFIX ]] || label="Brulion (${ID_SUFFIX#.})"
 grep -qxF "application-label:'$label'" <<<"$badging" || die "wrong app name (not \"$label\")"
-for permission in MANAGE_EXTERNAL_STORAGE POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM USE_EXACT_ALARM \
-  RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK USE_FULL_SCREEN_INTENT USE_BIOMETRIC INTERNET ACCESS_NETWORK_STATE RECORD_AUDIO; do
+required_permissions=(POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK
+  USE_FULL_SCREEN_INTENT USE_BIOMETRIC INTERNET ACCESS_NETWORK_STATE RECORD_AUDIO)
+# The app for Google Play leaves out what Play keeps for other kinds of apps
+# (android/play/AndroidManifest.xml); its SCHEDULE_EXACT_ALARM has no maxSdkVersion.
+store_permissions=(MANAGE_EXTERNAL_STORAGE USE_EXACT_ALARM READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE)
+if ((PLAY)); then
+  for permission in "${store_permissions[@]}"; do
+    ! grep -q "uses-permission: name='android.permission.$permission'" <<<"$badging" ||
+      die "permission $permission in the app for Google Play (android/play/AndroidManifest.xml not merged?)"
+  done
+  grep -qxF "uses-permission: name='android.permission.SCHEDULE_EXACT_ALARM'" <<<"$badging" ||
+    die "SCHEDULE_EXACT_ALARM of the app for Google Play must have no maxSdkVersion (android/play/AndroidManifest.xml)"
+else
+  required_permissions+=(MANAGE_EXTERNAL_STORAGE USE_EXACT_ALARM)
+fi
+for permission in "${required_permissions[@]}"; do
   grep -q "uses-permission: name='android.permission.$permission'" <<<"$badging" ||
     die "permission $permission missing from the merged manifest"
 done

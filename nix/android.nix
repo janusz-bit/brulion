@@ -44,9 +44,18 @@
   # The model on the device (docs/EXTENSIONS.md "AI"): llama.cpp's libraries and the plugin with
   # the model runner in the APK. 64-bit ABIs only; false: an APK without them.
   withLocalAi ? true,
+  # The app for Google Play (CMake's BRULION_PLAY, docs/GOOGLE_PLAY.md): the package
+  # io.github.januszbit.brulion.play without "All files access" and USE_EXACT_ALARM — an APK and
+  # an AAB (brulion-<version>-<abi>-play-unsigned.{apk,aab}).
+  play ? false,
 }:
 
 let
+  # Google Play takes bundles only.
+  bundle = withAab || play;
+  package = "io.github.januszbit.brulion" + lib.optionalString play ".play";
+  # What the outputs' names carry after the ABI.
+  tag = lib.optionalString play "-play";
   # Keep in sync with scripts/android-build.sh and src/app/CMakeLists.txt (compile/target SDK).
   ndkVersion = "27.2.12479018"; # r27c, the NDK Qt 6.12 is built with
   buildToolsVersion = "36.0.0";
@@ -158,7 +167,7 @@ assert lib.assertMsg (qtAndroid.version == qt6.qtbase.version) ''
 stdenvNoCC.mkDerivation (finalAttrs: {
   # One pname for every ABI, so that all of them share one Gradle dependency cache.
   pname = "brulion-android";
-  name = "brulion-android-${abi}${lib.optionalString withAab "-aab"}-${version}";
+  name = "brulion-android-${abi}${lib.optionalString bundle "-aab"}${tag}-${version}";
   inherit version;
 
   src = lib.fileset.toSource {
@@ -221,6 +230,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     "-DBRULION_WERROR=${if werror then "ON" else "OFF"}"
     # Qt's own Polish texts (qtbase_pl.qm…), bundled as resources.
     "-DBRULION_QT_TRANSLATIONS_DIR=${qt6.qttranslations}/translations"
+    "-DBRULION_PLAY=${if play then "ON" else "OFF"}"
   ]
   ++ lib.optionals (androidOpenssl != null) [
     # The pinned checkout instead of CMake's download (src/app/CMakeLists.txt).
@@ -292,7 +302,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook preBuild
     eval "$writeGradlew"
     eval "$buildApk"
-    ${lib.optionalString withAab ''
+    ${lib.optionalString bundle ''
       # The bundle of the Gradle project androiddeployqt prepared (the release build is done).
       (cd ${androidBuildDir} && gradle bundleRelease)
     ''}
@@ -315,10 +325,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     # 16 KB alignment of any native library stored uncompressed (Android 15+ with 16 KB pages;
     # Brulion's are compressed, src/app/CMakeLists.txt), which apksigner keeps when signing
     # (brulion-android-sign checks it).
-    ${buildTools}/zipalign -P 16 -f 4 "$apk" $out/brulion-${version}-${abi}-unsigned.apk
-    ${lib.optionalString withAab ''
+    ${buildTools}/zipalign -P 16 -f 4 "$apk" $out/brulion-${version}-${abi}${tag}-unsigned.apk
+    ${lib.optionalString bundle ''
       cp ${androidBuildDir}/build/outputs/bundle/release/android-build-release.aab \
-        $out/brulion-${version}-${abi}-unsigned.aab
+        $out/brulion-${version}-${abi}${tag}-unsigned.aab
     ''}
     runHook postInstall
   '';
@@ -329,19 +339,28 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   doInstallCheck = true;
   installCheckPhase = ''
     runHook preInstallCheck
-    apk=$out/brulion-${version}-${abi}-unsigned.apk
+    apk=$out/brulion-${version}-${abi}${tag}-unsigned.apk
     fail() { echo "APK check failed: $*" >&2; exit 1; }
 
     badging=$(${buildTools}/aapt2 dump badging "$apk")
     ${gnugrep}/bin/grep -E "^(package|minSdkVersion|targetSdkVersion|application-label|native-code):" <<<"$badging"
-    [[ $badging == *"package: name='io.github.januszbit.brulion'"* ]] || fail "wrong package name"
+    [[ $badging == *"package: name='${package}'"* ]] || fail "wrong package name (not ${package})"
     [[ $badging == *"versionName='${version}'"* ]] || fail "versionName is not ${version}"
     [[ $badging == *"native-code: '${abi}'"* ]] || fail "native code is not ${abi}"
-    for permission in MANAGE_EXTERNAL_STORAGE POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM USE_EXACT_ALARM \
-      RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE; do
+    for permission in POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK \
+      USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE ${if play then "" else "MANAGE_EXTERNAL_STORAGE USE_EXACT_ALARM"}; do
       [[ $badging == *"uses-permission: name='android.permission.$permission'"* ]] ||
         fail "permission $permission missing from the merged manifest"
     done
+    ${lib.optionalString play ''
+      # What Google Play keeps for other kinds of apps (android/play/AndroidManifest.xml).
+      for permission in MANAGE_EXTERNAL_STORAGE USE_EXACT_ALARM READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE; do
+        [[ $badging != *"uses-permission: name='android.permission.$permission'"* ]] ||
+          fail "permission $permission in the app for Google Play"
+      done
+      ${gnugrep}/bin/grep -qxF "uses-permission: name='android.permission.SCHEDULE_EXACT_ALARM'" <<<"$badging" ||
+        fail "SCHEDULE_EXACT_ALARM of the app for Google Play must have no maxSdkVersion"
+    ''}
     manifest=$(${buildTools}/aapt2 dump xmltree --file AndroidManifest.xml "$apk")
     for component in BrulionActivity AlarmActivity ReminderReceiver ActionReceiver RingTimeoutReceiver BootReceiver; do
       [[ $manifest == *"io.github.januszbit.brulion.android.$component\""* ]] ||
@@ -388,8 +407,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     if ${gnugrep}/bin/grep -qE 'QuickControls2(Material|Universal|Imagine|Fusion|FluentWinUI3)|Controls_(Material|Universal|Imagine|Fusion|FluentWinUI3)|QuickDialogs2|QtQuick_Dialogs' <<<"$listing"; then
       fail "unused Qt Quick styles or QtQuick.Dialogs in the APK"
     fi
-    ${lib.optionalString withAab ''
-      [[ $(unzip -l $out/brulion-${version}-${abi}-unsigned.aab) == *"base/lib/${abi}/libbrulion_${abi}.so"* ]] ||
+    ${lib.optionalString bundle ''
+      [[ $(unzip -l $out/brulion-${version}-${abi}${tag}-unsigned.aab) == *"base/lib/${abi}/libbrulion_${abi}.so"* ]] ||
         fail "the AAB has no base/lib/${abi}/libbrulion_${abi}.so"
     ''}
     echo "native libraries: $(${gnugrep}/bin/grep -c 'lib/.*\.so$' <<<"$listing"), Kotlin classes: $(wc -l <<<"$dex")"
@@ -424,6 +443,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       abi
       withAab
       withLocalAi
+      play
       llamaSrc
       whisperSrc
       qtAndroid
@@ -435,7 +455,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   };
 
   meta = {
-    description = "Brulion for Android (${abi}): unsigned release APK${lib.optionalString withAab " and AAB"}";
+    description = "Brulion for Android (${abi}${lib.optionalString play ", Google Play"}): unsigned release APK${lib.optionalString bundle " and AAB"}";
     homepage = "https://github.com/janusz-bit/brulion";
     license = lib.licenses.agpl3Plus;
     # Brulion's code built from source, with Qt's prebuilt libraries and Java libraries (androidx).

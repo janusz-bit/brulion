@@ -44,6 +44,9 @@ qt_add_library(brulion_platform STATIC
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
 brulion_set_warnings(brulion_platform)
+# platform::playStoreBuild(): the app for Google Play (the top CMakeLists.txt's BRULION_PLAY).
+set_property(SOURCE platform.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    "BRULION_PLAY_STORE=$<BOOL:${BRULION_PLAY}>")
 
 # PDF pages as pictures (pdfpages.h; sizes and the choice: docs/PERFORMANCE.md "Size"):
 # Android — the system's PdfRenderer through JNI (no library); the browser — none (Qt has no Qt PDF

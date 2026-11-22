@@ -16,12 +16,36 @@
 // cannot update that one, and uninstalling it deletes its notes. Only the package changes: the
 // code's namespace (the R class, the Kotlin classes, android:name in the manifest) stays, and
 // what is named after the package at run time (the FileProvider's authority) follows it.
+//
+// The app for Google Play (CMake's BRULION_PLAY, docs/GOOGLE_PLAY.md): `store=play` in
+// ../brulion-android.properties, which src/app/CMakeLists.txt writes next to this Gradle project.
+// Its package is io.github.januszbit.brulion.play — an app of its own beside the APK of GitHub
+// and F-Droid, which it never updates (it has no "All files access": a notebook on shared storage
+// that one opens would stay out of its reach) — named "Brulion", and play/AndroidManifest.xml,
+// merged over the manifest, leaves out the permissions Play keeps for other kinds of apps.
 def idSuffix = System.getenv('BRULION_ANDROID_ID_SUFFIX') ?: ''
+def buildProperties = new Properties()
+def buildPropertiesFile = new File(settingsDir, '../brulion-android.properties')
+if (buildPropertiesFile.isFile()) {
+    buildPropertiesFile.withInputStream { buildProperties.load(it) }
+}
+def playStore = buildProperties.getProperty('store', '') == 'play'
+if (playStore && idSuffix) {
+    throw new GradleException("BRULION_ANDROID_ID_SUFFIX=${idSuffix}: not for the app for Google Play (BRULION_PLAY), whose package is io.github.januszbit.brulion.play")
+}
 
 gradle.rootProject { project ->
     project.pluginManager.withPlugin('com.android.application') {
         project.android {
-            if (idSuffix) {
+            if (playStore) {
+                defaultConfig {
+                    applicationIdSuffix = '.play'
+                }
+                sourceSets {
+                    debug.manifest.srcFile 'play/AndroidManifest.xml'
+                    release.manifest.srcFile 'play/AndroidManifest.xml'
+                }
+            } else if (idSuffix) {
                 defaultConfig {
                     applicationIdSuffix = idSuffix
                     manifestPlaceholders['brulionLabel'] = "Brulion (${idSuffix.substring(1)})".toString()
