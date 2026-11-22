@@ -1133,6 +1133,14 @@ Item {
                     }
                 }
                 SettingSwitch {
+                    objectName: "railExpandsSetting"
+                    visible: !Theme.touchUi
+                    text: qsTr("Names beside the views' icons")
+                    description: qsTr("The rail of views at the window's edge widens with their names when the pointer rests on it. Off: the names show in tooltips.")
+                    checked: AppSettings.railExpands
+                    onToggled: AppSettings.railExpands = checked
+                }
+                SettingSwitch {
                     objectName: "captureButtonSetting"
                     text: qsTr("Quick note button")
                     description: qsTr("The + button in the top bar of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")

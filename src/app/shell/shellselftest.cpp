@@ -9458,7 +9458,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 ///     accent dialog too; an entry unticked under "Sidebar" leaves the sidebar (the drawer on
 ///     phones) and stays in the command palette; a bottom navigation slot takes another view from
 ///     its menu (phones: the bar shows it), and the view it already has stays checked there; the
-///     quick note button's switch hides it; "Restore the default look" brings the logo's colours
+///     quick note button's switch hides it; wide windows: the rail widens over the page panel under
+///     the pointer, not with its switch off; "Restore the default look" brings the logo's colours
 ///     back. Editor → Font → "Other…" opens the font picker; cancelled, the selection does not
 ///     move; a missing family names the serif or sans-serif font used instead. The settings are
 ///     put back at the end.
@@ -9753,6 +9754,46 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
             QMetaObject::invokeMethod(shellItem, "toggleSidebar");
         check(waitFor([&] { return shownNamed(window->contentItem(), u"sidebarTree"_s) != nullptr; }),
               "the page panel comes back");
+
+        // The rail widens over the page panel with the views' names while the pointer rests on
+        // it, nothing beside it moves; it narrows once the pointer leaves. Switched off it stays
+        // narrow (the names are tooltips). Not on touch screens: no pointer to rest.
+        QQuickItem *railItem = shownItem(u"shellRail"_s);
+        QQuickItem *railSurface = shownItem(u"railSurface"_s);
+        QQuickItem *calendarEntry = shownItem(u"sidebarNav_calendar"_s);
+        QQuickItem *tree = shownItem(u"sidebarTree"_s);
+        if (!touch && railItem && railSurface && calendarEntry && tree) {
+            const qreal narrowWidth = railItem->width();
+            const qreal treeX = tree->mapToScene(QPointF(0, 0)).x();
+            const QPointF onCalendar = calendarEntry->mapToScene(QPointF(calendarEntry->width() / 2, calendarEntry->height() / 2));
+            // (It must move over the rail: one event is where it came in.)
+            mouseMove(window, onCalendar - QPointF(0, 6));
+            mouseMove(window, onCalendar);
+            check(waitFor([&] { return railSurface->width() >= 200 && calendarEntry->width() > narrowWidth; }),
+                  "the pointer resting on the rail widens it with the views' names");
+            check(tree->mapToScene(QPointF(0, 0)).x() == treeX,
+                  "the widened rail lies over the page panel: nothing beside it moves");
+            // A click on a name over the page panel is the rail's (its items take the pointer
+            // there, not the page panel under them).
+            const QPointF onName = calendarEntry->mapToScene(QPointF(calendarEntry->width() - 30, calendarEntry->height() / 2));
+            check(onName.x() > narrowWidth + 40, "the calendar's row reaches over the page panel");
+            mouseClick(window, onName);
+            check(waitFor([&] { return app->currentView() == u"calendar"; }), "a click on a view's name opens it");
+            app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+            waitFor([&] { return app->currentView() == u"settings"; });
+            mouseMove(window, QPointF(window->width() - 40, window->height() / 2));
+            check(waitFor([&] { return railSurface->width() == narrowWidth && railItem->width() == narrowWidth; }),
+                  "leaving it narrows it again");
+            settings->setRailExpands(false);
+            mouseMove(window, onCalendar - QPointF(0, 6));
+            mouseMove(window, onCalendar);
+            settle(500);
+            check(railSurface->width() == narrowWidth, "with “Names beside the views' icons” off the rail stays narrow");
+            mouseMove(window, QPointF(window->width() - 40, window->height() / 2));
+            settings->setRailExpands(true);
+        } else if (!touch) {
+            check(false, "the rail, its surface, the calendar's entry and the page tree are shown");
+        }
 
         // The rail's sync status: a click syncs now with a sync engine, opens the sync center
         // without one.

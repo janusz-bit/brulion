@@ -8,7 +8,8 @@ import Brulion
 // integration via AppController.syncStatus — or, for a notebook kept on GitHub without Nextcloud,
 // GitHub's, with its own icon —, a Syncthing folder, this browser, this device only).
 // A line with "Sync now" when a sync engine is available, or `compact`: the status icon alone
-// (the sidebar's rail, ShellRail), its text as the tooltip. Clicking it opens the sync center
+// (the sidebar's rail, ShellRail), its text as the tooltip (and beside it, `textShown`, while the
+// rail is expanded). Clicking it opens the sync center
 // (the rail's button, `syncOnClick`, syncs instead; its tooltip says so).
 T.ItemDelegate {
     id: control
@@ -16,6 +17,8 @@ T.ItemDelegate {
     property real safeBottom: 0
     /// Only the icon, in a square button (the rail).
     property bool compact: false
+    /// Compact, with the status beside the icon (the rail expanded).
+    property bool textShown: false
     /// The owner syncs on a click (the rail): the tooltip says it.
     property bool syncOnClick: false
 
@@ -56,7 +59,7 @@ T.ItemDelegate {
 
     readonly property int squareSize: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight + 4
 
-    implicitWidth: compact ? squareSize : Math.max(implicitBackgroundWidth, implicitContentWidth + leftPadding + rightPadding)
+    implicitWidth: compact && !textShown ? squareSize : Math.max(implicitBackgroundWidth, implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: compact ? squareSize
                             : Math.max(Theme.touchUi ? 52 : 40, implicitContentHeight + topPadding) + safeBottom
     leftPadding: compact ? (squareSize - Theme.iconSize) / 2 : Theme.touchUi ? 16 : 14
@@ -88,7 +91,7 @@ T.ItemDelegate {
             }
         }
         BText {
-            visible: !control.compact
+            visible: !control.compact || control.textShown
             Layout.fillWidth: true
             text: control.statusText
             variant: "small"
@@ -109,7 +112,7 @@ T.ItemDelegate {
         Rectangle {
             anchors.fill: parent
             visible: control.pressed || control.hovered
-            radius: control.compact ? Theme.radius : 0
+            radius: control.compact ? Theme.radiusLg : 0
             color: control.pressed ? Theme.bgPressed : Theme.bgHover
         }
         Rectangle {
@@ -122,7 +125,7 @@ T.ItemDelegate {
             target: control
             visible: control.visualFocus
             inset: !control.compact
-            targetRadius: control.compact ? Theme.radius : 0
+            targetRadius: control.compact ? Theme.radiusLg : 0
         }
     }
 

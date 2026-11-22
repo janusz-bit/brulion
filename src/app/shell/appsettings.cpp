@@ -55,6 +55,7 @@ constexpr auto kSidebarHidden = "ui/sidebar/hidden"_L1;
 constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
 constexpr auto kCaptureButton = "ui/captureButton"_L1;
+constexpr auto kRailExpands = "ui/rail/expands"_L1;
 constexpr auto kGym = "extensions/silownia"_L1;
 constexpr auto kHabits = "extensions/nawyki"_L1;
 constexpr auto kAssistant = "extensions/asystent"_L1;
@@ -1195,6 +1196,17 @@ void AppSettings::setCaptureButtonShown(bool on)
 {
     if (store(kCaptureButton, on, captureButtonShown()))
         Q_EMIT captureButtonShownChanged();
+}
+
+bool AppSettings::railExpands() const
+{
+    return m_settings->value(kRailExpands, true).toBool();
+}
+
+void AppSettings::setRailExpands(bool on)
+{
+    if (store(kRailExpands, on, railExpands()))
+        Q_EMIT railExpandsChanged();
 }
 
 void AppSettings::resetAppearance()

@@ -162,16 +162,30 @@ components — no Material/Fusion look, so all targets look identical.
     — the current one checked, one click switches — then "Brulion Documentation" and "Open another
     notebook…" (the start screen); a recent notebook whose folder is gone is not recreated: a
     warning, and it stays on the list, marked on the start screen until removed — one in a
-    temporary folder leaves it); then the views as icon buttons, their names and shortcuts
-    in tooltips to the right: Journal, Calendar, Tasks, Habits, All pages, Tags, Graph,
-    Search (the selected one tinted, the accent's bar at the rail's edge; the entries hidden in
-    Settings → Appearance → Layout left out; in the drawer also Import notes; they scroll when the
-    window is too low; in the drawer, where a phone has no tooltips, each with its short name under
-    the icon — Journal, Calendar, Tasks, …, Pages, Import, Settings —, the rail 76 px wide, as
-    Material 3's navigation rail); at the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
-    its text in the tooltip; a click syncs now when there is a sync engine, otherwise or while a
-    sync runs it opens the sync center, as do a right click and a long press) and Settings. The top bar's sidebar
-    button hides only the page panel: the rail stays (not in focus mode).
+    temporary folder leaves it); then the views as icon buttons in groups, a line between them
+    (`ShellRail.startsGroup`, above the first shown entry of a group): Journal, Calendar, Tasks |
+    Habits, Gym, Flashcards | All pages, Tags, Graph | Search | the extensions' entries. The
+    selected one has the accent's tint and icon colour and a pill at the rail's edge (`railPill`,
+    as Discord's servers; a short pill under the pointer). The entries hidden in Settings →
+    Appearance → Layout are left out (no line for an empty group); in the drawer also Import notes;
+    they scroll when the window is too low. **Names:** on the desktop, with Settings → Appearance →
+    Layout → "Names beside the views' icons" (`AppSettings.railExpands`, `ui/rail/expands`, on by
+    default; not on touch screens), the rail widens to 216 px over the page panel (a shadow, the
+    rail's `Loader` above the `SplitView` and as wide as `ShellRail.faceWidth` — a pointer reaches an
+    item only within its parents' bounds —, the split placed beside the narrow width, so nothing moves)
+    250 ms after the pointer moved onto it (a window opening under a still pointer stays narrow),
+    and narrows 150 ms after the pointer leaves:
+    the notebook's name beside its mark, each view's name beside its icon, its shortcut as key
+    caps under the pointer, the flashcards' count at the row's end, the sync status's text. The
+    icons stay where they are. The keyboard's focus in it (Tab) widens it too, as does its
+    notebook menu while open. Off, the names and shortcuts are tooltips to the right. In the
+    drawer, where a phone has no tooltips, each view has its short name under the icon —
+    Journal, Calendar, Tasks, …, Pages, Import, Settings —, the rail 76 px wide, as Material 3's
+    navigation rail. At the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
+    its text in the tooltip, beside it with `textShown`; a click syncs now when there is a sync
+    engine, otherwise or while a sync runs it opens the sync center, as do a right click and a
+    long press) and Settings. The top bar's sidebar button hides only the page panel: the rail
+    stays (not in focus mode).
   * Sidebar (`ShellSidebar`, the page panel): the notebook's name and a new-page button, then
     its sections in the order chosen in Settings → Appearance → Layout → "Order of the sections"
     (`AppSettings.sidebarSections`, `ui/sidebar/sections`; Pages, Favorites, Recent by default;

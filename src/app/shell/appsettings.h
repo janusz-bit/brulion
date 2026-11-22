@@ -82,6 +82,9 @@ class AppSettings : public QObject {
     /// Quick capture's + on the top bar of phones and narrow windows (wide ones always show it).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
+    /// The rail of views widens over the page panel with the views' names while the pointer rests
+    /// on it (desktop; docs/UI.md "Sidebar"). On by default; off: the names in tooltips.
+    Q_PROPERTY(bool railExpands READ railExpands WRITE setRailExpands NOTIFY railExpandsChanged FINAL)
     /// The built-in gym extension (Settings → Extensions; docs/UI.md "Gym"): the Gym view, its
     /// palette commands. Off by default.
     Q_PROPERTY(bool gymEnabled READ gymEnabled WRITE setGymEnabled NOTIFY gymEnabledChanged FINAL)
@@ -326,6 +329,8 @@ public:
     /// slot swaps places with the one it replaces.
     Q_INVOKABLE void setBottomNavTab(int index, const QString &view);
     bool captureButtonShown() const;
+    bool railExpands() const;
+    void setRailExpands(bool on);
     bool gymEnabled() const;
     void setGymEnabled(bool on);
     bool habitsEnabled() const;
@@ -593,6 +598,7 @@ Q_SIGNALS:
     void sidebarSectionsChanged();
     void bottomNavTabsChanged();
     void captureButtonShownChanged();
+    void railExpandsChanged();
     void gymEnabledChanged();
     void habitsEnabledChanged();
     void assistantEnabledChanged();

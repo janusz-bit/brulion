@@ -110,6 +110,7 @@ private Q_SLOTS:
         QCOMPARE(s.bottomNavTabs(),
                  (QStringList{u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"calendar"_s}));
         QVERIFY(s.captureButtonShown());
+        QVERIFY(s.railExpands()); // the rail's names under the pointer (docs/UI.md "Sidebar")
         QVERIFY(!s.taskStatusHistory()); // docs/SYNTAX.md §5: off by default
         QVERIFY(!s.followsOutsideLinks()); // a planted link to ~/Documents is no notebook folder
     }
@@ -301,6 +302,10 @@ private Q_SLOTS:
             s.setSidebarHidden({u"graph"_s});
             s.setBottomNavTabs({u"tags"_s, u"journals"_s, u"graph"_s, u"allPages"_s});
             s.setCaptureButtonShown(false);
+            QSignalSpy rail(&s, &AppSettings::railExpandsChanged);
+            s.setRailExpands(false);
+            s.setRailExpands(false); // unchanged: no second signal
+            QCOMPARE(rail.size(), 1);
         }
         AppSettings s(file, m_tmp.path());
         QCOMPARE(s.themeMode(), u"light"_s);
@@ -337,6 +342,7 @@ private Q_SLOTS:
         // Four views (as the four slots of 0.13 stored them): the fifth from the default order.
         QCOMPARE(s.bottomNavTabs(), (QStringList{u"tags"_s, u"journals"_s, u"graph"_s, u"allPages"_s, u"search"_s}));
         QVERIFY(!s.captureButtonShown());
+        QVERIFY(!s.railExpands());
     }
 
     void appearanceValidation_data()
@@ -653,6 +659,7 @@ private Q_SLOTS:
         s.setEditorFont(u"serif"_s);
         s.setEditorFontSize(20);
         s.setCaptureButtonShown(false);
+        s.setRailExpands(false);
         QSignalSpy accent(&s, &AppSettings::accentChanged);
         QSignalSpy fonts(&s, &AppSettings::fontFamiliesChanged);
         s.resetAppearance();
@@ -670,6 +677,7 @@ private Q_SLOTS:
         QCOMPARE(s.editorFont(), u"sans"_s);
         QCOMPARE(s.editorFontSize(), 16);
         QVERIFY(!s.captureButtonShown());
+        QVERIFY(!s.railExpands()); // the layout stays
         QCOMPARE(s.sidebarHidden(), QStringList{u"recent"_s});
         QCOMPARE(s.sidebarSections(), (QStringList{u"recent"_s, u"favorites"_s, u"pages"_s}));
         QCOMPARE(accent.size(), 1);

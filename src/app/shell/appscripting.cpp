@@ -105,6 +105,7 @@ QList<SettingSpec> makeSpecs()
     specs << list("bottomNav", "layout", "bottomNavTabs", AppSettings::bottomNavViews(), 5,
                   "the phone's bottom navigation: five views");
     specs << toggle("captureButton", "layout", "captureButtonShown", "the quick note button on phones");
+    specs << toggle("railExpands", "layout", "railExpands", "the rail of views widens with their names under the pointer (desktop)");
     {
         SettingSpec s = toggle("statusBar", "layout", "statusBarShown", "the status bar (desktop)");
         s.onApp = true;
