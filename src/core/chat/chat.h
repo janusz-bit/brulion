@@ -31,7 +31,9 @@
 // sent with a message is an embed of the attachment in it, `![[Pasted image 20261115091200.jpg]]`
 // (or `![](assets/foto.png)`), shown by any app; the model gets the pictures of the conversation's
 // newest messages (at most MaxPictures). Who answers is the frontmatter's `partner:` — an
-// extension's chat command (docs/EXTENSIONS.md "Chat partners"); none: the built-in assistant.
+// extension's chat command (docs/EXTENSIONS.md "Chat partners"); none: the built-in assistant. A
+// conversation an AI agent started from another one (a sub-conversation: docs/UI.md "Agents
+// delegate") names it in `parent: "[[AI/2026-11-15 …]]"`, a link that follows a rename.
 //
 //   ---
 //   zadania: ignoruj
@@ -88,6 +90,10 @@ struct Conversation {
     /// Who answers: the frontmatter's `partner:` ("pirat/rozmowa": an extension and its chat
     /// command, "pirat": its first one); "" the built-in assistant.
     QString partner;
+    /// The conversation this one was started from: the frontmatter's `parent:` link as written,
+    /// `"[[AI/2026-11-15 Plan]]"` → "AI/2026-11-15 Plan" (no alias, heading or block part); ""
+    /// none.
+    QString parent{};
 };
 
 /// "AI": the folder of conversation pages (the same in every language).
@@ -118,10 +124,11 @@ QString appendMessage(const QString &content, Role role, QStringView markdown, c
 
 /// A new conversation page: the frontmatter that keeps its tasks out of the task lists, in the
 /// notebook's language ("pl": `zadania: ignoruj`, else `tasks: ignore`), its `partner:` when it
-/// is not "", and the user's first message — `question`, and ` ([[page]])` after its first line
-/// when it is about a page —, with its time when valid.
+/// is not "", its `parent:` link to the conversation `parent` (a page's name or vault path,
+/// ".md" left out) when it is not "", and the user's first message — `question`, and
+/// ` ([[page]])` after its first line when it is about a page —, with its time when valid.
 QString newConversation(QStringView question, QStringView page, QStringView language, const QDateTime &time = {},
-                        QStringView partner = {});
+                        QStringView partner = {}, QStringView parent = {});
 
 /// `content` with its frontmatter's `partner:` set to `partner` ("" takes the line out): the
 /// line replaced, or added at the frontmatter's end, or a frontmatter made for it; the rest byte
