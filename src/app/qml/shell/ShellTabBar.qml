@@ -7,9 +7,12 @@ import Brulion
 // between the top bar and the view, shown while there are two tabs or more (or the view is split).
 // Every tab has the same width (at most 220 px, at least 120: past that the bar scrolls — with the
 // wheel, or a tab at a time with the arrows ‹ › at its ends, shown then — and the focused tab glides
-// into view whenever it changes, a new one, Ctrl+9, a narrower window); the tab of the focused pane is drawn like the view under it with a 2-px accent edge along
-// its top (the "Nocny" look: square tabs, hairlines between them), the one shown in the other pane
-// of a split view like the view without the edge. A click shows a tab, a
+// into view whenever it changes, a new one, Ctrl+9, a narrower window). On the layered dark
+// backgrounds (Theme.layered: graphite, ink) the tabs are a browser's: the shown one rounded at the
+// top and flaring into the view below with concave corners, no lines between them. Otherwise the
+// tabs are square with hairlines between them (the "Nocny" look). The tab of the focused pane is
+// drawn like the view under it with a 2-px accent edge along its top, the one shown in the other
+// pane of a split view like the view without the edge. A click shows a tab, a
 // middle click or its × closes it, a drag along the bar moves it (AppController.moveTab), a
 // right-click (or a long press) opens its menu: Close tab, Close other tabs, Show in split view /
 // Close split view, Move to new window (desktop). The + at the end opens a new tab (Ctrl+T).
@@ -20,6 +23,13 @@ Rectangle {
     readonly property real tabWidth: Math.max(minTabWidth, Math.min(maxTabWidth, list.width / Math.max(1, tabs.length)))
     readonly property real minTabWidth: 120
     readonly property real maxTabWidth: 220
+    /// Browser-like tabs on the layered dark backgrounds (Theme.layered: graphite, ink — no
+    /// hairlines there): the shown tab rounded at the top and flaring into the view; square
+    /// tabs with hairlines between them otherwise.
+    readonly property bool rounded: Theme.layered
+    readonly property int tabRadius: Theme.radius
+    /// The room above a rounded tab (and around the well of a hovered one).
+    readonly property int tabInset: rounded ? 5 : 0
     /// The tabs need more room than the bar has: the arrows show. (From the bar's width, not the
     /// list's, which the arrows narrow.)
     readonly property bool overflows: tabs.length * minTabWidth > width - Theme.space1 - newTab.width - 2
@@ -83,6 +93,7 @@ Rectangle {
     }
 
     Rectangle {
+        visible: !bar.rounded
         anchors.bottom: parent.bottom
         width: parent.width
         height: 1
@@ -146,7 +157,8 @@ Rectangle {
 
                 width: bar.tabWidth
                 height: list.height
-                z: drag.active ? 2 : 0
+                // (The shown tab's flares lie over its neighbours' bottom corners.)
+                z: drag.active ? 2 : tab.shown ? 1 : 0
                 Accessible.role: Accessible.PageTab
                 Accessible.name: title
                 Accessible.selected: focusedTab
@@ -155,21 +167,87 @@ Rectangle {
                 transform: Translate { x: drag.active ? drag.activeTranslation.x : 0 }
 
                 // A shown tab runs into the view under it (its fill covers the bar's bottom line).
+                // Rounded (layered backgrounds): its top corners rounded, its bottom flaring out
+                // into the view with concave corners of the same radius, as a browser's tab; a
+                // tab under the pointer gets a rounded well inside the bar.
                 Rectangle {
+                    visible: !bar.rounded && (tab.shown || hover.hovered)
                     anchors.fill: parent
-                    visible: tab.shown || hover.hovered
                     color: tab.shown ? Theme.bg : Theme.bgHover
                 }
                 Rectangle {
+                    objectName: "shellTabShape"
+                    visible: bar.rounded && tab.shown
+                    y: bar.tabInset
+                    width: parent.width
+                    height: parent.height - bar.tabInset
+                    topLeftRadius: bar.tabRadius
+                    topRightRadius: bar.tabRadius
+                    antialiasing: true
+                    color: Theme.bg
+                }
+                Rectangle {
+                    visible: bar.rounded && !tab.shown && hover.hovered
+                    x: Theme.space1
+                    y: bar.tabInset
+                    width: parent.width - 2 * Theme.space1
+                    height: parent.height - 2 * bar.tabInset
+                    radius: Theme.radiusSm
+                    color: Theme.bgHover
+                }
+                // The flares: the view's colour in a square beside each bottom corner, less a
+                // quarter circle of the bar's colour around the square's top outer corner.
+                Item {
+                    visible: bar.rounded && tab.shown
+                    x: -bar.tabRadius
+                    y: parent.height - bar.tabRadius
+                    width: bar.tabRadius
+                    height: bar.tabRadius
+                    clip: true
+                    Rectangle { anchors.fill: parent; color: Theme.bg }
+                    Rectangle {
+                        x: -bar.tabRadius
+                        y: -bar.tabRadius
+                        width: 2 * bar.tabRadius
+                        height: width
+                        radius: bar.tabRadius
+                        antialiasing: true
+                        color: bar.color
+                    }
+                }
+                Item {
+                    visible: bar.rounded && tab.shown
+                    x: parent.width
+                    y: parent.height - bar.tabRadius
+                    width: bar.tabRadius
+                    height: bar.tabRadius
+                    clip: true
+                    Rectangle { anchors.fill: parent; color: Theme.bg }
+                    Rectangle {
+                        y: -bar.tabRadius
+                        width: 2 * bar.tabRadius
+                        height: width
+                        radius: bar.tabRadius
+                        antialiasing: true
+                        color: bar.color
+                    }
+                }
+                // The focused pane's tab: the accent along its top edge (rounded: between the
+                // corners).
+                Rectangle {
                     objectName: "shellTabAccent"
                     visible: tab.focusedTab && (AppController.tabCount > 1 || AppController.splitTab !== 0)
-                    anchors.top: parent.top
-                    width: parent.width
+                    x: bar.rounded ? bar.tabRadius : 0
+                    y: bar.rounded ? bar.tabInset : 0
+                    width: parent.width - 2 * x
                     height: 2
+                    radius: bar.rounded ? 1 : 0
                     color: Theme.accent
                 }
-                // Hairlines between the tabs, full height (IDE-like).
+                // Hairlines between the tabs, full height (IDE-like; not on rounded tabs, whose
+                // layers part by their shade).
                 Rectangle {
+                    visible: !bar.rounded
                     anchors.right: parent.right
                     width: 1
                     height: parent.height
@@ -178,8 +256,9 @@ Rectangle {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: Theme.space2
-                    anchors.rightMargin: 2
+                    anchors.leftMargin: bar.rounded ? Theme.space3 : Theme.space2
+                    anchors.rightMargin: bar.rounded ? Theme.space1 : 2
+                    anchors.topMargin: bar.rounded ? bar.tabInset : 0
                     spacing: Theme.space1
 
                     BIcon {

@@ -91,7 +91,8 @@ QList<SettingSpec> makeSpecs()
                     "the accent colour (custom: customAccent)");
     specs << text("customAccent", "appearance", "customAccent", "the custom accent colour, \"#rrggbb\"", "color");
     specs << choice("lightSurface", "appearance", "lightSurface", {u"paper"_s, u"white"_s}, "the light background");
-    specs << choice("darkSurface", "appearance", "darkSurface", {u"black"_s, u"slate"_s}, "the dark background");
+    specs << choice("darkSurface", "appearance", "darkSurface", {u"graphite"_s, u"ink"_s, u"black"_s, u"slate"_s},
+                    "the dark background");
     specs << choice("density", "appearance", "density", {u"comfortable"_s, u"compact"_s},
                     "the density of controls and rows (desktop)");
     specs << number("fontScale", "appearance", "fontScale", 0.85, 1.4, false, "the interface's text size, a factor");

@@ -185,6 +185,9 @@ Surface surface(QStringView name, bool dark)
         if (name == u"slate") // the logo's deep blue-grey
             return {hex(0x1c2130), hex(0x232a3b), hex(0x2b3245), hex(0x171b28),
                     hex(0x343c51), hex(0x2b3245), hex(0x48526b), hex(0x6c7793)};
+        if (name == u"ink") // "Atrament": warm charcoal layered like graphite (the "Papier i atrament" look)
+            return {hex(0x1e1d1a), hex(0x282723), hex(0x312f2b), hex(0x151412),
+                    hex(0x33312c), hex(0x262521), hex(0x4a473f), hex(0x8a8477)};
         if (name == u"black") // "Nocny", for OLED screens: true black, the side panes (bgSunken) and cards barely lifted
             return {hex(0x000000), hex(0x0d0f13), hex(0x1c2027), hex(0x08090b),
                     hex(0x262a32), hex(0x1a1d23), hex(0x3a404d), hex(0x6c7793)};
@@ -204,7 +207,7 @@ Surface surface(QStringView name, bool dark)
 
 QStringList surfaceNames(bool dark)
 {
-    return dark ? QStringList{u"graphite"_s, u"black"_s, u"slate"_s} : QStringList{u"paper"_s, u"white"_s};
+    return dark ? QStringList{u"graphite"_s, u"ink"_s, u"black"_s, u"slate"_s} : QStringList{u"paper"_s, u"white"_s};
 }
 
 // ---- Accent ---------------------------------------------------------------------------------
@@ -277,8 +280,12 @@ Accent accent(QStringView name, QStringView custom, bool dark, const Surface &s)
 
 // ---- Text -----------------------------------------------------------------------------------
 
-TextColors textColors(bool dark)
+TextColors textColors(bool dark, QStringView surfaceName)
 {
+    // "ink": warm paper-white text and the design's warm hues (Papier i atrament).
+    if (dark && surfaceName == u"ink")
+        return {hex(0xede8de), hex(0xbdb6a8), hex(0x9a9385), hex(0x93bceb), hex(0xb9a3d8), hex(0xc9a2f0), hex(0xf3877c),
+                hex(0xf2b33d), hex(0x84d0a6), hex(0xb9d4ee), hex(0xc7b5e2), hex(0xf2b33d), hex(0x8fd3a6)};
     if (dark)
         return {hex(0xd3d8e2), hex(0xa9b0bf), hex(0x8f96a7), hex(0x8fb8ea), hex(0xb9a3d8), hex(0xc89bf0), hex(0xf3877c),
                 hex(0xf2b33d), hex(0x7fd1a8), hex(0xb9d4ee), hex(0xc7b5e2), hex(0xf2b33d), hex(0x8fd3a6)};
@@ -298,7 +305,7 @@ QVariantMap paletteMap(bool dark, QStringView lightSurface, QStringView darkSurf
 {
     const Surface s = surface(dark ? darkSurface : lightSurface, dark);
     const Accent a = accent(accentName, customAccent, dark, s);
-    const TextColors t = textColors(dark);
+    const TextColors t = textColors(dark, dark ? darkSurface : lightSurface);
     QVariantMap m;
     const auto put = [&m](const char *name, Rgb c) { m.insert(QString::fromLatin1(name), toHex(c)); };
     put("bg", s.bg);

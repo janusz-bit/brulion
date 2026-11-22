@@ -62,7 +62,7 @@ Views without their own button — the Sync center, import and export, trash, cl
 ## Appearance
 In *Settings → Appearance* you tailor Brulion to yourself — separately on each device:
 - **Theme**: light, dark or following the system; **accent colour** (coral — the default —, red, blue, green, teal, violet, graphite or **Custom…** — any color from the grid or typed as `#3b7dd8`). The accent highlights today, the current tab and selections; where the chosen color would be hard to read, Brulion uses a lighter or darker shade of it by itself. Warnings and deleting stay red, reminders and alarms amber.
-- **Light background**: paper or white; **dark background**: black (the default; saves battery on OLED screens) or blue-grey.
+- **Light background**: paper or white; **dark background**: graphite (the default: layers of grey), ink (warm charcoal layers with warm text), blue-grey or black (saves battery on OLED screens).
 - **Text size**, **interface font** (Inter, built in, or any installed font) and **density** — compact fits more on a computer screen (on a phone the buttons stay large).
 - **Layout**: which items and sections the sidebar shows, in what order Pages, Favorites and Recent appear, which five views the bottom navigation has on a phone, and whether the top bar has the quick capture button **+**. Hidden views stay in the command palette and under their shortcuts.
 

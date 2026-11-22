@@ -62,7 +62,7 @@ Widoki bez własnego przycisku — centrum synchronizacji, import i eksport, kos
 ## Wygląd
 W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym urządzeniu:
 - **Motyw** jasny, ciemny albo zgodny z systemem; **kolor akcentu** (koralowy — domyślny —, czerwony, niebieski, zielony, morski, fioletowy, grafitowy albo **Własny…** — dowolny kolor z siatki lub wpisany jako `#3b7dd8`). Akcent wyróżnia dzisiejszy dzień, bieżącą kartę i zaznaczenia; tam, gdzie wybrany kolor byłby nieczytelny, Brulion sam bierze jego jaśniejszy albo ciemniejszy odcień. Ostrzeżenia i usuwanie zostają czerwone, przypomnienia i alarmy bursztynowe.
-- **Jasne tło**: papier albo białe; **ciemne tło**: czarne (domyślne; oszczędza baterię na ekranach OLED) albo granatowe.
+- **Jasne tło**: papier albo białe; **ciemne tło**: grafit (domyślne: warstwy szarości), atrament (ciepłe, węglowe warstwy z ciepłym tekstem), granat albo czerń (oszczędza baterię na ekranach OLED).
 - **Rozmiar tekstu**, **czcionka interfejsu** (wbudowana Inter albo dowolna zainstalowana) i **gęstość** — zwarta mieści więcej na ekranie komputera (na telefonie przyciski zostają duże).
 - **Układ**: które pozycje i sekcje pokazuje pasek boczny, w jakiej kolejności są Strony, Ulubione i Ostatnie, jakie pięć widoków ma dolna nawigacja na telefonie i czy górny pasek ma przycisk szybkiej notatki **+**. Ukryte widoki zostają w palecie poleceń i pod skrótami.
 

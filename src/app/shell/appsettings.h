@@ -64,7 +64,7 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString customAccent READ customAccent WRITE setCustomAccent NOTIFY accentChanged FINAL)
     /// Light background "paper" (default) | "white".
     Q_PROPERTY(QString lightSurface READ lightSurface WRITE setLightSurface NOTIFY surfacesChanged FINAL)
-    /// Dark background "graphite" (layered greys, default) | "black" (OLED) | "slate".
+    /// Dark background "graphite" (layered greys, default) | "ink" (warm layers) | "black" (OLED) | "slate".
     Q_PROPERTY(QString darkSurface READ darkSurface WRITE setDarkSurface NOTIFY surfacesChanged FINAL)
     /// Font family of the interface ("" = the system's).
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily WRITE setUiFontFamily NOTIFY fontFamiliesChanged FINAL)
