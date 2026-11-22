@@ -5,8 +5,9 @@ import Brulion
 
 // ShellTabBar — the main window's tabs (wide windows; docs/UI.md "Tabs, split view and windows"),
 // between the top bar and the view, shown while there are two tabs or more (or the view is split).
-// Every tab has the same width (at most 220 px, at least 120: past that the bar scrolls with the
-// wheel); the tab of the focused pane is drawn like the view under it with a 2-px accent edge along
+// Every tab has the same width (at most 220 px, at least 120: past that the bar scrolls — with the
+// wheel, or a tab at a time with the arrows ‹ › at its ends, shown then — and the focused tab glides
+// into view whenever it changes, a new one, Ctrl+9, a narrower window); the tab of the focused pane is drawn like the view under it with a 2-px accent edge along
 // its top (the "Nocny" look: square tabs, hairlines between them), the one shown in the other pane
 // of a split view like the view without the edge. A click shows a tab, a
 // middle click or its × closes it, a drag along the bar moves it (AppController.moveTab), a
@@ -19,6 +20,55 @@ Rectangle {
     readonly property real tabWidth: Math.max(minTabWidth, Math.min(maxTabWidth, list.width / Math.max(1, tabs.length)))
     readonly property real minTabWidth: 120
     readonly property real maxTabWidth: 220
+    /// The tabs need more room than the bar has: the arrows show. (From the bar's width, not the
+    /// list's, which the arrows narrow.)
+    readonly property bool overflows: tabs.length * minTabWidth > width - Theme.space1 - newTab.width - 2
+    /// The focused tab's place in the bar (-1: none there): kept in view.
+    readonly property int focusedIndex: AppController.tabIndex(AppController.focusedTab)
+    onFocusedIndexChanged: revealLater.restart()
+    onTabsChanged: revealLater.restart()
+    Later { id: revealLater; onTriggered: bar.scrollTo(bar.focusedIndex, ListView.Contain) }
+
+    /// Scroll the list until tab `index` is placed as `mode` says (ListView.Contain, Beginning,
+    /// End), gliding there.
+    function scrollTo(index: int, mode: int): void {
+        if (index < 0 || index >= list.count)
+            return
+        scrollGlide.stop()
+        const from = list.contentX
+        list.positionViewAtIndex(index, mode)
+        const to = list.contentX
+        if (Math.abs(to - from) < 0.5)
+            return
+        list.contentX = from
+        scrollGlide.to = to
+        scrollGlide.start()
+    }
+    /// ‹: the tab cut by the left edge comes whole into view, or else the one before the first.
+    function scrollBack(): void {
+        const first = list.indexAt(list.contentX + 1, list.height / 2)
+        if (first < 0)
+            return
+        const item = list.itemAtIndex(first)
+        const cut = item !== null && item.x < list.contentX - 0.5
+        bar.scrollTo(cut ? first : Math.max(0, first - 1), ListView.Beginning)
+    }
+    /// ›: the tab cut by the right edge, or else the one after the last.
+    function scrollOn(): void {
+        const last = list.indexAt(list.contentX + list.width - 1, list.height / 2)
+        if (last < 0)
+            return
+        const item = list.itemAtIndex(last)
+        const cut = item !== null && item.x + item.width > list.contentX + list.width + 0.5
+        bar.scrollTo(cut ? last : Math.min(list.count - 1, last + 1), ListView.End)
+    }
+    NumberAnimation {
+        id: scrollGlide
+        target: list
+        property: "contentX"
+        duration: Theme.duration
+        easing.type: Theme.easing
+    }
 
     implicitHeight: Theme.touchUi ? 44 : 38
     color: Theme.bgSunken
@@ -44,6 +94,16 @@ Rectangle {
         anchors.rightMargin: Theme.space1
         spacing: 2
 
+        BIconButton {
+            objectName: "shellTabsBack"
+            visible: bar.overflows
+            enabled: !list.atXBeginning
+            Layout.leftMargin: Theme.space1
+            iconName: "chevron-left"
+            label: qsTr("Scroll tabs left")
+            size: "small"
+            onClicked: bar.scrollBack()
+        }
         ListView {
             id: list
             objectName: "shellTabList"
@@ -53,11 +113,14 @@ Rectangle {
             clip: true
             interactive: false
             boundsBehavior: Flickable.StopAtBounds
+            // (A narrower window can push the focused tab out: it comes back.)
+            onWidthChanged: revealLater.restart()
             model: bar.tabs
             // (A drag in the bar moves a tab; the wheel scrolls a bar of many tabs.)
             WheelHandler {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: (event) => {
+                    scrollGlide.stop()
                     const delta = event.angleDelta.y !== 0 ? -event.angleDelta.y : -event.angleDelta.x
                     list.contentX = Math.max(0, Math.min(list.contentWidth - list.width, list.contentX + delta / 2))
                 }
@@ -181,6 +244,16 @@ Rectangle {
             }
         }
         BIconButton {
+            objectName: "shellTabsOn"
+            visible: bar.overflows
+            enabled: !list.atXEnd
+            iconName: "chevron-right"
+            label: qsTr("Scroll tabs right")
+            size: "small"
+            onClicked: bar.scrollOn()
+        }
+        BIconButton {
+            id: newTab
             objectName: "shellNewTab"
             iconName: "plus"
             label: qsTr("New tab")

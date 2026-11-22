@@ -917,6 +917,11 @@ bool AppController::selectTabAt(int index)
     return selectTab(bar.value(index, bar.value(bar.size() - 1)));
 }
 
+int AppController::tabIndex(int id) const
+{
+    return int(m_tabs.bar().indexOf(id));
+}
+
 bool AppController::nextTab()
 {
     return tabCount() > 1 && selectTab(m_tabs.neighbour(1));

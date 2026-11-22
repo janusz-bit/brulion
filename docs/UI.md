@@ -184,8 +184,13 @@ components — no Material/Fusion look, so all targets look identical.
     navigation rail. At the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
     its text in the tooltip, beside it with `textShown`; a click syncs now when there is a sync
     engine, otherwise or while a sync runs it opens the sync center, as do a right click and a
-    long press) and Settings. The top bar's sidebar button hides only the page panel: the rail
-    stays (not in focus mode).
+    long press) and Settings. The sidebar button (`panel-left`, `AppShell`'s `sidebarToggle`) hides
+    only the page panel: the rail stays (not in focus mode). The button never moves: it sits just right
+    of the rail, level with the top bar's buttons, over the page panel's header while the panel shows
+    and over the top bar's start while it is hidden — both leave it room (`leadingRoom`), so a second
+    click lands on it again. The panel slides (`sidebarReveal`, `Theme.duration`): its room in the
+    split narrows to nothing while the panel keeps its width, goes under the rail and fades, and the
+    top bar's row moves left into that room; the width the user's split handle left is kept.
   * Sidebar (`ShellSidebar`, the page panel): the notebook's name and a new-page button, then
     its sections in the order chosen in Settings → Appearance → Layout → "Order of the sections"
     (`AppSettings.sidebarSections`, `ui/sidebar/sections`; Pages, Favorites, Recent by default;
@@ -2241,7 +2246,9 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
 * **The tab bar** (`ShellTabBar`, wide windows): between the top bar and the view, shown while
   there are two tabs or more (or the view is split); 38 px high (44 on touch UIs). Square tabs
   side by side with full-height hairlines between them (IDE-like), equal widths (120–220 px; past
-  that the bar scrolls with the wheel), the view's icon and title (`ShellRouteTitles.routeIcon` —
+  that the bar scrolls: with the wheel, or a whole tab at a time with the arrows ‹ › shown at its
+  ends — the tab cut by the edge comes in whole, or the next one —, and the focused tab glides into
+  view whenever it changes: a new tab at the end, Ctrl+1…9, a narrower window), the view's icon and title (`ShellRouteTitles.routeIcon` —
   the command palette's icon of the view: the trash's bin, the sync center's, the event log's,
   a page's only for a page — and `routeTitle`, "Event log" for the log; a daily note's date and a
   journal day's in the language shown, following a switch), ×

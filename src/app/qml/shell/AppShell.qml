@@ -41,6 +41,13 @@ FocusScope {
     /// The window's toast host (Main.qml).
     property BToastHost toasts: null
     property bool sidebarVisible: flag(AppSettings.value("ui/sidebar/visible", true))
+    /// How much of the page panel shows, 0…1: it follows `sidebarVisible` over Theme.duration — the
+    /// panel slides under the rail and the top bar takes its room — while the panel's button stays
+    /// where it is (`sidebarToggle`). (Not on creation: a Behavior leaves the first value alone.)
+    property real sidebarReveal: sidebarVisible ? 1 : 0
+    Behavior on sidebarReveal { NumberAnimation { duration: Theme.duration; easing.type: Theme.easing } }
+    /// The panel's width while it slides: the one the user's split handle left it, taken as it hides.
+    property real sidebarFullWidth: Theme.sidebarWidth
 
     readonly property var safe: SafeArea.margins
     /// The system's navigation bar under the window's bottom edge (the SafeArea margin), without
@@ -324,6 +331,8 @@ FocusScope {
         dialog.open()
     }
     function toggleSidebar(): void {
+        if (shell.sidebarVisible && sidebarSlot.visible && sidebarSlot.width > 0)
+            shell.sidebarFullWidth = sidebarSlot.width
         shell.sidebarVisible = !shell.sidebarVisible
         AppSettings.setValue("ui/sidebar/visible", shell.sidebarVisible)
     }
@@ -456,23 +465,39 @@ FocusScope {
         orientation: Qt.Horizontal
         handle: BSplitHandle { orientation: Qt.Horizontal }
 
-        Loader {
-            id: sidebarLoader
-            visible: !Theme.narrow && shell.sidebarVisible && !shell.focusMode
-            active: !Theme.narrow
+        // The page panel. While it slides (`sidebarReveal` between 0 and 1) its room is the full
+        // width times the share shown — the maximum caps the width the handle left, which stays
+        // the preferred one —, and the panel keeps its full width inside, its right edge at the
+        // room's: it goes under the rail and fades instead of squeezing its rows.
+        Item {
+            id: sidebarSlot
+            readonly property bool sliding: shell.sidebarReveal < 1
+            visible: !Theme.narrow && shell.sidebarReveal > 0 && !shell.focusMode
+            clip: sliding
             SplitView.preferredWidth: Theme.sidebarWidth
-            SplitView.minimumWidth: 200
-            SplitView.maximumWidth: 440
-            sourceComponent: ShellSidebar {
-                topInset: shell.SafeArea.margins.top
-                // (The navigation bar's part the keyboard's room leaves.)
-                bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
-                onNewPageRequested: (folder) => shell.openNewPage(folder)
-                onNewFolderRequested: (folder) => shell.openNewFolder(folder)
-                onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
-                onDeleteRequested: (path) => shell.confirmDelete(path)
-                onMoveRequested: (path, isDir) => shell.openMove(path, isDir)
-                onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
+            SplitView.minimumWidth: sliding ? 0 : 200
+            SplitView.maximumWidth: sliding ? shell.sidebarFullWidth * shell.sidebarReveal : 440
+
+            Loader {
+                id: sidebarLoader
+                active: !Theme.narrow
+                width: sidebarSlot.sliding ? shell.sidebarFullWidth : sidebarSlot.width
+                height: sidebarSlot.height
+                x: sidebarSlot.width - width
+                opacity: shell.sidebarReveal
+                sourceComponent: ShellSidebar {
+                    // (Its header's name starts after the panel's button, which stays over it.)
+                    leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.width
+                    topInset: shell.SafeArea.margins.top
+                    // (The navigation bar's part the keyboard's room leaves.)
+                    bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
+                    onNewPageRequested: (folder) => shell.openNewPage(folder)
+                    onNewFolderRequested: (folder) => shell.openNewFolder(folder)
+                    onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
+                    onDeleteRequested: (path) => shell.confirmDelete(path)
+                    onMoveRequested: (path, isDir) => shell.openMove(path, isDir)
+                    onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
+                }
             }
         }
 
@@ -496,14 +521,15 @@ FocusScope {
                 crumbs: shell.crumbs
                 crumbPaths: shell.crumbPaths
                 topInset: shell.SafeArea.margins.top
-                sidebarVisible: shell.sidebarVisible
+                // (The part of the bar the page panel's button covers: all of it while the
+                // panel is hidden, less as the panel slides in, nothing once it shows.)
+                leadingRoom: sidebarToggle.visible ? sidebarToggle.x + sidebarToggle.width - split.x - mainColumn.x : 0
                 picture: shell.routeView.viewPicture
                 pictureAsText: shell.routeView.viewPictureAsText
                 pdf: shell.routeView.viewPdf
                 fileOnly: shell.routeView.viewFile
                 noteMode: shell.routeView.viewNoteMode
                 onMenuClicked: drawer.open()
-                onSidebarToggled: shell.toggleSidebar()
                 onPaletteRequested: shell.openPalette("")
                 onSwitcherRequested: shell.openSwitcher("")
                 // On a phone a block still edited with the keyboard hidden (its toolbar docked on
@@ -633,6 +659,22 @@ FocusScope {
                 contextPanel: shell.routeView.viewSidePanel
             }
         }
+    }
+    // The page panel's button (wide windows), over the top bar's start while the panel is hidden
+    // and over the panel's header while it shows: the same place either way, so it never jumps
+    // under the pointer as the panel goes and comes back (the top bar and the panel's header
+    // leave it room: their leadingRoom).
+    BIconButton {
+        id: sidebarToggle
+        objectName: "shellSidebarToggle"
+        visible: !Theme.narrow && !shell.focusMode
+        x: rail.width + Theme.space2
+        y: split.y + topBar.topInset + Math.round((topBar.height - topBar.topInset - height) / 2)
+        iconName: "panel-left"
+        label: shell.sidebarVisible ? qsTr("Hide sidebar") : qsTr("Show sidebar")
+        checkable: true
+        checked: shell.sidebarVisible
+        onClicked: shell.toggleSidebar()
     }
 
     // The keyboard's room (it covers this part of the window); under a docked toolbar when the
