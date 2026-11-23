@@ -35,6 +35,8 @@ QString keywordFor(TaskStatus status, QStringView previous = {});
 /// case-insensitive). The Tasks view, `type:tasks` queries that name no page or path, the
 /// calendar and VaultIndex::tasks() pass them by; the checkboxes stay checkboxes on the page.
 bool tasksIgnored(const ParsedNote &note);
+/// tasksIgnored() of a note's properties as parseNote() keeps them (keys lower case).
+bool tasksIgnored(const Properties &properties);
 /// The values that mark a page's tasks ignored: "ignore", "ignoruj".
 bool isIgnoreTasksValue(QStringView value);
 

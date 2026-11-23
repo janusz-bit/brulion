@@ -17,6 +17,7 @@ qt_target_qml_sources(brulion
         qml/content/ContentPageHeader.qml
         qml/content/ContentPageIconDialog.qml
         qml/content/ContentPageCoverDialog.qml
+        qml/content/ContentNoteOptionsDialog.qml
         qml/content/ContentPictureView.qml
         qml/content/ContentBaseView.qml
         qml/content/ContentSidePanel.qml

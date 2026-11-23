@@ -20,6 +20,14 @@ Ta strona jest dokumentem; [[Zadania|Zadania]] też. Dziennik domyślnie jest ko
 - Wybór zapisuje się w samej notatce jako właściwość `brulion: document` albo `brulion: outline`, więc na każdym urządzeniu wygląda tak samo.
 - Notatki bez tego klucza zgadują tryb po zawartości: strona z samych punktów otwiera się jako konspekt, strona z nagłówków i akapitów jako dokument.
 
+## Opcje notatki
+Menu strony **⋯** → **Opcje notatki…** ustawia, jak pokazywać tę jedną notatkę, niezależnie od ustawień urządzenia:
+- **Zadania w Zadaniach i kalendarzu** — wyłączone: pola wyboru zostają na stronie, ale jej zadania nie trafiają na listy zadań (lista rzeczy do spakowania, lista kontrolna do kopiowania).
+- **Numery linii w blokach kodu**, **Ramki wokół obrazków** — Jak w ustawieniach, Włączone albo Wyłączone.
+- **Szerokość tekstu** — Jak w ustawieniach, Wąska, Normalna, Szeroka albo Pełna.
+
+Wybory zapisują się w notatce jako właściwości (`numery-linii: true`, `ramki: false`, `szerokosc-tekstu: szeroka`, `zadania: ignoruj`; przy angielskim interfejsie `line-numbers`, `picture-frames`, `text-width`, `tasks: ignore`), więc notatka wygląda tak samo na każdym urządzeniu. „Jak w ustawieniach” z powrotem usuwa właściwość.
+
 ## Bloki
 Blokiem jest każdy punkt listy, a poza listami — każdy akapit, nagłówek, tabela, cytat, blok kodu. Kliknij blok, żeby go edytować; poza edycją widzisz go sformatowanego.
 

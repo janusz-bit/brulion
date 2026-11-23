@@ -883,6 +883,17 @@ Rectangle {
                 onTriggered: AppController.requestUiAction("toggleTasksIgnored")
             }
             BMenuItem {
+                // The note's own options: its tasks, line numbers, picture frames, text width
+                // (PageView "openNoteOptionsDialog", docs/UI.md "Note options").
+                objectName: "menuNoteOptions"
+                visible: bar.inNote && bar.onPage
+                height: visible ? implicitHeight : 0
+                text: qsTr("Note options…")
+                iconName: "sliders-horizontal"
+                enabled: !AppController.sourceModeShown && !AppSettings.readingMode
+                onTriggered: AppController.requestUiAction("noteOptions")
+            }
+            BMenuItem {
                 objectName: "menuFindInNote"
                 visible: ["page", "journal", "journals"].indexOf(AppController.currentView) >= 0
                 height: visible ? implicitHeight : 0

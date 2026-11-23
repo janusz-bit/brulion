@@ -10,6 +10,7 @@
 
 #include "markdown/frontmatter.h"
 #include "markdown/notemode.h"
+#include "markdown/noteoptions.h"
 #include "markdown/pagelook.h"
 #include "markdown/properties.h"
 #include "text/text.h"
@@ -181,6 +182,7 @@ void PageController::updatePageProperties()
             }
         }
         updateLook();
+        updateNoteOptions();
         map = {{u"items"_s, items},
                {u"tags"_s, tags},
                {u"aliases"_s, aliases},
@@ -235,6 +237,38 @@ void PageController::updateLook()
     Q_EMIT lookChanged();
 }
 
+void PageController::updateNoteOptions()
+{
+    const markdown::NoteOptions o = markdown::noteOptions(m_lookProperties);
+    const auto flag = [](std::optional<bool> value) { return value ? (*value ? u"on"_s : u"off"_s) : QString(); };
+    const QVariantMap map{{u"lineNumbers"_s, flag(o.lineNumbers)},
+                          {u"pictureFrames"_s, flag(o.pictureFrames)},
+                          {u"textWidth"_s, o.textWidth ? markdown::noteTextWidthName(*o.textWidth) : QString()},
+                          {u"tasks"_s, o.tasksIgnored ? u"ignore"_s : QString()}};
+    if (map == m_noteOptions)
+        return;
+    m_noteOptions = map;
+    Q_EMIT noteOptionsChanged();
+}
+
+int PageController::codeLineNumbers() const
+{
+    const QString v = m_noteOptions.value(u"lineNumbers"_s).toString();
+    return v.isEmpty() ? -1 : v == u"on" ? 1 : 0;
+}
+
+int PageController::pictureFrames() const
+{
+    const QString v = m_noteOptions.value(u"pictureFrames"_s).toString();
+    return v.isEmpty() ? -1 : v == u"on" ? 1 : 0;
+}
+
+int PageController::textWidth() const
+{
+    const auto width = markdown::noteTextWidthFromName(m_noteOptions.value(u"textWidth"_s).toString());
+    return width ? markdown::noteTextWidthPixels(*width) : -1;
+}
+
 namespace {
 
 /// The first property named `key` in any case (either block), or nullptr.
@@ -274,7 +308,68 @@ markdown::PropertyEditResult removeLookProperties(const QString &content, std::i
     return out;
 }
 
+/// The first property of the page named one of `keys` (in their order; any case), or nullptr.
+const markdown::PageProperty *findFirstOf(const markdown::PageProperties &props, const QStringList &keys)
+{
+    for (const QString &key : keys) {
+        if (const markdown::PageProperty *p = findAnyCase(props, key))
+            return p;
+    }
+    return nullptr;
+}
+
 } // namespace
+
+QVariantMap PageController::setNoteOption(const QString &name, const QString &given)
+{
+    if (refusesEdit())
+        return readOnlyResult();
+    using markdown::NoteOption;
+    const auto option = markdown::parseNoteOptionName(name);
+    const QString value = given.trimmed();
+    const auto width = markdown::noteTextWidthFromName(value);
+    const bool valid = !option ? false
+                       : value.isEmpty()                    ? true
+                       : *option == NoteOption::TextWidth  ? width.has_value()
+                       : *option == NoteOption::Tasks      ? value == u"ignore"
+                                                           : value == u"on" || value == u"off";
+    if (!valid)
+        return editResult(PropertyEditStatus::InvalidValue, tr("Not an option of a note"));
+    const QStringList keys = markdown::noteOptionKeys(*option);
+    const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
+        if (value.isEmpty()) {
+            markdown::PropertyEditResult out{content, PropertyEditStatus::Unchanged};
+            for (const QString &key : keys) {
+                const markdown::PropertyEditResult r = removeLookProperties(out.content, {QStringView(key)});
+                if (r.status != PropertyEditStatus::Changed && r.status != PropertyEditStatus::Unchanged)
+                    return markdown::PropertyEditResult{content, r.status};
+                if (r.status == PropertyEditStatus::Changed)
+                    out = r;
+            }
+            return out;
+        }
+        // The key the note has (its language decides the value's), else the interface's.
+        const markdown::PageProperties props = markdown::readPageProperties(content);
+        const markdown::PageProperty *existing = findFirstOf(props, keys);
+        const bool polish = existing ? existing->key.compare(keys.value(1), Qt::CaseInsensitive) == 0 : !m_english;
+        QVariant written;
+        PropertyType type = PropertyType::Text;
+        switch (*option) {
+        case NoteOption::LineNumbers:
+        case NoteOption::PictureFrames:
+            written = value == u"on";
+            type = PropertyType::Checkbox;
+            break;
+        case NoteOption::TextWidth: written = markdown::noteTextWidthValue(*width, polish); break;
+        case NoteOption::Tasks: written = polish ? u"ignoruj"_s : u"ignore"_s; break;
+        }
+        if (existing)
+            return markdown::setPageProperty(content, existing->source, existing->key, written, type);
+        return markdown::setPageProperty(content, props.addTarget(), markdown::noteOptionKey(*option, polish), written,
+                                         type);
+    });
+    return editResult(status, reasonFor(status, {}, {}));
+}
 
 QVariantMap PageController::setPageIcon(const QString &kind, const QString &name)
 {

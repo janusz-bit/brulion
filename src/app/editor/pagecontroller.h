@@ -221,6 +221,16 @@ class PageController : public QObject {
     /// no such picture in the notebook — | "ask" | "loading" | "failed": a web picture, as
     /// EditorHost::webPicture()), host (a web picture's site), error } }.
     Q_PROPERTY(QVariantMap look READ look NOTIFY lookChanged FINAL)
+    /// The note's own options (docs/SYNTAX.md §4 "Note options", markdown/noteoptions.h), from its
+    /// properties as they are now: { lineNumbers, pictureFrames: "" (the device's setting) | "on" |
+    /// "off", textWidth: "" | "narrow" | "normal" | "wide" | "full", tasks: "" | "ignore" }.
+    Q_PROPERTY(QVariantMap noteOptions READ noteOptions NOTIFY noteOptionsChanged FINAL)
+    /// The same typed, for the block views and the page: -1 the device's setting, 0 off, 1 on.
+    Q_PROPERTY(int codeLineNumbers READ codeLineNumbers NOTIFY noteOptionsChanged FINAL)
+    Q_PROPERTY(int pictureFrames READ pictureFrames NOTIFY noteOptionsChanged FINAL)
+    /// The width the note's text keeps within in pixels as Settings stores one (600, 680, 960; 0:
+    /// the full width), -1: the device's setting.
+    Q_PROPERTY(int textWidth READ textWidth NOTIFY noteOptionsChanged FINAL)
 
 public:
     explicit PageController(QObject *parent = nullptr);
@@ -409,6 +419,18 @@ public:
     Q_INVOKABLE QVariantMap setPageCover(const QString &target);
     /// The cover's vertical position: 0 top … 1 bottom (`banner_y`, two decimals). One undo step.
     Q_INVOKABLE QVariantMap setPageCoverPosition(double position);
+    // --- The note's own options (docs/SYNTAX.md §4 "Note options", markdown/noteoptions.h) --------
+    QVariantMap noteOptions() const { return m_noteOptions; }
+    int codeLineNumbers() const;
+    int pictureFrames() const;
+    int textWidth() const;
+    /// Set option `option` ("lineNumbers" | "pictureFrames" | "textWidth" | "tasks") to `value` as
+    /// in `noteOptions` ("on" / "off"; a width's name; "ignore"); "" removes every key of the
+    /// option, so the device's setting holds again. The key the note has (the first of the
+    /// option's keys, any case) keeps its place and its language; a new one is the interface's
+    /// (`numery-linii` with a Polish interface, else `line-numbers`). One undo step; { ok, status,
+    /// reason } as setPageProperty().
+    Q_INVOKABLE QVariantMap setNoteOption(const QString &option, const QString &value);
     /// The page header's tags and aliases: `kind` "tags" | "aliases" (markdown::addPageListItem).
     Q_INVOKABLE QVariantMap addPageListItem(const QString &kind, const QString &item);
     Q_INVOKABLE QVariantMap removePageListItem(const QString &kind, const QString &item);
@@ -1239,6 +1261,7 @@ Q_SIGNALS:
     void editRefused();
     void pagePropertiesChanged();
     void lookChanged();
+    void noteOptionsChanged();
     /// An attachment could not be read or stored (file name for the message).
     void attachmentFailed(const QString &name);
     /// A CSV picked in the browser became a table (pickCsvInBrowser(); `truncated`: rows, columns
@@ -1417,6 +1440,8 @@ private:
     void updatePageProperties();
     /// `look` from m_lookProperties and the host (the cover's file, a web picture's state).
     void updateLook();
+    /// `noteOptions` from m_lookProperties.
+    void updateNoteOptions();
     /// Run a pure property edit on the page's text (the source text in source mode) as one undo
     /// step.
     markdown::PropertyEditStatus
@@ -1568,6 +1593,7 @@ private:
     QString m_pagePropertiesText; ///< the text pageProperties was read from
     Properties m_lookProperties;  ///< the page properties `look` is read from (keys lower case)
     QVariantMap m_look;
+    QVariantMap m_noteOptions;
     bool m_pagePropertiesRead = false;
     /// Folded key -> type of the notebook's page properties (notebookPropertyType()); reset when
     /// the host's index changes.

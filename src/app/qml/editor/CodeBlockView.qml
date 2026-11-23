@@ -5,8 +5,9 @@ import Brulion
 // CodeBlockView — a fenced code block: monospace text on a sunken panel with the language as a
 // small label. The fence lines are not shown; the content is edited in place (persistent
 // InlineEditor, read-only until clicked, so nothing jumps). Enter inserts a line break, Tab a tab.
-// With AppSettings.codeLineNumbers each line of the text is numbered on its left (a wrapped line
-// once, on its first visual line: BlockViews.codeLineNumbers); the numbers are not in the text.
+// With AppSettings.codeLineNumbers — or the note's own `line-numbers` option (PageController.codeLineNumbers,
+// docs/SYNTAX.md §4 "Note options"), which wins — each line of the text is numbered on its left (a
+// wrapped line once, on its first visual line: BlockViews.codeLineNumbers); the numbers are not in the text.
 Rectangle {
     id: root
 
@@ -15,7 +16,10 @@ Rectangle {
     property Item blockItem
     final property BlockDelegate block: blockItem as BlockDelegate
     readonly property real firstLineCenter: code.y + Theme.lineHeightPx(Theme.textSm, 1.5) / 2
-    readonly property bool lineNumbers: AppSettings.codeLineNumbers
+    /// The note's own choice: -1 none (the device's setting), 0 off, 1 on.
+    readonly property int noteLineNumbers: root.block !== null && root.block.controller !== null
+                                           ? root.block.controller.codeLineNumbers : -1
+    readonly property bool lineNumbers: noteLineNumbers >= 0 ? noteLineNumbers > 0 : AppSettings.codeLineNumbers
     /// The numbers' column, one line per visual line of the code (updateLineNumbers()).
     property string lineNumberText: ""
 
