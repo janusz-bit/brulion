@@ -35,10 +35,16 @@
 // a chip while its block is edited — `chipShapes` gives one rounded shape per line segment of each
 // token ({x, y, width, height, color, kind "pill", from, to}: document positions of the token), in
 // the document's coordinates, vertically centred on the text's glyphs less `chipInset`, coloured
-// with the palette's reminderBackground / alarmBackground (its text: reminderChip / alarmChip,
-// else reminder / alarm). The editor draws them under the text and opens the reminder dialog on a
-// click (InlineEditor). Recomputed when the document's layout changes (text, width, font) and
-// announced only when different.
+// with the palette's reminderBackground / alarmBackground. A chip shows words, not its token: its
+// `label` (markdown::reminderChipLabel(): "⏰ jutro 18:00", relative to `chipToday` in the UI
+// language `chipLocale`) in `textColor` (reminderChip / alarmChip, else reminder / alarm) on its
+// `baseline` — drawn by the editor over the pill —, while the document keeps the token's text
+// byte for byte: its characters are laid out invisible (transparent, a 1-px font), the first one
+// as wide as the label and the others with no width, so the token takes the label's room and
+// never wraps inside. The editor opens the reminder dialog on a click and the chip's menu on a
+// right-click or a long press (InlineEditor), and moves the caret over a chip as one unit
+// (chipEndingAt / chipStartingAt / chipFromAround / chipToAround). Recomputed when the
+// document's layout changes (text, width, font) and announced only when different.
 #pragma once
 
 #include "richtextpills.h"
@@ -46,6 +52,7 @@
 #include "text/find.h"
 
 #include <QColor>
+#include <QFont>
 #include <QHash>
 #include <QPointer>
 #include <QQuickTextDocument>
@@ -54,6 +61,9 @@
 #include <QTextCharFormat>
 #include <QTimer>
 #include <QVariantMap>
+
+#include <functional>
+#include <optional>
 
 namespace brulion::editor {
 
@@ -83,6 +93,10 @@ class MarkdownHighlighter : public QSyntaxHighlighter {
     Q_PROPERTY(bool reminderChips READ reminderChips WRITE setReminderChips NOTIFY reminderChipsChanged FINAL)
     Q_PROPERTY(qreal chipInset READ chipInset WRITE setChipInset NOTIFY chipInsetChanged FINAL)
     Q_PROPERTY(QList<brulion::editor::RichTextPill> chipShapes READ chipShapes NOTIFY chipShapesChanged FINAL)
+    /// The language of the chips' words: "pl" (default) or "en".
+    Q_PROPERTY(QString chipLocale READ chipLocale WRITE setChipLocale NOTIFY chipLocaleChanged FINAL)
+    /// The day the chips' words are relative to ("YYYY-MM-DD"; "" or invalid: absolute dates).
+    Q_PROPERTY(QString chipToday READ chipToday WRITE setChipToday NOTIFY chipTodayChanged FINAL)
 
 public:
     /// A reminder token of a line (positions in the line): `reminderChips`.
@@ -90,6 +104,7 @@ public:
         int from = 0;
         int to = 0;
         bool alarm = false;
+        QString label;
         bool operator==(const LineChip &other) const = default;
     };
 
@@ -129,6 +144,17 @@ public:
     qreal chipInset() const { return m_chipInset; }
     void setChipInset(qreal px);
     QList<RichTextPill> chipShapes() const { return m_chipShapes; }
+    QString chipLocale() const { return m_chipLocale; }
+    void setChipLocale(const QString &locale);
+    QString chipToday() const { return m_chipToday; }
+    void setChipToday(const QString &today);
+    /// The caret as one unit with a chip (document positions; -1 when there is no such chip):
+    /// the start of the chip ending at `position` (Left, Backspace), the end of the one starting
+    /// there (Right, Delete), the start / end of the one `position` is strictly inside of.
+    Q_INVOKABLE int chipEndingAt(int position) const;
+    Q_INVOKABLE int chipStartingAt(int position) const;
+    Q_INVOKABLE int chipFromAround(int position) const;
+    Q_INVOKABLE int chipToAround(int position) const;
     /// Recomputes `chipShapes` from the current layout (layout changes call it by themselves).
     Q_INVOKABLE void refreshChips();
 
@@ -155,6 +181,8 @@ Q_SIGNALS:
     void reminderChipsChanged();
     void chipInsetChanged();
     void chipShapesChanged();
+    void chipLocaleChanged();
+    void chipTodayChanged();
 
 protected:
     void highlightBlock(const QString &text) override;
@@ -187,6 +215,12 @@ private:
     /// The current line's reminder tokens (m_lineChips) kept on its block (ChipData); the shapes
     /// recomputed when they changed.
     void storeLineChips();
+    /// The current line's chips laid out as their labels (m_lineChips: invisible characters, the
+    /// first one as wide as the label, the others with no width).
+    void collapseLineChips();
+    /// The chip [from, to) (document positions) of the line at `position` for which
+    /// `match(from, to)` holds; nullopt: none.
+    std::optional<std::pair<int, int>> chipWhere(int position, const std::function<bool(int, int)> &match) const;
 
     QPointer<QQuickTextDocument> m_quickDocument;
     QVariantMap m_palette;
@@ -216,6 +250,10 @@ private:
     qreal m_chipInset = 0;
     QList<LineChip> m_lineChips; ///< collected while a line is highlighted
     QList<RichTextPill> m_chipShapes;
+    QString m_chipLocale = QStringLiteral("pl");
+    QString m_chipToday;
+    /// The document's font the chips were laid out for (a new one lays them out again).
+    QFont m_chipFont;
     bool m_computingChips = false;
     QList<QMetaObject::Connection> m_layoutConnections;
 };

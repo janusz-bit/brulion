@@ -3565,6 +3565,9 @@ FocusScope {
         tokenB = b
         const mode = dateMenuMode
         dateMenuMode = ""
+        // A dialog the choice opens gives the keyboard back to the edited text itself.
+        if (action === "change" || action === "blockRecurrenceChange")
+            dateMenuEdit = null
         if (mode === "own")
             chooseOwnToken(dateMenuHandle, action)
         else if (mode !== "")
@@ -3608,12 +3611,43 @@ FocusScope {
         chipFound.map = controller.dateChip(row, link)
         if (!chipFound.map.kind)
             return false
+        dateMenuEdit = null
+        popupOwnTokenMenu(row, item, x, y)
+        return true
+    }
+    /// The menu of the reminder chip at [from, to) of the edited text of `edit` (InlineEditor: a
+    /// right-click or a long press on it) — snooze, change, remove, as on the rendered chip; the
+    /// block stays edited, the keyboard back in it once the menu closes.
+    function openReminderMenuInText(input: TextEdit, from: int, to: int, item: Item, x: real, y: real): void {
+        // (A TextEdit: an InlineEditor passes itself, which compiled code cannot do as its own type.)
+        const edit = input as InlineEditor
+        if (!edit || !controller || edit.row < 0 || edit.row >= controller.blocks.count)
+            return
+        chipFound.map = controller.editTextChip(edit.row, from, to)
+        if (!chipFound.map.kind)
+            return
+        // A word the keyboard is still composing becomes text first (the menu's edit rewrites it).
+        if (edit.activeFocus)
+            EditorInput.commitPreedit(edit)
+        dateMenuEdit = edit
+        popupOwnTokenMenu(edit.row, item, x, y)
+    }
+    /// The edited text a token menu was opened from (openReminderMenuInText()), else null.
+    property InlineEditor dateMenuEdit: null
+    function popupOwnTokenMenu(row: int, item: Item, x: real, y: real): void {
         if (dateMenuBlock >= 0)
             controller.untrack(dateMenuBlock)
         dateMenuBlock = controller.trackBlock(row)
         dateMenuHandle = dateMenuBlock
         popupTokenMenu(chipFound.map, "own", item, x, y)
-        return true
+    }
+    /// The token menu closed: the edited text it was opened from takes the keyboard again (a
+    /// dialog its choice opened gives it back itself).
+    function tokenMenuClosed(): void {
+        const edit = dateMenuEdit
+        dateMenuEdit = null
+        if (edit && edit.active && !dialogs.anyOpen)
+            edit.ensureFocus()
     }
     /// A chip just asked for (before its menu shows it).
     MapHolder { id: chipFound }
@@ -3801,6 +3835,7 @@ FocusScope {
         id: dateMenuComponent
         DateChipMenu {
             onChosen: (action, a, b) => editor.chooseDateAction(action, a, b)
+            onClosed: editor.tokenMenuClosed()
         }
     }
 

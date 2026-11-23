@@ -8,6 +8,7 @@
 // original text.
 #pragma once
 
+#include "dates/names.h"
 #include "types.h"
 
 #include <QDate>
@@ -122,5 +123,11 @@ QString stripTokens(QStringView text);
 
 /// `⏰ 2026-10-15 09:00` / `⏰! 2026-10-15 06:30` (a spec without time gives `⏰ 2026-10-15`).
 QString formatReminderToken(const DateSpec &at, bool alarm = false);
+
+/// What a reminder's chip shows instead of its token (rendered text, the edited block's chip,
+/// docs/UI.md): ⏰ — 🔔 for an alarm — and its local wall-clock time in words of the UI language,
+/// relative to `today` (dates::formatHuman()): "⏰ dziś 18:00", "🔔 jutro 06:30", "⏰ pt 17 paź",
+/// "⏰ Fri, Oct 17 18:00". An invalid spec gives the bell alone.
+QString reminderChipLabel(const DateSpec &at, bool alarm, dates::UiLocale locale, QDate today);
 
 } // namespace brulion::markdown

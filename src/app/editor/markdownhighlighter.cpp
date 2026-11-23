@@ -154,6 +154,104 @@ void MarkdownHighlighter::setChipInset(qreal px)
     refreshChips();
 }
 
+void MarkdownHighlighter::setChipLocale(const QString &locale)
+{
+    if (m_chipLocale == locale)
+        return;
+    m_chipLocale = locale;
+    Q_EMIT chipLocaleChanged();
+    if (m_reminderChips)
+        rehighlight();
+}
+
+void MarkdownHighlighter::setChipToday(const QString &today)
+{
+    if (m_chipToday == today)
+        return;
+    m_chipToday = today;
+    Q_EMIT chipTodayChanged();
+    if (m_reminderChips)
+        rehighlight();
+}
+
+std::optional<std::pair<int, int>> MarkdownHighlighter::chipWhere(int position,
+                                                                  const std::function<bool(int, int)> &match) const
+{
+    QTextDocument *doc = document();
+    if (!doc || !m_reminderChips || position < 0)
+        return std::nullopt;
+    const QTextBlock block = doc->findBlock(position);
+    const auto *data = block.isValid() ? static_cast<const ChipData *>(block.userData()) : nullptr;
+    if (!data)
+        return std::nullopt;
+    for (const LineChip &chip : data->chips) {
+        const int from = block.position() + chip.from;
+        const int to = block.position() + chip.to;
+        if (match(from, to))
+            return std::pair{from, to};
+    }
+    return std::nullopt;
+}
+
+int MarkdownHighlighter::chipEndingAt(int position) const
+{
+    const auto chip = chipWhere(position, [position](int, int to) { return to == position; });
+    return chip ? chip->first : -1;
+}
+
+int MarkdownHighlighter::chipStartingAt(int position) const
+{
+    const auto chip = chipWhere(position, [position](int from, int) { return from == position; });
+    return chip ? chip->second : -1;
+}
+
+int MarkdownHighlighter::chipFromAround(int position) const
+{
+    const auto chip = chipWhere(position, [position](int from, int to) { return from < position && position < to; });
+    return chip ? chip->first : -1;
+}
+
+int MarkdownHighlighter::chipToAround(int position) const
+{
+    const auto chip = chipWhere(position, [position](int from, int to) { return from < position && position < to; });
+    return chip ? chip->second : -1;
+}
+
+void MarkdownHighlighter::collapseLineChips()
+{
+    if (m_lineChips.isEmpty())
+        return;
+    QTextDocument *doc = document();
+    const QFont font = doc ? doc->defaultFont() : QFont();
+    m_chipFont = font;
+    const QFontMetricsF metrics(font);
+    QFont tiny = font;
+    tiny.setPixelSize(1);
+    const QFontMetricsF tinyMetrics(tiny);
+    const QString line = currentBlock().text();
+    for (const LineChip &chip : std::as_const(m_lineChips)) {
+        if (chip.to <= chip.from || chip.to > line.size())
+            continue;
+        // The token's characters: invisible, in a 1-px font. The first one (a surrogate pair:
+        // both halves) takes the label's width; the others next to none (1 %: Qt reads a
+        // percentage of 0 as "unchanged"), so no line breaks inside the token.
+        const int head = line.at(chip.from).isHighSurrogate() && chip.from + 1 < chip.to ? 2 : 1;
+        QTextCharFormat hidden;
+        hidden.setProperty(NameProperty, u"chip"_s);
+        hidden.setForeground(QColor(Qt::transparent));
+        hidden.setProperty(QTextFormat::FontPixelSize, 1);
+        QTextCharFormat first = hidden;
+        first.setFontLetterSpacingType(QFont::AbsoluteSpacing);
+        first.setFontLetterSpacing(std::max<qreal>(0, metrics.horizontalAdvance(chip.label)
+                                                              - tinyMetrics.horizontalAdvance(line.mid(chip.from, head))));
+        QTextCharFormat rest = hidden;
+        rest.setFontLetterSpacingType(QFont::PercentageSpacing);
+        rest.setFontLetterSpacing(1);
+        mergeRange(chip.from, head, first);
+        mergeRange(chip.from + head, chip.to - chip.from - head, rest);
+    }
+}
+
 void MarkdownHighlighter::storeLineChips()
 {
     const QList<LineChip> chips = std::exchange(m_lineChips, {});
@@ -183,6 +281,13 @@ void MarkdownHighlighter::refreshChips()
         const QFontMetricsF metrics(doc->defaultFont());
         const QColor reminderBg = color("reminderBackground", QColor(242, 179, 61, 56));
         const QColor alarmBg = color("alarmBackground", QColor(u"#f2b33d"_s));
+        const QColor reminderFg = color("reminderChip", color("reminder", QColor(u"#7a4f00"_s)));
+        const QColor alarmFg = color("alarmChip", color("alarm", QColor(u"#7a4f00"_s)));
+        // A new font (size, family): the chips are laid out again for their labels' new width.
+        if (doc->defaultFont() != m_chipFont) {
+            m_chipFont = doc->defaultFont();
+            QMetaObject::invokeMethod(this, &QSyntaxHighlighter::rehighlight, Qt::QueuedConnection);
+        }
         for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
             const auto *data = static_cast<const ChipData *>(block.userData());
             if (!data)
@@ -191,6 +296,7 @@ void MarkdownHighlighter::refreshChips()
                 const int from = block.position() + chip.from;
                 const int to = block.position() + chip.to;
                 const QList<detail::LineSegment> segments = detail::lineSegments(layout, block, from, to);
+                bool labelled = false;
                 for (const detail::LineSegment &segment : segments) {
                     const QPointF origin = block.layout()->position();
                     // Centred on the glyphs, not on the fixed-height line box (as RichTextPills).
@@ -206,6 +312,12 @@ void MarkdownHighlighter::refreshChips()
                     pill.kind = u"pill"_s;
                     pill.from = from;
                     pill.to = to;
+                    // The words on the chip's first part (it has one: the token never wraps).
+                    if (!std::exchange(labelled, true)) {
+                        pill.label = chip.label;
+                        pill.textColor = chip.alarm ? alarmFg : reminderFg;
+                        pill.baseline = origin.y() + baseline;
+                    }
                     out.append(pill);
                 }
             }
@@ -582,14 +694,15 @@ void MarkdownHighlighter::highlightBlock(const QString &line)
 {
     m_lineChips.clear();
     highlightLine(line);
-    storeLineChips();
     highlightSpelling(line);
-    if (m_findQuery.isEmpty())
-        return;
-    QTextCharFormat hit;
-    hit.setBackground(m_findColor);
-    for (const text::TextRange &range : text::findMatches(line, m_findQuery, m_findOptions))
-        mergeRange(int(range.start), int(range.length), hit);
+    if (!m_findQuery.isEmpty()) {
+        QTextCharFormat hit;
+        hit.setBackground(m_findColor);
+        for (const text::TextRange &range : text::findMatches(line, m_findQuery, m_findOptions))
+            mergeRange(int(range.start), int(range.length), hit);
+    }
+    collapseLineChips();
+    storeLineChips();
 }
 
 void MarkdownHighlighter::highlightLine(const QString &line)
@@ -861,7 +974,11 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
         setRange(at(t.from), int(t.to - t.from), m_formats[name]);
         if (m_reminderChips && m_mode == u"inline"
             && (t.kind == markdown::TokenKind::Reminder || t.kind == markdown::TokenKind::ReminderCompat))
-            m_lineChips.append({at(t.from), at(t.to), t.alarm});
+            m_lineChips.append({at(t.from), at(t.to), t.alarm,
+                                markdown::reminderChipLabel(
+                                        t.spec(), t.alarm,
+                                        m_chipLocale == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish,
+                                        QDate::fromString(m_chipToday, Qt::ISODate))});
     }
     if (const auto id = markdown::blockIdAtEnd(masked))
         setRange(at(id->from), int(id->to - id->from), m_formats[u"blockId"_s]);

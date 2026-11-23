@@ -160,6 +160,9 @@ class PageController : public QObject {
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
     /// Fixed clock "YYYY-MM-DD HH:mm" (tests, screenshots); empty = the real clock.
     Q_PROPERTY(QString now READ now WRITE setNow NOTIFY nowChanged FINAL)
+    /// The day "today" / "tomorrow" of the rendered dates are relative to ("YYYY-MM-DD": the fixed
+    /// clock's, else the local date; it moves on at midnight) — also the edited block's chips'.
+    Q_PROPERTY(QString todayDate READ todayDate NOTIFY todayChanged FINAL)
     /// Debounce of automatic saves in ms (default 400; 0 saves on every change).
     Q_PROPERTY(int saveDelay READ saveDelay WRITE setSaveDelay NOTIFY saveDelayChanged FINAL)
     /// Lines of folded blocks (for the shell to persist per device).
@@ -283,6 +286,7 @@ public:
     QString locale() const { return m_english ? QStringLiteral("en") : QStringLiteral("pl"); }
     void setLocale(const QString &locale);
     QString now() const { return m_fixedNow; }
+    QString todayDate() const { return m_model->today().toString(u"yyyy-MM-dd"); }
     void setNow(const QString &now);
     int saveDelay() const { return m_saveTimer.interval(); }
     void setSaveDelay(int ms);
@@ -750,6 +754,10 @@ public:
     Q_INVOKABLE QVariantMap dateChip(int row, const QString &url) const;
     /// dateChip(row, url)'s "url" ("" without one): typed, for QML compiled ahead of time.
     Q_INVOKABLE QString dateChipUrl(int row, const QString &url) const;
+    /// The reminder chip at range [from, to) of the row's edit text (a right-click or a long press
+    /// on a chip of the edited block, InlineEditor): what dateChip() returns for it (body ranges);
+    /// empty when no reminder is there.
+    Q_INVOKABLE QVariantMap editTextChip(int row, int from, int to) const;
     /// The zoom breadcrumb's entries for BBreadcrumb (ZoomBreadcrumb): [{ title }] — the page
     /// `pageTitle`, then each entry of `crumbs` (breadcrumb()), "…" for one without a title.
     Q_INVOKABLE QVariantList breadcrumbItems(const QString &pageTitle, const QVariantList &crumbs) const;
@@ -758,7 +766,8 @@ public:
     /// One edit of a token menu on body range [from, to) of a row (markdown::applyTokenAction():
     /// "set", "move", "shift", "alarm", "reminder", "remove", "recurrence", "priority",
     /// "blockRecurrence", "blockPriority"; on a [[day]] link "set", "move", "shift") — only the
-    /// token's bytes change. One undo step; false when nothing changed.
+    /// token's bytes change. One undo step; false when nothing changed. In the edited row a caret
+    /// after the token keeps its place in the text (one inside it goes to its start).
     Q_INVOKABLE bool applyTokenAction(int row, int from, int to, const QString &action, const QVariant &a = {},
                                       const QVariant &b = {});
     /// The token a link of a block copy's rendered text names: `raw` is the block's Markdown as a

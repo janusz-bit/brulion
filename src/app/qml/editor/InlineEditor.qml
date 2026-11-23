@@ -23,9 +23,12 @@ import Brulion
 // checking"). Spell checking (SpellCheck) runs in the edited prose of text blocks, headings and
 // quotes — not in code, calculations or queries ("code" highlighting).
 // A ⏰ / ⏰! reminder stays a chip while its block is edited (MarkdownHighlighter.reminderChips: a
-// pill under the token's text, in the rendered chip's colours): a click or a tap on it opens the
-// reminder dialog — date, time, alarm, repeat — as on the rendered chip, without moving the caret;
-// the keys still go through its text like any other.
+// pill in the rendered chip's colours showing its words — "⏰ jutro 18:00" — while the text keeps
+// the token as written): a click or a tap on it opens the reminder dialog — date, time, alarm,
+// repeat — as on the rendered chip, without moving the caret; a right-click or a long press its
+// menu (BlockEditor.openReminderMenuInText: snooze, change, remove). The caret goes over a chip as
+// one unit: Left / Right step over it, Backspace / Delete remove it whole, a selection takes it
+// whole, a caret put inside it (a click, Up / Down) goes to its end (chipKey(), chipSnap()).
 TextEdit {
     id: edit
 
@@ -139,6 +142,8 @@ TextEdit {
         spellCaret: edit.spellChecked ? edit.cursorPosition : -1
         spellColor: Theme.danger
         reminderChips: edit.active && edit.highlightMode === "inline"
+        chipLocale: DatesHelper.locale
+        chipToday: edit.editor && edit.editor.controller ? edit.editor.controller.todayDate : ""
     }
 
     // The reminder chips: their pills under the text, and over it what a click on one does.
@@ -159,6 +164,7 @@ TextEdit {
     Repeater {
         model: highlighter.chipShapes
         delegate: MouseArea {
+            id: chipArea
             required property richTextPill modelData
             objectName: "reminderChipArea"
             x: modelData.x - edit.chipPadding
@@ -168,10 +174,93 @@ TextEdit {
             enabled: edit.active
             hoverEnabled: !Theme.touchUi
             cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             Accessible.role: Accessible.Button
             Accessible.name: qsTr("Change reminder")
-            onClicked: edit.editor.editReminderInText(edit.row, modelData.from, modelData.to)
+            Accessible.description: modelData.label
+            /// The chip's words ("⏰ jutro 18:00"; the text keeps the token as written).
+            readonly property string label: modelData.label
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.RightButton)
+                    edit.editor.openReminderMenuInText(edit, modelData.from, modelData.to, chipArea, mouse.x, mouse.y)
+                else
+                    edit.editor.editReminderInText(edit.row, modelData.from, modelData.to)
+            }
+            // A finger held on it: its menu (no click follows).
+            onPressAndHold: (mouse) => {
+                if (Theme.touchUi)
+                    edit.editor.openReminderMenuInText(edit, modelData.from, modelData.to, chipArea, mouse.x, mouse.y)
+                else
+                    mouse.accepted = false
+            }
+            Text {
+                objectName: "reminderChipLabel"
+                x: edit.chipPadding
+                y: chipArea.modelData.baseline - chipArea.modelData.y - tabMetrics.ascent
+                textFormat: Text.PlainText
+                text: chipArea.modelData.label
+                font: edit.font
+                color: chipArea.modelData.textColor
+            }
         }
+    }
+
+    /// The keys that treat a reminder chip as one unit (Keys.onPressed): Left / Right over it,
+    /// with Shift its whole text selected, Backspace / Delete remove it. False: not at a chip.
+    function chipKey(key: int, modifiers: int): bool {
+        if (!highlighter.reminderChips || vimCommands || preeditText !== ""
+                || (modifiers & (Qt.AltModifier | Qt.MetaModifier)) !== 0)
+            return false
+        const shift = (modifiers & Qt.ShiftModifier) !== 0
+        const pos = cursorPosition
+        const selected = selectionStart !== selectionEnd
+        let other = -1
+        switch (key) {
+        case Qt.Key_Left:
+            other = highlighter.chipEndingAt(pos)
+            break
+        case Qt.Key_Right:
+            other = highlighter.chipStartingAt(pos)
+            break
+        case Qt.Key_Backspace:
+            if (!selected && !shift)
+                other = highlighter.chipEndingAt(pos)
+            if (other >= 0)
+                remove(other, pos)
+            return other >= 0
+        case Qt.Key_Delete:
+            if (!selected && !shift)
+                other = highlighter.chipStartingAt(pos)
+            if (other >= 0)
+                remove(pos, other)
+            return other >= 0
+        default:
+            return false
+        }
+        if (other < 0 || (selected && !shift))
+            return false
+        if (shift)
+            moveCursorSelection(other, TextEdit.SelectCharacters)
+        else
+            cursorPosition = other
+        return true
+    }
+    /// A caret inside a chip goes to its end (where it is drawn); a selection's moving end goes
+    /// over the whole chip. True when it moved.
+    function chipSnap(): bool {
+        if (!highlighter.reminderChips || preeditText !== "")
+            return false
+        const pos = cursorPosition
+        const to = highlighter.chipToAround(pos)
+        if (to < 0)
+            return false
+        if (selectionStart === selectionEnd) {
+            cursorPosition = to
+            return true
+        }
+        const anchor = pos === selectionEnd ? selectionStart : selectionEnd
+        moveCursorSelection(anchor < pos ? to : highlighter.chipFromAround(pos), TextEdit.SelectCharacters)
+        return true
     }
 
     /// The word marked as misspelled at `position` ({from, to, word, text}; {} when none).
@@ -250,6 +339,7 @@ TextEdit {
         }
         cursorPosition = c < 0 ? length : Math.min(c, length)
         syncing = false
+        chipSnap()
         editor.controller.cursorPosition = cursorPosition
         edit.selectFindMatch()
         edit.vimSelect()
@@ -291,6 +381,7 @@ TextEdit {
         lastText = plain()
         cursorPosition = Math.max(0, Math.min(cursor < 0 ? length : cursor, length))
         syncing = false
+        chipSnap()
         if (editor)
             editor.updateCompletion(edit)
     }
@@ -377,6 +468,9 @@ TextEdit {
     onCursorPositionChanged: {
         if (syncing || !active || !editor || !editor.controller)
             return
+        // (A caret inside a chip moves on: this runs again for its new place.)
+        if (chipSnap())
+            return
         editor.controller.cursorPosition = cursorPosition
         // A keystroke moves the caret before the text change is told (cursorPositionChanged, then
         // textChanged): onTextChanged updates the completion once for both.
@@ -445,6 +539,10 @@ TextEdit {
         }
     }
     Keys.onPressed: (event) => {
+        if (edit.active && edit.chipKey(event.key, event.modifiers)) {
+            event.accepted = true
+            return
+        }
         if (edit.active && edit.editor && edit.editor.handleEditorKey(event, edit))
             event.accepted = true
     }

@@ -68,6 +68,11 @@ struct RichTextPill {
     /// The document positions of the whole span the shape is part of.
     Q_PROPERTY(int from MEMBER from FINAL)
     Q_PROPERTY(int to MEMBER to FINAL)
+    /// MarkdownHighlighter's reminder chips: the words drawn on the chip ("⏰ jutro 18:00"; "" for
+    /// any other shape), their colour and their baseline (the document's coordinates).
+    Q_PROPERTY(QString label MEMBER label FINAL)
+    Q_PROPERTY(QColor textColor MEMBER textColor FINAL)
+    Q_PROPERTY(qreal baseline MEMBER baseline FINAL)
 public:
     qreal x = 0;
     qreal y = 0;
@@ -78,6 +83,9 @@ public:
     QString icon;
     int from = 0;
     int to = 0;
+    QString label;
+    QColor textColor;
+    qreal baseline = 0;
     bool operator==(const RichTextPill &other) const = default;
 };
 

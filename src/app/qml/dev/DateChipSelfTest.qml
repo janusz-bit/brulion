@@ -19,7 +19,11 @@ import Brulion
 // none value a neutral choice), and on a #tag and a [[link]] the link menu (LinkMenu: "Copy"
 // copies the tag, the link) — never the block menu. While the block is edited its ⏰ stays a chip:
 // a click or tap on it opens the reminder dialog on that reminder, the caret stays, the time chosen
-// is written (one undo step). An open task without a date has the "Add date" button at the end of
+// is written (one undo step). The chip shows its words ("⏰ dziś 18:00") while the file and the
+// edited text keep the token; Left / Right step over it, Shift+Left selects it whole, a caret put
+// inside goes to its end, Backspace / Delete remove it whole; a right-click or a finger held on it
+// opens its menu (no block or text menu, the block stays edited): An hour later, Tomorrow at this
+// time, Delete reminder, Change date and time… — each one undo step, the keyboard back in the text. An open task without a date has the "Add date" button at the end of
 // its first line — on hover (desktop) and while it is edited, never on a done task —: its menu
 // (QuickDateMenu) writes Today / Tomorrow / Next week as the 📅 due date at once and "Pick a
 // date…" opens the date dialog on tomorrow; the block stays edited, one undo step each. On a dated
@@ -182,6 +186,144 @@ QtObject {
         stepsPart4()
         stepsPart5()
         stepsPart6()
+        editedChipKeySteps()
+        editedChipMenuSteps()
+    }
+
+    // ---- The edited block's ⏰ chip: its words, the caret over it as one unit, its menu ------------
+    function edit(): InlineEditor { return editor.activeEditor }
+    /// The words on the edited block's chip ("" when there is none).
+    function chipLabel(): string {
+        const label = DevTest.findShown(window.delegateAt(row), "reminderChipLabel")
+        return label ? "" + DevTest.property(label, "text") : ""
+    }
+    readonly property string reminderToken: "⏰ 2026-10-15 18:00"
+    property int chipFrom: -1
+    property int chipTo: -1
+    function editAtChip(): void {
+        if (window.at()) show("Zadzwonić do hydraulika")
+        if (window.at()) editor.startEditing(row, 3)
+        if (window.at()) window.waitStep(page.editingRow === row && edit() !== null && edit().activeFocus && chipArea() !== null,
+                                         "the reminder's block is edited, its ⏰ a chip")
+        if (window.at()) {
+            chipFrom = Js.indexOf(edit().plain(), reminderToken)
+            chipTo = chipFrom + reminderToken.length
+            check(chipFrom > 0, "the edited text keeps the token as written: " + edit().plain())
+        }
+    }
+    function keyClick(key: int, modifiers: int): void {
+        window.taskEvents.keyClick(key, modifiers, -1)
+    }
+    /// Stop editing, undo once, and check the line is the sample's again.
+    function undoBack(what: string): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.undo()
+        }
+        if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), reminder) > 0, what + ": " + line("Zadzwonić do hydraulika"))
+    }
+    function editedChipKeySteps(): void {
+        editAtChip()
+        if (window.at()) {
+            check(chipLabel() === "⏰ dziś 18:00", "the chip shows its words, not its token: " + chipLabel())
+            check(Js.indexOf(line("Zadzwonić do hydraulika"), reminder) > 0, "the file keeps the token as written")
+            edit().cursorPosition = chipTo
+        }
+        if (window.at()) keyClick(Qt.Key_Left, Qt.NoModifier)
+        if (window.at()) check(edit().cursorPosition === chipFrom, "Left after the chip goes before it: " + edit().cursorPosition)
+        if (window.at()) keyClick(Qt.Key_Right, Qt.NoModifier)
+        if (window.at()) check(edit().cursorPosition === chipTo, "Right before it goes after it: " + edit().cursorPosition)
+        if (window.at()) keyClick(Qt.Key_Left, Qt.ShiftModifier)
+        if (window.at()) check(edit().selectionStart === chipFrom && edit().selectionEnd === chipTo,
+                               "Shift+Left selects the whole chip: " + edit().selectionStart + "–" + edit().selectionEnd)
+        if (window.at()) keyClick(Qt.Key_Left, Qt.ShiftModifier)
+        if (window.at()) check(edit().selectionStart === chipFrom - 1 && edit().selectionEnd === chipTo,
+                               "and on character by character before it")
+        if (window.at()) {
+            edit().deselect()
+            edit().cursorPosition = chipFrom + 5
+        }
+        if (window.at()) check(edit().cursorPosition === chipTo && page.cursorPosition === chipTo,
+                               "a caret put inside the chip goes to its end: " + edit().cursorPosition)
+        if (window.at()) keyClick(Qt.Key_Backspace, Qt.NoModifier)
+        if (window.at()) {
+            check(Js.indexOf(edit().plain(), "⏰") < 0 && edit().cursorPosition === chipFrom,
+                  "Backspace after the chip removes it whole: " + edit().plain())
+            check(chipArea() === null, "no chip is left")
+        }
+        undoBack("one undo step puts the reminder back")
+        editAtChip()
+        if (window.at()) edit().cursorPosition = chipFrom
+        if (window.at()) keyClick(Qt.Key_Delete, Qt.NoModifier)
+        if (window.at()) check(edit().plain() === "Zadzwonić do hydraulika  #telefon", "Delete before it removes it whole: " + edit().plain())
+        undoBack("Delete undone too")
+    }
+    /// The context gesture on the edited block's chip: a right-click, or a finger held on it.
+    function editedChipGesture(): void {
+        if (window.at()) {
+            const area = chipArea()
+            check(area !== null, "the chip is there")
+            if (area !== null && !window.touchRun)
+                window.taskEvents.mouseClick(area, area.width / 2, area.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+            else if (area !== null)
+                window.taskEvents.touchPress(area, area.width / 2, area.height / 2)
+        }
+        if (window.touchRun) {
+            if (window.at())
+                window.waiting(menuOpen())
+            if (window.at()) {
+                const area = chipArea()
+                if (area !== null)
+                    window.taskEvents.touchRelease(area, area.width / 2, area.height / 2)
+            }
+        }
+        if (window.at()) window.waitStep(menuOpen(), gesture + " on the edited block's chip opens its menu")
+        if (window.at()) {
+            check(menu().kind === "reminder" && item("dateChipHourLater").visible && item("dateChipRemove").visible,
+                  "the reminder's menu: snooze, change, remove")
+            check(!blockMenuOpen() && DevTest.property(editor.textMenu, "opened") !== true, "no block menu, no text menu")
+            check(page.editingRow === row && page.selectionCount === 0, "the block stays edited, none selected")
+            check(reminderDialog() === null || !reminderDialog().opened, "no dialog opens with it")
+        }
+    }
+    function editedChipMenuSteps(): void {
+        editAtChip()
+        if (window.at()) edit().cursorPosition = Js.indexOf(edit().plain(), "#telefon")
+        editedChipGesture()
+        choose("dateChipHourLater")
+        if (window.at()) window.waitStep(page.editingRow === row && edit() !== null && edit().activeFocus,
+                                         "the block is still edited, the keyboard in it")
+        if (window.at()) {
+            check(Js.indexOf(line("Zadzwonić do hydraulika"), "Zadzwonić do hydraulika ⏰ 2026-10-15 19:00 #telefon") > 0,
+                  "“An hour later” writes the new time: " + line("Zadzwonić do hydraulika"))
+            check(chipLabel() === "⏰ dziś 19:00", "the chip's words follow: " + chipLabel())
+            const caret = edit().cursorPosition + 0 // (typed copies: TextEdit's own cannot be compared)
+            const before = Js.indexOf(edit().plain(), "#telefon") + 0
+            check(caret === before, "the caret stays before #telefon: " + caret)
+        }
+        undoBack("one undo step puts the time back")
+        editAtChip()
+        editedChipGesture()
+        choose("dateChipTomorrowSameTime")
+        if (window.at()) window.waitStep(chipLabel() === "⏰ jutro 18:00", "“Tomorrow at this time”: tomorrow on the chip: " + chipLabel())
+        if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), "⏰ 2026-10-16 18:00 #telefon") > 0, "and in the file")
+        undoBack("undone")
+        editAtChip()
+        editedChipGesture()
+        choose("dateChipRemove")
+        if (window.at()) window.waitStep(chipArea() === null && page.editingRow === row,
+                                         "“Delete reminder” removes the chip, the block stays edited")
+        if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), "Zadzwonić do hydraulika #telefon") > 0,
+                               "only the token goes (and a space): " + line("Zadzwonić do hydraulika"))
+        undoBack("one undo step puts the reminder back")
+        editAtChip()
+        editedChipGesture()
+        choose("dateChipChange")
+        if (window.at()) window.waitStep(reminderDialog() !== null && reminderDialog().opened, "“Change date and time…” opens the reminder dialog")
+        if (window.at()) check(reminderDialog().at === "2026-10-15 18:00", "on the reminder's time: " + reminderDialog().at)
+        if (window.at()) reminderDialog().reject()
+        if (window.at()) window.waitStep(!reminderDialog().opened && page.editingRow === row, "cancelled, the block edited again")
+        if (window.at()) page.stopEditing()
     }
     function stepsPart1(): void {
         if (window.at()) show("Kupić płytki")
@@ -343,9 +485,9 @@ QtObject {
         if (window.at()) editor.startEditing(row, 3)
         if (window.at()) window.waitStep(page.editingRow === row && chipArea() !== null, "the edited block's ⏰ is still a chip")
         if (window.at()) {
-            // (One per line: on a phone the token wraps.)
+            // (One, also on a phone: the token never wraps inside.)
             const areas = DevTest.countNamed(window.delegateAt(row), "reminderChipArea")
-            check(areas === (Theme.touchUi ? 2 : 1), "one chip for its one reminder, a part per line: " + areas)
+            check(areas === 1, "one chip for its one reminder: " + areas)
             const area = chipArea()
             window.tapAt(area, area.width / 2, area.height / 2)
         }

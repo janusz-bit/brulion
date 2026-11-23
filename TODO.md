@@ -245,11 +245,13 @@ done in the repository simply disappears from the list.
   (RELATED-TO is sent only when a task is created); calendar commands of `brulion-cli` and the MCP
   server; Google's own CalDAV (it needs an OAuth sign-in — its secret iCal address works as a
   subscription).
-* **Reminders and alarms in an edited block** — they stay amber chips that open the date and time
-  dialog when clicked (docs/UI.md), but still show the raw text (`2026-11-20 18:00`, not "tomorrow
-  18:00") and are plain text to the keyboard. Missing: the chip's menu (snooze, remove) on a
-  right-click or long-press, the caret moving over the chip as one unit, and chips in Markdown
-  source mode and table cells.
+* **Reminder chips in Markdown source mode and table cells** — in an edited block a ⏰ is a chip
+  with its words, its menu and the caret over it as one unit (docs/UI.md); the source mode's
+  TextEdit and a table cell's TextField still show the token's raw text (`⏰ 2026-11-20 18:00`).
+  Source mode would need the highlighter's chips with a file position → block and range mapping for
+  the dialog and the menu; a cell, a TextEdit with the highlighter in place of its TextField. Also
+  untried on a real phone: the long press on an edited chip with Android's and GrapheneOS's own
+  text selection handles.
 
 ## Capture
 

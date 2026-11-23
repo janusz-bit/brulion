@@ -3172,6 +3172,17 @@ QString PageController::dateChipUrl(int row, const QString &url) const
     return dateChip(row, url).value(u"url"_s).toString();
 }
 
+QVariantMap PageController::editTextChip(int row, int from, int to) const
+{
+    if (!validRow(row) || from < 0 || to <= from)
+        return {};
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    const BlockShape shape = m_model->shapeAt(row);
+    QVariantMap chip = tokenChip(m_model->document().at(row).body, u"reminder:%1-%2"_s.arg(from).arg(to),
+                                 shape.editOffset, shape.task.has_value(), config);
+    return chip.value(u"kind"_s).toString() == u"reminder" ? chip : QVariantMap();
+}
+
 QVariantMap PageController::dateChip(int row, const QString &url) const
 {
     if (!validRow(row))
@@ -3208,7 +3219,21 @@ bool PageController::applyTokenAction(int row, int from, int to, const QString &
     const QString edited = markdown::applyTokenAction(body, from, to, action, a, b, tokenEditContext());
     if (edited == body)
         return false;
-    editBody(row, edited);
+    // The edited row's caret after the token moves with the text after it (a chip's menu in the
+    // edited block: a reminder removed or a shorter time keeps the caret where it was in the words).
+    int caret = -2;
+    if (editingRow() == row && m_cursor >= 0) {
+        const int offset = m_model->shapeAt(row).editOffset;
+        // (Inside the token: after it.) The text after the caret that the edit left as it was.
+        const qsizetype at = std::max<qsizetype>(m_cursor + offset, m_cursor + offset > from ? to : 0);
+        qsizetype common = 0;
+        while (common < body.size() && common < edited.size()
+               && body.at(body.size() - 1 - common) == edited.at(edited.size() - 1 - common))
+            ++common;
+        if (at >= from)
+            caret = int(std::max<qsizetype>(0, edited.size() - std::min(body.size() - at, common) - offset));
+    }
+    editBody(row, edited, caret);
     return true;
 }
 

@@ -318,8 +318,13 @@ private Q_SLOTS:
         QCOMPARE(shapes[0].color, QColor(u"#112233"_s));
         QCOMPARE(shapes[0].kind, u"pill"_s);
         QVERIFY(shapes[0].width > 10 && shapes[0].height > 5);
-        // The text of a chip takes the chip's colour.
-        QCOMPARE(formatAt(doc, 0, at(doc, 0, u"18:00"_s)).foreground().color(), QColor(u"#778899"_s));
+        // The chip shows words in its colour; the token's own characters are invisible.
+        QVERIFY(shapes[0].label.startsWith(u"⏰ "_s));
+        QVERIFY(shapes[1].label.startsWith(u"🔔 "_s));
+        QCOMPARE(shapes[0].textColor, QColor(u"#778899"_s));
+        QCOMPARE(formatAt(doc, 0, at(doc, 0, u"18:00"_s)).foreground().color().alpha(), 0);
+        QCOMPARE(nameAt(doc, 0, at(doc, 0, u"18:00"_s)), u"chip"_s);
+        QCOMPARE(nameAt(doc, 0, at(doc, 0, u"📅"_s)), u"due"_s); // the other dates stay text
         const int alarmFrom = doc.findBlockByNumber(2).position() + at(doc, 2, u"⏰!"_s);
         QCOMPARE(shapes[1].from, alarmFrom);
         QCOMPARE(shapes[1].to, alarmFrom + int(u"⏰! 2026-11-16 05:45"_s.size()));
@@ -356,24 +361,137 @@ private Q_SLOTS:
         QVERIFY(h.chipShapes().isEmpty());
     }
 
-    /// A reminder wrapped over two lines is two shapes of the same token.
-    void reminderChipWraps()
+    /// A chip's words: relative to chipToday in the language chipLocale, following both; the
+    /// document's text stays the token's, byte for byte.
+    void reminderChipLabels_data()
     {
+        QTest::addColumn<QString>("line");
+        QTest::addColumn<QString>("today");
+        QTest::addColumn<QString>("locale");
+        QTest::addColumn<QString>("label");
+        QTest::newRow("jutro") << u"Zadzwonić do mamy ⏰ 2026-11-11 18:00"_s << u"2026-11-10"_s << u"pl"_s
+                               << u"⏰ jutro 18:00"_s;
+        QTest::newRow("dziś, budzik") << u"Pobudka ⏰! 2026-11-10 05:45 ąę"_s << u"2026-11-10"_s << u"pl"_s
+                                      << u"🔔 dziś 05:45"_s;
+        QTest::newRow("piątek bez godziny") << u"⏰ 2026-11-13 na początku"_s << u"2026-11-10"_s << u"pl"_s
+                                            << u"⏰ pt 13 lis"_s;
+        QTest::newRow("tomorrow") << u"Call mum ⏰ 2026-11-11 18:00"_s << u"2026-11-10"_s << u"en"_s
+                                  << u"⏰ tomorrow 18:00"_s;
+        QTest::newRow("obsidian-reminder") << u"Spotkanie (@2026-11-11 09:30)"_s << u"2026-11-10"_s << u"pl"_s
+                                           << u"⏰ jutro 09:30"_s;
+        QTest::newRow("no day") << u"Call ⏰ 2026-11-11 18:00"_s << QString() << u"en"_s
+                                << u"⏰ Nov 11, 2026 18:00"_s;
+    }
+    void reminderChipLabels()
+    {
+        QFETCH(QString, line);
+        QFETCH(QString, today);
+        QFETCH(QString, locale);
+        QFETCH(QString, label);
         QTextDocument doc;
-        doc.setPlainText(u"Zadzwonić do mamy ⏰ 2026-11-11 18:00"_s);
-        const qreal before = doc.documentLayout()->documentSize().width();
+        doc.setTextWidth(2000);
+        doc.setPlainText(line);
         MarkdownHighlighter h;
+        h.setChipToday(today);
+        h.setChipLocale(locale);
         h.setReminderChips(true);
         h.attach(&doc);
-        // Narrow enough that the wrap falls inside the token ("⏰ 2026-11-11" | "18:00").
-        const QFontMetricsF metrics(doc.defaultFont());
-        doc.setTextWidth(metrics.horizontalAdvance(u"Zadzwonić do mamy ⏰ 2026-11-11 "_s) + 2);
-        QVERIFY(before > doc.textWidth());
         QCoreApplication::processEvents();
         const QList<RichTextPill> shapes = h.chipShapes();
-        QCOMPARE(shapes.size(), 2);
-        QCOMPARE(shapes[0].from, shapes[1].from);
-        QVERIFY(shapes[1].y > shapes[0].y);
+        QCOMPARE(shapes.size(), 1);
+        QCOMPARE(shapes[0].label, label);
+        QCOMPARE(doc.toPlainText(), line);
+        // As wide as its words (the layout's own widths: a pixel either way).
+        const qreal words = QFontMetricsF(doc.defaultFont()).horizontalAdvance(label);
+        QVERIFY2(std::abs(shapes[0].width - words) <= 2,
+                 qPrintable(u"%1 vs %2"_s.arg(shapes[0].width).arg(words)));
+        // Its baseline is the line's: the words stand where the text would.
+        const QTextLine first = doc.firstBlock().layout()->lineAt(0);
+        QCOMPARE(shapes[0].baseline, doc.firstBlock().layout()->position().y() + first.y() + first.ascent());
+    }
+
+    /// A new day or language: new words, the same text.
+    void reminderChipFollowsDayAndLanguage()
+    {
+        QTextDocument doc;
+        doc.setTextWidth(2000);
+        const QString line = u"Zadzwonić ⏰ 2026-11-11 18:00 #telefon"_s;
+        doc.setPlainText(line);
+        MarkdownHighlighter h;
+        h.setChipToday(u"2026-11-10"_s);
+        h.setReminderChips(true);
+        h.attach(&doc);
+        QCoreApplication::processEvents();
+        QCOMPARE(h.chipShapes().value(0).label, u"⏰ jutro 18:00"_s);
+        h.setChipToday(u"2026-11-11"_s); // midnight
+        QCoreApplication::processEvents();
+        QCOMPARE(h.chipShapes().value(0).label, u"⏰ dziś 18:00"_s);
+        h.setChipLocale(u"en"_s);
+        QCoreApplication::processEvents();
+        QCOMPARE(h.chipShapes().value(0).label, u"⏰ today 18:00"_s);
+        QCOMPARE(doc.toPlainText(), line);
+        // A larger font lays the chip out again for its words' new width.
+        QFont big = doc.defaultFont();
+        big.setPointSizeF(big.pointSizeF() * 2);
+        doc.setDefaultFont(big);
+        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();
+        const qreal words = QFontMetricsF(big).horizontalAdvance(u"⏰ today 18:00"_s);
+        QVERIFY2(std::abs(h.chipShapes().value(0).width - words) <= 3,
+                 qPrintable(u"%1 vs %2"_s.arg(h.chipShapes().value(0).width).arg(words)));
+    }
+
+    /// The token never wraps inside: a line too narrow for it moves the whole chip to the next one.
+    void reminderChipNeverWraps()
+    {
+        QTextDocument doc;
+        doc.setPlainText(u"Zadzwonić do mamy ⏰ 2026-11-11 18:00 i do taty"_s);
+        MarkdownHighlighter h;
+        h.setChipToday(u"2026-11-10"_s);
+        h.setReminderChips(true);
+        h.attach(&doc);
+        const QFontMetricsF metrics(doc.defaultFont());
+        // Room for the text and half of the chip's words: they go on the next line, whole.
+        doc.setTextWidth(metrics.horizontalAdvance(u"Zadzwonić do mamy ⏰ jutro"_s));
+        QCoreApplication::processEvents();
+        const QList<RichTextPill> shapes = h.chipShapes();
+        QCOMPARE(shapes.size(), 1);
+        const QTextLayout *layout = doc.firstBlock().layout();
+        QVERIFY(layout->lineCount() >= 2);
+        QCOMPARE(layout->lineForTextPosition(shapes[0].from).lineNumber(),
+                 layout->lineForTextPosition(shapes[0].to - 1).lineNumber());
+        QVERIFY(shapes[0].y > layout->lineAt(0).y());
+    }
+
+    /// The caret over a chip as one unit: the chip ending / starting at a position, the one a
+    /// position is inside of; none with the chips off, at other positions, on other lines.
+    void reminderChipUnits()
+    {
+        QTextDocument doc;
+        doc.setTextWidth(2000);
+        doc.setPlainText(u"Żółw ⏰ 2026-11-11 18:00 i ⏰! 2026-11-12 06:00\nDruga linia ⏰ 2026-11-13"_s);
+        MarkdownHighlighter h;
+        h.attach(&doc);
+        const int from = at(doc, 0, u"⏰"_s);
+        const int to = from + int(u"⏰ 2026-11-11 18:00"_s.size());
+        QCOMPARE(h.chipEndingAt(to), -1); // off
+        h.setReminderChips(true);
+        QCOMPARE(h.chipEndingAt(to), from);
+        QCOMPARE(h.chipStartingAt(from), to);
+        QCOMPARE(h.chipFromAround(from + 1), from);
+        QCOMPARE(h.chipToAround(to - 1), to);
+        QCOMPARE(h.chipFromAround(from), -1);
+        QCOMPARE(h.chipFromAround(to), -1);
+        QCOMPARE(h.chipStartingAt(from + 1), -1);
+        QCOMPARE(h.chipEndingAt(to + 1), -1);
+        const int alarm = at(doc, 0, u"⏰!"_s);
+        QCOMPARE(h.chipStartingAt(alarm), alarm + int(u"⏰! 2026-11-12 06:00"_s.size()));
+        const QTextBlock second = doc.findBlockByNumber(1);
+        const int third = second.position() + at(doc, 1, u"⏰"_s);
+        QCOMPARE(h.chipStartingAt(third), third + int(u"⏰ 2026-11-13"_s.size()));
+        QCOMPARE(h.chipEndingAt(second.position()), -1);
+        QCOMPARE(h.chipFromAround(-1), -1);
+        QCOMPARE(h.chipFromAround(100000), -1);
     }
 };
 

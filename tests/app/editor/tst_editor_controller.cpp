@@ -3316,6 +3316,63 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(at.text(), u"- spotkanie [[2026-10-16]] \n"_s);
     }
 
+    /// A reminder chip of the edited block (its menu, InlineEditor): editTextChip() names the
+    /// token by its range in the edit text (a task: after its marker); its menu's edits keep the
+    /// caret after the token where it was in the words, one undo step each.
+    void editTextChipMenu()
+    {
+        Fixture f(u"- [ ] Zadzwonić ⏰ 2026-10-15 18:00 do żłobka\n"_s);
+        const QString edit = f.edit(0);
+        const int from = int(edit.indexOf(u"⏰"_s));
+        const int to = from + int(u"⏰ 2026-10-15 18:00"_s.size());
+        const QVariantMap chip = f.page.editTextChip(0, from, to);
+        QCOMPARE(chip.value(u"kind"_s).toString(), u"reminder"_s);
+        QCOMPARE(chip.value(u"at"_s).toString(), u"2026-10-15 18:00"_s);
+        QVERIFY(chip.value(u"isTask"_s).toBool());
+        const int offset = f.page.editOffsetAt(0);
+        QVERIFY(offset > 0);
+        QCOMPARE(chip.value(u"from"_s).toInt(), from + offset);
+        QCOMPARE(chip.value(u"to"_s).toInt(), to + offset);
+        QVERIFY(f.page.editTextChip(0, 0, 5).isEmpty()); // words, no reminder
+        QVERIFY(f.page.editTextChip(0, -1, 3).isEmpty());
+        QVERIFY(f.page.editTextChip(7, from, to).isEmpty());
+
+        // Edited, the caret after the chip ("do |żłobka"): "An hour later" keeps it there.
+        const int caret = int(edit.indexOf(u"żłobka"_s));
+        f.page.startEditing(0, caret);
+        QVERIFY(f.page.applyTokenAction(0, from + offset, to + offset, u"shift"_s, 0, 60));
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić ⏰ 2026-10-15 19:00 do żłobka\n"_s);
+        QCOMPARE(f.page.cursorPosition(), caret);
+        // Removed: the caret stays before "żłobka", with the space before the token gone too.
+        QVERIFY(f.page.applyTokenAction(0, from + offset, to + offset, u"remove"_s));
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do żłobka\n"_s);
+        QCOMPARE(f.page.cursorPosition(), int(f.edit(0).indexOf(u"żłobka"_s)));
+        QCOMPARE(f.page.editingRow(), 0);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić ⏰ 2026-10-15 19:00 do żłobka\n"_s);
+
+        // A caret before the chip stays; one right before it stays before the text after it.
+        Fixture g(u"- Pilne ⏰ 2026-10-15 18:00 jutro\n"_s);
+        const int gFrom = int(g.edit(0).indexOf(u"⏰"_s));
+        const int gTo = gFrom + int(u"⏰ 2026-10-15 18:00"_s.size());
+        const int gOffset = g.page.editOffsetAt(0);
+        g.page.startEditing(0, 2);
+        QVERIFY(g.page.applyTokenAction(0, gFrom + gOffset, gTo + gOffset, u"remove"_s));
+        QCOMPARE(g.text(), u"- Pilne jutro\n"_s);
+        QCOMPARE(g.page.cursorPosition(), 2);
+        g.page.undo();
+        g.page.startEditing(0, gFrom);
+        QVERIFY(g.page.applyTokenAction(0, gFrom + gOffset, gTo + gOffset, u"remove"_s));
+        QCOMPARE(g.page.cursorPosition(), int(u"Pilne"_s.size()));
+        // A token at the line's start goes with the space after it: the caret at the start.
+        Fixture h(u"- ⏰ 2026-10-15 18:00 rano\n"_s);
+        h.page.startEditing(0, int(u"⏰ 2026-10-15 18:00"_s.size()));
+        QVERIFY(h.page.applyTokenAction(0, h.page.editOffsetAt(0), h.page.editOffsetAt(0) + int(u"⏰ 2026-10-15 18:00"_s.size()),
+                                        u"remove"_s));
+        QCOMPARE(h.text(), u"- rano\n"_s);
+        QCOMPARE(h.page.cursorPosition(), 0);
+    }
+
     // A reminder added from the "/" menu leaves the caret after a space: "/" typed next opens the
     // menu again and its command keeps the token whole (TODO: „/” zaraz po tokenie przypomnienia).
     void slashAfterReminder()
