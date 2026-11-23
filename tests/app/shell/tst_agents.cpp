@@ -531,13 +531,15 @@ private Q_SLOTS:
         QCOMPARE(a->details.value(u"reason"_s).toString(), u"children"_s);
         a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Szósta"_s}}, agent);
         QCOMPARE(a->code, u"refused"_s);
+        // (Every session so far: the conversation, Codex's answer, the other conversation, the four
+        // that wait. They are stopped once their agent has them: a slow start stopped sooner opens none.)
+        QTRY_COMPARE_WITH_TIMEOUT(logged(u"session/new"_s).size(), 7, 20000);
         for (const QString &w : std::as_const(waiting))
             QVERIFY(ask(control, u"chatStop"_s, {{u"path"_s, w}}, agent)->ok);
         QTRY_VERIFY_WITH_TIMEOUT(chats->lineage()->runningChildren(path) == 0, 10000);
 
-        // Three levels deep at most: such a conversation's agent gets no chat tools. (Every session so
-        // far: the conversation, Codex's answer, the other conversation, the four that waited.)
-        QTRY_COMPARE_WITH_TIMEOUT(logged(u"session/new"_s).size(), 7, 10000);
+        // Three levels deep at most: such a conversation's agent gets no chat tools.
+        QCOMPARE(logged(u"session/new"_s).size(), 7);
         ws->write(u"AI/b.md"_s, u"---\nparent: \"[[%1]]\"\n---\n- 🧑 b\n"_s.arg(child.chopped(3)));
         ws->write(u"AI/c.md"_s, u"---\npartner: acp:fake\nparent: \"[[AI/b]]\"\n---\n- 🧑 c\n"_s);
         QCOMPARE(chats->lineage()->depthOf(u"AI/c.md"_s), 3);

@@ -247,10 +247,12 @@ private Q_SLOTS:
         QFile file(m_vault + u"/.brulion/config.json"_s);
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QByteArray json = file.readAll();
+        file.close(); // (Windows replaces no file that is open)
         QVERIFY(json.contains("\"journalsFolder\": \"Dziennik\""));
         QVERIFY(json.contains("\"weekStartsOn\": 0")); // (the file's convention: 0 is Sunday)
         // A live client's change is undone with the rest of its changes.
-        QVERIFY(scripting()->setSetting(u"live:Claude Code"_s, u"pageMode"_s, u"outline"_s, &error));
+        QVERIFY2(scripting()->setSetting(u"live:Claude Code"_s, u"pageMode"_s, u"outline"_s, &error),
+                 qPrintable(error));
         QCOMPARE(m_app->workspace()->vaultConfig().value(u"pageMode"_s).toString(), u"outline"_s);
         QCOMPARE(scripting()->revert(u"Claude Code"_s), 1);
         QCOMPARE(m_app->workspace()->vaultConfig().value(u"pageMode"_s).toString(), u"document"_s);

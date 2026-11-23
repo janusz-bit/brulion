@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QMetaProperty>
 #include <QSettings>
@@ -754,7 +755,8 @@ private Q_SLOTS:
         QCOMPARE(AppSettings::deviceFolderPlace(u"1A2B-3C4D:Notatki/Łódź"_s), u"Memory card › Notatki/Łódź"_s);
         QCOMPARE(AppSettings::deviceFolderPlace(u"/home/jan/Notatki"_s), u"/home/jan/Notatki"_s);
         QCOMPARE(AppSettings::deviceFolderPlace(QString()), QString());
-        QCOMPARE(s.deviceFolderNotebook(uri), s.currentVault()); // (Windows makes it "D:/data/…")
+        // (an absolute path: Windows puts the drive in front, "D:/data/…")
+        QCOMPARE(s.deviceFolderNotebook(uri), QDir::cleanPath(QFileInfo(s.currentVault()).absoluteFilePath()));
         QVERIFY(s.deviceFolderNotebook(uri + u"2"_s).isEmpty());
         // The same link again changes nothing.
         s.setDeviceFolderLink(s.currentVault(), {uri, u"Notatki"_s, u"primary:Syncthing/Notatki"_s});

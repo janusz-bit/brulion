@@ -299,8 +299,8 @@ private Q_SLOTS:
         // A damaged, an encrypted, a bomb-like and a too large file: found by name only, nothing of
         // their bytes in the index.
         for (const QString &path : {Broken, Locked, Bomb, Huge}) {
-            const AttachmentSearch::Hit *hit =
-                    hitFor(indexer->search(QFileInfo(path).completeBaseName(), 10), path);
+            const QList<AttachmentSearch::Hit> found = indexer->search(QFileInfo(path).completeBaseName(), 10);
+            const AttachmentSearch::Hit *hit = hitFor(found, path); // (a pointer into `found`)
             QVERIFY2(hit && hit->nameOnly, qPrintable(path));
         }
         QVERIFY(!hitFor(indexer->search(u"ukryty"_s, 10), Huge));
