@@ -64,7 +64,7 @@ VaultPath pagePath(const QString &folder, const QStringList &parts)
     return base.isEmpty() ? relative : paths::join(base, relative);
 }
 
-/// The settings of the notebook that name folders (and the journal template), with their keys.
+/// The settings of the notebook that name folders (and the templates, the theme page), with their keys.
 struct SpecialSetting {
     const char *key;
     const char *special;
@@ -80,6 +80,7 @@ const SpecialSetting kSpecialSettings[] = {
         {"monthlyFolder", "monthly", &VaultConfig::monthlyFolder},             // monthly notes
         {"weeklyTemplate", "weeklyTemplate", &VaultConfig::weeklyTemplate},    // a file
         {"monthlyTemplate", "monthlyTemplate", &VaultConfig::monthlyTemplate}, // a file
+        {"themePage", "themePage", &VaultConfig::themePage},                   // a file: the theme
 };
 
 } // namespace

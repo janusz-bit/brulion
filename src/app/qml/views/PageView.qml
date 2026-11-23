@@ -1132,6 +1132,101 @@ FocusScope {
         }
     }
 
+    // A theme page's state (docs/UI.md "Look & feel", ThemePages): in use or not — with "Use it" —,
+    // no ```theme block yet, and the lines it ignored (a muted chip: the rest of the theme applies),
+    // the first of them with its reason and a button to it. Follows the editing (a save reads the
+    // page again). Made only for theme pages that are no extension page (their chip is above).
+    readonly property bool isThemePage: ThemePages.revision >= 0 && root.noteRoute && root.routePath !== ""
+                                        && root.extensionState === "" && ThemePages.isThemePage(root.routePath)
+    Loader {
+        active: root.isThemePage && !root.inSidePanel
+        visible: !editor.toolbarVisible
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: Theme.space4
+        anchors.bottomMargin: Theme.space2
+        z: 2
+        sourceComponent: themeStateComponent
+    }
+    Component {
+        id: themeStateComponent
+        Rectangle {
+            id: themeChip
+            objectName: "pageThemeState"
+            readonly property int revision: ThemePages.revision
+            readonly property bool applied: revision >= 0 && ThemePages.pageApplied(root.routePath)
+            readonly property int tokens: revision >= 0 ? ThemePages.pageTokens(root.routePath) : 0
+            readonly property int blocks: revision >= 0 ? ThemePages.pageBlocks(root.routePath) : 0
+            readonly property int issueCount: revision >= 0 ? ThemePages.pageIssueCount(root.routePath) : 0
+            readonly property int issueLine: issueCount > 0 ? ThemePages.pageIssueLine(root.routePath) : -1
+            readonly property string issueText: issueCount > 0 ? ThemePages.pageIssueText(root.routePath) : ""
+            readonly property string label: {
+                if (blocks === 0)
+                    return qsTr("Theme: no ```theme block yet")
+                const state = applied ? qsTr("Theme: in use") : qsTr("Theme: not in use")
+                if (issueCount > 0)
+                    return qsTr("%1 · %n line(s) ignored, %2", "", issueCount).arg(state).arg(issueText)
+                return qsTr("%1 · %n token(s)", "", tokens).arg(state)
+            }
+            width: Math.min(themeRow.implicitWidth + 2 * Theme.space2, root.width - 2 * Theme.space4)
+            height: themeRow.implicitHeight + 2 * Theme.space1
+            radius: Theme.radius
+            color: Theme.bg
+            border.color: Theme.borderSubtle
+            Accessible.role: Accessible.StatusBar
+            Accessible.name: themeChip.label
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: Theme.radius
+                color: Theme.bgSunken
+            }
+            RowLayout {
+                id: themeRow
+                x: Theme.space2
+                y: Theme.space1
+                width: parent.width - 2 * Theme.space2
+                spacing: Theme.space2
+                BIcon {
+                    name: themeChip.issueCount > 0 ? "triangle-alert" : "palette"
+                    size: Theme.iconSizeSm
+                    color: Theme.fgMuted
+                }
+                BText {
+                    objectName: "pageThemeLabel"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 420
+                    text: themeChip.label
+                    variant: "small"
+                    elide: Text.ElideRight
+                }
+                BButton {
+                    objectName: "pageThemeUse"
+                    visible: !themeChip.applied && themeChip.blocks > 0
+                    size: "small"
+                    variant: "primary"
+                    text: qsTr("Use it")
+                    onClicked: ThemePages.pick(root.routePath)
+                }
+                BButton {
+                    objectName: "pageThemeLine"
+                    visible: themeChip.issueLine >= 0
+                    size: "small"
+                    variant: "ghost"
+                    text: qsTr("Line %1").arg(themeChip.issueLine + 1)
+                    onClicked: AppController.openPage(root.routePath, themeChip.issueLine)
+                }
+                BIconButton {
+                    label: qsTr("Themes in Settings")
+                    iconName: "settings"
+                    size: "small"
+                    onClicked: AppController.navigate({ view: "settings", section: "appearance" })
+                }
+            }
+        }
+    }
+
     // Vim's mode in the corner where the shell's status bar does not show it (docs/UI.md "Vim mode").
     VimStatus {
         objectName: "pageVimStatus"

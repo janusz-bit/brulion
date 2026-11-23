@@ -82,6 +82,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacemacros.cpp
     ${_brulion_shell_dir}/workspaceapp.cpp
     ${_brulion_shell_dir}/appscripting.h ${_brulion_shell_dir}/appscripting.cpp
+    ${_brulion_shell_dir}/themepages.h ${_brulion_shell_dir}/themepages.cpp
     ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
     ${_brulion_shell_dir}/chatlineage.h ${_brulion_shell_dir}/chatlineage.cpp
     ${_brulion_shell_dir}/chatschedules.h ${_brulion_shell_dir}/chatschedules.cpp
@@ -229,6 +230,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellSyncFooter.qml
     qml/shell/ShellTabBar.qml
     qml/shell/ShellTabPane.qml
+    qml/shell/ShellThemePages.qml
     qml/shell/ShellTopBar.qml
     qml/shell/ShellTrayCalendar.qml
     qml/shell/ShellUpdateBanner.qml

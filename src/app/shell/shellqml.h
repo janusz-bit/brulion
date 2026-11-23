@@ -9,6 +9,7 @@
 //   McpServerSupervisor uncreatable — AppController.mcpServer (the remote MCP server while the app runs)
 //   SemanticSearch   uncreatable — Workspace.semantic (search by meaning)
 //   RecentNotebooks  uncreatable — AppController.recentNotebooks (the start screen's list)
+//   ThemePages       singleton — AppController::themePages() (the notebook's theme pages)
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
 //   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceCalendars, WorkspaceBackups, WorkspaceExtensions,
 //   WorkspaceChats   uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
@@ -48,6 +49,7 @@
 #include "recentnotebooks.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
+#include "themepages.h"
 #include "viewtraits.h"
 #include "webclippersetup.h"
 #include "workspace.h"
@@ -146,6 +148,18 @@ public:
     static AppScripting *create(QQmlEngine *, QJSEngine *)
     {
         return detail::cppOwned(detail::controllerForQml()->scripting());
+    }
+};
+
+struct ThemePagesForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ThemePages)
+    QML_NAMED_ELEMENT(ThemePages)
+    QML_SINGLETON
+public:
+    static ThemePages *create(QQmlEngine *, QJSEngine *)
+    {
+        return detail::cppOwned(detail::controllerForQml()->themePages());
     }
 };
 

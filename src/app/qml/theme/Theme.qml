@@ -25,8 +25,9 @@ import Brulion
 // red whatever the accent.
 //
 // Overrides (docs/EXTENSIONS.md "The app (`b.app`)": an extension's b.app.theme, an AI agent's live
-// theme): every token of the catalog (core extensions/appapi.cpp themeTokens(): the colours below,
-// radiusXs … radiusXl, focusRingWidth, fontUi/fontSans/fontSerif/fontMono) can be replaced. The
+// theme, a theme page picked in Settings → Appearance): every token of the catalog (core
+// extensions/appapi.cpp themeTokens(): the colours below, radiusXs … radiusXl, focusRingWidth, the
+// spacing unit `space`, fontUi/fontSans/fontSerif/fontMono) can be replaced. The
 // palette's tokens have them already (ThemeColors); every other colour keeps its own value as
 // `_<name>Base` and reads `_pick("<name>", _<name>Base)` (the override from palette.overrides through
 // palette.pickText(): a C++ method's QColor cannot be stored in a compiled `color`), sizes
@@ -417,16 +418,18 @@ QtObject {
     readonly property int weightBold: Font.Bold
 
     // ---- Spacing (4 px grid), radii, sizes ------------------------------------------------
-    readonly property int space1: 4
-    readonly property int space2: 8
-    readonly property int space3: 12
-    readonly property int space4: 16
-    readonly property int space5: 20
-    readonly property int space6: 24
-    readonly property int space8: 32
-    readonly property int space10: 40
-    readonly property int space12: 48
-    readonly property int space16: 64
+    /// The grid's unit: 4 px, or a theme's `space` (3 … 6) — every spaceN is N units.
+    readonly property int spaceUnit: palette.pickNumber(palette.overrides, "space", 4)
+    readonly property int space1: spaceUnit
+    readonly property int space2: 2 * spaceUnit
+    readonly property int space3: 3 * spaceUnit
+    readonly property int space4: 4 * spaceUnit
+    readonly property int space5: 5 * spaceUnit
+    readonly property int space6: 6 * spaceUnit
+    readonly property int space8: 8 * spaceUnit
+    readonly property int space10: 10 * spaceUnit
+    readonly property int space12: 12 * spaceUnit
+    readonly property int space16: 16 * spaceUnit
 
     // Soft shapes (chat apps rather than an IDE): controls 10, cards and menus 14, dialogs 22,
     // sheets from an edge 28 at their free corners; chips, search fields, the phone's navigation

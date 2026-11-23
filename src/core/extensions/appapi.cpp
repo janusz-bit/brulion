@@ -44,7 +44,9 @@ QList<ThemeToken> makeTokens()
         const char *name;
         double min, max;
     } numbers[] = {{"radiusXs", 0, 24}, {"radiusSm", 0, 24}, {"radius", 0, 32},
-                   {"radiusLg", 0, 40}, {"radiusXl", 0, 48}, {"focusRingWidth", 1, 6}};
+                   {"radiusLg", 0, 40}, {"radiusXl", 0, 48}, {"focusRingWidth", 1, 6},
+                   // the spacing unit: Theme.space1 (4 px), space2 … space16 its multiples
+                   {"space", 3, 6}};
     for (const auto &n : numbers)
         tokens.append({QString::fromLatin1(n.name), ThemeTokenKind::Number, n.min, n.max});
     for (const char *name : {"fontUi", "fontSans", "fontSerif", "fontMono"})
@@ -188,6 +190,16 @@ bool textField(const QVariantMap &item, const QString &key, int max, bool oneLin
 }
 
 } // namespace
+
+bool themeTokenValue(const ThemeToken &token, const QVariant &value, QVariant *out, QString *error)
+{
+    return tokenValue(token, value, out, error);
+}
+
+QString nearestThemeToken(QStringView name)
+{
+    return nearestToken(name);
+}
 
 const QList<ThemeToken> &themeTokens()
 {

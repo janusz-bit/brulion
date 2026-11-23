@@ -44,6 +44,7 @@ QtObject {
             case "monthly": name = qsTr("folder of monthly notes"); break
             case "weeklyTemplate": name = qsTr("weekly note template"); break
             case "monthlyTemplate": name = qsTr("monthly note template"); break
+            case "themePage": name = qsTr("theme page"); break
             }
             names += (i > 0 ? ", " : "") + name
         }

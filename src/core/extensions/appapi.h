@@ -36,10 +36,16 @@ struct ThemeToken {
 };
 
 /// Every token an extension may override, in Theme.qml's order: the surfaces, text, lines,
-/// accent and links, tags, states, chips, selection, diffs, the radii, the focus ring, fonts.
+/// accent and links, tags, states, chips, selection, diffs, the radii, the focus ring, the spacing
+/// unit (`space`), fonts.
 const QList<ThemeToken> &themeTokens();
 /// The token `name` (exact, case-sensitive), nullptr when there is none.
 const ThemeToken *themeToken(QStringView name);
+/// The token nearest to a misspelt `name` (at most 3 edits, any case), "" when none is near.
+QString nearestThemeToken(QStringView name);
+/// `value` checked against `token`'s kind and range, normalized into `*out` (a colour lower case,
+/// a number a double, a font trimmed); false and `*error` (English) when it does not fit.
+bool themeTokenValue(const ThemeToken &token, const QVariant &value, QVariant *out, QString *error);
 
 /// One extension's overrides of the theme (b.app.theme): tokens for both modes, and tokens for
 /// the dark or the light mode only (those win over `both` in their mode). Values are normalized

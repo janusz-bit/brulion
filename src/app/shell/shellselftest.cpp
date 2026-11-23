@@ -12,6 +12,8 @@
 #include "mediaplayback.h"
 #include "pagecontroller.h"
 #include "shortcutmap.h"
+#include "themepages.h"
+#include "themepalette.h"
 #include "traypopup.h"
 #include "uidriver.h"
 #include "voicerecorder.h"
@@ -9978,7 +9980,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 ///     its menu (phones: the bar shows it), and the view it already has stays checked there; the
 ///     quick note button's switch hides it; wide windows: the rail widens over the page panel under
 ///     the pointer, not with its switch off; "Restore the default look" brings the logo's colours
-///     back. Editor → Font → "Other…" opens the font picker; cancelled, the selection does not
+///     back; the look saved as a theme page is listed under Themes, a tap applies it, None takes it
+///     away. Editor → Font → "Other…" opens the font picker; cancelled, the selection does not
 ///     move; a missing family names the serif or sans-serif font used instead. The settings are
 ///     put back at the end.
 void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
@@ -10490,6 +10493,45 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                          && (color("accent") == u"#ff7a66" || color("accent") == u"#c4422f");
               }),
               "its “Restore” brings the default coral back");
+    }
+
+    // Themes (docs/UI.md "Look & feel"): the look saved as a theme page is listed under Themes; a
+    // tap on it applies it — the notebook's choice, its tokens the theme's bottom layer —, "None"
+    // takes it away. The page goes to the trash again.
+    {
+        ThemePages *themes = app->themePages();
+        const QVariantMap before = ui::ThemeOverrides::instance()->tokens(dark);
+        const QString page = themes->exportCurrent();
+        check(!page.isEmpty() && waitFor([&] { return themes->isThemePage(page) && themes->count() >= 1; }),
+              "\"Save the look as a theme page\" makes a theme page, and the list has it");
+        // Its row: the first of the list when it is the notebook's only theme page.
+        int index = -1;
+        const QVariantList rows = themes->pages();
+        for (qsizetype i = 0; i < rows.size(); ++i)
+            if (rows[i].toMap().value(u"path"_s).toString() == page)
+                index = int(i);
+        const QString rowName = u"themePage_%1"_s.arg(index);
+        QQuickItem *row = index >= 0 ? shownItem(rowName) : nullptr;
+        // (The list's rows are made again when it changes: the row is found anew, not kept.)
+        const auto selectedRow = [&] {
+            QQuickItem *now = shownNamed(window->contentItem(), rowName);
+            return now && now->property("selected").toBool();
+        };
+        check(row != nullptr && shownItem(u"themePage_none"_s) != nullptr && shownItem(u"themePagesExport"_s) != nullptr,
+              "Appearance → Themes lists the theme page next to None, with \"Save the look as a theme page\"");
+        check(activate(row) && waitFor([&] {
+                  return themes->current() == page
+                         && app->workspace()->vaultConfig().value(u"themePage"_s).toString() == page
+                         && !ui::ThemeOverrides::instance()->tokens(dark).value(u"bg"_s).toString().isEmpty()
+                         && selectedRow();
+              }),
+              "a tap on a theme page applies it as the notebook's theme (its row selected)");
+        check(activate(shownItem(u"themePage_none"_s)) && waitFor([&] {
+                  return themes->current().isEmpty() && ui::ThemeOverrides::instance()->tokens(dark) == before;
+              }),
+              "None takes the theme page away");
+        app->workspace()->deletePage(page);
+        waitFor([&] { return !themes->isThemePage(page); });
     }
 
     // Settings → Editor → Font → "Other…" opens the picker; cancelled, the selection stays on the

@@ -485,15 +485,15 @@ end, { label = "Ile otwartych zadań" })
 `b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (pole `thoughts` odpowiedzi: to, co model myślał — streszczenie myślenia Claude'a, rozumowanie serwera, myśli modelu na urządzeniu), `images` (obrazki z notatnika dla modelu, który widzi: `b.ai({ prompt = "Co tu jest napisane?", images = { "paragon.jpg" } })`), `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
 
 ## Aplikacja
-`b.app` to sam Brulion: to, co pokazuje, jego polecenia, ustawienia tego urządzenia, kolory, górny pasek, pasek stanu i menu. Czytanie nie wymaga niczego; zmienianie wymaga uprawnienia `aplikacja` (`uprawnienia: [aplikacja]`). Zmienia się aplikacja na tym urządzeniu — tak jak przy ustawieniach zmienianych ręcznie — a to, co rozszerzenie dodało do aplikacji, znika, gdy je wyłączysz.
+`b.app` to sam Brulion: to, co pokazuje, jego polecenia, ustawienia tego urządzenia i notatnika, kolory, górny pasek, pasek stanu i menu. Czytanie nie wymaga niczego; zmienianie wymaga uprawnienia `aplikacja` (`uprawnienia: [aplikacja]`). Zmienia się aplikacja na tym urządzeniu — tak jak przy ustawieniach zmienianych ręcznie — a to, co rozszerzenie dodało do aplikacji, znika, gdy je wyłączysz.
 
 | Funkcja | Co robi |
 |---|---|
 | `b.app.state()` | co jest na ekranie: `view` (`"journals"`, `"page"`, `"calendar"` …), `page`, `date`, `dark`, `touch`, `narrow`, `width`, `height`, `platform`, `language` |
 | `b.app.commands()` | polecenia palety, każde `{ id, title, shortcut, enabled }` |
 | `b.app.run(id)` | uruchamia jedno z nich: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
-| `b.app.settings()` | ustawienia, które rozszerzenie może zmienić, z wartościami i tym, co przyjmują |
-| `b.app.get(klucz)`, `b.app.set(klucz, wartość)` | jedno ustawienie: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)` |
+| `b.app.settings()` | ustawienia, które rozszerzenie może zmienić, z wartościami i tym, co przyjmują: tego urządzenia (`scope = "device"`), potem własne ustawienia notatnika (`scope = "notebook"`, zapisane w `.brulion/config.json` i synchronizowane: `journalsFolder`, `journalFileFormat`, `journalTemplate`, `templatesFolder`, `newPagesFolder`, `weekStartsOn`, `defaultReminderTime`, fiszkowe `flashcards.tags`, `flashcards.clozeBold` …, `themePage`) |
+| `b.app.get(klucz)`, `b.app.set(klucz, wartość)` | jedno ustawienie: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; ustawienia notatnika dla każdego jego urządzenia: `b.app.set("journalsFolder", "Dziennik")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Motywy/Sepia.md")` |
 | `b.app.navigate(widok)` | pokazuje widok: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
 | `b.app.open(strona, { line = 12, side = true })` | otwiera stronę, w danym wierszu, w panelu bocznym |
 | `b.app.back()` | wraca |
@@ -506,7 +506,7 @@ end, { label = "Ile otwartych zadań" })
 
 Przechodzenie (`navigate`, `open`, `back`, `run`) i komunikaty dzieją się po wywołaniu — w poleceniach, akcjach i reakcjach, nie podczas wczytywania strony. Reakcja `"route"` uruchamia się, gdy ekran pokazuje coś innego: `e.view`, `e.page`, `e.date`.
 
-**Kolory.** `b.app.theme` przyjmuje nazwy tokenów wyglądu Brulionu: `bg`, `bgElevated`, `bgSunken` (powierzchnie), `fg`, `fgMuted` (tekst), `accent`, `link`, `tagFg`, `border`, `selection`, `mark` (wyróżnienia), `danger`, `warning`, `success` i inne, zaokrąglenia `radius`, `radiusSm`, `radiusLg` oraz czcionki `fontUi`, `fontSans`, `fontSerif`, `fontMono`. Kolor to `"#rrggbb"`; kolory jednego trybu idą do `dark = { … }` albo `light = { … }`. Literówka w nazwie to błąd, który podaje właściwą nazwę.
+**Kolory.** `b.app.theme` przyjmuje nazwy tokenów wyglądu Brulionu: `bg`, `bgElevated`, `bgSunken` (powierzchnie), `fg`, `fgMuted` (tekst), `accent`, `link`, `tagFg`, `border`, `selection`, `mark` (wyróżnienia), `danger`, `warning`, `success` i inne, zaokrąglenia `radius`, `radiusSm`, `radiusLg`, odstępy między elementami `space` (od 3 do 6, zwykle 4) oraz czcionki `fontUi`, `fontSans`, `fontSerif`, `fontMono`. Kolor to `"#rrggbb"`; kolory jednego trybu idą do `dark = { … }` albo `light = { … }`. Literówka w nazwie to błąd, który podaje właściwą nazwę. Te same nazwy, jako zwykłe wiersze bloku `theme`, tworzą stronę motywu, która nie potrzebuje żadnego kodu ([[Pierwsze kroki#Motywy|Motywy]]); kolory rozszerzenia kładą się na nią.
 
 ```luau
 -- Sepia: strony w kolorze papieru w jasnym trybie, morski akcent, łagodniejsze rogi.

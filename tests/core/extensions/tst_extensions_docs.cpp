@@ -247,7 +247,12 @@ class TestExtensionsDocs : public QObject {
                                         {u"editorWidth"_s, 680},   {u"accent"_s, u"coral"_s},
                                         {u"readingMode"_s, false}, {u"editorFont"_s, u"sans"_s},
                                         {u"sourceMode"_s, false},  {u"lineSpacing"_s, u"normal"_s},
-                                        {u"wordCount"_s, true}};
+                                        {u"wordCount"_s, true},
+                                        // the notebook's own (scope "notebook")
+                                        {u"journalsFolder"_s, u"journals"_s}, {u"journalFileFormat"_s, u"yyyy-MM-dd"_s},
+                                        {u"weekStartsOn"_s, u"monday"_s},     {u"themePage"_s, QString()}};
+            static const QStringList notebook{u"journalsFolder"_s, u"journalFileFormat"_s, u"weekStartsOn"_s,
+                                              u"themePage"_s};
             if (operation == u"state")
                 return QVariantMap{{u"view"_s, u"page"_s},     {u"route"_s, QVariantMap{{u"view"_s, u"page"_s}}},
                                    {u"page"_s, u"Zakupy"_s},   {u"path"_s, u"Zakupy.md"_s},
@@ -262,7 +267,9 @@ class TestExtensionsDocs : public QObject {
             if (operation == u"settings") {
                 QVariantList out;
                 for (auto it = settings.cbegin(); it != settings.cend(); ++it)
-                    out << QVariantMap{{u"key"_s, it.key()}, {u"value"_s, it.value()}};
+                    out << QVariantMap{{u"key"_s, it.key()},
+                                       {u"value"_s, it.value()},
+                                       {u"scope"_s, notebook.contains(it.key()) ? u"notebook"_s : u"device"_s}};
                 return out;
             }
             if (operation == u"get" || operation == u"set") {

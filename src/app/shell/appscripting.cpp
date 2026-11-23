@@ -12,6 +12,7 @@
 #include "util/paths.h"
 
 #include <QMetaProperty>
+#include <QRegularExpression>
 #include <QPointer>
 #include <QTimer>
 
@@ -156,6 +157,65 @@ QList<SettingSpec> makeSpecs()
     return specs;
 }
 
+QList<SettingSpec> makeNotebookSpecs()
+{
+    const auto spec = [](const char *key, const char *kind, const char *label) {
+        SettingSpec s;
+        s.key = QString::fromLatin1(key);
+        s.group = u"notebook"_s;
+        s.kind = QString::fromLatin1(kind);
+        s.property = s.key;
+        s.label = QString::fromLatin1(label);
+        s.notebook = true;
+        return s;
+    };
+    const auto choice = [&](const char *key, QStringList options, const char *label) {
+        SettingSpec s = spec(key, "choice", label);
+        s.options = std::move(options);
+        return s;
+    };
+    QList<SettingSpec> specs;
+    specs << spec("journalsFolder", "path", "the folder of the daily notes");
+    specs << spec("journalFileFormat", "text", "the daily notes' file names, a date format (\"yyyy-MM-dd\")");
+    specs << spec("journalTemplate", "path", "the daily notes' template, a page's path (\"templates/journal.md\")");
+    specs << spec("templatesFolder", "path", "the folder of the templates");
+    specs << spec("newPagesFolder", "path", "the folder of new pages (\"\": the notebook's root)");
+    specs << spec("attachmentsFolder", "path", "the folder of pasted pictures and files");
+    specs << spec("weeklyFolder", "path", "the folder of the weekly notes");
+    specs << spec("weeklyFileFormat", "text", "the weekly notes' file names (\"yyyy-'W'ww\")");
+    specs << spec("weeklyTemplate", "path", "the weekly notes' template");
+    specs << spec("monthlyFolder", "path", "the folder of the monthly notes");
+    specs << spec("monthlyFileFormat", "text", "the monthly notes' file names (\"yyyy-MM\")");
+    specs << spec("monthlyTemplate", "path", "the monthly notes' template");
+    specs << choice("journalMode", {u"outline"_s, u"document"_s}, "how daily notes are edited");
+    specs << choice("pageMode", {u"document"_s, u"outline"_s}, "how new pages are edited");
+    specs << spec("defaultReminderTime", "text", "the time of a reminder given without one, \"HH:mm\"");
+    specs << choice("weekStartsOn",
+                    {u"monday"_s, u"tuesday"_s, u"wednesday"_s, u"thursday"_s, u"friday"_s, u"saturday"_s,
+                     u"sunday"_s},
+                    "the first day of the week");
+    // The flashcards' card settings (the "flashcards" object; docs/SYNTAX.md §15).
+    specs << spec("flashcards.tags", "text", "the tags of the decks, \"flashcards, fiszki\" (\"\": this device's)");
+    specs << spec("flashcards.singleLineSeparator", "text", "a one-line card's separator (\"::\")");
+    specs << spec("flashcards.singleLineReversedSeparator", "text", "a reversed one-line card's separator (\":::\")");
+    specs << spec("flashcards.multilineSeparator", "text", "a multi-line card's separator line (\"?\")");
+    specs << spec("flashcards.multilineReversedSeparator", "text", "a reversed multi-line card's separator (\"??\")");
+    specs << spec("flashcards.multilineEndMarker", "text", "the line that ends a multi-line card (\"\": a blank line)");
+    specs << spec("flashcards.clozeHighlights", "toggle", "==highlights== are clozes");
+    specs << spec("flashcards.clozeBold", "toggle", "**bold text** is a cloze");
+    specs << spec("flashcards.clozeCurly", "toggle", "{{curly brackets}} are clozes");
+    specs << spec("flashcards.foldersAsDecks", "toggle", "a card's deck is its note's folder");
+    specs << spec("themePage", "path", "the notebook's theme page (\"\": none; Settings → Appearance)");
+    return specs;
+}
+
+const QStringList &weekDays()
+{
+    static const QStringList days{u"monday"_s, u"tuesday"_s,  u"wednesday"_s, u"thursday"_s,
+                                  u"friday"_s, u"saturday"_s, u"sunday"_s};
+    return days;
+}
+
 // Edit distance (the nearest key in an error).
 int distance(QStringView a, QStringView b)
 {
@@ -210,16 +270,35 @@ const QList<SettingSpec> &AppScripting::settingSpecs()
     return specs;
 }
 
+const QList<SettingSpec> &AppScripting::notebookSettingSpecs()
+{
+    static const QList<SettingSpec> specs = makeNotebookSpecs();
+    return specs;
+}
+
 const SettingSpec *AppScripting::settingSpec(const QString &key)
 {
-    for (const SettingSpec &s : settingSpecs())
-        if (s.key == key)
-            return &s;
+    for (const QList<SettingSpec> *specs : {&settingSpecs(), &notebookSettingSpecs()})
+        for (const SettingSpec &s : *specs)
+            if (s.key == key)
+                return &s;
     return nullptr;
 }
 
 QVariant AppScripting::read(const SettingSpec &spec) const
 {
+    if (spec.notebook) {
+        // Workspace.config: the same JSON the command line prints (notebook::vaultConfigJson).
+        const QVariantMap config = m_app->workspace()->vaultConfig();
+        const qsizetype dot = spec.property.indexOf(u'.');
+        const QVariant v = dot < 0 ? config.value(spec.property)
+                                   : config.value(spec.property.left(dot)).toMap().value(spec.property.mid(dot + 1));
+        if (spec.key == u"weekStartsOn") {
+            const int day = v.toInt();
+            return day >= 1 && day <= 7 ? weekDays().at(day - 1) : weekDays().first();
+        }
+        return spec.kind == u"toggle" ? QVariant(v.toBool()) : QVariant(v.toString());
+    }
     QObject *target = spec.onApp ? static_cast<QObject *>(m_app) : static_cast<QObject *>(m_app->settings());
     const QVariant v = target->property(spec.property.toLatin1().constData());
     if (spec.kind == u"number")
@@ -233,6 +312,15 @@ QVariant AppScripting::read(const SettingSpec &spec) const
 
 bool AppScripting::write(const SettingSpec &spec, const QVariant &value)
 {
+    if (spec.notebook) {
+        QVariant v = value;
+        if (spec.key == u"weekStartsOn")
+            v = int(weekDays().indexOf(value.toString())) + 1;
+        const qsizetype dot = spec.property.indexOf(u'.');
+        const QVariantMap change = dot < 0 ? QVariantMap{{spec.property, v}}
+                                           : QVariantMap{{spec.property.left(dot), QVariantMap{{spec.property.mid(dot + 1), v}}}};
+        return m_app->workspace()->isOpen() && m_app->workspace()->setConfig(change);
+    }
     QObject *target = spec.onApp ? static_cast<QObject *>(m_app) : static_cast<QObject *>(m_app->settings());
     const int index = target->metaObject()->indexOfProperty(spec.property.toLatin1().constData());
     if (index < 0)
@@ -251,8 +339,17 @@ bool AppScripting::write(const SettingSpec &spec, const QVariant &value)
 QVariantList AppScripting::settings() const
 {
     QVariantList out;
-    for (const SettingSpec &s : settingSpecs()) {
+    QList<const SettingSpec *> specs;
+    for (const SettingSpec &s : settingSpecs())
+        specs << &s;
+    // The notebook's own while one is open (with none they say nothing).
+    if (m_app->workspace()->isOpen())
+        for (const SettingSpec &s : notebookSettingSpecs())
+            specs << &s;
+    for (const SettingSpec *spec : std::as_const(specs)) {
+        const SettingSpec &s = *spec;
         QVariantMap row{{u"key"_s, s.key},
+                        {u"scope"_s, s.notebook ? u"notebook"_s : u"device"_s},
                         {u"group"_s, s.group},
                         {u"kind"_s, s.kind},
                         {u"label"_s, s.label},
@@ -275,9 +372,14 @@ QVariant AppScripting::setting(const QString &key, QString *error) const
     const SettingSpec *spec = settingSpec(key);
     if (!spec) {
         QStringList keys;
-        for (const SettingSpec &s : settingSpecs())
-            keys << s.key;
+        for (const QList<SettingSpec> *specs : {&settingSpecs(), &notebookSettingSpecs()})
+            for (const SettingSpec &s : *specs)
+                keys << s.key;
         *error = unknownWith(u"setting"_s, key, keys);
+        return {};
+    }
+    if (spec->notebook && !m_app->workspace()->isOpen()) {
+        *error = u"“%1” is a setting of the notebook, and no notebook is open"_s.arg(key);
         return {};
     }
     return read(*spec);
@@ -335,11 +437,23 @@ bool AppScripting::setSetting(const QString &whoSet, const QString &key, const Q
                                      .arg(spec->options.join(u", "_s)),
                     false);
         v = items;
+    } else if (spec->kind == u"path") { // the notebook's: a folder or a page from the notebook's root
+        const QString path = type == QMetaType::QString ? paths::normalize(value.toString()) : QString();
+        const QStringList parts = value.toString().split(QRegularExpression(u"[/\\\\]"_s));
+        if (type != QMetaType::QString || value.toString().contains(u'\n') || value.toString().size() > 300
+            || parts.contains(u".."_s) || (!path.isEmpty() && paths::isIgnored(path)))
+            return (*error = u"“%1” is a path in the notebook, from its root (\"\": the root)"_s.arg(key), false);
+        if (key == u"themePage" && !(m_themePageCheck && m_themePageCheck(path)))
+            return (*error = u"“%1” is \"\" or the path of a theme page (a page tagged #theme)"_s.arg(key), false);
+        v = path;
     } else { // text
         if (type != QMetaType::QString || value.toString().size() > 200 || value.toString().contains(u'\n'))
             return (*error = u"“%1” is one line of text (at most 200 characters)"_s.arg(key), false);
-        v = value.toString().trimmed();
+        // (The notebook's texts as given: a separator may keep its blanks; Workspace.setConfig checks them.)
+        v = spec->notebook ? value.toString() : value.toString().trimmed();
     }
+    if (spec->notebook && !m_app->workspace()->isOpen())
+        return (*error = u"“%1” is a setting of the notebook, and no notebook is open"_s.arg(key), false);
     const QVariant before = read(*spec);
     if (before == v)
         return true;
@@ -349,10 +463,16 @@ bool AppScripting::setSetting(const QString &whoSet, const QString &key, const Q
         if (!write(*spec, v))
             qCWarning(lcApp, "b.app.set: %s was not written", qUtf8Printable(spec->key));
     };
-    if (spec->deferred)
+    if (spec->notebook) {
+        // The notebook checks its own (a date format that names one file for every day, a time):
+        // what it refuses is an error, not a silent no.
+        if (!write(*spec, v))
+            return (*error = u"“%1” cannot be %2 in this notebook"_s.arg(key, v.toString().left(60)), false);
+    } else if (spec->deferred) {
         later(apply);
-    else
+    } else {
         apply();
+    }
     if (!live.isEmpty()) {
         m_changes.append({QDateTime::currentDateTime(), live, u"setting"_s, key, before, v, {}});
         ++m_liveRevision;
@@ -557,10 +677,19 @@ void AppScripting::setLiveTheme(const QString &whoSets, const extensions::ThemeL
     Q_EMIT liveChanged();
 }
 
+void AppScripting::setPageTheme(const QString &path, const extensions::ThemeLayer &layer)
+{
+    if (path == m_pageThemePath && layer == m_pageTheme)
+        return;
+    m_pageThemePath = path;
+    m_pageTheme = layer;
+    applyTheme();
+}
+
 QVariantMap AppScripting::theme() const
 {
     QVariantList extensionLayers, liveLayers;
-    QList<extensions::ThemeLayer> layers;
+    QList<extensions::ThemeLayer> layers{m_pageTheme};
     for (const extensions::ThemeInfo &t : m_extensionThemes) {
         extensionLayers << QVariantMap{{u"extension"_s, t.extension},
                                        {u"tokens"_s, extensions::themeLayerTable(t.layer)}};
@@ -570,15 +699,19 @@ QVariantMap AppScripting::theme() const
         liveLayers << QVariantMap{{u"who"_s, who(w)}, {u"tokens"_s, extensions::themeLayerTable(layer)}};
         layers << layer;
     }
-    return {{u"extensions"_s, extensionLayers},
-            {u"live"_s, liveLayers},
-            {u"light"_s, extensions::mergedTheme(layers, false)},
-            {u"dark"_s, extensions::mergedTheme(layers, true)}};
+    QVariantMap out{{u"extensions"_s, extensionLayers},
+                    {u"live"_s, liveLayers},
+                    {u"light"_s, extensions::mergedTheme(layers, false)},
+                    {u"dark"_s, extensions::mergedTheme(layers, true)}};
+    if (!m_pageThemePath.isEmpty())
+        out.insert(u"page"_s,
+                   QVariantMap{{u"path"_s, m_pageThemePath}, {u"tokens"_s, extensions::themeLayerTable(m_pageTheme)}});
+    return out;
 }
 
 void AppScripting::applyTheme()
 {
-    QList<extensions::ThemeLayer> layers;
+    QList<extensions::ThemeLayer> layers{m_pageTheme};
     for (const extensions::ThemeInfo &t : m_extensionThemes)
         layers << t.layer;
     for (const auto &entry : m_liveThemes)
