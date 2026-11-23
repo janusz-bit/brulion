@@ -3308,203 +3308,208 @@
     </message>
     <message>
         <location filename="../src/app/qml/io/CalendarsPanel.qml" line="136"/>
+        <source>Ring the reminders of events</source>
+        <translation>Dzwoń przypomnieniami wydarzeń</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="142"/>
         <source>Tasks in the notes</source>
         <translation>Zadania w notatkach</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="146"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="152"/>
         <source>Page</source>
         <translation>Strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="152"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="158"/>
         <source>The page the calendar&apos;s new tasks go to</source>
         <translation>Strona, na którą trafiają nowe zadania kalendarza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="161"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="167"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="173"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="179"/>
         <source>Fetch again</source>
         <translation>Pobieraj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="176"/>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="338"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="182"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="344"/>
         <source>hourly</source>
         <translation>co godzinę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="176"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="182"/>
         <source>every 6 h</source>
         <translation>co 6 h</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="177"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="183"/>
         <source>daily</source>
         <translation>codziennie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="179"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="185"/>
         <source>How often the subscription is fetched</source>
         <translation>Jak często pobierać subskrypcję</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="190"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="196"/>
         <source>Calendars of other programs</source>
         <translation>Kalendarze innych programów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="196"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="202"/>
         <source>Refresh all</source>
         <translation>Odśwież wszystkie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="204"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="210"/>
         <source>A subscription shows another calendar&apos;s events, read-only. A CalDAV account (Nextcloud, Fastmail, iCloud, Radicale, …) shows its events — new ones and changes go back to the server — and keeps its tasks in sync with task lines of this notebook. Everything is kept on this device: other devices set up their own.</source>
         <translation>Subskrypcja pokazuje wydarzenia innego kalendarza tylko do odczytu. Konto CalDAV (Nextcloud, Fastmail, iCloud, Radicale, …) pokazuje swoje wydarzenia — nowe i zmienione wracają na serwer — i synchronizuje swoje zadania z liniami zadań tego notatnika. Wszystko jest zapisane na tym urządzeniu: inne urządzenia konfiguruje się osobno.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="208"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="214"/>
         <source>In the browser, a calendar&apos;s server must allow this website to read it (CORS); many do not. The apps for Linux, Windows and Android have no such limit.</source>
         <translation>W przeglądarce serwer kalendarza musi pozwolić tej stronie na odczyt (CORS); wiele na to nie pozwala. Aplikacje na Linuksa, Windows i Androida nie mają tego ograniczenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="219"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="225"/>
         <source>Many synced tasks would be deleted at once. Nothing was deleted yet:</source>
         <translation>Naraz zostałoby usuniętych wiele zsynchronizowanych zadań. Nic jeszcze nie usunięto:</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="232"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="238"/>
         <source>Delete them</source>
         <translation>Usuń je</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="245"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="251"/>
         <source>Subscriptions</source>
         <translation>Subskrypcje</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="246"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="252"/>
         <source>Calendars by their address (ICS, webcal://), read-only</source>
         <translation>Kalendarze po adresie (ICS, webcal://), tylko do odczytu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="258"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="264"/>
         <source>https://… or webcal://…</source>
         <translation>https://… albo webcal://…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="267"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="273"/>
         <source>Subscribe</source>
         <translation>Subskrybuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="287"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="293"/>
         <source>For example holidays, a school&apos;s or a team&apos;s calendar, or Google Calendar&apos;s secret address in iCal format.</source>
         <translation>Na przykład święta, kalendarz szkoły albo zespołu, albo tajny adres Kalendarza Google w formacie iCal.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="306"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="312"/>
         <source>Remove the account</source>
         <translation>Usuń konto</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="322"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="328"/>
         <source>Changed on both sides</source>
         <translation>Zmienione po obu stronach</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="325"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="331"/>
         <source>Keep the newer</source>
         <translation>Zachowaj nowsze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="325"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="331"/>
         <source>Keep both</source>
         <translation>Zachowaj oba</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="327"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="333"/>
         <source>When a task changed both here and on the server</source>
         <translation>Gdy zadanie zmieniło się i tutaj, i na serwerze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="334"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="340"/>
         <source>Sync</source>
         <translation>Synchronizacja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="337"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="343"/>
         <source>5 min</source>
         <translation>5 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="337"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="343"/>
         <source>15 min</source>
         <translation>15 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="340"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="346"/>
         <source>How often the account syncs</source>
         <translation>Jak często synchronizować konto</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="347"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="353"/>
         <source>The password of this account is missing on this device: add the account again.</source>
         <translation>Na tym urządzeniu brakuje hasła tego konta: dodaj konto ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="353"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="359"/>
         <source>Add a CalDAV account…</source>
         <translation>Dodaj konto CalDAV…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="363"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="369"/>
         <source>What happened</source>
         <translation>Co się działo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="366"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="372"/>
         <source>Clear</source>
         <translation>Wyczyść</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="398"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="404"/>
         <source>Show less</source>
         <translation>Pokaż mniej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="398"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="404"/>
         <source>Show all (%1)</source>
         <translation>Pokaż wszystkie (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="421"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="427"/>
         <source>Remove the calendar from Brulion?</source>
         <translation>Usunąć kalendarz z Brulionu?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="424"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="430"/>
         <source>Its events are no longer shown and its tasks no longer synced. The calendar stays on its server; task lines already in the notes stay as they are.</source>
         <translation>Jego wydarzenia przestaną być widoczne, a zadania synchronizowane. Kalendarz zostaje na serwerze; linie zadań, które już są w notatkach, pozostaną bez zmian.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="425"/>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="435"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="431"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="441"/>
         <source>Remove</source>
         <translation>Usuń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="431"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="437"/>
         <source>Remove the account from Brulion?</source>
         <translation>Usunąć konto z Brulionu?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="434"/>
+        <location filename="../src/app/qml/io/CalendarsPanel.qml" line="440"/>
         <source>Its calendars are no longer shown or synced on this device and its password is forgotten. Nothing is deleted on the server or in the notes.</source>
         <translation>Jego kalendarze przestaną być widoczne i synchronizowane na tym urządzeniu, a hasło zostanie zapomniane. Nic nie zostanie usunięte na serwerze ani w notatkach.</translation>
     </message>
@@ -6386,8 +6391,8 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Odrzuć wszystkie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="106"/>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="138"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="107"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="139"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
@@ -6401,18 +6406,18 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="120"/>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="153"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="121"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="155"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="126"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="127"/>
         <source>Dismiss</source>
         <translation>Odrzuć</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="161"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="163"/>
         <source>and %n more</source>
         <translation>
             <numerusform>i jeszcze %n</numerusform>
@@ -30447,6 +30452,78 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Do tego dnia</translation>
     </message>
     <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="114"/>
+        <source>CalDAV</source>
+        <translation>CalDAV</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="115"/>
+        <source>subscription</source>
+        <translation>subskrypcja</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="120"/>
+        <location filename="../src/cli/commands_calendar.cpp" line="207"/>
+        <source>No calendars: they are set up in the app (Sync center, Calendars)</source>
+        <translation>Brak kalendarzy: konfiguruje się je w aplikacji (Centrum synchronizacji, Kalendarze)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="132"/>
+        <source>--to is before --from</source>
+        <translation>--to jest przed --from</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="134"/>
+        <source>At most 800 days at a time</source>
+        <translation>Najwyżej 800 dni naraz</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="186"/>
+        <source>(no title)</source>
+        <translation>(bez tytułu)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="206"/>
+        <source>No events in these days</source>
+        <translation>Brak wydarzeń w tych dniach</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="221"/>
+        <source>The calendars of other programs the app shows</source>
+        <translation>Kalendarze innych programów, które pokazuje aplikacja</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="222"/>
+        <source>ICS subscriptions and CalDAV calendars as the app&apos;s last sync left them on this device: {id, kind (subscription, caldav), name, color, visible, readOnly, events, syncedAt, error?} and, for CalDAV, account, tasks (synced with task lines) and alarms (their events&apos; reminders ring). Nothing is fetched here: the app syncs them. Addresses are never listed.</source>
+        <translation>Subskrypcje ICS i kalendarze CalDAV w takim stanie, w jakim zostawiła je na tym urządzeniu ostatnia synchronizacja aplikacji: {id, kind (subscription, caldav), name, color, visible, readOnly, events, syncedAt, error?} oraz, dla CalDAV, account, tasks (synchronizowane z liniami zadań) i alarms (przypomnienia ich wydarzeń dzwonią). Nic nie jest tu pobierane: synchronizuje je aplikacja. Adresów nigdy nie wypisuje.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="232"/>
+        <source>The events of the calendars in a range of days</source>
+        <translation>Wydarzenia kalendarzy w zakresie dni</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="233"/>
+        <source>Every occurrence of every event (series expanded, cancelled and left-out ones not shown) from --from to --to in the device&apos;s time zone: {calendar, calendarId, uid, title, start, end, allDay, recurring, location?, description?, status?}; an all-day event&apos;s start and end are its first and last day. Read from what the app&apos;s last sync kept on this device; calendars whose events the app does not show are left out.</source>
+        <translation>Każde wystąpienie każdego wydarzenia (serie rozwinięte, odwołane i pominięte nie są pokazywane) od --from do --to w strefie czasowej urządzenia: {calendar, calendarId, uid, title, start, end, allDay, recurring, location?, description?, status?}; początek i koniec wydarzenia całodniowego to jego pierwszy i ostatni dzień. Czytane z tego, co ostatnia synchronizacja aplikacji zachowała na tym urządzeniu; kalendarze, których wydarzeń aplikacja nie pokazuje, są pomijane.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="240"/>
+        <source>The first day (default: today)</source>
+        <translation>Pierwszy dzień (domyślnie: dziś)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="241"/>
+        <source>The last day (default: 6 days after --from)</source>
+        <translation>Ostatni dzień (domyślnie: 6 dni po --from)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="243"/>
+        <source>Only this calendar (its name or id)</source>
+        <translation>Tylko ten kalendarz (jego nazwa albo id)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="244"/>
         <location filename="../src/cli/commands_tasks.cpp" line="871"/>
         <source>At most this many (default 200)</source>
         <translation>Najwyżej tyle (domyślnie 200)</translation>
@@ -30477,6 +30554,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Co obliczyć?</translation>
     </message>
     <message>
+        <location filename="../src/cli/commands_calendar.cpp" line="116"/>
         <location filename="../src/cli/commands_tools.cpp" line="49"/>
         <source>error: %1</source>
         <translation>błąd: %1</translation>
@@ -30773,52 +30851,52 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>arguments musi być obiektem</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="176"/>
+        <location filename="../src/cli/registry.cpp" line="177"/>
         <source>Arguments:</source>
         <translation>Argumenty:</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="183"/>
+        <location filename="../src/cli/registry.cpp" line="184"/>
         <source>(required, or --stdin)</source>
         <translation>(wymagany albo --stdin)</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="185"/>
+        <location filename="../src/cli/registry.cpp" line="186"/>
         <source>(required)</source>
         <translation>(wymagany)</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="187"/>
+        <location filename="../src/cli/registry.cpp" line="188"/>
         <source>(or --stdin)</source>
         <translation>(albo --stdin)</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="192"/>
+        <location filename="../src/cli/registry.cpp" line="193"/>
         <source>Destructive: needs --allow-destructive.</source>
         <translation>Niszczące: wymaga --allow-destructive.</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="194"/>
+        <location filename="../src/cli/registry.cpp" line="195"/>
         <source>Writes notes (refused with --read-only; --dry-run shows the change).</source>
         <translation>Zapisuje notatki (odmowa przy --read-only; --dry-run pokazuje zmianę).</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="197"/>
+        <location filename="../src/cli/registry.cpp" line="198"/>
         <source>Brulion&apos;s command line: read and change the notes of a notebook folder.</source>
         <translation>Wiersz poleceń Brulionu: czytaj i zmieniaj notatki w folderze notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="198"/>
+        <location filename="../src/cli/registry.cpp" line="199"/>
         <source>Usage: %1 [global options] &lt;command&gt; [arguments]</source>
         <translation>Użycie: %1 [opcje globalne] &lt;polecenie&gt; [argumenty]</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="199"/>
+        <location filename="../src/cli/registry.cpp" line="200"/>
         <source>Commands:</source>
         <translation>Polecenia:</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="202"/>
+        <location filename="../src/cli/registry.cpp" line="203"/>
         <source>
 Global options:
   --vault &lt;dir&gt;          the notebook folder (else $BRULION_VAULT, else the app&apos;s current notebook)
@@ -35805,183 +35883,183 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::AppController</name>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="444"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="445"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="462"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="463"/>
         <source>Scheduled conversation “%1” started</source>
         <translation>Zaczęła się rozmowa według harmonogramu „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="485"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="486"/>
         <source>Stop</source>
         <translation>Zatrzymaj</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="699"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1717"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="700"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1721"/>
         <source>The notebook folder %1 is not available.</source>
         <translation>Folder notatnika %1 jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1201"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1202"/>
         <source>The command line asked to open a page of another notebook (%1).</source>
         <translation>Wiersz poleceń chciał otworzyć stronę innego notatnika (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1264"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1268"/>
         <source>The note of this reminder no longer exists.</source>
         <translation>Notatka tego przypomnienia już nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1407"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1411"/>
         <source>Could not change the start at sign-in.</source>
         <translation>Nie udało się zmienić uruchamiania po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1457"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1461"/>
         <source>Interface size: %1 %</source>
         <translation>Rozmiar interfejsu: %1 %</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1458"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1462"/>
         <source>Interface size: automatic (%1 %)</source>
         <translation>Rozmiar interfejsu: automatyczny (%1 %)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1570"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1627"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1574"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1631"/>
         <source>Brulion got no lasting access to this folder. Choose it again.</source>
         <translation>Brulion nie dostał trwałego dostępu do tego folderu. Wybierz go jeszcze raz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1571"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1584"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1628"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1575"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1588"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1632"/>
         <source>This folder cannot be used for a notebook.</source>
         <translation>Tego folderu nie można użyć na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1598"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1601"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1602"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1605"/>
         <source>Copying the notes from the folder “%1”…</source>
         <translation>Kopiowanie notatek z folderu „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1600"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1604"/>
         <source>Copying the notes from the folder “%1”… %2 of %3</source>
         <translation>Kopiowanie notatek z folderu „%1”… %2 z %3</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1609"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1613"/>
         <source>The notes of the folder “%1” could not be copied yet — Brulion tries again in the notebook.</source>
         <translation>Notatek z folderu „%1” nie udało się jeszcze skopiować — Brulion spróbuje ponownie w notatniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1622"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1626"/>
         <source>Only a notebook in the app&apos;s storage can sync with a folder of the phone.</source>
         <translation>Z folderem na telefonie może się synchronizować tylko notatnik w pamięci aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1634"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1638"/>
         <source>The notebook “%1” already syncs with this folder.</source>
         <translation>Z tym folderem synchronizuje się już notatnik „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1644"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1648"/>
         <source>This notebook syncs with the folder “%1” now.</source>
         <translation>Ten notatnik synchronizuje się teraz z folderem „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1656"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1660"/>
         <source>This notebook no longer syncs with the folder “%1”. The notes stay in both.</source>
         <translation>Ten notatnik nie synchronizuje się już z folderem „%1”. Notatki zostają w obu miejscach.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1679"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1683"/>
         <source>Choose a folder for the notebook.</source>
         <translation>Wybierz folder na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1868"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1872"/>
         <source>Could not open the notebook %1: %2</source>
         <translation>Nie udało się otworzyć notatnika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1886"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1890"/>
         <source>Could not update the documentation: %1</source>
         <translation>Nie udało się zaktualizować dokumentacji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1890"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1894"/>
         <source>Could not write all sample notes: %1</source>
         <translation>Nie udało się zapisać wszystkich przykładowych notatek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2071"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2075"/>
         <source>Transcribed %1</source>
         <translation>Spisano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2073"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2077"/>
         <source>%1 was not transcribed: %2</source>
         <translation>Nie spisano %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2157"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2161"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2158"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2162"/>
         <source>Reminders work. This is how they will look.</source>
         <translation>Przypomnienia działają. Tak będą wyglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2176"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2180"/>
         <source>Could not schedule the notification: %1</source>
         <translation>Nie udało się zaplanować powiadomienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2178"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2182"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2181"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2185"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2188"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2192"/>
         <source>No system tray on this desktop: notifications cannot be shown yet.</source>
         <translation>Na tym pulpicie nie ma zasobnika systemowego: powiadomień nie da się jeszcze pokazać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2208"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2212"/>
         <source>Quick capture writes into your own notebook. Open or create one first.</source>
         <translation>Szybka notatka trafia do Twojego własnego notatnika. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2229"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2234"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2233"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2238"/>
         <source>The voice note could not be saved.</source>
         <translation>Nie udało się zapisać notatki głosowej.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2370"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2374"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2371"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2375"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="2566"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="2570"/>
         <source>The conversation changed since: nothing was put back.</source>
         <translation>Rozmowa zmieniła się w międzyczasie: niczego nie przywrócono.</translation>
     </message>
@@ -36079,8 +36157,8 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="892"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="909"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="893"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="910"/>
         <source>Too many tabs are open: close some first.</source>
         <translation>Otwartych jest zbyt wiele kart: najpierw zamknij część z nich.</translation>
     </message>
@@ -36162,8 +36240,8 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Dodano do strony „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="439"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="462"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="440"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="463"/>
         <location filename="../src/app/shell/appautomation.cpp" line="469"/>
         <source>Open</source>
         <translation>Otwórz</translation>
@@ -37659,52 +37737,52 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="770"/>
+        <location filename="../src/app/shell/workspace.cpp" line="775"/>
         <source>“%1” is an encrypted page: it is changed only while it is unlocked.</source>
         <translation>„%1” to zaszyfrowana strona: można ją zmieniać tylko, gdy jest odblokowana.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="786"/>
-        <location filename="../src/app/shell/workspace.cpp" line="804"/>
-        <location filename="../src/app/shell/workspace.cpp" line="839"/>
+        <location filename="../src/app/shell/workspace.cpp" line="791"/>
+        <location filename="../src/app/shell/workspace.cpp" line="809"/>
+        <location filename="../src/app/shell/workspace.cpp" line="844"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1041"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1053"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1046"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1058"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1062"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1067"/>
         <source>Untitled canvas</source>
         <translation>Tablica bez tytułu</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1067"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1072"/>
         <source>Could not create the canvas %1: %2</source>
         <translation>Nie udało się utworzyć tablicy %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1421"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1426"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1570"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1591"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1575"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1596"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="355"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1741"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1746"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1744"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1749"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -37835,17 +37913,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1759"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1764"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1774"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1779"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1872"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1877"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
@@ -38622,125 +38700,125 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceCalendars</name>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="448"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="490"/>
         <source>(no title)</source>
         <translation>(bez tytułu)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="596"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="638"/>
         <source>An event needs a title and a date.</source>
         <translation>Wydarzenie musi mieć tytuł i datę.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="646"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="688"/>
         <source>The event could not be saved.</source>
         <translation>Nie udało się zapisać wydarzenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="740"/>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="838"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="782"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="880"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="752"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="794"/>
         <source>This calendar is subscribed already.</source>
         <translation>Ten kalendarz jest już subskrybowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="765"/>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="972"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="807"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1014"/>
         <source>The calendars could not be saved.</source>
         <translation>Nie udało się zapisać kalendarzy.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="895"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="937"/>
         <source>The account has no calendars.</source>
         <translation>Konto nie ma kalendarzy.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="938"/>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="997"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="980"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1039"/>
         <source>The password could not be saved.</source>
         <translation>Nie udało się zapisać hasła.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1171"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1215"/>
         <source>The server refused the user name or password.</source>
         <translation>Serwer odrzucił nazwę użytkownika albo hasło.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1173"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1217"/>
         <source>Nothing was found at this address.</source>
         <translation>Pod tym adresem nic nie znaleziono.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1175"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1219"/>
         <source>The server cannot be reached. Check the address and the connection.</source>
         <translation>Nie można połączyć się z serwerem. Sprawdź adres i połączenie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1177"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1221"/>
         <source>The server did not answer in time.</source>
         <translation>Serwer nie odpowiedział na czas.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1179"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1223"/>
         <source>The answer is not a calendar (perhaps a login page).</source>
         <translation>Odpowiedź nie jest kalendarzem (może to strona logowania).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1181"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1225"/>
         <source>The calendar is too large.</source>
         <translation>Kalendarz jest za duży.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1183"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1227"/>
         <source>The server does not allow this.</source>
         <translation>Serwer na to nie pozwala.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1185"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1229"/>
         <source>The server had a problem. It is tried again later.</source>
         <translation>Serwer miał problem. Brulion spróbuje ponownie później.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1187"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1231"/>
         <source>The server does not let other websites read the calendar (CORS). The apps for Linux, Windows and Android can.</source>
         <translation>Serwer nie pozwala innym stronom odczytać kalendarza (CORS). Aplikacje na Linuksa, Windows i Androida mogą to zrobić.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1189"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1233"/>
         <source>Calendars are not ready.</source>
         <translation>Kalendarze nie są gotowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1190"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1234"/>
         <source>The calendar could not be updated (%1).</source>
         <translation>Nie udało się zaktualizować kalendarza (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1202"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1246"/>
         <source>Updated %1</source>
         <translation>Zaktualizowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1204"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1248"/>
         <source>Not fetched yet</source>
         <translation>Jeszcze nie pobrano</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1229"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1273"/>
         <source>Synced %1</source>
         <translation>Zsynchronizowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1231"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1275"/>
         <source>Not synced yet</source>
         <translation>Jeszcze nie zsynchronizowano</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1337"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1382"/>
         <source>Updated: %n event(s)</source>
         <translation>
             <numerusform>Zaktualizowano: %n wydarzenie</numerusform>
@@ -38749,27 +38827,27 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1342"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1387"/>
         <source>%1 received, %2 sent, %3 deleted</source>
         <translation>odebrano %1, wysłano %2, usunięto %3</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1347"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1392"/>
         <source>Changed on both sides: “%1” — both versions kept</source>
         <translation>Zmienione po obu stronach: „%1” — zachowano obie wersje</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1348"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1393"/>
         <source>Changed on one side and deleted on the other: “%1” kept</source>
         <translation>Zmienione po jednej stronie i usunięte po drugiej: zachowano „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1349"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1394"/>
         <source>Changed on both sides: “%1” — the newer version kept</source>
         <translation>Zmienione po obu stronach: „%1” — zachowano nowszą wersję</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1354"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1399"/>
         <source>%n deletion(s) wait for a confirmation: %1</source>
         <translation>
             <numerusform>%n usunięcie czeka na potwierdzenie: %1</numerusform>
@@ -38778,27 +38856,27 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1388"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1433"/>
         <source>No calendars</source>
         <translation>Brak kalendarzy</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1390"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1435"/>
         <source>Updating calendars…</source>
         <translation>Aktualizowanie kalendarzy…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1392"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1437"/>
         <source>Offline — calendars wait for the network</source>
         <translation>Offline — kalendarze czekają na sieć</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1396"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1441"/>
         <source>Calendars updated %1</source>
         <translation>Kalendarze zaktualizowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1397"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1442"/>
         <source>Calendars not updated yet</source>
         <translation>Kalendarzy jeszcze nie zaktualizowano</translation>
     </message>
@@ -39858,38 +39936,38 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceReminders</name>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="465"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="488"/>
         <source>“%1” is in another notebook and was not snoozed.</source>
         <translation>„%1” jest w innym notatniku, więc nie zostało odłożone.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="481"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="504"/>
         <source>“%1” has changed in the note meanwhile and was not snoozed.</source>
         <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało odłożone.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="487"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="510"/>
         <source>Could not snooze the reminder: %1</source>
         <translation>Nie udało się odłożyć przypomnienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="504"/>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="584"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="527"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="607"/>
         <source>“%1” was not marked done: no notebook is open.</source>
         <translation>Nie oznaczono „%1” jako zrobione: żaden notatnik nie jest otwarty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="589"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="612"/>
         <source>“%1” is in another notebook and was not marked done.</source>
         <translation>„%1” jest w innym notatniku, więc nie zostało oznaczone jako zrobione.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="606"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="629"/>
         <source>“%1” has changed in the note meanwhile and was not marked done.</source>
         <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało oznaczone jako zrobione.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="609"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="632"/>
         <source>Could not mark the task done: %1</source>
         <translation>Nie udało się oznaczyć zadania jako zrobionego: %1</translation>
     </message>
