@@ -1,6 +1,7 @@
 #include "backup/archive.h"
 
 #include "backup/taskrunner_p.h"
+#include "backup/zipwriter_p.h"
 #include "util/paths.h"
 #include "util/unicode.h"
 #include "vault/vaultconfig.h"
@@ -18,6 +19,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include <new>
 #include <utility>
@@ -28,9 +30,9 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
-/// What a read callback returns to make miniz give the entry up (more than its buffer).
-constexpr size_t GiveUp = size_t(-1);
 constexpr int MaxReadAttempts = 3;
+/// A file is read, checksummed and deflated this much at a time: the unit a slice may overrun by.
+constexpr qint64 ReadPieceBytes = 64 << 10;
 /// More than any deflate stream can expand (about 1032:1), with room for headers.
 constexpr qint64 MaxDeflateRatio = 1100;
 constexpr qint64 ReadBufferBytes = 64 << 10;
@@ -62,14 +64,6 @@ QString printable(QString name)
     return name;
 }
 
-/// DOS timestamps cover 1980 … 2107; miniz would overflow its fields otherwise.
-MZ_TIME_T entryTime(qint64 mtimeMs)
-{
-    static const qint64 earliest = QDateTime(QDate(1980, 1, 2), QTime(0, 0)).toSecsSinceEpoch();
-    static const qint64 latest = QDateTime(QDate(2107, 12, 30), QTime(0, 0)).toSecsSinceEpoch();
-    return MZ_TIME_T(std::clamp(mtimeMs / 1000, earliest, latest));
-}
-
 } // namespace
 
 // ---- Writing ----------------------------------------------------------------------------------
@@ -78,10 +72,7 @@ namespace detail {
 
 class WriteTask : public Task {
 public:
-    WriteTask(Sources sources, WriteOptions options, bool inlineRun)
-        : m_sources(std::move(sources)), m_options(std::move(options)), m_inline(inlineRun)
-    { }
-    ~WriteTask() override { closeArchive(); }
+    WriteTask(Sources sources, WriteOptions options) : m_sources(std::move(sources)), m_options(std::move(options)) { }
 
     bool step(int budgetMs) override;
     void cancel() { m_cancel.store(true); }
@@ -95,105 +86,47 @@ public:
     const WriteResult &result() const { return m_result; }
 
 private:
-    /// One attempt at reading a file (the read callback's state).
-    struct Reading {
-        WriteTask *task = nullptr;
+    /// The file being added: read in pieces, a few at a time per step, so that one slice (the
+    /// browser's) never takes more than a moment whatever the file's size.
+    struct Current {
         const SourceFile *source = nullptr;
-        QFile *file = nullptr;
+        std::unique_ptr<QFile> file;
         qint64 size = 0;
         qint64 mtime = 0;
+        qint64 offset = 0;  ///< bytes read and written
         qint64 counted = 0; ///< of the file's bytes in the progress
-        bool changed = false;
-        bool readFailed = false;
+        int attempt = 0;
     };
-    enum class Added { Done, Retry, Skip, Fatal };
+    enum class Pumped { More, Done, Retry, Skip, Fatal };
 
     void open();
     void addFolder(const QString &folder);
-    void addFile(const SourceFile &source);
-    Added addOnce(const SourceFile &source);
+    /// Start `source` (its attempt `attempt`): m_current, or nothing when it is left out.
+    void startFile(const SourceFile &source, int attempt);
+    Pumped pump(const QElapsedTimer &clock, int budgetMs);
+    void finishFile(Pumped how);
     void finishArchive();
-    /// miniz gave up: the run fails if a callback knows why (cancelled, the size limit, a failed
-    /// write); true then.
-    bool failForCallbacks();
+    /// The writer failed: the run fails with the reason it knows.
+    void failForWriter();
     void fail(WriteError error, const QString &detail);
-    void closeArchive();
-
-    static size_t readCallback(void *opaque, mz_uint64 offset, void *buffer, size_t n);
-    static size_t writeCallback(void *opaque, mz_uint64 offset, const void *buffer, size_t n);
 
     Sources m_sources;
     WriteOptions m_options;
-    bool m_inline = false;
     std::atomic_bool m_cancel{false};
     std::atomic<qint64> m_doneBytes{0};
     std::atomic_bool m_finished{false};
     WriteResult m_result;
 
-    mz_zip_archive m_zip{};
-    bool m_zipOpen = false;
     std::unique_ptr<QSaveFile> m_file;
+    std::unique_ptr<ZipWriter> m_zip;
     QString m_workPath;
-    bool m_writeFailed = false;
-    bool m_tooLarge = false;
     bool m_started = false;
     int m_archivedNotebookFiles = 0; ///< .brulion/config.json not counted
     qsizetype m_nextFile = 0;
     qsizetype m_nextFolder = 0;
+    std::optional<Current> m_current;
+    QByteArray m_piece;
 };
-
-size_t WriteTask::writeCallback(void *opaque, mz_uint64 offset, const void *buffer, size_t n)
-{
-    auto *task = static_cast<WriteTask *>(opaque);
-    if (task->m_options.maxBytes > 0 && qint64(offset) + qint64(n) > task->m_options.maxBytes) {
-        task->m_tooLarge = true;
-        return 0;
-    }
-    if ((qint64(offset) != task->m_file->pos() && !task->m_file->seek(qint64(offset)))
-        || task->m_file->write(static_cast<const char *>(buffer), qint64(n)) != qint64(n)) {
-        task->m_writeFailed = true;
-        return 0;
-    }
-    return n;
-}
-
-size_t WriteTask::readCallback(void *opaque, mz_uint64 offset, void *buffer, size_t n)
-{
-    auto *r = static_cast<Reading *>(opaque);
-    if (r->task->m_cancel.load())
-        return GiveUp;
-    if (r->task->m_options.onRead)
-        r->task->m_options.onRead(r->source->path, qint64(offset));
-    if (qint64(offset) >= r->size) {
-        // The end: the entry is committed only if the file still is what was read. (Anything else
-        // costs this entry alone: miniz has not recorded it, and the next one overwrites it.)
-        char extra = 0;
-        const QFileInfo now(r->source->absolutePath);
-        if (r->file->read(&extra, 1) != 0 || !now.exists() || now.size() != r->size
-            || now.lastModified().toMSecsSinceEpoch() != r->mtime) {
-            r->changed = true;
-            return GiveUp;
-        }
-        return 0;
-    }
-    if (qint64(offset) != r->file->pos() && !r->file->seek(qint64(offset))) {
-        r->readFailed = true;
-        return GiveUp;
-    }
-    const qint64 wanted = std::min<qint64>(qint64(n), r->size - qint64(offset));
-    const qint64 got = r->file->read(static_cast<char *>(buffer), wanted);
-    if (got < 0) {
-        r->readFailed = true;
-        return GiveUp;
-    }
-    if (got == 0) { // shorter than when it was opened
-        r->changed = true;
-        return GiveUp;
-    }
-    r->counted += got;
-    r->task->m_doneBytes.fetch_add(got);
-    return size_t(got);
-}
 
 void WriteTask::open()
 {
@@ -220,11 +153,20 @@ void WriteTask::open()
         fail(WriteError::FolderUnwritable, m_file->errorString());
         return;
     }
-    m_zip.m_pWrite = &WriteTask::writeCallback;
-    m_zip.m_pIO_opaque = this;
-    m_zipOpen = mz_zip_writer_init_v2(&m_zip, 0, 0);
-    if (!m_zipOpen)
-        fail(WriteError::WriteFailed, u"cannot start the archive"_s);
+    m_zip = std::make_unique<ZipWriter>(*m_file, ZipWriter::Options{.maxBytes = m_options.maxBytes});
+    m_piece.resize(ReadPieceBytes);
+}
+
+void WriteTask::failForWriter()
+{
+    switch (m_zip->error()) {
+    case ZipWriter::Error::TooLarge:
+        fail(WriteError::TooLarge, u"above the limit of %1 bytes"_s.arg(m_options.maxBytes));
+        break;
+    case ZipWriter::Error::Compression: fail(WriteError::WriteFailed, u"the compression failed"_s); break;
+    case ZipWriter::Error::Misuse: fail(WriteError::WriteFailed, u"the archive writer was misused"_s); break;
+    default: fail(WriteError::WriteFailed, m_file->errorString()); break;
+    }
 }
 
 void WriteTask::addFolder(const QString &folder)
@@ -233,79 +175,110 @@ void WriteTask::addFolder(const QString &folder)
         m_result.skipped.append(folder);
         return;
     }
-    const QByteArray name = folder.toUtf8() + '/';
-    MZ_TIME_T time = entryTime(0);
-    const bool added = mz_zip_writer_add_mem_ex_v2(&m_zip, name.constData(), nullptr, 0, nullptr, 0, 0, 0, 0, &time,
-                                                   nullptr, 0, nullptr, 0);
-    if (!added && !failForCallbacks())
-        fail(WriteError::WriteFailed, m_file->errorString());
+    if (!m_zip->addFolder(folder.toUtf8(), 0))
+        failForWriter();
 }
 
-WriteTask::Added WriteTask::addOnce(const SourceFile &source)
+void WriteTask::startFile(const SourceFile &source, int attempt)
 {
-    QFile file(source.absolutePath);
     const QFileInfo info(source.absolutePath);
     // A link is no file of the notebook (the vault lists none): one put in a file's place since
     // the files were listed — by a sync, by another program — would have the backup read what it
     // points at, a file anywhere on the device. Asked before the file is opened and after.
     if (info.isSymLink()) {
         m_result.skipped.append(source.path);
-        return Added::Skip;
+        return;
     }
     if (!info.exists()) {
         m_result.vanished.append(source.path);
-        return Added::Skip;
-    }
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Unbuffered) || QFileInfo(source.absolutePath).isSymLink()) {
-        m_result.skipped.append(source.path);
-        return Added::Skip;
-    }
-    Reading reading{.task = this,
-                    .source = &source,
-                    .file = &file,
-                    .size = info.size(),
-                    .mtime = info.lastModified().toMSecsSinceEpoch()};
-
-    const bool store = isCompressedFormat(source.path) || (m_inline && reading.size > m_options.inlineDeflateLimit);
-    const mz_uint flags = mz_uint(store ? 0 : m_options.compressionLevel) | MZ_ZIP_FLAG_WRITE_HEADER_SET_SIZE;
-    const QByteArray name = source.path.toUtf8();
-    const MZ_TIME_T time = entryTime(reading.mtime);
-    if (mz_zip_writer_add_read_buf_callback(&m_zip, name.constData(), &WriteTask::readCallback, &reading,
-                                            mz_uint64(reading.size), &time, nullptr, 0, flags, nullptr, 0, nullptr, 0))
-        return Added::Done;
-
-    m_doneBytes.fetch_sub(reading.counted);
-    if (failForCallbacks())
-        return Added::Fatal;
-    if (reading.changed)
-        return Added::Retry;
-    if (reading.readFailed) {
-        m_result.skipped.append(source.path);
-        return Added::Skip;
-    }
-    fail(WriteError::WriteFailed, QString::fromLatin1(mz_zip_get_error_string(mz_zip_get_last_error(&m_zip))));
-    return Added::Fatal;
-}
-
-void WriteTask::addFile(const SourceFile &source)
-{
-    if (checkEntryPath(source.path) != EntryPath::Ok) {
-        m_result.skipped.append(source.path);
-        m_doneBytes.fetch_add(source.size);
         return;
     }
-    for (int attempt = 0; attempt < MaxReadAttempts; ++attempt) {
-        const Added added = addOnce(source);
-        if (added == Added::Done) {
-            ++m_result.files;
-            if (source.path != vaultConfigPath())
-                ++m_archivedNotebookFiles;
-            return;
-        }
-        if (added != Added::Retry)
-            return;
+    auto file = std::make_unique<QFile>(source.absolutePath);
+    if (!file->open(QIODevice::ReadOnly | QIODevice::Unbuffered) || QFileInfo(source.absolutePath).isSymLink()) {
+        m_result.skipped.append(source.path);
+        return;
     }
-    m_result.skipped.append(source.path); // it keeps changing; the next run takes it
+    Current current;
+    current.source = &source;
+    current.size = info.size();
+    current.mtime = info.lastModified().toMSecsSinceEpoch();
+    current.attempt = attempt;
+    const int level = isCompressedFormat(source.path) ? 0 : m_options.compressionLevel;
+    if (!m_zip->beginFile(source.path.toUtf8(), current.mtime, current.size, level)) {
+        failForWriter();
+        return;
+    }
+    current.file = std::move(file);
+    m_current = std::move(current);
+}
+
+WriteTask::Pumped WriteTask::pump(const QElapsedTimer &clock, int budgetMs)
+{
+    Current &c = *m_current;
+    while (c.offset <= c.size) {
+        if (m_cancel.load()) {
+            fail(WriteError::Cancelled, {});
+            return Pumped::Fatal;
+        }
+        if (m_options.onRead)
+            m_options.onRead(c.source->path, c.offset);
+        if (c.offset >= c.size)
+            break;
+        const qint64 got = c.file->read(m_piece.data(), std::min<qint64>(m_piece.size(), c.size - c.offset));
+        if (got < 0)
+            return Pumped::Skip;
+        if (got == 0) // shorter than when it was opened
+            return Pumped::Retry;
+        c.counted += got;
+        m_doneBytes.fetch_add(got);
+        if (!m_zip->write(m_piece.constData(), got)) {
+            failForWriter();
+            return Pumped::Fatal;
+        }
+        c.offset += got;
+        if (clock.elapsed() >= budgetMs && c.offset < c.size)
+            return Pumped::More;
+    }
+    // The end: the entry is committed only if the file still is what was read. (Anything else
+    // costs this entry alone: the writer starts the next one where this began.)
+    char extra = 0;
+    const QFileInfo now(c.source->absolutePath);
+    if (c.file->read(&extra, 1) != 0 || !now.exists() || now.size() != c.size
+        || now.lastModified().toMSecsSinceEpoch() != c.mtime)
+        return Pumped::Retry;
+    if (!m_zip->endFile()) {
+        failForWriter();
+        return Pumped::Fatal;
+    }
+    return Pumped::Done;
+}
+
+void WriteTask::finishFile(Pumped how)
+{
+    Current c = std::move(*m_current);
+    m_current.reset();
+    switch (how) {
+    case Pumped::Done:
+        ++m_result.files;
+        if (c.source->path != vaultConfigPath())
+            ++m_archivedNotebookFiles;
+        return;
+    case Pumped::Retry:
+        m_zip->abandonFile();
+        m_doneBytes.fetch_sub(c.counted);
+        if (c.attempt + 1 < MaxReadAttempts)
+            startFile(*c.source, c.attempt + 1);
+        else
+            m_result.skipped.append(c.source->path); // it keeps changing; the next run takes it
+        return;
+    case Pumped::Skip:
+        m_zip->abandonFile();
+        m_doneBytes.fetch_sub(c.counted);
+        m_result.skipped.append(c.source->path);
+        return;
+    case Pumped::More:
+    case Pumped::Fatal: return;
+    }
 }
 
 void WriteTask::finishArchive()
@@ -315,25 +288,20 @@ void WriteTask::finishArchive()
         fail(WriteError::NothingArchived, u"none of %1 files could be read"_s.arg(m_sources.notebookFileCount()));
         return;
     }
-    if (!mz_zip_writer_finalize_archive(&m_zip)) {
-        if (!failForCallbacks())
-            fail(WriteError::WriteFailed, m_file->errorString());
-        return;
-    }
-    const qint64 end = qint64(m_zip.m_archive_size);
-    closeArchive();
-    // The manifest: the ZIP's comment follows the end-of-directory record, whose last field is its
-    // length (miniz writes none). Everything is known only now, whether anything was left out too.
+    // The manifest, the ZIP's comment: everything is known only now, whether anything was left out too.
     const QByteArray manifest = backupManifest(
             m_options.notebookId, m_result.skipped.isEmpty() && m_result.vanished.isEmpty(), m_result.files);
-    const char length[2] = {char(manifest.size() & 0xff), char((manifest.size() >> 8) & 0xff)};
+    if (!m_zip->finish(manifest)) {
+        failForWriter();
+        return;
+    }
     // Cut after the manifest: an entry given up may have reached further than the archive's end.
-    const qint64 size = end + manifest.size();
-    if (!m_file->seek(end - 2) || m_file->write(length, 2) != 2 || m_file->write(manifest) != manifest.size()
-        || !m_file->resize(size) || !m_file->commit()) {
+    const qint64 size = m_zip->offset();
+    if (!m_file->resize(size) || !m_file->commit()) {
         fail(WriteError::WriteFailed, m_file->errorString());
         return;
     }
+    m_zip.reset();
     m_file.reset();
     if (m_workPath != m_options.targetPath && !QFile::rename(m_workPath, m_options.targetPath)) {
         QFile::remove(m_workPath);
@@ -344,36 +312,15 @@ void WriteTask::finishArchive()
     m_result.bytes = size;
 }
 
-bool WriteTask::failForCallbacks()
-{
-    if (m_cancel.load())
-        fail(WriteError::Cancelled, {});
-    else if (m_tooLarge)
-        fail(WriteError::TooLarge, u"above the limit of %1 bytes"_s.arg(m_options.maxBytes));
-    else if (m_writeFailed)
-        fail(WriteError::WriteFailed, m_file->errorString());
-    else
-        return false;
-    return true;
-}
-
 void WriteTask::fail(WriteError error, const QString &detail)
 {
-    // (Only the first reason counts; closing removes the temporary file.)
+    // (Only the first reason counts; the temporary file is removed with the QSaveFile.)
     if (m_result.error == WriteError::None) {
         m_result.error = error;
         m_result.detail = detail;
     }
-    closeArchive();
+    m_zip.reset();
     m_file.reset();
-}
-
-void WriteTask::closeArchive()
-{
-    if (m_zipOpen) {
-        mz_zip_writer_end(&m_zip);
-        m_zipOpen = false;
-    }
 }
 
 bool WriteTask::step(int budgetMs)
@@ -393,15 +340,26 @@ bool WriteTask::step(int budgetMs)
             fail(WriteError::Cancelled, {});
             break;
         }
-        if (m_nextFile < m_sources.files.size()) {
-            addFile(m_sources.files.at(m_nextFile++));
+        if (m_current) {
+            const Pumped how = pump(clock, budgetMs);
+            if (how == Pumped::More)
+                return false;
+            finishFile(how);
+        } else if (m_nextFile < m_sources.files.size()) {
+            const SourceFile &source = m_sources.files.at(m_nextFile++);
+            if (checkEntryPath(source.path) != EntryPath::Ok) {
+                m_result.skipped.append(source.path);
+                m_doneBytes.fetch_add(source.size);
+            } else {
+                startFile(source, 0);
+            }
         } else if (m_nextFolder < m_sources.emptyFolders.size()) {
             addFolder(m_sources.emptyFolders.at(m_nextFolder++));
         } else {
             finishArchive();
             break;
         }
-        if (clock.elapsed() >= budgetMs)
+        if (clock.elapsed() >= budgetMs && m_result.ok())
             return false;
     }
     m_finished.store(true);
@@ -425,7 +383,7 @@ void BackupWriter::start(const Sources &sources, const WriteOptions &options)
 {
     if (m_task)
         return;
-    m_task = std::make_shared<detail::WriteTask>(sources, options, m_runner->isInline());
+    m_task = std::make_shared<detail::WriteTask>(sources, options);
     m_runner->start(m_task, [this] {
         const WriteResult result = m_task->result();
         m_task.reset();
@@ -540,31 +498,105 @@ struct ArchiveReader::Private {
         return name;
     }
 
-    /// Inflate the entry into `out` (nullptr: keep nothing), checksum compared: false when it is
-    /// damaged, gives other than exactly its size or `cancel` is set.
-    bool extract(const ArchiveEntry &entry, char *out, const std::atomic_bool *cancel)
+    /// Inflate the entry, `sink` given its bytes piece by piece (miniz's: at most 64 KiB; false from
+    /// it stops), checksum compared: false when it is damaged, gives other than exactly its size,
+    /// the sink refuses or `cancel` is set.
+    bool extract(const ArchiveEntry &entry, const std::function<bool(const char *, size_t)> &sink,
+                 const std::atomic_bool *cancel)
     {
-        struct Sink {
-            char *out;
+        struct State {
+            const std::function<bool(const char *, size_t)> *sink;
             qint64 left;
             const std::atomic_bool *cancel;
-        } sink{out, entry.size, cancel};
+        } state{&sink, entry.size, cancel};
         const auto write = [](void *opaque, mz_uint64, const void *data, size_t n) -> size_t {
-            auto *s = static_cast<Sink *>(opaque);
+            auto *s = static_cast<State *>(opaque);
             if ((s->cancel && s->cancel->load()) || qint64(n) > s->left)
                 return 0;
-            if (s->out) {
-                std::memcpy(s->out, data, n);
-                s->out += n;
-            }
+            if (!(*s->sink)(static_cast<const char *>(data), n))
+                return 0;
             s->left -= qint64(n);
             return n;
         };
         // miniz succeeds without a byte for an entry it takes for a folder (a DOS attribute, no "/")
         // or one without compressed bytes: only the whole claimed size counts.
-        return mz_zip_reader_extract_to_callback(&zip, mz_uint(entry.index), write, &sink, 0) && sink.left == 0;
+        return mz_zip_reader_extract_to_callback(&zip, mz_uint(entry.index), write, &state, 0) && state.left == 0;
     }
 };
+
+struct Extraction::Private {
+    mz_zip_reader_extract_iter_state *state = nullptr;
+    qint64 size = 0;
+    qint64 done = 0;
+    QByteArray piece;
+    bool finished = false;
+    bool failed = false;
+
+    ~Private()
+    {
+        if (state)
+            mz_zip_reader_extract_iter_free(state); // (its verdict only matters at the end)
+    }
+};
+
+Extraction::Extraction() : d(std::make_unique<Private>()) { }
+
+Extraction::~Extraction() = default;
+
+Extraction::Step Extraction::step(QIODevice *out, int budgetMs, const std::atomic_bool *cancel)
+{
+    if (d->failed)
+        return Step::Failed;
+    if (d->finished)
+        return Step::Done;
+    QElapsedTimer clock;
+    clock.start();
+    const auto fail = [this] {
+        d->failed = true;
+        if (d->state)
+            mz_zip_reader_extract_iter_free(std::exchange(d->state, nullptr));
+        return Step::Failed;
+    };
+    for (;;) {
+        if (cancel && cancel->load())
+            return fail();
+        const size_t got = mz_zip_reader_extract_iter_read(d->state, d->piece.data(), size_t(d->piece.size()));
+        if (got == 0) {
+            // The end, or an error: the checksum and the size are asked at the end.
+            const bool whole = d->done == d->size;
+            const bool ok = mz_zip_reader_extract_iter_free(std::exchange(d->state, nullptr));
+            if (!ok || !whole)
+                return fail();
+            d->finished = true;
+            return Step::Done;
+        }
+        if (qint64(got) > d->size - d->done)
+            return fail();
+        if (out && out->write(d->piece.constData(), qint64(got)) != qint64(got))
+            return fail();
+        d->done += qint64(got);
+        if (clock.elapsed() >= budgetMs)
+            return Step::More;
+    }
+}
+
+std::unique_ptr<Extraction> ArchiveReader::beginExtract(const ArchiveEntry &entry)
+{
+    if (!d->open || entry.folder)
+        return nullptr;
+    std::unique_ptr<Extraction> extraction(new Extraction);
+    extraction->d->size = entry.size;
+    extraction->d->piece.resize(ReadBufferBytes);
+    // (An entry of no bytes has no iterator to read from: it is done at once.)
+    if (entry.size == 0) {
+        extraction->d->finished = true;
+        return extraction;
+    }
+    extraction->d->state = mz_zip_reader_extract_iter_new(&d->zip, mz_uint(entry.index), 0);
+    if (!extraction->d->state)
+        extraction->d->failed = true;
+    return extraction;
+}
 
 ArchiveReader::ArchiveReader(const QString &path) : d(std::make_unique<Private>(path)) { }
 
@@ -585,8 +617,14 @@ ArchiveInfo ArchiveReader::readEntries(const ArchiveLimits &limits)
         d->zip.m_pRead = &Private::readCallback;
         d->zip.m_pIO_opaque = d.get();
         if (d->file.size() <= 0
-            || !mz_zip_reader_init(&d->zip, mz_uint64(d->file.size()), MZ_ZIP_FLAG_DO_NOT_SORT_CENTRAL_DIRECTORY))
+            || !mz_zip_reader_init(&d->zip, mz_uint64(d->file.size()), MZ_ZIP_FLAG_DO_NOT_SORT_CENTRAL_DIRECTORY)) {
+            // A ZIP starts with the first entry's header; its end — the directory — is what an
+            // interrupted copy or download misses.
+            const QByteArray start = d->file.size() >= 4 && d->file.seek(0) ? d->file.read(4) : QByteArray();
+            if (start == "PK\x03\x04" || start == "PK\x05\x06")
+                return refuse(ArchiveProblem::Truncated, u"a ZIP archive without its end: cut short or damaged"_s);
             return refuse(ArchiveProblem::NotAZip, u"no ZIP archive"_s);
+        }
         d->open = true;
     }
     const mz_uint count = mz_zip_reader_get_num_files(&d->zip);
@@ -652,7 +690,8 @@ bool ArchiveReader::verify(const ArchiveEntry &entry, const std::atomic_bool *ca
 {
     if (!d->open || entry.folder)
         return d->open;
-    return d->extract(entry, nullptr, cancel);
+    return d->extract(
+            entry, [](const char *, size_t) { return true; }, cancel);
 }
 
 std::optional<QByteArray> ArchiveReader::read(const ArchiveEntry &entry)
@@ -669,9 +708,28 @@ std::optional<QByteArray> ArchiveReader::read(const ArchiveEntry &entry)
     } catch (const std::bad_alloc &) {
         return std::nullopt;
     }
-    if (!d->extract(entry, bytes.data(), nullptr))
+    char *out = bytes.data();
+    const bool ok = d->extract(
+            entry,
+            [&out](const char *data, size_t n) {
+                std::memcpy(out, data, n);
+                out += n;
+                return true;
+            },
+            nullptr);
+    if (!ok)
         return std::nullopt;
     return bytes;
+}
+
+bool ArchiveReader::extractTo(const ArchiveEntry &entry, QIODevice &out, const std::atomic_bool *cancel)
+{
+    if (!d->open || entry.folder)
+        return false;
+    return d->extract(
+            entry,
+            [&out](const char *data, size_t n) { return out.write(data, qint64(n)) == qint64(n); },
+            cancel);
 }
 
 std::optional<quint32> fileCrc32(const QString &absolutePath, const std::atomic_bool *cancel)

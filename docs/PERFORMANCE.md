@@ -3154,6 +3154,24 @@ entry staged in pieces ≤ 256 KiB, stored and deflated) and `tst_sync_*_streame
 device, folder and mass-deletion tests again with every attachment in pieces). Not measured on a
 phone.
 
+### Backups and restores of large files in bounded memory (2026-11-23)
+
+A backup read a file 64 KiB at a time into miniz's zip writer already, but a restore held every
+entry whole (`ArchiveReader::read()`, `Vault::writeBinary()`), so a file above 1 GiB was left alone
+(`MaxRestoredEntryBytes`), and the browser's backup, with no threads, stored every file above 4 MiB
+without compression because miniz's `mz_zip_writer_add_read_buf_callback` deflates a file in one
+call. Now: the backup's ZIP is written by `backup/zipwriter_p.h` (miniz's `tdefl` compressor driven
+piece by piece, the sizes patched into the local header at the end, ZIP64 where needed), so a step
+may end in the middle of a file and the browser's slices stay ~8 ms whatever the size; a restore
+inflates an entry above 4 MiB through `ArchiveReader::beginExtract()` / `Extraction::step()` (resumable: writes of at most 64 KiB, a step of the browser's slice, the checking pass too) into
+`Vault::newStagingFile()` and `Vault::writeStaged()` puts it in place (hashed in 256 KiB pieces), and
+the limit is the archive's 64 GiB. Asserted, not sampled: `tst_backup_archive` (an entry inflated
+into a counting device in writes of at most 256 KiB; a 8 MiB text file deflated in slices with more
+than 20 turns of the event loop in between), `tst_backup_restore` (a 9 MiB file and a 6 MiB note
+through a staging file, History kept, no temporary file left, a cancel leaves the file as it was),
+`tst_backup_large` (a sparse file of 1 GiB + 5 MiB through a backup — every read within 1 MiB of the
+last — and a restore into another notebook).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the

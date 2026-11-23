@@ -23,6 +23,26 @@ ColumnLayout {
     /// The foreign backup a restore would start from, waiting for its own confirmation.
     property string foreignRestore: ""
 
+    /// The confirmation's title: a listed backup by its time, a picked file by its name.
+    function restoreTitle(): string {
+        if (AppController.routeText(section.plan, "source") === "file") {
+            return AppController.routeFlag(section.plan, "foreign")
+                    ? qsTr("Restore “%1”, a backup of another notebook?").arg(AppController.routeText(section.plan, "fileName"))
+                    : qsTr("Restore from “%1”?").arg(AppController.routeText(section.plan, "fileName"))
+        }
+        return qsTr("Restore the backup from %1?").arg(AppController.routeText(section.plan, "when"))
+    }
+
+    /// What a picked file holds and, when it is not this notebook's, a warning: above the usual note.
+    function restoreSource(): string {
+        if (AppController.routeText(section.plan, "source") !== "file")
+            return ""
+        let text = qsTr("The file holds %n file(s), %1 in all.", "", AppController.routeInt(section.plan, "files", 0)).arg(AppController.routeText(section.plan, "sizeText")) + " "
+        if (AppController.routeFlag(section.plan, "foreign"))
+            text += qsTr("It was not made from this notebook as it is now: it may come from another notebook, and restoring it may replace this notebook's notes with another notebook's.") + " "
+        return text
+    }
+
     function runningText(): string {
         switch (section.backups.phase) {
         case "backup": return qsTr("Creating a backup…")
@@ -294,6 +314,40 @@ ColumnLayout {
         }
     }
 
+    BButton {
+        objectName: "backupsRestoreFromFile"
+        Layout.topMargin: Theme.space2
+        visible: section.backups.available
+        text: qsTr("Restore from a file…")
+        iconName: "folder-open"
+        variant: "ghost"
+        enabled: !section.backups.running
+        onClicked: {
+            if (section.backups.browser)
+                section.backups.pickRestoreFile()
+            else
+                filePicker.open()
+        }
+    }
+    BText {
+        Layout.fillWidth: true
+        visible: section.backups.available
+        text: qsTr("A backup ZIP from another device or folder, or one downloaded earlier.")
+        variant: "muted"
+        wrapMode: Text.Wrap
+    }
+
+    FilePicker {
+        id: filePicker
+        objectName: "backupsFileDialog"
+        title: qsTr("Choose a backup to restore")
+        fileMode: FilePicker.OpenFile
+        nameFilters: AppController.isAndroid ? [] : [qsTr("ZIP archives (*.zip)")]
+        dark: Theme.dark
+        colors: Theme.colors
+        onAccepted: section.backups.prepareRestoreFromFile(selectedFile)
+    }
+
     FilePicker {
         id: folderPicker
         objectName: "backupsFolderDialog"
@@ -308,11 +362,12 @@ ColumnLayout {
         id: restoreDialog
         objectName: "backupsRestoreConfirm"
         parent: T.Overlay.overlay
-        title: qsTr("Restore the backup from %1?").arg(AppController.routeText(section.plan, "when"))
+        title: section.restoreTitle()
         message: qsTr("%n file(s) will be replaced by the backup's version.", "", AppController.routeInt(section.plan, "changed", 0))
                  + " " + qsTr("%n file(s) will come back.", "", AppController.routeInt(section.plan, "recreated", 0))
                  + " " + qsTr("%n file(s) the backup does not hold will go to the trash.", "", AppController.routeInt(section.plan, "trashed", 0))
-        detail: (AppController.routeFlag(section.plan, "incomplete") ? qsTr("This backup is not known to be complete, so files it does not hold stay where they are.") + " " : "")
+        detail: section.restoreSource()
+                + (AppController.routeFlag(section.plan, "incomplete") ? qsTr("This backup is not known to be complete, so files it does not hold stay where they are.") + " " : "")
                 + (AppController.routeInt(section.plan, "tooLarge", 0) > 0
                    ? qsTr("%n file(s) are too large to restore and stay as they are.", "", AppController.routeInt(section.plan, "tooLarge", 0)) + " " : "")
                 + qsTr("A safety backup of the notebook as it is now is made first. Replaced notes stay in the version history as well; other files only in the safety backup.")

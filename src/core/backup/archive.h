@@ -5,6 +5,7 @@
 
 #include "backup/backup.h"
 
+#include <QIODevice>
 #include <QMetaType>
 #include <QObject>
 
@@ -44,9 +45,6 @@ struct WriteOptions {
     QString workFolder;
     qint64 maxBytes = 0; ///< the archive may not grow above this; 0: no limit
     int compressionLevel = 6;
-    /// In slices on the calling thread (no pool) files above this are stored, not deflated: a
-    /// single file is the smallest slice, and storing a big one takes a moment only.
-    qint64 inlineDeflateLimit = 4 << 20;
     /// Tests: called before each read of a file (its path, the offset), on the writing thread.
     std::function<void(const VaultPath &, qint64)> onRead;
 };
@@ -126,6 +124,8 @@ enum class ArchiveProblem {
     None,
     Unreadable,    ///< the file cannot be read
     NotAZip,       ///< no ZIP archive, or a damaged one
+    Truncated,     ///< begins like a ZIP archive but has no usable end: cut short (an interrupted copy or download)
+    NotABackup,    ///< a ZIP archive that Brulion did not write: no manifest (RestoreCheckOptions::requireManifest)
     UnsafePath,    ///< an entry escapes the notebook (checkEntryPath)
     IgnoredPath,   ///< an entry the notebook's folder may not hold
     Duplicate,     ///< two entries of one path, or a file used as a folder
@@ -160,6 +160,29 @@ struct ArchiveInfo {
     bool ok() const { return problem == ArchiveProblem::None; }
 };
 
+/// One entry inflated a piece at a time, resumable: a step works for about a budget and stops where it
+/// is, so that a thread-less caller (the browser) lets its event loop run between steps of a large
+/// entry. From ArchiveReader::beginExtract(); the reader must outlive it and is used by no one else
+/// while a step runs.
+class Extraction {
+public:
+    enum class Step {
+        More,   ///< stopped at the budget: step again
+        Done,   ///< the whole entry went out, its checksum matched
+        Failed, ///< damaged, larger or smaller than it claimed, `out` refused a write, or cancelled
+    };
+    ~Extraction();
+    Q_DISABLE_COPY_MOVE(Extraction)
+    /// Inflate into `out` (nullptr: keep nothing, a checksum run) for about `budgetMs`.
+    Step step(QIODevice *out, int budgetMs, const std::atomic_bool *cancel = nullptr);
+
+private:
+    friend class ArchiveReader;
+    Extraction();
+    struct Private;
+    std::unique_ptr<Private> d;
+};
+
 /// A backup read entry by entry. Used by one thread at a time. Malformed or hostile input gives
 /// problems, never a crash: names and sizes are the archive's claims until checked.
 class ArchiveReader {
@@ -172,8 +195,15 @@ public:
     ArchiveInfo readEntries(const ArchiveLimits &limits = {});
     /// Inflate the entry and compare its checksum, keeping nothing.
     bool verify(const ArchiveEntry &entry, const std::atomic_bool *cancel = nullptr);
-    /// The entry's bytes; nothing when it is damaged or larger than it claimed.
+    /// The entry's bytes; nothing when it is damaged or larger than it claimed. Holds the whole
+    /// entry (up to 1 GiB): for notes and small files; larger ones go through extractTo().
     std::optional<QByteArray> read(const ArchiveEntry &entry);
+    /// Inflate the entry into `out` as it comes, at most 64 KiB at a time whatever its size, its
+    /// checksum compared: false when it is damaged, larger than it claimed, `out` refuses a write or
+    /// `cancel` is set (`out` then holds a part: the caller drops it).
+    bool extractTo(const ArchiveEntry &entry, QIODevice &out, const std::atomic_bool *cancel = nullptr);
+    /// extractTo() in steps (verify(): step() with no device). nullptr for a folder or an archive that is not open.
+    std::unique_ptr<Extraction> beginExtract(const ArchiveEntry &entry);
 
 private:
     struct Private;

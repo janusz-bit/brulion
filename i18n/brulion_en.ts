@@ -1673,7 +1673,15 @@
 <context>
     <name>ShellBackupSettings</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="312"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="40"/>
+        <source>The file holds %n file(s), %1 in all.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="366"/>
         <source>%n file(s) will be replaced by the backup&apos;s version.</source>
         <translation>
             <numerusform>%n file will be replaced by the backup&apos;s version.</numerusform>
@@ -1681,7 +1689,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="313"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="367"/>
         <source>%n file(s) will come back.</source>
         <translation>
             <numerusform>%n file will come back.</numerusform>
@@ -1689,7 +1697,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="314"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="368"/>
         <source>%n file(s) the backup does not hold will go to the trash.</source>
         <translation>
             <numerusform>%n file the backup does not hold will go to the trash.</numerusform>
@@ -1697,7 +1705,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="317"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="372"/>
         <source>%n file(s) are too large to restore and stay as they are.</source>
         <translation>
             <numerusform>%n file is too large to restore and stays as it is.</numerusform>
@@ -1906,7 +1914,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8969"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9007"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -2706,7 +2714,7 @@
 <context>
     <name>brulion::shell::WorkspaceBackups</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="459"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="472"/>
         <source>The backup was made without %n file(s) that could not be read or disappeared while it ran. Older backups are kept.</source>
         <translation>
             <numerusform>The backup was made without %n file that could not be read or disappeared while it ran. Older backups are kept.</numerusform>
@@ -2714,7 +2722,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="773"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="953"/>
         <source>The restore did not finish: %n file(s) could not be written, so nothing else went to the trash.</source>
         <translation>
             <numerusform>The restore did not finish: %n file could not be written, so nothing else went to the trash.</numerusform>
@@ -2722,7 +2730,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="776"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="956"/>
         <source>The restore did not finish: %n file(s) could not be written or moved to the trash.</source>
         <translation>
             <numerusform>The restore did not finish: %n file could not be written or moved to the trash.</numerusform>
@@ -2730,7 +2738,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1014"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1194"/>
         <source>The last backup is missing %n file(s) that could not be read or disappeared while it ran. The event log names them. Older complete backups are kept.</source>
         <translation>
             <numerusform>The last backup is missing %n file that could not be read or disappeared while it ran. The event log names it. Older complete backups are kept.</numerusform>

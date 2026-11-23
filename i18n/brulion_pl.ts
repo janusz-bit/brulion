@@ -323,7 +323,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="64"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9341"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9379"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -18647,7 +18647,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="540"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="955"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10483"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10521"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -20713,246 +20713,290 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellBackupSettings</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="30"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="50"/>
         <source>Waiting for the running sync to finish…</source>
         <translation>Czekanie na koniec trwającej synchronizacji…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="71"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="91"/>
         <source>ZIP copies of this notebook. Sync does not carry them to your other devices.</source>
         <translation>Kopie tego notatnika w plikach ZIP. Synchronizacja nie przenosi ich na inne urządzenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="111"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="131"/>
         <source>I have dealt with it</source>
         <translation>Sprawa załatwiona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="245"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="265"/>
         <source>not from this notebook</source>
         <translation>nie z tego notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="246"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="266"/>
         <source>incomplete</source>
         <translation>niekompletna</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="287"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="307"/>
         <source>The backup from %1 was not made from this notebook: it may be the only copy of another one. It is deleted for good; it does not go to the trash.</source>
         <translation>Kopia (%1) nie powstała z tego notatnika: może być jedyną kopią innego. Zostanie usunięta na zawsze; nie trafi do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="315"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="370"/>
         <source>This backup is not known to be complete, so files it does not hold stay where they are.</source>
         <translation>Nie wiadomo, czy ta kopia jest pełna, więc pliki, których w niej nie ma, zostają na miejscu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="318"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="373"/>
         <source>A safety backup of the notebook as it is now is made first. Replaced notes stay in the version history as well; other files only in the safety backup.</source>
         <translation>Najpierw powstanie kopia bezpieczeństwa obecnego stanu notatnika. Zastąpione notatki zostaną też w historii wersji, a inne pliki tylko w kopii bezpieczeństwa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="339"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="394"/>
         <source>Use a backup from another notebook?</source>
         <translation>Użyć kopii z innego notatnika?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="340"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="395"/>
         <source>This backup was not made from this notebook as it is now: it comes from another notebook of the same name, or from this one when it lay in another folder. Restoring it may replace this notebook&apos;s notes with another notebook&apos;s.</source>
         <translation>Ta kopia nie powstała z tego notatnika w jego obecnym miejscu: pochodzi z innego notatnika o tej samej nazwie albo z tego, gdy leżał w innym folderze. Jej przywrócenie może zastąpić notatki tego notatnika notatkami innego.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="341"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="396"/>
         <source>Continue</source>
         <translation>Kontynuuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="28"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="48"/>
         <source>Creating a backup…</source>
         <translation>Tworzenie kopii…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="29"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="30"/>
+        <source>Restore “%1”, a backup of another notebook?</source>
+        <translation>Przywrócić „%1” — kopię innego notatnika?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="31"/>
+        <source>Restore from “%1”?</source>
+        <translation>Przywrócić z „%1”?</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="40"/>
+        <source>The file holds %n file(s), %1 in all.</source>
+        <translation>
+            <numerusform>Plik zawiera %n plik, razem %1.</numerusform>
+            <numerusform>Plik zawiera %n pliki, razem %1.</numerusform>
+            <numerusform>Plik zawiera %n plików, razem %1.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="42"/>
+        <source>It was not made from this notebook as it is now: it may come from another notebook, and restoring it may replace this notebook&apos;s notes with another notebook&apos;s.</source>
+        <translation>Nie powstała z tego notatnika w obecnym stanie: może pochodzić z innego notatnika, a jej przywrócenie może zastąpić notatki tego notatnika notatkami innego.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="49"/>
         <source>Checking the backup…</source>
         <translation>Sprawdzanie kopii…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="31"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="51"/>
         <source>Saving the notebook as it is now…</source>
         <translation>Zapisywanie obecnego stanu notatnika…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="32"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="52"/>
         <source>Restoring…</source>
         <translation>Przywracanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="47"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="67"/>
         <source>This notebook already holds exactly what the backup holds.</source>
         <translation>Notatnik zawiera już dokładnie to samo co ta kopia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="57"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="77"/>
         <source>Backups</source>
         <translation>Kopie zapasowe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="68"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="88"/>
         <source>The documentation needs no backups.</source>
         <translation>Dokumentacja nie potrzebuje kopii zapasowych.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="70"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="90"/>
         <source>Copies of this notebook as ZIP archives. They live in this browser: clearing its data removes them together with the notes. Download one to keep it elsewhere.</source>
         <translation>Kopie tego notatnika jako archiwa ZIP. Są w tej przeglądarce: wyczyszczenie jej danych usuwa je razem z notatkami. Pobierz kopię, żeby mieć ją także gdzie indziej.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="90"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="110"/>
         <source>Last backup</source>
         <translation>Ostatnia kopia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="91"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="111"/>
         <source>None yet.</source>
         <translation>Jeszcze żadnej.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="94"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="114"/>
         <source>Create a backup now</source>
         <translation>Utwórz kopię teraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="130"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="150"/>
         <source>Stop</source>
         <translation>Zatrzymaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="145"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="165"/>
         <source>Automatic backups</source>
         <translation>Kopie automatyczne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="146"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="166"/>
         <source>Checked when the notebook opens and every hour while Brulion runs. Nothing is written when nothing changed.</source>
         <translation>Sprawdzane przy otwarciu notatnika i co godzinę, gdy Brulion działa. Gdy nic się nie zmieniło, nowa kopia nie powstaje.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="152"/>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="155"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="172"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="175"/>
         <source>How often</source>
         <translation>Jak często</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="156"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="176"/>
         <source>Every day</source>
         <translation>Codziennie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="156"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="176"/>
         <source>Every week</source>
         <translation>Co tydzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="162"/>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="166"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="182"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="186"/>
         <source>How many to keep</source>
         <translation>Ile zachować</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="163"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="183"/>
         <source>The oldest go after a new backup has been made.</source>
         <translation>Najstarsze znikają po utworzeniu nowej kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="175"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="195"/>
         <source>Folder: this device&apos;s own</source>
         <translation>Folder: własny na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="175"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="195"/>
         <source>Folder</source>
         <translation>Folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="179"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="199"/>
         <source>Choose…</source>
         <translation>Wybierz…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="189"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="209"/>
         <source>Use the default</source>
         <translation>Użyj domyślnego</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="198"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="218"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="211"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="231"/>
         <source>Saved backups</source>
         <translation>Zapisane kopie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="220"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="240"/>
         <source>No backups in this folder yet.</source>
         <translation>W tym folderze nie ma jeszcze kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="255"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="275"/>
         <source>Restore the backup from %1</source>
         <translation>Przywróć kopię (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="272"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="292"/>
         <source>Download the backup from %1</source>
         <translation>Pobierz kopię (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="273"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="293"/>
         <source>Share the backup from %1</source>
         <translation>Udostępnij kopię (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="281"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="301"/>
         <source>Delete the backup from %1</source>
         <translation>Usuń kopię (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="288"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="308"/>
         <source>The backup from %1 is deleted for good; it does not go to the trash.</source>
         <translation>Kopia (%1) zostanie usunięta na zawsze; nie trafi do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="300"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="321"/>
+        <source>Restore from a file…</source>
+        <translation>Przywróć z pliku…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="335"/>
+        <source>A backup ZIP from another device or folder, or one downloaded earlier.</source>
+        <translation>Kopia ZIP z innego urządzenia lub folderu albo pobrana wcześniej.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="343"/>
+        <source>Choose a backup to restore</source>
+        <translation>Wybierz kopię do przywrócenia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="345"/>
+        <source>ZIP archives (*.zip)</source>
+        <translation>Archiwa ZIP (*.zip)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="354"/>
         <source>Choose a folder for backups</source>
         <translation>Wybierz folder na kopie zapasowe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="311"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="33"/>
         <source>Restore the backup from %1?</source>
         <translation>Przywrócić kopię (%1)?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="319"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8854"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="374"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8857"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="329"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="384"/>
         <source>Delete this backup?</source>
         <translation>Usunąć tę kopię?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="330"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8877"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="385"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8915"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="312"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="366"/>
         <source>%n file(s) will be replaced by the backup&apos;s version.</source>
         <translation>
             <numerusform>%n plik zostanie zastąpiony wersją z kopii.</numerusform>
@@ -20961,7 +21005,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="313"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="367"/>
         <source>%n file(s) will come back.</source>
         <translation>
             <numerusform>%n plik wróci.</numerusform>
@@ -20970,7 +21014,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="314"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="368"/>
         <source>%n file(s) the backup does not hold will go to the trash.</source>
         <translation>
             <numerusform>%n plik, którego nie ma w kopii, trafi do kosza.</numerusform>
@@ -20979,7 +21023,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="317"/>
+        <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="372"/>
         <source>%n file(s) are too large to restore and stay as they are.</source>
         <translation>
             <numerusform>%n plik jest za duży, by go przywrócić, i zostaje bez zmian.</numerusform>
@@ -21823,7 +21867,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="127"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10631"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10669"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -22476,7 +22520,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="19"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9655"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9693"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -22859,7 +22903,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8969"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9007"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -22878,7 +22922,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8906"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8944"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -23923,13 +23967,13 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="109"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="12022"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="12060"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="110"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="12012"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="12050"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -33945,7 +33989,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="11271"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="11309"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
@@ -38913,87 +38957,87 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceBackups</name>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="134"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="136"/>
         <source>The notebook was closed during a restore, so it is only partly restored. Open it again and see Settings → Backups.</source>
         <translation>Notatnik zamknięto w trakcie przywracania, więc jest przywrócony tylko częściowo. Otwórz go ponownie i zajrzyj do: Ustawienia → Kopie zapasowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="479"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="492"/>
         <source>Nothing was restored: “%1” could not be read for the safety backup, and the restore would replace it.</source>
         <translation>Niczego nie przywrócono: nie udało się odczytać „%1” do kopii bezpieczeństwa, a przywracanie by go zastąpiło.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="656"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="824"/>
         <source>This backup holds no files of a notebook, so restoring it would only empty this one. Nothing was changed.</source>
         <translation>W tej kopii nie ma plików notatnika, więc jej przywrócenie tylko opróżniłoby ten notatnik. Nic się nie zmieniło.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="659"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="827"/>
         <source>This backup holds names that differ only in letter case, which this storage cannot keep apart. Nothing was changed; unpack the ZIP by hand.</source>
         <translation>W tej kopii są nazwy różniące się tylko wielkością liter, a ten dysk ich nie rozróżnia. Nic się nie zmieniło; rozpakuj ZIP ręcznie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="767"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="947"/>
         <source>The restore was stopped: the notebook is only partly restored. The safety backup holds it as it was.</source>
         <translation>Przywracanie zatrzymano: notatnik jest przywrócony tylko częściowo. Kopia bezpieczeństwa zawiera jego wcześniejszy stan.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="769"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="949"/>
         <source>The restore was stopped: the notebook is only partly restored.</source>
         <translation>Przywracanie zatrzymano: notatnik jest przywrócony tylko częściowo.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="763"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="943"/>
         <source>The safety backup holds the notebook as it was.</source>
         <translation>Kopia bezpieczeństwa zawiera wcześniejszy stan notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="780"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="960"/>
         <source>The restore did not finish: the backup or the notebook&apos;s folder became unavailable.</source>
         <translation>Przywracanie nie zostało ukończone: kopia albo folder notatnika stały się niedostępne.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="782"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="962"/>
         <source>Restored. Replaced notes are in the version history, and files the backup does not hold are in the trash.</source>
         <translation>Przywrócono. Zastąpione notatki są w historii wersji, a pliki, których nie ma w kopii, w koszu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="784"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="964"/>
         <source>The safety backup holds everything as it was.</source>
         <translation>Kopia bezpieczeństwa zawiera wszystko sprzed przywrócenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1001"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1181"/>
         <source>A restore of this notebook did not finish, so it is only partly restored. Run the restore again.</source>
         <translation>Przywracanie tego notatnika nie zostało ukończone, więc jest przywrócony tylko częściowo. Uruchom przywracanie ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1003"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1183"/>
         <source>A restore of this notebook did not finish, so it is only partly restored. The backup “%1” holds it as it was: restore that one, or run the restore again.</source>
         <translation>Przywracanie tego notatnika nie zostało ukończone, więc jest przywrócony tylko częściowo. Kopia „%1” zawiera jego wcześniejszy stan: przywróć ją albo uruchom przywracanie ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1008"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1188"/>
         <source>This browser&apos;s storage of backups could not be read, so backups and restoring are off until the page is reloaded. Older backups have not been touched.</source>
         <translation>Nie udało się odczytać kopii z pamięci tej przeglądarki, więc kopie i przywracanie są wyłączone do przeładowania strony. Starszych kopii to nie dotyczy.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1040"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1220"/>
         <source>The last backup failed: none of the notebook&apos;s files could be read. %1</source>
         <translation>Ostatnia kopia się nie udała: nie udało się odczytać żadnego pliku notatnika. %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1042"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1222"/>
         <source>The last backup failed: the notebook&apos;s folder went away while it ran. %1</source>
         <translation>Ostatnia kopia się nie udała: folder notatnika zniknął w jej trakcie. %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1044"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1224"/>
         <source>No backup was made: the folder %1 lies inside the notebook. Choose a folder outside it.</source>
         <translation>Kopia nie powstała: folder %1 leży wewnątrz notatnika. Wybierz folder poza nim.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="459"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="472"/>
         <source>The backup was made without %n file(s) that could not be read or disappeared while it ran. Older backups are kept.</source>
         <translation>
             <numerusform>Kopia powstała bez %n pliku, którego nie udało się odczytać albo który zniknął w jej trakcie. Starsze kopie zostają.</numerusform>
@@ -39002,7 +39046,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="773"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="953"/>
         <source>The restore did not finish: %n file(s) could not be written, so nothing else went to the trash.</source>
         <translation>
             <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n pliku, więc nic więcej nie trafiło do kosza.</numerusform>
@@ -39011,7 +39055,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="776"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="956"/>
         <source>The restore did not finish: %n file(s) could not be written or moved to the trash.</source>
         <translation>
             <numerusform>Przywracanie nie zostało ukończone: nie udało się zapisać %n pliku albo przenieść go do kosza.</numerusform>
@@ -39020,7 +39064,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1014"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1194"/>
         <source>The last backup is missing %n file(s) that could not be read or disappeared while it ran. The event log names them. Older complete backups are kept.</source>
         <translation>
             <numerusform>W ostatniej kopii brakuje %n pliku, którego nie udało się odczytać albo który zniknął w jej trakcie. Rejestr zdarzeń podaje jego nazwę. Starsze pełne kopie zostają.</numerusform>
@@ -39029,130 +39073,158 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="339"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="343"/>
         <source>The notebook&apos;s folder is not available, so no backup was made.</source>
         <translation>Folder notatnika jest niedostępny, więc kopia nie powstała.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="344"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="348"/>
         <source>This notebook is empty: there is nothing to back up.</source>
         <translation>Ten notatnik jest pusty: nie ma czego kopiować.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="373"/>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="411"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="386"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="424"/>
         <source>The restore was cancelled. Nothing was changed.</source>
         <translation>Przywracanie anulowano. Nic się nie zmieniło.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="429"/>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="534"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="442"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="547"/>
         <source>The safety backup could not be made, so nothing was restored. %1</source>
         <translation>Nie udało się zrobić kopii bezpieczeństwa, więc niczego nie przywrócono. %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="464"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="477"/>
         <source>Backup created.</source>
         <translation>Kopia utworzona.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="612"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="625"/>
         <source>The backup could not be deleted.</source>
         <translation>Nie udało się usunąć kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="629"/>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="694"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="640"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="874"/>
         <source>The notebook&apos;s folder is not available, so nothing can be restored.</source>
         <translation>Folder notatnika jest niedostępny, więc nie można niczego przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="652"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="686"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="694"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="753"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="772"/>
+        <source>This file cannot be read.</source>
+        <translation>Tego pliku nie da się odczytać.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="789"/>
+        <source>Brulion backups (*.zip)</source>
+        <translation>Kopie zapasowe Brulionu (*.zip)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="796"/>
+        <source>This file is too large for this browser to restore.</source>
+        <translation>Ten plik jest za duży, żeby ta przeglądarka mogła go przywrócić.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="814"/>
         <source>This backup is damaged and cannot be restored. Nothing was changed.</source>
         <translation>Ta kopia jest uszkodzona i nie można jej przywrócić. Nic się nie zmieniło.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="654"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="816"/>
         <source>This backup cannot be read. Is its folder still available?</source>
         <translation>Nie można odczytać tej kopii. Czy jej folder jest nadal dostępny?</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="661"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="818"/>
+        <source>This backup is cut short, as after an interrupted download or copy, and cannot be restored. Nothing was changed.</source>
+        <translation>Ta kopia jest ucięta, jak po przerwanym pobieraniu albo kopiowaniu, i nie da się jej przywrócić. Nic nie zostało zmienione.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="821"/>
+        <source>This ZIP archive is not a Brulion backup: it has no mark of one. Nothing was changed; unpack it by hand or import it instead.</source>
+        <translation>To archiwum ZIP nie jest kopią zapasową Brulionu: nie ma jej znaku. Nic nie zostało zmienione; rozpakuj je ręcznie albo zaimportuj.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="829"/>
         <source>This file is not a backup Brulion can restore. Nothing was changed.</source>
         <translation>Ten plik nie jest kopią, którą Brulion może przywrócić. Nic się nie zmieniło.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="708"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="888"/>
         <source>There is not enough free space for this restore: it needs %1.</source>
         <translation>Za mało wolnego miejsca na przywrócenie: potrzeba %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1022"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1202"/>
         <source>Older backups are kept.</source>
         <translation>Starsze kopie zostają.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1025"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1205"/>
         <source>The last backup failed: the folder %1 is not available. Is the drive connected? %2</source>
         <translation>Ostatnia kopia się nie udała: folder %1 jest niedostępny. Czy dysk jest podłączony? %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1029"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1209"/>
         <source>The last backup failed: Brulion cannot write to %1. Allow “All files access” for Brulion in Android&apos;s settings, or use this device&apos;s own folder. %2</source>
         <translation>Ostatnia kopia się nie udała: Brulion nie może zapisywać w %1. Włącz dla Brulionu „Dostęp do wszystkich plików” w ustawieniach Androida albo użyj własnego folderu urządzenia. %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1033"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1213"/>
         <source>The last backup failed: Brulion cannot write to %1. %2</source>
         <translation>Ostatnia kopia się nie udała: Brulion nie może zapisywać w %1. %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1036"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1216"/>
         <source>The last backup failed while writing; the disk may be full. %1</source>
         <translation>Ostatnia kopia nie udała się podczas zapisu; dysk może być pełny. %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1038"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1218"/>
         <source>The last backup did not fit in this browser&apos;s storage. %1</source>
         <translation>Ostatnia kopia nie zmieściła się w pamięci tej przeglądarki. %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1080"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1260"/>
         <source>Brulion cannot write backups to this place. Choose a folder on the phone&apos;s storage or a memory card; cloud drives are not supported.</source>
         <translation>Brulion nie może zapisywać kopii w tym miejscu. Wybierz folder w pamięci telefonu lub na karcie; dyski w chmurze nie są obsługiwane.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1086"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1266"/>
         <source>Brulion cannot write backups to this place.</source>
         <translation>Brulion nie może zapisywać kopii w tym miejscu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1091"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1271"/>
         <source>Backups cannot be kept inside the notebook: sync would spread them and each backup would hold the ones before it. Choose a folder outside it.</source>
         <translation>Kopii nie można trzymać w notatniku: synchronizacja by je rozniosła, a każda kolejna zawierałaby poprzednie. Wybierz folder poza nim.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1105"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1285"/>
         <source>Brulion cannot write to this folder. Allow “All files access” for Brulion in Android&apos;s settings, then choose it again.</source>
         <translation>Brulion nie może zapisywać w tym folderze. Włącz dla Brulionu „Dostęp do wszystkich plików” w ustawieniach Androida i wybierz go ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1108"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1288"/>
         <source>Brulion cannot write to this folder.</source>
         <translation>Brulion nie może zapisywać w tym folderze.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1141"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1321"/>
         <source>The backup could not be read.</source>
         <translation>Nie udało się odczytać kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1148"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1328"/>
         <source>Save or send the backup</source>
         <translation>Zapisz lub wyślij kopię</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacebackups.cpp" line="1149"/>
+        <location filename="../src/app/shell/workspacebackups.cpp" line="1329"/>
         <source>Could not open the share menu.</source>
         <translation>Nie udało się otworzyć menu udostępniania.</translation>
     </message>

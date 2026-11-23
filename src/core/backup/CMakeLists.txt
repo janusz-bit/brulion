@@ -14,5 +14,6 @@ brulion_add_core_module(backup
         archive.h archive.cpp
         restore.h restore.cpp
         taskrunner_p.h taskrunner.cpp
+        zipwriter_p.h zipwriter.cpp
     DEPS util vault notebook log)
 target_link_libraries(brulion_core_backup PRIVATE brulion_miniz)

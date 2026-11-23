@@ -6,6 +6,8 @@
 #include "filesystemtraits.h"
 #include "synctest.h"
 
+#include <QDirIterator>
+#include <QRandomGenerator>
 #include <QSet>
 #include <QTemporaryDir>
 
@@ -343,6 +345,164 @@ private Q_SLOTS:
         QVERIFY2(again.ok(), qPrintable(again.detail));
         QVERIFY(!again.plan.hasChanges());
         QCOMPARE(again.plan.identical, 5);
+    }
+
+    void aFileThatIsNoBackupOfBrulionsIsRefusedWhenAManifestIsRequired_data()
+    {
+        QTest::addColumn<QByteArray>("zip");
+        QTest::addColumn<int>("problem");
+        QTest::addColumn<bool>("require");
+        const QByteArray plain = rawZip({{"żółć.md", "- treść\n"}, {"Folder/gęślą.md", "- a\n"}});
+        QTest::newRow("a ZIP of someone else's") << plain << int(ArchiveProblem::NotABackup) << true;
+        QTest::newRow("the same, a listed backup needs no manifest") << plain << int(ArchiveProblem::None) << false;
+        QTest::newRow("with the manifest") << withManifest(plain, u"id"_s) << int(ArchiveProblem::None) << true;
+        QTest::newRow("another program's comment")
+                << [&]() -> QByteArray {
+                       QByteArray z = plain;
+                       const QByteArray comment = "Created by Zipper 9000";
+                       z[z.size() - 2] = char(comment.size());
+                       return QByteArray(z + comment);
+                   }()
+                << int(ArchiveProblem::NotABackup) << true;
+        QTest::newRow("a manifest without files is still no backup of a notebook")
+                << withManifest(rawZip({{"pusty/", ""}}), u"id"_s) << int(ArchiveProblem::NoFiles) << true;
+        QTest::newRow("not a ZIP") << QByteArray("to nie jest archiwum") << int(ArchiveProblem::NotAZip) << true;
+        QTest::newRow("cut short")
+                << withManifest(rawZip({{"a.bin", QByteArray(40'000, 'x')}, {"b.md", "treść"}}, 0), u"id"_s).left(20'000)
+                << int(ArchiveProblem::Truncated) << true;
+    }
+    void aFileThatIsNoBackupOfBrulionsIsRefusedWhenAManifestIsRequired()
+    {
+        QFETCH(QByteArray, zip);
+        QFETCH(int, problem);
+        QFETCH(bool, require);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"Moja kopia żółć.zip"_s);
+        writeFile(path, zip);
+        RestoreCheckOptions options;
+        options.requireManifest = require;
+        const RestoreCheck check = runChecker(poolOn(nullptr), path, {file(u"a.md"_s, 1)}, {}, options);
+        QCOMPARE(int(check.problem), problem);
+        if (problem == int(ArchiveProblem::None)) {
+            QCOMPARE(check.files, 2);
+            QCOMPARE(check.bytes, qint64(QByteArray("- treść\n").size() + QByteArray("- a\n").size()));
+            QCOMPARE(check.manifest.valid, zip.contains("brulionBackup"));
+        } else {
+            QVERIFY(!check.plan.hasChanges()); // nothing was planned from it
+        }
+    }
+
+    void aRealBackupCutShortIsTruncated_data() { modes_data(); }
+    void aRealBackupCutShortIsTruncated()
+    {
+        QFETCH(bool, threads);
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"N"_s);
+        writeFile(root + u"/Żółw.md"_s, QByteArray(100'000, 'x'));
+        writeFile(root + u"/obraz.png"_s, QByteArray(300'000, 'y'));
+        Vault vault(root);
+        QVERIFY(vault.open());
+        const QString zip = backupOf(vault, dir.filePath(u"kopie"_s));
+        QVERIFY(!zip.isEmpty());
+        const QByteArray whole = readFile(zip);
+        const notebook::WorkerPool pool = poolOn(threads ? &m_threads : nullptr);
+        for (const qsizetype keep : {qsizetype(3), whole.size() / 3, whole.size() * 2 / 3, whole.size() - 1}) {
+            const QString cut = dir.filePath(u"ucięta %1.zip"_s.arg(keep));
+            writeFile(cut, whole.left(keep));
+            RestoreCheckOptions options;
+            options.requireManifest = true;
+            const RestoreCheck check = runChecker(pool, cut, notebookFiles(vault), notebookFolders(vault), options);
+            // (Without its last byte the directory still reads, but the manifest, the comment, is cut: no backup.)
+            QVERIFY2(check.problem == ArchiveProblem::Truncated || check.problem == ArchiveProblem::NotAZip
+                             || check.problem == ArchiveProblem::NotABackup,
+                     qPrintable(QString::number(keep)));
+            QVERIFY(!check.ok());
+        }
+        // The whole of it is fine.
+        RestoreCheckOptions options;
+        options.requireManifest = true;
+        QVERIFY(runChecker(pool, zip, notebookFiles(vault), notebookFolders(vault), options).ok());
+    }
+
+    void aLargeFileIsInflatedIntoAStagingFileAndPutInPlace_data() { modes_data(); }
+    void aLargeFileIsInflatedIntoAStagingFileAndPutInPlace()
+    {
+        QFETCH(bool, threads);
+        const notebook::WorkerPool pool = poolOn(threads ? &m_threads : nullptr);
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"N"_s);
+        QByteArray big(9 << 20, '\0'); // above the 4 MiB that is streamed
+        QRandomGenerator generator(5);
+        for (qsizetype i = 0; i < big.size(); ++i)
+            big[i] = char(generator.bounded(256));
+        QByteArray text(6 << 20, '\0'); // a note too: History keeps what it replaced
+        for (qsizetype i = 0; i < text.size(); ++i)
+            text[i] = "zażółć gęślą jaźń\n"[i % 18];
+        writeFile(root + u"/Duże/żółć ąę.bin"_s, big);
+        writeFile(root + u"/Długa notatka.md"_s, text);
+        writeFile(root + u"/mała.md"_s, "- mała\n");
+        QTemporaryDir state;
+        Vault vault(root, state.path());
+        QVERIFY(vault.open());
+        const QString zip = backupOf(vault, dir.filePath(u"kopie"_s));
+        QVERIFY(!zip.isEmpty());
+
+        // The notebook moves on: the big file is other bytes, the note other text, one file is gone.
+        QVERIFY(vault.writeBinary(u"Duże/żółć ąę.bin"_s, QByteArray(5 << 20, 'z')));
+        QVERIFY(vault.writeBinary(u"Długa notatka.md"_s, QByteArray(5 << 20, 'q')));
+        QVERIFY(vault.remove(u"mała.md"_s));
+        vault.rescan();
+
+        const RestoreCheck check = runChecker(pool, zip, notebookFiles(vault), notebookFolders(vault));
+        QVERIFY2(check.ok(), qPrintable(check.detail));
+        QCOMPARE(check.plan.toChange.size(), 2);
+        QCOMPARE(check.plan.toRecreate.size(), 1);
+        QVERIFY(check.plan.tooLarge.isEmpty());
+        const RestoreResult result = applyTo(vault, pool, check.plan, zip);
+        QVERIFY2(result.ok(), qPrintable(result.detail + result.failed.join(u", ")));
+        QCOMPARE(result.changed, 2);
+        QCOMPARE(result.recreated, 1);
+        QVERIFY(readFile(root + u"/Duże/żółć ąę.bin"_s) == big);
+        QVERIFY(readFile(root + u"/Długa notatka.md"_s) == text);
+        QCOMPARE(readFile(root + u"/mała.md"_s), QByteArray("- mała\n"));
+        // What the note was before is in History; nothing of the staging is left anywhere.
+        const QList<HistoryEntry> versions = vault.history()->list(u"Długa notatka.md"_s);
+        QVERIFY(!versions.isEmpty());
+        QVERIFY(vault.history()->readBytes(versions.first().id) == QByteArray(5 << 20, 'q'));
+        QDirIterator leftovers(root, {u".brulion-tmp-*"_s}, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+        QVERIFY(!leftovers.hasNext());
+        QCOMPARE(vault.files().size(), 3);
+    }
+
+    void cancellingALargeRestoreLeavesNoStagingFileAndTheFileAsItWas()
+    {
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"N"_s);
+        QByteArray big(12 << 20, '\0');
+        QRandomGenerator generator(9);
+        for (qsizetype i = 0; i < big.size(); ++i)
+            big[i] = char(generator.bounded(256));
+        writeFile(root + u"/duży.bin"_s, big);
+        QTemporaryDir state;
+        Vault vault(root, state.path());
+        QVERIFY(vault.open());
+        const QString zip = backupOf(vault, dir.filePath(u"kopie"_s));
+        QVERIFY(!zip.isEmpty());
+        const QByteArray other(7 << 20, 'o');
+        QVERIFY(vault.writeBinary(u"duży.bin"_s, other));
+        const RestoreCheck check = runChecker(poolOn(nullptr), zip, notebookFiles(vault), notebookFolders(vault));
+        QVERIFY(check.ok());
+
+        RestoreApplier applier(vault, poolOn(nullptr));
+        QSignalSpy spy(&applier, &RestoreApplier::finished);
+        applier.start(check.plan, zip);
+        applier.cancel(); // before the first slice
+        QVERIFY(spy.wait(60000));
+        const RestoreResult result = spy.first().first().value<RestoreResult>();
+        QVERIFY(result.cancelled);
+        QVERIFY(readFile(root + u"/duży.bin"_s) == other);
+        QDirIterator leftovers(root, {u".brulion-tmp-*"_s}, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+        QVERIFY(!leftovers.hasNext());
     }
 
     void manyFilesAcrossBatches_data() { modes_data(); }

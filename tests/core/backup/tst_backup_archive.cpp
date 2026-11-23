@@ -6,8 +6,12 @@
 
 #include "vault/vault.h"
 
+#include <QCoreApplication>
 #include <QRandomGenerator>
 #include <QTemporaryDir>
+
+#include <atomic>
+#include <cstring>
 
 using namespace backuptest;
 
@@ -54,6 +58,30 @@ QStringList entryNames(const QString &zipPath)
     out.sort();
     return out;
 }
+
+/// A sink that keeps nothing: the size of every write it was given, so that a test can tell an entry
+/// inflated in pieces from one held whole.
+class CountingDevice : public QIODevice {
+public:
+    qint64 total = 0;
+    qint64 largest = 0;
+    qint64 writes = 0;
+    quint32 crc = 0;
+    qint64 refuseAfter = -1; ///< a full disk: writes fail once this many bytes came
+
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+    qint64 writeData(const char *data, qint64 n) override
+    {
+        if (refuseAfter >= 0 && total + n > refuseAfter)
+            return -1;
+        total += n;
+        largest = std::max(largest, n);
+        ++writes;
+        crc = quint32(mz_crc32(crc, reinterpret_cast<const unsigned char *>(data), size_t(n)));
+        return n;
+    }
+};
 
 } // namespace
 
@@ -158,11 +186,176 @@ private Q_SLOTS:
         QCOMPARE(info.entries.size(), 1);
         QCOMPARE(info.entries.first().size, qint64(12) << 20);
         QVERIFY(reader.verify(info.entries.first()));
-        // In slices (no threads) a big file is stored, so a slice stays a moment.
-        if (!threads)
-            QCOMPARE(info.entries.first().compressedSize, info.entries.first().size);
-        else
-            QVERIFY(info.entries.first().compressedSize < info.entries.first().size / 10);
+        // Deflated whatever the mode: in slices the compression goes on between turns of the event loop.
+        QVERIFY(info.entries.first().compressedSize < info.entries.first().size / 10);
+    }
+
+    void aLargeFileIsDeflatedInSlicesThePageStaysResponsive()
+    {
+        // The browser has no threads: a file of several megabytes (stored, uncompressed, until now)
+        // is deflated a piece at a time, and the event loop runs between the pieces.
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"N"_s);
+        QByteArray noise(8 << 20, '\0'); // text-like but not trivial: words in a random order
+        QRandomGenerator generator(7);
+        const QByteArrayList words = {"zażółć", " gęślą ", "jaźń\n", "- ", "dom ", "łódź ", "Ćma ", "[[Notatka]] "};
+        for (qsizetype at = 0; at < noise.size();) {
+            const QByteArray &word = words.at(generator.bounded(int(words.size())));
+            const qsizetype n = std::min<qsizetype>(word.size(), noise.size() - at);
+            std::memcpy(noise.data() + at, word.constData(), size_t(n));
+            at += n;
+        }
+        writeFile(root + u"/duża notatka.md"_s, noise);
+        Vault vault(root);
+        QVERIFY(vault.open());
+        WriteOptions options;
+        options.targetPath = dir.filePath(u"Brulion-N-2026-11-02-143005.zip"_s);
+        struct Turns { // (shared: a turn still queued when the test ends must not touch its stack)
+            int turns = 0;
+            bool pending = false;
+        };
+        const auto state = std::make_shared<Turns>();
+        options.onRead = [state](const VaultPath &, qint64) {
+            if (std::exchange(state->pending, true))
+                return;
+            QMetaObject::invokeMethod(
+                    qApp,
+                    [state] {
+                        ++state->turns;
+                        state->pending = false;
+                    },
+                    Qt::QueuedConnection);
+        };
+        const WriteResult result = runWriter(poolOn(nullptr), collectSources(vault), options);
+        QVERIFY2(result.ok(), qPrintable(result.detail));
+        QVERIFY2(state->turns >= 20, qPrintable(QString::number(state->turns)));
+        ArchiveReader reader(options.targetPath);
+        const ArchiveInfo info = reader.readEntries();
+        QCOMPARE(info.entries.size(), 1);
+        QVERIFY(info.entries.first().compressedSize < info.entries.first().size / 2);
+        QCOMPARE(*reader.read(info.entries.first()), noise);
+    }
+
+    void anEntryIsInflatedIntoADeviceInPieces_data()
+    {
+        QTest::addColumn<bool>("stored");
+        QTest::newRow("deflated") << false;
+        QTest::newRow("stored") << true;
+    }
+    void anEntryIsInflatedIntoADeviceInPieces()
+    {
+        // No write is ever the whole entry: a restore of a file of any size needs a piece of memory.
+        QFETCH(bool, stored);
+        constexpr qint64 size = 9 << 20;
+        QByteArray bytes(size, '\0');
+        QRandomGenerator generator(11);
+        for (qsizetype i = 0; i < bytes.size(); ++i)
+            bytes[i] = stored ? char(generator.bounded(256)) : char('a' + (i / 7) % 20);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"z.zip"_s);
+        writeFile(path, rawZip({{"Duży żółw.bin", bytes}, {"mały.md", "ok"}}, stored ? 0 : 6));
+        ArchiveReader reader(path);
+        const ArchiveInfo info = reader.readEntries();
+        QVERIFY2(info.ok(), qPrintable(info.detail));
+        const ArchiveEntry entry = info.entries.first();
+        QCOMPARE(entry.size, size);
+
+        CountingDevice sink;
+        QVERIFY(sink.open(QIODevice::WriteOnly));
+        QVERIFY(reader.extractTo(entry, sink));
+        QCOMPARE(sink.total, size);
+        QCOMPARE(sink.crc, entry.crc32);
+        QVERIFY2(sink.largest <= (256 << 10), qPrintable(QString::number(sink.largest)));
+        QVERIFY(sink.writes >= size / (256 << 10));
+
+        // A sink that refuses (a full disk), and one stopped halfway.
+        CountingDevice full;
+        full.refuseAfter = 1 << 20;
+        QVERIFY(full.open(QIODevice::WriteOnly));
+        QVERIFY(!reader.extractTo(entry, full));
+        std::atomic_bool cancel{false};
+        CountingDevice stopped;
+        QVERIFY(stopped.open(QIODevice::WriteOnly));
+        QVERIFY(reader.extractTo(entry, stopped, &cancel)); // not cancelled yet
+        cancel = true;
+        CountingDevice never;
+        QVERIFY(never.open(QIODevice::WriteOnly));
+        QVERIFY(!reader.extractTo(entry, never, &cancel));
+        QCOMPARE(never.total, qint64(0));
+        // A folder is no file.
+        ArchiveEntry folder = entry;
+        folder.folder = true;
+        QVERIFY(!reader.extractTo(folder, never));
+    }
+
+    void anEntryIsInflatedInStepsThatCanStopAnywhere()
+    {
+        // The browser's restore: a step ends at its budget and the event loop runs; a budget of nothing
+        // ends it after every piece, so the pieces can be counted.
+        constexpr qint64 size = 6 << 20;
+        QByteArray bytes(size, '\0');
+        for (qsizetype i = 0; i < bytes.size(); ++i)
+            bytes[i] = char('a' + (i / 5) % 23);
+        QTemporaryDir dir;
+        const QString path = dir.filePath(u"z.zip"_s);
+        writeFile(path, rawZip({{"Duży.bin", bytes}, {"pusty.md", ""}}));
+        ArchiveReader reader(path);
+        const ArchiveInfo info = reader.readEntries();
+        QVERIFY(info.ok());
+
+        CountingDevice sink;
+        QVERIFY(sink.open(QIODevice::WriteOnly));
+        std::unique_ptr<Extraction> extraction = reader.beginExtract(info.entries.first());
+        QVERIFY(extraction);
+        int steps = 0;
+        Extraction::Step step;
+        while ((step = extraction->step(&sink, 0)) == Extraction::Step::More)
+            ++steps;
+        QCOMPARE(step, Extraction::Step::Done);
+        QVERIFY2(steps >= size / (64 << 10) - 2, qPrintable(QString::number(steps)));
+        QCOMPARE(sink.total, size);
+        QCOMPARE(sink.crc, info.entries.first().crc32);
+        QVERIFY(sink.largest <= (64 << 10));
+        QCOMPARE(extraction->step(&sink, 0), Extraction::Step::Done); // asked again: still done
+
+        // Nothing kept: a checksum run. An empty entry is done at once. A cancel fails it.
+        extraction = reader.beginExtract(info.entries.first());
+        while ((step = extraction->step(nullptr, 1000)) == Extraction::Step::More) { }
+        QCOMPARE(step, Extraction::Step::Done);
+        QCOMPARE(reader.beginExtract(info.entries.last())->step(nullptr, 10), Extraction::Step::Done);
+        std::atomic_bool cancel{true};
+        QCOMPARE(reader.beginExtract(info.entries.first())->step(nullptr, 10, &cancel), Extraction::Step::Failed);
+        // An extraction dropped halfway frees what it holds.
+        extraction = reader.beginExtract(info.entries.first());
+        QCOMPARE(extraction->step(nullptr, 0), Extraction::Step::More);
+        extraction.reset();
+        // A damaged entry fails at its end.
+        QByteArray zip = rawZip({{"a.bin", QByteArray(3 << 20, 'x')}}, 0);
+        zip[zip.indexOf(QByteArray(1000, 'x')) + (2 << 20)] = 'y';
+        const QString bad = dir.filePath(u"bad.zip"_s);
+        writeFile(bad, zip);
+        ArchiveReader damaged(bad);
+        const ArchiveInfo badInfo = damaged.readEntries();
+        QVERIFY(badInfo.ok());
+        extraction = damaged.beginExtract(badInfo.entries.first());
+        while ((step = extraction->step(nullptr, 1000)) == Extraction::Step::More) { }
+        QCOMPARE(step, Extraction::Step::Failed);
+    }
+
+    void aDamagedEntryIsRefusedAfterItsPiecesWentOut()
+    {
+        QTemporaryDir dir;
+        QByteArray zip = rawZip({{"a.bin", QByteArray(3 << 20, 'x')}}, 0);
+        const qsizetype data = zip.indexOf(QByteArray(1000, 'x'));
+        zip[data + (2 << 20)] = 'y';
+        const QString path = dir.filePath(u"z.zip"_s);
+        writeFile(path, zip);
+        ArchiveReader reader(path);
+        const ArchiveInfo info = reader.readEntries();
+        QVERIFY(info.ok());
+        CountingDevice sink;
+        QVERIFY(sink.open(QIODevice::WriteOnly));
+        QVERIFY(!reader.extractTo(info.entries.first(), sink)); // the caller drops what came
     }
 
     void aFileChangingDuringTheRunIsReadAgain_data()
@@ -611,11 +804,14 @@ private Q_SLOTS:
         QTest::newRow("a file and a folder") << zip({{"a", "1"}, {"a/b.md", "2"}}) << int(ArchiveProblem::Duplicate);
         QTest::newRow("a folder and a file") << zip({{"a/", ""}, {"a", "2"}}) << int(ArchiveProblem::Duplicate);
         QTest::newRow("not a zip") << QByteArray("to nie jest archiwum") << int(ArchiveProblem::NotAZip);
-        QTest::newRow("a zip's head only") << QByteArray("PK\x03\x04 ucięte") << int(ArchiveProblem::NotAZip);
+        QTest::newRow("a zip's head only") << QByteArray("PK\x03\x04 ucięte") << int(ArchiveProblem::Truncated);
         QTest::newRow("empty file") << QByteArray() << int(ArchiveProblem::NotAZip);
         QByteArray cut = zip({{"a.md", "treść"}, {"b.md", "treść"}});
         cut.chop(10);
-        QTest::newRow("cut short") << cut << int(ArchiveProblem::NotAZip);
+        QTest::newRow("cut short") << cut << int(ArchiveProblem::Truncated);
+        QTest::newRow("cut in half") << rawZip({{"a.md", QByteArray(50'000, 'x')}, {"b.md", "treść"}}, 0).left(30'000)
+                                     << int(ArchiveProblem::Truncated);
+        QTest::newRow("a PNG") << QByteArray("\x89PNG\r\n\x1a\n....") << int(ArchiveProblem::NotAZip);
         // Brulion's manifest does not make a hostile archive any less hostile.
         QTest::newRow("zip slip with a manifest")
                 << withManifest(zip({{"../poza.md", "owned"}})) << int(ArchiveProblem::UnsafePath);
