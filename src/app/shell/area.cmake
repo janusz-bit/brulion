@@ -221,6 +221,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellSemanticSettings.qml
     qml/shell/ShellSettingDividers.qml
     qml/shell/ShellSettingRow.qml
+    qml/shell/ShellShareActions.qml
     qml/shell/ShellShareDialog.qml
     qml/shell/ShellShortcutSettings.qml
     qml/shell/ShellSidePanel.qml

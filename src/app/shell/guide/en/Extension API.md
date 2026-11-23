@@ -169,6 +169,7 @@ end, { label = "Archive the done tasks" })
 - `ctx.page` is the name of the page on screen, an empty text when there is none.
 - With `block = true` the command works on the block under the cursor, `ctx.block`, and the palette offers it only in a note. Check that `ctx.block` is there.
 - With `palette = false` the palette does not offer it: a view's button (`b.ui.run`) or the app runs it — the AI chat runs the AI assistant's `chat` this way.
+- `ctx.folder`, `ctx.path` and `ctx.shared` come from items of the folder tree's menu and of the share dialogs (below, The app).
 - `ctx.selection` is what you selected in the note before choosing the command: the text selected in the block you are editing (or in the Markdown source), or the selected blocks as Markdown — what the AI in the editor works on too; an empty text when nothing is.
 - With `key = "Ctrl+Alt+W"` the command suggests a keyboard shortcut; it gets it only while none of Brulion's own commands has it. Every command of an extension is in **Settings → Keyboard shortcuts**, where you can give it any shortcut.
 - With `chat = true` it is a **chat partner**: the AI chat offers it as who answers a conversation. It gets `ctx.messages` (the conversation, the user's last; pictures as `images`) and `ctx.omitted` (how many first messages did not fit the model), and what it returns is its message in the conversation. More in [[AI]].
@@ -518,7 +519,9 @@ b.app.theme({
 })
 ```
 
-**Buttons and entries.** `b.app.contribute(place, item)` puts an item into one of six places: `"toolbar"` (a button of the top bar), `"statusbar"` (a text at the window's bottom), `"sidebar"` (an entry of the side bar), `"pageMenu"` (a page's menu), `"blockMenu"` (a block's menu) and `"slash"` (the `/` menu). An item has an `id`, a `label`, an `icon`, and says what it does: `command` (one of the extension's commands), `view`, `page`, `run` (a palette command) or, in the `/` menu, `insert` (text to write). The same `id` again replaces the item — a status bar text that counts something simply contributes itself again.
+**Buttons and entries.** `b.app.contribute(place, item)` puts an item into one of eleven places: `"toolbar"` (a button of the top bar), `"statusbar"` (a text at the window's bottom), `"sidebar"` (an entry of the side bar), `"pageMenu"` (a page's menu), `"blockMenu"` (a block's menu), `"slash"` (the `/` menu), `"tabMenu"` (a tab's menu), `"folderMenu"` (the menu of a row in the folder tree), `"bottomNav"` (a button of the phone's bottom navigation), `"keyboardToolbar"` (a button of the editing toolbar on the phone's keyboard) and `"share"` (an action of the share dialogs). An item has an `id`, a `label`, an `icon`, and says what it does: `command` (one of the extension's commands), `view`, `page`, `run` (a palette command) or, in the `/` menu, `insert` (text to write). The same `id` again replaces the item — a status bar text that counts something simply contributes itself again. The label is your text: Brulion does not translate it.
+
+What a command gets depends on where it was chosen: a tab's page as `ctx.page`; in the folder tree the row's path as `ctx.path`, and the folder as `ctx.folder` or the page as `ctx.page`; on the keyboard's toolbar the block you are editing, `ctx.block`, and what is selected in it, `ctx.selection`; in a share dialog what is shared, `ctx.shared` — `text`, `title`, `incoming` (`true` when another app shared it into Brulion, `false` for a page shared from Brulion's "Export page") and, for files, `files`. A share action only runs a command, and it takes the share: Brulion saves nothing itself then. The bottom navigation and the keyboard's toolbar show only icons, so their buttons need an `icon`. There is room for 2 buttons of all extensions on the bottom navigation — they come after its views and never take one's place —, for 4 buttons of one extension (8 in all) on the keyboard's toolbar and 4 share actions (8 in all); every other place takes 16 items of an extension.
 
 ```luau
 -- Today's open tasks in the status bar, always up to date, and a `/` entry for a meeting.
@@ -542,6 +545,27 @@ b.app.contribute("slash", {
     label = "Meeting notes",
     insert = "## Meeting\n- Who:\n- Decisions:\n- [ ] Next step",
 })
+```
+
+```luau
+-- Whatever is shared saved as a bookmark, and a button on the phone's keyboard that marks the
+-- block you are editing as important.
+b.command("bookmark", function(ctx)
+    if not ctx.shared then
+        return
+    end
+    b.appendToPage("Bookmarks", `- {ctx.shared.title}: {ctx.shared.text:sub(1, 200)}`)
+    return "Bookmarked"
+end, { palette = false })
+
+b.command("important", function(ctx)
+    if ctx.block then
+        b.setProperty(ctx.block.ref, "important", "yes")
+    end
+end, { palette = false })
+
+b.app.contribute("share", { id = "bookmark", label = "Bookmark", icon = "bookmark", command = "bookmark" })
+b.app.contribute("keyboardToolbar", { id = "important", label = "Important", icon = "flag", command = "important" })
 ```
 
 **As you type.** `b.app.inputRule({ match, replace })` replaces text the moment you type it: `->` becomes `→` when you type the `>`. One Ctrl+Z brings back what you typed. With `word = true` only a whole word is replaced, once you type a space or punctuation after it. Nothing is replaced in code, formulas, link targets or web addresses, nor when you paste. Brulion comes with no rules of its own — an extension declares the ones you want — and `b.app.remove("inputRule", "->")` takes one away.

@@ -10,7 +10,9 @@ import Brulion
 // phone's bottom navigation, which comes back.
 // The tools follow `mode` (BlockEditor.toolbarMode):
 //   "block"   outdent, indent, move up/down, task (a tap cycles the status, a long press opens the
-//             status menu), [[, #, /, date, reminder, picture, undo, redo, "More" (the block
+//             status menu), [[, #, /, date, reminder, picture, the extensions' buttons
+//             (b.app.contribute("keyboardToolbar", …): a command on the edited block, ctx.block
+//             and ctx.selection; docs/UI.md "Extension items in the UI"), undo, redo, "More" (the block
 //             menu above the bar: copying a link to the block or heading, …), hide keyboard. In the
 //             document mode the writing tools come first — a list button (paragraph ↔ list
 //             item), task, [[, #, / — then outdent / indent (list items only) and move up/down, so
@@ -49,6 +51,12 @@ Rectangle {
     readonly property bool documentMode: editor !== null && editor.documentMode
     /// The edited block is a list item (the document mode indents only those).
     readonly property bool listItem: edit !== null && edit.block !== null && edit.block.listItem
+    readonly property list<var> noRows: []
+    /// The extensions' buttons as text: made again only when they change.
+    readonly property string extensionsKey: Workspace.extensions !== null
+                                            ? Workspace.extensions.contributionsKey("keyboardToolbar", Workspace.extensions.appRevision) : ""
+    readonly property list<var> extensionItems: bar.extensionsKey !== ""
+                                                ? Workspace.extensions.contributions("keyboardToolbar", bar.extensionsKey.length) : bar.noRows
 
     // Cyan in the browser's keyboard self-test (KeyboardInsets.marked): found on a screenshot.
     color: KeyboardInsets.marked ? "#00ffff" : Theme.bgElevated
@@ -332,6 +340,27 @@ Rectangle {
                 onClicked: {
                     bar.commitComposition()
                     bar.editor.recordVoiceNote(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                }
+            }
+            // The extensions' buttons: their commands on the edited block (ctx.block, ctx.selection).
+            Separator { visible: bar.extensionItems.length > 0 }
+            Repeater {
+                model: bar.extensionItems
+                delegate: ToolButton {
+                    id: extensionButton
+                    // (A row of WorkspaceExtensions.contributions(): its `id` and `icon` read
+                    // through modelData — a delegate's property cannot have those names.)
+                    required property var modelData
+                    required property string extension
+                    readonly property string itemId: UiModels.stringField(extensionButton.modelData, "id")
+                    objectName: "contribution_keyboardToolbar_" + extensionButton.itemId
+                    iconName: UiModels.stringField(extensionButton.modelData, "icon")
+                    label: UiModels.stringField(extensionButton.modelData, "label")
+                    toolTip: UiModels.stringField(extensionButton.modelData, "tooltip")
+                    onClicked: {
+                        bar.commitComposition()
+                        bar.editor.runToolbarItem(extensionButton.extension, extensionButton.itemId)
+                    }
                 }
             }
             Separator {}

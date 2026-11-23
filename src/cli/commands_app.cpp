@@ -1197,7 +1197,8 @@ void addAppCommands(QList<Command> &out)
     out.append(make(u"app.contributions"_s,
                     QT_TRANSLATE_NOOP("brulion::cli",
                                       "The items extensions put into the running app's UI: toolbar, statusbar, "
-                                      "sidebar, pageMenu, blockMenu, slash"),
+                                      "sidebar, pageMenu, blockMenu, slash, tabMenu, folderMenu, bottomNav, "
+                                      "keyboardToolbar, share"),
                     appContributions,
                     {option(u"slot"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Only this slot's items"))}));
     c = make(

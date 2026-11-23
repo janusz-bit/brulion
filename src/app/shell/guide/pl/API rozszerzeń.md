@@ -169,6 +169,7 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 - `ctx.page` to nazwa strony na ekranie; pusty tekst, gdy żadnej nie ma.
 - Z `block = true` polecenie działa na bloku pod kursorem, `ctx.block`, a paleta pokazuje je tylko w notatce. Sprawdź, czy `ctx.block` jest.
 - Z `palette = false` paleta go nie pokazuje: uruchamia je przycisk widoku (`b.ui.run`) albo sama aplikacja — tak czat z AI uruchamia polecenie `chat` asystenta AI.
+- `ctx.folder`, `ctx.path` i `ctx.shared` przychodzą z elementów menu drzewa folderów i okien udostępniania (niżej, Aplikacja).
 - `ctx.selection` to to, co zaznaczyłeś w notatce przed wybraniem polecenia: tekst zaznaczony w edytowanym bloku (albo w źródle Markdown) albo zaznaczone bloki jako Markdown — to samo, na czym pracuje AI w edytorze; pusty tekst, gdy nic nie jest zaznaczone.
 - Z `key = "Ctrl+Alt+W"` polecenie proponuje skrót klawiszowy; dostaje go tylko wtedy, gdy nie ma go żadne polecenie samego Brulionu. Każde polecenie rozszerzenia jest w **Ustawieniach → Skróty klawiszowe**, gdzie możesz mu nadać dowolny skrót.
 - Z `chat = true` jest **rozmówcą** w czacie z AI: czat pozwala wybrać je jako tego, kto odpowiada w rozmowie. Dostaje `ctx.messages` (rozmowę, na końcu wiadomość użytkownika; obrazki jako `images`) i `ctx.omitted` (ile pierwszych wiadomości nie zmieściło się w modelu), a to, co zwraca, jest jego wiadomością w rozmowie. Więcej na stronie [[AI]].
@@ -518,7 +519,9 @@ b.app.theme({
 })
 ```
 
-**Przyciski i pozycje.** `b.app.contribute(miejsce, element)` dodaje element w jednym z sześciu miejsc: `"toolbar"` (przycisk górnego paska), `"statusbar"` (tekst na dole okna), `"sidebar"` (pozycja paska bocznego), `"pageMenu"` (menu strony), `"blockMenu"` (menu bloku) i `"slash"` (menu `/`). Element ma `id`, `label`, `icon` i mówi, co robi: `command` (jedno z poleceń rozszerzenia), `view`, `page`, `run` (polecenie palety) albo, w menu `/`, `insert` (tekst do wpisania). To samo `id` jeszcze raz zastępuje element — tekst paska stanu, który coś liczy, po prostu dodaje się od nowa.
+**Przyciski i pozycje.** `b.app.contribute(miejsce, element)` dodaje element w jednym z jedenastu miejsc: `"toolbar"` (przycisk górnego paska), `"statusbar"` (tekst na dole okna), `"sidebar"` (pozycja paska bocznego), `"pageMenu"` (menu strony), `"blockMenu"` (menu bloku), `"slash"` (menu `/`), `"tabMenu"` (menu karty), `"folderMenu"` (menu wiersza w drzewie folderów), `"bottomNav"` (przycisk dolnej nawigacji telefonu), `"keyboardToolbar"` (przycisk paska edycji nad klawiaturą telefonu) i `"share"` (akcja okien udostępniania). Element ma `id`, `label`, `icon` i mówi, co robi: `command` (jedno z poleceń rozszerzenia), `view`, `page`, `run` (polecenie palety) albo, w menu `/`, `insert` (tekst do wpisania). To samo `id` jeszcze raz zastępuje element — tekst paska stanu, który coś liczy, po prostu dodaje się od nowa. Etykieta to twój tekst: Brulion jej nie tłumaczy.
+
+To, co dostaje polecenie, zależy od miejsca, w którym je wybrano: stronę karty jako `ctx.page`; w drzewie folderów ścieżkę wiersza jako `ctx.path`, a folder jako `ctx.folder` albo stronę jako `ctx.page`; na pasku nad klawiaturą edytowany blok, `ctx.block`, i to, co jest w nim zaznaczone, `ctx.selection`; w oknie udostępniania to, co udostępniono, `ctx.shared` — `text`, `title`, `incoming` (`true`, gdy inna aplikacja udostępniła to Brulionowi, `false` dla strony udostępnianej z „Eksportuj stronę” Bruliona) i, dla plików, `files`. Akcja udostępniania tylko uruchamia polecenie i przejmuje to, co udostępniono: Brulion sam niczego wtedy nie zapisuje. Dolna nawigacja i pasek nad klawiaturą pokazują same ikony, więc ich przyciski potrzebują `icon`. W dolnej nawigacji jest miejsce na 2 przyciski wszystkich rozszerzeń — stają za jej widokami i nigdy nie zajmują miejsca żadnego z nich —, na pasku nad klawiaturą na 4 przyciski jednego rozszerzenia (8 w sumie), a akcji udostępniania może być 4 (8 w sumie); każde inne miejsce mieści 16 elementów rozszerzenia.
 
 ```luau
 -- Dzisiejsze otwarte zadania na pasku stanu, zawsze aktualne, i pozycja `/` na spotkanie.
@@ -542,6 +545,27 @@ b.app.contribute("slash", {
     label = "Notatka ze spotkania",
     insert = "## Spotkanie\n- Kto:\n- Ustalenia:\n- [ ] Następny krok",
 })
+```
+
+```luau
+-- To, co udostępniono, zapisane jako zakładka, i przycisk nad klawiaturą telefonu, który
+-- oznacza edytowany blok jako ważny.
+b.command("zakladka", function(ctx)
+    if not ctx.shared then
+        return
+    end
+    b.appendToPage("Zakładki", `- {ctx.shared.title}: {ctx.shared.text:sub(1, 200)}`)
+    return "Zapisano zakładkę"
+end, { palette = false })
+
+b.command("wazne", function(ctx)
+    if ctx.block then
+        b.setProperty(ctx.block.ref, "priorytet", "wysoki")
+    end
+end, { palette = false })
+
+b.app.contribute("share", { id = "zakladka", label = "Zakładka", icon = "bookmark", command = "zakladka" })
+b.app.contribute("keyboardToolbar", { id = "wazne", label = "Ważne", icon = "flag", command = "wazne" })
 ```
 
 **W trakcie pisania.** `b.app.inputRule({ match, replace })` zamienia tekst w chwili, gdy go wpisujesz: `->` staje się `→`, gdy wpiszesz `>`. Jedno Ctrl+Z przywraca to, co wpisałeś. Z `word = true` zamieniane jest tylko całe słowo, gdy wpiszesz po nim spację albo znak interpunkcyjny. Nic nie jest zamieniane w kodzie, wzorach, celach linków ani adresach stron, ani przy wklejaniu. Brulion nie ma własnych reguł — rozszerzenie deklaruje te, których chcesz — a `b.app.remove("inputRule", "->")` zabiera jedną z nich.

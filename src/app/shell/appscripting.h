@@ -116,10 +116,15 @@ public:
 
     // ---- the items of the UI (b.app.contribute) --------------------------------------------------
     /// Does what the item `id` of `extension` in `slot` does — its command (on the block at
-    /// `line` of `path` in a block's menu and the slash menu: ctx.block), view, page or palette
-    /// command; for `insert` nothing here (the editor inserts it). False when the item is gone.
+    /// `line` of `path` in a block's menu, the slash menu and the keyboard's toolbar: ctx.block;
+    /// else `path` is ctx.page), view, page or palette command; for `insert` nothing here (the
+    /// editor inserts it). `context`: the slot's own fields — the folder tree's row {path,
+    /// folder?}; the keyboard toolbar's {selection} (ctx.selection); a share action's {text} (the shared text as
+    /// edited, `path` ""), which becomes ctx.shared with the share waiting (AppController::sharedForExtensions()), or,
+    /// with `path`, the page shared from Brulion as ctx.shared. False when the item is gone.
     Q_INVOKABLE bool activate(const QString &slot, const QString &extension, const QString &id,
-                              const QString &path = QString(), int line = -1);
+                              const QString &path = QString(), int line = -1,
+                              const QVariantMap &context = QVariantMap());
 
     // ---- live changes ----------------------------------------------------------------------------
     int liveRevision() const { return m_liveRevision; }

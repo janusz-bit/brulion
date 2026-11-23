@@ -15,7 +15,8 @@ import Brulion
 // The tree (FolderTreeModel): a tap on a folder opens or closes it, on a page opens it; the
 // context menu (right-click, press-and-hold, the Menu key, and on touch screens the row's "⋯"
 // button) has the folder's and the page's actions — Move to…, Show folder pages, Search in
-// folder, Export folder…, Copy link, …; the "Pages" header's "+" a menu with a new page or
+// folder, Export folder…, Copy link, …, then the extensions' items (b.app.contribute("folderMenu",
+// …): a command gets the row as ctx.path, ctx.folder or ctx.page); the "Pages" header's "+" a menu with a new page or
 // folder at the root, "Collapse all", "Show attachments" and "Show the open page" (reveal:
 // the open page or daily note is shown and highlighted in the tree on every route change,
 // `ui/sidebar/revealCurrent`, on by default — a collapsed "Pages" section stays collapsed, only
@@ -158,6 +159,14 @@ Rectangle {
     /// The same where the click asks (Ctrl+click, Ctrl+Enter: a new tab — OpenIn).
     function openPageHere(path: string): void {
         sidebar.openPage(path, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
+    }
+    /// An extension's item of the row menu (b.app.contribute("folderMenu", …)) on the row `path`.
+    /// (Kept in a property: compiled code passed the map built in the call empty.)
+    property var _treeItemContext: ({})
+    function runTreeItem(extension: string, id: string, path: string, isDir: bool, page: bool): void {
+        // A folder's row: {path, folder}; another row: {path, folder: ""} (a page's also as ctx.page).
+        sidebar._treeItemContext = { path: path, folder: isDir ? path : "" }
+        AppScripting.activate("folderMenu", extension, id, !isDir && page ? path : "", -1, sidebar._treeItemContext)
     }
     function showContextMenu(item: Item, path: string, isDir: bool): void {
         sidebar.contextPath = path
@@ -1147,6 +1156,21 @@ Rectangle {
                 text: qsTr("Page history")
                 iconName: "history"
                 onTriggered: sidebar.go({ view: "history", path: contextMenu.path })
+            }
+            // The extensions' items (b.app.contribute("folderMenu", …)): their commands get the
+            // row (ctx.path; ctx.folder for a folder, ctx.page for a page).
+            BMenuSeparator {
+                id: treeExtensionsAt
+                visible: treeExtensions.count > 0
+                height: visible ? implicitHeight : 0
+            }
+            ShellContributionItems {
+                id: treeExtensions
+                menu: contextMenu
+                after: treeExtensionsAt
+                slot: "folderMenu"
+                onPicked: (extension, id) => sidebar.runTreeItem(extension, id, contextMenu.path, contextMenu.isDir,
+                                                                 contextMenu.page)
             }
             BMenuSeparator {}
             BMenuItem {

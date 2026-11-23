@@ -6725,6 +6725,277 @@ void checkContributions(QQuickWindow *window, AppController *app, const Check &c
         focused->forceActiveFocus();
 }
 
+/// The slots of 0.29 (b.app.contribute: tabMenu, folderMenu, bottomNav, keyboardToolbar, share;
+/// docs/UI.md "Extension items in the UI"): an extension page with an item in each, arrived as a
+/// sync would and approved. With real input each place shows its item and a tap runs its Luau
+/// command once, with what the place gives it — a tab's menu (wide windows: ctx.page), a folder's
+/// row menu in the tree (ctx.folder), the bottom navigation after its views (phones), the
+/// keyboard's toolbar (touch UIs: ctx.block), the share dialog's action (ctx.shared: the share is
+/// the extension's, nothing saved) and the export dialog's (the page shared). Saved without the
+/// bottom navigation's and the toolbar's items they go at once; deleted, the page takes the rest.
+void checkContributionSlots(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool narrow = window->width() < 900;
+    Workspace *ws = app->workspace();
+    WorkspaceExtensions *ext = ws->extensions();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QString path = ws->newPagePath(u"Sloty samotestu"_s);
+    const QString note = u"Notatka slotów samotestu.md"_s;
+    const QString id = u"sloty-samotestu"_s;
+    check(!ws->exists(path) && !ws->exists(note), "the self-test's slot pages are new");
+    check(ws->write(note, u"- żółty blok\n- drugi\n"_s), "a note for the slots is written");
+    const auto page = [](const QString &items) {
+        // (Pieces joined with +, each with its own prefix, as checkContributions' page.)
+        return u"---\ntags: [rozszerzenie]\nuprawnienia: [aplikacja]\n---\n```luau\n"_s
+               + u"local function say(name, ctx)\n"_s + u"    local s = ctx.shared\n"_s
+               + u"    b.log(`slot {name}: {ctx.page}|{ctx.folder or \"\"}|{if ctx.block then ctx.block.text else \"\"}|"_s
+               + u"{if s then s.text else \"\"}` .. (if name == \"klawiatura\" then \"|\" .. ctx.selection else \"\"))\n"_s
+               + u"end\n"_s
+               + u"for _, name in { \"karta\", \"folder\", \"nawigacja\", \"klawiatura\", \"udostepnij\" } do\n"_s
+               + u"    b.command(name, function(ctx) say(name, ctx) end, { palette = false })\n"_s + u"end\n"_s + items
+               + u"```\n"_s;
+    };
+    const QString menus =
+            u"b.app.contribute(\"tabMenu\", { id = \"karta\", label = \"Karta samotestu\", command = \"karta\" })\n"_s
+            + u"b.app.contribute(\"folderMenu\", { id = \"folder\", label = \"Folder samotestu\", "_s
+            + u"icon = \"folder\", command = \"folder\" })\n"_s
+            + u"b.app.contribute(\"share\", { id = \"udostepnij\", label = \"Udostępnij samotestowi\", "_s
+            + u"icon = \"share\", command = \"udostepnij\" })\n"_s;
+    const QString buttons =
+            u"b.app.contribute(\"bottomNav\", { id = \"nawigacja\", label = \"Nawigacja samotestu\", "_s
+            + u"icon = \"flame\", command = \"nawigacja\" })\n"_s
+            + u"b.app.contribute(\"keyboardToolbar\", { id = \"klawiatura\", label = \"Klawiatura samotestu\", "_s
+            + u"icon = \"sparkles\", command = \"klawiatura\" })\n"_s;
+    const auto said = [&](const QString &line) { return int(ext->console()->text().count(u"slot "_s + line)); };
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    check(ws->vault()->writeText(path, page(menus + buttons), ChangeSource::Sync),
+          "an extension with an item in each slot arrives");
+    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 10000), "its code waits for approval");
+    check(ext->contributions(u"share"_s).isEmpty(), "and puts nothing into the slots before");
+    ext->approve(path);
+    check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000), "approved, it runs");
+    for (const QString &slot : {u"tabMenu"_s, u"folderMenu"_s, u"bottomNav"_s, u"keyboardToolbar"_s, u"share"_s})
+        check(ext->contributions(slot).size() == 1, qPrintable(u"its item is in “%1”"_s.arg(slot)));
+    QPointF at;
+
+    // ---- A tab's menu (the tab bar: wide windows, two tabs): the tab's page.
+    if (!narrow) {
+        app->openPage(note);
+        waitLoadedEditor(window->contentItem(), u"pageEditor"_s, note);
+        const int added = app->newTab();
+        QQuickItem *tab = nullptr;
+        check(waitFor([&] {
+                  tab = findShown(window->contentItem(), [&](QQuickItem *item) {
+                      return item->objectName() == u"shellTab"
+                             && item->property("route").toMap().value(u"path"_s).toString() == note;
+                  });
+                  return tab != nullptr;
+              }),
+              "the tab bar shows the note's tab");
+        if (tab) {
+            mouseMove(window, QPointF(1, 1));
+            mouseClick(window, pointIn(tab), Qt::RightButton);
+        }
+        QQuickItem *item = steadyItem(window, [&] { return named(u"contribution_tabMenu_karta"_s); }, &at, 10000);
+        check(item != nullptr, "a right-click on a tab opens its menu with the extension's item");
+        const int before = said(u"karta: Notatka slotów samotestu|||"_s);
+        if (item)
+            tapOrClick(window, at, touch);
+        check(waitFor([&] { return said(u"karta: Notatka slotów samotestu|||"_s) == before + 1; }, 10000),
+              "the item runs its command once, on the tab's page");
+        closeMenus(window);
+        app->closeTab(added);
+        settle(200);
+    }
+
+    // ---- The folder tree's row menu (the sidebar; the drawer on phones): the folder.
+    {
+        QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+        app->goHome();
+        if (narrow && drawer) {
+            QMetaObject::invokeMethod(drawer, "open");
+            waitFor([&] { return drawer->property("opened").toBool(); });
+            settle(200);
+        }
+        QQuickItem *list = findShownNamed(window->contentItem(), u"sidebarTree"_s);
+        if (auto *model = list ? list->property("model").value<QObject *>() : nullptr) {
+            int row = -1;
+            QMetaObject::invokeMethod(model, "indexOf", qReturnArg(row), u"Projekty"_s);
+            if (row >= 0)
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", row, 4 /* ListView.Contain */);
+        }
+        // (A row the list shows, not one of its pooled delegates: itemAtIndex.)
+        const auto folderRow = [&]() -> QQuickItem * {
+            return !list ? nullptr : findShown(list, [&](QQuickItem *item) {
+                if (item->objectName() != u"treeRow" || item->property("path").toString() != u"Projekty")
+                    return false;
+                QQuickItem *live = nullptr;
+                QMetaObject::invokeMethod(list, "itemAtIndex", qReturnArg(live), item->property("index").toInt());
+                return live == item;
+            });
+        };
+        QQuickItem *row = nullptr;
+        check(waitFor([&] { return (row = folderRow()) != nullptr; }, 10000), "the tree shows the folder “Projekty”");
+        if (!row) {
+            int count = 0;
+            if (list)
+                for (QQuickItem *item : list->findChildren<QQuickItem *>())
+                    if (item->objectName() == u"treeRow" && count++ < 12)
+                        std::fprintf(stderr, "selftest: tree row %s visible %d\n",
+                                     qPrintable(item->property("path").toString()), item->isVisible());
+            std::fprintf(stderr, "selftest: the tree %s, %d rows\n", list ? "shown" : "missing", count);
+        }
+        settle(200);
+        at = row ? pointIn(row) : QPointF();
+        if (row && touch) {
+            QQuickItem *more = findShown(row, [](QQuickItem *item) { return item->objectName() == u"treeRowMore"; });
+            if (more)
+                tapOrClick(window, pointIn(more), true);
+        } else if (row) {
+            mouseClick(window, at, Qt::RightButton);
+        }
+        QQuickItem *item = steadyItem(window, [&] { return named(u"contribution_folderMenu_folder"_s); }, &at, 10000);
+        check(item != nullptr, "the folder's menu has the extension's item");
+        const int before = said(u"folder: |Projekty||"_s);
+        if (item)
+            tapOrClick(window, at, touch);
+        check(waitFor([&] { return said(u"folder: |Projekty||"_s) == before + 1; }, 10000),
+              "the item runs its command once, on the folder (ctx.folder)");
+        closeMenus(window);
+        if (drawer && drawer->property("visible").toBool()) {
+            QMetaObject::invokeMethod(drawer, "close");
+            waitFor([&] { return !drawer->property("visible").toBool(); });
+        }
+    }
+
+    // ---- The bottom navigation (phones): after the views, which all stay.
+    if (narrow) {
+        app->goHome();
+        QQuickItem *button =
+                steadyItem(window, [&] { return named(u"contribution_bottomNav_nawigacja"_s); }, &at, 10000);
+        check(button != nullptr, "the bottom navigation shows the extension's button");
+        const QStringList views = app->settings()->bottomNavTabs();
+        bool allViews = !views.isEmpty();
+        for (const QString &view : views) {
+            QQuickItem *tab = named(u"bottomNav_"_s + view);
+            allViews = allViews && tab && button && tab->mapToScene(QPointF()).x() < button->mapToScene(QPointF()).x();
+        }
+        check(allViews, "after every view of the bar, none of them left out");
+        const int before = said(u"nawigacja: |||"_s);
+        if (button)
+            tapOrClick(window, at, touch);
+        check(waitFor([&] { return said(u"nawigacja: |||"_s) == before + 1; }, 10000), "a tap runs its command once");
+    }
+
+    // ---- The keyboard's toolbar (touch UIs): the edited block.
+    if (touch) {
+        app->openPage(note);
+        QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, note);
+        if (editor) {
+            clearToasts(window);
+            uidriver::callQml(editor, "startEditing", {QVariant(0), QVariant(-1)});
+            check(waitFor([&] { return editor->property("toolbarVisible").toBool(); }, 10000),
+                  "editing a block shows the toolbar");
+            QQuickItem *button = nullptr;
+            check(waitFor([&] { return (button = named(u"contribution_keyboardToolbar_klawiatura"_s)) != nullptr; }),
+                  "the toolbar has the extension's button");
+            // Scrolled to the middle of the row (wider than a phone: a chevron at its edge).
+            if (QQuickItem *flick = button ? uidriver::enclosingFlickable(button) : nullptr) {
+                settle(200);
+                auto *content = flick->property("contentItem").value<QQuickItem *>();
+                const QRectF r = button->mapRectToItem(content, QRectF(0, 0, button->width(), button->height()));
+                const qreal maxX = std::max<qreal>(0, flick->property("contentWidth").toReal() - flick->width());
+                flick->setProperty("contentX", std::clamp<qreal>(r.center().x() - flick->width() / 2, 0, maxX));
+            }
+            // A word of the block selected: the command gets it as ctx.selection.
+            if (QQuickItem *edit = editor->property("activeEditor").value<QQuickItem *>())
+                QMetaObject::invokeMethod(edit, "select", 0, 5);
+            button = steadyItem(window, [&] { return named(u"contribution_keyboardToolbar_klawiatura"_s); }, &at);
+            const int before = said(u"klawiatura: Notatka slotów samotestu||żółty blok||żółty"_s);
+            if (button)
+                tapOrClick(window, at, true);
+            check(waitFor(
+                          [&] {
+                              return said(u"klawiatura: Notatka slotów samotestu||żółty blok||żółty"_s) == before + 1;
+                          },
+                          10000),
+                  "a tap runs its command once, on the edited block and its selection (ctx.block, ctx.selection)");
+            uidriver::callQml(editor, "stopEditing", {QVariant(false)});
+        }
+    }
+
+    // ---- The share dialog: the action takes the share, nothing is saved.
+    {
+        app->goHome();
+        const QString today = ws->journalPath(app->today(0));
+        app->receiveShare({{u"text"_s, u"Udostępniony żółw"_s}});
+        QObject *dialog = nullptr;
+        check(waitFor([&] {
+                  dialog = window->findChild<QObject *>(u"shellShare"_s);
+                  return dialog && dialog->property("opened").toBool();
+              }),
+              "a share opens the share dialog");
+        QQuickItem *action = steadyItem(window, [&] { return named(u"contribution_share_udostepnij"_s); }, &at, 10000);
+        check(action != nullptr, "the share dialog offers the extension's action");
+        const int before = said(u"udostepnij: |||Udostępniony żółw"_s);
+        if (action)
+            tapOrClick(window, at, touch);
+        check(waitFor([&] { return said(u"udostepnij: |||Udostępniony żółw"_s) == before + 1; }, 10000),
+              "a tap runs its command once with the shared text (ctx.shared)");
+        check(waitFor([&] { return dialog && !dialog->property("visible").toBool(); }) && app->pendingShare().isEmpty()
+                      && !ws->readFile(today).contains(u"Udostępniony żółw"_s),
+              "the dialog closes, the share is the extension's: nothing saved");
+    }
+    // ---- … and the export dialog: the page shared.
+    {
+        app->openPage(note);
+        waitLoadedEditor(window->contentItem(), u"pageEditor"_s, note);
+        check(app->commands()->run(u"page.export"_s), "“Export page” opens");
+        QQuickItem *action = steadyItem(window, [&] { return named(u"contribution_share_udostepnij"_s); }, &at, 10000);
+        check(action != nullptr, "the export dialog offers the extension's action");
+        const int before = said(u"udostepnij: Notatka slotów samotestu|||- żółty blok"_s);
+        if (action)
+            tapOrClick(window, at, touch);
+        check(waitFor([&] { return said(u"udostepnij: Notatka slotów samotestu|||- żółty blok"_s) == before + 1; },
+                      10000),
+              "a tap runs its command once with the page (ctx.shared)");
+        check(waitFor([&] { return named(u"pageExportFormats"_s) == nullptr; }), "and the export dialog closes");
+        closeMenus(window);
+    }
+
+    // Saved without the buttons (this device's save keeps the approval): they go at once.
+    check(ws->writeIfUnchanged(path, page(menus), ws->read(path, nullptr)) == EditorHost::WriteResult::Written,
+          "the page is saved without the buttons");
+    check(waitFor(
+                  [&] {
+                      return ext->contribution(u"bottomNav"_s, id, u"nawigacja"_s).isEmpty()
+                             && ext->contribution(u"keyboardToolbar"_s, id, u"klawiatura"_s).isEmpty();
+                  },
+                  10000),
+          "the buttons are no items any more");
+    check(!ext->contribution(u"share"_s, id, u"udostepnij"_s).isEmpty(), "the share action stays");
+    if (narrow) {
+        app->goHome();
+        check(waitFor([&] { return named(u"contribution_bottomNav_nawigacja"_s) == nullptr; }, 5000),
+              "and the bottom navigation's button is gone");
+    }
+    ws->deletePage(path);
+    check(waitFor(
+                  [&] {
+                      return ext->contributions(u"share"_s).isEmpty() && ext->contributions(u"tabMenu"_s).isEmpty();
+                  },
+                  10000),
+          "a deleted page's items are gone");
+    ws->deletePage(note);
+    ext->console()->clear();
+    closeMenus(window);
+    app->goHome();
+    settle(300);
+    if (focused)
+        focused->forceActiveFocus();
+}
+
 /// The rendered HTML of row `row` of an editor's controller (its blocks' "html" role).
 QString renderedRow(QObject *controller, int row)
 {
@@ -11924,6 +12195,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3h-app. Extension items in the UI (b.app.contribute): a top bar button and a status bar text,
     // tapped.
     checkContributions(window, app, check);
+    closeMenus(window);
+    // 3h-app'. The slots of 0.29: a tab's menu, the folder tree's, the bottom navigation, the
+    // keyboard's toolbar, the share dialogs.
+    checkContributionSlots(window, app, check);
     closeMenus(window);
     // 3h-ai'. The AI in the editor (rewrite → Replace → Undo) and the chat list's rename / delete.
     // (Before the ✨'s step, as the steps that leave the keyboard focus in a view.)

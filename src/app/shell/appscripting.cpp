@@ -724,7 +724,7 @@ void AppScripting::applyTheme()
 // ---- the items of the UI --------------------------------------------------------------------------
 
 bool AppScripting::activate(const QString &slot, const QString &extension, const QString &id, const QString &path,
-                            int line)
+                            int line, const QVariantMap &context)
 {
     WorkspaceExtensions *extensions = m_app->workspace()->extensions();
     const QVariantMap item = extensions->contribution(slot, extension, id);
@@ -735,9 +735,31 @@ bool AppScripting::activate(const QString &slot, const QString &extension, const
     const QString page = item.value(u"page"_s).toString();
     const QString run = item.value(u"run"_s).toString();
     if (!command.isEmpty()) {
-        // A block's menu and the slash menu: on that block (ctx.block); a page's menu: ctx.page.
-        extensions->runCommand(extension, command, path, slot == u"blockMenu" || slot == u"slash" ? line : -1);
-    } else if (!view.isEmpty()) {
+        // A block's menu, the slash menu and the keyboard's toolbar: on that block (ctx.block);
+        // the others: ctx.page.
+        const bool onBlock = slot == u"blockMenu" || slot == u"slash" || slot == u"keyboardToolbar";
+        // The keyboard's toolbar: the edited block's selection (ctx.selection).
+        if (slot == u"keyboardToolbar" && context.contains(u"selection"_s))
+            extensions->offerSelection(path, context.value(u"selection"_s).toString());
+        QVariantMap fields;
+        if (slot == u"folderMenu") {
+            fields.insert(u"path"_s, context.value(u"path"_s).toString());
+            // (A folder's row; "" is none: the notebook's root is no row of the tree.)
+            if (const QString folder = context.value(u"folder"_s).toString(); !folder.isEmpty())
+                fields.insert(u"folder"_s, folder);
+        } else if (slot == u"share") {
+            // Shared into Brulion (the share waiting) or a page shared from it.
+            fields.insert(u"shared"_s, path.isEmpty() ? m_app->sharedForExtensions(context.value(u"text"_s).toString())
+                                                      : QVariantMap{{u"text"_s, m_app->workspace()->readFile(path)},
+                                                                    {u"title"_s, paths::pageTitle(path)},
+                                                                    {u"incoming"_s, false}});
+        }
+        extensions->runCommand(extension, command, path, onBlock ? line : -1, {}, fields);
+        return true;
+    }
+    // (A selection the editor offered for a command: not left for the next one.)
+    extensions->clearSelection();
+    if (!view.isEmpty()) {
         QVariantMap route = item.value(u"params"_s).toMap();
         route.insert(u"view"_s, u"extension"_s);
         route.insert(u"extension"_s, extension);

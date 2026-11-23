@@ -340,9 +340,12 @@ public:
     void runCodeAt(const QString &path, int line);
 
     /// Runs a command; `path`/`line` name the block under the caret (ctx.block) when given; `args`
-    /// is its ctx.args (`{}` when none: what the app or a toast's button passes).
-    Q_INVOKABLE void runCommand(const QString &extension, const QString &name, const QString &path = QString(), int line = -1,
-                                const QVariantMap &args = QVariantMap());
+    /// is its ctx.args (`{}` when none: what the app or a toast's button passes); `context` adds a
+    /// slot's own fields to ctx (AppScripting::activate(): `folder` and `path` of the folder tree's
+    /// row, `shared` of a share action) — no other key is taken.
+    Q_INVOKABLE void runCommand(const QString &extension, const QString &name, const QString &path = QString(),
+                                int line = -1, const QVariantMap &args = QVariantMap(),
+                                const QVariantMap &context = QVariantMap());
     /// runCommand() of `command` "<extension>/<name>" on the block at `line` of `path` (the editor);
     /// "*/run" runs the ```luau block there in the console (runCodeAt()). `selection`: the
     /// editor's selection (ctx.selection).
@@ -426,7 +429,8 @@ public:
     void setAppHandler(AppHandler handler) { m_appHandler = std::move(handler); }
     int appRevision() const { return m_appRevision; }
     /// The items the extensions running put into `slot` (appapi.h contributionSlots(): "toolbar",
-    /// "statusbar", "sidebar", "pageMenu", "blockMenu", "slash"): rows {extension, title (the
+    /// "statusbar", "sidebar", "pageMenu", "blockMenu", "slash", "tabMenu", "folderMenu",
+    /// "bottomNav", "keyboardToolbar", "share"): rows {extension, title (the
     /// extension's), slot, id, label, icon, tooltip, tone, command, view, params, page, run, insert,
     /// key ("extension/id"), live}, by their order. `revision` (appRevision) only makes a binding
     /// ask again.

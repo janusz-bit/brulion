@@ -12,6 +12,9 @@ import Brulion
 // first lines and why one cannot be saved. Text goes to the journal by default, a single file to
 // a new page (its title from the file name). Nothing is written before "Save"
 // (AppController.saveShare); "Cancel" drops the share and its copies (AppController.dismissShare).
+// Below, the extensions' share actions (ShellShareActions, b.app.contribute("share", …)): one takes
+// the share instead — its command gets the text as edited here, or the readable files, as
+// ctx.shared —, Brulion saves nothing and the dialog closes.
 // Shared content is shown as plain text only.
 BDialog {
     id: dialog
@@ -63,6 +66,17 @@ BDialog {
     onRejected: {
         if (!saved)
             AppController.dismissShare()
+    }
+    /// An extension's share action takes the share: its command gets it (ctx.shared), then the
+    /// share is dropped (nothing saved here) and the dialog closes.
+    /// (Kept in a property: compiled code passed the map built in the call empty.)
+    property var _actionContext: ({})
+    function runShareAction(extension: string, id: string): void {
+        dialog._actionContext = { text: textField.text }
+        AppScripting.activate("share", extension, id, "", -1, dialog._actionContext)
+        dialog.saved = true
+        AppController.dismissShare()
+        dialog.close()
     }
 
     BSegmented {
@@ -169,6 +183,12 @@ BDialog {
         variant: "faint"
         font.pixelSize: Theme.textSm
         wrapMode: Text.Wrap
+    }
+
+    ShellShareActions {
+        objectName: "shareActions"
+        Layout.fillWidth: true
+        onPicked: (extension, id) => dialog.runShareAction(extension, id)
     }
 
     BText {

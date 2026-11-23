@@ -1756,7 +1756,7 @@ QString WorkspaceExtensions::viewTitle(const QString &extension, const QString &
 bool WorkspaceExtensions::isWaiting() const { return !m_questionKind.isEmpty(); }
 
 void WorkspaceExtensions::runCommand(const QString &extension, const QString &name, const QString &path, int line,
-                                     const QVariantMap &args)
+                                     const QVariantMap &args, const QVariantMap &context)
 {
     if (!m_engine)
         return;
@@ -1774,6 +1774,11 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
         const QVariantMap block = m_host->blockAt(path, line);
         if (!block.isEmpty())
             ctx.insert(u"block"_s, block);
+    }
+    // A slot's own fields (the folder tree's row, what is shared), never one of the above.
+    for (const QString &key : {u"folder"_s, u"path"_s, u"shared"_s}) {
+        if (context.contains(key))
+            ctx.insert(key, context.value(key));
     }
     cancelCommandQuestion();
     m_current = CallContext{};

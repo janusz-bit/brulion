@@ -493,6 +493,8 @@ The function gets one table, `ctx`:
 | `ctx.page` | the name of the page on screen, `""` when the view on screen is no page (the journal's stream, Tasks, a view of an extension) |
 | `ctx.block` | with `block = true`: the block under the caret (above, "Blocks") |
 | `ctx.args` | what the caller passes the command, a record: a toast's button (below), `brulion-cli extension run … --args '{"name": "Reading"}'`, the app's own callers (`brulion-cli habit set` runs the habits' `set` with `{ name, state, date }`); `{}` when nothing is passed. A turn of the AI chat has none: `ctx.args or {}` |
+| `ctx.folder`, `ctx.path` | only from an item of the folder tree's menu (`b.app.contribute("folderMenu", …)`, "Items of the UI"): the row's path from the notebook's root, and the same path as `ctx.folder` when the row is a folder |
+| `ctx.shared` | only from a share action (`b.app.contribute("share", …)`): what is shared, `{ text, title, incoming, files? }` ("Items of the UI") |
 | `ctx.selection` | what is selected in the editor on screen when the command runs — what the editor's AI assistant works on too: the text selected in the block being edited (its Markdown as typed) or in the Markdown source, else the blocks selected, as Markdown with their children; `""` when nothing is (or no editor is on screen). At most 200 000 characters |
 | `ctx.messages` | only in a turn of the AI chat (the AI assistant's `chat`, a chat partner's command, "AI"): the conversation's messages `{ role = "user" \| "assistant", content, images? }`, the user's last — `images` the pictures sent with a user's message, named as `b.ai`'s `images` takes them |
 | `ctx.conversation` | only in a turn of the AI chat: the name of the conversation's own page (`"AI/2026-11-16 Co mam jutro"`) |
@@ -1717,8 +1719,12 @@ place, so a status bar text that counts something is the same call with a new la
 one line of at most 100 characters, `icon` one of the app's icons, `tone` `"accent"`, `"success"`,
 `"danger"`, `"warning"` or `"info"`, `order` a number (smaller first), and exactly one of:
 
-* `command = "name"` — one of the extension's commands, run as from the palette (in `blockMenu`
-  and `slash` on that block: `ctx.block`; in `pageMenu` with `ctx.page`);
+* `command = "name"` — one of the extension's commands, run as from the palette, with what its
+  place gives it (the table below): in `blockMenu`, `slash` and `keyboardToolbar` on that block
+  (`ctx.block`, and `ctx.selection` on the keyboard's toolbar); in `pageMenu` and `tabMenu` with
+  that page as `ctx.page`; in `folderMenu` with the tree's row (`ctx.path`, and `ctx.folder` or
+  `ctx.page`); in `share` with what is shared (`ctx.shared`); elsewhere `ctx.page` is the page on
+  screen;
 * `view = "name"` (with `params = { … }`) — one of its views, opened;
 * `page = "Projects/Home"` — a page, opened (made when missing);
 * `run = "go.calendar"` — a command of the palette, the app's or another extension's;
@@ -1732,10 +1738,24 @@ one line of at most 100 characters, `icon` one of the app's icons, `tone` `"acce
 | `"pageMenu"` | an item of a page's menu | `label`, what it does |
 | `"blockMenu"` | an item of a block's menu (its bullet, a right-click, a long press) | `label`, what it does |
 | `"slash"` | an entry of the editor's `/` menu, found by its label as the others | `label`, `command` or `insert` |
+| `"tabMenu"` | an item of a tab's menu (a right-click or a long press on a tab of the tab bar: wide windows) — a command gets the tab's page as `ctx.page` (`""` for a tab that shows no page: the journal, Tasks …) | `label`, what it does |
+| `"folderMenu"` | an item of the folder tree's row menu (the sidebar's "Pages", the drawer on phones: a right-click, a long press, the row's ⋯) — a command gets the row: `ctx.path` its path from the notebook's root (`"Projekty/Dom"`, `"Projekty/Dom/Plan.md"`), and `ctx.folder` (the same path) for a folder's row or `ctx.page` for a page's (`""` for a folder, an attachment) | `label`, what it does |
+| `"bottomNav"` | a button of the phone's bottom navigation, after its views: the icon, the label its name (the pill beside the icon while it is current: an item that opens a view of the extension, while that view shows). At most 2 of all extensions; they never take a view's place — a phone too narrow for all of them at 48 px shows fewer. On wide windows the sidebar's rail is the place (`"sidebar"`) | `label`, an `icon`, what it does |
+| `"keyboardToolbar"` | a button of the editor's toolbar on the on-screen keyboard (touch UIs, a block being edited; after its insert tools, before Undo): the icon, the label as its name and tooltip — a command works on the edited block (`ctx.block`, the page saved first) and what is selected in it (`ctx.selection`) | `label`, an `icon`, what it does |
+| `"share"` | an action of the share dialogs: "Save to Brulion" — text or files another app shared into Brulion (Android's share sheet, "Open with", the browser's share target) — and "Export page" (a page shared from Brulion). The action takes the share: the dialog closes and Brulion saves nothing itself | `label`, a `command` (it gets `ctx.shared`) |
+
+`ctx.shared` is `{ text, title, incoming, files? }`: shared into Brulion (`incoming = true`) the
+text as edited in the dialog — or, for files, their texts one after another, a blank line between
+them — the share's title (a web page's, the first file's name) and the readable `.md` / `.txt` files
+`{ name, title, text }`; a page shared from Brulion (`incoming = false`) its Markdown as stored and
+its name (also `ctx.page`). An item's label is the extension's own text: an extension that speaks
+two languages picks one by `b.app.state().language`.
 
 A misspelt field (`comand`) is an error, not an item that does nothing; a `command` or `view` the
 extension does not have is an error after its top level (at the top level the command may come
-further down). Each extension has at most 16 items in a slot, all of them together 64.
+further down). Each extension has at most 16 items in a slot, all of them together 64 — except
+where there is less room: the bottom navigation takes 2 buttons of all extensions, the keyboard's
+toolbar 4 of one extension and 8 in all, the share dialogs 4 actions of one extension and 8 in all.
 `b.app.remove(slot, id)` takes one away (`true` when there was one), `b.app.remove(slot)` all of the
 extension's in that slot; `b.app.contributions(slot?)` lists every extension's items with their
 `extension`.
@@ -1785,6 +1805,55 @@ dueToday()
 b.on("change", function(e)
     dueToday()
 end)
+```
+
+```luau
+-- A bookmark of whatever is shared — into Brulion from another app, or a page from its Export
+-- dialog —, the pages of a folder from the tree's menu, a tab's page noted in the journal, a
+-- button on the phone's keyboard that marks the edited block, and the bookmarks on the bottom
+-- navigation.
+b.command("bookmark", function(ctx)
+    local shared = ctx.shared
+    if not shared then
+        return "Share something with Brulion first"
+    end
+    local from = if shared.incoming then "shared" else `from [[{ctx.page}]]`
+    local text = shared.text:gsub("%s+", " "):sub(1, 200)
+    b.appendToPage("Bookmarks", `- {shared.title} ({from}): {text}`)
+    return `Bookmarked “{shared.title}”`
+end, { palette = false })
+
+b.command("list-folder", function(ctx)
+    -- A folder's row, or the folder of a page's row.
+    local folder = ctx.folder or (ctx.path or ""):match("^(.*)/") or ""
+    local lines = {}
+    for _, path in b.pages({ paths = true }) do
+        if folder == "" or path:sub(1, #folder + 1) == folder .. "/" then
+            table.insert(lines, `- [[{path:gsub("%.md$", "")}]]`)
+        end
+    end
+    b.appendToJournal(b.today(), `- Pages in {if folder == "" then "the notebook" else folder}:\n  ` .. table.concat(lines, "\n  "))
+    return `{#lines} pages listed in today's journal`
+end, { palette = false })
+
+b.command("note-tab", function(ctx)
+    if ctx.page ~= "" then
+        b.appendToJournal(b.today(), `- Worked on [[{ctx.page}]]`)
+    end
+end, { palette = false })
+
+b.command("mark", function(ctx)
+    if not ctx.block then
+        return
+    end
+    b.setProperty(ctx.block.ref, "marked", b.today())
+end, { palette = false })
+
+b.app.contribute("share", { id = "bookmark", label = "Bookmark", icon = "bookmark", command = "bookmark" })
+b.app.contribute("folderMenu", { id = "list", label = "List the pages here", icon = "list", command = "list-folder" })
+b.app.contribute("tabMenu", { id = "note", label = "Note in today's journal", command = "note-tab" })
+b.app.contribute("keyboardToolbar", { id = "mark", label = "Mark the block", icon = "flag", command = "mark" })
+b.app.contribute("bottomNav", { id = "bookmarks", label = "Bookmarks", icon = "bookmark", page = "Bookmarks" })
 ```
 
 ### Input rules
@@ -2306,7 +2375,7 @@ Home:7
 | `b.ai` | 200 000 characters and 8 pictures a request, 64 tools, 5 minutes an answer; on the device also the model's context (a longer request is cut) and 2 048 tokens an answer |
 | Hooks | 256 in all; three failures in a row take one off; hooks answering hooks end after four rounds; 200 `"task"` events of one burst |
 | Values crossing | 64 levels of nesting |
-| `b.app` | an item's label 100 characters (one line), tooltip 300, `insert` 20 000; 16 items of one extension in a slot, 64 in all; 200 theme tokens per extension; a toast's text 300 characters (cut) |
+| `b.app` | an item's label 100 characters (one line), tooltip 300, `insert` 20 000; 16 items of one extension in a slot, 64 in all (the bottom navigation 2 in all, the keyboard's toolbar and the share dialogs 4 of one extension, 8 in all); 200 theme tokens per extension; a toast's text 300 characters (cut) |
 
 * One VM per notebook (made again when the language changes or on "Reload extensions"; an extension
   page that changes is loaded again alone). Every extension has an environment of its own (its
@@ -2353,7 +2422,7 @@ Home:7
 |---|---|
 | `3rdparty/luau` | Luau 0.743: the VM and the compiler, and the type checker (Analysis, Config: `brulion_luau_analysis`, with `BRULION_LUAU_CHECK`); patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
 | `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits; the UI items and themes of `b.app` (`contributions()`, `themes()`, `appRevision()`) |
-| `src/core/extensions/appapi.h` | `b.app`'s checks: the theme's tokens (`themeTokens()`, `themeLayerFrom()`, `mergedTheme()`), the slots and their items (`contributionSlots()`, `contributionFrom()`), the operations the host answers (`appOperations()`, `isAppChange()`) |
+| `src/core/extensions/appapi.h` | `b.app`'s checks: the theme's tokens (`themeTokens()`, `themeLayerFrom()`, `mergedTheme()`), the slots and their items (`contributionSlots()`, `contributionLimits()`, `contributionFrom()`), the operations the host answers (`appOperations()`, `isAppChange()`) |
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks and pages by tag and property, a query from an offset, attachments, the revision, writes — a page, a journal, a block's line, status and property, blocks inserted and removed —, today and now, the week's first day, languages, the timer, the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`, `markdown::setTaskStatus`), every ref resolved the same way (`resolveRef`: a note's line, stale when changed); a dry run that only computes them (`brulion-cli extension …`, `brulion-cli habit …`) |
 | `src/core/extensions/blockedit.h` | the pure edits behind the writes: a block's line replaced, lines inserted around a block or under it, a block removed, a property set, a line replaced, inserted or removed as written (`b.replaceLine` …); `plainWords` (a block's `plain`, `b.plain`) |
@@ -2409,7 +2478,9 @@ browser build — and the fastest; its type checker (Analysis, vendored for the 
 (colours, sizes, fonts, both modes, the nearest name in an error, too many), layers merged in their
 order and dropped with their extension, every slot's items and their fields (a misspelt one, two
 actions, an `insert` outside the slash menu, labels made one line, the limits per extension and
-slot, the same id replaced in its place, the order), the app's operations as the host gets them,
+slot — the bottom navigation's, the keyboard toolbar's and the share dialogs' own —, an icon the
+bottom navigation and the keyboard's toolbar need, a share action that only runs a command, the
+same id replaced in its place, the order), the app's operations as the host gets them,
 the permission `app`, what is refused at the top level and in macros, `b.app` read-only, the
 "route" event, a dry run's notes and a check's report, megabytes and loops of items.
 

@@ -313,6 +313,62 @@ private Q_SLOTS:
                                                     {u"view"_s, u"month"_s},
                                                     {u"params"_s, QVariantMap{{u"month"_s, u"2026-11"_s}}}}
                                      << QString();
+        // The slots of 0.29: the tab bar's and the folder tree's menus, the bottom navigation, the
+        // keyboard's toolbar, the share dialogs.
+        QTest::newRow("tab menu command")
+                << u"tabMenu"_s
+                << QVariantMap{{u"id"_s, u"kopia"_s}, {u"label"_s, u"Kopia karty"_s}, {u"command"_s, u"kopia"_s}}
+                << QString();
+        QTest::newRow("tab menu insert") << u"tabMenu"_s
+                                         << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"x"_s}, {u"insert"_s, u"x"_s}}
+                                         << u"slash menu only"_s;
+        QTest::newRow("folder menu view")
+                << u"folderMenu"_s
+                << QVariantMap{{u"id"_s, u"spis"_s}, {u"label"_s, u"Spis folderu"_s}, {u"view"_s, u"spis"_s}}
+                << QString();
+        QTest::newRow("folder menu no action")
+                << u"folderMenu"_s << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"Żółw"_s}}
+                << u"needs what it does"_s;
+        QTest::newRow("bottom nav view") << u"bottomNav"_s << button << QString();
+        QTest::newRow("bottom nav no icon")
+                << u"bottomNav"_s
+                << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"Siłownia"_s}, {u"view"_s, u"today"_s}}
+                << u"it needs an “icon”"_s;
+        QTest::newRow("bottom nav no label")
+                << u"bottomNav"_s << QVariantMap{{u"id"_s, u"a"_s}, {u"icon"_s, u"dumbbell"_s}, {u"view"_s, u"today"_s}}
+                << u"a button needs a “label”"_s;
+        QTest::newRow("keyboard toolbar command") << u"keyboardToolbar"_s
+                                                  << QVariantMap{{u"id"_s, u"seria"_s},
+                                                                 {u"label"_s, u"Dodaj serię"_s},
+                                                                 {u"icon"_s, u"plus"_s},
+                                                                 {u"command"_s, u"seria"_s}}
+                                                  << QString();
+        QTest::newRow("keyboard toolbar no icon")
+                << u"keyboardToolbar"_s
+                << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"x"_s}, {u"command"_s, u"seria"_s}}
+                << u"needs an “icon”"_s;
+        QTest::newRow("keyboard toolbar insert")
+                << u"keyboardToolbar"_s
+                << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"x"_s}, {u"icon"_s, u"plus"_s}, {u"insert"_s, u"→"_s}}
+                << u"slash menu only"_s;
+        QTest::newRow("share command") << u"share"_s
+                                       << QVariantMap{{u"id"_s, u"zakladka"_s},
+                                                      {u"label"_s, u"Zapisz jako zakładkę"_s},
+                                                      {u"icon"_s, u"bookmark"_s},
+                                                      {u"command"_s, u"zakladka"_s}}
+                                       << QString();
+        QTest::newRow("share without icon")
+                << u"share"_s << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"Wyślij"_s}, {u"command"_s, u"wyslij"_s}}
+                << QString();
+        QTest::newRow("share view") << u"share"_s
+                                    << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"x"_s}, {u"view"_s, u"v"_s}}
+                                    << u"a “command”"_s;
+        QTest::newRow("share run") << u"share"_s
+                                   << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"x"_s}, {u"run"_s, u"go.calendar"_s}}
+                                   << u"a “command”"_s;
+        QTest::newRow("share nothing") << u"share"_s << QVariantMap{{u"id"_s, u"a"_s}, {u"label"_s, u"x"_s}}
+                                       << u"needs what it does"_s;
+        QTest::newRow("slot in another case") << u"BottomNav"_s << button << u"unknown slot “BottomNav”"_s;
         QTest::newRow("unknown slot") << u"titlebar"_s << button << u"unknown slot “titlebar”"_s;
         QTest::newRow("no id") << u"toolbar"_s << QVariantMap{{u"label"_s, u"x"_s}, {u"run"_s, u"go.calendar"_s}}
                                << u"needs an “id”"_s;
@@ -483,6 +539,111 @@ private Q_SLOTS:
                 m_engine.load(ext(u"e4"_s, u"b.app.contribute(\"statusbar\", { id = \"s\", label = \"S\" })"_s));
         QVERIFY(!full.ok());
         QVERIFY2(full.error.contains(u"is full"_s), qPrintable(full.error));
+    }
+
+    void newSlotsHaveTheirLimits_data()
+    {
+        QTest::addColumn<QString>("slot");
+        QTest::addColumn<int>("perExtension");
+        QTest::addColumn<int>("all");
+        QTest::newRow("tabMenu") << u"tabMenu"_s << 16 << 64;
+        QTest::newRow("folderMenu") << u"folderMenu"_s << 16 << 64;
+        QTest::newRow("bottomNav") << u"bottomNav"_s << 2 << 2;
+        QTest::newRow("keyboardToolbar") << u"keyboardToolbar"_s << 4 << 8;
+        QTest::newRow("share") << u"share"_s << 4 << 8;
+    }
+    void newSlotsHaveTheirLimits()
+    {
+        QFETCH(QString, slot);
+        QFETCH(int, perExtension);
+        QFETCH(int, all);
+        QCOMPARE(contributionLimits(slot).perExtension, perExtension);
+        QCOMPARE(contributionLimits(slot).all, all);
+        QVERIFY(isContributionSlot(slot));
+        const QString item = u"b.app.contribute(\"%1\", { id = \"p\" .. i, label = \"Przycisk \" .. i, "
+                             "icon = \"flame\", command = \"klik\" })"_s.arg(slot);
+        const auto code = [&](int count) {
+            return u"b.command(\"klik\", function(ctx) end)\nfor i = 1, %1 do %2 end\n"_s.arg(count).arg(item);
+        };
+        // One more than an extension may have: the load fails, nothing is kept.
+        const Result over = m_engine.load(ext(u"x"_s, code(perExtension + 1)));
+        QVERIFY(!over.ok());
+        QVERIFY2(over.error.contains(u"at most %1 items of one extension in “%2”"_s.arg(perExtension).arg(slot)),
+                 qPrintable(over.error));
+        QVERIFY(m_engine.contributions(slot).isEmpty());
+        // Extensions with their most fill the slot; one item more is refused.
+        int loaded = 0;
+        for (int e = 0; loaded + perExtension <= all; ++e, loaded += perExtension)
+            QVERIFY(m_engine.load(ext(u"e%1"_s.arg(e), code(perExtension))).ok());
+        QCOMPARE(m_engine.contributions(slot).size(), all);
+        const Result full = m_engine.load(ext(u"pelny"_s, code(1)));
+        QVERIFY(!full.ok());
+        QVERIFY2(full.error.contains(u"“%1” is full (%2 items"_s.arg(slot).arg(all)), qPrintable(full.error));
+        // The same id again replaces its item, also in a full slot.
+        QVERIFY(eval(u"b.app.contribute(\"%1\", { id = \"p1\", label = \"Nowa etykieta\", icon = \"flame\", "
+                     "command = \"klik\" })"_s.arg(slot),
+                     u"e0"_s)
+                        .ok());
+        QCOMPARE(m_engine.contributions(slot).size(), all);
+        QCOMPARE(m_engine.contributions(slot).first().label, u"Nowa etykieta"_s);
+        // Removed, there is room again; an extension unloaded takes its items along.
+        const Result removed = eval(u"return b.app.remove(\"%1\")"_s.arg(slot), u"e0"_s);
+        QVERIFY(removed.ok() && removed.value.toBool());
+        QCOMPARE(m_engine.contributions(slot).size(), all - perExtension);
+        QVERIFY(m_engine.load(ext(u"pelny"_s, code(1))).ok());
+        for (int e = 0; e * perExtension < all; ++e)
+            m_engine.unload(u"e%1"_s.arg(e));
+        m_engine.unload(u"pelny"_s);
+        QVERIFY(m_engine.contributions(slot).isEmpty());
+    }
+
+    void newSlotsFromLuau()
+    {
+        QVERIFY(m_engine.load(ext(u"zakladki"_s, uR"lua(
+            b.command("zapisz", function(ctx) return ctx.shared and ctx.shared.text or "" end, { label = "Zapisz" })
+            b.view("spis", function(params) return b.ui.text("Spis") end)
+            b.app.contribute("tabMenu", { id = "karta", label = "Kopiuj nazwę karty", command = "zapisz" })
+            b.app.contribute("folderMenu", { id = "spis", label = "Spis folderu", icon = "list", view = "spis" })
+            b.app.contribute("bottomNav", { id = "spis", label = "Spis", icon = "list", view = "spis" })
+            b.app.contribute("keyboardToolbar", { id = "zapisz", label = "Zapisz blok", icon = "bookmark", command = "zapisz" })
+            b.app.contribute("share", { id = "zapisz", label = "Zapisz jako zakładkę", icon = "bookmark", command = "zapisz" })
+        )lua"_s))
+                        .ok());
+        for (const QString &slot : {u"tabMenu"_s, u"folderMenu"_s, u"bottomNav"_s, u"keyboardToolbar"_s, u"share"_s}) {
+            QCOMPARE(m_engine.contributions(slot).size(), 1);
+            QCOMPARE(m_engine.contributions(slot).first().extension, u"zakladki"_s);
+        }
+        const Result all = eval(u"return #b.app.contributions()"_s, u"zakladki"_s);
+        QVERIFY(all.ok());
+        QCOMPARE(all.value.toInt(), 5);
+        const Result one = eval(u"return b.app.contributions(\"share\")[1].label"_s, u"zakladki"_s);
+        QVERIFY(one.ok());
+        QCOMPARE(one.value.toString(), u"Zapisz jako zakładkę"_s);
+        // A command gets what the app passes (here as a caller would: ctx.shared).
+        const Result shared = m_engine.runCommand(
+                u"zakladki"_s, u"zapisz"_s,
+                {{u"page"_s, QString()},
+                 {u"selection"_s, QString()},
+                 {u"args"_s, QVariantMap()},
+                 {u"shared"_s, QVariantMap{{u"text"_s, u"Zupa z ąćęłńóśźż"_s}, {u"incoming"_s, true}}}});
+        QVERIFY2(shared.ok(), qPrintable(shared.error));
+        QCOMPARE(shared.value.toString(), u"Zupa z ąćęłńóśźż"_s);
+        // A misspelt slot names the right ones; removing from an unknown one is an error too.
+        const Result typo = eval(u"b.app.contribute(\"bottomnav\", { id = \"a\", label = \"A\", icon = \"x\", "
+                                 "view = \"spis\" })"_s,
+                                 u"zakladki"_s);
+        QVERIFY(!typo.ok());
+        QVERIFY2(typo.error.contains(u"unknown slot “bottomnav”"_s) && typo.error.contains(u"bottomNav"_s),
+                 qPrintable(typo.error));
+        QVERIFY(!eval(u"b.app.remove(\"udostępnij\")"_s, u"zakladki"_s).ok());
+        // A share action names its own command: after the top level, a missing one is an error.
+        const Result missing = eval(u"b.app.contribute(\"share\", { id = \"b\", label = \"B\", "
+                                    "command = \"brak\" })"_s,
+                                    u"zakladki"_s);
+        QVERIFY(!missing.ok());
+        QVERIFY2(missing.error.contains(u"has no command “brak”"_s), qPrintable(missing.error));
+        m_engine.unload(u"zakladki"_s);
+        QVERIFY(m_engine.contributions().isEmpty());
     }
 
     void contributionsOfOthersAreSeen()
