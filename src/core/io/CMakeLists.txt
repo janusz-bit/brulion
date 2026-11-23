@@ -59,6 +59,6 @@ brulion_add_core_module(io
         paper.h export_paper.cpp
         paperdoc_p.h paperdoc.cpp
         docx_p.h docx.cpp
-    DEPS util text dates markdown index notebook drawing diagram calc chart canvas
+    DEPS util text dates markdown index notebook dataview drawing diagram calc chart canvas
     QT Gui)
 target_link_libraries(brulion_core_io PRIVATE brulion_miniz)

@@ -264,16 +264,24 @@ public:
         else if (isKeyword(head, u"task"))
             q.type = QueryType::Task;
         else if (isKeyword(head, u"calendar"))
-            throw ParseError{messages::calendarNotSupported(), head.line};
+            q.type = QueryType::Calendar;
         else
             throw ParseError{messages::expectedQueryType(describe(head)), head.line};
         next();
+        if (q.type == QueryType::Calendar && isKeyword(peek(), u"without") && isKeyword(peek(1), u"id"))
+            throw ParseError{messages::calendarWithoutId(), peek().line};
         if (q.type != QueryType::Task && isKeyword(peek(), u"without") && isKeyword(peek(1), u"id")) {
             next();
             next();
             q.withoutId = true;
         }
-        if (q.type == QueryType::List && !atCommandOrEnd()) {
+        if (q.type == QueryType::Calendar) {
+            // CALENDAR <date>: the day each page is shown on.
+            if (atCommandOrEnd())
+                throw ParseError{messages::calendarNeedsDate(), head.line};
+            const ExprPtr e = expression();
+            q.columns.append({e, e->text});
+        } else if (q.type == QueryType::List && !atCommandOrEnd()) {
             const ExprPtr e = expression();
             q.columns.append({e, e->text});
         } else if (q.type == QueryType::Table && !atCommandOrEnd()) {

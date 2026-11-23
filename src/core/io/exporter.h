@@ -2,6 +2,7 @@
 // io module — see io/io.h for the overview and the list of exporters.
 #pragma once
 
+#include "calc/calclocale.h"
 #include "io/files.h"
 #include "types.h"
 
@@ -50,6 +51,10 @@ struct ExportInput {
     /// gives what it computed). A macro not in here — and in the Markdown, Obsidian, Logseq,
     /// JSON and other exports every one — stays as written.
     QHash<QString, QHash<QString, QString>> macroTexts;
+    /// The language inline calculations' results are written in ("html-site", "html-single", "pdf",
+    /// "docx", "pandoc" show the values of inline calculations and queries: docs/SYNTAX.md §9
+    /// "Inline calculations", §10 "Inline queries"): the UI's.
+    calc::CalcLocale calcLocale = calc::CalcLocale::Polish;
     /// The footer of the HTML exports' pages ("html-site", "html-single"; "" = "Exported from
     /// Brulion on <now>"). Publishing gives one without the time, so that a page that did not
     /// change stays the same bytes.

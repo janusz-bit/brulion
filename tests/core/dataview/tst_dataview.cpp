@@ -132,8 +132,10 @@ private Q_SLOTS:
         QTest::addColumn<QString>("source");
         QTest::addColumn<QString>("message");
         QTest::newRow("empty") << u"  \n // tylko komentarz"_s << u"Write a query"_s;
-        QTest::newRow("type") << u"SELECT x"_s << u"starts with LIST, TABLE or TASK, not “SELECT”"_s;
-        QTest::newRow("calendar") << u"CALENDAR file.day"_s << u"CALENDAR views are not supported"_s;
+        QTest::newRow("type") << u"SELECT x"_s << u"starts with LIST, TABLE, TASK or CALENDAR, not “SELECT”"_s;
+        QTest::newRow("calendar without a date") << u"CALENDAR\nWHERE x"_s << u"CALENDAR needs the date"_s;
+        QTest::newRow("calendar without id") << u"CALENDAR WITHOUT ID file.day"_s << u"has no WITHOUT ID"_s;
+        QTest::newRow("calendar expression") << u"CALENDAR termin +"_s << u"An expression is missing"_s;
         QTest::newRow("missing expression") << u"LIST\nWHERE"_s << u"Line 2: An expression is missing"_s;
         QTest::newRow("bad source") << u"LIST FROM 12"_s << u"Cannot read the source “12”"_s;
         QTest::newRow("csv") << u"TABLE x FROM csv(\"dane.csv\")"_s << u"csv() sources are not supported"_s;
@@ -729,6 +731,77 @@ private Q_SLOTS:
         QCOMPARE(cells, (QStringList{u"250"_s, u"[[Garaż]]"_s, u"[[Dom]]"_s, u"[[Ogród]]"_s, u"ż"_s}));
         QVERIFY2(errors.at(0).contains(u"too long"_s), qPrintable(errors.at(0)));
         QVERIFY2(errors.at(1).contains(u"nested too deeply"_s), qPrintable(errors.at(1)));
+    }
+
+    // CALENDAR <date>: the pages on the days of their date (docs/SYNTAX.md §10 "Dataview queries").
+    void calendarRows_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<QStringList>("rows"); // "path@date"
+        QTest::newRow("a field") << u"CALENDAR termin"_s << QStringList{u"Projekty/Dom.md@2026-10-20"_s};
+        QTest::newRow("a daily note") << u"CALENDAR file.day"_s << QStringList{u"journals/2026-10-14.md@2026-10-14"_s};
+        QTest::newRow("from") << u"CALENDAR file.day FROM #projekt"_s << QStringList();
+        QTest::newRow("where") << u"CALENDAR termin WHERE status != \"w toku\""_s << QStringList();
+        QTest::newRow("an expression") << u"CALENDAR termin - dur(1 week)"_s
+                                       << QStringList{u"Projekty/Dom.md@2026-10-13"_s};
+        QTest::newRow("no dates") << u"CALENDAR budżet FROM #projekt"_s << QStringList();
+        // A time late in the evening stays on its day: local wall-clock time, never UTC.
+        QTest::newRow("late evening") << u"CALENDAR date(\"2026-10-15 23:30\") FROM \"Projekty\""_s
+                                      << QStringList{u"Projekty/Archiwum/Garaż.md@2026-10-15"_s,
+                                                     u"Projekty/Dom.md@2026-10-15"_s, u"Projekty/Ogród.md@2026-10-15"_s};
+        QTest::newRow("lower case, a comment")
+                << u"calendar termin\n// tylko projekty\nFROM \"Projekty\""_s << QStringList{u"Projekty/Dom.md@2026-10-20"_s};
+        QTest::newRow("sort and limit") << u"CALENDAR date(today) FROM \"Projekty\" SORT file.name DESC LIMIT 2"_s
+                                        << QStringList{u"Projekty/Ogród.md@2026-10-14"_s,
+                                                       u"Projekty/Archiwum/Garaż.md@2026-10-14"_s};
+        QTest::newRow("groups are no pages") << u"CALENDAR date(today) GROUP BY status"_s << QStringList();
+    }
+    void calendarRows()
+    {
+        QFETCH(QString, source);
+        QFETCH(QStringList, rows);
+        QCOMPARE(failure(m_index, source), QString());
+        const dataview::Result r = run(m_index, source);
+        QCOMPARE(r.type, dataview::QueryType::Calendar);
+        QStringList got;
+        for (const dataview::Row &row : r.rows) {
+            got.append(row.path + u'@' + row.date.toString(Qt::ISODate));
+            QCOMPARE(row.cells.size(), 1);
+            QVERIFY(row.cells.first().startsWith(u"[["_s));
+        }
+        QCOMPARE(got, rows);
+        QCOMPARE(r.total, rows.size());
+    }
+    void calendarKeepsEveryRow()
+    {
+        // Without LIMIT a calendar returns every page with a date (any month can be shown).
+        dataview::Options o = options();
+        o.defaultLimit = 1;
+        const dataview::Result r = run(m_index, u"CALENDAR date(today) FROM \"Projekty\""_s, o);
+        QCOMPARE(r.rows.size(), 3);
+        QCOMPARE(r.dateField, u"date(today)"_s);
+        QCOMPARE(r.rows.at(1).cells.first(), u"[[Dom]]"_s);
+    }
+    void isCalendarQuery_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<bool>("calendar");
+        QTest::newRow("upper case") << u"CALENDAR file.day"_s << true;
+        QTest::newRow("lower case, indented") << u"  calendar termin"_s << true;
+        QTest::newRow("after comments") << u"// Spotkania\n\n  // i terminy\nCalendar termin"_s << true;
+        QTest::newRow("alone") << u"calendar"_s << true;
+        QTest::newRow("a longer word") << u"CALENDARZ termin"_s << false;
+        QTest::newRow("an underscore") << u"calendar_x"_s << false;
+        QTest::newRow("a list") << u"LIST FROM #projekt"_s << false;
+        QTest::newRow("a column named so") << u"TABLE calendar"_s << false;
+        QTest::newRow("empty") << QString() << false;
+        QTest::newRow("only a comment") << u"// CALENDAR file.day"_s << false;
+    }
+    void isCalendarQuery()
+    {
+        QFETCH(QString, source);
+        QFETCH(bool, calendar);
+        QCOMPARE(dataview::isCalendarQuery(source), calendar);
     }
 
     void fileTimes()

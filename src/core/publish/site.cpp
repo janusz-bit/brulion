@@ -45,6 +45,7 @@ SiteBuild buildSite(const SiteInput &input)
     exportInput.vaultName = input.title;
     exportInput.now = input.now;
     exportInput.footer = input.footer.isEmpty() ? publishedFooter() : input.footer;
+    exportInput.calcLocale = input.calcLocale;
     for (const io::FileEntry &f : input.files) {
         if (f.path == kConfigPath) {
             exportInput.files.append(f);

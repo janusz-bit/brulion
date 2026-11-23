@@ -12,6 +12,7 @@
 
 #include "calc/calc.h"
 #include "chart/chart.h"
+#include "dataview/dataview.h"
 #include "index/vaultindex.h"
 #include "markdown/inline.h"
 #include "markdown/linkformat.h"
@@ -145,6 +146,29 @@ QString macroValue(const markdown::MacroView &view)
     for (const markdown::MacroPiece &p : view.pieces)
         out += u'\x1e' + QString::number(int(p.kind)) + p.tone + (p.bold ? u'b' : u'-') + p.text + u'\x1f' + p.page;
     return out;
+}
+
+/// An inline query's view as a comparable value.
+QString inlineQueryValue(const std::optional<markdown::InlineQueryView> &view)
+{
+    return view ? u'1' + view->markdown + u'\x1f' + view->text + u'\x1f' + view->error : u"0"_s;
+}
+
+/// The inline Dataview query `expr` of the note `path` through the host's QueryHost (docs/SYNTAX.md
+/// §10 "Inline queries"): its value, or its message; nullopt for no Dataview expression or no value.
+std::optional<markdown::InlineQueryView> inlineQueryOf(brulion::EditorHost *host, const QString &path,
+                                                       const QString &expr)
+{
+    auto *queries = qobject_cast<brulion::QueryHost *>(host);
+    if (!queries)
+        return std::nullopt;
+    const QVariantMap value = queries->evaluateDataview(expr, path);
+    const QString kind = value.value(u"kind"_s).toString();
+    if (kind == u"error")
+        return markdown::InlineQueryView{QString(), QString(), value.value(u"text"_s).toString()};
+    if (kind != u"value")
+        return std::nullopt;
+    return markdown::InlineQueryView{value.value(u"markdown"_s).toString(), value.value(u"text"_s).toString(), QString()};
 }
 
 QString dependencyValue(const std::optional<markdown::TaskDependencyView> &dep)
@@ -1530,6 +1554,14 @@ void BlockListModel::recordReads(markdown::RenderContext &ctx, const QString &pa
             return view;
         };
     }
+    if (ctx.inlineQuery) {
+        ctx.inlineQuery = [slot, record, inner = std::move(ctx.inlineQuery)](const QString &expr) {
+            std::optional<markdown::InlineQueryView> view = inner(expr);
+            if (*slot)
+                record(RenderRead::InlineQuery, expr, QString(), QString(), inlineQueryValue(view));
+            return view;
+        };
+    }
     if (ctx.taskDependency) {
         ctx.taskDependency = [slot, record, inner = std::move(ctx.taskDependency)](const QString &id) {
             std::optional<markdown::TaskDependencyView> dep = inner(id);
@@ -1572,6 +1604,9 @@ bool BlockListModel::readsChanged(const RenderReads &reads, const QSet<QString> 
         case RenderRead::BlockText: now = textValue(ctx->blockText ? ctx->blockText(read.target) : std::nullopt); break;
         case RenderRead::TaskDependency:
             now = dependencyValue(ctx->taskDependency ? ctx->taskDependency(read.target) : std::nullopt);
+            break;
+        case RenderRead::InlineQuery:
+            now = inlineQueryValue(ctx->inlineQuery ? ctx->inlineQuery(read.target) : std::nullopt);
             break;
         case RenderRead::Macro: {
             markdown::MacroSpan macro;
@@ -1672,8 +1707,10 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
         const calc::CalcLineResult r = calc::evaluateInline(expr, **scope, locale);
         if (r.hasValue())
             return r.value;
-        return r.hasError() ? u"#ERR"_s : QString();
+        return r.hasError() ? markdown::InlineCalcError.toString() : QString();
     };
+    // Inline Dataview queries, when the calculator has no value: the host's index.
+    ctx.inlineQuery = [host, path](const QString &expr) { return inlineQueryOf(host.data(), path, expr); };
     // Macros of extensions (docs/SYNTAX.md §13 "Macros"): what the host computed for this note.
     if (host && host->rendersMacros()) {
         ctx.macro = [host, path](const markdown::MacroSpan &macro) {
@@ -1712,8 +1749,9 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
         const calc::CalcLineResult r = calc::evaluateInline(expr, **scope, locale);
         if (r.hasValue())
             return r.value;
-        return r.hasError() ? u"#ERR"_s : QString();
+        return r.hasError() ? markdown::InlineCalcError.toString() : QString();
     };
+    ctx.inlineQuery = [host, path](const QString &expr) { return inlineQueryOf(host.data(), path, expr); };
     if (host && host->rendersMacros()) {
         ctx.macro = [host, path](const markdown::MacroSpan &macro) {
             return host ? host->macroView(macro, path)
@@ -2228,9 +2266,12 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
         const BlockShape &shape = cachedShape(row);
         if (shape.view != BlockView::Query)
             return QVariantMap();
-        // A Dataview query has no filters to show as chips: its results say it all.
+        // A Dataview query has no filters to show as chips: its results say it all. A CALENDAR is
+        // a database view (a month).
         if (shape.lang == u"dataview")
-            return QVariantMap{{u"filters"_s, QVariantList()}, {u"terms"_s, QStringList()}, {u"view"_s, QString()}};
+            return QVariantMap{{u"filters"_s, QVariantList()},
+                               {u"terms"_s, QStringList()},
+                               {u"view"_s, dataview::isCalendarQuery(shape.editText) ? u"dataview"_s : QString()}};
         // A base is a database view; its YAML has no filters to show as chips.
         if (shape.lang == u"base")
             return QVariantMap{{u"filters"_s, QVariantList()}, {u"terms"_s, QStringList()}, {u"view"_s, u"base"_s}};

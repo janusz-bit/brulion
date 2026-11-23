@@ -229,8 +229,10 @@ done in the repository simply disappears from the list.
   a table's cells have no keyboard navigation (Tab / arrows between cells) and no multi-cell
   selection or paste, as Obsidian's tables have.
 * **Obsidian compatibility: what remains** — canvases keep the Advanced Canvas plugin's shapes,
-  borders and portals in the file but draw plain cards; Dataview's `CALENDAR` views, inline `= …`
-  queries and `dataviewjs` stay code (docs/SYNTAX.md §10 "Dataview queries").
+  borders and portals in the file but draw plain cards; Dataview's `dataviewjs` blocks and inline
+  `$= …` queries stay code (JavaScript: no script engine for notes; docs/SYNTAX.md §10 "Dataview
+  queries"); a Dataview `CALENDAR` was tested with the mouse and the offscreen self-test, not yet
+  with a finger on a real phone.
 * **Flashcards: what is still missing** — cards of the Spaced Repetition plugin and of Logseq, FSRS-6,
   the state next to each card, decks, sessions and statistics are there (docs/SYNTAX.md §15,
   docs/UI.md "Flashcards"); missing: FSRS parameters fitted to one's own reviews (an optimizer; the

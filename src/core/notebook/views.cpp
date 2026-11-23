@@ -2,12 +2,17 @@
 #include "notebook/views.h"
 
 #include "notebook/json.h"
+
+#include "dataview/dataview.h"
+#include "util/paths.h"
 #include "views/bases.h"
 #include "views/edits.h"
 
 #include <QCoreApplication>
 #include <QHash>
 #include <QJsonArray>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -147,6 +152,67 @@ QJsonObject viewResultJson(const views::ViewResult &view)
     };
 }
 
+namespace {
+
+/// A ```dataview CALENDAR block as a calendar view (docs/SYNTAX.md §10 "Dataview queries"): the
+/// pages of the month's grid on the days of their date, read-only — one title column, no groups,
+/// no new rows.
+QJsonObject dataviewCalendar(const VaultIndex &index, const QString &source, const ViewRequest &request)
+{
+    const QString language = u"dataview"_s;
+    const std::variant<dataview::Query, QString> parsed = dataview::parseQuery(source);
+    if (const QString *error = std::get_if<QString>(&parsed))
+        return failed(language, *error);
+    const dataview::Query &query = std::get<dataview::Query>(parsed);
+    if (query.type != dataview::QueryType::Calendar)
+        return failed(language, QCoreApplication::translate("brulion::Dataview",
+                                                            "Only a CALENDAR query is shown as a calendar."));
+    dataview::Options options;
+    options.currentPath = request.currentPath;
+    options.now = request.now;
+    options.weekStart = request.weekStart;
+    options.stat = request.stat;
+    const auto result = dataview::runQuery(query, index, options);
+    if (const QString *error = std::get_if<QString>(&result))
+        return failed(language, *error);
+    views::ViewResult view;
+    view.kind = views::ViewKind::Calendar;
+    view.type = QueryType::Pages;
+    const QDate month = request.month.isValid() ? request.month : request.now.date();
+    view.month = QDate(month.year(), month.month(), 1);
+    views::Column title;
+    title.id = u"title"_s;
+    title.label = std::get<dataview::Result>(result).dateField;
+    title.kind = views::ColumnKind::Title;
+    view.columns.append(title);
+    const auto [from, to] = views::calendarRange(view.month, request.weekStart);
+    for (const dataview::Row &row : std::get<dataview::Result>(result).rows) {
+        if (row.date < from || row.date > to)
+            continue;
+        views::Row out;
+        out.path = row.path;
+        const ParsedNote *note = index.note(row.path);
+        out.title = note && !note->title.isEmpty() ? note->title : paths::pageTitle(row.path);
+        out.date = row.date;
+        views::Cell cell;
+        cell.markdown = row.cells.value(0);
+        cell.text = out.title;
+        cell.empty = false;
+        out.cells.append(cell);
+        view.rows.append(out);
+    }
+    // By day; on one day in the query's order (its SORT).
+    std::ranges::stable_sort(view.rows, {}, &views::Row::date);
+    view.total = int(view.rows.size());
+    QJsonObject out = viewResultJson(view);
+    out.insert(u"ok"_s, true);
+    out.insert(u"error"_s, QString());
+    out.insert(u"language"_s, language);
+    return out;
+}
+
+} // namespace
+
 QJsonObject runView(const VaultIndex &index, const QString &language, const QString &source, const ViewRequest &request,
                     QueryCache *cache)
 {
@@ -173,6 +239,8 @@ QJsonObject runView(const VaultIndex &index, const QString &language, const QStr
         out.insert(u"language"_s, language);
         return out;
     }
+    if (language == u"dataview")
+        return dataviewCalendar(index, source, request);
     const std::variant<Query, QString> parsed = parseQuery(source);
     if (const QString *error = std::get_if<QString>(&parsed))
         return failed(u"query"_s, *error);

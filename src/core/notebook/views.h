@@ -37,7 +37,8 @@ struct ViewRequest {
 };
 
 /// Run `source` — the body of a ```query block with `view:` ("query"), a ```base block or a .base
-/// file's text ("base") — and give its view as JSON (see the file comment). `cache`: a QueryCache
+/// file's text ("base"), a ```dataview CALENDAR block ("dataview": the pages of the month's grid on
+/// the days of their date, read-only) — and give its view as JSON (see the file comment). `cache`: a QueryCache
 /// kept for this query (the app's blocks run again after every save), or null.
 QJsonObject runView(const VaultIndex &index, const QString &language, const QString &source, const ViewRequest &request,
                     QueryCache *cache = nullptr);

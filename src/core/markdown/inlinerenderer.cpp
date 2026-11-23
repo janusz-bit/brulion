@@ -21,6 +21,7 @@
 #include "markdown/tokens_p.h"
 
 #include <QHash>
+#include <QRegularExpression>
 #include <QStringList>
 #include <QTextBoundaryFinder>
 #include <QUrl>
@@ -889,9 +890,35 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
         if (content.size() >= 2 && content.startsWith(u' ') && content.endsWith(u' ') && !content.trimmed().isEmpty())
             content = content.sliced(1, content.size() - 2);
         const QString trimmed = content.trimmed();
-        if (m_ctx.inlineCalc && trimmed.startsWith(u'=')) {
+        if ((m_ctx.inlineCalc || m_ctx.inlineQuery) && trimmed.startsWith(u'=')) {
+            // The calculator first, then Dataview (docs/SYNTAX.md §9 "Inline calculations").
             const QString expr = trimmed.sliced(1).trimmed();
-            const QString result = expr.isEmpty() ? QString() : m_ctx.inlineCalc(expr);
+            const QString result = expr.isEmpty() || !m_ctx.inlineCalc ? QString() : m_ctx.inlineCalc(expr);
+            const auto query = (result.isEmpty() || result == InlineCalcError) && !expr.isEmpty() && m_ctx.inlineQuery
+                                       ? m_ctx.inlineQuery(expr)
+                                       : std::nullopt;
+            if (query && !query->error.isEmpty()) {
+                const ChipColors muted{pal.overdue.foreground, pal.neutral.background};
+                atoms.append({span.from, span.to, chip(muted, u"\u26A0 "_s + query->error)});
+                continue;
+            }
+            if (query && !query->markdown.isEmpty()) {
+                // Plain text in a chip, as a result; links, tags and other Markdown rendered.
+                RenderContext inner = m_ctx;
+                inner.inlineCalc = nullptr;
+                inner.inlineQuery = nullptr;
+                inner.macro = nullptr;
+                inner.dateLinks = false;
+                inner.dayLinks = false;
+                QString html = InlineRenderer(std::move(inner)).renderInline(query->markdown, true, depth + 1, {}, false);
+                // Links naming a range of the text (a reminder's, an encrypted fragment's) would name
+                // one of the value's, not of the block: their chips stay, without the link.
+                static const QRegularExpression rangeLink(
+                        u"<a href=\"(?:reminder|encrypted|task|date|recur|prio|macro|day):[^\"]*\"[^>]*>(.*?)</a>"_s);
+                html.replace(rangeLink, u"\\1"_s);
+                atoms.append({span.from, span.to, html.contains(u'<') ? html : chip(pal.neutral, query->text)});
+                continue;
+            }
             if (!result.isEmpty()) {
                 atoms.append({span.from, span.to, chip(pal.neutral, result)});
                 continue;

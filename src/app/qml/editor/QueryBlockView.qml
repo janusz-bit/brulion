@@ -393,6 +393,7 @@ Rectangle {
             height: databaseLoader.implicitHeight
             sourceComponent: DatabaseView {
                 id: databaseView
+                objectName: "databaseView" // (the editor's self-tests)
                 width: databaseLoader.width
                 controller: root.block.controller
                 source: root.block.rowData.editText

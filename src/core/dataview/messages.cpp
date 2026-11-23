@@ -16,12 +16,17 @@ QString emptyQuery()
 
 QString expectedQueryType(const QString &found)
 {
-    return QCoreApplication::translate("brulion::Dataview", "A Dataview query starts with LIST, TABLE or TASK, not “%1”.").arg(found);
+    return QCoreApplication::translate("brulion::Dataview", "A Dataview query starts with LIST, TABLE, TASK or CALENDAR, not “%1”.").arg(found);
 }
 
-QString calendarNotSupported()
+QString calendarNeedsDate()
 {
-    return QCoreApplication::translate("brulion::Dataview", "CALENDAR views are not supported: use LIST, TABLE or TASK.");
+    return QCoreApplication::translate("brulion::Dataview", "CALENDAR needs the date to show each page on, e.g. CALENDAR file.day.");
+}
+
+QString calendarWithoutId()
+{
+    return QCoreApplication::translate("brulion::Dataview", "A CALENDAR has no WITHOUT ID: it shows pages on days.");
 }
 
 QString unknownCommand(const QString &found)

@@ -689,7 +689,7 @@
 <context>
     <name>DatabaseView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="89"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n task</numerusform>
@@ -697,11 +697,19 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="89"/>
         <source>%n row(s)</source>
         <translation>
             <numerusform>%n row</numerusform>
             <numerusform>%n rows</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1316"/>
+        <source>%1: %n page(s)</source>
+        <translation>
+            <numerusform>%1: %n page</numerusform>
+            <numerusform>%1: %n pages</numerusform>
         </translation>
     </message>
 </context>
@@ -1440,7 +1448,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="701"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="702"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -2258,7 +2266,7 @@
 <context>
     <name>brulion::Dataview</name>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="173"/>
+        <location filename="../src/core/dataview/messages.cpp" line="178"/>
         <source>%n year(s)</source>
         <translation>
             <numerusform>%n year</numerusform>
@@ -2266,7 +2274,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="178"/>
+        <location filename="../src/core/dataview/messages.cpp" line="183"/>
         <source>%n month(s)</source>
         <translation>
             <numerusform>%n month</numerusform>
@@ -2274,7 +2282,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="183"/>
+        <location filename="../src/core/dataview/messages.cpp" line="188"/>
         <source>%n week(s)</source>
         <translation>
             <numerusform>%n week</numerusform>
@@ -2282,7 +2290,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="188"/>
+        <location filename="../src/core/dataview/messages.cpp" line="193"/>
         <source>%n day(s)</source>
         <translation>
             <numerusform>%n day</numerusform>
@@ -2290,7 +2298,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="193"/>
+        <location filename="../src/core/dataview/messages.cpp" line="198"/>
         <source>%n hour(s)</source>
         <translation>
             <numerusform>%n hour</numerusform>
@@ -2298,7 +2306,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="198"/>
+        <location filename="../src/core/dataview/messages.cpp" line="203"/>
         <source>%n minute(s)</source>
         <translation>
             <numerusform>%n minute</numerusform>
@@ -2306,7 +2314,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="203"/>
+        <location filename="../src/core/dataview/messages.cpp" line="208"/>
         <source>%n second(s)</source>
         <translation>
             <numerusform>%n second</numerusform>
@@ -2314,7 +2322,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="208"/>
+        <location filename="../src/core/dataview/messages.cpp" line="213"/>
         <source>%n millisecond(s)</source>
         <translation>
             <numerusform>%n millisecond</numerusform>
@@ -2461,7 +2469,7 @@
     <name>brulion::ioviews::PublishController</name>
     <message numerus="yes">
         <location filename="../src/app/io/publishcontroller.cpp" line="563"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="864"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -2469,7 +2477,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="834"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="836"/>
         <source>%n encrypted fragment(s) are left out of the pages.</source>
         <translation>
             <numerusform>%n encrypted fragment is left out of the pages.</numerusform>
@@ -2477,7 +2485,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="841"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="843"/>
         <source>%n new</source>
         <translation>
             <numerusform>%n new</numerusform>
@@ -2485,7 +2493,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="843"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
         <source>%n changed</source>
         <translation>
             <numerusform>%n changed</numerusform>
@@ -2493,7 +2501,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="847"/>
         <source>%n to remove</source>
         <translation>
             <numerusform>%n to remove</numerusform>
@@ -2501,7 +2509,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="847"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="849"/>
         <source>%n changed there</source>
         <translation>
             <numerusform>%n changed there</numerusform>
@@ -2509,7 +2517,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="849"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="851"/>
         <source>%n unchanged</source>
         <translation>
             <numerusform>%n unchanged</numerusform>
@@ -2517,7 +2525,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="864"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n attachment</numerusform>

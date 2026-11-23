@@ -4,6 +4,7 @@
 // its hashes for the incremental publish. Part of the publish module — see publish/publish.h.
 #pragma once
 
+#include "calc/calclocale.h"
 #include "io/files.h"
 #include "publish/selection.h"
 #include "publish/target.h"
@@ -45,6 +46,8 @@ struct SiteInput {
     bool nojekyll = false;
     /// The pages' footer ("" = "Published with Brulion").
     QString footer;
+    /// The language of inline calculations' results (io::ExportInput::calcLocale): the UI's.
+    calc::CalcLocale calcLocale = calc::CalcLocale::Polish;
 };
 
 struct SiteBuild {

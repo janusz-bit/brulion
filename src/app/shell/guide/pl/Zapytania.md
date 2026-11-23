@@ -118,10 +118,14 @@ Skarbiec współdzielony z Obsidianem często ma zapytania wtyczki Dataview. Bru
 TABLE status, budżet AS "Budżet" FROM #projekt WHERE status != "zrobione" SORT budżet DESC
 ```
 
-- `LIST`, `TABLE` (kolumny z `AS "nazwa"`, `WITHOUT ID` ukrywa kolumnę ze stroną) i `TASK`,
+- `LIST`, `TABLE` (kolumny z `AS "nazwa"`, `WITHOUT ID` ukrywa kolumnę ze stroną), `TASK` i `CALENDAR` (niżej),
 - `FROM #tag`, `FROM "Folder"`, `FROM [[Strona]]` (strony, które do niej linkują), łączone przez `AND`, `OR` i `-`,
 - `WHERE`, `SORT … DESC`, `GROUP BY`, `FLATTEN`, `LIMIT`,
 - pola z nagłówka YAML i z linii `klucz:: wartość` oraz `file.name`, `file.mtime`, `file.tags`, `file.tasks`…,
 - daty, np. `date(today) + dur(7 days)`, i funkcje Dataview (`contains`, `length`, `round`, `dateformat`…).
 
-Brulion czyta te zapytania sam i nigdy nie uruchamia skryptów: bloki `dataviewjs` zostają kodem, a funkcje z wyrażeniami regularnymi i widoki `CALENDAR` mówią, że nie są obsługiwane.
+`CALENDAR termin` pokazuje miesiąc z kropką dla każdej strony w dniu jej daty (tu pola `termin`; `file.day` to data notatki dziennej). Strzałki zmieniają miesiąc; dotknij dnia, żeby otworzyć jego stronę albo wybrać jedną z jego stron.
+
+**Zapytanie w tekście** to kod w linii zaczynający się od `=`, jak w Dataview: ta strona nazywa się `= this.file.name`, a za tydzień będzie `= date(today) + dur(1 week)`. Pokazuje wartość, a w pliku zostaje zapytanie. Ten sam kod to także [[Obliczenia#Rachunki w tekście|rachunek w tekście]]: gdy kalkulator ma wynik (`= 52 * 7`), widać ten wynik; Dataview czyta tylko to, czego kalkulator nie umie policzyć.
+
+Brulion czyta te zapytania sam i nigdy nie uruchamia skryptów: bloki `dataviewjs` i zapytania `$= …` zostają kodem (to JavaScript), a funkcje z wyrażeniami regularnymi mówią, że nie są obsługiwane.

@@ -721,8 +721,10 @@ void PublishController::readStep()
 void PublishController::buildAndRun()
 {
     const QString notebook = m_workspace ? m_workspace->name() : QString();
-    const SiteInput input =
+    SiteInput input =
             siteInputFor(m_target, std::exchange(m_readFiles, {}), m_workspace->vault()->config(), notebook, now());
+    input.calcLocale = m_settings && m_settings->language() == u"en" ? calc::CalcLocale::English
+                                                                      : calc::CalcLocale::Polish;
     m_readQueue.clear();
     setProgress(-1, tr("Making the pages…"));
     const int generation = m_generation;

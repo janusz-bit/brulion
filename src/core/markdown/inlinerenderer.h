@@ -79,6 +79,19 @@ struct TaskDependencyView {
     bool open = false; ///< it is not done or cancelled: it blocks
 };
 
+/// What RenderContext::inlineCalc gives for an expression it cannot evaluate.
+inline constexpr QStringView InlineCalcError = u"#ERR";
+
+/// What an inline Dataview query shows (RenderContext::inlineQuery).
+struct InlineQueryView {
+    /// The value as inline Markdown (rendered like the block's text — links, tags — without inline
+    /// calculations and queries; plain text in a chip, as a calculation's result); "" with an error.
+    QString markdown;
+    QString text; ///< the value as plain text (the chip's)
+    /// Why it has no value ("Unknown function “foo()”."): a muted error chip; "" for a value.
+    QString error;
+};
+
 /// Everything the renderer needs besides the text. All callbacks are optional.
 struct RenderContext {
     /// Page link target (as written, e.g. "Projekty/Dom") -> resolved vault path, or nullopt
@@ -98,8 +111,13 @@ struct RenderContext {
     /// of that task's text, in the overdue colours while it is open and the done ones' after;
     /// "⛔ id?" in the unresolved colour for a missing id. Unset: the token as muted text.
     std::function<std::optional<TaskDependencyView>(const QString &id)> taskDependency;
-    /// Inline calculation `= expr` -> result text; an empty result shows the code as written.
+    /// Inline calculation `= expr` -> result text (InlineCalcError when it cannot be evaluated); an
+    /// empty result shows the code as written.
     std::function<QString(const QString &expr)> inlineCalc;
+    /// Inline Dataview query `= expr` (docs/SYNTAX.md §10 "Inline queries") -> what it shows, asked
+    /// only when inlineCalc gave no value (nothing or InlineCalcError): the calculator comes first.
+    /// nullopt: no Dataview expression or no value (the calculator's answer stays).
+    std::function<std::optional<InlineQueryView>(const QString &expr)> inlineQuery;
     /// A macro of an extension, `{{ext:silownia/rekord Przysiad}}` (markdown/macros.h, docs/SYNTAX.md
     /// §13 "Macros") -> what it shows: its pieces (text in a tone, bold, a `page:` link, code —
     /// always escaped), "—" when it gave nothing; a placeholder while it is computed ("…"), and a

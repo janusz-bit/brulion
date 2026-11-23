@@ -74,7 +74,7 @@ brulion_add_test(tst_shell_macros SOURCES tst_macros.cpp
     LIBS brulion_shell brulion_core_extensions brulion_core_index brulion_core_vault)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
     LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_calc
-         brulion_core_dates brulion_core_diagram brulion_core_chart)
+         brulion_core_dates brulion_core_diagram brulion_core_chart brulion_core_dataview)
 # The block editor's compare-and-swap saves on the real Workspace (an external append during a
 # debounced save is merged, never overwritten).
 brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIBS brulion_shell brulion_editor)

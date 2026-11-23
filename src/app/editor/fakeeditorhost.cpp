@@ -268,6 +268,17 @@ QVariantMap FakeEditorHost::runDataview(const QString &source, const QString &cu
     return out;
 }
 
+QVariantMap FakeEditorHost::evaluateDataview(const QString &expression, const QString &currentPath)
+{
+    ++m_inlineQueries;
+    if (m_queriesFail)
+        return notebook::dataviewInlineJson(std::nullopt).toVariantMap();
+    dataview::Options options;
+    options.currentPath = paths::normalize(currentPath);
+    options.now = clockTime(m_now);
+    return notebook::dataviewInlineJson(dataview::evaluateInline(expression, currentIndex(), options)).toVariantMap();
+}
+
 QVariantMap FakeEditorHost::runView(const QString &language, const QString &source, const QString &currentPath,
                                     const QVariantMap &state)
 {

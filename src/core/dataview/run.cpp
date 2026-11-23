@@ -353,6 +353,24 @@ Result build(const Query &q, const QList<RowData> &rows, Context &ctx, int limit
         }
         break;
     }
+    case QueryType::Calendar: {
+        // The pages whose date is one: each on its day (a group of a GROUP BY is no page).
+        r.dateField = q.columns.isEmpty() ? QString() : q.columns.first().second;
+        for (const RowData &row : rows.first(first)) {
+            if (row.group || q.columns.isEmpty())
+                continue;
+            const Value date = evaluate(*q.columns.first().first, ctx, rowObject(row));
+            if (!date.is(Value::Type::Date))
+                continue;
+            Row out;
+            out.path = row.path;
+            out.date = date.asDate().at.date();
+            out.cells.append(shown.add(idCell(row, ctx)));
+            r.rows.append(out);
+        }
+        r.total = int(r.rows.size());
+        break;
+    }
     case QueryType::Task: {
         qsizetype left = limit;
         const auto task = [&shown](const Row &row) { shown.add(row.task ? row.task->text : QString()); };
@@ -447,7 +465,9 @@ std::variant<Result, QString> runQuery(const Query &query, const VaultIndex &ind
             apply(*cmd, rows, ctx);
             limited = limited || cmd->kind == Command::Kind::Limit;
         }
-        return build(query, rows, ctx, limited ? MaxRows : std::max(1, opts.defaultLimit));
+        // (A calendar shows any month: every row's date is needed.)
+        const bool every = limited || query.type == QueryType::Calendar;
+        return build(query, rows, ctx, every ? MaxRows : std::max(1, opts.defaultLimit));
     } catch (const EvalError &e) {
         return e.message.isEmpty() ? messages::tooCostly() : e.message;
     }

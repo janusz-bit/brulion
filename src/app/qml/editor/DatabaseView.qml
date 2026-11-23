@@ -14,7 +14,8 @@ import Brulion
 // group (a task's status by default), cards dragged between columns with the mouse or, on touch
 // screens, after a long press (the card's status, priority, date or property becomes the column's).
 // Gallery: cards with the page's cover or first picture. Calendar: a month's grid, rows on the day
-// of their date, dragged to another day. "+" makes a new row: a page in the view's folder with its
+// of their date, dragged to another day; a ```dataview CALENDAR block's (language "dataview",
+// read-only) shows a dot per page, a tap on a day opens its page or a menu of its pages. "+" makes a new row: a page in the view's folder with its
 // tag and values (a board column's, a calendar day's), or a task. An edit on this page is one undo
 // step of the page; in another file the toast's Undo puts it back (toastRequested(…, true)).
 //
@@ -1224,6 +1225,37 @@ Item {
     }
 
     // ---- calendar ------------------------------------------------------------------------------------------
+    /// A Dataview CALENDAR (docs/SYNTAX.md §10 "Dataview queries"): a dot per page on its day; a tap
+    /// on a day opens its page, or a menu of its pages.
+    readonly property bool dots: root.language === "dataview"
+    readonly property int maxDots: Math.max(1, Math.floor((root.dayWidth - 2 * Theme.space1 + 3) / 10))
+    /// The menu of a day's pages is open (the editor's self-tests).
+    readonly property bool dayMenuOpen: dayMenu.opened
+    /// The month a calendar shows, "YYYY-MM-01" (the editor's self-tests).
+    readonly property string shownMonth: results.month
+    function openDay(rows: list<int>, day: Item): void {
+        if (rows.length === 1) {
+            root.openRow(rows[0])
+            return
+        }
+        dayMenu.rows = rows
+        dayMenu.popup(day, 0, day.height)
+    }
+    BMenu {
+        id: dayMenu
+        objectName: "viewDayMenu"
+        property list<int> rows
+        Instantiator {
+            model: dayMenu.rows
+            delegate: BMenuItem {
+                required property int modelData
+                text: results.revision >= 0 ? results.rowText(modelData) : ""
+                onTriggered: root.openRow(modelData)
+            }
+            onObjectAdded: (index, object) => dayMenu.insertItem(index, object as Item)
+            onObjectRemoved: (index, object) => dayMenu.removeItem(object as Item)
+        }
+    }
     readonly property real dayWidth: Math.floor(root.width / 7)
     readonly property real dayHeight: root.touch ? 76 : 96
     readonly property int dayItems: root.touch ? 2 : 3
@@ -1279,12 +1311,47 @@ Item {
                     font.weight: results.revision >= 0 && results.dayIsToday(day.index) ? Theme.weightBold : Theme.weightNormal
                     color: results.revision >= 0 && results.dayIsToday(day.index) ? Theme.accentText : Theme.fgMuted
                 }
+                Accessible.role: root.dots ? Accessible.Button : Accessible.NoRole
+                Accessible.name: root.dots && results.revision >= 0
+                                 ? qsTr("%1: %n page(s)", "", day.rows.length).arg(results.dayNumber(day.index)) : ""
                 TapHandler {
                     enabled: results.canAddRow
                     onDoubleTapped: root.startAdding(-1, day.index)
                 }
+                // A Dataview calendar: the day's pages as dots, a tap opens them.
+                TapHandler {
+                    enabled: root.dots && day.rows.length > 0
+                    onTapped: root.openDay(day.rows, day)
+                }
+                Row {
+                    visible: root.dots
+                    x: Theme.space1
+                    y: root.smallLineH + 6
+                    spacing: 4
+                    Repeater {
+                        model: root.dots ? Math.min(root.maxDots, day.rows.length) : 0
+                        delegate: Rectangle {
+                            required property int index
+                            objectName: "viewDayDot"
+                            width: 6
+                            height: 6
+                            radius: 3
+                            color: Theme.accent
+                        }
+                    }
+                }
+                Text {
+                    visible: root.dots && day.rows.length > root.maxDots
+                    x: Theme.space1
+                    y: root.smallLineH + 14
+                    text: "+" + (day.rows.length - root.maxDots)
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textXs
+                    color: Theme.fgFaint
+                }
                 Repeater {
-                    model: Math.min(root.dayItems, day.rows.length)
+                    model: root.dots ? 0 : Math.min(root.dayItems, day.rows.length)
                     delegate: Rectangle {
                         id: entry
                         required property int index
@@ -1347,7 +1414,7 @@ Item {
                     }
                 }
                 Text {
-                    visible: day.rows.length > root.dayItems
+                    visible: !root.dots && day.rows.length > root.dayItems
                     x: Theme.space1
                     y: root.smallLineH + 4 + root.dayItems * (root.smallLineH + 2)
                     text: qsTr("+%1 more").arg(day.rows.length - root.dayItems)

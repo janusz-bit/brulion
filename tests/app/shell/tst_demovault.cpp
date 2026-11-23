@@ -11,6 +11,7 @@
 
 #include "calc/calc.h"
 #include "chart/chart.h"
+#include "dataview/expression.h"
 #include "dates/natural.h"
 #include "dates/recurrence.h"
 #include "diagram/diagram.h"
@@ -34,6 +35,12 @@ using namespace brulion;
 using brulion::shell::DemoFile;
 
 namespace {
+
+/// An inline expression the calculator cannot evaluate is an inline Dataview query when it parses.
+bool isDataviewExpression(const QString &expression)
+{
+    return std::holds_alternative<dataview::Expression>(dataview::parseExpression(expression.trimmed()));
+}
 
 const QDateTime kNow(QDate(2026, 10, 14), QTime(10, 0)); // a Wednesday
 
@@ -486,8 +493,10 @@ private Q_SLOTS:
             }
             static const QRegularExpression inlineCalc(u"`=([^`]+)`"_s);
             for (const auto &m : inlineCalc.globalMatch(content)) {
+                // A calculation, or an inline Dataview query (docs/SYNTAX.md §10 "Inline queries").
                 const calc::CalcLineResult r = calc::evaluateInline(m.captured(1), calc::Scope());
-                QVERIFY2(r.hasValue() && !r.hasError(), qPrintable(m.captured(0) + u" → "_s + r.error));
+                QVERIFY2((r.hasValue() && !r.hasError()) || isDataviewExpression(m.captured(1)),
+                         qPrintable(m.captured(0) + u" → "_s + r.error));
             }
             static const QRegularExpression queryBlock(u"```query\n(.*?)```"_s,
                                                        QRegularExpression::DotMatchesEverythingOption);
@@ -617,7 +626,8 @@ private Q_SLOTS:
             static const QRegularExpression inlineCalc(u"`=([^`]+)`"_s);
             for (const auto &m : inlineCalc.globalMatch(content)) {
                 const calc::CalcLineResult r = calc::evaluateInline(m.captured(1), calc::Scope());
-                QVERIFY2(r.hasValue() && !r.hasError(), qPrintable(f.path + u": "_s + m.captured(0)));
+                QVERIFY2((r.hasValue() && !r.hasError()) || isDataviewExpression(m.captured(1)),
+                         qPrintable(f.path + u": "_s + m.captured(0)));
             }
             // Every ```mermaid example draws (a type Brulion does not draw yet only where shown so).
             static const QRegularExpression mermaidBlock(u"```mermaid\n(.*?)```"_s,

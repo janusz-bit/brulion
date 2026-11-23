@@ -7408,32 +7408,32 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>DatabaseView</name>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="68"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="69"/>
         <source>Board</source>
         <translation>Tablica</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="69"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="70"/>
         <source>Gallery</source>
         <translation>Galeria</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="70"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="71"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="71"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="72"/>
         <source>List</source>
         <translation>Lista</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="72"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="73"/>
         <source>Table</source>
         <translation>Tabela</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="89"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n zadanie</numerusform>
@@ -7442,7 +7442,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="89"/>
         <source>%n row(s)</source>
         <translation>
             <numerusform>%n wiersz</numerusform>
@@ -7451,195 +7451,204 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="89"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="90"/>
         <source>%1 of %2</source>
         <translation>%1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="95"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="96"/>
         <source>Changed “%1”</source>
         <translation>Zmieniono „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="206"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="207"/>
         <source>The new row could not be made.</source>
         <translation>Nie udało się utworzyć nowego wiersza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="271"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="272"/>
         <source>Views of this base</source>
         <translation>Widoki tej bazy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="281"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="282"/>
         <source>Previous month</source>
         <translation>Poprzedni miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="300"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="301"/>
         <source>Next month</source>
         <translation>Następny miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="309"/>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="367"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="310"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="368"/>
         <source>New task</source>
         <translation>Nowe zadanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="309"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="310"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="318"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="319"/>
         <source>Columns</source>
         <translation>Kolumny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="331"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="332"/>
         <source>This view cannot be shown.</source>
         <translation>Nie można pokazać tego widoku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="334"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="335"/>
         <source>Nothing matches this view.</source>
         <translation>Nic nie pasuje do tego widoku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="334"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="335"/>
         <source>Nothing yet — the notebook is still being indexed.</source>
         <translation>Jeszcze nic — notatnik jest nadal indeksowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="367"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="368"/>
         <source>Title of the new page</source>
         <translation>Tytuł nowej strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="398"/>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="479"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="399"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="480"/>
         <source>Add column</source>
         <translation>Dodaj kolumnę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="412"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="413"/>
         <source>Other…</source>
         <translation>Inna…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="418"/>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="449"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="419"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="450"/>
         <source>Hide column</source>
         <translation>Ukryj kolumnę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="433"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="434"/>
         <source>Remove the sort</source>
         <translation>Usuń sortowanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="443"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="444"/>
         <source>Sort ascending</source>
         <translation>Sortuj rosnąco</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="444"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="445"/>
         <source>Sort descending</source>
         <translation>Sortuj malejąco</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="446"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="447"/>
         <source>Move left</source>
         <translation>Przesuń w lewo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="447"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="448"/>
         <source>Move right</source>
         <translation>Przesuń w prawo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="463"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="464"/>
         <source>To do</source>
         <translation>Do zrobienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="464"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="465"/>
         <source>In progress</source>
         <translation>W toku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="465"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="466"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="466"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="467"/>
         <source>Deferred</source>
         <translation>Oczekujące</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="467"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="468"/>
         <source>Cancelled</source>
         <translation>Anulowane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="468"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="469"/>
         <source>Highest</source>
         <translation>Najwyższy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="469"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="470"/>
         <source>High</source>
         <translation>Wysoki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="470"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="471"/>
         <source>Medium</source>
         <translation>Średni</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="471"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="472"/>
         <source>Normal</source>
         <translation>Normalny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="472"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="473"/>
         <source>Low</source>
         <translation>Niski</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="473"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="474"/>
         <source>Lowest</source>
         <translation>Najniższy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="480"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="481"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="489"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="490"/>
         <source>A property, e.g. status or formula.total</source>
         <translation>Właściwość, np. status albo formula.razem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="489"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="490"/>
         <source>A property, or Label = expression</source>
         <translation>Właściwość albo Etykieta = wyrażenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="526"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="527"/>
         <source>a, b, [[Page]]</source>
         <translation>a, b, [[Strona]]</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1174"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1175"/>
         <source>New in “%1”</source>
         <translation>Nowy w „%1”</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1316"/>
+        <source>%1: %n page(s)</source>
+        <translation>
+            <numerusform>%1: %n strona</numerusform>
+            <numerusform>%1: %n strony</numerusform>
+            <numerusform>%1: %n stron</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1353"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1420"/>
         <source>+%1 more</source>
         <translation>jeszcze %1</translation>
     </message>
@@ -16624,12 +16633,12 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Edytuj zapytanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="523"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="524"/>
         <source>Task: %1</source>
         <translation>Zadanie: %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="701"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="702"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Pokaż jeszcze %n</numerusform>
@@ -16638,37 +16647,37 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="725"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="726"/>
         <source>Query results are shown when a notebook is open.</source>
         <translation>Wyniki zapytania pojawią się po otwarciu notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="731"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="732"/>
         <source>This query cannot be run.</source>
         <translation>Nie można wykonać tego zapytania.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="733"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="734"/>
         <source>Write a Dataview query, e.g. TABLE status FROM #projekt</source>
         <translation>Napisz zapytanie Dataview, np. TABLE status FROM #projekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="734"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="735"/>
         <source>Write filters, e.g. type:tasks status:open tag:zakupy</source>
         <translation>Wpisz filtry, np. type:tasks status:open tag:zakupy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="736"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="737"/>
         <source>Nothing matches this query.</source>
         <translation>Nic nie pasuje do tego zapytania.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="736"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="737"/>
         <source>Nothing yet — the notebook is still being indexed.</source>
         <translation>Jeszcze nic — notatnik jest nadal indeksowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="738"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="739"/>
         <source>The notebook is still being indexed: more results may appear.</source>
         <translation>Notatnik jest nadal indeksowany: mogą pojawić się kolejne wyniki.</translation>
     </message>
@@ -26816,156 +26825,161 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/core/dataview/messages.cpp" line="19"/>
-        <source>A Dataview query starts with LIST, TABLE or TASK, not “%1”.</source>
-        <translation>Zapytanie Dataview zaczyna się od LIST, TABLE albo TASK, a nie od „%1”.</translation>
+        <source>A Dataview query starts with LIST, TABLE, TASK or CALENDAR, not “%1”.</source>
+        <translation>Zapytanie Dataview zaczyna się od LIST, TABLE, TASK albo CALENDAR, a nie od „%1”.</translation>
     </message>
     <message>
         <location filename="../src/core/dataview/messages.cpp" line="24"/>
-        <source>CALENDAR views are not supported: use LIST, TABLE or TASK.</source>
-        <translation>Widoki CALENDAR nie są obsługiwane: użyj LIST, TABLE albo TASK.</translation>
+        <source>CALENDAR needs the date to show each page on, e.g. CALENDAR file.day.</source>
+        <translation>CALENDAR potrzebuje daty, w której dniu pokazać każdą stronę, np. CALENDAR file.day.</translation>
     </message>
     <message>
         <location filename="../src/core/dataview/messages.cpp" line="29"/>
+        <source>A CALENDAR has no WITHOUT ID: it shows pages on days.</source>
+        <translation>CALENDAR nie ma WITHOUT ID: pokazuje strony w dniach.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/dataview/messages.cpp" line="34"/>
         <source>Unknown command “%1”. Available: FROM, WHERE, SORT, GROUP BY, FLATTEN, LIMIT.</source>
         <translation>Nieznane polecenie „%1”. Dostępne: FROM, WHERE, SORT, GROUP BY, FLATTEN, LIMIT.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="34"/>
+        <location filename="../src/core/dataview/messages.cpp" line="39"/>
         <source>FROM comes once, right after LIST, TABLE or TASK.</source>
         <translation>FROM może wystąpić raz, zaraz po LIST, TABLE albo TASK.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="39"/>
+        <location filename="../src/core/dataview/messages.cpp" line="44"/>
         <source>Cannot read the source “%1”. Examples: #tag, &quot;Folder&quot;, [[Page]], outgoing([[Page]]).</source>
         <translation>Nie można odczytać źródła „%1”. Przykłady: #tag, &quot;Folder&quot;, [[Strona]], outgoing([[Strona]]).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="44"/>
+        <location filename="../src/core/dataview/messages.cpp" line="49"/>
         <source>csv() sources are not supported.</source>
         <translation>Źródła csv() nie są obsługiwane.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="49"/>
+        <location filename="../src/core/dataview/messages.cpp" line="54"/>
         <source>LIMIT needs a whole number from 1 to %1, not “%2”.</source>
         <translation>LIMIT wymaga liczby całkowitej od 1 do %1, a nie „%2”.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="54"/>
+        <location filename="../src/core/dataview/messages.cpp" line="59"/>
         <source>A string is not closed with &quot;.</source>
         <translation>Tekst nie jest zamknięty znakiem &quot;.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="59"/>
+        <location filename="../src/core/dataview/messages.cpp" line="64"/>
         <source>A link is not closed with ]].</source>
         <translation>Link nie jest zamknięty znakami ]].</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="64"/>
+        <location filename="../src/core/dataview/messages.cpp" line="69"/>
         <source>An expression is missing at the end.</source>
         <translation>Na końcu brakuje wyrażenia.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="65"/>
+        <location filename="../src/core/dataview/messages.cpp" line="70"/>
         <source>Expected a value or a field, found “%1”.</source>
         <translation>Oczekiwano wartości albo pola, a jest „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="70"/>
+        <location filename="../src/core/dataview/messages.cpp" line="75"/>
         <source>“%1” is missing at the end.</source>
         <translation>Na końcu brakuje „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="71"/>
+        <location filename="../src/core/dataview/messages.cpp" line="76"/>
         <source>Expected “%1”, found “%2”.</source>
         <translation>Oczekiwano „%1”, a jest „%2”.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="76"/>
+        <location filename="../src/core/dataview/messages.cpp" line="81"/>
         <source>A name is missing after %1.</source>
         <translation>Po %1 brakuje nazwy.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="81"/>
+        <location filename="../src/core/dataview/messages.cpp" line="86"/>
         <source>Unexpected “%1”.</source>
         <translation>Nieoczekiwane „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="86"/>
+        <location filename="../src/core/dataview/messages.cpp" line="91"/>
         <source>Unknown function “%1”.</source>
         <translation>Nieznana funkcja „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="91"/>
+        <location filename="../src/core/dataview/messages.cpp" line="96"/>
         <source>The function “%1” is not supported: Brulion does not run regular expressions or scripts from notes.</source>
         <translation>Funkcja „%1” nie jest obsługiwana: Brulion nie uruchamia wyrażeń regularnych ani skryptów z notatek.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="97"/>
+        <location filename="../src/core/dataview/messages.cpp" line="102"/>
         <source>Wrong number of arguments for “%1”.</source>
         <translation>Zła liczba argumentów funkcji „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="102"/>
+        <location filename="../src/core/dataview/messages.cpp" line="107"/>
         <source>The expression is nested too deeply.</source>
         <translation>Wyrażenie jest zagnieżdżone zbyt głęboko.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="107"/>
+        <location filename="../src/core/dataview/messages.cpp" line="112"/>
         <source>The expression is too long: at most %1 operators may follow one another.</source>
         <translation>Wyrażenie jest za długie: zbyt wiele operatorów następuje po sobie (najwyżej %1).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="114"/>
+        <location filename="../src/core/dataview/messages.cpp" line="119"/>
         <source>A list, object or lambda is nested more than %1 levels deep.</source>
         <translation>Lista, obiekt lub lambda ma zbyt wiele poziomów zagnieżdżenia (najwyżej %1).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="121"/>
+        <location filename="../src/core/dataview/messages.cpp" line="126"/>
         <source>A value is too large: more than %1 items or %2 characters.</source>
         <translation>Wartość jest za duża: przekracza limit elementów (%1) lub znaków (%2).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="129"/>
+        <location filename="../src/core/dataview/messages.cpp" line="134"/>
         <source>The results are too large: more than %1 items or %2 characters.</source>
         <translation>Wyniki są za duże: przekraczają limit elementów (%1) lub znaków (%2).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="137"/>
+        <location filename="../src/core/dataview/messages.cpp" line="142"/>
         <source>Cannot read the date “%1”. Examples: date(today), date(2026-10-15), date(&quot;2026-10-15 09:30&quot;).</source>
         <translation>Nie można odczytać daty „%1”. Przykłady: date(today), date(2026-10-15), date(&quot;2026-10-15 09:30&quot;).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="143"/>
+        <location filename="../src/core/dataview/messages.cpp" line="148"/>
         <source>Cannot read the duration “%1”. Examples: dur(3 days), dur(&quot;1h 30m&quot;).</source>
         <translation>Nie można odczytać czasu trwania „%1”. Przykłady: dur(3 days), dur(&quot;1h 30m&quot;).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="148"/>
+        <location filename="../src/core/dataview/messages.cpp" line="153"/>
         <source>The query takes too long to evaluate. Narrow it down with FROM or WHERE.</source>
         <translation>Obliczanie zapytania trwa zbyt długo. Zawęź je przez FROM albo WHERE.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="153"/>
+        <location filename="../src/core/dataview/messages.cpp" line="158"/>
         <source>The query makes more than %1 rows.</source>
         <translation>Zapytanie tworzy ponad %1 wierszy.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="158"/>
+        <location filename="../src/core/dataview/messages.cpp" line="163"/>
         <source>“%1” is not a function.</source>
         <translation>„%1” nie jest funkcją.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="163"/>
+        <location filename="../src/core/dataview/messages.cpp" line="168"/>
         <source>File</source>
         <translation>Plik</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="168"/>
+        <location filename="../src/core/dataview/messages.cpp" line="173"/>
         <source>Group</source>
         <translation>Grupa</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="173"/>
+        <location filename="../src/core/dataview/messages.cpp" line="178"/>
         <source>%n year(s)</source>
         <translation>
             <numerusform>%n rok</numerusform>
@@ -26974,7 +26988,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="178"/>
+        <location filename="../src/core/dataview/messages.cpp" line="183"/>
         <source>%n month(s)</source>
         <translation>
             <numerusform>%n miesiąc</numerusform>
@@ -26983,7 +26997,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="183"/>
+        <location filename="../src/core/dataview/messages.cpp" line="188"/>
         <source>%n week(s)</source>
         <translation>
             <numerusform>%n tydzień</numerusform>
@@ -26992,7 +27006,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="188"/>
+        <location filename="../src/core/dataview/messages.cpp" line="193"/>
         <source>%n day(s)</source>
         <translation>
             <numerusform>%n dzień</numerusform>
@@ -27001,7 +27015,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="193"/>
+        <location filename="../src/core/dataview/messages.cpp" line="198"/>
         <source>%n hour(s)</source>
         <translation>
             <numerusform>%n godzina</numerusform>
@@ -27010,7 +27024,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="198"/>
+        <location filename="../src/core/dataview/messages.cpp" line="203"/>
         <source>%n minute(s)</source>
         <translation>
             <numerusform>%n minuta</numerusform>
@@ -27019,7 +27033,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="203"/>
+        <location filename="../src/core/dataview/messages.cpp" line="208"/>
         <source>%n second(s)</source>
         <translation>
             <numerusform>%n sekunda</numerusform>
@@ -27028,13 +27042,18 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="208"/>
+        <location filename="../src/core/dataview/messages.cpp" line="213"/>
         <source>%n millisecond(s)</source>
         <translation>
             <numerusform>%n milisekunda</numerusform>
             <numerusform>%n milisekundy</numerusform>
             <numerusform>%n milisekund</numerusform>
         </translation>
+    </message>
+    <message>
+        <location filename="../src/core/notebook/views.cpp" line="168"/>
+        <source>Only a CALENDAR query is shown as a calendar.</source>
+        <translation>Jako kalendarz można pokazać tylko zapytanie CALENDAR.</translation>
     </message>
 </context>
 <context>
@@ -33216,7 +33235,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::editor::BlockListModel</name>
     <message>
-        <location filename="../src/app/editor/blocklistmodel.cpp" line="1318"/>
+        <location filename="../src/app/editor/blocklistmodel.cpp" line="1342"/>
         <source>no results are available here.</source>
         <translation>wyniki nie są tu dostępne.</translation>
     </message>
@@ -33903,56 +33922,56 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Pobieranie obrazów z internetu (%1 z %2)…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="679"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="702"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="681"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="704"/>
         <source>This format is not available.</source>
         <translation>Ten format jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="706"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="708"/>
         <source>Creating “%1”…</source>
         <translation>Tworzenie „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="691"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="720"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="782"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="693"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="722"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="784"/>
         <source>Nothing was exported.</source>
         <translation>Nic nie wyeksportowano.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="831"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="833"/>
         <source>The file could not be saved: %1</source>
         <translation>Nie udało się zapisać pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="839"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="872"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="841"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="874"/>
         <source>“%1” could not be saved: %2</source>
         <translation>Nie udało się zapisać „%1”: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="844"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="846"/>
         <source>Saved “%1”.</source>
         <translation>Zapisano „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="864"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="866"/>
         <source>The file could not be saved in Downloads: %1</source>
         <translation>Nie udało się zapisać pliku w Pobranych: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="874"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="876"/>
         <source>Downloads/%1</source>
         <translation>Pobrane/%1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="876"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="878"/>
         <source>Saved “%1” in Downloads.</source>
         <translation>Zapisano „%1” w Pobranych.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="900"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="902"/>
         <source>“%1” is being downloaded.</source>
         <translation>Trwa pobieranie „%1”.</translation>
     </message>
@@ -33973,42 +33992,42 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/io/exportcontroller.cpp" line="444"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="802"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="804"/>
         <source>Printing is not available here.</source>
         <translation>Drukowanie nie jest tu dostępne.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="743"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="745"/>
         <source>Choose a printer…</source>
         <translation>Wybierz drukarkę…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="745"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="747"/>
         <source>Print “%1”</source>
         <translation>Drukuj „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="760"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="762"/>
         <source>Printing “%1”…</source>
         <translation>Drukowanie „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="764"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="766"/>
         <source>The printer could not be used.</source>
         <translation>Nie udało się użyć drukarki.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="773"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="775"/>
         <source>Preparing to print…</source>
         <translation>Przygotowywanie wydruku…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="792"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="794"/>
         <source>The system&apos;s printing could not be opened.</source>
         <translation>Nie udało się otworzyć drukowania systemu.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="817"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="819"/>
         <source>“%1” went to the printer.</source>
         <translation>„%1” wysłano do drukarki.</translation>
     </message>
@@ -34973,7 +34992,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message numerus="yes">
         <location filename="../src/app/io/publishcontroller.cpp" line="563"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="864"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n strona</numerusform>
@@ -35002,54 +35021,54 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Wczytywanie pliku %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="727"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="729"/>
         <source>Making the pages…</source>
         <translation>Tworzenie stron…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="761"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="763"/>
         <source>Uploading %1 of %2…</source>
         <translation>Wysyłanie %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="763"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="765"/>
         <source>Removing %1 of %2…</source>
         <translation>Usuwanie %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="765"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="767"/>
         <source>Making the commit…</source>
         <translation>Tworzenie commitu…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="767"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="769"/>
         <source>Making the public link…</source>
         <translation>Tworzenie publicznego linku…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="769"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="771"/>
         <source>Checking GitHub Pages…</source>
         <translation>Sprawdzanie GitHub Pages…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="771"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="784"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="788"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="773"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="786"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="790"/>
         <source>Looking at the target…</source>
         <translation>Sprawdzanie miejsca publikacji…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="822"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="824"/>
         <source>Could not be read</source>
         <translation>Nie udało się odczytać</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="831"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="833"/>
         <source>“%1” is not in the notebook any more.</source>
         <translation>„%1” nie ma już w notatniku.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="834"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="836"/>
         <source>%n encrypted fragment(s) are left out of the pages.</source>
         <translation>
             <numerusform>%n zaszyfrowany fragment jest pominięty w stronach.</numerusform>
@@ -35058,7 +35077,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="841"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="843"/>
         <source>%n new</source>
         <translation>
             <numerusform>%n nowy</numerusform>
@@ -35067,7 +35086,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="843"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
         <source>%n changed</source>
         <translation>
             <numerusform>%n zmieniony</numerusform>
@@ -35076,7 +35095,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="847"/>
         <source>%n to remove</source>
         <translation>
             <numerusform>%n do usunięcia</numerusform>
@@ -35085,7 +35104,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="847"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="849"/>
         <source>%n changed there</source>
         <translation>
             <numerusform>%n zmieniony tam</numerusform>
@@ -35094,7 +35113,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="849"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="851"/>
         <source>%n unchanged</source>
         <translation>
             <numerusform>%n bez zmian</numerusform>
@@ -35103,17 +35122,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="852"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="854"/>
         <source>The target could not be checked (%1) – this is what the last publish recorded.</source>
         <translation>Nie udało się sprawdzić miejsca publikacji (%1) – to stan zapisany przy ostatniej publikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="860"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
         <source>Nothing to send</source>
         <translation>Nie ma nic do wysłania</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="864"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n załącznik</numerusform>
@@ -35122,17 +35141,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="926"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="928"/>
         <source>“%1” is no longer published.</source>
         <translation>Wycofano publikację „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="932"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="934"/>
         <source>“%1” was up to date already.</source>
         <translation>„%1” było już aktualne.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="933"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="935"/>
         <source>Published “%1”: %2.</source>
         <translation>Opublikowano „%1”: %2.</translation>
     </message>
@@ -37850,9 +37869,9 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacequery.cpp" line="285"/>
-        <location filename="../src/app/shell/workspacequery.cpp" line="329"/>
-        <location filename="../src/app/shell/workspacequery.cpp" line="372"/>
+        <location filename="../src/app/shell/workspacequery.cpp" line="287"/>
+        <location filename="../src/app/shell/workspacequery.cpp" line="331"/>
+        <location filename="../src/app/shell/workspacequery.cpp" line="396"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="232"/>
         <source>No notebook is open.</source>
         <translation>Nie otwarto notatnika.</translation>
