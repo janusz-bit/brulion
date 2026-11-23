@@ -200,8 +200,9 @@ done in the repository simply disappears from the list.
   * creating your own annotations (highlights, notes) saved in the PDF — today existing ones are
     only shown, new ones are made in another app.
 * **Spell checking — check on devices and further ideas.** Underlining errors in the edited
-  block, suggestions, the user dictionary and "Ignore" (docs/UI.md "Spell checking") are checked
-  automatically on a computer (Hunspell, tests and the editor self-test). What remains:
+  block, in source mode and in the rendered blocks, suggestions, the user dictionary and "Ignore"
+  (docs/UI.md "Spell checking") are checked automatically on a computer (Hunspell, tests and the
+  editor self-test). What remains:
   * on a real Android phone: the system spell checker (Gboard, Polish and English) — underlines,
     tapping a word and suggestions, spell checking turned off in Android's settings (Brulion's
     spelling settings disappear); the Kotlin/JNI code (`SpellCheck.kt`) has not run on a device;
@@ -209,7 +210,12 @@ done in the repository simply disappears from the list.
     (Windows: a program folder with Polish characters in its path);
   * a user dictionary synced between devices (today a device setting — Nextcloud carries only
     `config.json` from `.brulion/`, and merging by keys would lose words);
-  * underlines also outside the edited block and in the Markdown source mode.
+  * the underlines outside the edited block and in source mode (docs/UI.md "Spell checking") on
+    a real Android phone with "Underline in the whole page" on (every word on screen to the system's
+    checker: how long it takes, battery) and a source-mode page of 0.5 MB in a Release build on
+    the phone (the slices were measured on a computer's Debug build only);
+  * the rendered blocks underline no word inside a Markdown link's text (the traced rendering keeps
+    a link as a whole) and nothing in transclusions, query results or the RenderedTextItem.
 * **Vim mode: what Vim has beyond it** (docs/UI.md "Vim mode") — block visual mode (Ctrl+V:
   the app's paste today), patterns in `/` `?` `:s` `:g` (plain text today: a safe pattern engine
   first), the jump list (Ctrl+O / Ctrl+I: the app's keys today), `is` / `as` growing a visual

@@ -185,6 +185,9 @@ class AppSettings : public QObject {
     /// Its languages: "auto" (default: the UI language, the system's, English), "pl", "en",
     /// "pl,en" (spell/languages.h resolveLanguages).
     Q_PROPERTY(QString spellLanguages READ spellLanguages WRITE setSpellLanguages NOTIFY spellLanguagesChanged FINAL)
+    /// Misspelled words are underlined in the blocks not being edited too (SpellCheck.wholePage).
+    /// Default on, except on phones (Android: the system's checker over IPC for every word shown).
+    Q_PROPERTY(bool spellWholePage READ spellWholePage WRITE setSpellWholePage NOTIFY spellWholePageChanged FINAL)
     /// The personal dictionary: words spell checking takes as right, sorted (a device setting:
     /// every notebook of this device; docs/UI.md "Spell checking" says why not in the notebook).
     Q_PROPERTY(QStringList spellingWords READ spellingWords WRITE setSpellingWords NOTIFY spellingWordsChanged FINAL)
@@ -462,6 +465,8 @@ public:
     void setTaskStatusHistory(bool on);
     QString spellLanguages() const;
     void setSpellLanguages(const QString &languages);
+    bool spellWholePage() const;
+    void setSpellWholePage(bool on);
     QStringList spellingWords() const;
     void setSpellingWords(const QStringList &words);
     bool attachmentSearch() const;
@@ -668,6 +673,7 @@ Q_SIGNALS:
     void spellCheckChanged();
     void taskStatusHistoryChanged();
     void spellLanguagesChanged();
+    void spellWholePageChanged();
     void spellingWordsChanged();
     void attachmentSearchChanged();
     void wordCountShownChanged();

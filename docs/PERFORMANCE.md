@@ -3154,6 +3154,33 @@ entry staged in pieces ≤ 256 KiB, stored and deflated) and `tst_sync_*_streame
 device, folder and mass-deletion tests again with every attachment in pieces). Not measured on a
 phone.
 
+### Spell checking in source mode (2026-11-23)
+
+Source mode (Ctrl+E) underlines misspelled words (docs/UI.md "Spell checking"). The tokenizer and
+the verdicts are cheap; what costs is the document's layout. Every line whose formats change
+outside an edit's own `contentsChange` signal is laid out alone — `QSyntaxHighlighter` calls
+`QTextDocument::markContentsDirty` per line, and `QTextDocumentLayout::documentChanged` then
+walks every line of the document (`layoutFlow`: `QTextBlock::textDirection` and `position` per
+line were 54 % of the samples) — so marking every line of a large page is quadratic. Measured with
+`tst_editor_spellcheck` (Debug build of the app's code over the dev shell's release Qt, this
+desktop, a misspelled word on every line — the worst case; `BRULION_SPELL_SOURCE_KB` sets the
+size):
+
+| | text set (highlighting at once) | spelling, GUI thread's CPU | longest turn of the event loop |
+|---|---|---|---|
+| 80 KB, 1 509 lines, every line checked (`largeSourceInSlices`) | 31 ms | 627 ms | 6 ms |
+| 500 KB, 9 427 lines, every line checked | 208 ms | 31.7 s | 11 ms |
+| 500 KB, 8 640 lines, the lines on screen ± 100 (`sourceViewOnly`, what `SourceEditor` does) | 196 ms | 567 ms | 10 ms |
+
+Hence: a large edit (the page's text set, a long paste: over 20 000 characters) is highlighted
+without spelling — the same cost as before —, the spelling follows in slices of 6 ms with as long
+a pause between them; lines waiting for verdicts are highlighted again once every queued word has
+its answer (not after each batch of 200); and source mode checks only the lines on screen and 100
+around them (`MarkdownHighlighter.spellViewFrom` / `spellViewTo`; scrolling checks the lines that
+come in). Typing highlights the edited line alone, as before. Not measured with
+`tests/bench/app`'s `source-typing` (it needs a Release build, the probe and the bench's vault):
+left for the next bench run.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the

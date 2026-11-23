@@ -22,6 +22,12 @@ import Brulion
 // typewriter scrolling in the middle of the view.
 // Vim keys (docs/UI.md "Vim mode"): the TextEdit is BlockEditor.vimSession's source buffer
 // (VimSourceBuffer) while it exists; normal and visual mode make it read-only with a block caret.
+// Spell checking (docs/UI.md "Spell checking"): misspelled words of the prose are underlined
+// (MarkdownHighlighter in "source" mode: not in fences, the frontmatter, formulas between `$$`
+// lines, comments, code spans, links' targets, URLs or tags; only the lines on screen and a
+// margin around them; a large file in slices); a right-click on one — on touch UIs a tap — opens
+// its corrections, Add to dictionary and Ignore (BlockEditor.openSourceSpellingMenu); a
+// correction is one step of the text's own undo.
 Flickable {
     id: root
 
@@ -44,6 +50,25 @@ Flickable {
     TouchFlick.enabled: true
 
     function focusEditor(): void { source.forceActiveFocus() }
+    /// Misspelled words are underlined (SpellCheck on).
+    readonly property bool spellChecked: SpellCheck.active
+    /// The marked word at a point of the text ({from, to, word, text}; {} when none), kept for the
+    /// menu (compiled code cannot look into a returned map directly).
+    MapHolder { id: misspelling }
+    /// The word marked as misspelled at `position` of the text ({from, to, word, text}; {}: none).
+    function misspelledAt(position: int): var {
+        return root.spellChecked ? highlighter.misspelledAt(position) : ({})
+    }
+    /// The spelling's menu for a misspelled word at (x, y) of the text; false when there is none.
+    function openSpellingAt(x: real, y: real): bool {
+        if (!root.editor || !root.spellChecked)
+            return false
+        const pos = source.positionAt(x, y)
+        misspelling.map = highlighter.misspelledAt(pos)
+        if (misspelling.map.word === undefined)
+            return false
+        return root.editor.openSourceSpellingMenu(source, misspelling.map, x, y)
+    }
     /// Vim's normal / visual mode in the source (BlockEditor.vimCommands).
     readonly property bool vimCommands: editor !== null && editor.vimCommands
     onVimCommandsChanged: {
@@ -186,6 +211,7 @@ Flickable {
         }
 
         MarkdownHighlighter {
+            id: highlighter
             textDocument: source.textDocument
             palette: root.editor.highlighterPalette
             mode: "source"
@@ -196,6 +222,23 @@ Flickable {
             findMatchDiacritics: find ? find.matchDiacritics : false
             findWholeWord: find ? find.wholeWord : false
             findColor: root.editor.findHitColor
+            spellCheck: root.spellChecked ? SpellCheck : null
+            spellCaret: root.spellChecked && source.activeFocus ? source.cursorPosition : -1
+            spellColor: Theme.danger
+            // Only the lines on screen (and a margin around them) are checked: a large page costs
+            // what is seen (positionAt() again when the text's height changes: it was set).
+            spellViewFrom: root.spellChecked && source.height >= 0
+                           ? source.positionAt(0, Math.max(0, root.contentY - source.y)) : -1
+            spellViewTo: root.spellChecked && source.height >= 0
+                         ? source.positionAt(source.width, Math.max(0, root.contentY - source.y + root.height)) : -1
+        }
+        // A right-click on a misspelled word: its corrections (no menu elsewhere, as before).
+        TapHandler {
+            enabled: !Theme.touchUi && root.spellChecked
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+            acceptedButtons: Qt.RightButton
+            gesturePolicy: TapHandler.WithinBounds
+            onTapped: (eventPoint) => root.openSpellingAt(eventPoint.position.x, eventPoint.position.y)
         }
 
         Component.onCompleted: {
@@ -279,7 +322,9 @@ Flickable {
                 const y = eventPoint.position.y
                 source.forceActiveFocus()
                 source.cursorPosition = source.positionAt(x, y)
-                DeviceInfo.showInputMethod()
+                // On a misspelled word: its corrections (the caret is there already).
+                if (!root.openSpellingAt(x, y))
+                    DeviceInfo.showInputMethod()
             }
             onLongPressed: {
                 source.forceActiveFocus()

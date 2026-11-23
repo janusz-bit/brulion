@@ -23,9 +23,15 @@
 // nothing. A change of languages or a word taken out of the dictionary forgets them all
 // (invalidated(): re-highlight everything); adding or ignoring a word only asks again about the
 // words marked wrong (they stay marked until the answer comes: no flicker).
+//
+// The rendered blocks of a page (`wholePage`, docs/UI.md "Spell checking"): wrongWords(text) gives
+// the misspelled words of a block's text from the verdicts known now, cached by the text (at most
+// MaxCachedTexts) until a verdict changes or is forgotten; `revision` changes whenever verdicts
+// arrive or go, so QML bindings over it follow.
 #pragma once
 
 #include "spell/spellchecker.h"
+#include "spell/spellwords.h"
 
 #include <QHash>
 #include <QObject>
@@ -60,6 +66,10 @@ class SpellCheck : public QObject {
     Q_PROPERTY(bool active READ active NOTIFY activeChanged FINAL)
     Q_PROPERTY(QStringList personalWords READ personalWords WRITE setPersonalWords NOTIFY personalWordsChanged FINAL)
     Q_PROPERTY(QStringList ignoredWords READ ignoredWords NOTIFY ignoredWordsChanged FINAL)
+    /// Misspelled words are underlined in the rendered blocks too, not only in the edited one.
+    Q_PROPERTY(bool wholePage READ wholePage WRITE setWholePage NOTIFY wholePageChanged FINAL)
+    /// Changes whenever verdicts arrive or are forgotten (wrongWords() may give another answer).
+    Q_PROPERTY(int revision READ revision NOTIFY revisionChanged FINAL)
 
 public:
     enum class Verdict { Pending, Correct, Wrong };
@@ -71,6 +81,8 @@ public:
     static constexpr int BatchSize = 200;
     /// Suggestions offered for a word.
     static constexpr int MaxSuggestions = 6;
+    /// Texts whose misspelled words wrongWords() keeps; more and the cache starts again.
+    static constexpr int MaxCachedTexts = 2000;
 
     /// `available`: the languages backends can be made for; `factory` makes them (on the worker
     /// thread).
@@ -97,10 +109,21 @@ public:
     QStringList personalWords() const { return m_personal; }
     void setPersonalWords(const QStringList &words);
     QStringList ignoredWords() const { return m_ignored; }
+    bool wholePage() const { return m_wholePage; }
+    void setWholePage(bool on);
+    int revision() const { return m_revision; }
 
     /// The verdict about `word` (as spell::checkedText() gives it). Pending: not known yet — it
     /// is queued (unless already) and checked() follows. Always Correct while not active.
     Verdict verdict(const QString &word);
+    /// The verdict about `word` if known, else Pending — without queuing it.
+    Verdict knownVerdict(const QString &word) const;
+
+    /// The misspelled words of `text` (a block's text, its lines checked as spell::findWords()
+    /// with `lineStart`; positions in `text`), from the verdicts known now: the words not known
+    /// yet are queued and `*pending` set (checked() follows). Cached by the text until a verdict
+    /// changes or is forgotten. Empty while not active.
+    QList<spell::WordSpan> wrongWords(const QString &text, bool *pending = nullptr);
 
     /// Ask for corrections of `word`: suggestionsReady() follows (also with an empty list).
     Q_INVOKABLE void requestSuggestions(const QString &word);
@@ -142,8 +165,19 @@ Q_SIGNALS:
     /// Every verdict is gone (languages, the dictionary, enabled): re-highlight everything.
     void invalidated();
     void suggestionsReady(const QString &word, const QStringList &suggestions);
+    void wholePageChanged();
+    void revisionChanged();
 
 private:
+    /// What wrongWords() found in a text, and under which verdicts.
+    struct TextWords {
+        QList<spell::WordSpan> wrong;
+        bool pending = false;
+        int epoch = 0;
+    };
+    /// Verdicts may differ now: wrongWords()' cache is stale, bindings follow `revision`.
+    void verdictsChanged(bool differ);
+
     void updateLanguages();
     void ensureWorker();
     void stopWorker();
@@ -169,6 +203,11 @@ private:
     QHash<QString, QStringList> m_suggestions;
     int m_generation = 0;
     bool m_storeWords = true;
+    bool m_wholePage = true;
+    int m_revision = 0;
+    /// Bumped whenever a known verdict may change (wrongWords()' cache is valid only for its own).
+    int m_epoch = 0;
+    QHash<QString, TextWords> m_textWords;
     QTimer m_flushTimer;
     std::unique_ptr<QThread> m_thread;
     SpellWorker *m_worker = nullptr; ///< deleted on m_thread when it finishes

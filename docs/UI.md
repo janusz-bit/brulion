@@ -3434,15 +3434,16 @@ skipped unless `BRULION_SEMANTIC_MODEL` names its GGUF file).
 
 ## Spell checking
 
-Misspelled words of the block being edited are underlined in red (`Theme.danger`), in Polish and
-English — both at once by default — with corrections in the edited text's menu. User guide: the
-page "Spell checking" of the documentation notebook.
+Misspelled words are underlined in red (`Theme.danger`), in Polish and English — both at once by
+default — with corrections in a menu: in the edited block, in source mode and (Settings → Editor →
+"Underline in the whole page") in the rendered blocks. User guide: the page "Spell checking" of the
+documentation notebook.
 
-* **Where:** the prose of the edited block only (`InlineEditor` of text blocks, headings, quotes,
-  callouts: `spellChecked`); rendered blocks, code, `calc`, `query`, table cells, the properties
-  panel and source mode are not checked. One block at a time keeps the cost per keystroke tiny and
-  reading free of red. `spell/spellwords.h` (core) finds the words of a line and skips the syntax:
-  code spans and comments, formulas, wiki links, embeds and block refs whole, a Markdown link's
+* **Where:** the prose of the edited block (`InlineEditor` of text blocks, headings, quotes,
+  callouts: `spellChecked`), of source mode's text (`SourceEditor`, below) and of the rendered text
+  of those blocks (`BlockText`, below); code, `calc`, `query`, formulas, table cells and the
+  properties panel are not checked. `spell/spellwords.h` (core) finds the words of a line and
+  skips the syntax: code spans and comments, formulas, wiki links, embeds and block refs whole, a Markdown link's
   destination (its text is checked), URLs, e-mail addresses, tags, every task and date token (📅 ⏰ 🔁
   and its rule, priorities, task ids, Logseq planning), block ids, `key::` names, task keywords,
   callout types, HTML, `{{macros}}`, footnote markers; words with digits or `_`, single letters,
@@ -3467,8 +3468,52 @@ page "Spell checking" of the documentation notebook.
   places the caret as usual — a long press stays the system's selection). Adding or ignoring asks
   again only about the words marked wrong, which stay marked until the answer (no flicker); taking a
   word out of the dictionary or changing languages forgets every verdict (`invalidated()`).
+* **Source mode** (Ctrl+E): `SourceEditor`'s `MarkdownHighlighter` ("source" mode) underlines the
+  prose with the same tokenizer and skips, besides, whatever spans lines — fenced code (` ``` ` and
+  `~~~`), the frontmatter (keys and values: the properties panel is not checked either), display
+  formulas between lines that are only `$$` (also in list items and quotes; the bits of a Normal
+  line state carry it: `MathFlag`), `%%` comments over lines (the text after the closing `%%` and
+  before an opening one is prose). Each line keeps its prose range (`SpellRange` in the block's
+  user data) so `misspelledAt()` never offers a word of the syntax. A right-click on a marked word
+  — a tap on touch UIs — opens the text menu with only the spelling's items
+  (`BlockEditor.openSourceSpellingMenu`); a correction replaces the word through
+  `EditorInput.replaceRange` (one step of the TextEdit's own undo, the caret after it). Never a
+  stall on a large page: a large edit (over 20 000 characters: the page's text set, a long paste)
+  is highlighted at once without spelling, a pass over its lines (`sweepSpelling()`) adds it in
+  slices of 6 ms with as long a pause between them; lines waiting for verdicts are highlighted
+  again once every word asked for has its answer (`SpellCheck.idle()`: one pass, not one per
+  batch of 200), also in slices; a change of languages or of the dictionary is such a pass too.
+  Only the lines on screen and 100 around them are checked (`spellViewFrom` / `spellViewTo`, bound
+  to the view's scroll position; the lines that scroll in are checked as they come, those that
+  leave keep their marks). Typing highlights the edited line only (QSyntaxHighlighter). The pause
+  matters:
+  QTextDocumentLayout lays out every format change made outside an edit's own signal on its own and
+  walks all the document's lines for it (~1 ms per changed line at 10 000 lines), so only lines whose
+  marks change cost that, spread over the pass (docs/PERFORMANCE.md "Spell checking in source mode").
+* **Rendered blocks** (`SpellCheck.wholePage`, "Underline in the whole page"): `BlockText` asks
+  `PageController.spellMarkedHtml(row, html, SpellCheck.revision, color)` — computed only for the
+  delegates that exist (the blocks on screen and the list's cache), never for hidden rows. It takes
+  `SpellCheck::wrongWords(body)` (the block's Markdown, line by line as in the edited block;
+  cached by the text, `MaxCachedTexts`, until a verdict changes or every verdict is forgotten —
+  `revision` changes then and the bindings follow) and puts the words on the rendering
+  (`spellmarks.h`, `BlockListModel::spellMarkedHtml`): through the source anchors of the traced
+  rendering (`renderBlockTraced`, kept per row while the HTML is), each verbatim piece of a word
+  gets `<span style="text-decoration:underline;text-decoration-color:…">` — plain text, emphasis,
+  headings, quotes, callouts; a word inside a construct rendered as a whole (a Markdown link's
+  text) is not underlined until the block is edited. The marked HTML is kept per row while the html
+  and the words are the same. A text with marks is shown by the tinted TextEdit (as a text with
+  chips): a right-click on a marked word maps the TextEdit's position through the rendering's
+  source map (`RenderedText::displayRange`, `PageController.misspelledInRendered`) and opens the
+  spelling's items (`BlockEditor.openRenderedSpellingMenu`); a correction is
+  `PageController.replaceInBody(row, from, to, text, replacement)` — the block's body through
+  BlockDocument, one undo step, refused when the body no longer has the word there. On touch UIs
+  the marks show, a tap still edits the block (its word then has the edited block's menu). Not
+  drawn by the RenderedTextItem (BRULION_TEXT_ITEM), JournalDayItem or PageItem, nor in
+  transclusions and query results.
 * **Settings** (Settings → Editor, shown only where `SpellCheck.available`): "Check spelling"
-  (`AppSettings.spellCheck`, default on), "Spelling languages" (`spellLanguages`: Automatic — the UI
+  (`AppSettings.spellCheck`, default on), "Underline in the whole page" (`spellWholePage`,
+  `spelling/wholePage`: default on, off on Android — every word on screen would go to the system's
+  checker over IPC), "Spelling languages" (`spellLanguages`: Automatic — the UI
   language, the system's and English, `spell::resolveLanguages`; Polish, English, Both — of the
   languages this device has) and "Personal dictionary" (a dialog listing `SpellCheck.personalWords`:
   add, remove). main.cpp binds `SpellCheck` to these settings and to the UI language.
@@ -3484,7 +3529,8 @@ page "Spell checking" of the documentation notebook.
   pl_PL is preferred for Polish, en_US, en_GB, … for English; the dictionary's 8-bit encoding (the
   Polish one is ISO8859-2) through `spell/dictencoding.h`. **Android**: the system's spell checker
   (`TextServicesManager` / `SpellCheckerSession`, the keyboard's dictionaries; `SpellCheck.kt` over
-  JNI, one session per language, at most 3 s per answer — none: nothing marked); its languages are
+  JNI, one session per language, at most 3 s per answer — none: nothing marked; it checks words,
+  not a text field, so the rendered blocks use it the same way when the setting is on); its languages are
   the checker's subtypes (Android 12+) or the device's languages and English; with the checker off
   in Android's settings Brulion offers no spell checking. **None** in the browser and in desktop
   builds without Hunspell (`-DBRULION_SPELL_BACKEND=none`): the settings hide it. Packaging: the Nix
@@ -3495,8 +3541,12 @@ page "Spell checking" of the documentation notebook.
 Tests: `tst_spell_words` (the tokenizer), `tst_spell_checker` (rules, languages, encodings),
 `tst_spelldictionaries`, `tst_spellbackends` (Hunspell with ISO8859-2 and UTF-8 dictionaries the
 test writes), `tst_editor_spellcheck` (the worker, the settings, the underlines, the caret,
-`misspelledAt`), `tst_editor_qml_spelling` and `_touch` (`--editor-script spelltest`: the mark, the
-menu with a right-click and a finger, corrections, undo, add, ignore, syntax, off).
+`misspelledAt`; source mode's exclusions, data-driven; a large text in slices, no turn of the event
+loop over a frame; `wrongWords()` and its cache; the marks on the rendered HTML; the word under a
+click, a correction in a rendered block and its undo), `tst_editor_qml_spelling` and `_touch`
+(`--editor-script spelltest`: the mark, the menu with a right-click and a finger, corrections, undo,
+add, ignore, syntax, off; a rendered block's mark, menu, correction and undo — desktop —; source
+mode's marks, menu, correction, Ctrl+Z and Ignore).
 
 ## The block editor (heart of the app)
 

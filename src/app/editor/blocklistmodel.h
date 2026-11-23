@@ -81,8 +81,10 @@
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/taskdeps.h"
+#include "spell/spellwords.h"
 
 #include <QAbstractListModel>
+#include <QColor>
 #include <QDate>
 #include <QHash>
 #include <QPointer>
@@ -105,6 +107,7 @@ class Scope;
 namespace brulion::editor {
 
 struct BlockTagStyle;
+class SpellCheck;
 
 class BlockListModel : public QAbstractListModel {
     Q_OBJECT
@@ -217,6 +220,16 @@ public:
     /// Shape (view, edit mapping) of a row.
     BlockShape shapeAt(int row) const;
     QString editTextAt(int row) const;
+    /// The html role of `row` with the block's misspelled words underlined in `color`
+    /// (SpellCheck::wrongWords over its Markdown, spellmarks.h; docs/UI.md "Spell checking") —
+    /// for blocks spell checking covers (text, headings, quotes, callouts); the html role as it is
+    /// for others, with no misspelled word or without `spell`. Kept while the html and the words
+    /// are the same.
+    QString spellMarkedHtml(int row, SpellCheck *spell, const QColor &color) const;
+    /// The misspelled word shown at display position `position` of `row`'s rendered text (the
+    /// position in its rich text: a TextEdit's positionAt(), the word's end included): {from, to
+    /// (its range in the block's body), word (as checked), text (as written)}; {} when none.
+    QVariantMap misspelledInRendered(int row, int position, SpellCheck *spell) const;
     /// Offset in the body of the text given to the renderer (maps `reminder:FROM-TO` links).
     int renderOffsetAt(int row) const;
 
@@ -365,6 +378,15 @@ private:
         /// `html` as RenderedText (renderedTextAt()): valid while `runsHtml` is `html` itself.
         std::shared_ptr<const markdown::RenderedText> runs;
         QString runsHtml;
+        /// `html`'s source anchors (anchorsAt()): valid while `anchorsHtml` is `html` itself.
+        QList<markdown::HtmlSourceAnchor> anchors;
+        QString anchorsHtml;
+        /// spellMarkedHtml(): the marked text of `spellHtmlOf` (the html it was made from) for
+        /// the words `spellWrong` in `spellColor`.
+        QString spellHtml;
+        QString spellHtmlOf;
+        QList<spell::WordSpan> spellWrong;
+        QColor spellColor;
         QVariantList embeds;
         bool onlyEmbeds = false;
         QVariantList calcResults;
@@ -435,6 +457,9 @@ private:
     /// The renderedText role: renderHtml() with its source anchors read into RenderedText (kept
     /// while the HTML is).
     std::shared_ptr<const markdown::RenderedText> renderedTextAt(int docIndex) const;
+    /// renderHtml()'s source anchors (the HTML rendered again with them when needed; kept while
+    /// the HTML is).
+    const QList<markdown::HtmlSourceAnchor> &anchorsAt(int docIndex) const;
     /// The subtask progress of the list item at `docIndex` (its descendants' tasks, SYNTAX §5).
     markdown::SubtaskProgress subtaskProgressAt(int docIndex) const;
     /// What every rendering of the editor shares: today, the language, the colours, journal

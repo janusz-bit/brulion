@@ -12,7 +12,7 @@ import Brulion
 // qml/shell/ShellThemePages, ThemePages; Layout: sidebar entries and sections, the bottom
 // navigation's buttons, the quick note button),
 // Editor (font — serif, sans or any installed family —, code font, size, line spacing, width,
-// source mode, spell checking — on/off, its languages, the personal dictionary's dialog, shown only
+// source mode, spell checking — on/off, in the whole page, its languages, the personal dictionary's dialog, shown only
 // where SpellCheck.available —, word count, focus mode, typewriter scrolling, Vim keys; font pickers:
 // BFontPickerDialog, not in the browser), Keyboard shortcuts (qml/shell/ShellShortcutSettings: the
 // commands' shortcuts), Notebook (the vault's shared settings in
@@ -1215,10 +1215,20 @@ Item {
                 visible: SpellCheck.available
                 text: qsTr("Check spelling")
                 description: Theme.touchUi
-                             ? qsTr("Misspelled words of the block you are editing are underlined; tap one for corrections.")
-                             : qsTr("Misspelled words of the block you are editing are underlined; right-click one for corrections.")
+                             ? qsTr("Misspelled words of the block you are editing and of the Markdown source are underlined; tap one for corrections.")
+                             : qsTr("Misspelled words of the block you are editing and of the Markdown source are underlined; right-click one for corrections.")
                 checked: AppSettings.spellCheck
                 onToggled: AppSettings.spellCheck = checked
+            }
+            SettingSwitch {
+                objectName: "settingsSpellWholePage"
+                visible: SpellCheck.available && AppSettings.spellCheck
+                text: qsTr("Underline in the whole page")
+                description: Theme.touchUi
+                             ? qsTr("Also in the blocks you are not editing.")
+                             : qsTr("Also in the blocks you are not editing; right-click a word there for corrections.")
+                checked: AppSettings.spellWholePage
+                onToggled: AppSettings.spellWholePage = checked
             }
             ShellSettingRow {
                 objectName: "spellLanguagesRow"

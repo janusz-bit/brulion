@@ -64,8 +64,10 @@
 #include "lazyhtmlmimedata.h"
 #include "markdown/pageprops.h"
 #include "markdown/tokenedit.h"
+#include "spellcheck.h"
 #include "text/find.h"
 
+#include <QColor>
 #include <QDateTime>
 #include <QObject>
 #include <QPoint>
@@ -548,6 +550,22 @@ public:
     Q_INVOKABLE int insertToken(int row, int cursor, const QString &token);
     /// Replace [from, to) of the row's edit text. Returns the new cursor (end of `text`).
     Q_INVOKABLE int replaceRange(int row, int from, int to, const QString &text);
+
+    // --- Spell checking in rendered blocks (docs/UI.md "Spell checking") -----------------------
+    /// `html` (the row's html role, as the binding read it) with the block's misspelled words
+    /// underlined in `color` (BlockListModel::spellMarkedHtml over the app's SpellCheck, or
+    /// setSpellCheck()'s); `revision` (SpellCheck.revision) only makes a binding follow new
+    /// verdicts. `html` itself when it is no longer the row's rendering.
+    Q_INVOKABLE QString spellMarkedHtml(int row, const QString &html, int revision, const QColor &color) const;
+    /// The misspelled word at `position` of the row's rendered text ({from, to — its range in the
+    /// block's body —, word, text}; {} when none: BlockListModel::misspelledInRendered).
+    Q_INVOKABLE QVariantMap misspelledInRendered(int row, int position) const;
+    /// A correction in a block that is not edited: [from, to) of the row's body — still `text` —
+    /// replaced by `replacement`, one undo step. False (nothing changed) when the body no longer
+    /// has `text` there or the page is read-only.
+    Q_INVOKABLE bool replaceInBody(int row, int from, int to, const QString &text, const QString &replacement);
+    /// The SpellCheck of the methods above (tests; null: SpellCheck::instance()).
+    void setSpellCheck(SpellCheck *spell) { m_spell = spell; }
     /// "Highlight" (docs/UI.md "Coloured highlights"): highlight [from, to) of the row's edit text in
     /// `color` (a palette name, markdown::parseHighlightColorName: "default" writes `==…==`,
     /// another `<mark style="background: …;">…</mark>`), recolour the highlight around it, or
@@ -1453,6 +1471,7 @@ private:
     void applyMode(NoteMode mode, int source);
 
     QPointer<EditorHost> m_host;
+    QPointer<SpellCheck> m_spell;
     QString m_path;
     QPointer<EditorHost> m_shownHost; ///< told by showFile() that this editor shows m_shownPath
     QString m_shownPath;

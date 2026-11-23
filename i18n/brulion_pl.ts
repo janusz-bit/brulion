@@ -18392,13 +18392,28 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1218"/>
-        <source>Misspelled words of the block you are editing are underlined; tap one for corrections.</source>
-        <translation>Błędne słowa w edytowanym bloku są podkreślone; dotknij słowa, żeby zobaczyć podpowiedzi.</translation>
+        <source>Misspelled words of the block you are editing and of the Markdown source are underlined; tap one for corrections.</source>
+        <translation>Błędne słowa w edytowanym bloku i w źródle Markdown są podkreślone; dotknij słowa, żeby zobaczyć podpowiedzi.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1219"/>
-        <source>Misspelled words of the block you are editing are underlined; right-click one for corrections.</source>
-        <translation>Błędne słowa w edytowanym bloku są podkreślone; kliknij słowo prawym przyciskiem, żeby zobaczyć podpowiedzi.</translation>
+        <source>Misspelled words of the block you are editing and of the Markdown source are underlined; right-click one for corrections.</source>
+        <translation>Błędne słowa w edytowanym bloku i w źródle Markdown są podkreślone; kliknij słowo prawym przyciskiem, żeby zobaczyć podpowiedzi.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1226"/>
+        <source>Underline in the whole page</source>
+        <translation>Podkreślaj na całej stronie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1228"/>
+        <source>Also in the blocks you are not editing.</source>
+        <translation>Także w blokach, których nie edytujesz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1229"/>
+        <source>Also in the blocks you are not editing; right-click a word there for corrections.</source>
+        <translation>Także w blokach, których nie edytujesz; kliknij tam słowo prawym przyciskiem, żeby zobaczyć podpowiedzi.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1226"/>
