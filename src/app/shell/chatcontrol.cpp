@@ -350,9 +350,16 @@ void ChatControl::sendTo(const QJsonObject &params, const Caller &caller, const 
     const QString text = params.value(u"text"_s).toString().trimmed();
     if (text.isEmpty())
         return reply.fail(BadParams, u"Write the message (text)"_s, {{u"param"_s, u"text"_s}});
-    if (m_chats->isRunning(path))
-        return reply.fail(Busy, u"Its turn runs: wait for it (chatWait) or stop it (chatStop) first"_s,
+    if (m_chats->isRunning(path)) {
+        // In line after the answer (as a message the user writes meanwhile), when asked to.
+        if (params.value(u"queue"_s).toBool() && m_chats->queue(path, text)) {
+            QJsonObject out = row(path);
+            out.insert(u"queued"_s, true);
+            return reply.ok(out);
+        }
+        return reply.fail(Busy, u"Its turn runs: wait for it (chatWait), stop it (chatStop) or put the message in line (queue)"_s,
                           {{u"state"_s, m_chats->stateOf(path)}});
+    }
     const QString parent = m_chats->lineage()->parentOf(path);
     if (caller.granted && !parent.isEmpty()
         && m_chats->lineage()->runningChildren(parent) >= ChatLineage::MaxRunningChildren)

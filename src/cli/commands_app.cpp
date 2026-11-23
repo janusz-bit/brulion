@@ -788,8 +788,10 @@ Result appChatStart(Call &call)
 
 Result appChatSend(Call &call)
 {
-    return chatCommand(call, u"chatSend"_s, {{u"path"_s, call.str(u"conversation"_s)}, {u"text"_s, call.str(u"text"_s)}},
-                       true);
+    QJsonObject params{{u"path"_s, call.str(u"conversation"_s)}, {u"text"_s, call.str(u"text"_s)}};
+    if (call.flag(u"queue"_s))
+        params.insert(u"queue"_s, true);
+    return chatCommand(call, u"chatSend"_s, params, true);
 }
 
 Result appChatWait(Call &call)
@@ -1343,10 +1345,13 @@ void addAppCommands(QList<Command> &out)
                       {conversation,
                        stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The message"),
                                             true, true)),
+                       flag(u"queue"_s, QT_TRANSLATE_NOOP("brulion::cli",
+                                                           "While its turn runs: put it in line after the answer")),
                        waitFlag, timeoutOption},
                       true);
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
-                                       "Refused while its turn runs (exit 4, busy): wait for it or stop it first. An "
+                                       "Refused while its turn runs (exit 4, busy) — unless --queue puts it in line, "
+                                       "sent when the answer is written (as a message the user writes meanwhile). An "
                                        "agent the app started sends only to its own sub-conversations."));
     out.append(c);
     c = chatCommandOf(u"app.chat.wait"_s,

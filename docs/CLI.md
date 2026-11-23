@@ -359,7 +359,7 @@ Never compute a hash yourself.
 | `app chat list` | `[--parent C] [--limit N]` | the app's AI conversations, newest change first: `{conversations [{path, name, partner, partnerName, state, failure?, question?, parent?, messages, changed}], total}` ("Conversations" below) | |
 | `app chat read <conversation>` | `[--from N] [--limit N] [--offset N]` | its messages `{…, total, messages [{position, role, time?, text, length, offset?, cut?}], next?, partial?}`, 30 000 characters at once | |
 | `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner, its turn started (an agent the app started: a sub-conversation of its own) | yes |
-| `app chat send <conversation> <text>` | `[--wait] [--timeout MS] [--stdin]` | its next message; exit 4 `busy` while its turn runs | yes |
+| `app chat send <conversation> <text>` | `[--queue] [--wait] [--timeout MS] [--stdin]` | its next message; exit 4 `busy` while its turn runs — `--queue` puts it in line instead, sent when the answer is written (docs/UI.md "AI chat": writing on while it answers; `--wait` then waits for the turn that runs) | yes |
 | `app chat wait <conversation>` | `[--timeout MS]` | until its turn ends: `{state, answer}`; exit 1 `turn_failed`, 5 `waiting_for_user`, 3 `timeout` | |
 | `app chat stop <conversation>` | | stop its turn: `{stopped}` | yes |
 | `app chat partners` | | who may answer: `{partners [{id, name, kind, by}]}` | |
@@ -1323,7 +1323,7 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `chats` | `parent`, `limit` (50, at most 500) | `{conversations: [{path, name, partner, partnerName, state, failure?, question?, parent?, page?, messages, changed}], total}` |
 | `chatRead` | `path`, `from`, `limit` (20, at most 200), `offset` | the row and `{total, messages: [{position, role, time?, text, length, offset?, cut?}], next?: {from, offset}, partial?}` |
 | `chatStart` | `text`, `partner`, `page`, `parent` | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`) |
-| `chatSend` | `path`, `text` | its row; `busy` while its turn runs |
+| `chatSend` | `path`, `text`, `queue`? | its row; `busy` while its turn runs — with `queue` true it waits in line instead (`queued: true`) |
 | `chatWait` | `path`, `ms` (60000, at most 600000) | `{path, state, answer? \| question? \| failure? \| partial?}`; `timeout` with them |
 | `chatStop` | `path` | `{path, stopped}` |
 | `chatPartners` | | `{partners: [{id, name, kind: assistant \| agent \| extension, by}]}` |

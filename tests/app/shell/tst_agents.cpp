@@ -504,6 +504,12 @@ private Q_SLOTS:
         QCOMPARE(a->result.value(u"state"_s).toString(), u"running"_s);
         a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"I jeszcze"_s}}, agent);
         QCOMPARE(a->code, u"busy"_s);
+        // … or in line after the answer, when asked to (then out of line again here).
+        a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Po odpowiedzi"_s}, {u"queue"_s, true}}, agent);
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QVERIFY(a->result.value(u"queued"_s).toBool());
+        QCOMPARE(chats->queued(child).size(), 1);
+        chats->unqueue(child, chats->queued(child).first().toMap().value(u"id"_s).toInt());
         a = ask(control, u"chatWait"_s, {{u"path"_s, child}, {u"ms"_s, 300}}, agent);
         QTRY_VERIFY_WITH_TIMEOUT(a->done, 5000);
         QCOMPARE(a->code, u"timeout"_s);
