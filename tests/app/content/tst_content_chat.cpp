@@ -30,6 +30,7 @@
 #include "vault/localstore.h"
 #include "vault/vault.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -1158,7 +1159,19 @@ private Q_SLOTS:
         QVERIFY(!ws->read(meadow).contains(u"unread"_s));
         // Another conversation changes after it: the unread one stays on top.
         const QString spring = u"AI/2026-11-14 Źródło.md"_s;
+        // (Later than the answer by the files' times — on a file system whose clock is coarse
+        // two writes can share one, and the list then sorts them by name.)
+        const auto mtimeOf = [&](const QString &path) {
+            for (const FileStat &f : ws->vault()->markdownFiles()) {
+                if (f.path == path)
+                    return f.mtime;
+            }
+            return qint64(0);
+        };
+        QTRY_VERIFY(ws->read(meadow).contains(u"I brzęczy."_s));
+        QTRY_VERIFY(QDateTime::currentMSecsSinceEpoch() > mtimeOf(meadow) + 50);
         QVERIFY(ws->write(spring, ws->read(spring) + u"- 🧑 A w dolinach?\n"_s));
+        QTRY_VERIFY(mtimeOf(spring) > mtimeOf(meadow));
         list.refreshNow();
         QCOMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Łąka"_s, u"Źródło"_s}));
         QVERIFY(value(list, 1, "unread").toBool());
