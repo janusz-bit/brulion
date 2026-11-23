@@ -1,10 +1,13 @@
 // QueryResultModel (src/app/editor): live ```query results through the host's QueryHost — the
 // FakeEditorHost runs them on the real index module — rows for groups and items, rendering,
 // checking tasks here and in other files, refreshing after index changes, limits, navigation;
-// ```dataview blocks (language "dataview": LIST, TABLE cells, TASK groups).
+// ```dataview blocks (language "dataview": LIST, TABLE cells, TASK groups); macros of extensions
+// in result rows and in a database view's cells (ViewResultModel): what the host computed, the
+// rows that show one rendered again when that changes, placeholders, escaping, code spans.
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
 #include "queryresultmodel.h"
+#include "viewresultmodel.h"
 
 #include <QAbstractItemModelTester>
 #include <QRegularExpression>
@@ -67,6 +70,24 @@ struct Fixture {
         return -1;
     }
 };
+
+/// A macro's value: one piece of text.
+markdown::MacroView macroValue(const QString &text)
+{
+    markdown::MacroView view;
+    view.pieces = {markdown::MacroPiece{markdown::MacroPiece::Kind::Text, text, {}, {}, true}};
+    return view;
+}
+
+/// The notes with macros of extensions the macro tests query (tag "trening").
+void addTrainingNotes(FakeEditorHost &host)
+{
+    // (The host computes macros from now on; the others show "…" until set.)
+    host.setMacroView(u"silownia/inne"_s, macroValue(u"inne"_s));
+    host.setFile(u"Trening.md"_s, u"- [ ] Przysiad {{ext:silownia/rekord Przysiad}} #trening\n"
+                                  "- [ ] Wiosłowanie `{{ext:silownia/rekord Wiosło}}` #trening\n"
+                                  "- [ ] Bieg — żółw #trening\n"_s);
+}
 
 } // namespace
 
@@ -660,6 +681,76 @@ private Q_SLOTS:
         query.results.refresh();
         QVERIFY(query.results.ok());
         QCOMPARE(query.results.type(), u"tasks"_s);
+    }
+
+    // A result's macro shows what the host computed for the item's note ("…" until then), as the
+    // editor shows it; a new value renders only the rows that show a macro again.
+    void macrosInResults()
+    {
+        Fixture f(u"type:tasks tag:trening"_s);
+        addTrainingNotes(f.host);
+        f.results.refresh();
+        QCOMPARE(f.results.rowCount(), 3);
+        const int squat = f.rowOf(u"Przysiad"_s);
+        const int rowing = f.rowOf(u"Wiosłowanie"_s);
+        QVERIFY(squat >= 0 && rowing >= 0);
+        const auto html = [&f](int r) { return f.row(r).value(u"html"_s).toString(); };
+        QVERIFY2(!html(squat).contains(u"{{ext:"_s), qPrintable(html(squat)));
+        QVERIFY2(html(squat).contains(u"…"_s), qPrintable(html(squat)));
+        // In a code span a macro is text.
+        QVERIFY2(html(rowing).contains(u"{{ext:silownia/rekord Wiosło}}"_s), qPrintable(html(rowing)));
+
+        QSignalSpy changed(&f.results, &QAbstractItemModel::dataChanged);
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, macroValue(u"120 kg <b>rekord</b>"_s));
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(changed.first().at(0).toModelIndex().row(), squat);
+        // Escaped: the value is text, never HTML.
+        QVERIFY2(html(squat).contains(u"120 kg &lt;b&gt;rekord&lt;/b&gt;"_s), qPrintable(html(squat)));
+        // The same value again: nothing to signal.
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, macroValue(u"120 kg <b>rekord</b>"_s));
+        QCOMPARE(changed.size(), 1);
+        // An extension waiting for approval: its placeholder, as in the editor.
+        markdown::MacroView unapproved;
+        unapproved.state = markdown::MacroView::State::Unapproved;
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, unapproved);
+        QCOMPARE(changed.size(), 2);
+        QVERIFY2(html(squat).contains(u"uruchomić?"_s), qPrintable(html(squat)));
+        QVERIFY(!html(squat).contains(u"120 kg"_s));
+    }
+
+    // A database view (a ```query with `view:table`) shows the macros of its cells the same way.
+    void macrosInAViewsCells()
+    {
+        Fixture f(u"type:tasks tag:zakupy"_s);
+        addTrainingNotes(f.host);
+        ViewResultModel view;
+        QAbstractItemModelTester tester(&view, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        view.setRefreshDelay(0);
+        view.setController(&f.page);
+        view.setLanguage(u"query"_s);
+        view.setSource(u"type:tasks tag:trening view:table"_s);
+        view.refresh();
+        QVERIFY2(view.ok(), qPrintable(view.error()));
+        QCOMPARE(view.rowCount(), 3);
+        const auto rowOf = [&view](const QString &prefix) {
+            for (int r = 0; r < view.rowCount(); ++r) {
+                if (view.data(view.index(r), ViewResultModel::TextsRole).toStringList().value(0).startsWith(prefix))
+                    return r;
+            }
+            return -1;
+        };
+        const int squat = rowOf(u"Przysiad"_s);
+        QVERIFY(squat >= 0);
+        const auto cells = [&view, squat] {
+            return view.data(view.index(squat), ViewResultModel::CellsRole).toStringList().join(u'|');
+        };
+        QVERIFY2(cells().contains(u"…"_s) && !cells().contains(u"{{ext:"_s), qPrintable(cells()));
+        QSignalSpy changed(&view, &QAbstractItemModel::dataChanged);
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, macroValue(u"120 kg"_s));
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(changed.first().at(0).toModelIndex().row(), squat);
+        QVERIFY2(cells().contains(u"120 kg"_s), qPrintable(cells()));
+        QVERIFY(view.data(view.index(squat), ViewResultModel::HeadlineRole).toString().contains(u"120 kg"_s));
     }
 
     void rendersWithTheThemeAndLanguage()

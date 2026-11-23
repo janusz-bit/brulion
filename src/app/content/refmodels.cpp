@@ -232,6 +232,14 @@ void GroupedRefsModel::fillRef(Ref &r, const QString &path) const
                 m_renderReads.insert(*to, {path, target, id, {}, text});
             return text;
         };
+        // Macros of extensions: what the Workspace computed for this note (never computed here).
+        if (shell::Workspace *ws = workspace(); ws && ws->rendersMacros()) {
+            ctx.macro = [this, ws, path](const markdown::MacroSpan &macro) {
+                markdown::MacroView view = ws->macroView(macro, path);
+                m_macroReads.append({path, macro, view});
+                return view;
+            };
+        }
         r.html = markdown::InlineRenderer(ctx).renderBlock(entry->body, entry->kind);
     }
     if (r.html.isEmpty())
@@ -280,6 +288,25 @@ bool GroupedRefsModel::renderReadsChanged(const QString &note) const
     });
 }
 
+void GroupedRefsModel::workspaceReset()
+{
+    m_macroReads.clear();
+    if (shell::Workspace *ws = workspace())
+        connect(ws, &EditorHost::macrosChanged, this, &GroupedRefsModel::followMacros, Qt::UniqueConnection);
+}
+
+void GroupedRefsModel::followMacros()
+{
+    shell::Workspace *ws = workspace();
+    if (!ws)
+        return;
+    const bool changed = std::ranges::any_of(m_macroReads, [ws](const MacroRead &read) {
+        return ws->macroView(read.macro, read.path) != read.view;
+    });
+    if (changed)
+        markShownChanged();
+}
+
 bool GroupedRefsModel::affectedBy(const IndexChanges &changes) const
 {
     // (No changed notes — the revision that follows the index's own signal for the same save,
@@ -297,6 +324,7 @@ void GroupedRefsModel::refresh()
     const auto dropLocators = qScopeGuard([this] { m_locators.clear(); });
     m_sources.clear();
     m_renderReads.clear();
+    m_macroReads.clear();
     for (const Group &g : std::as_const(groups))
         m_sources.insert(g.path);
 

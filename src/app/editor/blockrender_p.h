@@ -3,6 +3,7 @@
 #pragma once
 
 #include "blocktext.h"
+#include "editorhost.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 
@@ -29,5 +30,20 @@ QString richTextToPlain(const QString &html);
 /// unresolved, muted, codeBackground, highlightBackground, <chip>Fg / <chip>Bg — colour names or
 /// QColors; a missing or invalid one keeps the default). Defined in linkpreview.cpp.
 markdown::Palette rendererPalette(const QVariantMap &map);
+
+/// The macros of extensions `ctx` renders (one BlockListModel::renderContextFor() gave it, so the
+/// host renders macros) as `host` shows them for the note `path` — the note the rendered text is
+/// in, not the page that shows it (a query's result) —, setting `*shows` when one was asked for:
+/// such a row is rendered again on EditorHost::macrosChanged. The context is used right away.
+inline void showMacrosOf(markdown::RenderContext &ctx, EditorHost *host, const QString &path, bool *shows)
+{
+    if (!ctx.macro || !host)
+        return; // the host computes no macros: they show as written
+    ctx.macro = [host, path, shows](const markdown::MacroSpan &macro) {
+        if (shows)
+            *shows = true;
+        return host->macroView(macro, path);
+    };
+}
 
 } // namespace brulion::editor::detail

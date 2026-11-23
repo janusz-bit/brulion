@@ -49,6 +49,12 @@
 // once when `active` is true again, before the view's next frame. The first fill and changes of
 // the model's own properties (filters, today, …) are computed as before, also while inactive.
 //
+// `host` (an EditorHost: PlanningContext.host, the Workspace): a task's macros of extensions
+// (`{{ext:…}}`, docs/EXTENSIONS.md "Macros") show what the host computed for the task's note, as
+// in the editor — never by running an extension while rendering; when what they show changes
+// (EditorHost::macrosChanged) only the rows that show a macro are rendered again (a hidden model:
+// when shown). Without a host a macro shows as written.
+//
 // Header roles: rowType, section, sectionLabel, sectionCount, collapsed.
 // A task row's section is the section it is shown in; depth: 0, or how deep a subtask is nested;
 // subtaskCount: the subtasks listed under it (any depth, also folded ones); folded: they are hidden.
@@ -68,6 +74,7 @@
 // page, tag or task (index/tasktime.h) — the view's "Time spent".
 #pragma once
 
+#include "editorhost.h"
 #include "index/notecache.h"
 #include "index/vaultindex.h"
 #include "markdown/inlinerenderer.h"
@@ -98,6 +105,8 @@ class TaskListModel : public QAbstractListModel, public QQmlParserStatus {
     Q_INTERFACES(QQmlParserStatus)
 
     Q_PROPERTY(QObject *vaultIndex READ vaultIndexObject WRITE setVaultIndexObject NOTIFY vaultIndexChanged FINAL)
+    /// What the tasks' macros show (EditorHost::macroView); null: as written.
+    Q_PROPERTY(brulion::EditorHost *host READ host WRITE setHost NOTIFY hostChanged FINAL)
     /// Today ("YYYY-MM-DD"); "" = the system clock.
     Q_PROPERTY(QString today READ today WRITE setToday NOTIFY todayChanged FINAL)
     /// First weekday for "This week" (1 = Monday … 7 = Sunday); 0 = the vault's setting.
@@ -200,6 +209,8 @@ public:
     void setVaultIndex(VaultIndex *index);
     QObject *vaultIndexObject() const;
     void setVaultIndexObject(QObject *index);
+    EditorHost *host() const { return m_host.data(); }
+    void setHost(EditorHost *host);
 
     QString today() const { return m_todayText; }
     void setToday(const QString &today);
@@ -301,6 +312,7 @@ public:
 
 Q_SIGNALS:
     void vaultIndexChanged();
+    void hostChanged();
     void todayChanged();
     void weekStartChanged();
     void localeChanged();
@@ -343,6 +355,7 @@ private:
         int title = 0;                 ///< m_titleRank of pageTitle
         mutable QString html; ///< rendered lazily
         mutable bool rendered = false;
+        mutable bool showsMacro = false; ///< `html` asked the host what a macro shows
     };
     struct Row {
         bool header = false;
@@ -389,9 +402,15 @@ private:
     QVariant taskRowData(const Item &item, int role) const;
     QVariant sectionRowData(const QString &section, int role) const;
     QString pageQueryValue(const QString &path) const;
+    /// The item's rich text (HtmlRole): rendered, its macros as the host shows them.
+    QString renderItem(const Item &item) const;
+    /// EditorHost::macrosChanged: the rendered rows that show a macro, again (when active).
+    void followMacros();
 
     QPointer<VaultIndex> m_index;
     QMetaObject::Connection m_indexConnection;
+    QPointer<EditorHost> m_host;
+    bool m_macrosStale = false; ///< macrosChanged() while inactive: followed when active
     QString m_todayText;
     QDate m_today;
     int m_weekStart = 0;

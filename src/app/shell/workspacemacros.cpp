@@ -29,6 +29,10 @@ namespace {
 constexpr qint64 kMacroKeepMs = 10 * 60 * 1000;
 /// One slice of macro calls between two frames (a call has MacroTimeoutMs at most).
 constexpr qint64 kMacroSliceMs = 25;
+/// The macros an export computes now (macroTexts()), all of them together.
+constexpr qint64 kExportMacroMs = 3000;
+/// The macros of copied blocks computed now (withMacroTexts()), all of them together.
+constexpr qint64 kClipboardMacroMs = 1000;
 /// A template variable is filled once, when the template is: more time than a macro's.
 constexpr int kVariableTimeoutMs = 1000;
 
@@ -193,20 +197,44 @@ QHash<QString, QHash<QString, QString>> WorkspaceExtensions::macroTexts(const QL
             continue;
         const QString content = QString::fromUtf8(file.data);
         for (const markdown::MacroSpan &m : markdown::findMacrosInNote(content)) {
-            if (!m_engine->isLoaded(m.extension) || !m_macroNames.contains(m.extension + u'/' + m.name))
-                continue;
-            const extensions::MacroRequest request{m.extension, m.name, m.arguments, file.path};
-            const QString key = extensions::MacroCache::keyOf(request);
-            if (!m_macros.ask(key, request, now))
-                continue;
-            std::optional<markdown::MacroView> view = m_macros.view(key);
-            if ((!view || m_macros.isStale(key)) && budget.elapsed() < 3000)
-                view = computeMacro(key, request, now);
+            const std::optional<markdown::MacroView> view =
+                    documentMacro(m, file.path, now, budget.elapsed() < kExportMacroMs);
             if (view && view->state == markdown::MacroView::State::Ok)
                 out[file.path].insert(content.sliced(m.from, m.to - m.from), markdown::macroMarkdown(*view));
         }
     }
     return out;
+}
+
+QString WorkspaceExtensions::withMacroTexts(const QString &markdown, const QString &path)
+{
+    // The copied blocks are on screen: their values are mostly kept already (the editor asked).
+    if (!m_engine || m_engine->isRunning() || !markdown.contains(u"{{"))
+        return markdown;
+    QElapsedTimer budget;
+    budget.start();
+    const qint64 now = m_macroClock.elapsed();
+    return markdown::replaceMacros(markdown, [&](const markdown::MacroSpan &m) -> std::optional<QString> {
+        const std::optional<markdown::MacroView> view = documentMacro(m, path, now, budget.elapsed() < kClipboardMacroMs);
+        if (!view || view->state != markdown::MacroView::State::Ok)
+            return std::nullopt;
+        return markdown::macroMarkdown(*view);
+    });
+}
+
+std::optional<markdown::MacroView> WorkspaceExtensions::documentMacro(const markdown::MacroSpan &macro,
+                                                                       const QString &path, qint64 now, bool compute)
+{
+    if (!m_engine->isLoaded(macro.extension) || !m_macroNames.contains(macro.extension + u'/' + macro.name))
+        return std::nullopt;
+    const extensions::MacroRequest request{macro.extension, macro.name, macro.arguments, path};
+    const QString key = extensions::MacroCache::keyOf(request);
+    if (!m_macros.ask(key, request, now))
+        return std::nullopt;
+    std::optional<markdown::MacroView> view = m_macros.view(key);
+    if ((!view || m_macros.isStale(key)) && compute)
+        view = computeMacro(key, request, now);
+    return view;
 }
 
 void WorkspaceExtensions::noteMacrosChanged()

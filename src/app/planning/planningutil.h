@@ -15,6 +15,7 @@
 #include <QStringList>
 #include <QVariantMap>
 
+#include <functional>
 #include <optional>
 
 namespace brulion {
@@ -40,8 +41,11 @@ markdown::Palette paletteFromMap(const QVariantMap &map);
 
 /// Inline Markdown of a task / reminder (links, tags, emphasis) as escaped rich text for QML
 /// `Text { textFormat: Text.RichText }`; links resolve against `index` seen from `fromPath`.
+/// `macro` (RenderContext::macro): what a macro of an extension shows (docs/SYNTAX.md §13
+/// "Macros"); without it a macro shows as written.
 QString renderInline(const VaultIndex *index, const QString &markdown, const VaultPath &fromPath, QDate today,
-                     dates::UiLocale locale, const markdown::Palette &palette);
+                     dates::UiLocale locale, const markdown::Palette &palette,
+                     std::function<markdown::MacroView(const markdown::MacroSpan &)> macro = {});
 
 /// Plain text of inline Markdown for labels and accessibility: wiki links show their display
 /// text (or target), Markdown links their text, emphasis markers are removed, whitespace is

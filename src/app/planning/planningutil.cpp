@@ -83,7 +83,8 @@ markdown::Palette paletteFromMap(const QVariantMap &map)
 }
 
 QString renderInline(const VaultIndex *index, const QString &markdown, const VaultPath &fromPath, QDate today,
-                     dates::UiLocale locale, const markdown::Palette &palette)
+                     dates::UiLocale locale, const markdown::Palette &palette,
+                     std::function<markdown::MacroView(const markdown::MacroSpan &)> macro)
 {
     markdown::RenderContext ctx;
     if (index) {
@@ -129,6 +130,7 @@ QString renderInline(const VaultIndex *index, const QString &markdown, const Vau
     ctx.taskCheckbox = false;
     // [[2026-10-13]] shows as "Tue, Oct 13" (the note keeps the date as written).
     ctx.linkTitle = markdown::journalLinkTitle(index ? index->config() : VaultConfig(), locale, today);
+    ctx.macro = std::move(macro);
     return markdown::InlineRenderer(ctx).render(markdown);
 }
 

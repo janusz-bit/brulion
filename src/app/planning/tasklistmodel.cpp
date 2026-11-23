@@ -332,7 +332,7 @@ QVariant TaskListModel::taskRowData(const Item &item, int role) const
     case TextRole: return plainText(t.text);
     case HtmlRole:
         if (!item.rendered) {
-            item.html = renderInline(m_index.data(), t.text, item.ref.path, today, loc, m_palette);
+            item.html = renderItem(item);
             item.rendered = true;
         }
         return item.html;
@@ -535,6 +535,61 @@ void TaskListModel::setVaultIndex(VaultIndex *index)
         m_indexConnection = connect(index, &VaultIndex::changed, this, &TaskListModel::scheduleRefresh);
     Q_EMIT vaultIndexChanged();
     requestRebuild();
+}
+
+void TaskListModel::setHost(EditorHost *host)
+{
+    if (m_host == host)
+        return;
+    if (m_host)
+        disconnect(m_host, &EditorHost::macrosChanged, this, &TaskListModel::followMacros);
+    m_host = host;
+    if (m_host)
+        connect(m_host, &EditorHost::macrosChanged, this, &TaskListModel::followMacros);
+    Q_EMIT hostChanged();
+    // The rows rendered before show their macros as written: rendered again when asked.
+    bool any = false;
+    for (const Item &item : std::as_const(m_items)) {
+        any = any || item.rendered;
+        item.rendered = false;
+    }
+    if (any && !m_rows.isEmpty())
+        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {HtmlRole});
+}
+
+QString TaskListModel::renderItem(const Item &item) const
+{
+    item.showsMacro = false;
+    std::function<markdown::MacroView(const markdown::MacroSpan &)> macro;
+    if (m_host && m_host->rendersMacros()) {
+        // What the host computed for the task's note ("…" until then): rendering never waits.
+        macro = [host = m_host.data(), &item](const markdown::MacroSpan &span) {
+            item.showsMacro = true;
+            return host->macroView(span, item.ref.path);
+        };
+    }
+    return renderInline(m_index.data(), item.ref.task.text, item.ref.path, currentDay(), uiLocale(m_locale), m_palette,
+                        std::move(macro));
+}
+
+void TaskListModel::followMacros()
+{
+    m_macrosStale = !m_active;
+    if (m_macrosStale)
+        return;
+    QList<int> changed;
+    for (const Item &item : std::as_const(m_items)) {
+        if (!item.rendered || !item.showsMacro)
+            continue;
+        const QString before = item.html;
+        item.html = renderItem(item);
+        if (item.html == before)
+            continue;
+        if (const int row = m_rowOfKey.value(item.key, -1); row >= 0)
+            changed.append(row);
+    }
+    for (const int row : std::as_const(changed))
+        Q_EMIT dataChanged(index(row), index(row), {HtmlRole});
 }
 
 QObject *TaskListModel::vaultIndexObject() const
@@ -747,6 +802,8 @@ void TaskListModel::setActive(bool active)
     // What changed while hidden, at once: the view shown again shows it in its first frame.
     if (m_stale && !m_completing)
         rebuild();
+    if (m_macrosStale)
+        followMacros();
 }
 
 void TaskListModel::setRefreshDelay(int msec)

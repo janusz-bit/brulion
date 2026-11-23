@@ -336,6 +336,7 @@ docs/nastroj
 - Zwróć tekst, liczbę, `b.ui.text` (przygaszony albo w kolorze), `b.ui.link`, `b.ui.heading` (pogrubiony) — albo ich listę. Zawsze pokazuje się jako tekst, nigdy jako HTML.
 - Makro liczy się od nowa samo, gdy zmieni się notatka, którą czytało, i gdy zmieni się któreś z ustawień jego rozszerzenia. Nie może pytać ani niczego zmieniać — nie zapisuje, nie zmienia ustawień, nie uruchamia timerów — i ma ćwierć sekundy.
 - Makro rozszerzenia, które jeszcze nie działało na tym urządzeniu, pokazuje kłódkę: kliknięcie pokazuje kod rozszerzenia do przeczytania przed uruchomieniem.
+- Wartość widać wszędzie tam, gdzie tekst notatki: w **Zadaniach**, w odnośnikach zwrotnych, w wynikach zapytania i w komórkach widoku bazy danych, a także w blokach skopiowanych i wklejonych do poczty albo edytora biurowego. Eksport do HTML, PDF i Worda też ją pokazuje; eksport do Markdownu i skopiowany Markdown zostawiają makro tak, jak je zapisano.
 
 ```luau
 b.macro("slowa", function(ctx)

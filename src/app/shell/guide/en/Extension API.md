@@ -336,6 +336,7 @@ docs/mood
 - Return a text, a number, `b.ui.text` (muted, or in a colour), `b.ui.link`, `b.ui.heading` (bold) — or a list of them. It is always shown as text, never as HTML.
 - A macro is computed again by itself when a note it read changes, and when one of its extension's settings does. It may not ask a question nor change anything — no writes, no settings set, no timers —, and it has a quarter of a second.
 - A macro of an extension that has not run on this device shows a lock: a click shows the extension's code, to read before you run it.
+- The value shows wherever the note's text does: in **Tasks**, the backlinks, the results of a query and the cells of a database view, and in blocks you copy and paste into a mail or an office app. Exports to HTML, PDF and Word show it too; Markdown exports and copied Markdown keep the macro as written.
 
 ```luau
 b.macro("words", function(ctx)

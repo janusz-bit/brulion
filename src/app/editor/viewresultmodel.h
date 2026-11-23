@@ -32,6 +32,9 @@
 
 namespace brulion {
 class EditorHost;
+namespace markdown {
+struct Palette;
+}
 namespace views {
 struct ViewResult;
 }
@@ -306,7 +309,13 @@ private:
     void timerFired();
     void connectHost();
     void rebuild();
-    QString render(const QString &markdown) const;
+    /// The rendered cells, headline and details of row `i` of the view (rebuild(), followMacros()).
+    void renderCells(Row &row, qsizetype i, const markdown::Palette &palette) const;
+    /// EditorHost::macrosChanged: the rows that show a macro of an extension, rendered again.
+    void followMacros();
+    /// `markdown` rendered as the view's page renders text, its macros as in the note `path` (the
+    /// row's); `*showsMacro` set when it shows one.
+    QString render(const QString &markdown, const QString &path = QString(), bool *showsMacro = nullptr) const;
     QUrl coverUrl(const QString &cover, const QString &kind) const;
     /// Apply a views::RowEdit to row `row`'s file (this page: PageController; else the host).
     QVariantMap applyEdit(int row, const void *edit);

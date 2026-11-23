@@ -99,6 +99,9 @@ protected:
     /// Something else the rows come from changed (the attachments' text): as a change of the files
     /// — a refresh after the delay, or the rows marked stale while inactive.
     void markContentChanged() { contentChanged(); }
+    /// Something the rows show changed that the index does not log (what a macro of an extension
+    /// shows): a refresh now, or the rows marked stale while inactive.
+    void markShownChanged();
 
     /// Replace `rows` by `next` with fine-grained model signals. `key(row)` identifies rows
     /// (unique in each list); `same(a, b)` decides whether a kept row changed its data.

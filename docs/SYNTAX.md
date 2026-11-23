@@ -2519,8 +2519,10 @@ other app shows it as text.
   extension waits for approval on this device (`🔒 silownia/rekord · run?`), is off, unknown or
   failed — a click on it offers what can be done. The index reads a macro's arguments as text: a
   `[[link]]` or a `#tag` there links and tags the note.
-* **Exports**: HTML, PDF, DOCX and Pandoc show the value the app computed; Markdown, Obsidian,
-  Logseq and the data exports keep the macro.
+* **Elsewhere in the app**: the Tasks view, the linked references, query results and database
+  views show the value as the editor does (for the note the macro is in).
+* **Exports**: HTML, PDF, DOCX and Pandoc, and the HTML of copied blocks, show the value the app
+  computed; Markdown, Obsidian, Logseq and the data exports and the copied Markdown keep the macro.
 
 ### View blocks
 

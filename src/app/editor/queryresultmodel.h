@@ -196,6 +196,7 @@ private:
         mutable QString html;
         mutable bool htmlValid = false;
         mutable QStringList cells; ///< TABLE cells rendered (with htmlValid)
+        mutable bool showsMacro = false; ///< the rendered text shows a macro of an extension
     };
 
     void schedule();
@@ -204,9 +205,14 @@ private:
     bool writeStatus(Row &row, const QString &status);
     void rebuildRows();
     void invalidateHtml();
-    QString renderItem(const QVariantMap &item) const;
-    /// Markdown of a Dataview value rendered as the query's page renders text.
-    QString renderMarkdown(const QString &markdown) const;
+    /// The row's html and cells (htmlValid).
+    void renderRow(const Row &row) const;
+    /// EditorHost::macrosChanged: the rendered rows that show a macro, again.
+    void followMacros();
+    QString renderItem(const QVariantMap &item, bool *showsMacro) const;
+    /// Markdown of a Dataview value rendered as the query's page renders text (its macros as in
+    /// the note `path`, the row's).
+    QString renderMarkdown(const QString &markdown, const QString &path, bool *showsMacro) const;
     /// The host's answer for the source (runQuery or runDataview).
     QVariantMap runHost(QueryHost *queries) const;
     bool dataview() const { return m_language == u"dataview"; }

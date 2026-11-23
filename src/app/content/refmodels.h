@@ -15,6 +15,10 @@
 //              text rendered by the core InlineRenderer — escaped, links page:/tag:/block:/ext:,
 //              the task checkbox as task:toggle), text (plain, one line), blockId, breadcrumb
 //              ("Project › Tasks": the parent blocks), taskStatus, depth (0)
+//              A block's macros of extensions (`{{ext:…}}`, docs/EXTENSIONS.md "Macros") show
+//              what the Workspace computed for the block's note, as in the editor (a placeholder
+//              until then, or while the extension waits for approval); the rows follow when what
+//              they show changes (EditorHost::macrosChanged).
 // Groups listed in `collapsedPaths` keep their header (with the count) and hide their refs.
 // Unlinked references (mode "unlinked") are plain-text mentions: html is the escaped excerpt
 // with the mention highlighted; linkMention(row) turns it into a [[link]] in that file (through
@@ -141,6 +145,7 @@ protected:
     virtual bool mayNowReference(const QString &note) const;
 
     void refresh() override;
+    void workspaceReset() override;
     /// Only changes of the notes the rows came from, or of notes that may now add rows.
     bool affectedBy(const IndexChanges &changes) const override;
     int rows() const override { return int(m_rows.size()); }
@@ -198,6 +203,15 @@ private:
     mutable QMultiHash<QString, RenderRead> m_renderReads;
     /// Whether a row would read something else from `note` now.
     bool renderReadsChanged(const QString &note) const;
+    /// What the rendered rows' macros showed (Workspace::macroView), by the note they are in.
+    struct MacroRead {
+        QString path;
+        markdown::MacroSpan macro;
+        markdown::MacroView view;
+    };
+    mutable QList<MacroRead> m_macroReads;
+    /// EditorHost::macrosChanged: refreshed when a row's macro shows something else now.
+    void followMacros();
     /// The blocks of the notes rendered during one refresh, found by line (BlockDocument::Locator:
     /// one block of a note parsed, not the whole note).
     mutable QHash<QString, std::shared_ptr<const markdown::BlockDocument::Locator>> m_locators;

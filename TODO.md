@@ -90,12 +90,11 @@ done in the repository simply disappears from the list.
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
   per device (of the version read), live reload, hooks (`save`, `change`, `task`, `journal`,
   `open`, `day`, `timer`), shared code, settings, timers, copies between notebooks, the type check
-  on save, the Luau console and its syntax colours, macros in the text (`{{ext:…}}`), template
-  variables, ```` ```view ```` blocks, side panel sections and the views' input controls are there
-  (docs/EXTENSIONS.md). What remains: macros show their source in the rows of the Tasks view, the
-  linked references, query results and the clipboard's HTML (only the editor and the document
-  exports compute them); and checks on real devices — a view block in a page drawn by `PageItem`
-  (`BRULION_PAGE_ITEM=1`) and the new view controls (date dialog, slider, text area) on a phone,
+  on save, the Luau console and its syntax colours, macros in the text (`{{ext:…}}`, computed
+  wherever a note's text shows), template variables, ```` ```view ```` blocks, side panel
+  sections and the views' input controls are there (docs/EXTENSIONS.md). What remains: checks on
+  real devices — a view block in a page drawn by `PageItem` (`BRULION_PAGE_ITEM=1`) and the new
+  view controls (date dialog, slider, text area) on a phone,
   the type checker on an Android phone (built in, measured, not run on one yet), the browser's
   hostile-extension self-test in a real browser beside CI's headless Chrome
   (`scripts/wasm-smoke.mjs --extensions`).
