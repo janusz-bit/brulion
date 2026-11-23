@@ -340,6 +340,89 @@
     </message>
 </context>
 <context>
+    <name>ChatTools</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="42"/>
+        <source>read %n file(s)</source>
+        <translation>
+            <numerusform>read %n file</numerusform>
+            <numerusform>read %n files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="43"/>
+        <source>edited %n file(s)</source>
+        <translation>
+            <numerusform>edited %n file</numerusform>
+            <numerusform>edited %n files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="44"/>
+        <source>deleted %n file(s)</source>
+        <translation>
+            <numerusform>deleted %n file</numerusform>
+            <numerusform>deleted %n files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="45"/>
+        <source>moved %n file(s)</source>
+        <translation>
+            <numerusform>moved %n file</numerusform>
+            <numerusform>moved %n files</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="46"/>
+        <source>searched %n time(s)</source>
+        <translation>
+            <numerusform>searched %n time</numerusform>
+            <numerusform>searched %n times</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="47"/>
+        <source>ran %n command(s)</source>
+        <translation>
+            <numerusform>ran %n command</numerusform>
+            <numerusform>ran %n commands</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="48"/>
+        <source>fetched %n web page(s)</source>
+        <translation>
+            <numerusform>fetched %n web page</numerusform>
+            <numerusform>fetched %n web pages</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="50"/>
+        <source>took %n step(s)</source>
+        <translation>
+            <numerusform>took %n step</numerusform>
+            <numerusform>took %n steps</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="51"/>
+        <source>%n other step(s)</source>
+        <translation>
+            <numerusform>%n other step</numerusform>
+            <numerusform>%n other steps</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/chattools.cpp" line="84"/>
+        <source>%n step(s) failed</source>
+        <translation>
+            <numerusform>%n step failed</numerusform>
+            <numerusform>%n steps failed</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ChatView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/views/ChatView.qml" line="727"/>
