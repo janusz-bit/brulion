@@ -3335,6 +3335,52 @@ private Q_SLOTS:
         QCOMPARE(run(dir, {u"--allow-destructive"_s, u"publish"_s, u"remove"_s, u"Serwer"_s}).code, 0);
         QCOMPARE(run(dir, {u"publish"_s, u"targets"_s}).result().value(u"targets"_s).toArray().size(), 1);
     }
+
+    void protectedPublishing()
+    {
+        // Password-protected pages: --protect on, the pages' password from standard input, only
+        // ciphertext in the folder, the password never in the store.
+        const QString dir = vault({{u"Blog/Pierwszy wpis.md"_s, "# Wpis\nZażółć gęślą jaźń, ![[kot.png]]\n"},
+                                   {u"assets/kot.png"_s, "\x89PNG kot"}});
+        const QString www = m_tmp.filePath(u"www chroniona"_s);
+        Run r = run(dir,
+                    {u"publish"_s, u"add"_s, u"folder"_s, u"Rodzina"_s, u"--path"_s, www, u"--protect"_s, u"on"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"protect"_s).toBool());
+        QVERIFY(!r.result().value(u"hasPagesPassword"_s).toBool());
+        QCOMPARE(run(dir, {u"publish"_s, u"include"_s, u"Rodzina"_s, u"--folder"_s, u"Blog"_s}).code, 0);
+        r = run(dir, {u"publish"_s, u"run"_s, u"Rodzina"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"no_page_password"_s);
+        QVERIFY(!QFileInfo::exists(www));
+        QCOMPARE(run(dir, {u"publish"_s, u"secret"_s, u"Rodzina"_s, u"--share"_s, u"--pages"_s, u"--stdin"_s}, "x\n")
+                         .code,
+                 2);
+        QCOMPARE(run(dir, {u"publish"_s, u"secret"_s, u"Rodzina"_s, u"--pages"_s, u"--stdin"_s}, "Źdźbło łąki\n")
+                         .result()
+                         .value(u"which"_s)
+                         .toString(),
+                 u"pages"_s);
+        r = run(dir, {u"publish"_s, u"run"_s, u"Rodzina"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"protected"_s).toBool());
+        const QByteArray index = readFile(www + u"/index.html"_s);
+        QVERIFY(index.contains("brulion-sealed"));
+        for (const QString &secret : {u"Zażółć"_s, u"Pierwszy wpis"_s, u"kot.png"_s, u"Źdźbło łąki"_s})
+            QVERIFY2(!index.contains(secret.toUtf8()), qPrintable(secret));
+        QVERIFY(!QFileInfo::exists(www + u"/Blog"_s));
+        QVERIFY(!QFileInfo::exists(www + u"/search-index.js"_s));
+        QCOMPARE(QDir(www + u"/p"_s).entryList(QDir::Files).size(), 1);
+        QCOMPARE(QDir(www + u"/f"_s).entryList(QDir::Files).size(), 1);
+        const QByteArray targets = readFile(stateDirOf(dir) + u"/publish/targets.json"_s);
+        QVERIFY(targets.contains("protectSalt"));
+        QVERIFY(!targets.contains("Źdźbło łąki"));
+        r = run(dir, {u"publish"_s, u"targets"_s});
+        QVERIFY(r.result().value(u"targets"_s).toArray().first().toObject().value(u"hasPagesPassword"_s).toBool());
+        // Unchanged: nothing sent again.
+        r = run(dir, {u"publish"_s, u"run"_s, u"Rodzina"_s});
+        QCOMPARE(r.result().value(u"done"_s).toObject().value(u"uploaded"_s).toInt(), 0);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCliProcess)

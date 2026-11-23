@@ -256,6 +256,8 @@ QVariantMap PublishController::targetRow(const PublishTarget &t) const
             {u"needsSharePassword"_s, t.kind == TargetKind::Nextcloud && t.sharePassword
                                               && readSecret(secretFile(data, t.id, u"share"_s)).isEmpty()},
             {u"needsToken"_s, t.kind == TargetKind::GitHubPages && readSecret(githubTokenFile(data)).isEmpty()},
+            {u"protect"_s, t.protect},
+            {u"needsPagesPassword"_s, t.protect && readSecret(secretFile(data, t.id, u"pages"_s)).isEmpty()},
     };
 }
 
@@ -358,6 +360,8 @@ QVariantMap PublishController::targetFields(const QString &id) const
             {u"shareExpires"_s, t.shareExpires.isValid() ? t.shareExpires.toString(Qt::ISODate) : QString()},
             {u"hasPassword"_s, !t.id.isEmpty() && !readSecret(secretFile(data, t.id, u"password"_s)).isEmpty()},
             {u"hasSharePassword"_s, !t.id.isEmpty() && !readSecret(secretFile(data, t.id, u"share"_s)).isEmpty()},
+            {u"protect"_s, t.protect},
+            {u"hasPagesPassword"_s, !t.id.isEmpty() && !readSecret(secretFile(data, t.id, u"pages"_s)).isEmpty()},
     };
 }
 
@@ -386,6 +390,8 @@ PublishTarget targetFromFields(const QVariantMap &f, const PublishTarget &base)
     t.share = f.value(u"share"_s, true).toBool();
     t.sharePassword = f.value(u"sharePassword"_s).toBool();
     t.shareExpires = QDate::fromString(text(u"shareExpires"_s), Qt::ISODate);
+    if (f.contains(u"protect"_s))
+        t.protect = f.value(u"protect"_s).toBool();
     return t;
 }
 
@@ -401,6 +407,9 @@ QString PublishController::checkFields(const QVariantMap &fields) const
     if (!fields.value(u"shareExpires"_s).toString().trimmed().isEmpty() && !t.shareExpires.isValid())
         return tr("Write the expiry date as YYYY-MM-DD.");
     const QString id = fields.value(u"id"_s).toString();
+    if (t.protect && fields.contains(u"pagesPasswordGiven"_s) && !fields.value(u"pagesPasswordGiven"_s).toBool()
+        && (id.isEmpty() || readSecret(secretFile(appDataDir(), id, u"pages"_s)).isEmpty()))
+        return tr("Type the pages' password.");
     for (const QVariant &row : m_targets) {
         const QVariantMap map = row.toMap();
         if (map.value(u"id"_s).toString() != id
@@ -410,7 +419,8 @@ QString PublishController::checkFields(const QVariantMap &fields) const
     return {};
 }
 
-QString PublishController::saveTarget(const QVariantMap &fields, const QString &password, const QString &sharePassword)
+QString PublishController::saveTarget(const QVariantMap &fields, const QString &password, const QString &sharePassword,
+                                      const QString &pagesPassword)
 {
     if (!m_workspace || !m_workspace->vault() || !checkFields(fields).isEmpty())
         return {};
@@ -429,6 +439,8 @@ QString PublishController::saveTarget(const QVariantMap &fields, const QString &
         writeSecret(secretFile(data, t.id, u"password"_s), password);
     if (!sharePassword.isEmpty() || fields.value(u"forgetSharePassword"_s).toBool() || !t.sharePassword)
         writeSecret(secretFile(data, t.id, u"share"_s), t.sharePassword ? sharePassword : QString());
+    if (!pagesPassword.isEmpty() || fields.value(u"forgetPagesPassword"_s).toBool() || !t.protect)
+        writeSecret(secretFile(data, t.id, u"pages"_s), t.protect ? pagesPassword : QString());
     m_current = t.id;
     refreshTargets();
     dismiss();
@@ -444,6 +456,7 @@ void PublishController::removeTarget(const QString &id)
     const QString data = appDataDir();
     writeSecret(secretFile(data, id, u"password"_s), {});
     writeSecret(secretFile(data, id, u"share"_s), {});
+    writeSecret(secretFile(data, id, u"pages"_s), {});
     if (m_current == id)
         m_current.clear();
     dismiss();
@@ -677,6 +690,10 @@ void PublishController::start(Operation operation, bool force)
         runPublisher(SiteBuild{});
         return;
     }
+    if (m_target.protect && readSecret(secretFile(appDataDir(), m_target.id, u"pages"_s)).isEmpty()) {
+        setState(u"error"_s, publish::errorText(u"no-page-password"_s));
+        return;
+    }
     m_selection = selectFiles(*index, m_target.scope);
     if (m_selection.pages.isEmpty()) {
         m_plan = planMap(PublishReport{}, SiteBuild{});
@@ -721,8 +738,10 @@ void PublishController::readStep()
 void PublishController::buildAndRun()
 {
     const QString notebook = m_workspace ? m_workspace->name() : QString();
-    const SiteInput input =
+    SiteInput input =
             siteInputFor(m_target, std::exchange(m_readFiles, {}), m_workspace->vault()->config(), notebook, now());
+    if (input.protect)
+        input.protection.password = readSecret(secretFile(appDataDir(), m_target.id, u"pages"_s));
     m_readQueue.clear();
     setProgress(-1, tr("Making the pages…"));
     const int generation = m_generation;
@@ -731,6 +750,10 @@ void PublishController::buildAndRun()
             [this, generation](SiteBuild site) {
                 if (generation != m_generation || m_state != u"preparing")
                     return;
+                if (!site.errorCode.isEmpty()) {
+                    setState(u"error"_s, publish::errorText(site.errorCode));
+                    return;
+                }
                 setState(m_operation == Operation::Preview ? u"checking"_s : u"publishing"_s);
                 runPublisher(site);
             });
@@ -874,6 +897,7 @@ QVariantMap PublishController::planMap(const PublishReport &r, const SiteBuild &
             {u"conflicts"_s, conflicts},
             {u"warnings"_s, warnings},
             {u"fragmentsRemoved"_s, site.fragmentsRemoved},
+            {u"protectedPages"_s, site.protectedPages},
             {u"hasChanges"_s, plan.hasChanges()},
             {u"conflictCount"_s, plan.count(FileAction::Conflict)},
     };

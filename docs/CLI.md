@@ -311,12 +311,12 @@ Never compute a hash yourself.
 | `clip uninstall` | `[--browser B] [--system]` | remove Brulion's host manifests | |
 | `clip status` | `[--browser B] [--system]` | each browser's manifest, the program it starts, whether it is this one | |
 | `clip manifest <browser>` | `[--program P] [--extension-id ID]` | a host manifest's JSON (for packages) | |
-| `publish targets` | | the notebook's publishing targets on this device ("Publishing" below): `{targets [{id, name, kind, address, siteUrl, title, content, items [{kind, value}], linkedPages, onlyMarked, extensionPages, aiConversations, hasPassword?, last {at, operation, ok, url, pages, uploaded, deleted, unchanged, commit?, errorCode?, message?}, …}]}` | |
-| `publish add <kind> <name>` | `github\|webdav\|nextcloud\|folder`; `[--repository R] [--branch B] [--folder F] [--url U] [--server S] [--username N] [--path P] [--site-url U] [--title T] [--content site\|document] [--share on\|off] [--share-password on\|off] [--share-expires D]` | a target (checked: `bad_target` with the problem; a name taken: `target_exists`) | yes |
+| `publish targets` | | the notebook's publishing targets on this device ("Publishing" below): `{targets [{id, name, kind, address, siteUrl, title, content, items [{kind, value}], linkedPages, onlyMarked, extensionPages, aiConversations, hasPassword?, protect?, protectSalt?, hasPagesPassword?, last {at, operation, ok, url, pages, uploaded, deleted, unchanged, commit?, errorCode?, message?}, …}]}` | |
+| `publish add <kind> <name>` | `github\|webdav\|nextcloud\|folder`; `[--repository R] [--branch B] [--folder F] [--url U] [--server S] [--username N] [--path P] [--site-url U] [--title T] [--content site\|document] [--share on\|off] [--share-password on\|off] [--share-expires D] [--protect on\|off]` | a target (checked: `bad_target` with the problem; a name taken: `target_exists`) | yes |
 | `publish set <target>` | `[--name N]` and `publish add`'s options | change a target | yes |
 | `publish include <target>` | `[--page P] [--folder F] [--tag T] [--notebook] [--linked-pages on\|off] [--only-marked on\|off] [--extension-pages on\|off] [--ai-conversations on\|off]` | publish a page, a folder, a tag (with its sub-tags) or the whole notebook with the target; the options choose how pages are picked | yes |
 | `publish exclude <target>` | `[--page P] [--folder F] [--tag T] [--notebook]` | stop publishing an item | yes |
-| `publish secret <target>` | `[--share] (--password T \| --stdin)` | keep the target's password (`--share`: a Nextcloud link's) in an owner-only file of the app's data; empty forgets it | yes |
+| `publish secret <target>` | `[--share \| --pages] (--password T \| --stdin)` | keep the target's password (`--share`: a Nextcloud link's; `--pages`: the password of protected pages) in an owner-only file of the app's data; empty forgets it | yes |
 | `publish remove <target>` | | forget a target (what it published stays) | destructive |
 | `publish preview <target>` | | the dry run: `{target, url, remoteChecked, remoteError?, counts {upload, update, unchanged, delete, conflict}, files [{path, action, size}], pages, attachments, bytes, leftOut [{path, reason, reasonText}], missingItems, encryptedFragmentsRemoved}` | |
 | `publish run <target>` | `[--force]` | publish: only what changed is sent (GitHub: one commit); `done {uploaded, updated, deleted, unchanged}`, `url`, `commit?`; a conflict is exit 4 `conflicts` until `--force` (needs `--allow-destructive`) | yes |
@@ -448,6 +448,9 @@ brulion-cli publish add nextcloud Rodzina --server chmura.example.pl --username 
 printf '%s' "$APP_PASSWORD" | brulion-cli publish secret Rodzina --stdin
 printf '%s' "$LINK_PASSWORD" | brulion-cli publish secret Rodzina --share --stdin
 brulion-cli publish run Rodzina                                      # → https://chmura.example.pl/s/…
+brulion-cli publish set Blog --protect on                            # password-protected pages
+printf '%s' "$PAGES_PASSWORD" | brulion-cli publish secret Blog --pages --stdin
+brulion-cli publish run Blog                                         # every page and picture encrypted
 ```
 
 * **What is published**: the target's items (`publish include`) — pages, folders, tags with their
@@ -463,14 +466,23 @@ brulion-cli publish run Rodzina                                      # → https
   new files with `If-None-Match: *`); a folder compares SHA-256. A file changed at the target since
   the last publish (or there without having been published from here) is a conflict: nothing is
   replaced, exit 4 `conflicts`, until `publish run --force --allow-destructive`.
+* **Password-protected pages** (`--protect on`, docs/UI.md "Publishing" → "Password-protected
+  pages"): every page and file goes up encrypted (AES-256-GCM, the key from PBKDF2-HMAC-SHA256 with
+  600 000 rounds), under names that tell nothing (`p/<hex>.html`, `f/<hex>`); each page is a lock
+  page that asks for the password and opens the page with the browser's WebCrypto (https needed).
+  No search on such a site. The password is `publish secret --pages` (or
+  `BRULION_PUBLISH_PAGES_PASSWORD`); without it `preview` and `run` stop with exit 5
+  `no_page_password`. `publish targets` says `protect: true` and `hasPagesPassword`; the plan's
+  `protected` is true.
 * **Secrets**: GitHub uses the token the app keeps (`<app data>/secrets/github-token`, Settings →
   the sync center's GitHub tab) or `BRULION_GITHUB_TOKEN`; WebDAV and Nextcloud passwords and a
-  Nextcloud link's password are kept by `publish secret` in owner-only files
-  (`<app data>/secrets/publish-<id>`, `…-share`), or come from `BRULION_PUBLISH_PASSWORD` /
-  `BRULION_PUBLISH_SHARE_PASSWORD`. Never on the command line, never in the notebook; masked in
+  Nextcloud link's password (and the pages' password) are kept by `publish secret` in owner-only
+  files (`<app data>/secrets/publish-<id>`, `…-share`, `…-pages`), or come from
+  `BRULION_PUBLISH_PASSWORD` / `BRULION_PUBLISH_SHARE_PASSWORD` / `BRULION_PUBLISH_PAGES_PASSWORD`. Never on the command line, never in the notebook; masked in
   every log line.
 * **Exit codes**: 3 `nothing_to_publish` (no page chosen) or the target not found; 4 conflicts (or
-  a GitHub branch that kept moving); 5 offline, a sign-in refused, no token or password; 7 a token
+  a GitHub branch that kept moving); 5 offline, a sign-in refused, no token or password (also the
+  pages' password of a protected target); 7 a token
   that may not push, `--read-only`, `--force` or `unpublish` without `--allow-destructive`; the
   error's `details` carry the plan.
 * **MCP**: `brulion_publish_targets`, `_preview` and `_run` (a write: refused by a read-only

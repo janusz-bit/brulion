@@ -54,6 +54,10 @@ QString errorText(const QString &code, const QString &detail)
         return PublishMessages::tr("Publishing to GitHub needs a token: add one in the GitHub tab of the sync center.");
     if (code == u"no-password")
         return PublishMessages::tr("The password of this target is missing: edit the target and type it again.");
+    if (code == u"no-page-password")
+        return PublishMessages::tr(
+                "The pages' password is not on this device: edit the target and type it (it is never kept in "
+                "the notebook).");
     if (code == u"io")
         return withDetail(PublishMessages::tr("The folder could not be written."), detail);
     if (code == u"files-failed")

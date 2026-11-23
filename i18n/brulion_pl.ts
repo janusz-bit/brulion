@@ -15571,208 +15571,258 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/core/publish/messages.cpp" line="58"/>
+        <source>The pages&apos; password is not on this device: edit the target and type it (it is never kept in the notebook).</source>
+        <translation>Hasła stron nie ma na tym urządzeniu: zmień miejsce i wpisz je (nigdy nie jest przechowywane w notatniku).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/messages.cpp" line="62"/>
         <source>The folder could not be written.</source>
         <translation>Nie udało się zapisać folderu.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="60"/>
+        <location filename="../src/core/publish/messages.cpp" line="64"/>
         <source>Some files could not be published: publish again to retry them.</source>
         <translation>Niektórych plików nie udało się opublikować: opublikuj ponownie, żeby spróbować jeszcze raz.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="63"/>
+        <location filename="../src/core/publish/messages.cpp" line="67"/>
         <source>The files are on Nextcloud, but its public link could not be made or changed.</source>
         <translation>Pliki są w Nextcloudzie, ale nie udało się utworzyć ani zmienić publicznego linku.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="66"/>
+        <location filename="../src/core/publish/messages.cpp" line="70"/>
         <source>The server has no space left.</source>
         <translation>Na serwerze zabrakło miejsca.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="68"/>
+        <location filename="../src/core/publish/messages.cpp" line="72"/>
         <source>The server refused it.</source>
         <translation>Serwer odmówił.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="70"/>
+        <location filename="../src/core/publish/messages.cpp" line="74"/>
         <source>Nothing to publish: add a page, a folder or a tag first.</source>
         <translation>Nie ma nic do opublikowania: najpierw dodaj stronę, folder albo tag.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="72"/>
+        <location filename="../src/core/publish/messages.cpp" line="76"/>
         <source>Give the target a name.</source>
         <translation>Nadaj miejscu publikacji nazwę.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="74"/>
+        <location filename="../src/core/publish/messages.cpp" line="78"/>
         <source>The repository is written as owner/name, e.g. jan/notatki.</source>
         <translation>Repozytorium zapisuje się jako właściciel/nazwa, np. jan/notatki.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="76"/>
+        <location filename="../src/core/publish/messages.cpp" line="80"/>
         <source>That is no branch name Git accepts.</source>
         <translation>Git nie przyjmie takiej nazwy gałęzi.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="78"/>
+        <location filename="../src/core/publish/messages.cpp" line="82"/>
         <source>That is no folder name the target accepts.</source>
         <translation>Miejsce publikacji nie przyjmie takiej nazwy folderu.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="80"/>
+        <location filename="../src/core/publish/messages.cpp" line="84"/>
         <source>Give a full address starting with https://.</source>
         <translation>Podaj pełny adres zaczynający się od https://.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="82"/>
+        <location filename="../src/core/publish/messages.cpp" line="86"/>
         <source>Give the Nextcloud server&apos;s address, e.g. cloud.example.com.</source>
         <translation>Podaj adres serwera Nextcloud, np. cloud.example.com.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="84"/>
+        <location filename="../src/core/publish/messages.cpp" line="88"/>
         <source>Give the user name.</source>
         <translation>Podaj nazwę użytkownika.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="86"/>
+        <location filename="../src/core/publish/messages.cpp" line="90"/>
         <source>Choose a folder for the site: a public link to the whole account is never made.</source>
         <translation>Wybierz folder dla witryny: publiczny link do całego konta nigdy nie powstaje.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="88"/>
+        <location filename="../src/core/publish/messages.cpp" line="92"/>
         <source>Choose a folder on this device.</source>
         <translation>Wybierz folder na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="89"/>
+        <location filename="../src/core/publish/messages.cpp" line="93"/>
         <source>Publishing did not work.</source>
         <translation>Publikowanie się nie udało.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="95"/>
+        <location filename="../src/core/publish/messages.cpp" line="99"/>
         <source>The target&apos;s place changed: what was published at the old place stays there.</source>
         <translation>Miejsce publikacji wskazuje gdzie indziej: to, co opublikowano w starym miejscu, tam zostaje.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="98"/>
+        <location filename="../src/core/publish/messages.cpp" line="102"/>
         <source>GitHub Pages of this repository is served from another branch or folder: change it in the repository&apos;s settings to show this site.</source>
         <translation>GitHub Pages tego repozytorium działa z innej gałęzi lub folderu: zmień to w ustawieniach repozytorium, żeby pokazać tę witrynę.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="103"/>
+        <location filename="../src/core/publish/messages.cpp" line="107"/>
         <source>Whether GitHub Pages is on could not be checked.</source>
         <translation>Nie udało się sprawdzić, czy GitHub Pages jest włączone.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="105"/>
+        <location filename="../src/core/publish/messages.cpp" line="109"/>
         <source>GitHub Pages serves only a branch&apos;s root or its docs folder: this folder is published, but Pages was not turned on for it.</source>
         <translation>GitHub Pages udostępnia tylko katalog główny gałęzi albo jej folder docs: ten folder jest opublikowany, ale Pages nie zostało dla niego włączone.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="110"/>
+        <location filename="../src/core/publish/messages.cpp" line="114"/>
         <source>GitHub Pages could not be turned on: turn it on in the repository&apos;s settings (Pages).</source>
         <translation>Nie udało się włączyć GitHub Pages: włącz je w ustawieniach repozytorium (Pages).</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="114"/>
+        <location filename="../src/core/publish/messages.cpp" line="118"/>
         <source>The link&apos;s password is missing on this device: the link was left as it is.</source>
         <translation>Na tym urządzeniu brakuje hasła linku: link pozostał bez zmian.</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="121"/>
+        <location filename="../src/core/publish/messages.cpp" line="125"/>
         <source>In a hidden folder</source>
         <translation>W ukrytym folderze</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="122"/>
+        <location filename="../src/core/publish/messages.cpp" line="126"/>
         <source>Marked publish: false</source>
         <translation>Oznaczona publish: false</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="123"/>
+        <location filename="../src/core/publish/messages.cpp" line="127"/>
         <source>Not marked publish: true</source>
         <translation>Bez oznaczenia publish: true</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="124"/>
+        <location filename="../src/core/publish/messages.cpp" line="128"/>
         <source>An extension&apos;s code</source>
         <translation>Kod rozszerzenia</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="125"/>
+        <location filename="../src/core/publish/messages.cpp" line="129"/>
         <source>A conversation with AI</source>
         <translation>Rozmowa z AI</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="126"/>
+        <location filename="../src/core/publish/messages.cpp" line="130"/>
         <source>A template</source>
         <translation>Szablon</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="127"/>
+        <location filename="../src/core/publish/messages.cpp" line="131"/>
         <source>Encrypted</source>
         <translation>Zaszyfrowane</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="128"/>
+        <location filename="../src/core/publish/messages.cpp" line="132"/>
         <source>A conflict copy</source>
         <translation>Kopia konfliktu</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="136"/>
+        <location filename="../src/core/publish/messages.cpp" line="140"/>
         <source>New</source>
         <translation>Nowy</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="137"/>
+        <location filename="../src/core/publish/messages.cpp" line="141"/>
         <source>Changed</source>
         <translation>Zmieniony</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="138"/>
+        <location filename="../src/core/publish/messages.cpp" line="142"/>
         <source>Unchanged</source>
         <translation>Bez zmian</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="139"/>
+        <location filename="../src/core/publish/messages.cpp" line="143"/>
         <source>Removed</source>
         <translation>Usunięty</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="141"/>
+        <location filename="../src/core/publish/messages.cpp" line="145"/>
         <source>Changed there – kept</source>
         <translation>Zmieniony tam – zostaje</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="142"/>
+        <location filename="../src/core/publish/messages.cpp" line="146"/>
         <source>Changed there – not replaced</source>
         <translation>Zmieniony tam – nie zastąpiony</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="150"/>
+        <location filename="../src/core/publish/messages.cpp" line="154"/>
         <source>GitHub Pages</source>
         <translation>GitHub Pages</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="151"/>
+        <location filename="../src/core/publish/messages.cpp" line="155"/>
         <source>WebDAV server</source>
         <translation>Serwer WebDAV</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="152"/>
+        <location filename="../src/core/publish/messages.cpp" line="156"/>
         <source>Nextcloud</source>
         <translation>Nextcloud</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="153"/>
+        <location filename="../src/core/publish/messages.cpp" line="157"/>
         <source>Folder on this device</source>
         <translation>Folder na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/core/publish/messages.cpp" line="160"/>
+        <location filename="../src/core/publish/messages.cpp" line="164"/>
         <source>Published with Brulion</source>
         <translation>Opublikowano w Brulionie</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="270"/>
+        <source>Protected page</source>
+        <translation>Strona chroniona</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="271"/>
+        <source>Type the password to read this page.</source>
+        <translation>Wpisz hasło, żeby przeczytać tę stronę.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="272"/>
+        <source>Password</source>
+        <translation>Hasło</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="273"/>
+        <source>Remember it until the browser is closed</source>
+        <translation>Zapamiętaj do zamknięcia przeglądarki</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="274"/>
+        <source>Open</source>
+        <translation>Otwórz</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="275"/>
+        <source>Opening…</source>
+        <translation>Otwieranie…</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="276"/>
+        <source>Wrong password.</source>
+        <translation>Błędne hasło.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="277"/>
+        <source>This browser cannot open the page here: it needs a secure (https) address and a current browser.</source>
+        <translation>Ta przeglądarka nie otworzy tu strony: potrzebny jest bezpieczny adres (https) i aktualna przeglądarka.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/publish/protect.cpp" line="279"/>
+        <source>The page opens with JavaScript: turn it on to type the password.</source>
+        <translation>Strona otwiera się za pomocą JavaScriptu: włącz go, żeby wpisać hasło.</translation>
     </message>
 </context>
 <context>
@@ -15843,150 +15893,155 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Dodaj token…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="237"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="238"/>
         <source>A password of this target is not on this device: type it in the target&apos;s settings.</source>
         <translation>Hasła tego miejsca publikacji nie ma na tym urządzeniu: wpisz je w ustawieniach miejsca.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="241"/>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="629"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="242"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="634"/>
         <source>Edit…</source>
         <translation>Edytuj…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="249"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="250"/>
         <source>What is published</source>
         <translation>Co jest publikowane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="274"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="275"/>
         <source>Stop publishing it</source>
         <translation>Przestań to publikować</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="283"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="284"/>
         <source>Nothing yet: add a page, a folder, a tag or the whole notebook.</source>
         <translation>Jeszcze nic: dodaj stronę, folder, tag albo cały notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="288"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="289"/>
         <source>Add…</source>
         <translation>Dodaj…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="297"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="298"/>
         <source>Also the pages they link to</source>
         <translation>Także strony, do których prowadzą linki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="298"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="299"/>
         <source>One step of links: a published page&apos;s links lead somewhere.</source>
         <translation>Jeden krok po linkach: linki opublikowanej strony dokądś prowadzą.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="305"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="306"/>
         <source>Only pages marked publish: true</source>
         <translation>Tylko strony oznaczone publish: true</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="306"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="307"/>
         <source>A page you add by itself is published anyway.</source>
         <translation>Strona dodana osobno i tak jest publikowana.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="313"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="314"/>
         <source>Extension pages</source>
         <translation>Strony rozszerzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="314"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="315"/>
         <source>Pages tagged #extension hold the notebook&apos;s code: left out unless chosen.</source>
         <translation>Strony z tagiem #rozszerzenie zawierają kod notatnika: pomijane, chyba że je wybierzesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="321"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="322"/>
         <source>Conversations with AI</source>
         <translation>Rozmowy z AI</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="322"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="323"/>
         <source>The AI folder: left out unless chosen.</source>
         <translation>Folder AI: pomijany, chyba że go wybierzesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="331"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="332"/>
         <source>Content</source>
         <translation>Zawartość</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="342"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="343"/>
         <source>Preview</source>
         <translation>Podgląd</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="350"/>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="557"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="351"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="562"/>
         <source>Publish</source>
         <translation>Opublikuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="359"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="360"/>
         <source>Cancel</source>
         <translation>Anuluj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="378"/>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="457"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="379"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="462"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="396"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="397"/>
         <source>Unpublishing…</source>
         <translation>Wycofywanie publikacji…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="397"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="398"/>
         <source>Publishing…</source>
         <translation>Publikowanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="397"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="398"/>
         <source>Preparing the preview…</source>
         <translation>Przygotowywanie podglądu…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="418"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="419"/>
         <source>What a publish would do</source>
         <translation>Co zrobi publikacja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="419"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="420"/>
         <source>Changed at the target</source>
         <translation>Zmienione w miejscu publikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="420"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="421"/>
         <source>Unpublished</source>
         <translation>Wycofano publikację</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="420"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="421"/>
         <source>Published</source>
         <translation>Opublikowano</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="463"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="430"/>
+        <source>Encrypted with the pages&apos; password: the files have random names, and the browser asks for the password.</source>
+        <translation>Zaszyfrowane hasłem stron: pliki mają przypadkowe nazwy, a przeglądarka pyta o hasło.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="468"/>
         <source>Copy link</source>
         <translation>Kopiuj link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="469"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="474"/>
         <source>Link copied.</source>
         <translation>Skopiowano link.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="512"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="517"/>
         <source>…and %n more file(s).</source>
         <translation>
             <numerusform>…i jeszcze %n plik.</numerusform>
@@ -15995,113 +16050,113 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="523"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="528"/>
         <source>Left out</source>
         <translation>Pominięte</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="567"/>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="730"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="572"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="735"/>
         <source>Replace them</source>
         <translation>Zastąp je</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="573"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="578"/>
         <source>Done</source>
         <translation>Gotowe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="585"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="590"/>
         <source>Publishing did not work</source>
         <translation>Publikowanie się nie udało</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="588"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="593"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="599"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="604"/>
         <source>A page…</source>
         <translation>Stronę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="607"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="612"/>
         <source>A folder…</source>
         <translation>Folder…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="615"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="620"/>
         <source>A tag…</source>
         <translation>Tag…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="620"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="625"/>
         <source>The whole notebook</source>
         <translation>Cały notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="635"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="640"/>
         <source>Unpublish…</source>
         <translation>Wycofaj publikację…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="642"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="647"/>
         <source>Remove the target…</source>
         <translation>Usuń miejsce publikacji…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="657"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="662"/>
         <source>Choose a tag</source>
         <translation>Wybierz tag</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="669"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="674"/>
         <source>Search tags…</source>
         <translation>Szukaj tagów…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="699"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="704"/>
         <source>No tags found.</source>
         <translation>Nie znaleziono tagów.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="718"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="723"/>
         <source>Unpublish?</source>
         <translation>Wycofać publikację?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="721"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="726"/>
         <source>Every file this target published is removed from it (a Nextcloud link too). Your notes stay as they are.</source>
         <translation>Każdy plik opublikowany w tym miejscu zostanie z niego usunięty (link Nextclouda też). Twoje notatki pozostaną bez zmian.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="722"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="727"/>
         <source>Unpublish</source>
         <translation>Wycofaj publikację</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="728"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="733"/>
         <source>Replace the changed files?</source>
         <translation>Zastąpić zmienione pliki?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="729"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="734"/>
         <source>Someone changed these files at the target since the last publish (or they were there before). Publishing replaces them with this notebook&apos;s pages.</source>
         <translation>Ktoś zmienił te pliki w miejscu publikacji od ostatniej publikacji (albo były tam wcześniej). Publikacja zastąpi je stronami tego notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="736"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="741"/>
         <source>Remove the target?</source>
         <translation>Usunąć miejsce publikacji?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="739"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="744"/>
         <source>Brulion forgets where it published and its passwords. What it published stays there – unpublish it first to remove it.</source>
         <translation>Brulion zapomni, gdzie publikował, i jego hasła. To, co opublikowano, tam zostanie – żeby to usunąć, najpierw wycofaj publikację.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="740"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="745"/>
         <source>Remove</source>
         <translation>Usuń</translation>
     </message>
@@ -16109,244 +16164,266 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>PublishTargetDialog</name>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="81"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="88"/>
         <source>New publishing target</source>
         <translation>Nowe miejsce publikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="81"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="88"/>
         <source>Change the target</source>
         <translation>Zmień miejsce publikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="82"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="89"/>
         <source>Where the pages go. Passwords stay on this device.</source>
         <translation>Dokąd trafiają strony. Hasła zostają na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="83"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="90"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="124"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="132"/>
         <source>Where</source>
         <translation>Dokąd</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="194"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="199"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="202"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="207"/>
         <source>Name</source>
         <translation>Nazwa</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="200"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="208"/>
         <source>Blog, Recipes for the family…</source>
         <translation>Blog, Przepisy dla rodziny…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="209"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="215"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="217"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="223"/>
         <source>Repository</source>
         <translation>Repozytorium</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="216"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="224"/>
         <source>owner/name</source>
         <translation>właściciel/nazwa</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="225"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="230"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="233"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="238"/>
         <source>Branch</source>
         <translation>Gałąź</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="226"/>
         <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="234"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="239"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="242"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="247"/>
         <source>Folder in the branch</source>
         <translation>Folder w gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="240"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="248"/>
         <source>Its root (or docs)</source>
         <translation>Katalog główny (albo docs)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="245"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="253"/>
         <source>A branch that does not exist yet is made, without history. GitHub Pages is turned on for it (its root or docs/) and serves the site at https://&lt;owner&gt;.github.io/&lt;name&gt;/.</source>
         <translation>Gałąź, której jeszcze nie ma, zostanie utworzona, bez historii. GitHub Pages zostanie dla niej włączone (katalog główny albo docs/) i udostępni witrynę pod https://&lt;właściciel&gt;.github.io/&lt;nazwa&gt;/.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="249"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="257"/>
         <source>Uses the GitHub token saved on this device (%1).</source>
         <translation>Używa tokenu GitHuba zapisanego na tym urządzeniu (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="250"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="258"/>
         <source>Uses the GitHub token saved on this device.</source>
         <translation>Używa tokenu GitHuba zapisanego na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="251"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="259"/>
         <source>Publishing needs a GitHub token with the “repo” scope: add it in the sync center&apos;s GitHub tab.</source>
         <translation>Publikowanie wymaga tokenu GitHuba z zakresem „repo”: dodaj go na karcie GitHub w centrum synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="256"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="264"/>
         <source>Add a GitHub token…</source>
         <translation>Dodaj token GitHuba…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="272"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="277"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="280"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="285"/>
         <source>WebDAV address of the folder</source>
         <translation>Adres WebDAV folderu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="289"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="294"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="297"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="302"/>
         <source>Server</source>
         <translation>Serwer</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="299"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="304"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="307"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="312"/>
         <source>Folder for the site</source>
         <translation>Folder na witrynę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="305"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="313"/>
         <source>Public/Recipes</source>
         <translation>Publiczne/Przepisy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="318"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="324"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="326"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="332"/>
         <source>User name</source>
         <translation>Nazwa użytkownika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="319"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="328"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="327"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="336"/>
         <source>App password</source>
         <translation>Hasło aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="319"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="328"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="335"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="327"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="336"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="343"/>
         <source>Password</source>
         <translation>Hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="336"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="378"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="344"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="386"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="484"/>
         <source>Kept on this device</source>
         <translation>Zapisane na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="340"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="348"/>
         <source>Hide the passwords</source>
         <translation>Ukryj hasła</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="340"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="348"/>
         <source>Show the passwords</source>
         <translation>Pokaż hasła</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="348"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="356"/>
         <source>An app password from Nextcloud&apos;s Settings → Security works best (and can be revoked there).</source>
         <translation>Najlepiej działa hasło aplikacji z Ustawień Nextclouda → Bezpieczeństwo (tam też można je odwołać).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="360"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="368"/>
         <source>A public link</source>
         <translation>Publiczny link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="362"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="370"/>
         <source>Anyone with the link sees the folder (read-only). Off: the files are on Nextcloud, without a link.</source>
         <translation>Każdy, kto ma link, widzi folder (tylko do odczytu). Wyłączone: pliki są w Nextcloudzie, bez linku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="368"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="376"/>
         <source>The link asks for a password</source>
         <translation>Link wymaga hasła</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="377"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="378"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="385"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="386"/>
         <source>The link&apos;s password</source>
         <translation>Hasło linku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="381"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="387"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="389"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="395"/>
         <source>The link expires on</source>
         <translation>Link wygasa</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="388"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="396"/>
         <source>YYYY-MM-DD (empty: never)</source>
         <translation>RRRR-MM-DD (puste: nigdy)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="394"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="402"/>
         <source>Nextcloud shows a shared folder as a list of files: the viewers open a page there, or download the folder and open index.html. For one file to read online choose “One document” in the target&apos;s options.</source>
         <translation>Nextcloud pokazuje udostępniony folder jako listę plików: odbiorcy otwierają tam stronę albo pobierają folder i otwierają index.html. Jeśli ma to być jeden plik do czytania w przeglądarce, wybierz „Jeden dokument” w opcjach miejsca.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="403"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="412"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="411"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="420"/>
         <source>Folder</source>
         <translation>Folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="413"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="421"/>
         <source>/srv/www/notes</source>
         <translation>/srv/www/notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="418"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="426"/>
         <source>Browse…</source>
         <translation>Przeglądaj…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="424"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="432"/>
         <source>For a web server&apos;s folder, or one a sync app takes to a server. Hidden files there (.git, .htaccess) are never touched.</source>
         <translation>Na folder serwera WWW albo taki, który program do synchronizacji przenosi na serwer. Ukryte pliki w nim (.git, .htaccess) nigdy nie są ruszane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="434"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="442"/>
         <source>Site title (optional)</source>
         <translation>Tytuł witryny (opcjonalnie)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="435"/>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="442"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="443"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="450"/>
         <source>Site address (optional)</source>
         <translation>Adres witryny (opcjonalnie)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="439"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="447"/>
         <source>Site title</source>
         <translation>Tytuł witryny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="448"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="456"/>
         <source>Site address</source>
         <translation>Adres witryny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="449"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="457"/>
         <source>A custom domain</source>
         <translation>Własna domena</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="477"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="471"/>
+        <source>Password-protected pages</source>
+        <translation>Strony chronione hasłem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="473"/>
+        <source>Every page and picture is encrypted; the browser asks for the password and opens them.</source>
+        <translation>Każda strona i obrazek są zaszyfrowane; przeglądarka pyta o hasło i je otwiera.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="483"/>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="484"/>
+        <source>The pages&apos; password</source>
+        <translation>Hasło stron</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="490"/>
+        <source>Anyone may download the encrypted files and try passwords: choose a long one, several words. Visible without it: that the site exists, its number of files and their sizes. Pages published here before stay in a GitHub branch&apos;s history.</source>
+        <translation>Każdy może pobrać zaszyfrowane pliki i próbować haseł: wybierz długie, z kilku słów. Bez niego widać tylko, że witryna istnieje, ile ma plików i jakie są ich rozmiary. Strony opublikowane tu wcześniej zostają w historii gałęzi na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/PublishTargetDialog.qml" line="516"/>
         <source>Choose the folder for the site</source>
         <translation>Wybierz folder na witrynę</translation>
     </message>
@@ -32155,334 +32232,349 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie ma miejsca publikacji %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="126"/>
+        <location filename="../src/cli/commands_publish.cpp" line="130"/>
         <source>the whole notebook</source>
         <translation>cały notatnik</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="148"/>
+        <location filename="../src/cli/commands_publish.cpp" line="152"/>
         <source>published %1</source>
         <translation>opublikowano %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="149"/>
+        <location filename="../src/cli/commands_publish.cpp" line="153"/>
         <source>failed %1: %2</source>
         <translation>nie powiodło się %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="155"/>
+        <location filename="../src/cli/commands_publish.cpp" line="159"/>
         <source>No publishing targets yet: publish add …</source>
         <translation>Nie ma jeszcze miejsc publikacji: publish add …</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="213"/>
+        <location filename="../src/cli/commands_publish.cpp" line="219"/>
         <source>A target named %1 exists already</source>
         <translation>Miejsce publikacji o nazwie %1 już istnieje</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="219"/>
-        <location filename="../src/cli/commands_publish.cpp" line="239"/>
-        <location filename="../src/cli/commands_publish.cpp" line="341"/>
+        <location filename="../src/cli/commands_publish.cpp" line="225"/>
+        <location filename="../src/cli/commands_publish.cpp" line="245"/>
+        <location filename="../src/cli/commands_publish.cpp" line="350"/>
         <source>The target could not be saved</source>
         <translation>Nie udało się zapisać miejsca publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="220"/>
+        <location filename="../src/cli/commands_publish.cpp" line="226"/>
         <source>Added %1 (%2): %3</source>
         <translation>Dodano %1 (%2): %3</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="257"/>
+        <location filename="../src/cli/commands_publish.cpp" line="264"/>
         <source>Removed %1: what it published stays where it is (publish unpublish removes it)</source>
         <translation>Usunięto %1: to, co opublikowało, zostaje na miejscu (usuwa to publish unpublish)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="275"/>
+        <location filename="../src/cli/commands_publish.cpp" line="277"/>
+        <source>--share and --pages name different passwords: give one</source>
+        <translation>--share i --pages to różne hasła: podaj jedno</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_publish.cpp" line="284"/>
         <source>The secret could not be kept</source>
         <translation>Nie udało się zachować sekretu</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="277"/>
+        <location filename="../src/cli/commands_publish.cpp" line="286"/>
         <source>Forgot the secret of %1</source>
         <translation>Zapomniano sekret miejsca %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="277"/>
+        <location filename="../src/cli/commands_publish.cpp" line="286"/>
         <source>Kept the secret of %1</source>
         <translation>Zachowano sekret miejsca %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="393"/>
+        <location filename="../src/cli/commands_publish.cpp" line="403"/>
         <source>%1 removed, %2 kept (changed there since)</source>
         <translation>usunięte: %1, zachowane: %2 (zmienione tam od tamtej pory)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="401"/>
+        <location filename="../src/cli/commands_publish.cpp" line="411"/>
         <source>%1 page(s), %2 attachment(s), %3 · %4 new, %5 changed, %6 unchanged, %7 removed</source>
         <translation>stron: %1, załączników: %2, %3 · nowe: %4, zmienione: %5, bez zmian: %6, usunięte: %7</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="411"/>
+        <location filename="../src/cli/commands_publish.cpp" line="421"/>
         <source>The target was not checked (%1): the plan comes from the last publish.</source>
         <translation>Miejsca publikacji nie sprawdzono (%1): plan pochodzi z ostatniej publikacji.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="426"/>
+        <location filename="../src/cli/commands_publish.cpp" line="436"/>
         <source>Left out:</source>
         <translation>Pominięte:</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="431"/>
+        <location filename="../src/cli/commands_publish.cpp" line="441"/>
         <source>Note: %1</source>
         <translation>Uwaga: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="462"/>
+        <location filename="../src/cli/commands_publish.cpp" line="472"/>
         <source>--force replaces files changed at the target: run it with --allow-destructive</source>
         <translation>--force zastępuje pliki zmienione w miejscu publikacji: uruchom z --allow-destructive</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="479"/>
+        <location filename="../src/cli/commands_publish.cpp" line="491"/>
         <source>%1 could not be read and is left out</source>
         <translation>Nie udało się odczytać %1 – pominięto</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="530"/>
+        <location filename="../src/cli/commands_publish.cpp" line="546"/>
         <source>%1 encrypted fragment(s) were left out of the published pages</source>
         <translation>Zaszyfrowane fragmenty pominięte w publikowanych stronach: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="578"/>
+        <location filename="../src/cli/commands_publish.cpp" line="594"/>
         <source>A publishing target: its name or id</source>
         <translation>Miejsce publikacji: jego nazwa albo identyfikator</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="580"/>
+        <location filename="../src/cli/commands_publish.cpp" line="596"/>
         <source>GitHub: owner/name</source>
         <translation>GitHub: właściciel/nazwa</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="582"/>
+        <location filename="../src/cli/commands_publish.cpp" line="598"/>
         <source>GitHub: the branch (default gh-pages, made when missing)</source>
         <translation>GitHub: gałąź (domyślnie gh-pages, tworzona, gdy jej brak)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="584"/>
+        <location filename="../src/cli/commands_publish.cpp" line="600"/>
         <source>GitHub: the folder in the branch (&quot;&quot; or docs); Nextcloud: the folder of the account</source>
         <translation>GitHub: folder w gałęzi (&quot;&quot; albo docs); Nextcloud: folder konta</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="586"/>
+        <location filename="../src/cli/commands_publish.cpp" line="602"/>
         <source>WebDAV: the folder&apos;s address</source>
         <translation>WebDAV: adres folderu</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="587"/>
+        <location filename="../src/cli/commands_publish.cpp" line="603"/>
         <source>Nextcloud: the server&apos;s address</source>
         <translation>Nextcloud: adres serwera</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="589"/>
+        <location filename="../src/cli/commands_publish.cpp" line="605"/>
         <source>WebDAV, Nextcloud: the user name</source>
         <translation>WebDAV, Nextcloud: nazwa użytkownika</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="590"/>
+        <location filename="../src/cli/commands_publish.cpp" line="606"/>
         <source>Folder: a folder on this device</source>
         <translation>Folder: folder na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="592"/>
+        <location filename="../src/cli/commands_publish.cpp" line="608"/>
         <source>The address people open (a custom domain, a web server&apos;s)</source>
         <translation>Adres, który otwierają odbiorcy (własna domena, adres serwera WWW)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="594"/>
+        <location filename="../src/cli/commands_publish.cpp" line="610"/>
         <source>The site&apos;s title (default: the notebook&apos;s name)</source>
         <translation>Tytuł witryny (domyślnie: nazwa notatnika)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="596"/>
+        <location filename="../src/cli/commands_publish.cpp" line="612"/>
         <source>Web pages (default) or one HTML document</source>
         <translation>Strony WWW (domyślnie) albo jeden dokument HTML</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="598"/>
+        <location filename="../src/cli/commands_publish.cpp" line="614"/>
         <source>Nextcloud: a public link (default on)</source>
         <translation>Nextcloud: publiczny link (domyślnie włączony)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="600"/>
+        <location filename="../src/cli/commands_publish.cpp" line="616"/>
         <source>Nextcloud: the link asks for a password (kept with publish secret --share)</source>
         <translation>Nextcloud: link wymaga hasła (zapisz je przez publish secret --share)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="603"/>
+        <location filename="../src/cli/commands_publish.cpp" line="619"/>
         <source>Nextcloud: the link&apos;s expiry date (never: none)</source>
         <translation>Nextcloud: data ważności linku (never: bez daty)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="606"/>
+        <location filename="../src/cli/commands_publish.cpp" line="621"/>
+        <source>Password-protected pages: every page encrypted, opened with the password in the browser (kept with publish secret --pages)</source>
+        <translation>Strony chronione hasłem: każda strona zaszyfrowana, otwierana hasłem w przeglądarce (przechowywanym przez publish secret --pages)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_publish.cpp" line="625"/>
         <source>A page</source>
         <translation>Strona</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="607"/>
+        <location filename="../src/cli/commands_publish.cpp" line="626"/>
         <source>A folder with its subfolders</source>
         <translation>Folder z podfolderami</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="609"/>
+        <location filename="../src/cli/commands_publish.cpp" line="628"/>
         <source>The pages with a tag (and its sub-tags)</source>
         <translation>Strony z tagiem (i jego podtagami)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="610"/>
+        <location filename="../src/cli/commands_publish.cpp" line="629"/>
         <source>The whole notebook</source>
         <translation>Cały notatnik</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="614"/>
+        <location filename="../src/cli/commands_publish.cpp" line="633"/>
         <source>The pages they link to are published too</source>
         <translation>Strony, do których prowadzą linki, też są publikowane</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="616"/>
+        <location filename="../src/cli/commands_publish.cpp" line="635"/>
         <source>Only pages marked publish: true (a chosen page is published anyway)</source>
         <translation>Tylko strony oznaczone publish: true (strona wybrana sama i tak jest publikowana)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="619"/>
+        <location filename="../src/cli/commands_publish.cpp" line="638"/>
         <source>Extension pages (their code) may be published</source>
         <translation>Strony rozszerzeń (ich kod) mogą być publikowane</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="621"/>
+        <location filename="../src/cli/commands_publish.cpp" line="640"/>
         <source>Conversations with AI (AI/) may be published</source>
         <translation>Rozmowy z AI (AI/) mogą być publikowane</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="625"/>
+        <location filename="../src/cli/commands_publish.cpp" line="644"/>
         <source>The notebook&apos;s publishing targets on this device</source>
         <translation>Miejsca publikacji notatnika na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="630"/>
+        <location filename="../src/cli/commands_publish.cpp" line="649"/>
         <source>Where it publishes</source>
         <translation>Dokąd publikuje</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="632"/>
+        <location filename="../src/cli/commands_publish.cpp" line="651"/>
         <source>Its name (&quot;Blog&quot;, &quot;Przepisy&quot;)</source>
         <translation>Jego nazwa (&quot;Blog&quot;, &quot;Przepisy&quot;)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="634"/>
+        <location filename="../src/cli/commands_publish.cpp" line="653"/>
         <source>Add a publishing target</source>
         <translation>Dodaj miejsce publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="635"/>
+        <location filename="../src/cli/commands_publish.cpp" line="654"/>
         <source>A target is this device&apos;s, kept in the notebook&apos;s device state (as the app&apos;s); what it publishes comes with publish include. Passwords never go on the command line: publish secret reads them from standard input. GitHub uses the token the app keeps (or BRULION_GITHUB_TOKEN).</source>
         <translation>Miejsce publikacji należy do tego urządzenia i jest trzymane w stanie urządzenia notatnika (jak miejsca aplikacji); co publikuje, ustala publish include. Hasła nigdy nie trafiają do wiersza poleceń: publish secret czyta je ze standardowego wejścia. GitHub używa tokenu, który trzyma aplikacja (albo BRULION_GITHUB_TOKEN).</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="644"/>
+        <location filename="../src/cli/commands_publish.cpp" line="663"/>
         <source>A new name</source>
         <translation>Nowa nazwa</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="646"/>
+        <location filename="../src/cli/commands_publish.cpp" line="665"/>
         <source>Change a publishing target</source>
         <translation>Zmień miejsce publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="656"/>
+        <location filename="../src/cli/commands_publish.cpp" line="675"/>
         <source>Publish a page, a folder, a tag or the notebook with a target</source>
         <translation>Publikuj stronę, folder, tag albo notatnik w miejscu publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="658"/>
+        <location filename="../src/cli/commands_publish.cpp" line="677"/>
         <source>Never published: hidden folders, conflict copies, encrypted pages, files and fragments, pages marked publish: false; extension pages, conversations with AI and templates only when chosen.</source>
         <translation>Nigdy nie są publikowane: ukryte foldery, kopie konfliktów, zaszyfrowane strony, pliki i fragmenty, strony oznaczone publish: false; strony rozszerzeń, rozmowy z AI i szablony tylko na życzenie.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="669"/>
+        <location filename="../src/cli/commands_publish.cpp" line="688"/>
         <source>Stop publishing an item with a target</source>
         <translation>Przestań publikować element w miejscu publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="671"/>
+        <location filename="../src/cli/commands_publish.cpp" line="690"/>
         <source>Its pages go from the site with the next publish.</source>
         <translation>Jego strony znikną z witryny przy następnej publikacji.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="676"/>
+        <location filename="../src/cli/commands_publish.cpp" line="695"/>
         <source>Keep a target&apos;s password on this device</source>
         <translation>Zachowaj hasło miejsca publikacji na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="680"/>
+        <location filename="../src/cli/commands_publish.cpp" line="699"/>
         <source>The password (better: --stdin); empty forgets it</source>
         <translation>Hasło (lepiej: --stdin); puste zapomina je</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="681"/>
+        <location filename="../src/cli/commands_publish.cpp" line="700"/>
         <source>Nextcloud: the public link&apos;s password</source>
         <translation>Nextcloud: hasło publicznego linku</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="682"/>
-        <source>Kept like the app&apos;s Nextcloud password, in an owner-only file of the app&apos;s data folder, never in the notebook. BRULION_PUBLISH_PASSWORD and BRULION_PUBLISH_SHARE_PASSWORD override them.</source>
-        <translation>Trzymane jak hasło Nextclouda w aplikacji: w pliku dostępnym tylko dla właściciela, w folderze danych aplikacji, nigdy w notatniku. BRULION_PUBLISH_PASSWORD i BRULION_PUBLISH_SHARE_PASSWORD mają pierwszeństwo.</translation>
+        <location filename="../src/cli/commands_publish.cpp" line="701"/>
+        <source>The password of protected pages (--protect on)</source>
+        <translation>Hasło stron chronionych (--protect on)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="690"/>
+        <location filename="../src/cli/commands_publish.cpp" line="702"/>
+        <source>Kept like the app&apos;s Nextcloud password, in an owner-only file of the app&apos;s data folder, never in the notebook. BRULION_PUBLISH_PASSWORD, BRULION_PUBLISH_SHARE_PASSWORD and BRULION_PUBLISH_PAGES_PASSWORD override them.</source>
+        <translation>Trzymane jak hasło Nextclouda w aplikacji: w pliku dostępnym tylko dla właściciela, w folderze danych aplikacji, nigdy w notatniku. BRULION_PUBLISH_PASSWORD, BRULION_PUBLISH_SHARE_PASSWORD i BRULION_PUBLISH_PAGES_PASSWORD mają pierwszeństwo.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_publish.cpp" line="710"/>
         <source>Forget a publishing target</source>
         <translation>Zapomnij miejsce publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="692"/>
+        <location filename="../src/cli/commands_publish.cpp" line="712"/>
         <source>What it published stays: publish unpublish removes that first.</source>
         <translation>To, co opublikowało, zostaje: najpierw usuń to przez publish unpublish.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="700"/>
+        <location filename="../src/cli/commands_publish.cpp" line="720"/>
         <source>What a publish would upload, change and remove (nothing written)</source>
         <translation>Co publikacja wyśle, zmieni i usunie (niczego nie zapisuje)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="702"/>
+        <location filename="../src/cli/commands_publish.cpp" line="722"/>
         <source>The target is looked at (offline: the plan from the last publish); the pages left out are listed with the reason.</source>
         <translation>Miejsce publikacji jest sprawdzane (offline: plan z ostatniej publikacji); pominięte strony są wymienione z powodem.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="708"/>
+        <location filename="../src/cli/commands_publish.cpp" line="728"/>
         <source>Publish a target&apos;s pages</source>
         <translation>Opublikuj strony miejsca publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="710"/>
+        <location filename="../src/cli/commands_publish.cpp" line="730"/>
         <source>Replace files changed at the target since the last publish (needs --allow-destructive)</source>
         <translation>Zastąp pliki zmienione w miejscu publikacji od ostatniej publikacji (wymaga --allow-destructive)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="713"/>
+        <location filename="../src/cli/commands_publish.cpp" line="733"/>
         <source>Only what changed is sent (GitHub: one commit). A file changed at the target since the last publish stops it (exit 4 conflicts) until --force. --dry-run is publish preview.</source>
         <translation>Wysyłane jest tylko to, co się zmieniło (GitHub: jeden commit). Plik zmieniony w miejscu publikacji od ostatniej publikacji ją zatrzymuje (wyjście 4 conflicts) aż do --force. --dry-run to publish preview.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="721"/>
+        <location filename="../src/cli/commands_publish.cpp" line="741"/>
         <source>Remove what a target published</source>
         <translation>Usuń to, co opublikowało miejsce publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="723"/>
+        <location filename="../src/cli/commands_publish.cpp" line="743"/>
         <source>Also files changed at the target since</source>
         <translation>Także pliki zmienione od tamtej pory w miejscu publikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_publish.cpp" line="724"/>
+        <location filename="../src/cli/commands_publish.cpp" line="744"/>
         <source>Its files go (GitHub: in one commit), a Nextcloud link too; files the target had of its own stay.</source>
         <translation>Jego pliki znikają (GitHub: w jednym commicie), link Nextclouda też; własne pliki miejsca zostają.</translation>
     </message>
@@ -34942,38 +35034,43 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Cały notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="314"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="316"/>
         <source>A free website at &lt;you&gt;.github.io from a repository of yours.</source>
         <translation>Darmowa witryna pod &lt;ty&gt;.github.io z Twojego repozytorium.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="319"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="321"/>
         <source>A folder of your Nextcloud and a public link to it, with a password if you like.</source>
         <translation>Folder Twojego Nextclouda i publiczny link do niego, jeśli chcesz – z hasłem.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="323"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="325"/>
         <source>A folder on your own web server that takes WebDAV.</source>
         <translation>Folder na własnym serwerze WWW obsługującym WebDAV.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="330"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="332"/>
         <source>A folder a web server or a sync app takes from this computer.</source>
         <translation>Folder, który serwer WWW albo program do synchronizacji bierze z tego komputera.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="402"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="408"/>
         <source>Write the expiry date as YYYY-MM-DD.</source>
         <translation>Wpisz datę ważności jako RRRR-MM-DD.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="408"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="412"/>
+        <source>Type the pages&apos; password.</source>
+        <translation>Wpisz hasło stron.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/publishcontroller.cpp" line="417"/>
         <source>Another target has this name.</source>
         <translation>Inne miejsce publikacji ma już tę nazwę.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="563"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="576"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="885"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n strona</numerusform>
@@ -34982,74 +35079,74 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="659"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="672"/>
         <source>Choose a target first.</source>
         <translation>Najpierw wybierz miejsce publikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="676"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="689"/>
         <source>Removing what was published…</source>
         <translation>Usuwanie tego, co opublikowano…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="688"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="705"/>
         <source>Reading the pages…</source>
         <translation>Wczytywanie stron…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="713"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="730"/>
         <source>Reading %1 of %2 files…</source>
         <translation>Wczytywanie pliku %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="727"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="746"/>
         <source>Making the pages…</source>
         <translation>Tworzenie stron…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="761"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="784"/>
         <source>Uploading %1 of %2…</source>
         <translation>Wysyłanie %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="763"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="786"/>
         <source>Removing %1 of %2…</source>
         <translation>Usuwanie %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="765"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="788"/>
         <source>Making the commit…</source>
         <translation>Tworzenie commitu…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="767"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="790"/>
         <source>Making the public link…</source>
         <translation>Tworzenie publicznego linku…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="769"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="792"/>
         <source>Checking GitHub Pages…</source>
         <translation>Sprawdzanie GitHub Pages…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="771"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="784"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="788"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="794"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="807"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="811"/>
         <source>Looking at the target…</source>
         <translation>Sprawdzanie miejsca publikacji…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="822"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
         <source>Could not be read</source>
         <translation>Nie udało się odczytać</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="831"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="854"/>
         <source>“%1” is not in the notebook any more.</source>
         <translation>„%1” nie ma już w notatniku.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="834"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="857"/>
         <source>%n encrypted fragment(s) are left out of the pages.</source>
         <translation>
             <numerusform>%n zaszyfrowany fragment jest pominięty w stronach.</numerusform>
@@ -35058,7 +35155,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="841"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="864"/>
         <source>%n new</source>
         <translation>
             <numerusform>%n nowy</numerusform>
@@ -35067,7 +35164,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="843"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="866"/>
         <source>%n changed</source>
         <translation>
             <numerusform>%n zmieniony</numerusform>
@@ -35076,7 +35173,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="868"/>
         <source>%n to remove</source>
         <translation>
             <numerusform>%n do usunięcia</numerusform>
@@ -35085,7 +35182,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="847"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="870"/>
         <source>%n changed there</source>
         <translation>
             <numerusform>%n zmieniony tam</numerusform>
@@ -35094,7 +35191,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="849"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="872"/>
         <source>%n unchanged</source>
         <translation>
             <numerusform>%n bez zmian</numerusform>
@@ -35103,17 +35200,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="852"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="875"/>
         <source>The target could not be checked (%1) – this is what the last publish recorded.</source>
         <translation>Nie udało się sprawdzić miejsca publikacji (%1) – to stan zapisany przy ostatniej publikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="860"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="883"/>
         <source>Nothing to send</source>
         <translation>Nie ma nic do wysłania</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="885"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n załącznik</numerusform>
@@ -35122,17 +35219,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="926"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="950"/>
         <source>“%1” is no longer published.</source>
         <translation>Wycofano publikację „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="932"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="956"/>
         <source>“%1” was up to date already.</source>
         <translation>„%1” było już aktualne.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/publishcontroller.cpp" line="933"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="957"/>
         <source>Published “%1”: %2.</source>
         <translation>Opublikowano „%1”: %2.</translation>
     </message>

@@ -333,13 +333,12 @@ done in the repository simply disappears from the list.
 ## Sharing and collaboration
 
 * **Publishing: what remains** — publishing (docs/UI.md "Publishing", core `publish`,
-  `brulion-cli publish`) is tested against in-memory servers. What remains: password-protected pages
-  on GitHub Pages and a WebDAV server (the pages encrypted with core `crypto`'s AES-GCM and PBKDF2 —
-  the encrypted notes' module — and opened with the password in the browser through WebCrypto);
-  checking by hand against github.com (Pages turned on, a custom domain, the secondary rate limit
-  of a first publish with hundreds of pictures), a real Nextcloud (its password policy, older
-  servers' OCS answers) and WebDAV servers (Apache, nginx), on the desktop, Android and in the
-  browser (CORS).
+  `brulion-cli publish`) is tested against in-memory servers. What remains: checking by hand against
+  github.com (Pages turned on, a custom domain, the secondary rate limit of a first publish with
+  hundreds of pictures; a password-protected site there), a real Nextcloud (its password policy,
+  older servers' OCS answers) and WebDAV servers (Apache, nginx; a protected site's lock pages and
+  sealed files served from them), on the desktop, Android and in the browser (CORS); protected
+  pages in Safari and on phones' browsers (only Chromium and Firefox are tested).
 * **Shared notebooks** — a notebook shared with another person: who changed what, comments; to be
   decided whether Nextcloud is enough or live editing is needed (Logseq RTC, AFFiNE, Obsidian:
   "Multiplayer" planned).

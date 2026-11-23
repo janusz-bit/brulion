@@ -2753,7 +2753,8 @@ target's dialog comes first and the item follows it). The same targets and the s
   notebook cannot send notes anywhere): another device sets up its own — on GitHub its first publish
   is still incremental (the branch's blob ids say what is there already). Passwords live in
   owner-only files next to the Nextcloud app password (`<app data>/secrets/publish-<id>`,
-  `…-share`), masked in every log line; removing a target forgets them.
+  `…-share`, `…-pages` for protected pages), masked in every log line; removing a target forgets
+  them.
 * **What is published** — the chosen target's card: its items (a page, a folder with its
   subfolders, a tag with its sub-tags, the whole notebook; "Add…" with the pickers, × removes one)
   and switches: **Also the pages they link to** (one step), **Only pages marked publish: true**
@@ -2798,11 +2799,56 @@ target's dialog comes first and the item follows it). The same targets and the s
 * Errors in words (`publish/messages.h`): a sign-in refused, a token that may not push or is
   missing, not found, offline, the rate limit, the branch that kept moving, Nextcloud's refusal
   quoted, a password missing on this device.
-* Password-protected pages on GitHub Pages or a WebDAV server (the pages encrypted, opened with a
-  password in the browser) wait for the crypto module of encrypted notes (TODO.md).
+* **Password-protected pages** (the target dialog's **Password-protected pages** switch and the
+  pages' password; `publish set --protect on` + `publish secret --pages`; core `publish/protect.h`)
+  — for any kind of target, made for GitHub Pages and WebDAV servers, which have no passwords of
+  their own: every page and file goes up encrypted and the browser asks for the password.
+  * **The scheme**: K = PBKDF2-HMAC-SHA256(the password, the site's salt, 600 000 rounds — OWASP's
+    figure for SHA-256, the strength of the encrypted notes' 220 000 SHA-512 rounds), 32 bytes;
+    each page and file sealed with AES-256-GCM under its own key HMAC-SHA256(K, its salt) — the
+    salt and the IV derived from K, the file's new name and its bytes, so an unchanged page is the
+    same bytes and the incremental publish sends it once. The site's salt (16 random bytes) is the
+    target's (`protectSalt` in `publish/targets.json`, made when protection is turned on; not
+    secret). The password never enters the notebook or the store: it is a secret like the others
+    (`<app data>/secrets/publish-<id>-pages`), asked for in the target's dialog — a target without
+    it on this device says so on its card ("A password of this target is not on this device") and
+    a publish stops with "The pages' password is not on this device" (the command line: exit 5
+    `no_page_password`). The crypto is core `crypto`'s (BearSSL), the one of the encrypted notes.
+  * **What goes up**: `index.html` stays `index.html`; every other page goes to `p/<name>.html`,
+    every picture and file to `f/<name>` (`<name>`: 20 hex digits of HMAC-SHA256(K, its path) —
+    nothing of the page's title, folder or tag); `style.css` (the site's own) and `.nojekyll` stay
+    as they are. Each page is a **lock page**: the generic title "Protected page" (in the app's
+    language), `noindex, nofollow, noarchive`, `no-referrer`, a password field, "Remember it until
+    the browser is closed" (on by default) and **Open**; the sealed page in a `<script
+    type="application/json">` ({v, kdf, hash, iterations, salt, page, iv, data}, Base64) and an
+    inline script — no external resources, no `eval`, no inline handlers. The site's search is
+    left out (its index would hold every page's text); there are no OpenGraph tags, sitemap or RSS
+    to leak anything. Visible without the password: that the site exists, that it is Brulion's, how
+    many files it has and their sizes, when they change.
+  * **In the browser**: the script derives K with WebCrypto (`importKey` + `deriveBits` PBKDF2,
+    HMAC `sign`, AES-GCM `decrypt`), parses the page with `DOMParser` (nothing in it runs) and puts
+    it in place of the lock page (its real title then), scrolls to the address's `#fragment`, then
+    fetches the files its pictures and links name (`data-sealed-src` / `data-sealed-href`) and
+    shows them as `blob:` URLs (a link's file downloads with its own name). A wrong password: "Wrong
+    password.", nothing shown. With "Remember" K (never the password) is kept in `sessionStorage`
+    under the site's salt, so the links between protected pages open at once until the tab is
+    closed; a kept K that no longer opens a page (the password changed) is forgotten and the form
+    shown. WebCrypto needs a secure context: over plain `http://` (except `localhost`) the lock page
+    says it needs https. Pictures need `fetch`: a protected site opened from disk (`file://`, a
+    folder target) shows its pages but not their pictures — "One document" has them inside.
+  * **Changing it**: another password gives other names and other bytes — the whole site is sent
+    again and the old files removed; turning protection on removes the plain files by the next
+    publish, but a GitHub branch keeps them in its history (publish to a new branch, or unpublish
+    and delete the branch, for a site that was public before). Anyone can download the encrypted
+    files and try passwords offline: the dialog asks for a long one.
 
 Tests: `tst_publish_selection`, `tst_publish_github`, `tst_publish_webdav` (core: the in-memory
-GitHub with Pages, WebDAV and Nextcloud with the OCS Share API, a folder), `tst_appio_publish`
+GitHub with Pages, WebDAV and Nextcloud with the OCS Share API, a folder), `tst_publish_protect`
+(protected sites: only ciphertext, no names, opened again by a decryption of its own, wrong
+passwords, links and files, the same bytes for unchanged pages), `tests/web/publish.e2e.mjs`
+(`scripts/web-test.sh --publish`: a protected site made by brulion-cli opened in Chromium and
+Firefox — a wrong password, the right one, a link to another page without asking again, the
+picture), `tst_appio_publish`
 (the controller), `tst_cli_process` (`publishing`: a folder target end to end), the import self-test's
 step 9 (the page's "Publish…" → a new folder target → the dry run → "Publish").
 

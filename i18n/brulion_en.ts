@@ -1354,7 +1354,7 @@
 <context>
     <name>PublishPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/PublishPanel.qml" line="512"/>
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="517"/>
         <source>…and %n more file(s).</source>
         <translation>
             <numerusform>…and %n more file.</numerusform>
@@ -2460,8 +2460,8 @@
 <context>
     <name>brulion::ioviews::PublishController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="563"/>
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="576"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="885"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -2469,7 +2469,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="834"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="857"/>
         <source>%n encrypted fragment(s) are left out of the pages.</source>
         <translation>
             <numerusform>%n encrypted fragment is left out of the pages.</numerusform>
@@ -2477,7 +2477,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="841"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="864"/>
         <source>%n new</source>
         <translation>
             <numerusform>%n new</numerusform>
@@ -2485,7 +2485,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="843"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="866"/>
         <source>%n changed</source>
         <translation>
             <numerusform>%n changed</numerusform>
@@ -2493,7 +2493,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="868"/>
         <source>%n to remove</source>
         <translation>
             <numerusform>%n to remove</numerusform>
@@ -2501,7 +2501,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="847"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="870"/>
         <source>%n changed there</source>
         <translation>
             <numerusform>%n changed there</numerusform>
@@ -2509,7 +2509,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="849"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="872"/>
         <source>%n unchanged</source>
         <translation>
             <numerusform>%n unchanged</numerusform>
@@ -2517,7 +2517,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="885"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n attachment</numerusform>

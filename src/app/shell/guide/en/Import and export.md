@@ -154,7 +154,9 @@ If someone changed a published file at the target in the meantime, nothing is re
 
 Targets and their passwords stay on this device (never in the notebook): on another device set the target up again; on GitHub its first publish there still sends only what is new. In a terminal the same is `brulion-cli publish …` (see [[Command line and AI agents|Command line and AI agents]]).
 
-Nextcloud shows a shared folder as a list of files: people open a page there or download the folder; for one file to read online choose **One document**. Pages protected with a password on GitHub Pages or your own server are not possible yet.
+Nextcloud shows a shared folder as a list of files: people open a page there or download the folder; for one file to read online choose **One document**.
+
+**Password-protected pages** (a switch in the target's settings, with the pages' password) put every page and picture on the web encrypted — on GitHub Pages and your own server too, which have no passwords of their own. Whoever opens the site sees only a “Protected page” asking for the password; the browser opens the page with it, and with **Remember it until the browser is closed** the links to the other pages open without asking again. Nothing of the pages shows without the password — not their titles, nor the names of pages, folders, tags or pictures; the site has no search then. The password stays on this device, like the other passwords. Choose a long one (several words): anyone may download the encrypted files and try passwords. The browser needs a secure address (https) to open them, and a site opened from a folder on disk shows its pages without their pictures (**One document** has them inside). Turning it on for a site published before removes the plain files with the next publish, but on GitHub they stay in the branch's history.
 
 Because your notes are ordinary files, the simplest backup is copying the notebook folder.
 

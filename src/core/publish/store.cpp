@@ -105,10 +105,12 @@ bool PublishStore::writeTargets(const QList<PublishTarget> &list)
     return writeJson(targetsFile(), QJsonDocument(QJsonObject{{u"version"_s, 1}, {u"targets"_s, array}}));
 }
 
-bool PublishStore::saveTarget(const PublishTarget &target)
+bool PublishStore::saveTarget(const PublishTarget &saved)
 {
-    if (!isSafeId(target.id))
+    if (!isSafeId(saved.id))
         return false;
+    PublishTarget target = saved;
+    ensureProtectSalt(target); // a protected target always has its salt in the store
     QList<PublishTarget> list = targets();
     const auto it = std::ranges::find(list, target.id, &PublishTarget::id);
     if (it == list.end())
@@ -167,7 +169,12 @@ QString secretFile(const QString &appDataDir, const QString &targetId, const QSt
 {
     if (!isSafeId(targetId) || appDataDir.isEmpty())
         return {};
-    return appDataDir + u"/secrets/publish-"_s + targetId + (which == u"share" ? u"-share"_s : QString());
+    QString suffix;
+    if (which == u"share")
+        suffix = u"-share"_s;
+    else if (which == u"pages")
+        suffix = u"-pages"_s;
+    return appDataDir + u"/secrets/publish-"_s + targetId + suffix;
 }
 
 QString githubTokenFile(const QString &appDataDir)

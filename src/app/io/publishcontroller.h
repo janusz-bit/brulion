@@ -6,7 +6,8 @@
 //   targets     [{ id, name, kind, kindText, icon, address, siteUrl, url (where it is, after a
 //                 publish), items [{ kind, value, label, icon }], linkedPages, onlyMarked,
 //                 extensionPages, aiConversations, content, published, lastText, lastOk,
-//                 lastError, needsPassword, needsSharePassword, needsToken }]
+//                 lastError, needsPassword, needsSharePassword, needsToken, protect,
+//                 needsPagesPassword }]
 //   current     the chosen target's id ("" none); currentTarget its row ({} none)
 //   kinds       [{ value, text, icon, description }] — the folder target on the desktop only
 //   state       "idle" → preview() → "preparing" (the chosen pages read in chunks, the site built
@@ -18,10 +19,11 @@
 //                 attachments, remoteChecked, remoteText, url, files [{ path, action, actionText,
 //                 icon, sizeText }] (what changes first, at most 300), moreFiles, leftOut [{ path,
 //                 reasonText }], conflicts [{ path, actionText }], warnings [text],
-//                 fragmentsRemoved }
+//                 fragmentsRemoved, protectedPages }
 //
 // Secrets: a target's WebDAV / Nextcloud password and a Nextcloud link's password in owner-only
-// files next to the Nextcloud app password (publish::secretFile), the GitHub token the notebooks
+// files next to the Nextcloud app password (publish::secretFile), so is the password of protected
+// pages ("pages": the pages are encrypted with it, publish/protect.h), the GitHub token the notebooks
 // from GitHub use (<app data>/secrets/github-token) — never in the store, masked in every log line.
 #pragma once
 
@@ -101,14 +103,15 @@ public:
 
     /// The fields of a target for the form: { id, name, kind, repository, branch, folder, url,
     /// server, username, path, siteUrl, title, content, share, sharePassword, shareExpires
-    /// ("yyyy-MM-dd" | ""), hasPassword, hasSharePassword } — a new one's defaults for "".
+    /// ("yyyy-MM-dd" | ""), protect, hasPassword, hasSharePassword, hasPagesPassword } — a new
+    /// one's defaults for "".
     Q_INVOKABLE QVariantMap targetFields(const QString &id) const;
     /// What is wrong with the form's fields (translated; "" when they make a target).
     Q_INVOKABLE QString checkFields(const QVariantMap &fields) const;
     /// Save a target from the form's fields (a new one when `id` is empty) with its secrets
     /// ("" keeps the one kept; `forget…` removes it): its id, "" when the fields make none.
     Q_INVOKABLE QString saveTarget(const QVariantMap &fields, const QString &password = {},
-                                   const QString &sharePassword = {});
+                                   const QString &sharePassword = {}, const QString &pagesPassword = {});
     Q_INVOKABLE void removeTarget(const QString &id);
     /// Add an item to the current target ("page" | "folder" | "tag" | "notebook", its value), then
     /// a dry run.

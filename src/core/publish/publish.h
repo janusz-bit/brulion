@@ -1,9 +1,10 @@
 // brulion::publish — a page or chosen notes as a website at an address with one command
 // (docs/UI.md "Publishing", docs/CLI.md `publish`): GitHub Pages, a WebDAV folder of one's own,
 // Nextcloud with a public link (optionally with a password and an expiry date), a folder on this
-// device. GUI-free; HTTP through sync::HttpTransport only; single-threaded (the thread that owns
-// the objects) except buildSite(), which is pure. Module "publish"; deps: util, text, markdown,
-// index, io, github, sync, log; QtCore + QtNetwork.
+// device, optionally with password-protected pages. GUI-free; HTTP through sync::HttpTransport
+// only; single-threaded (the thread that owns the objects) except buildSite(), which is pure.
+// Module "publish"; deps: util, text, markdown, index, io, github, sync, log, chat, crypto;
+// QtCore + QtNetwork.
 //
 // API overview
 //
@@ -15,14 +16,19 @@
 //                stripEncrypted(text), isEncryptedFile, isHiddenPath, isExtensionPage
 //   target.h     PublishTarget{id, name, kind GitHubPages | WebDav | Nextcloud | Folder,
 //                repository, branch, folder, url, server, username, path, share, shareExpires,
-//                sharePassword, siteUrl, title, content Site | Document, scope, last
-//                (PublishStatus)}; JSON; checkTarget(), identity(), describe(), davUrl(),
-//                pagesPath(), defaultPagesUrl(), siteAddress(), newTargetId()
+//                sharePassword, siteUrl, title, content Site | Document, protect, protectSalt,
+//                scope, last (PublishStatus)}; JSON; checkTarget(), identity(), describe(),
+//                davUrl(), pagesPath(), defaultPagesUrl(), siteAddress(), newTargetId(),
+//                ensureProtectSalt()
 //   site.h       buildSite(SiteInput) -> SiteBuild{files [SiteFile{path, data, sha256, gitSha}],
-//                pages, attachments, bytes, fragmentsRemoved, encryptedPages}: io::htmlSiteFiles
-//                (or the HTML document export as index.html), `.nojekyll` for GitHub;
+//                pages, attachments, bytes, fragmentsRemoved, encryptedPages, protectedPages,
+//                errorCode}: io::htmlSiteFiles (or the HTML document export as index.html),
+//                `.nojekyll` for GitHub, password protection (protect.h);
 //                prepareSite(index, target, read, name, now) (the command line), siteInputFor(),
 //                filesToRead()
+//   protect.h    protectSite(files, SiteProtection{password, salt, iterations}, lockTexts()) ->
+//                ProtectedSite{files, errorCode}: every page and file encrypted (AES-256-GCM, a key
+//                from PBKDF2-HMAC-SHA256), lock pages that open them with WebCrypto
 //   manifest.h   PublishManifest{identity, publishedAt, url, commit, shareId, shareUrl,
 //                sharePasswordHash, shareExpires, files {path: {sha256, size, remote}}}; JSON
 //   plan.h       planPublish(site, manifest, remote, kind, force), planUnpublish() ->
@@ -51,6 +57,7 @@
 #include "publish/messages.h"
 #include "publish/ocs.h"
 #include "publish/plan.h"
+#include "publish/protect.h"
 #include "publish/publisher.h"
 #include "publish/selection.h"
 #include "publish/site.h"
