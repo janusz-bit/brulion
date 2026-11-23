@@ -1927,28 +1927,27 @@ private Q_SLOTS:
             return u"run #%1: moved here %2, folders moved here %3, up %4, down %5, trashed here %6, deleted "
                    u"there %7; asks %8 (%9 deletions), cancelled %10, skipped %11, conflicts %12; listed %13 "
                    u"folders and %14 files there, %15 files here, %16 tracked, %17 checked, %18 requests "
-                   u"(%19 failed), %20 ms%21"_s
-                    .arg(x.runNumber)
-                    .arg(x.filesMovedHere)
-                    .arg(x.foldersMovedHere)
-                    .arg(x.uploaded)
-                    .arg(x.downloaded)
-                    .arg(x.deletedLocal)
-                    .arg(x.deletedRemote)
-                    .arg(int(x.needsConfirmation))
-                    .arg(x.pendingDeletions.size())
-                    .arg(int(x.cancelled))
-                    .arg(x.skipped.size())
-                    .arg(x.conflicts.size())
-                    .arg(x.stats.remoteFolders)
-                    .arg(x.stats.remoteFiles)
-                    .arg(x.stats.localFiles)
-                    .arg(x.stats.trackedFiles)
-                    .arg(x.stats.pathsChecked)
-                    .arg(x.stats.requests)
-                    .arg(x.stats.failedRequests)
-                    .arg(x.durationMs)
-                    .arg(errors);
+                   u"(%19 failed), %20 ms%21"_s.arg(x.runNumber)
+                           .arg(x.filesMovedHere)
+                           .arg(x.foldersMovedHere)
+                           .arg(x.uploaded)
+                           .arg(x.downloaded)
+                           .arg(x.deletedLocal)
+                           .arg(x.deletedRemote)
+                           .arg(int(x.needsConfirmation))
+                           .arg(x.pendingDeletions.size())
+                           .arg(int(x.cancelled))
+                           .arg(x.skipped.size())
+                           .arg(x.conflicts.size())
+                           .arg(x.stats.remoteFolders)
+                           .arg(x.stats.remoteFiles)
+                           .arg(x.stats.localFiles)
+                           .arg(x.stats.trackedFiles)
+                           .arg(x.stats.pathsChecked)
+                           .arg(x.stats.requests)
+                           .arg(x.stats.failedRequests)
+                           .arg(x.durationMs)
+                           .arg(errors);
         };
         QElapsedTimer timer;
         timer.start();
