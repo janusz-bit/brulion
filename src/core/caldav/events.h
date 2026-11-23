@@ -27,6 +27,7 @@ struct EventAlarm {
     bool fromEnd = false;                        ///< RELATED=END
     std::optional<io::ical::DateTimeValue> absolute;
     bool audio = false; ///< ACTION:AUDIO
+    QString action;     ///< ACTION in upper case ("" when missing)
 };
 
 /// One VEVENT: a single event, a recurring series (its master) or an exception of a series (an

@@ -391,7 +391,8 @@ std::optional<Event> eventFromComponent(const io::ical::Component &c, int maxTex
         if (!trigger)
             continue;
         EventAlarm alarm;
-        alarm.audio = a->text(u"ACTION").trimmed().compare(u"AUDIO"_s, Qt::CaseInsensitive) == 0;
+        alarm.action = a->text(u"ACTION").trimmed().toUpper();
+        alarm.audio = alarm.action == u"AUDIO";
         if (trigger->param(u"VALUE"_s).compare(u"DATE-TIME"_s, Qt::CaseInsensitive) == 0
             || !trigger->value.contains(u'P')) {
             alarm.absolute = io::ical::parseDateTime(*trigger);

@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 
 #include <algorithm>
 #include <chrono>
@@ -276,6 +277,31 @@ void ReminderScheduler::resendSoon()
     scheduleRefresh();
 }
 
+void ReminderScheduler::setExtraSource(ExtraSource source)
+{
+    m_extra = std::move(source);
+    scheduleRefresh();
+}
+
+void ReminderScheduler::extraChanged()
+{
+    scheduleRefresh();
+}
+
+QList<ScheduledNotification> ReminderScheduler::between(const QDateTime &from, const QDateTime &to)
+{
+    QList<ScheduledNotification> list = m_occurrences.between(*m_index, from, to, m_locale);
+    if (!m_extra)
+        return list;
+    const QList<ScheduledNotification> extra = m_extra(from, to);
+    if (extra.isEmpty())
+        return list;
+    list += extra;
+    std::ranges::stable_sort(list, byTime);
+    assignNativeIds(list);
+    return list;
+}
+
 void ReminderScheduler::scheduleRefresh()
 {
     if (m_running)
@@ -299,6 +325,21 @@ void ReminderScheduler::refreshAt(const QDateTime &now)
     int dropped = 0;
     QList<ScheduledNotification> next =
             m_occurrences.upcoming(*m_index, now, m_horizonDays, m_maxScheduled, &dropped, m_locale);
+    if (m_extra) {
+        // The extra source's, within the same window; the soonest of both win.
+        const QDateTime today = now.toLocalTime();
+        const QDateTime to = QDateTime(today.date().addDays(m_horizonDays), QTime(23, 59, 59));
+        const QList<ScheduledNotification> extra = m_extra(today.addSecs(-60), to);
+        if (!extra.isEmpty()) {
+            next += extra;
+            std::ranges::stable_sort(next, byTime);
+            if (next.size() > m_maxScheduled) {
+                dropped += int(next.size()) - m_maxScheduled;
+                next.resize(m_maxScheduled);
+            }
+            assignNativeIds(next);
+        }
+    }
     applyRingMinutes(next);
     m_dropped = dropped;
     if (m_forceSchedule || next != m_upcoming) {
@@ -346,7 +387,7 @@ void ReminderScheduler::processDue(const QDateTime &now)
     if (m_lastSeen.isValid() && m_lastSeen < from)
         from = std::max(m_lastSeen, now.addDays(-HistoryDays));
     followDays(now);
-    QList<ScheduledNotification> due = m_occurrences.between(*m_index, from, now, m_locale);
+    QList<ScheduledNotification> due = between(from, now);
     applyRingMinutes(due);
 
     bool handledChanged = false;
@@ -388,8 +429,7 @@ void ReminderScheduler::armTimer(const QDateTime &now)
     if (!m_running || !m_inApp || !m_index)
         return;
     followDays(now);
-    const QList<ScheduledNotification> soon =
-            m_occurrences.between(*m_index, now, now.addSecs(qint64(TimerWindowHours) * 3600), m_locale);
+    const QList<ScheduledNotification> soon = between(now, now.addSecs(qint64(TimerWindowHours) * 3600));
     const auto next = std::ranges::find_if(
             soon, [&](const ScheduledNotification &n) { return n.at > now && !m_handled.contains(n.id); });
     if (next == soon.end())
@@ -493,8 +533,18 @@ void ReminderScheduler::pruneMissed(const QDateTime &now)
         for (const ScheduledNotification &n : m_occurrences.between(*m_index, from, to, m_locale))
             alive.insert(n.id, n.taskLine);
     }
-    const qsizetype removed = m_missed.removeIf(
-            [&](const ScheduledNotification &n) { return n.at < limit || (check && !alive.contains(n.id)); });
+    // The extra source's are not in the notes: they stay for HistoryDays unless the source no
+    // longer has them (an alarm deleted or moved on the server).
+    QSet<QString> extraNow;
+    if (m_extra && !m_missed.isEmpty()) {
+        for (const ScheduledNotification &n : m_extra(m_missed.constFirst().at, std::max(m_missed.constLast().at, m_missed.constFirst().at)))
+            extraNow.insert(n.id);
+    }
+    const qsizetype removed = m_missed.removeIf([&](const ScheduledNotification &n) {
+        if (m_extra && n.path.startsWith(u"calendar:"_s))
+            return n.at < limit || !extraNow.contains(n.id);
+        return n.at < limit || (check && !alive.contains(n.id));
+    });
     bool changed = removed > 0;
     if (check) {
         for (ScheduledNotification &n : m_missed) {

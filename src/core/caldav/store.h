@@ -60,6 +60,7 @@ struct CalendarEntry {
     QStringList components; ///< "VEVENT", "VTODO" (empty: both)
     bool readOnly = false;
     bool showEvents = true; ///< its events in the calendar view
+    bool alarms = true;     ///< the VALARMs of its events ring (eventalarms.h)
     bool syncTasks = false; ///< its tasks ↔ task lines of `taskPage`
     QString taskPage;       ///< the page new tasks of the server go to ("Kalendarze/Praca.md")
     bool visible = true;    ///< shown in the calendar view (the toggle of its colour dot)

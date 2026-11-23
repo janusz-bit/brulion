@@ -136,6 +136,104 @@ private Q_SLOTS:
         QCOMPARE(env.sink.scheduled.size(), 2);
     }
 
+    void extraSourceIsScheduledFiredAndMissed()
+    {
+        Env env(dt(2026, 10, 14, 8, 0), /*native*/ true);
+        fill(env.index, {{u"Praca.md"_s, lines({u"- Zwykłe ⏰ 2026-10-14 10:00"_s})}});
+        // An event of a calendar: three alarms, one of them out of the window of the first look.
+        QList<ScheduledNotification> events;
+        const auto event = [&](const QDateTime &at, const QString &title, bool alarm) {
+            ScheduledNotification n;
+            n.at = at;
+            n.title = title;
+            n.alarm = alarm;
+            n.path = u"calendar:c-1"_s;
+            n.id = u"event-"_s + title + at.toString(u"HHmm"_s);
+            events.append(n);
+        };
+        event(dt(2026, 10, 14, 9, 45), u"Zebranie zespołu"_s, false);
+        event(dt(2026, 10, 14, 12, 0), u"Dentysta"_s, true);
+        event(dt(2026, 10, 30, 12, 0), u"Za daleko"_s, false);
+        int calls = 0;
+        auto s = env.scheduler();
+        s->setExtraSource([&](const QDateTime &from, const QDateTime &to) {
+            ++calls;
+            QList<ScheduledNotification> out;
+            for (const ScheduledNotification &n : std::as_const(events)) {
+                if (n.at >= from && n.at <= to)
+                    out.append(n);
+            }
+            return out;
+        });
+        s->start();
+        QVERIFY(calls > 0);
+        // The notes' and the extra source's, in time order, nativeIds unique.
+        QCOMPARE(keys(env.sink.scheduled.last()),
+                 QStringList({u"2026-10-14 09:45 Zebranie zespołu"_s, u"2026-10-14 10:00 Zwykłe"_s,
+                              u"2026-10-14 12:00 Dentysta"_s}));
+        QSet<int> ids;
+        for (const ScheduledNotification &n : env.sink.scheduled.last())
+            ids.insert(n.nativeId);
+        QCOMPARE(ids.size(), 3);
+        QVERIFY(!ids.contains(0));
+        QVERIFY(env.sink.scheduled.last().at(2).alarm);
+
+        // A new alarm appears (a sync brought it): the set is handed over again.
+        event(dt(2026, 10, 14, 8, 30), u"Nowe z serwera"_s, false);
+        const qsizetype before = env.sink.scheduled.size();
+        s->extraChanged();
+        QTRY_COMPARE(env.sink.scheduled.size(), before + 1);
+        QCOMPARE(env.sink.scheduled.last().first().title, u"Nowe z serwera"_s);
+        QCOMPARE(env.sink.scheduled.last().size(), 4);
+    }
+
+    void extraSourceFiresInApp()
+    {
+        Env env(dt(2026, 10, 14, 9, 44));
+        fill(env.index, {{u"Praca.md"_s, lines({u"- Zwykłe ⏰ 2026-10-14 10:00"_s})}});
+        ScheduledNotification n;
+        n.at = dt(2026, 10, 14, 9, 45);
+        n.title = u"Zebranie zespołu"_s;
+        n.path = u"calendar:c-1"_s;
+        n.id = u"event-1"_s;
+        auto s = env.scheduler();
+        s->setExtraSource([&](const QDateTime &from, const QDateTime &to) {
+            return n.at >= from && n.at <= to ? QList<ScheduledNotification>{n} : QList<ScheduledNotification>{};
+        });
+        QSignalSpy firedSpy(s.get(), &ReminderScheduler::fired);
+        s->start();
+        QCOMPARE(s->nextFireTime(), dt(2026, 10, 14, 9, 45));
+        env.clock.set(dt(2026, 10, 14, 9, 45, 1));
+        s->checkNow();
+        QCOMPARE(env.sink.shownTitles(), QStringList({u"Zebranie zespołu"_s}));
+        QCOMPARE(firedSpy.size(), 1);
+        env.clock.set(dt(2026, 10, 14, 9, 46));
+        s->checkNow();
+        QCOMPARE(env.sink.shown.size(), 1); // once
+        QCOMPARE(s->nextFireTime(), dt(2026, 10, 14, 10, 0));
+
+        // The app was closed over the next one: caught up when it is not too late, else missed
+        // (and kept while the source has it, dropped once the source does not).
+        s.reset();
+        env.clock.set(dt(2026, 10, 14, 17, 0));
+        n.at = dt(2026, 10, 14, 9, 50);
+        n.id = u"event-2"_s;
+        auto later = env.scheduler();
+        later->setExtraSource([&](const QDateTime &from, const QDateTime &to) {
+            return n.at >= from && n.at <= to ? QList<ScheduledNotification>{n} : QList<ScheduledNotification>{};
+        });
+        later->start();
+        QCOMPARE(later->missed().size(), 2); // the note's 10:00 and the event's 09:50, both over 6 h late
+        QVERIFY(std::ranges::any_of(later->missed(), [](const ScheduledNotification &m) { return m.id == u"event-2"_s; }));
+        later->refresh();
+        QCOMPARE(later->missed().size(), 2);
+        // The event is gone from the source (deleted on the server): its missed entry goes too.
+        n.id = u"event-3"_s;
+        n.at = dt(2026, 10, 20, 9, 0);
+        later->refresh();
+        QVERIFY(!std::ranges::any_of(later->missed(), [](const ScheduledNotification &m) { return m.id == u"event-2"_s; }));
+    }
+
     void firesOnce()
     {
         Env env(dt(2026, 10, 14, 8, 59));

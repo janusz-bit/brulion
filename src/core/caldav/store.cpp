@@ -109,6 +109,7 @@ QJsonObject CalendarSettings::toJson() const
                                 {u"components"_s, QJsonArray::fromStringList(c.components)},
                                 {u"readOnly"_s, c.readOnly},
                                 {u"showEvents"_s, c.showEvents},
+                                {u"alarms"_s, c.alarms},
                                 {u"syncTasks"_s, c.syncTasks},
                                 {u"taskPage"_s, c.taskPage},
                                 {u"visible"_s, c.visible}});
@@ -152,6 +153,7 @@ CalendarSettings CalendarSettings::fromJson(const QJsonObject &json)
             c.components.append(comp.toString());
         c.readOnly = o.value(u"readOnly"_s).toBool();
         c.showEvents = o.value(u"showEvents"_s).toBool(true);
+        c.alarms = o.value(u"alarms"_s).toBool(true);
         c.syncTasks = o.value(u"syncTasks"_s).toBool();
         c.taskPage = o.value(u"taskPage"_s).toString();
         c.visible = o.value(u"visible"_s).toBool(true);
