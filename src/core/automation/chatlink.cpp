@@ -19,7 +19,8 @@ bool isVariationSelector(char32_t code)
 }
 
 /// A character an emoji sequence is made of (pictographs, dingbats, arrows and the like): a
-/// zero-width joiner between two of them is the emoji's own (👨‍👩‍👧), not something hidden.
+/// zero-width joiner between two of them is the emoji's own (a family: man, ZWJ, woman, ZWJ, girl),
+/// not something hidden.
 bool isEmojiLike(char32_t code)
 {
     return code >= 0x1F000 || (code >= 0x2190 && code <= 0x2BFF) || (code >= 0x2300 && code <= 0x23FF)
