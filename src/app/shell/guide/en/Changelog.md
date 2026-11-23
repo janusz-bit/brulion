@@ -7,6 +7,29 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.29.0 — November 23, 2026
+
+**New**
+- **The AI chat grows up** — write on while it answers (messages wait in line, **Send now** with Ctrl+Enter), **Edit from here** and **Fork from here** on a message, **Quote**, how much an agent may do without asking (per conversation), the files a turn changed with **Undo these changes**, agents that hand work to other agents, conversations on a schedule ("every day at 7:30"), Claude Code's and Codex's subscription limits beside the agent, dictation on the computer, and charts, Mermaid diagrams and formulas drawn in answers. The list has pinned and archived conversations, a search through the messages and badges for the ones that need you.
+- **Report an AI answer** — **Report response…** in an answer's menu: pick a reason, see and edit the report, then send it — or only hide the answer.
+- **Reminders in words** — a reminder in the block you edit reads "tomorrow 18:00", has its menu (snooze, change, remove) and the caret steps over it as one character.
+- **Tables by keyboard** — the arrows and Tab move between cells; Shift+arrows select cells to copy, cut, clear or paste (TSV, CSV, Markdown tables); a database view's field moves with Tab and the arrows too.
+- **Dataview: inline queries and calendars** — `` `= this.file.name` `` shows its value, and a `CALENDAR` query is a month of your pages.
+- **Search inside documents** — the whole-notebook search reads Word (DOCX), PowerPoint (PPTX), OpenDocument (ODT) and EPUB files too (`in:documents`).
+- **Password-protected websites** — publishing can encrypt every page and picture; visitors open them with the password, in their browser.
+- **Calendar events ring** — the alarms of CalDAV events ring like your reminders; a series changed "this and following", subtasks moved under another task, `brulion-cli calendar`.
+- **Themes as pages** — a page with a ```` ```theme ```` block is a theme you pick in **Settings → Appearance → Themes**, synced with the notebook and shared as a file; **Save the look as a theme page**.
+- **Spelling everywhere** — underlines in Markdown source mode (Ctrl+E) and in the blocks you are not editing, with the same suggestions.
+- **Flashcards** — the Spaced Repetition plugin's settings (separators, an end-of-card marker, bold and curly clozes, folders as decks) belong to the notebook, and notes tagged `#review` are reviewed as a whole.
+- **Vim keys** — Ctrl+A / Ctrl+X on numbers, sentences, H M L, macros (`q`, `@`), `:g` and `:normal`.
+- **Extensions** — `b.app.inputRule` (`->` becomes `→` as you type), `b.app.tagStyle` (a tint for blocks tagged `#pilne`), five more places for their buttons (a tab's menu, the folder tree, the phone's bottom bar, the keyboard's toolbar, sharing), the notebook's settings in `b.app.settings()`, and macros' values in Tasks, backlinks, query results and copied text.
+- **Backups** — **Restore from a file…** (**Settings → Backups**) takes a Brulion backup from anywhere, also another notebook's, and says first what it holds; files of any size are restored in little memory, and the browser compresses big files in its backups too.
+- **And more** — formulas from articles in the Web Clipper, Polish instructions for 144 exercises in the gym, a Google Play build that syncs a folder you pick, big attachments synced and imported in little memory, the phone's settings as a plain list.
+
+**Fixes**
+- A dialog closed over a page no longer gives the keyboard to the hidden Journal.
+- Code blocks in extension views lose their fences and wrap.
+
 ## 0.28.1 — November 22, 2026
 
 **New**

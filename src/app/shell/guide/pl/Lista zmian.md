@@ -7,6 +7,29 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.29.0 — 23 listopada 2026
+
+**Nowe**
+- **Dojrzalszy czat z AI** — pisz dalej, gdy odpowiada (wiadomości czekają w kolejce, **Wyślij teraz** przez Ctrl+Enter), **Edytuj od tego miejsca** i **Rozgałęź od tego miejsca** na wiadomości, **Cytuj**, ile agent może zrobić bez pytania (osobno w każdej rozmowie), pliki zmienione w turze z **Cofnij te zmiany**, agenci przekazujący pracę innym agentom, rozmowy według harmonogramu („codziennie o 7:30”), limity subskrypcji Claude Code i Codex obok agenta, dyktowanie na komputerze oraz wykresy, diagramy Mermaid i wzory rysowane w odpowiedziach. Na liście są przypięte i zarchiwizowane rozmowy, szukanie w wiadomościach i znaczki przy rozmowach, które na Ciebie czekają.
+- **Zgłoś odpowiedź AI** — **Zgłoś odpowiedź…** w menu odpowiedzi: wybierz powód, zobacz i popraw zgłoszenie, a potem je wyślij — albo tylko ukryj odpowiedź.
+- **Przypomnienia słowami** — przypomnienie w edytowanym bloku brzmi „jutro 18:00”, ma swoje menu (odłóż, zmień, usuń), a kursor przeskakuje je jak jeden znak.
+- **Tabele z klawiatury** — strzałki i Tab przechodzą między komórkami; Shift ze strzałkami zaznacza komórki do skopiowania, wycięcia, wyczyszczenia albo wklejenia (TSV, CSV, tabele Markdown); pole widoku bazy danych też przechodzi Tabem i strzałkami.
+- **Dataview: zapytania w tekście i kalendarze** — `` `= this.file.name` `` pokazuje swoją wartość, a zapytanie `CALENDAR` to miesiąc Twoich stron.
+- **Szukanie w dokumentach** — szukanie w całym notatniku czyta też pliki Worda (DOCX), PowerPointa (PPTX), OpenDocument (ODT) i EPUB (`w:dokumenty`).
+- **Witryny chronione hasłem** — publikowanie może zaszyfrować każdą stronę i obrazek; odwiedzający otwierają je hasłem, w swojej przeglądarce.
+- **Wydarzenia z kalendarza dzwonią** — alarmy wydarzeń CalDAV dzwonią jak Twoje przypomnienia; seria zmieniona „to i następne”, podzadania przeniesione pod inne zadanie, `brulion-cli calendar`.
+- **Motywy jako strony** — strona z blokiem ```` ```theme ```` to motyw, który wybierasz w **Ustawienia → Wygląd → Motywy**, synchronizowany z notatnikiem i udostępniany jako plik; **Zapisz wygląd jako stronę motywu**.
+- **Pisownia wszędzie** — podkreślenia w trybie źródła Markdown (Ctrl+E) i w blokach, których nie edytujesz, z tymi samymi podpowiedziami.
+- **Fiszki** — ustawienia wtyczki Spaced Repetition (separatory, znacznik końca fiszki, luki z pogrubienia i klamer, foldery jako talie) należą do notatnika, a notatki z tagiem `#review` powtarzasz w całości.
+- **Klawisze Vima** — Ctrl+A / Ctrl+X na liczbach, zdania, H M L, makra (`q`, `@`), `:g` i `:normal`.
+- **Rozszerzenia** — `b.app.inputRule` (`->` zmienia się w `→` w trakcie pisania), `b.app.tagStyle` (odcień bloków z tagiem `#pilne`), pięć nowych miejsc na ich przyciski (menu karty, drzewo folderów, dolny pasek telefonu, pasek nad klawiaturą, udostępnianie), ustawienia notatnika w `b.app.settings()` oraz wartości makr w Zadaniach, odnośnikach zwrotnych, wynikach zapytań i kopiowanym tekście.
+- **Kopie zapasowe** — **Przywróć z pliku…** (**Ustawienia → Kopie zapasowe**) przyjmuje kopię Brulionu skądkolwiek, także innego notatnika, i najpierw mówi, co w niej jest; pliki dowolnej wielkości wracają w małej pamięci, a przeglądarka kompresuje w kopiach także duże pliki.
+- **I więcej** — wzory z artykułów w Web Clipperze, polskie instrukcje 144 ćwiczeń w Siłowni, wersja dla Google Play synchronizująca wybrany folder, duże załączniki synchronizowane i importowane w małej pamięci, ustawienia na telefonie jako zwykła lista.
+
+**Poprawki**
+- Okno zamknięte nad stroną nie oddaje już klawiatury ukrytemu Dziennikowi.
+- Bloki kodu w widokach rozszerzeń tracą płotki i się zawijają.
+
 ## 0.28.1 — 22 listopada 2026
 
 **Nowe**
