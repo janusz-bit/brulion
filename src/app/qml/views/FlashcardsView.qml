@@ -9,8 +9,11 @@ import Brulion
 // deck: the question, Space shows the answer, 1–4 grade it (Again, Hard, Good, Easy with the next
 // interval), U undoes the last grade —, "Statistics" — the counts, the grades per day, the
 // retention, the forecast. Every grade is written next to its card in its note by the extension.
+// "Notes" — opened from the decks' "Notes to review" — reviews the notes tagged #review as a whole
+// (the plugin's note reviews: a note, Hard · Good · Easy with the days they schedule, Skip, Undo;
+// its state in the note's frontmatter).
 //
-// Route parameters: tab ("decks" | "review" | "stats"), deck ("" every card, "tag:flashcards/…",
+// Route parameters: tab ("decks" | "review" | "stats" | "notes"), deck ("" every card, "tag:flashcards/…",
 // "page:Name", "folder:Path"), group ("tag" | "page" | "folder": the decks' list), ahead (days of
 // reviews studied ahead), more (new cards beyond today's limit).
 //
@@ -38,7 +41,7 @@ FocusScope {
 
     function applyRoute(): void {
         const tab = AppController.routeText(root.route, "tab")
-        root.tab = tab === "review" || tab === "stats" ? tab : "decks"
+        root.tab = tab === "review" || tab === "stats" || tab === "notes" ? tab : "decks"
         root.deck = AppController.routeText(root.route, "deck")
         const group = AppController.routeText(root.route, "group")
         root.group = group === "page" || group === "folder" ? group : "tag"
@@ -111,7 +114,7 @@ FocusScope {
         focus: true
         lines: cards
         maximumWidth: root.maximumWidth
-        Accessible.name: root.tab === "review" ? qsTr("Review") : root.tab === "stats" ? qsTr("Statistics") : qsTr("Decks")
+        Accessible.name: root.tab === "review" ? qsTr("Review") : root.tab === "stats" ? qsTr("Statistics") : root.tab === "notes" ? qsTr("Notes to review") : qsTr("Decks")
 
         header: Item {
             width: lines.width
@@ -165,7 +168,7 @@ FocusScope {
                     id: tabBar
                     objectName: "flashcardsTabs"
                     model: root.tabs
-                    currentValue: root.tab
+                    currentValue: root.tab === "notes" ? "decks" : root.tab // the notes are one of the decks' entries
                     accessibleName: qsTr("Flashcards' views")
                     onActivated: (value) => root.show("" + value, "" + value === "decks" ? "" : root.deck)
                 }

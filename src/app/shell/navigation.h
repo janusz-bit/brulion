@@ -10,7 +10,7 @@
 //   "tasks"        TasksView                     query?
 //   "habits"       HabitsView                    month? ("YYYY-MM")
 //   "gym"          GymView (the gym extension)   tab? ("today" | "progress"), exercise?
-//   "flashcards"   FlashcardsView (fiszki)       tab? ("decks" | "review" | "stats"), deck?, group?,
+//   "flashcards"   FlashcardsView (fiszki)       tab? ("decks" | "review" | "stats" | "notes"), deck?, group?,
 //                                                ahead?, more?
 //   "graph"        GraphView                     path? (focus)
 //   "search"       SearchView                    query?

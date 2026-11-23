@@ -5785,8 +5785,9 @@ QQuickItem *enclosingOfType(QQuickItem *item, const char *type)
 /// command and the sidebar's count of cards to study, a deck of two cards written for it, its review
 /// session by real input — Space shows the answer (a tap on touch screens), 3 grades it (a tap on
 /// "Good"): the card's line gets its scheduling comment and the month's review log a line —, the
-/// next card asked, U (a tap on Undo) puts both notes back; the notebook and the setting are left as
-/// they were.
+/// next card asked, U (a tap on Undo) puts both notes back; then a note tagged for review as a whole
+/// (the notebook's tag setting): listed in the decks, shown, graded with 2 (a tap on "Good": its
+/// frontmatter written), undone; the notebook and the settings are left as they were.
 void checkFlashcards(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -5803,9 +5804,16 @@ void checkFlashcards(QQuickWindow *window, AppController *app, const Check &chec
         const QString path = ws->newPagePath(log);
         oldLogs.insert(path, ws->exists(path) ? ws->readFile(path) : QString());
     }
+    // The notes to review: a note of its own under a tag of its own (the notebook's setting, put back).
+    const QString notePage = ws->newPagePath(u"Notatka samotestu"_s);
+    const QString noteText = u"---\ntags: [samotest]\n---\n# Notatka samotestu\n\nTreść do powtórki.\n"_s;
+    const QString oldReviewTags = ws->vaultConfig().value(u"flashcards"_s).toMap().value(u"reviewTags"_s).toString();
     const auto restore = [&] {
         if (ws->exists(deck))
             ws->deletePage(deck);
+        if (ws->exists(notePage))
+            ws->deletePage(notePage);
+        ws->setConfig({{u"flashcards"_s, QVariantMap{{u"reviewTags"_s, oldReviewTags}}}});
         for (auto [path, content] : std::as_const(oldLogs).asKeyValueRange()) {
             if (!content.isEmpty())
                 ws->writeFile(path, content);
@@ -5903,6 +5911,57 @@ void checkFlashcards(QQuickWindow *window, AppController *app, const Check &chec
     }
     check(waitFor([&] { return ws->readFile(deck) == deckText; }, 3000), "Undo puts the card's line back");
     check(waitFor([&] { return question() == u"Stolica Peru samotestu"; }, 3000), "and asks the card again");
+
+    // A note reviewed as a whole: the decks' entry, the note shown, 2 (a tap on "Good") writes its
+    // frontmatter, U (a tap on Undo) puts the note back.
+    if (ws->exists(notePage)) {
+        check(false, "the self-test's note page is not there before");
+        restore();
+        return;
+    }
+    check(ws->setConfig({{u"flashcards"_s, QVariantMap{{u"reviewTags"_s, u"samotest"_s}}}}), "the review tag is set");
+    ws->writeFile(notePage, noteText);
+    app->navigate({{u"view"_s, u"flashcards"_s}, {u"tab"_s, u"decks"_s}});
+    const QString entry = english ? u"Notes to review"_s : u"Notatki do powtórki"_s;
+    check(waitFor([&] {
+              for (int i = 0; i < model->rowCount(); ++i) {
+                  const auto *controls = qobject_cast<ExtensionControlsModel *>(
+                          model->data(model->index(i), ExtensionViewModel::ControlsRole).value<QObject *>());
+                  for (int k = 0; controls && k < controls->rowCount(); ++k)
+                      if (controls->data(controls->index(k), ExtensionControlsModel::TextRole).toString() == entry)
+                          return true;
+              }
+              return false;
+          }, 5000),
+          "the decks list “Notes to review”");
+    app->navigate({{u"view"_s, u"flashcards"_s}, {u"tab"_s, u"notes"_s}});
+    check(waitFor([&] { return model->view() == u"notes" && question().contains(u"Treść do powtórki"_s); }, 5000),
+          "the note shows as it reads");
+    check(!question().contains(u"sr-due"_s), "without its frontmatter");
+    if (steadyItem(window, [&] { return button(good); }, &at)) {
+        if (touch) {
+            tapOrClick(window, at, touch);
+        } else {
+            list->forceActiveFocus();
+            sendKey(window, Qt::Key_2, Qt::NoModifier, u"2"_s);
+        }
+        check(waitFor([&] {
+                  const QString text = ws->readFile(notePage);
+                  return text.startsWith(u"---\ntags: [samotest]\nsr-due: "_s) && text.contains(u"\nsr-interval: 3\nsr-ease: 250\n---\n"_s)
+                         && text.endsWith(u"Treść do powtórki.\n"_s);
+              }, 3000),
+              "the grade is written into the note's frontmatter");
+        if (touch) {
+            if (steadyItem(window, [&] { return button(undo); }, &at))
+                tapOrClick(window, at, touch);
+        } else {
+            list->forceActiveFocus();
+            sendKey(window, Qt::Key_U, Qt::NoModifier, u"u"_s);
+        }
+        check(waitFor([&] { return ws->readFile(notePage) == noteText; }, 3000), "Undo puts the note back");
+    } else {
+        check(false, "the note's grades show");
+    }
     restore();
 }
 

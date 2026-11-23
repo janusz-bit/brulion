@@ -48,6 +48,7 @@ constexpr auto kFcHighlights = "clozeHighlights"_L1;
 constexpr auto kFcBold = "clozeBold"_L1;
 constexpr auto kFcCurly = "clozeCurly"_L1;
 constexpr auto kFcFolders = "foldersAsDecks"_L1;
+constexpr auto kFcReviewTags = "reviewTags"_L1;
 
 std::optional<QString> pathValue(const QJsonValue &v)
 {
@@ -199,6 +200,12 @@ void mergeFlashcards(ParsedVaultConfig &out)
         else
             out.warnings.append(u"Invalid value for \"%1.%2\": %3"_s.arg(kFlashcards, kFcTags, compactJson(*v)));
     }
+    if (const auto v = o.constFind(kFcReviewTags); v != o.constEnd()) {
+        if (const auto tags = tagsValue(*v))
+            fc.reviewTags = *tags;
+        else
+            out.warnings.append(u"Invalid value for \"%1.%2\": %3"_s.arg(kFlashcards, kFcReviewTags, compactJson(*v)));
+    }
     text(kFcSingle, &FlashcardsConfig::singleLineSeparator, false);
     text(kFcSingleReversed, &FlashcardsConfig::singleLineReversedSeparator, false);
     text(kFcMulti, &FlashcardsConfig::multilineSeparator, true);
@@ -217,6 +224,8 @@ QJsonObject flashcardsObject(const FlashcardsConfig &c)
     QJsonObject o;
     if (const QStringList tags = normalizeFlashcardTags(c.tags); !tags.isEmpty())
         o.insert(kFcTags, QJsonArray::fromStringList(tags));
+    if (const QStringList reviewTags = normalizeFlashcardTags(c.reviewTags); !reviewTags.isEmpty())
+        o.insert(kFcReviewTags, QJsonArray::fromStringList(reviewTags));
     const auto text = [&](QLatin1StringView key, const QString &value, const QString &def, bool trim) {
         const auto ok = separatorValue(value, trim);
         if (ok && *ok != def)
@@ -364,7 +373,7 @@ QByteArray serializeVaultConfig(const VaultConfig &config, const QJsonObject &ra
     if (there == raw.constEnd() || there->isObject()) {
         QJsonObject fc = there == raw.constEnd() ? QJsonObject() : there->toObject();
         for (const QLatin1StringView key : {kFcTags, kFcSingle, kFcSingleReversed, kFcMulti, kFcMultiReversed,
-                                            kFcEndMarker, kFcHighlights, kFcBold, kFcCurly, kFcFolders})
+                                            kFcEndMarker, kFcHighlights, kFcBold, kFcCurly, kFcFolders, kFcReviewTags})
             fc.remove(key);
         for (auto it = mine.constBegin(); it != mine.constEnd(); ++it)
             fc.insert(it.key(), it.value());
@@ -426,14 +435,14 @@ bool applyFlashcardsConfig(FlashcardsConfig &config, const QVariantMap &values)
             return true;
         };
         bool ok = false;
-        if (key == kFcTags) {
+        if (key == kFcTags || key == kFcReviewTags) {
             if (v.metaType().id() == QMetaType::QString || v.metaType().id() == QMetaType::QStringList) {
                 const auto tags = tagsValue(v.metaType().id() == QMetaType::QString
                                                     ? QJsonValue(v.toString())
                                                     : QJsonValue(QJsonArray::fromStringList(v.toStringList())));
                 ok = tags.has_value();
                 if (ok)
-                    c.tags = *tags;
+                    (key == kFcTags ? c.tags : c.reviewTags) = *tags;
             }
         } else if (key == kFcSingle)
             ok = text(&FlashcardsConfig::singleLineSeparator, false);
@@ -473,6 +482,8 @@ QVariantMap flashcardsSettings(const FlashcardsConfig &c)
                   {u"foldersAsDecks"_s, c.foldersAsDecks}};
     if (const QStringList tags = normalizeFlashcardTags(c.tags); !tags.isEmpty())
         m.insert(u"tags"_s, tags.join(u", "_s));
+    if (const QStringList reviewTags = normalizeFlashcardTags(c.reviewTags); !reviewTags.isEmpty())
+        m.insert(u"reviewTags"_s, reviewTags.join(u", "_s));
     return m;
 }
 

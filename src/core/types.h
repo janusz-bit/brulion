@@ -282,6 +282,7 @@ struct FlashcardsConfig {
     bool clozeBold = false;      ///< `**answer**`
     bool clozeCurly = false;     ///< `{{answer}}`
     bool foldersAsDecks = false; ///< a card's deck is its note's folder
+    QStringList reviewTags;      ///< the tags of notes reviewed as a whole, as `tags`; empty: "review"
 
     friend bool operator==(const FlashcardsConfig &, const FlashcardsConfig &) = default;
 };

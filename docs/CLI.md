@@ -268,6 +268,8 @@ Never compute a hash yourself.
 | `card show <id>` | `card list`'s options | one card, and `next`: what each grade would schedule `{Again: {due, interval}, …}` | |
 | `card review <id> <grade>` | again, hard, good, easy (1–4, znowu, trudne, dobrze, łatwe); `card list`'s options | schedules the card with FSRS-6 and writes its state next to it (the plugin's `<!--SR:…-->` comment, Logseq's `card-*` properties) and a line into the review log: `{id, grade, before, after, interval, question, page, path, line, writes}` | yes |
 | `card grade <id> <grade>` | as `card review` | `card review` | yes |
+| `card notes` | `[--due] [--limit N] [--review-tags T]` | the notes reviewed as a whole (the Spaced Repetition plugin's `#review` notes, docs/SYNTAX.md §15 "Notes to review"): `{notes: [{page, path, status (new, due, scheduled), due?, interval?, ease?, next: {hard, good, easy: {due, interval, ease, text}}}], counts: {due, new, scheduled, total}, today, tags}`, by path (`--due`: what to review now — due notes, the earliest first, then new ones) | |
+| `card review-note <page> <grade>` | hard, good, easy (2–4, trudne, dobrze, łatwe); a name or a path; `--review-tags T` | schedules the note as the plugin does and writes `sr-due`, `sr-interval`, `sr-ease` into its frontmatter (made when missing), nothing else of the note: `{page, path, grade, before, after: {due, interval, ease}, interval, writes}` | yes |
 | `card stats` | `[--deck D]`, `card list`'s options | `{total, new, learning, young, mature, due, reviewedToday, retention, reviews, perDay: [{date, correct, again}], forecast: [{date, count}]}` (30 days back and ahead) | |
 | `gym volume` | `[--weeks N] [--unit kg\|lb]` | the weekly volume (docs/SYNTAX.md §5 "Gym"): sets × reps × weight of the done sets per muscle and week, the last N weeks (12 by default, at most 104): `{unit, weeks: [first days], totals, sets, current, average, muscles: [{id, name, volume: [...], sets: [...], current, currentSets, average}], unassigned: [exercises whose muscles nobody knows]}` — every primary muscle the volume and the sets, every secondary one half, bodyweight sets with the logged body weight | |
 | `gym weights` | `[--from D] [--to D] [--unit kg\|lb]` | the body weight log: `{unit, entries: [{date, weight, unit, kg, fat?, notes, trend, line, text}], latest, latestDate, trend, change7, change30, fat}` — the trend an average smoothed by 10 % a day | |
@@ -407,13 +409,16 @@ decks, the plugin's separators, end marker, cloze kinds and folders as decks: do
 the tags.
 
 The `card` commands are run by the built-in flashcards extension (`fiszki.luau`, its commands
-`list`, `show`, `grade` and `stats` with the options as `ctx.args`) as the app's Flashcards view
+`list`, `show`, `grade`, `notes`, `review-note` and `stats` with the options as `ctx.args`) as the app's Flashcards view
 runs them: a grade's two writes — the card's note and the month's review log (made when missing) —
 go each through the command line's edit (the lock, `--dry-run`, `--diff`, hashes; a note that
 changed while it was computed is exit 4 `concurrent_change`). An id that is no card is exit 3
 `card_not_found`, a grade that is none exit 2 `bad_argument`. `--now` sets the review's time. An
 agent quizzes the user so: `card due` → ask the `question` → show the `answer` → `card review <id>
-good` (the MCP tools `brulion_card_due`, `brulion_card_review`).
+good` (the MCP tools `brulion_card_due`, `brulion_card_review`). The notes to review work the same way: `card notes --due`
+→ read the note → `card review-note <page> good` (`brulion_card_notes`, `brulion_card_review_note`); a note without
+the review tag is exit 2 `not_review_note`, one that does not exist exit 3 `note_not_found`, a grade that is none exit 2
+`bad_argument` (`again` is none: a note is graded hard, good or easy).
 
 The `gym` commands are run by the built-in gym extension (`silownia.luau`, its commands
 `volume-report`, `weights`, `weight` and `catalog-search` with the options as `ctx.args`) whether the

@@ -519,6 +519,58 @@ private Q_SLOTS:
         QVERIFY(r.result().value(u"events"_s).toArray().isEmpty());
     }
 
+    // card notes / card review-note (docs/SYNTAX.md §15 "Notes to review"): the notes tagged #review
+    // as a whole, their state in the frontmatter, the plugin's scheduling (kNow is 2026-10-14).
+    void cardNotes()
+    {
+        const QString dir = vault({{u"A.md"_s, "---\ntags: [review]\nsr-due: 2026-10-10\nsr-interval: 3\nsr-ease: 250\n---\nTreść\n"},
+                                   {u"Nauka/Nowa.md"_s, "#review\nżółw\n"},
+                                   {u"Inna.md"_s, "Bez tagu\n"}});
+        Run r = run(dir, {u"card"_s, u"notes"_s});
+        QCOMPARE(r.code, 0);
+        const QJsonArray notes = r.result().value(u"notes"_s).toArray();
+        QCOMPARE(notes.size(), 2);
+        QCOMPARE(notes[0].toObject().value(u"path"_s).toString(), u"A.md"_s);
+        QCOMPARE(notes[0].toObject().value(u"status"_s).toString(), u"due"_s);
+        QCOMPARE(notes[0].toObject().value(u"next"_s).toObject().value(u"good"_s).toObject().value(u"due"_s).toString(),
+                 u"2026-10-27"_s);
+        QCOMPARE(notes[1].toObject().value(u"status"_s).toString(), u"new"_s);
+        QCOMPARE(r.result().value(u"counts"_s).toObject().value(u"due"_s).toInt(), 1);
+        QCOMPARE(r.result().value(u"counts"_s).toObject().value(u"new"_s).toInt(), 1);
+        // Another tag of the notebook's own.
+        r = run(dir, {u"card"_s, u"notes"_s, u"--review-tags"_s, u"nic"_s});
+        QCOMPARE(r.result().value(u"notes"_s).toArray().size(), 0);
+
+        // Nothing written by a dry run; then the frontmatter of the note, the rest as it was.
+        const QByteArray before = readFile(dir + u"/A.md"_s);
+        r = run(dir, {u"--dry-run"_s, u"card"_s, u"review-note"_s, u"A"_s, u"good"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/A.md"_s), before);
+        r = run(dir, {u"card"_s, u"review-note"_s, u"A"_s, u"good"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"after"_s).toObject().value(u"due"_s).toString(), u"2026-10-27"_s);
+        QCOMPARE(readFile(dir + u"/A.md"_s),
+                 QByteArray("---\ntags: [review]\nsr-due: 2026-10-27\nsr-interval: 13\nsr-ease: 250\n---\nTreść\n"));
+        // A new note gets a frontmatter; by its path, the Polish grade.
+        r = run(dir, {u"card"_s, u"review-note"_s, u"Nauka/Nowa.md"_s, u"łatwe"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/Nauka/Nowa.md"_s),
+                 QByteArray("---\nsr-due: 2026-10-18\nsr-interval: 4\nsr-ease: 270\n---\n#review\nżółw\n"));
+        r = run(dir, {u"card"_s, u"notes"_s, u"--due"_s});
+        QCOMPARE(r.result().value(u"notes"_s).toArray().size(), 0);
+        // Mistakes: a grade that is none, a note without the tag, a note that does not exist.
+        r = run(dir, {u"card"_s, u"review-note"_s, u"A"_s, u"again"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_argument"_s);
+        r = run(dir, {u"card"_s, u"review-note"_s, u"Inna"_s, u"good"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"not_review_note"_s);
+        QCOMPARE(readFile(dir + u"/Inna.md"_s), QByteArray("Bez tagu\n"));
+        r = run(dir, {u"card"_s, u"review-note"_s, u"Brak"_s, u"good"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"note_not_found"_s);
+    }
+
     void habits()
     {
         // kNow is Wednesday 2026-10-14.

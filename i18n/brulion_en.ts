@@ -863,7 +863,7 @@
 <context>
     <name>FlashcardsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/FlashcardsView.qml" line="147"/>
+        <location filename="../src/app/qml/views/FlashcardsView.qml" line="150"/>
         <source>%n card(s) to study now</source>
         <translation>
             <numerusform>%n card to study now</numerusform>
@@ -1606,7 +1606,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2934"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2945"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1614,7 +1614,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2799"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2810"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1646,7 +1646,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2172"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2183"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1654,7 +1654,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2623"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2634"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1662,7 +1662,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2801"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2812"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1906,7 +1906,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8969"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9028"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>

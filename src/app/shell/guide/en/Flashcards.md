@@ -32,6 +32,7 @@ The Spaced Repetition plugin lets you change how cards are written, and so does 
 - **End of a multi-line card** — set it to, say, `---`, and a card runs up to a line with only that, so it can hold blank lines.
 - **Clozes** — besides highlights, as in `a ==b==`, you can make `**bold**` text or `{{curly}}` text a cloze; Anki's `{{c1::…}}` always are.
 - **Folders as decks** — every note in a folder is read, tagged or not, and its cards are in the deck of the folder: `Languages/Spanish` becomes `#languages/spanish`.
+- **Tags of notes to review** — which tag makes a whole note something to review (`#review` by default; see "Notes to review" below).
 
 ## Decks
 **Flashcards** in the sidebar (and on the phone's bottom bar, when you choose it) shows how many cards are waiting today — the same number is on its icon. The **Decks** tab lists your decks **by tag** — `#flashcards/spanish` with its sub-decks below it —, **by page** or **by folder**, each with how many cards are due and how many new ones you can learn today. A tap on a deck starts its session; its **⋯** menu also offers studying ahead and the deck's statistics. **Study all** (or Enter) studies every deck at once.
@@ -48,6 +49,24 @@ The card shows its question, large, with the page and the headings it comes from
 
 New cards come after the reviews, at most 20 a day (Settings changes the number). When everything is done, Brulion says when the next review is due; **Study ahead** brings tomorrow's reviews, and you can learn ten more new cards. The **Statistics** tab shows how many cards you graded each day, how many of your reviews you remembered (aim for about 90 %), how many cards are new, learning, young and mature, and how many come back on each of the next days.
 
+## Notes to review
+Not everything is a question. To go back to a whole note now and then — an article, a plan, a page of your notes — tag it **`#review`** (a tag of your own can be set in the settings). On the **Decks** tab a **Notes to review** entry appears with how many notes are due and how many are new; a tap opens them one at a time, the note drawn as it reads, scrollable, with **Edit** to open it in the editor.
+
+Read it, then grade how well you know it: **Hard** (1), **Good** (2) or **Easy** (3) — each button shows in how many days the note comes back. **Skip** (S) leaves a note for later today, **Undo** (U) takes the last grade back. A note you have never reviewed is new; one that is due comes first, the one waiting longest earliest.
+
+The state goes into the note's properties, the way the Spaced Repetition plugin writes it, and nothing else of the note changes:
+
+```markdown
+---
+tags: [review]
+sr-due: 2026-11-23
+sr-interval: 3
+sr-ease: 250
+---
+```
+
+`sr-due` is the day the note comes back, `sr-interval` the days between the last two reviews, `sr-ease` how easy the note is for you (250 = 2.5×; Easy raises it, Hard lowers it). The plugin spreads the notes over the days a little, so a hundred notes reviewed on one day do not all return on one day.
+
 ## Where the reviews are saved
 After a review, the card's line gets a comment at its end — invisible in Brulion, in Obsidian's reading view and in Logseq:
 
@@ -62,7 +81,7 @@ Every grade is also a line of a review log, one page a month: `Fiszki/Powtórki 
 Because a review changes one line, two devices that review different cards of one note merge cleanly through Nextcloud, and when you review the same card on both, the later review stays. With Syncthing the same happens when you merge the conflict copy in the sync center.
 
 > [!tip] From the command line
-> `brulion-cli card due` lists the cards to study now and `brulion-cli card review <id> good` grades one — an AI agent can quiz you this way; see [[Command line and AI agents]].
+> `brulion-cli card due` lists the cards to study now and `brulion-cli card review <id> good` grades one — an AI agent can quiz you this way; so `brulion-cli card notes --due` and `brulion-cli card review-note <page> good` do for notes to review; see [[Command line and AI agents]].
 
 ## Try it
 This page is a deck itself: the cards below wait in **Flashcards**.

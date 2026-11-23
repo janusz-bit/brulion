@@ -26,6 +26,8 @@ brulion-cli --format text habit list                # nawyki: dzisiejsze odhacze
 brulion-cli habit tick Medytacja                   # odhacz nawyk na dziś
 brulion-cli --format text card due                 # fiszki do nauki teraz
 brulion-cli card review 1a2b3c4d dobrze            # oceń jedną (znowu, trudne, dobrze, łatwe)
+brulion-cli --format text card notes --due         # notatki z #review do przeczytania teraz
+brulion-cli card review-note "Plan" dobrze         # oceń całą notatkę (trudne, dobrze, łatwe)
 brulion-cli search zolw                            # znajdzie „żółw”
 brulion-cli search "ciasto z jabłkami" --semantic  # też po znaczeniu (zob. Szukanie)
 brulion-cli clip install                           # połącz Web Clipper przeglądarek (zob. Import i eksport)

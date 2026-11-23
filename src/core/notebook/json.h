@@ -85,7 +85,7 @@ QJsonObject notificationJson(const ScheduledNotification &notification);
 /// The keys of Workspace::vaultConfig(): journalsFolder, journalFileFormat, newPagesFolder,
 /// attachmentsFolder, templatesFolder, journalTemplate, defaultReminderTime, weekStartsOn,
 /// journalMode, pageMode, weekly and monthly settings, flashcards {tags ("a, b" or ""), the
-/// separators, the end marker, the cloze kinds, foldersAsDecks}.
+/// separators, the end marker, the cloze kinds, foldersAsDecks, reviewTags ("a, b" or "")}.
 QJsonObject vaultConfigJson(const VaultConfig &config);
 
 } // namespace brulion::notebook
