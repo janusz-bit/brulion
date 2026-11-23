@@ -6,8 +6,9 @@
 // closed), the first lines of a new page, its name, the journal's line, the history b.ai gets and
 // the previews of the list; the time of each message (its `czas::` / `time::` line, old pages
 // without one), pictures sent with a message (embeds, the newest of them as the model's images),
-// who answers (the frontmatter's `partner:`) and a conversation too long for the model cut by
-// whole turns.
+// who answers (the frontmatter's `partner:`), a conversation too long for the model cut by whole
+// turns, and the answers the user reported or hid (the frontmatter's `zgłoszone:` / `ukryte:`
+// lists of message numbers: read in their forms, set, taken away, the rest byte for byte).
 #include "chat/chat.h"
 
 #include <QTest>
@@ -17,6 +18,7 @@ using namespace brulion;
 using namespace brulion::chat;
 
 Q_DECLARE_METATYPE(brulion::chat::Role)
+Q_DECLARE_METATYPE(brulion::chat::Flag)
 
 namespace {
 
@@ -389,6 +391,152 @@ private Q_SLOTS:
         QCOMPARE(changed, expected);
         QCOMPARE(parse(changed).partner, partner);
         QCOMPARE(setPartner(changed, partner), changed); // (again: nothing more)
+    }
+
+    void flags_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<QString>("flags"); // a letter a message: - none, R reported, H hidden
+
+        const QString four = u"- 🧑 Pytanie\n- 🤖 Odpowiedź\n- 🧑 Dalej\n- 🤖 Druga\n"_s;
+        QTest::newRow("none") << u"---\nzadania: ignoruj\n---\n"_s + four << u"----"_s;
+        QTest::newRow("no frontmatter") << four << u"----"_s;
+        QTest::newRow("Polish") << u"---\nzadania: ignoruj\nzgłoszone: [2]\nukryte: [4]\n---\n"_s + four << u"-R-H"_s;
+        QTest::newRow("English") << u"---\ntasks: ignore\nreported: [4]\nhidden: [2]\n---\n"_s + four << u"-H-R"_s;
+        QTest::newRow("any case") << u"---\nZGŁOSZONE: [2]\nHidden: 4\n---\n"_s + four << u"-R-H"_s;
+        QTest::newRow("a scalar list") << u"---\nukryte: 2, 4\n---\n"_s + four << u"-H-H"_s;
+        QTest::newRow("a block list") << u"---\nukryte:\n  - 2\n  - \"4\"\nzadania: ignoruj\n---\n"_s + four << u"-H-H"_s;
+        QTest::newRow("a block list at the key's indentation") << u"---\nukryte:\n- 2\n- 4\n---\n"_s + four << u"-H-H"_s;
+        QTest::newRow("reported first") << u"---\nzgłoszone: [2]\nukryte: [2]\n---\n"_s + four << u"-R--"_s;
+        QTest::newRow("both languages") << u"---\nzgłoszone: [2]\nreported: [4]\n---\n"_s + four << u"-R-R"_s;
+        QTest::newRow("no numbers") << u"---\nukryte: tak\nzgłoszone: [x, -3, 2.5, 0, 99999999999]\n---\n"_s + four
+                                    << u"----"_s;
+        QTest::newRow("beyond the messages") << u"---\nukryte: [9, 4]\n---\n"_s + four << u"---H"_s;
+        QTest::newRow("a comment") << u"---\nukryte: [2] # za długie\n---\n"_s + four << u"-H--"_s;
+        QTest::newRow("a key without a space") << u"---\nukryte:[2]\n---\n"_s + four << u"----"_s;
+        QTest::newRow("CRLF") << u"---\r\nukryte: [2]\r\n---\r\n- 🧑 ą\r\n- 🤖 ę\r\n"_s << u"-H"_s;
+        QTest::newRow("not in the frontmatter")
+                << u"- 🧑 Pytanie\n  ukryte:: [1]\n- 🤖 Odpowiedź\nukryte: [2]\n"_s << u"--"_s;
+        QTest::newRow("an unclosed frontmatter") << u"---\nukryte: [1]\n- 🧑 ą\n"_s << u"-"_s;
+    }
+    void flags()
+    {
+        QFETCH(QString, page);
+        QFETCH(QString, flags);
+        const Conversation c = parse(page);
+        QString got;
+        for (const Message &m : c.messages)
+            got += m.flag == Flag::Reported ? u'R' : m.flag == Flag::Hidden ? u'H' : u'-';
+        QCOMPARE(got, flags);
+    }
+
+    void setsFlags_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<int>("number");
+        QTest::addColumn<int>("flag");
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("expected");
+
+        const QString two = u"- 🧑 Zażółć\n- 🤖 Gęślą jaźń\n"_s;
+        const int none = int(Flag::None), reported = int(Flag::Reported), hidden = int(Flag::Hidden);
+        QTest::newRow("added at the frontmatter's end")
+                << u"---\nzadania: ignoruj\npartner: pirat\n---\n"_s + two << 2 << reported << u"pl"_s
+                << u"---\nzadania: ignoruj\npartner: pirat\nzgłoszone: [2]\n---\n"_s + two;
+        QTest::newRow("an English page") << u"---\ntasks: ignore\n---\n"_s + two << 2 << hidden << u"pl"_s
+                                         << u"---\ntasks: ignore\nhidden: [2]\n---\n"_s + two;
+        QTest::newRow("no frontmatter") << two << 2 << hidden << u"pl"_s << u"---\nukryte: [2]\n---\n"_s + two;
+        QTest::newRow("no frontmatter, English") << two << 2 << reported << u"en"_s
+                                                 << u"---\nreported: [2]\n---\n"_s + two;
+        QTest::newRow("the language of the times")
+                << u"- 🧑 a\n  time:: 2026-11-15 09:12\n- 🤖 b\n"_s << 2 << hidden << u"pl"_s
+                << u"---\nhidden: [2]\n---\n- 🧑 a\n  time:: 2026-11-15 09:12\n- 🤖 b\n"_s;
+        QTest::newRow("in order") << u"---\nukryte: [5]\n---\n"_s + two << 2 << hidden << u"pl"_s
+                                  << u"---\nukryte: [2, 5]\n---\n"_s + two;
+        QTest::newRow("from hidden to reported")
+                << u"---\nzadania: ignoruj\nukryte: [2, 4]\n---\n"_s + two << 2 << reported << u"pl"_s
+                << u"---\nzadania: ignoruj\nukryte: [4]\nzgłoszone: [2]\n---\n"_s + two;
+        QTest::newRow("the last one taken out")
+                << u"---\nzadania: ignoruj\nukryte: [2]\npartner: pirat\n---\n"_s + two << 2 << none << u"pl"_s
+                << u"---\nzadania: ignoruj\npartner: pirat\n---\n"_s + two;
+        QTest::newRow("its key as written") << u"---\nUkryte: 4\n---\n"_s + two << 2 << hidden << u"pl"_s
+                                            << u"---\nUkryte: [2, 4]\n---\n"_s + two;
+        QTest::newRow("a block list becomes a flow list")
+                << u"---\nukryte:\n  - 4\n  - 6\nzadania: ignoruj\n---\n"_s + two << 2 << hidden << u"pl"_s
+                << u"---\nukryte: [2, 4, 6]\nzadania: ignoruj\n---\n"_s + two;
+        QTest::newRow("CRLF") << u"---\r\nzadania: ignoruj\r\n---\r\n- 🧑 a\r\n- 🤖 b\r\n"_s << 2 << reported << u"pl"_s
+                              << u"---\r\nzadania: ignoruj\r\nzgłoszone: [2]\r\n---\r\n- 🧑 a\r\n- 🤖 b\r\n"_s;
+        QTest::newRow("CRLF without a frontmatter or a last line break")
+                << u"- 🧑 a\r\n- 🤖 b"_s << 2 << reported << u"pl"_s << u"---\r\nzgłoszone: [2]\r\n---\r\n- 🧑 a\r\n- 🤖 b"_s;
+        QTest::newRow("two entries of a flag become one")
+                << u"---\nzgłoszone: [2]\nreported: [4]\n---\n"_s + two << 6 << reported << u"pl"_s
+                << u"---\nzgłoszone: [2, 4, 6]\n---\n"_s + two;
+        QTest::newRow("its mark already") << u"---\nukryte: [2]\n---\n"_s + two << 2 << hidden << u"pl"_s
+                                          << u"---\nukryte: [2]\n---\n"_s + two;
+        QTest::newRow("no mark to take away") << u"---\nzadania: ignoruj\n---\n"_s + two << 2 << none << u"pl"_s
+                                              << u"---\nzadania: ignoruj\n---\n"_s + two;
+        QTest::newRow("no message 0") << two << 0 << hidden << u"pl"_s << two;
+        QTest::newRow("an unclosed frontmatter")
+                << u"---\nzadania: ignoruj\n- 🧑 a\n- 🤖 b\n"_s << 2 << hidden << u"en"_s
+                << u"---\nukryte: [2]\n---\n---\nzadania: ignoruj\n- 🧑 a\n- 🤖 b\n"_s;
+        QTest::newRow("closed by ...") << u"---\nzadania: ignoruj\n...\n"_s + two << 2 << hidden << u"pl"_s
+                                       << u"---\nzadania: ignoruj\nukryte: [2]\n...\n"_s + two;
+    }
+    void setsFlags()
+    {
+        QFETCH(QString, page);
+        QFETCH(int, number);
+        QFETCH(int, flag);
+        QFETCH(QString, language);
+        QFETCH(QString, expected);
+        const QString changed = setFlag(page, number, Flag(flag), language);
+        QCOMPARE(changed, expected);
+        if (changed == page)
+            return;
+        // Read back: the mark, the messages as they were.
+        const Conversation before = parse(page);
+        const Conversation after = parse(changed);
+        QCOMPARE(after.messages.size(), before.messages.size());
+        for (qsizetype i = 0; i < after.messages.size(); ++i) {
+            QCOMPARE(after.messages.at(i).text, before.messages.at(i).text);
+            if (i + 1 == number)
+                QCOMPARE(int(after.messages.at(i).flag), flag);
+        }
+        QCOMPARE(after.partner, before.partner);
+        QCOMPARE(setFlag(changed, number, Flag(flag), language), changed); // (again: nothing more)
+    }
+
+    void flagsComeAndGo()
+    {
+        QString page = newConversation(u"Co to za roślina?"_s, QString(), u"pl"_s);
+        page = appendMessage(page, Role::Assistant, u"To **żółw** <script>"_s);
+        page = appendMessage(page, Role::User, u"A ta?"_s);
+        page = appendMessage(page, Role::Assistant, u"Paproć."_s);
+        const QString original = page;
+        page = setFlag(page, 2, Flag::Reported);
+        page = setFlag(page, 4, Flag::Hidden);
+        QCOMPARE(page, u"---\nzadania: ignoruj\nzgłoszone: [2]\nukryte: [4]\n---\n- 🧑 Co to za roślina?\n"
+                       "- 🤖 To **żółw** <script>\n- 🧑 A ta?\n- 🤖 Paproć.\n"_s);
+        // A message appended later: the marks stay with their messages.
+        page = appendMessage(page, Role::User, u"Dzięki"_s);
+        const Conversation c = parse(page);
+        QCOMPARE(c.messages.at(1).flag, Flag::Reported);
+        QCOMPARE(c.messages.at(3).flag, Flag::Hidden);
+        QCOMPARE(c.messages.at(4).flag, Flag::None);
+        // The history the model gets is the same (the marks are the user's view of it).
+        QCOMPARE(history(c), history(parse(appendMessage(original, Role::User, u"Dzięki"_s))));
+        // Both taken away: the page as it was.
+        page = setFlag(setFlag(page, 2, Flag::None), 4, Flag::None);
+        QCOMPARE(page, appendMessage(original, Role::User, u"Dzięki"_s));
+    }
+
+    void flagKeys()
+    {
+        QCOMPARE(flagKey(Flag::Reported, u"pl"), u"zgłoszone"_s);
+        QCOMPARE(flagKey(Flag::Hidden, u"pl"), u"ukryte"_s);
+        QCOMPARE(flagKey(Flag::Reported, u"en"), u"reported"_s);
+        QCOMPARE(flagKey(Flag::Hidden, u"de"), u"hidden"_s);
+        QCOMPARE(flagKey(Flag::None, u"pl"), QString());
     }
 
     void partnerOfAPage()

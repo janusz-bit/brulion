@@ -9,6 +9,7 @@
 #include "capture.h"
 
 #include "ai/local.h"
+#include "aireport/aireport.h"
 #include "chat/chat.h"
 #include "log/categories.h"
 #include "util/paths.h"
@@ -829,6 +830,49 @@ bool WorkspaceChats::setPartner(const QString &path, const QString &partner)
         return false;
     const QString changed = chat::setPartner(content, partner);
     return changed == content || m_workspace->write(path, changed);
+}
+
+// ---- reported and hidden answers -----------------------------------------------------------------
+
+bool WorkspaceChats::setFlag(const QString &path, int number, const QString &flag)
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return false;
+    chat::Flag mark = chat::Flag::None;
+    if (flag == u"reported")
+        mark = chat::Flag::Reported;
+    else if (flag == u"hidden")
+        mark = chat::Flag::Hidden;
+    else if (!flag.isEmpty())
+        return false;
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    if (!ok)
+        return false;
+    const chat::Conversation conversation = chat::parse(content);
+    if (number < 1 || number > conversation.messages.size()
+        || conversation.messages.at(number - 1).role != chat::Role::Assistant)
+        return false;
+    const QString changed = chat::setFlag(content, number, mark, m_extensions->language());
+    return changed == content || m_workspace->write(path, changed);
+}
+
+QString WorkspaceChats::modelName(const QString &path) const
+{
+    const QString partner = partnerOf(path);
+    if (WorkspaceAgents::isAgent(partner)) {
+        const QString label = m_agents->label(partner);
+        QString out = u"AI agent "_s + (label.isEmpty() ? partner : label);
+        for (const QVariant &row : m_agents->options(path, partner)) {
+            const QVariantMap o = row.toMap();
+            if (o.value(u"category"_s).toString() == u"model" && !o.value(u"currentName"_s).toString().isEmpty())
+                out += u" · model "_s + o.value(u"currentName"_s).toString();
+        }
+        return out;
+    }
+    const QString who = partner.isEmpty() ? u"Brulion's AI assistant"_s
+                                          : u"Chat partner "_s + partner + u" (an extension)"_s;
+    return who + u" · "_s + aireport::modelDescription(m_extensions->aiSettings());
 }
 
 // ---- pictures -------------------------------------------------------------------------------------

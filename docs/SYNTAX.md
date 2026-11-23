@@ -2601,6 +2601,18 @@ zadania: ignoruj
   partners"); `partner: acp:claude` an AI agent set up on the device (docs/UI.md "AI agents
   (ACP)"); without it the built-in AI assistant. The chat writes it when another partner is
   chosen and takes it out for the assistant.
+* **Answers reported or hidden** (docs/UI.md "AI chat": Report response): the frontmatter lists them
+  by number — the page's messages counted from 1, the user's too —, `zgłoszone: [2]` and `ukryte:
+  [4, 6]` (`reported:` / `hidden:` in an English notebook). Either key is read in any case and in
+  either language, its list also as `2, 4` or a block list of `- 2` lines; a word, `0`, `-3`, `2.5`
+  or a number with no message counts for nothing, and a number in both lists is reported. The chat
+  shows such an answer folded. It writes a list as a flow list in order, a new key in the page's
+  language (its time's key, its `zadania:` / `tasks:`, else the notebook's) at the frontmatter's
+  end, and takes a key out with its last number (a frontmatter made for it stays); the rest byte
+  for byte. Another app, and an older Brulion, reads them as page properties and shows every
+  message; the model gets a marked answer with the conversation as any other. Messages are only
+  appended, so a number stays its message's — one deleted by hand above a marked one moves the mark
+  to the next.
 * **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
   notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),
   messages appended at the end of the page with their time (its line ending kept, everything
@@ -2615,8 +2627,9 @@ zadania: ignoruj
   the oldest left out, the latest always sent; the chat says so above the first message the model
   gets.
 * Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `formatMessage`,
-  `newConversation`, `setPartner`, `picturesIn`, `withPictures`, `withoutPictures`, `pageTitle`,
-  `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`), tested in `tests/core/chat`.
+  `newConversation`, `setPartner`, `setFlag`, `flagKey`, `picturesIn`, `withPictures`,
+  `withoutPictures`, `pageTitle`, `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`),
+  tested in `tests/core/chat`.
 
 ## 15. Flashcards
 

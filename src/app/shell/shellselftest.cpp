@@ -7397,7 +7397,9 @@ void clearToasts(QQuickWindow *window);
 /// menu on a phone —, the dialog offers the presets, "Shorter" asks the model (the request says so)
 /// and shows its answer, Replace changes the block — one undo step: Undo brings the text back.
 /// Then a conversation in the chat's list: renamed through its row's menu (a right-click, a long
-/// press) — the toast's Undo renames it back — and moved to the trash, Undo bringing it back.
+/// press) — the toast's Undo renames it back — and moved to the trash, Undo bringing it back; its
+/// AI's answer hidden through Report response (its menu, the report dialog's Hide this response:
+/// marked in the page, folded, Show opens it again).
 void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -7607,6 +7609,49 @@ void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check
     check(waitFor([&] { return !ws->exists(chatPath); }), "the conversation goes to the trash");
     check(tapToastAction(window, app, u"chat"_s, touch), "with Undo");
     check(waitFor([&] { return ws->exists(chatPath); }), "Undo brings it back");
+
+    // ---- Report response: the AI's answer hidden from its menu, folded, opened again ------------------
+    closeMenus(window);
+    clearToasts(window);
+    app->navigate({{u"view"_s, u"chat"_s}, {u"path"_s, chatPath}});
+    QQuickItem *aiAnswer = steadyItem(window, [&] { return named(u"chatMessageAi"_s); }, &at);
+    check(aiAnswer != nullptr, "the conversation shows the AI's answer");
+    mouseMove(window, QPointF(2, 2));
+    if (aiAnswer) {
+        if (touch)
+            longPressForMenu(window, at);
+        else
+            mouseClick(window, at, Qt::RightButton);
+    }
+    QQuickItem *reportItem = steadyItem(window, [&] { return named(u"chatMessageReport"_s); }, &at);
+    check(reportItem != nullptr, "the answer's menu has Report response…");
+    if (reportItem)
+        tapOrClick(window, at, touch);
+    QQuickItem *response = nullptr;
+    check(waitFor([&] { return (response = named(u"aiReportResponse"_s)) != nullptr; }), "the report dialog opens");
+    check(response && response->property("text").toString() == u"Odpowiedź", "with the answer to report");
+    const QQuickItem *questionBox = named(u"aiReportQuestionBox"_s);
+    check(questionBox && !questionBox->property("checked").toBool() && named(u"aiReportQuestion"_s) == nullptr,
+          "its question offered, not added");
+    // (The dialog's end in view: a phone's sheet scrolls.)
+    if (QQuickItem *hide = named(u"aiReportHide"_s)) {
+        if (QQuickItem *scroll = uidriver::enclosingFlickable(hide))
+            scroll->setProperty("contentY", std::max<qreal>(0, scroll->property("contentHeight").toReal() - scroll->height()));
+    }
+    QQuickItem *hide = steadyItem(window, [&] { return named(u"aiReportHide"_s); }, &at);
+    check(hide != nullptr, "the dialog has Hide this response");
+    if (hide)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return ws->read(chatPath).contains(u"\nukryte: [2]\n"_s); }),
+          "the answer is marked hidden in its page");
+    check(waitFor([&] { return named(u"chatFlagged"_s) != nullptr && named(u"chatMessageAi"_s) == nullptr; }),
+          "and shown folded");
+    QQuickItem *showAgain = steadyItem(window, [&] { return named(u"chatFlaggedToggle"_s); }, &at);
+    check(showAgain != nullptr, "with Show");
+    if (showAgain)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return named(u"chatMessageAi"_s) != nullptr; }), "Show opens it again");
+
     closeMenus(window);
     mouseMove(window, QPointF(2, 2)); // (no tooltip left open over the chat's buttons)
     settle(100);

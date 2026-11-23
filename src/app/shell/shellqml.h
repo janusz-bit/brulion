@@ -16,6 +16,7 @@
 //   ChatTurn         uncreatable — Workspace.chats.turn(path): one conversation's turn
 //   AgentShare       uncreatable — Workspace.chats.share ("Share agents with the phone")
 //   WritingSession   creatable — WritingSession { workspace: Workspace } (the editor's AI assistant)
+//   AiReportDraft    creatable — AiReportDraft {} (Report response: the report of an AI answer)
 //   WorkspaceEncryption uncreatable — Workspace.encryption (encrypted notes)
 //   EncryptedPageHost creatable — PageView's EditorHost (encryptedpagehost.h)
 //   ExtensionFormModel, ExtensionControlsModel   uncreatable — a question's fields, a row's controls
@@ -30,6 +31,7 @@
 //   WebClipperSetup  singleton — Settings' "Browser extension (Web Clipper)" (the host manifests)
 #pragma once
 
+#include "aireportdraft.h"
 #include "appcontroller.h"
 #include "applockcontroller.h"
 #include "appscripting.h"
@@ -280,6 +282,12 @@ struct WritingSessionForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::WritingSession)
     QML_NAMED_ELEMENT(WritingSession)
+};
+
+struct AiReportDraftForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AiReportDraft)
+    QML_NAMED_ELEMENT(AiReportDraft)
 };
 
 struct ChatTurnForeign {

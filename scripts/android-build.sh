@@ -52,6 +52,10 @@
 #   BRULION_UPDATE_CHECK=OFF     no check for a newer version on GitHub, no message or switch about
 #                                it (CMake option BRULION_UPDATE_CHECK, default ON): for builds that a
 #                                store updates (F-Droid, IzzyOnDroid; docs/ANDROID.md)
+#   BRULION_AI_REPORT_EMAIL      where "Report response" sends reports of AI answers: an email
+#                                address (a mailto: link the user sends in the mail app; CMake cache
+#                                variable of that name, docs/UI.md "AI chat"); default empty: a new
+#                                public issue on GitHub, prefilled
 #   BRULION_ANDROID_CMAKE=system use the cmake/ninja on PATH instead of the SDK's (NixOS's
 #                                patched cmake does not find the NDK sysroot's EGL/GLES headers)
 #   BRULION_ANDROID_OPENSSL=source  OpenSSL 3 built from source by
@@ -424,6 +428,7 @@ cmake_args=(
   -DBRULION_ANDROID_VERSION_CODE="${BRULION_ANDROID_VERSION_CODE:-}"
   -DBRULION_UPDATE_CHECK="${BRULION_UPDATE_CHECK:-ON}"
   -DBRULION_PLAY="$( ((PLAY)) && echo ON || echo OFF)"
+  -DBRULION_AI_REPORT_EMAIL="${BRULION_AI_REPORT_EMAIL:-}"
 )
 [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]] && cmake_args+=(-DBRULION_ANDROID_SELFTEST=ON)
 [[ -n ${BRULION_ANDROID_OPENSSL_DIR:-} ]] && cmake_args+=(-DBRULION_ANDROID_OPENSSL_DIR="$BRULION_ANDROID_OPENSSL_DIR")

@@ -87,6 +87,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/agentshare.h ${_brulion_shell_dir}/agentshare.cpp
     ${_brulion_shell_dir}/serverprocess.h ${_brulion_shell_dir}/serverprocess.cpp
     ${_brulion_shell_dir}/writingsession.h ${_brulion_shell_dir}/writingsession.cpp
+    ${_brulion_shell_dir}/aireportdraft.h ${_brulion_shell_dir}/aireportdraft.cpp
     ${_brulion_shell_dir}/workspaceencryption.h ${_brulion_shell_dir}/workspaceencryption.cpp
     ${_brulion_shell_dir}/encryptedpagehost.h ${_brulion_shell_dir}/encryptedpagehost.cpp
     ${_brulion_shell_dir}/extensionviewmodel.h ${_brulion_shell_dir}/extensionviewmodel.cpp
@@ -118,7 +119,7 @@ target_link_libraries(brulion_shell
            brulion_core_extensions brulion_core_ai brulion_core_acp brulion_core_chat brulion_core_automation brulion_planning
            brulion_core_writing
            brulion_core_encryption brulion_core_applock brulion_core_semantic
-    PRIVATE Qt6::Network brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
+    PRIVATE Qt6::Network brulion_core_aireport brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_github brulion_core_caldav brulion_core_clipper
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
@@ -135,6 +136,10 @@ target_link_libraries(brulion_shell PUBLIC brulion_media PRIVATE brulion_editor)
 target_link_libraries(brulion_shell PUBLIC brulion_attachments)
 target_compile_definitions(brulion_shell PRIVATE BRULION_VERSION="${PROJECT_VERSION}"
     BRULION_UPDATE_CHECK=$<BOOL:${BRULION_UPDATE_CHECK}>)
+# Where "Report response" sends a report of an AI answer (aireportdraft.h): the email address of
+# the top CMakeLists.txt's BRULION_AI_REPORT_EMAIL, "" a new issue on GitHub.
+set_property(SOURCE ${_brulion_shell_dir}/aireportdraft.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    "BRULION_AI_REPORT_EMAIL=\"${BRULION_AI_REPORT_EMAIL}\"")
 # The model on the device (localai.h): where the app looks for the model runner's plugin — next
 # to llama.cpp's libraries in <lib>/brulion of the installed app, and in a debug build also where
 # they were built (the app run from its build folder). A build without it defines nothing here.
@@ -180,6 +185,7 @@ endif()
 qt_target_qml_sources(brulion QML_FILES
     qml/shell/AppShell.qml
     qml/shell/ShellAboutDialog.qml
+    qml/shell/ShellAiReportDialog.qml
     qml/shell/ShellAutomationDialog.qml
     qml/shell/ShellAutomationSettings.qml
     qml/shell/ShellBackupSettings.qml

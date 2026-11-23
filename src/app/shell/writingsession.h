@@ -120,6 +120,9 @@ public:
     Q_INVOKABLE bool canAccept() const;
     /// A preset's name in the UI ("Shorter", "Translate to English").
     Q_INVOKABLE QString presetLabel(const QString &preset) const;
+    /// Who writes, as a report of the result says it (English, Report response): "Brulion's
+    /// writing assistant · Anthropic · claude-opus-5-5" (aireport::modelDescription of the settings).
+    Q_INVOKABLE QString modelName() const;
     /// The change from `original` to `result` as rich text, escaped: removed words struck through in
     /// `removedColor`, added ones on `addedBackground`, line breaks kept.
     Q_INVOKABLE QString changesHtml(const QColor &removedColor, const QColor &addedBackground) const;

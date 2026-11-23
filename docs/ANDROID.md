@@ -2667,3 +2667,14 @@ They install side by side with their own data, and neither updates the other. Pu
 app — the Play Console checklist, the Data safety answers, the declarations, the upload from
 `release.yml` — is in [docs/GOOGLE_PLAY.md](GOOGLE_PLAY.md); the privacy policy of both is
 [docs/PRIVACY.md](PRIVACY.md) (<https://janusz-bit.github.io/brulion/privacy.html>).
+
+**AI-generated content.** Google Play's AI-Generated Content policy asks that users can report or
+flag offensive AI output without leaving the app: every answer of the AI has **Report response…**
+(docs/UI.md "AI chat"), in every build. Where the report goes is the CMake cache variable
+`BRULION_AI_REPORT_EMAIL`, which `scripts/android-build.sh` passes on from the environment: an email
+address makes **Send report** open the user's mail app with the report (`mailto:`); empty — the
+default — a new public issue on GitHub, prefilled. Brulion itself sends nothing.
+
+```sh
+BRULION_ANDROID_PLAY=1 BRULION_AI_REPORT_EMAIL=ai-reports@example.com scripts/android-build.sh
+```

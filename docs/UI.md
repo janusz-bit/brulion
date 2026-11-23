@@ -1307,13 +1307,53 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   (`chatTime`, "09:12": its `czas::` line; none on a page written before times were kept), and above
   the first message of a day that day (`chatDay`: "Today", "Yesterday", "15 Nov"); a click on a link
   follows it (page:, tag:, ext: through `PageTools.openLink`, from the conversation's page), a long
-  press or right-click has Copy (the message's Markdown) and "Show in the page" (the page at its
-  line). Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
+  press or right-click has Copy (the message's Markdown), "Show in the page" (the page at its
+  line) and, on the AI's, **Report response…** (below). Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
   or the page names one: its menu, `chatPartnerMenu`, changes it for the next turns —
   `WorkspaceChats.setPartner()` writes the page's `partner:`), the page it is about (a chip that
   opens it), "Open the conversation as a page" (`chatOpenPage`) and, without the list, "New
   conversation". New messages scroll the list to its end (`WorkspaceChats.written`, the model's
   count).
+* **Reporting an answer** (Google Play's AI-Generated Content policy asks for it; every build has
+  it): **Report response…** (`chatMessageReport`) opens `aiReportDialog`
+  (`qml/shell/ShellAiReportDialog.qml`; `AiReportDraft`, `shell/aireportdraft.h`, over core
+  `aireport/aireport.h`) — a reason, one of six chips (`aiReportReasons`, `aiReportReason_<id>`:
+  offensive or hateful, sexual content, violent or dangerous, harassment, false or misleading, other;
+  needed for Send), a comment (`aiReportComment`, optional) and **what the report holds**: the answer
+  in an editable field (`aiReportResponse`: the user may shorten it or take a private part out), the
+  user's question before it only with its box ticked (`aiReportQuestionBox`, off — "your question
+  and the rest of the conversation stay out of the report"; then `aiReportQuestion`, editable:
+  `ChatMessageModel.questionBefore()`, the user's messages of that turn without their pictures —
+  never the rest of the conversation or the page it is about), who answered (`aiReportFacts`:
+  `WorkspaceChats.modelName()` — "Brulion's AI assistant · Anthropic · claude-opus-5-5" from the
+  settings now, never a server's address; an extension's partner by its id; an agent with its model
+  option) and the app's version and device (`platform::deviceDescription()`: no user or host names;
+  "(Google Play)" in that build). **Show the report's text** (`aiReportPreviewToggle`,
+  `aiReportPreview`) shows its title and text exactly as they go, as plain text. The report is in
+  English (it goes to the developers), the comment, the answer and the question each in a code
+  fence longer than any run of backticks in it, so Markdown, HTML or a mention in them stays text on
+  GitHub. **Send report** opens it through `Workspace.openUrl` (the app's one way to the browser and
+  the mail app: http, https and mailto only): with the CMake cache variable
+  `BRULION_AI_REPORT_EMAIL` (an email address, checked when configuring; `scripts/android-build.sh`
+  passes it on from the environment) a `mailto:` with subject and body (RFC 6068: CRLF lines), else
+  a new issue of github.com/janusz-bit/brulion with `title` and `body` in its address — the dialog
+  says which, and that an issue there is public (`aiReportDestination`). Every character but the
+  unreserved ones is percent-encoded (a "+" never turns into a space); a link longer than 7000
+  characters (`aireport::MaxLinkLength`: GitHub refuses one of some 8 KB) gets its long texts cut to
+  one length that fits — the short ones whole, never inside a surrogate pair —, a line under each
+  saying how much of it is there, and the dialog says so (`aiReportCut`). Brulion sends nothing
+  itself: the user sends the issue or the email there. The answer is then marked **reported**;
+  **Hide this response** (`aiReportHide`) marks it **hidden** and sends nothing. A marked answer is
+  a line in its place, "Reported response" / "Hidden response" with **Show** (`chatFlagged`,
+  `chatFlaggedText`, `chatFlaggedToggle` — then **Fold**: `ChatMessageModel.reveal()`, the row's
+  `revealed`, while the view shows the conversation); the list's preview of a conversation whose
+  last message it is says the same, and its menu has **Remove the “Reported” mark** / **Unhide
+  response** (`chatMessageUnflag`). The mark is kept in the conversation's page
+  (`WorkspaceChats.setFlag(path, number, "reported" | "hidden" | "")` → `chat::setFlag`: the
+  frontmatter's `zgłoszone:` / `ukryte:`, docs/SYNTAX.md §14), so it syncs and stays after a
+  restart; another app and an older Brulion show the answer as before. The model still gets a
+  marked answer with the conversation (the mark is the user's view of it). The writing assistant's
+  result has the action too ("AI in the editor").
 * **A conversation too long for the model** (`WorkspaceChats.historyBudget`: 16 000 characters for
   the model on the device, 120 000 for a provider on the network — `chat::firstSent`, a picture
   counting 3 000): the turn sends it from a later turn on, whole turns from the oldest left out, the
@@ -1408,7 +1448,8 @@ page deleted meanwhile ends the turn), `chatFailed` keeps the reason in the conv
 `ChatTurn`; `turn(path)` (a `ChatTurn`: `running`, `queued`, `place`, `status`, `failure`,
 `omitted`, `partial`, `partialSettled`, `partialTail`, `thoughts`, `allThoughts`, `speed`),
 `retry(path)`, `stop(path)`, `stopAll()`, `dismissFailure(path)`, `isConversation(path)`,
-`showing()` / `isShown()`, `rename()`, `remove()`, `nameOf()`, `partnerOf()` / `setPartner()`, the
+`showing()` / `isShown()`, `rename()`, `remove()`, `nameOf()`, `partnerOf()` / `setPartner()`,
+`setFlag()` (an AI's answer reported or hidden) / `modelName()` (who answered, for a report), the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
 `picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
 `stopDictation` / `cancelDictation` → `dictated`), `historyBudget`, `seesPictures`, `onDevice`,
@@ -1672,7 +1713,11 @@ changes in the note but on Replace / Insert.
   summary or a continuation of blocks after them through `insertAfterBlock()` (their nesting kept, at
   the block's depth: a sibling list item in an outline); in source mode one step of the text's own
   undo (`EditorInput.replaceRange`). A text that changed meanwhile (a sync) is left alone, with a
-  notice.
+  notice. Under a written result **Report response…** (`writingReport`) opens the chat's report
+  dialog ("AI chat": `ShellAiReportDialog`) for it — its box adds "the text it worked on" (the
+  instruction and the text sent; off), who wrote it is `WritingSession.modelName()`, the place
+  `writing/<action>/<preset>`; no Hide: the result is in no note until Replace / Insert —, and once
+  sent the row says "Reported response" (`writingReported`) until the next answer.
 * `WritingSession` (`src/app/shell/writingsession.h`, QML `WritingSession { workspace: Workspace }`):
   `startInline` / `startBlocks` / `startSource` take the pieces (the text, the context around it, where
   the result goes), `rewriteWith()`, `retry()`, `stop()`, `clear()`, `state` ("" → "waiting" →

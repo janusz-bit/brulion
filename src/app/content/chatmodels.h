@@ -10,14 +10,18 @@
 //   // above the first message of a day, "" otherwise), pictures (their addresses to show; their
 //   // vault paths: picturePaths, to open), sent
 //   // (the model gets it: chat::firstSent with `budget`), firstSent (the first one it gets after
-//   // some it does not: a line above it says so)
+//   // some it does not: a line above it says so), flag ("" | "reported" | "hidden": the user
+//   // reported or hid it — the page's frontmatter, chat::setFlag; shown folded), revealed (a
+//   // folded one opened again in this view: reveal())
 //   // page: the page the conversation is about ("" none), title: the page's name without the date,
 //   // omitted: the messages the model does not get
 //   // render(markdown): an answer being written as a message shows it
+//   // questionBefore(row): the user's question an answer answers (Report response)
 //
 //   ChatListModel { workspace: Workspace; locale: DatesHelper.locale }
 //   // roles: path, title (the name without its date), date ("2026-11-15", "" without one),
-//   // dateLabel ("today 09:12": the page's last change), preview (its last message as one line),
+//   // dateLabel ("today 09:12": the page's last change), preview (its last message as one line;
+//   // "Reported response" / "Hidden response" for one the user reported or hid),
 //   // fromAi (the last message is the AI's), messages (how many), running / queued (its turn runs,
 //   // waits for the model on the device). Newest change first.
 #pragma once
@@ -26,6 +30,7 @@
 
 #include "markdown/inlinerenderer.h"
 
+#include <QSet>
 #include <QString>
 #include <QUrl>
 #include <QVariantMap>
@@ -62,7 +67,9 @@ public:
         PicturesRole,
         SentRole,
         FirstSentRole,
-        PicturePathsRole
+        PicturePathsRole,
+        FlagRole,
+        RevealedRole
     };
     explicit ChatMessageModel(QObject *parent = nullptr);
 
@@ -86,6 +93,12 @@ public:
     /// `markdown` as a message of this conversation shows it (renderMessage): the answer being
     /// written, before it is one of the rows.
     Q_INVOKABLE QString render(const QString &markdown) const;
+    /// The user's question the message at `row` answers: the user's messages of its turn (a run
+    /// of them joined by a blank line) without their pictures; "" when none comes before it.
+    Q_INVOKABLE QString questionBefore(int row) const;
+    /// Opens a reported or hidden message at `row` in this view (`shown` false folds it again):
+    /// the row's `revealed`, kept while the view shows this conversation.
+    Q_INVOKABLE void reveal(int row, bool shown);
 
     /// A message's Markdown as the bubble shows it: its blocks as rich text, one paragraph each —
     /// indented by their depth, a list item after its bullet or number (a task's box from the
@@ -116,8 +129,11 @@ private:
         QStringList picturePaths;
         bool sent = true;
         bool firstSent = false;
+        int number = 0; ///< its number in the page, from 1 (chat::setFlag)
+        QString flag;   ///< "" | "reported" | "hidden"
     };
     QList<Row> m_rows;
+    QSet<int> m_revealed; // the numbers of the folded messages opened again
     QString m_path;
     QVariantMap m_palette;
     QString m_locale = QStringLiteral("pl");

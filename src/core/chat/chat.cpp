@@ -380,6 +380,141 @@ QString withoutEmbeds(QStringView markdown, const QStringList &names)
     return lines.join(u'\n').trimmed();
 }
 
+/// A line of a page: where it starts, where the next one starts (its line break included) and
+/// its text without the line break.
+struct Span {
+    qsizetype start = 0;
+    qsizetype end = 0;
+    QStringView text;
+};
+
+/// The frontmatter of a page: its lines between the `---` lines, and where its closing line
+/// (`---` or `...`) starts; `found` false for a page without one, or with one that never closes.
+struct Frontmatter {
+    bool found = false;
+    QList<Span> lines;
+    qsizetype closing = 0;
+};
+
+Frontmatter frontmatterOf(QStringView content)
+{
+    Frontmatter fm;
+    const auto lineAt = [&](qsizetype from) {
+        const qsizetype nl = content.indexOf(u'\n', from);
+        const qsizetype end = nl < 0 ? content.size() : nl + 1;
+        QStringView text = content.mid(from, end - from);
+        while (text.endsWith(u'\n') || text.endsWith(u'\r'))
+            text.chop(1);
+        return Span{from, end, text};
+    };
+    if (content.isEmpty() || lineAt(0).text.trimmed() != u"---")
+        return fm;
+    qsizetype at = lineAt(0).end;
+    while (at < content.size()) {
+        const Span line = lineAt(at);
+        if (line.text.trimmed() == u"---" || line.text.trimmed() == u"...") {
+            fm.found = true;
+            fm.closing = at;
+            return fm;
+        }
+        fm.lines.append(line);
+        at = line.end;
+    }
+    return {};
+}
+
+/// An entry of the frontmatter that lists marked messages: `zgłoszone: [2, 5]`, a block list under
+/// its key (`ukryte:` and `  - 4` lines), its key as written.
+struct FlagEntry {
+    Flag flag = Flag::None;
+    qsizetype start = 0;
+    qsizetype end = 0;     ///< after its last line's line break
+    QString key;           ///< as written ("Zgłoszone")
+    QStringView ending;    ///< its first line's line break ("\r\n", "\n")
+    QList<int> numbers;
+};
+
+/// The message numbers a list's text names: `[2, 5]`, `2, 5`, `- 2` lines, quoted items; what is
+/// no whole number from 1 on (a word, `-3`, `2.5`) is left out, a comment (`# …`) too.
+QList<int> numbersIn(QStringView text)
+{
+    QList<int> out;
+    QString s;
+    for (const QStringView line : splitLines(text)) {
+        QStringView l = line;
+        if (const qsizetype hash = l.indexOf(u'#'); hash >= 0)
+            l = l.left(hash);
+        l = l.trimmed();
+        if (l.startsWith(u'-') && (l.size() == 1 || l.at(1) == u' ' || l.at(1) == u'\t'))
+            l = l.mid(1); // (a block list's item)
+        s += l.toString() + u',';
+    }
+    s.remove(u'[');
+    s.remove(u']');
+    static const QRegularExpression separators(u"[,\\s]+"_s);
+    for (QString item : s.split(separators, Qt::SkipEmptyParts)) {
+        if (item.size() >= 2 && (item.front() == u'"' || item.front() == u'\'') && item.back() == item.front())
+            item = item.mid(1, item.size() - 2);
+        bool ok = false;
+        const int n = item.toInt(&ok);
+        static const QRegularExpression digits(u"^\\d{1,9}$"_s);
+        if (ok && n >= 1 && digits.matchView(item).hasMatch() && !out.contains(n))
+            out.append(n);
+    }
+    return out;
+}
+
+QList<FlagEntry> flagEntries(QStringView content, const Frontmatter &fm)
+{
+    QList<FlagEntry> out;
+    if (!fm.found)
+        return out;
+    static const QRegularExpression key(u"^(zgłoszone|reported|ukryte|hidden)[ \\t]*:(?:[ \\t]+(.*))?$"_s,
+                                        QRegularExpression::CaseInsensitiveOption);
+    for (qsizetype i = 0; i < fm.lines.size(); ++i) {
+        const Span &line = fm.lines.at(i);
+        const auto m = key.matchView(line.text);
+        if (!m.hasMatch())
+            continue;
+        const QString name = m.captured(1).toLower();
+        FlagEntry e;
+        e.flag = name == u"zgłoszone" || name == u"reported" ? Flag::Reported : Flag::Hidden;
+        e.start = line.start;
+        e.end = line.end;
+        e.key = m.captured(1);
+        e.ending = content.mid(line.start + line.text.size(), line.end - line.start - line.text.size());
+        // Its value, and the lines under it that belong to it (indented; a block list's `- ` items
+        // also at the key's own indentation, as YAML allows).
+        QString value = m.captured(2);
+        if (const qsizetype hash = value.indexOf(u'#'); hash >= 0)
+            value.truncate(hash);
+        const bool block = value.trimmed().isEmpty();
+        for (qsizetype j = i + 1; j < fm.lines.size(); ++j) {
+            const QStringView next = fm.lines.at(j).text;
+            const bool indented = !next.isEmpty() && (next.at(0) == u' ' || next.at(0) == u'\t') && !isBlank(next);
+            const bool item = block && next.startsWith(u'-') && (next.size() == 1 || next.at(1) == u' ' || next.at(1) == u'\t');
+            if (!indented && !item)
+                break;
+            value += u'\n' + next.toString();
+            e.end = fm.lines.at(j).end;
+            i = j;
+        }
+        e.numbers = numbersIn(value);
+        out.append(e);
+    }
+    return out;
+}
+
+/// "[2, 5]": the numbers in order.
+QString flowList(QList<int> numbers)
+{
+    std::sort(numbers.begin(), numbers.end());
+    QStringList items;
+    for (const int n : std::as_const(numbers))
+        items.append(QString::number(n));
+    return u'[' + items.join(u", "_s) + u']';
+}
+
 } // namespace
 
 QString folder() { return u"AI"_s; }
@@ -476,6 +611,14 @@ Conversation parse(QStringView content)
         }
     }
     close();
+    // The messages reported or hidden: their numbers in the frontmatter (reported first).
+    QList<int> reported, hidden;
+    for (const FlagEntry &e : flagEntries(content, frontmatterOf(content)))
+        (e.flag == Flag::Reported ? reported : hidden) += e.numbers;
+    for (qsizetype n = 0; n < conversation.messages.size(); ++n) {
+        Message &m = conversation.messages[n];
+        m.flag = reported.contains(int(n + 1)) ? Flag::Reported : hidden.contains(int(n + 1)) ? Flag::Hidden : Flag::None;
+    }
     for (const Message &m : std::as_const(conversation.messages)) {
         if (m.role != Role::User)
             continue;
@@ -604,6 +747,84 @@ QString setPartner(const QString &content, QStringView partner)
     if (value.isEmpty())
         return content;
     return u"---"_s + newline + u"partner: "_s + value + newline + u"---"_s + newline + content;
+}
+
+QString flagKey(Flag flag, QStringView language)
+{
+    switch (flag) {
+    case Flag::Reported: return language == u"pl" ? u"zgłoszone"_s : u"reported"_s;
+    case Flag::Hidden: return language == u"pl" ? u"ukryte"_s : u"hidden"_s;
+    case Flag::None: break;
+    }
+    return {};
+}
+
+QString setFlag(const QString &content, int number, Flag flag, QStringView language)
+{
+    if (number < 1)
+        return content;
+    const Frontmatter fm = frontmatterOf(content);
+    const QList<FlagEntry> entries = flagEntries(content, fm);
+    QList<int> reported, hidden;
+    for (const FlagEntry &e : entries)
+        (e.flag == Flag::Reported ? reported : hidden) += e.numbers;
+    const Flag now = reported.contains(number) ? Flag::Reported : hidden.contains(number) ? Flag::Hidden : Flag::None;
+    if (now == flag)
+        return content;
+    reported.removeAll(number);
+    hidden.removeAll(number);
+    if (flag == Flag::Reported)
+        reported.append(number);
+    else if (flag == Flag::Hidden)
+        hidden.append(number);
+    // (Each number once, as the lists of several entries are merged.)
+    const auto unique = [](QList<int> numbers) {
+        std::sort(numbers.begin(), numbers.end());
+        numbers.erase(std::unique(numbers.begin(), numbers.end()), numbers.end());
+        return numbers;
+    };
+    reported = unique(reported);
+    hidden = unique(hidden);
+
+    const QString newline = content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+    QString lang = languageOf(content);
+    if (lang.isEmpty())
+        lang = language.toString();
+    // The edits, from the end of the page to its start: {start, end, text}.
+    struct Edit {
+        qsizetype start;
+        qsizetype end;
+        QString text;
+    };
+    QList<Edit> edits;
+    QString added; // the entries the frontmatter gets at its end
+    for (const Flag kind : {Flag::Reported, Flag::Hidden}) {
+        const QList<int> &numbers = kind == Flag::Reported ? reported : hidden;
+        bool written = false;
+        for (const FlagEntry &e : entries) {
+            if (e.flag != kind)
+                continue;
+            if (!written && !numbers.isEmpty())
+                edits.append({e.start, e.end, e.key + u": "_s + flowList(numbers) + e.ending.toString()});
+            else
+                edits.append({e.start, e.end, QString()});
+            written = true;
+        }
+        if (!written && !numbers.isEmpty())
+            added += flagKey(kind, lang) + u": "_s + flowList(numbers) + newline;
+    }
+    if (!fm.found) {
+        if (added.isEmpty())
+            return content;
+        return u"---"_s + newline + added + u"---"_s + newline + content;
+    }
+    if (!added.isEmpty())
+        edits.append({fm.closing, fm.closing, added});
+    std::sort(edits.begin(), edits.end(), [](const Edit &a, const Edit &b) { return a.start > b.start; });
+    QString out = content;
+    for (const Edit &e : std::as_const(edits))
+        out.replace(e.start, e.end - e.start, e.text);
+    return out;
 }
 
 QStringList picturesIn(QStringView markdown)

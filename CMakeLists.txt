@@ -35,6 +35,16 @@ if(BRULION_PLAY)
     endif()
 endif()
 
+# "Report response" (docs/UI.md "AI chat"): an email address the reports of AI answers go to — a
+# mailto: link with the report, which the user sends in their mail app. Empty (the default): a new
+# issue of the repository on GitHub, prefilled, which the user sends there (public).
+set(BRULION_AI_REPORT_EMAIL "" CACHE STRING "Email address for reports of AI responses (empty: a GitHub issue)")
+string(STRIP "${BRULION_AI_REPORT_EMAIL}" BRULION_AI_REPORT_EMAIL)
+if(NOT BRULION_AI_REPORT_EMAIL STREQUAL ""
+   AND NOT BRULION_AI_REPORT_EMAIL MATCHES "^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$")
+    message(FATAL_ERROR "BRULION_AI_REPORT_EMAIL is no plain email address (name@example.com): ${BRULION_AI_REPORT_EMAIL}")
+endif()
+
 if(BRULION_BUILD_APP)
     # 6.12: the QML uses Item.mutabilityGroup (the renderer keeps text that changes often out of
     # the batches of the rest: docs/PERFORMANCE.md "The model on the device"). brulion-cli alone

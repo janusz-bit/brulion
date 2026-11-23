@@ -16,9 +16,10 @@ brulion_add_test(tst_content_semantic SOURCES tst_content_semantic.cpp
 # The AI chat on a real Workspace, the model on the device played (tst_content_chat.cpp): a
 # conversation's page, its turns, a change asked in it, Stop, a failure, the messages and the list;
 # times, pictures, turns side by side (an OpenAI-compatible server played: ../fakeaiserver.h), the
-# device's model's line, a long conversation cut by turns, a partner of one's own, rename, delete.
+# device's model's line, a long conversation cut by turns, a partner of one's own, rename, delete;
+# answers reported or hidden (Report response) and the report's draft.
 brulion_add_test(tst_content_chat SOURCES tst_content_chat.cpp ../fakeaiserver.h
-    LIBS brulion_content brulion_shell brulion_core_vault brulion_core_ai Qt6::Gui Qt6::Network)
+    LIBS brulion_content brulion_shell brulion_core_vault brulion_core_ai brulion_core_aireport Qt6::Gui Qt6::Network)
 
 # The views in their real QML (qml-smoke.sh): every content view (journals, a page with its side
 # panel and dialogs, all pages, tags, a tag, search, trash, history) at desktop and phone sizes
