@@ -929,10 +929,17 @@ page; the icon `layers`): cards written in notes and scheduled with FSRS (docs/S
   schedules and writes everything; the view is its views `decks`, `review` and `stats` in an
   `ExtensionView` (the route's keys as params through `setParam`) drawn by `ShellExtensionView`. On by
   default (`AppSettings.flashcardsEnabled`, `extensions/fiszki`; off: an empty state with **Switch
-  on**). Settings → Extensions → Flashcards: new cards a day (5–50, 20), the desired retention
-  (80–95 %, 90), the tags of decks ("flashcards, fiszki"), the code as a page ("Edit the code") —
-  device settings `WorkspaceExtensions::setFlashcardSettings` gives the extension with every view,
-  action and command (`withSettings`).
+  on**). Settings → Extensions → Flashcards: new cards a day (5–50, 20) and the desired retention
+  (80–95 %, 90) — **device** settings —, then the **notebook's** (`Workspace.setConfig({flashcards:
+  {…}})`, `.brulion/config.json` "flashcards", docs/SYNTAX.md §15 "Settings of the cards"; fields
+  and switches disabled while no notebook is open): the tags of decks ("flashcards, fiszki"; the
+  device's value stays what a notebook without tags shows and uses), the card separators (single-line
+  and both ways, multi-line and both ways — an empty field switches one off), the end of a
+  multi-line card, switches for clozes from `==highlights==`, `**bold**` and `{{curly}}` text and
+  for **Folders as decks**, and the code as a page ("Edit the code"). A field follows the config (a
+  sync's change shows) and saves when editing finishes. `AppController` gives the extension both
+  with every view, action and command: `WorkspaceExtensions::setFlashcardSettings` (`withSettings`)
+  gets the device's map with the notebook's keys over it, again on `Workspace::configChanged`.
 * **Header** (QML): the title, "N cards to study now" (else what flashcards are), **Study**
   (primary; an icon alone on narrow windows) — all cards, or the deck of the statistics —, the tabs
   Decks · Review · Statistics (`BSegmented`), on Decks the grouping By tag · By page · By folder, on

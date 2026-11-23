@@ -1561,6 +1561,9 @@ bool Workspace::setConfig(const QVariantMap &map)
             return false;
         *field = *mode;
     }
+    // The flashcards' settings (the plugin's): a map of the keys to change.
+    if (map.contains(u"flashcards"_s) && !applyFlashcardsConfig(c.flashcards, map.value(u"flashcards"_s).toMap()))
+        return false;
     if (sameVaultConfig(c, m_vault->config()))
         return true;
     if (!m_vault->saveConfig(c)) {

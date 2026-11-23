@@ -268,6 +268,24 @@ struct ParsedNote {
 /// outline of blocks or an Obsidian-like continuous document. See markdown/notemode.h.
 enum class NoteMode { Outline, Document };
 
+/// The notebook's flashcard settings (config.json "flashcards", docs/SYNTAX.md §15 "Settings of
+/// the cards"): the Obsidian Spaced Repetition plugin's own, with its defaults. Only values that
+/// differ from them are written to the file.
+struct FlashcardsConfig {
+    QStringList tags; ///< the tags of decks, lower case without "#"; empty: this device's setting
+    QString singleLineSeparator = QStringLiteral("::");
+    QString singleLineReversedSeparator = QStringLiteral(":::");
+    QString multilineSeparator = QStringLiteral("?");
+    QString multilineReversedSeparator = QStringLiteral("??");
+    QString multilineEndMarker; ///< empty: a blank line ends a multi-line card
+    bool clozeHighlights = true; ///< `==answer==`
+    bool clozeBold = false;      ///< `**answer**`
+    bool clozeCurly = false;     ///< `{{answer}}`
+    bool foldersAsDecks = false; ///< a card's deck is its note's folder
+
+    friend bool operator==(const FlashcardsConfig &, const FlashcardsConfig &) = default;
+};
+
 struct VaultConfig {
     QString journalsFolder = QStringLiteral("journals");
     QString journalFileFormat = QStringLiteral("yyyy-MM-dd");  ///< Qt QDate format string
@@ -287,6 +305,7 @@ struct VaultConfig {
     QString monthlyFolder = QStringLiteral("journals");
     QString monthlyFileFormat = QStringLiteral("yyyy-MM"); ///< Qt QDate format of the 1st: "2026-11"
     QString monthlyTemplate = QStringLiteral("templates/monthly.md");
+    FlashcardsConfig flashcards;
 };
 
 } // namespace brulion

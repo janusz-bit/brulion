@@ -25,6 +25,14 @@ A line like `capital:: Warsaw` — one word, `::` and a space, not a list item �
 
 In **Logseq** a card is a block tagged `#card`: the block is the question and the blocks under it the answer. `{{cloze Paris}}` in it is hidden while you are asked, and `{{cloze Paris \\ city}}` shows the hint `(city)`. Logseq cards work in Brulion as they are.
 
+## Settings of the cards
+The Spaced Repetition plugin lets you change how cards are written, and so does Brulion, with the same settings. They are kept in the notebook (its `.brulion/config.json`), so every device reads your notes alike — **Settings → Extensions → Flashcards**:
+
+- **Separators** — the text between a question and its answer (`::`, and `:::` for both ways) and the line that splits a card of several lines (`?`, and `??` for both ways) can be anything you like, say `->` and `<->`. An empty field switches one off.
+- **End of a multi-line card** — set it to, say, `---`, and a card runs up to a line with only that, so it can hold blank lines.
+- **Clozes** — besides highlights, as in `a ==b==`, you can make `**bold**` text or `{{curly}}` text a cloze; Anki's `{{c1::…}}` always are.
+- **Folders as decks** — every note in a folder is read, tagged or not, and its cards are in the deck of the folder: `Languages/Spanish` becomes `#languages/spanish`.
+
 ## Decks
 **Flashcards** in the sidebar (and on the phone's bottom bar, when you choose it) shows how many cards are waiting today — the same number is on its icon. The **Decks** tab lists your decks **by tag** — `#flashcards/spanish` with its sub-decks below it —, **by page** or **by folder**, each with how many cards are due and how many new ones you can learn today. A tap on a deck starts its session; its **⋯** menu also offers studying ahead and the deck's statistics. **Study all** (or Enter) studies every deck at once.
 

@@ -963,6 +963,36 @@ private Q_SLOTS:
         QVERIFY(!ws->setConfig({{u"journalMode"_s, QString()}}));
         QCOMPARE(ws->vaultConfig().value(u"pageMode"_s).toString(), u"outline"_s);
         QCOMPARE(changed.size(), 2);
+
+        // The flashcards' settings (the Spaced Repetition plugin's): a map of the keys to change, in
+        // config.json's "flashcards" object with only what differs from the defaults.
+        QCOMPARE(ws->vaultConfig().value(u"flashcards"_s).toMap().value(u"singleLineSeparator"_s).toString(), u"::"_s);
+        QVERIFY(!ws->readFile(u".brulion/config.json"_s).contains(u"flashcards"_s));
+        QVERIFY(ws->setConfig({{u"flashcards"_s, QVariantMap{{u"singleLineSeparator"_s, u" => "_s},
+                                                               {u"clozeBold"_s, true},
+                                                               {u"tags"_s, u"#Fiszki, żółwie"_s}}}}));
+        QCOMPARE(changed.size(), 3);
+        const QVariantMap fc = ws->vaultConfig().value(u"flashcards"_s).toMap();
+        QCOMPARE(fc.value(u"singleLineSeparator"_s).toString(), u" => "_s);
+        QCOMPARE(fc.value(u"clozeBold"_s).toBool(), true);
+        QCOMPARE(fc.value(u"tags"_s).toString(), u"fiszki, żółwie"_s);
+        QCOMPARE(fc.value(u"multilineSeparator"_s).toString(), u"?"_s);
+        const QString json = ws->readFile(u".brulion/config.json"_s);
+        QVERIFY(json.contains(u"\"clozeBold\": true"_s));
+        QVERIFY(!json.contains(u"multilineSeparator"_s));
+        QCOMPARE(ws->vault()->config().flashcards.tags, (QStringList{u"fiszki"_s, u"żółwie"_s}));
+        QVERIFY(ws->setConfig({{u"flashcards"_s, QVariantMap{{u"clozeBold"_s, true}}}})); // unchanged
+        QCOMPARE(changed.size(), 3);
+        // A bad value or an unknown key changes nothing.
+        QVERIFY(!ws->setConfig({{u"flashcards"_s, QVariantMap{{u"multilineSeparator"_s, u"a\nb"_s}}}}));
+        QVERIFY(!ws->setConfig({{u"flashcards"_s, QVariantMap{{u"nope"_s, 1}}}}));
+        QVERIFY(!ws->setConfig({{u"flashcards"_s, QVariantMap{{u"clozeCurly"_s, u"yes"_s}}}}));
+        QCOMPARE(changed.size(), 3);
+        // Back to the defaults: the object is gone from the file.
+        QVERIFY(ws->setConfig({{u"flashcards"_s, QVariantMap{{u"singleLineSeparator"_s, u"::"_s},
+                                                               {u"clozeBold"_s, false},
+                                                               {u"tags"_s, QString()}}}}));
+        QVERIFY(!ws->readFile(u".brulion/config.json"_s).contains(u"flashcards"_s));
     }
 
     void configFromObsidian()

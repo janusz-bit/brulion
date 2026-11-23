@@ -491,6 +491,23 @@ Item {
         onEditingFinished: save()
     }
 
+    /// A text field that saves one key of the notebook's flashcard settings (config.json
+    /// "flashcards") when editing finishes; its text follows the config, as ConfigField's.
+    component FlashcardsField: BTextField {
+        id: fcField
+        required property string key
+        readonly property string configText: AppController.routeText(Workspace.config.flashcards, key)
+        Layout.preferredWidth: Theme.compact ? -1 : 160
+        Layout.fillWidth: Theme.compact
+        enabled: Workspace.isOpen
+        Binding on text { value: fcField.configText }
+        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+        onEditingFinished: {
+            if (text !== configText)
+                errorText = Workspace.setConfig({ flashcards: Js.withKey({}, key, text) }) ? "" : qsTr("This value cannot be used.")
+        }
+    }
+
     /// A switch row of a settings card.
     component SettingSwitch: BSwitch {
         Layout.fillWidth: true
@@ -1663,17 +1680,110 @@ Item {
                 ShellSettingRow {
                     visible: AppSettings.flashcardsEnabled
                     title: qsTr("Tags of decks")
-                    description: qsTr("A note with one of these tags (or a tag under one, #flashcards/spanish) is a deck. Blocks tagged #card are cards wherever they are.")
+                    description: qsTr("A note with one of these tags (or a tag under one, #flashcards/spanish) is a deck. Kept in this notebook; one without tags uses this device's.")
                     BTextField {
+                        id: flashcardsTagsField
                         objectName: "flashcardsTagsSetting"
+                        readonly property string notebookTags: AppController.routeText(Workspace.config.flashcards, "tags")
                         Layout.preferredWidth: Theme.compact ? -1 : 260
                         Layout.fillWidth: Theme.compact
-                        text: AppSettings.flashcardsTags
+                        Binding on text { value: flashcardsTagsField.notebookTags !== "" ? flashcardsTagsField.notebookTags : AppSettings.flashcardsTags }
                         placeholderText: "flashcards, fiszki"
                         accessibleName: qsTr("Tags of decks")
                         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-                        onEditingFinished: AppSettings.flashcardsTags = text
+                        onEditingFinished: {
+                            if (Workspace.isOpen)
+                                errorText = Workspace.setConfig({ flashcards: { tags: text } }) ? "" : qsTr("This value cannot be used.")
+                            else
+                                AppSettings.flashcardsTags = text
+                        }
                     }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Card separators")
+                    description: qsTr("Single-line cards: the question, the separator, the answer; the longer one asks both ways. Kept in this notebook. Empty switches one off.")
+                    ColumnLayout {
+                        spacing: Theme.space2
+                        FlashcardsField {
+                            objectName: "flashcardsSingleSetting"
+                            key: "singleLineSeparator"
+                            placeholderText: "::"
+                            accessibleName: qsTr("Single-line separator")
+                        }
+                        FlashcardsField {
+                            objectName: "flashcardsSingleReversedSetting"
+                            key: "singleLineReversedSeparator"
+                            placeholderText: ":::"
+                            accessibleName: qsTr("Single-line separator, both ways")
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Multi-line separators")
+                    description: qsTr("A line that is only this text splits a multi-line card into the question above and the answer below; the second one asks both ways. Empty switches one off.")
+                    ColumnLayout {
+                        spacing: Theme.space2
+                        FlashcardsField {
+                            objectName: "flashcardsMultiSetting"
+                            key: "multilineSeparator"
+                            placeholderText: "?"
+                            accessibleName: qsTr("Multi-line separator")
+                        }
+                        FlashcardsField {
+                            objectName: "flashcardsMultiReversedSetting"
+                            key: "multilineReversedSeparator"
+                            placeholderText: "??"
+                            accessibleName: qsTr("Multi-line separator, both ways")
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("End of a multi-line card")
+                    description: qsTr("A line that is only this text ends a multi-line card or a cloze card, so that it can hold blank lines (for example ---). Empty: a blank line ends it.")
+                    FlashcardsField {
+                        objectName: "flashcardsEndMarkerSetting"
+                        key: "multilineEndMarker"
+                        accessibleName: qsTr("End of a multi-line card")
+                    }
+                }
+                SettingSwitch {
+                    objectName: "flashcardsHighlightsSetting"
+                    visible: AppSettings.flashcardsEnabled
+                    text: qsTr("Clozes from ==highlights==")
+                    description: qsTr("A line with ==an answer== (or ==1;;an answer;;a hint==) is a cloze card. Kept in this notebook.")
+                    checked: AppController.routeFlag(Workspace.config.flashcards, "clozeHighlights")
+                    enabled: Workspace.isOpen
+                    onToggled: Workspace.setConfig({ flashcards: { clozeHighlights: checked } })
+                }
+                SettingSwitch {
+                    objectName: "flashcardsBoldSetting"
+                    visible: AppSettings.flashcardsEnabled
+                    text: qsTr("Clozes from **bold text**")
+                    description: qsTr("A line with **an answer** (or **1;;an answer;;a hint**) is a cloze card. Kept in this notebook.")
+                    checked: AppController.routeFlag(Workspace.config.flashcards, "clozeBold")
+                    enabled: Workspace.isOpen
+                    onToggled: Workspace.setConfig({ flashcards: { clozeBold: checked } })
+                }
+                SettingSwitch {
+                    objectName: "flashcardsCurlySetting"
+                    visible: AppSettings.flashcardsEnabled
+                    text: qsTr("Clozes from {{curly brackets}}")
+                    description: qsTr("A line with {{an answer}} (or {{1;;an answer;;a hint}}) is a cloze card. Anki's {{c1::answer::hint}} always is. Kept in this notebook.")
+                    checked: AppController.routeFlag(Workspace.config.flashcards, "clozeCurly")
+                    enabled: Workspace.isOpen
+                    onToggled: Workspace.setConfig({ flashcards: { clozeCurly: checked } })
+                }
+                SettingSwitch {
+                    objectName: "flashcardsFoldersSetting"
+                    visible: AppSettings.flashcardsEnabled
+                    text: qsTr("Folders as decks")
+                    description: qsTr("Every note in a folder is read for cards, tagged or not, and its cards are in the deck of its folder (sub-folders are sub-decks), whatever their tags say. Notes outside any folder keep their tags. Kept in this notebook.")
+                    checked: AppController.routeFlag(Workspace.config.flashcards, "foldersAsDecks")
+                    enabled: Workspace.isOpen
+                    onToggled: Workspace.setConfig({ flashcards: { foldersAsDecks: checked } })
                 }
                 BuiltinSourceRow {
                     objectName: "flashcardsSourceSetting"

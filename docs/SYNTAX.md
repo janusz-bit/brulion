@@ -93,6 +93,18 @@ and the folder is an Obsidian vault (`.obsidian/`), `journalsFolder`, `journalFi
 to Obsidian's settings (`daily-notes.json`, `templates.json`, `app.json`; docs/IMPORT.md "Obsidian folder without importing") — in memory, until the settings are saved. `weeklyFolder` /
 `monthlyFolder` missing from the file follow `journalsFolder` (also one taken from Obsidian).
 
+`flashcards` (Settings → Extensions → Flashcards; §15 "Settings of the cards"): the Spaced Repetition
+plugin's card settings and the tags of decks, kept in the notebook so that every device reads the
+cards alike — `{"tags": ["flashcards", "fiszki"], "singleLineSeparator": "::",
+"singleLineReversedSeparator": ":::", "multilineSeparator": "?", "multilineReversedSeparator": "??",
+"multilineEndMarker": "", "clozeHighlights": true, "clozeBold": false, "clozeCurly": false,
+"foldersAsDecks": false}`. Only the values that differ from these (the plugin's defaults) are
+written, the object is missing from a notebook that never changed one, and keys this version does
+not know stay. A separator is a text of at most 40 characters without a line break (the two
+multi-line ones and the end marker are trimmed; an empty one is switched off, for the end marker
+"none"); `tags` is a list (or a text "a, b") that without any falls back to the tags set on the
+device (Settings of the device, "flashcards/tags"). An invalid value is a warning and its default.
+
 `agentHosts` (written by the desktop app while it shares its AI agents in a tailnet, docs/CLI.md
 "A phone finds the computer"): `[{"url": "http://nixos.tail1ea20e.ts.net:8790", "host": "nixos",
 "agents": [{"id": "claude", "name": "Claude Code"}]}]` — where a computer of the user's offers its
@@ -2640,6 +2652,7 @@ from where Brulion left — and the other way round.
   line of its own); else the frontmatter's; else the note's first. A deck's cards include its
   sub-decks'. A Logseq card's decks are `card` and the other tags of its block.
 * Decks are also listed **by page** and **by folder** (the folder's sub-folders included).
+* With **folders as decks** (below) a card's deck is its note's folder instead.
 
 ### Card formats (deck notes)
 
@@ -2669,6 +2682,27 @@ The plugin's parser: a **paragraph** is a run of lines up to a blank line; a fen
   above it are no cards.
 * Shown: the question and the answer as Markdown, without the scheduling comment, a block id at the
   end (`^abc123`) and the flashcard tags; a breadcrumb of the page and the headings above the card.
+
+### Settings of the cards
+
+The plugin's settings (st3v3nmw/obsidian-spaced-repetition 1.15.4, its `parser.ts`,
+`note-question-parser.ts` and `topic-path.ts`; its defaults), kept per **notebook** in
+`.brulion/config.json` (§1 "`flashcards`") — Settings → Extensions → Flashcards, `brulion-cli
+info` — and given to the extension by the app and by `brulion-cli card …` (the options of a
+command still win). The device's setting for the tags remains the fallback of a notebook that sets
+none; new cards a day and the desired retention stay device settings (a way of studying, not a
+property of the notes).
+
+| Setting (config key) | Default | Means |
+|---|---|---|
+| Single-line separators (`singleLineSeparator`, `singleLineReversedSeparator`) | `::` · `:::` | a line with the first one is a card (question before, answer after), with the second both ways. Both are looked for as the plugin does: the longer first (`<=>` before `=>`; the basic one first when they are as long), the first occurrence of one decides and counts only outside inline code, `a::b:::c` with the defaults is `a::b` both ways |
+| Multi-line separators (`multilineSeparator`, `multilineReversedSeparator`) | `?` · `??` | a line that is only this text (spaces around it ignored) splits a card of several lines into the question above and the answer below, the second both ways |
+| End of a multi-line card (`multilineEndMarker`) | none | a line that is only this text ends a multi-line or a cloze card, which then **goes on through blank lines** (a blank line ends a card without one): `Pytanie` / `?` / `Odpowiedź` / (blank) / `ciąg dalszy` / `---`. The marker is no part of the card, nor are the blank lines before it; the card's state goes to its last line of text. A card still open at the end of the note ends there; a blank line outside a card, as ever, only separates paragraphs |
+| Cloze kinds (`clozeHighlights`, `clozeBold`, `clozeCurly`) | on · off · off | which text makes a line a cloze: `==answer==`, `**answer**` and `{{answer}}`, each also numbered with a hint, `==1;;answer;;hint==` (the same for the other two). Anki's `{{c1::answer::hint}}` always do. Code spans, an unclosed or empty one are text; `{{cloze …}}` (Logseq's) and Anki's are no curly cloze. Numbered and not numbered ones follow one rule (a paragraph that numbers some asks only those) |
+| Folders as decks (`foldersAsDecks`) | off | as the plugin's "Convert folders to decks and subdecks": **every** note in a folder (not the notebook's root) is read for cards — tagged or not — and each of its cards is in the deck of the note's folder, `Nauka/Hiszpański` → `#nauka/hiszpański` (lower case, as tags; its sub-folders are sub-decks), **whatever its tags say** (the plugin's rule: the folder replaces the tags, a tag at the start of a card is only left out of its text). A note outside any folder keeps its tags' decks (unlike the plugin, which would give it none). The decks "by tag" are then the folders, drawn without a `#`; the review log's pages (`Fiszki/Powtórki …`, `Flashcards/Reviews …`) are no cards |
+
+A property line (`key:: value`) is no card whatever the separators are. The editor draws only
+Anki's `{{c1::…}}` clozes as highlights (a bold or curly cloze is plain bold text or braces there).
 
 ### Logseq cards
 

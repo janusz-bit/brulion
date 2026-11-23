@@ -10,6 +10,7 @@
 #include "extensions/notebookhost.h"
 #include "index/vaultindex.h"
 #include "vault/vault.h"
+#include "vault/vaultconfig.h"
 
 #include <algorithm>
 #include <memory>
@@ -57,10 +58,11 @@ bool startCards(Call &call, Cards &c)
     return true;
 }
 
-/// The settings every command takes: --deck, --tags, --new-per-day, --retention.
+/// The settings every command takes: the notebook's, --deck, --tags, --new-per-day, --retention.
 QVariantMap settingsArgs(Call &call)
 {
-    QVariantMap args;
+    // The notebook's own (config.json "flashcards": the plugin's card settings), then the options.
+    QVariantMap args = call.vault() ? flashcardsSettings(call.vault()->config().flashcards) : QVariantMap();
     if (const QString deck = call.str(u"deck"_s); !deck.isEmpty())
         args.insert(u"deck"_s, deck);
     if (const QString tags = call.str(u"tags"_s); !tags.isEmpty())

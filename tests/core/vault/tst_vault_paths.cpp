@@ -450,6 +450,174 @@ private Q_SLOTS:
         QCOMPARE(vaultConfigToJson(broken).value("weeklyFileFormat"_L1).toString(), u"yyyy-'W'ww"_s);
     }
 
+    // The flashcards' settings: the Spaced Repetition plugin's, in one object, only what differs
+    // from its defaults written, an invalid value a warning and the default.
+    void flashcardsDefaults()
+    {
+        const ParsedVaultConfig parsed = parseVaultConfig("{}");
+        const FlashcardsConfig &fc = parsed.config.flashcards;
+        QVERIFY(fc.tags.isEmpty());
+        QCOMPARE(fc.singleLineSeparator, u"::"_s);
+        QCOMPARE(fc.singleLineReversedSeparator, u":::"_s);
+        QCOMPARE(fc.multilineSeparator, u"?"_s);
+        QCOMPARE(fc.multilineReversedSeparator, u"??"_s);
+        QCOMPARE(fc.multilineEndMarker, QString());
+        QVERIFY(fc.clozeHighlights);
+        QVERIFY(!fc.clozeBold);
+        QVERIFY(!fc.clozeCurly);
+        QVERIFY(!fc.foldersAsDecks);
+        // Nothing of it in a file that never set it.
+        QVERIFY(!serializeVaultConfig(parsed.config, parsed.raw).contains("flashcards"));
+        QVERIFY(!vaultConfigToJson(parsed.config).contains(u"flashcards"_s));
+    }
+
+    void flashcardsParse_data()
+    {
+        QTest::addColumn<QByteArray>("json");
+        QTest::addColumn<int>("warnings");
+        QTest::addColumn<QString>("field");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("tags as a list") << R"({"flashcards":{"tags":["#Fiszki"," flashcards/Język ","fiszki","a b"]}})"_ba << 0
+                                        << u"tags"_s << u"fiszki,flashcards/język"_s;
+        QTest::newRow("tags as a text") << R"({"flashcards":{"tags":"#Fiszki, żółwie  #słówka"}})"_ba << 0 << u"tags"_s
+                                        << u"fiszki,żółwie,słówka"_s;
+        QTest::newRow("tags of numbers") << R"({"flashcards":{"tags":[1,2]}})"_ba << 1 << u"tags"_s << QString();
+        QTest::newRow("an empty list is none") << R"({"flashcards":{"tags":[]}})"_ba << 0 << u"tags"_s << QString();
+        QTest::newRow("a single-line separator") << R"({"flashcards":{"singleLineSeparator":" → "}})"_ba << 0
+                                                 << u"single"_s << u" → "_s;
+        QTest::newRow("a separator switched off") << R"({"flashcards":{"singleLineReversedSeparator":""}})"_ba << 0
+                                                  << u"singleReversed"_s << QString();
+        QTest::newRow("a multi-line separator is trimmed") << R"({"flashcards":{"multilineSeparator":" ?? "}})"_ba << 0
+                                                           << u"multi"_s << u"??"_s;
+        QTest::newRow("an end marker") << R"({"flashcards":{"multilineEndMarker":" --- "}})"_ba << 0 << u"endMarker"_s
+                                       << u"---"_s;
+        QTest::newRow("a line break in a separator") << R"({"flashcards":{"multilineSeparator":"a\nb"}})"_ba << 1
+                                                     << u"multi"_s << u"?"_s;
+        QTest::newRow("a separator of 41 characters")
+                << (R"({"flashcards":{"singleLineSeparator":")"_ba + QByteArray(41, 'x') + R"("}})"_ba) << 1
+                << u"single"_s << u"::"_s;
+        QTest::newRow("a separator that is no text") << R"({"flashcards":{"singleLineSeparator":5}})"_ba << 1
+                                                     << u"single"_s << u"::"_s;
+        QTest::newRow("not an object") << R"({"flashcards":[1]})"_ba << 1 << u"single"_s << u"::"_s;
+        QTest::newRow("a flag that is no flag") << R"({"flashcards":{"clozeBold":"yes"}})"_ba << 1 << u"bold"_s
+                                                << u"false"_s;
+        QTest::newRow("clozes") << R"({"flashcards":{"clozeBold":true,"clozeCurly":true,"clozeHighlights":false}})"_ba
+                                << 0 << u"clozes"_s << u"false,true,true"_s;
+        QTest::newRow("folders") << R"({"flashcards":{"foldersAsDecks":true}})"_ba << 0 << u"folders"_s << u"true"_s;
+    }
+    void flashcardsParse()
+    {
+        QFETCH(QByteArray, json);
+        QFETCH(int, warnings);
+        QFETCH(QString, field);
+        QFETCH(QString, expected);
+        const ParsedVaultConfig parsed = parseVaultConfig(json);
+        QCOMPARE(parsed.warnings.size(), warnings);
+        const FlashcardsConfig &fc = parsed.config.flashcards;
+        const auto flag = [](bool on) { return on ? u"true"_s : u"false"_s; };
+        QString got;
+        if (field == u"tags"_s)
+            got = fc.tags.join(u',');
+        else if (field == u"single"_s)
+            got = fc.singleLineSeparator;
+        else if (field == u"singleReversed"_s)
+            got = fc.singleLineReversedSeparator;
+        else if (field == u"multi"_s)
+            got = fc.multilineSeparator;
+        else if (field == u"endMarker"_s)
+            got = fc.multilineEndMarker;
+        else if (field == u"bold"_s)
+            got = flag(fc.clozeBold);
+        else if (field == u"clozes"_s)
+            got = flag(fc.clozeHighlights) + u',' + flag(fc.clozeBold) + u',' + flag(fc.clozeCurly);
+        else if (field == u"folders"_s)
+            got = flag(fc.foldersAsDecks);
+        QCOMPARE(got, expected);
+    }
+
+    void flashcardsRoundTrip()
+    {
+        VaultConfig config;
+        FlashcardsConfig &fc = config.flashcards;
+        fc.tags = {u"fiszki"_s, u"słówka/łatwe"_s};
+        fc.singleLineSeparator = u" => "_s;
+        fc.multilineSeparator.clear(); // off
+        fc.multilineEndMarker = u"---"_s;
+        fc.clozeHighlights = false;
+        fc.clozeBold = true;
+        fc.foldersAsDecks = true;
+        // A key of a newer version stays, and so does everything else of the file.
+        const ParsedVaultConfig old =
+                parseVaultConfig(R"({"flashcards":{"przyszłość":[1,2],"clozeCurly":true},"inne":"żółw"})"_ba);
+        QVERIFY(old.config.flashcards.clozeCurly);
+        const QByteArray json = serializeVaultConfig(config, old.raw);
+        const ParsedVaultConfig parsed = parseVaultConfig(json);
+        QVERIFY2(parsed.warnings.isEmpty(), qPrintable(parsed.warnings.join(u'\n')));
+        QVERIFY(sameVaultConfig(parsed.config, config));
+        QVERIFY(!parsed.config.flashcards.clozeCurly); // the config's value, not the old file's
+        const QJsonObject o = parsed.raw.value(u"flashcards"_s).toObject();
+        QCOMPARE(o.value(u"przyszłość"_s).toArray().size(), 2);
+        QCOMPARE(parsed.raw.value(u"inne"_s).toString(), u"żółw"_s);
+        QVERIFY(!o.contains(u"singleLineReversedSeparator"_s)); // the default is not written
+        QVERIFY(!o.contains(u"clozeCurly"_s));
+        QCOMPARE(o.value(u"multilineSeparator"_s).toString(), QString()); // "off" is written
+        QVERIFY(o.contains(u"multilineSeparator"_s));
+        // Back to the defaults: the object goes, with nothing else of its own left in it.
+        const ParsedVaultConfig plain = parseVaultConfig(serializeVaultConfig(VaultConfig{}, parseVaultConfig(json).raw));
+        QVERIFY(plain.raw.value(u"flashcards"_s).toObject().keys() == QStringList{u"przyszłość"_s});
+        const ParsedVaultConfig ownOnly = parseVaultConfig(R"({"flashcards":{"clozeBold":true}})"_ba);
+        QVERIFY(!serializeVaultConfig(VaultConfig{}, ownOnly.raw).contains("flashcards"));
+        // A "flashcards" that is no object is left alone unless something is to be written.
+        const ParsedVaultConfig broken = parseVaultConfig(R"({"flashcards":"x"})"_ba);
+        QCOMPARE(parseVaultConfig(serializeVaultConfig(broken.config, broken.raw)).raw.value(u"flashcards"_s).toString(),
+                 u"x"_s);
+        // Each field takes part in the comparison.
+        for (bool FlashcardsConfig::*flag : {&FlashcardsConfig::clozeHighlights, &FlashcardsConfig::clozeBold,
+                                             &FlashcardsConfig::clozeCurly, &FlashcardsConfig::foldersAsDecks}) {
+            VaultConfig other;
+            other.flashcards.*flag = !(other.flashcards.*flag);
+            QVERIFY(!sameVaultConfig(other, VaultConfig{}));
+        }
+        for (QString FlashcardsConfig::*field :
+             {&FlashcardsConfig::singleLineSeparator, &FlashcardsConfig::singleLineReversedSeparator,
+              &FlashcardsConfig::multilineSeparator, &FlashcardsConfig::multilineReversedSeparator,
+              &FlashcardsConfig::multilineEndMarker}) {
+            VaultConfig other;
+            other.flashcards.*field += u"x"_s;
+            QVERIFY(!sameVaultConfig(other, VaultConfig{}));
+        }
+        VaultConfig tagged;
+        tagged.flashcards.tags = {u"x"_s};
+        QVERIFY(!sameVaultConfig(tagged, VaultConfig{}));
+    }
+
+    void flashcardsApplyAndSettings()
+    {
+        FlashcardsConfig c;
+        QVERIFY(applyFlashcardsConfig(c, {{u"tags"_s, u"#Fiszki, Języki"_s}, {u"clozeBold"_s, true},
+                                          {u"multilineEndMarker"_s, u" ---"_s}}));
+        QCOMPARE(c.tags, (QStringList{u"fiszki"_s, u"języki"_s}));
+        QVERIFY(c.clozeBold);
+        QCOMPARE(c.multilineEndMarker, u"---"_s);
+        QVERIFY(applyFlashcardsConfig(c, {{u"tags"_s, QStringList{u"#A"_s, u"b"_s}}}));
+        QCOMPARE(c.tags, (QStringList{u"a"_s, u"b"_s}));
+        // One bad value, an unknown key or a value of the wrong kind: nothing changes.
+        const FlashcardsConfig before = c;
+        QVERIFY(!applyFlashcardsConfig(c, {{u"clozeCurly"_s, true}, {u"singleLineSeparator"_s, u"a\nb"_s}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"clozeCurly"_s, u"yes"_s}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"nope"_s, 1}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"singleLineSeparator"_s, 5}}));
+        QVERIFY(c == before);
+        // What the extension gets: every setting, the tags only when the notebook has any.
+        const QVariantMap m = flashcardsSettings(c);
+        QCOMPARE(m.value(u"tags"_s).toString(), u"a, b"_s);
+        QCOMPARE(m.value(u"singleLineSeparator"_s).toString(), u"::"_s);
+        QCOMPARE(m.value(u"multilineEndMarker"_s).toString(), u"---"_s);
+        QCOMPARE(m.value(u"clozeBold"_s).toBool(), true);
+        QVERIFY(!flashcardsSettings(FlashcardsConfig{}).contains(u"tags"_s));
+        QCOMPARE(normalizeFlashcardTags({u"#Żółw"_s, u"  "_s, u"#"_s, u"a b"_s, u"żółw"_s}), (QStringList{u"żółw"_s}));
+    }
+
     void serializeRoundTrip()
     {
         VaultConfig config;

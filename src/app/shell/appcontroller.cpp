@@ -358,9 +358,20 @@ AppController::AppController(const Options &options, QObject *parent)
     connect(m_settings.get(), &AppSettings::flashcardsEnabledChanged, this,
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
     // The flashcards' settings go with their views and their due count (WorkspaceExtensions).
-    m_workspace->extensions()->setFlashcardSettings(m_settings->flashcardsSettings());
-    connect(m_settings.get(), &AppSettings::flashcardsSettingsChanged, this,
-            [this] { m_workspace->extensions()->setFlashcardSettings(m_settings->flashcardsSettings()); });
+    // — the device's (new cards a day, retention; the tags as a fallback) and the notebook's (the
+    // plugin's card settings in .brulion/config.json, its tags), which a sync or a switch of notebook changes.
+    const auto flashcardSettings = [this] {
+        QVariantMap settings = m_settings->flashcardsSettings();
+        if (const Vault *vault = m_workspace->vault(); vault && vault->isOpen()) {
+            const QVariantMap notebook = flashcardsSettings(vault->config().flashcards);
+            for (auto it = notebook.cbegin(); it != notebook.cend(); ++it)
+                settings.insert(it.key(), it.value());
+        }
+        m_workspace->extensions()->setFlashcardSettings(settings);
+    };
+    flashcardSettings();
+    connect(m_settings.get(), &AppSettings::flashcardsSettingsChanged, this, flashcardSettings);
+    connect(m_workspace.get(), &Workspace::configChanged, this, flashcardSettings);
     // A device that never chose a model and has the former default's files keeps that model: the
     // default changed (the assistant's own came first), and an update must not swap the model it
     // uses for one still to download.
