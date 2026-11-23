@@ -178,7 +178,9 @@ jobs:
           PLAY_UPLOAD_KEYSTORE_STORE_PASS: ${{ inputs.play && secrets.PLAY_UPLOAD_KEYSTORE_STORE_PASS || '' }}
           PLAY_UPLOAD_KEYSTORE_KEY_PASS: ${{ inputs.play && secrets.PLAY_UPLOAD_KEYSTORE_KEY_PASS || '' }}
           PLAY_UPLOAD_KEYSTORE_ALIAS: ${{ inputs.play && secrets.PLAY_UPLOAD_KEYSTORE_ALIAS || '' }}
-          BRULION_ANDROID_AAB: ${{ inputs.aab && '1' || '0' }}
+          # (The app for Google Play always with its AAB: scripts/android-build.sh builds one unless told
+          # BRULION_ANDROID_AAB=0, which only a test APK asks for.)
+          BRULION_ANDROID_AAB: ${{ (inputs.aab || inputs.play) && '1' || '0' }}
           BRULION_ANDROID_PLAY: ${{ inputs.play && '1' || '0' }}
           BRULION_ANDROID_UNIT_TESTS: 1
           BRULION_ANDROID_LINT: 1
