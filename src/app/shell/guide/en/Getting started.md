@@ -60,13 +60,33 @@ Folders organize pages like directories on disk: the page `Projects/Home` is the
 Views without their own button — the Sync center, import and export, trash, clean up — are in the **More** menu (⋯, on a phone ⋮) → **Notebook** and in the command palette; **Settings** is also at the bottom of the icon bar. At the top, the **More** menu has page actions as icons (Favorite, Rename, Move, History), the **Mode** switch (Document, Outline, Source) and — on a computer — **Open in** (New tab, Window, Side panel, Split). The event log is in *Settings → Application* and in the palette.
 
 ## Appearance
-In *Settings → Appearance* you tailor Brulion to yourself — separately on each device:
+In *Settings → Appearance* you tailor Brulion to yourself — separately on each device (a theme from the notebook goes over it, below):
 - **Theme**: light, dark or following the system; **accent colour** (coral — the default —, red, blue, green, teal, violet, graphite or **Custom…** — any color from the grid or typed as `#3b7dd8`). The accent highlights today, the current tab and selections; where the chosen color would be hard to read, Brulion uses a lighter or darker shade of it by itself. Warnings and deleting stay red, reminders and alarms amber.
 - **Light background**: paper or white; **dark background**: graphite (the default: layers of grey), ink (warm charcoal layers with warm text), blue-grey or black (saves battery on OLED screens).
 - **Text size**, **interface font** (Inter, built in, or any installed font) and **density** — compact fits more on a computer screen (on a phone the buttons stay large).
 - **Layout**: which items and sections the sidebar shows, in what order Pages, Favorites and Recent appear, which five views the bottom navigation has on a phone, and whether the top bar has the quick capture button **+**. Hidden views stay in the command palette and under their shortcuts.
 
 The font of notes (sans-serif — Inter, the default —, serif — Literata — or **Other…**), the code font (JetBrains Mono), the text size and the **line spacing** are in *Settings → Editor*. “Restore the default look” goes back to the original colors and fonts. Brulion brings these three fonts with it, so notes look the same on every device. In the browser there is no choice of fonts — only the built-in ones work.
+
+### Themes
+A **theme** is a page of the notebook tagged `#theme` with a `theme` block: Brulion's colours for the light and the dark mode, its fonts, how round its corners are and how much room there is between things — written as data, nothing in it runs. *Settings → Appearance → Themes* lists the notebook's theme pages next to **None**, each with its colours in both modes; a click puts one on, at once, over the settings above. The theme you pick is the notebook's: every device that follows the notebook shows it after a sync. **Only on this device** keeps this device's own instead — a phone may wear a darker one.
+
+````markdown
+---
+tags: [theme]
+description: Paper by day, sea green always.
+---
+```theme
+accent: #1f8a80
+radius: 9
+light:
+  bg: #f4ecd8
+dark:
+  bg: #14110c
+```
+````
+
+Edit the page and the theme follows at once. A line Brulion cannot use — a misspelt name, a colour that is none, a font this device does not have — is left out and the rest applies; a muted note at the bottom of the page says which line and why. **Save the look as a theme page** writes the look you have now into a new page: to share a theme, copy its page's file into another notebook or send it. The names of the colours are those of [[Extension API#The app|b.app.theme]].
 
 On a computer a thin **status bar** runs along the bottom of the window: the sync status on the left (green “synced”; a click opens the Sync center), on the right the edited block (“Block 3 of 12”), the word count and the command palette's key.
 

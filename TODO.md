@@ -106,9 +106,8 @@ done in the repository simply disappears from the list.
   phone's bottom navigation, the editor's toolbar on the keyboard, the share sheet); replacing a
   built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
   editor input rules (`->` → `→` as typed, declarative so nothing waits for Luau); styles of blocks
-  by tag (a block tagged `#pilne` tinted); a theme as a page of its own (`#theme`, a `theme` block,
-  picked in Settings → Appearance and synced); `b.app.settings()` for the notebook's own settings
-  (`.brulion/config.json`: journal folder, templates) beside the device's.
+  by tag (a block tagged `#pilne` tinted); in `brulion-cli extension run`, the notebook's own
+  settings for `b.app.get` (they are there without the app: `.brulion/config.json`).
 * **Gym: next steps** — Polish instructions for the common exercises (free-exercise-db's are
   English); the exercises' pictures checked on a real phone; the rest timer's notification with the
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).
@@ -370,8 +369,6 @@ done in the repository simply disappears from the list.
 * **More interface languages** — translations beyond Polish and English, and with them natural
   language dates, the calculator and the introduction (Obsidian: many languages, also at the
   start).
-* **Themes** — theme files exchanged between users (colours, fonts, spacing), beyond the appearance
-  settings (Obsidian, Joplin); no code from notes.
 
 ## Windows
 

@@ -306,6 +306,9 @@ struct VaultConfig {
     QString monthlyFileFormat = QStringLiteral("yyyy-MM"); ///< Qt QDate format of the 1st: "2026-11"
     QString monthlyTemplate = QStringLiteral("templates/monthly.md");
     FlashcardsConfig flashcards;
+    /// The notebook's theme page (docs/SYNTAX.md §13 "Theme pages"): its vault path, "" none —
+    /// Settings → Appearance picks it, every device that follows the notebook shows it.
+    QString themePage;
 };
 
 } // namespace brulion

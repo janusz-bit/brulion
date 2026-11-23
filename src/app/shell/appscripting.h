@@ -4,12 +4,12 @@
 // made by AppController:
 //
 // * b.app's operations (core extensions/appapi.h appOperations(), Host::app): the app's state, its
-//   palette commands, the device settings an extension may read and change (a registry:
-//   settingSpecs()), navigation, a command run, a message. What moves the UI (navigate, open, back,
+//   palette commands, the device's and the notebook's settings an extension may read and change
+//   (registries: settingSpecs(), notebookSettingSpecs()), navigation, a command run, a message. What moves the UI (navigate, open, back,
 //   run, toast) runs after the extension's call returns, from the event loop: never inside a Luau
 //   call (a palette command may run an extension's command).
-// * The theme's overrides: the extensions' layers (b.app.theme, Engine::themes(), in their order)
-//   and those of live clients (the remote control's `theme`, an agent's), merged and handed to
+// * The theme's overrides: the theme page picked in Settings → Appearance (ThemePages) at the
+//   bottom, the extensions' layers (b.app.theme, Engine::themes(), in their order) over it and those of live clients (the remote control's `theme`, an agent's), merged and handed to
 //   ui::ThemeOverrides, which Theme.qml's tokens read — a live layer over the extensions'.
 // * The items extensions put into the UI (b.app.contribute): activate() does what one does when
 //   it is clicked.
@@ -56,6 +56,9 @@ struct SettingSpec {
     bool deferred = false;
     int listSize = 0; ///< list: exactly this many values (0: any number)
     QString label;    ///< what it is, in English
+    /// A setting of the notebook (.brulion/config.json, synced), not of this device: `property` is
+    /// its key there ("journalsFolder", "flashcards.tags" inside the "flashcards" object).
+    bool notebook = false;
 };
 
 class AppScripting : public QObject {
@@ -80,9 +83,16 @@ public:
     QVariant call(const QString &who, const QString &operation, const QVariantMap &args, QString *error);
 
     // ---- settings -------------------------------------------------------------------------------
+    /// The device's settings (AppSettings, AppController).
     static const QList<SettingSpec> &settingSpecs();
+    /// The notebook's own settings (.brulion/config.json through Workspace.setConfig): its folders,
+    /// the journal's file name and template, the weekly and monthly notes, the note modes, the
+    /// reminders' time, the week's first day, the flashcards' card settings, the theme page.
+    static const QList<SettingSpec> &notebookSettingSpecs();
+    /// A device's or the notebook's setting (their keys never clash).
     static const SettingSpec *settingSpec(const QString &key);
-    /// [{key, group, kind, label, value, options?, min?, max?}] in the registry's order.
+    /// [{key, scope ("device" | "notebook"), group, kind, label, value, options?, min?, max?}]: the
+    /// device's in the registry's order, then the notebook's while one is open.
     QVariantList settings() const;
     /// The value of `key`; `*error` for an unknown one (with the nearest key).
     QVariant setting(const QString &key, QString *error) const;
@@ -95,8 +105,13 @@ public:
     void setExtensionThemes(const QList<extensions::ThemeInfo> &themes);
     /// A live client's layer (an empty one removes it), over the extensions'; noted in the journal.
     void setLiveTheme(const QString &who, const extensions::ThemeLayer &layer);
-    /// {extensions: [{extension, tokens}], live: [{who, tokens}], light: {…}, dark: {…}} — the
-    /// layers and the tokens in force in each mode.
+    /// The theme page in force (ThemePages: `path`, "" none) — the bottom layer, under the
+    /// extensions' and the live ones: a look the user picked, which code may still change.
+    void setPageTheme(const QString &path, const extensions::ThemeLayer &layer);
+    /// The theme page's checker of b.app.set("themePage", path): true for "" and a theme page.
+    void setThemePageCheck(std::function<bool(const QString &path)> check) { m_themePageCheck = std::move(check); }
+    /// {page?: {path, tokens}, extensions: [{extension, tokens}], live: [{who, tokens}], light: {…},
+    /// dark: {…}} — the layers and the tokens in force in each mode.
     QVariantMap theme() const;
 
     // ---- the items of the UI (b.app.contribute) --------------------------------------------------
@@ -145,6 +160,9 @@ private:
     AppController *m_app;
     std::function<QVariantMap()> m_ui;
     std::function<QString(const QString &)> m_liveOwner;
+    std::function<bool(const QString &)> m_themePageCheck;
+    QString m_pageThemePath;
+    extensions::ThemeLayer m_pageTheme;
     QList<extensions::ThemeInfo> m_extensionThemes;
     QList<std::pair<QString, extensions::ThemeLayer>> m_liveThemes; // in the order set
     QList<Change> m_changes;

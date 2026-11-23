@@ -60,6 +60,20 @@ struct ExtensionCode
 
 ExtensionCode extensionCode(QStringView content);
 
+/// A fenced block of a page: its fence lines (0-based; close = -1 when it runs to the end) and the
+/// lines between them.
+struct FencedBlock
+{
+    int open = 0;
+    int close = -1;
+    QStringList lines;
+};
+
+/// The fenced blocks of `language` (lower case: "theme") on a page, by the rules of its ```luau
+/// blocks above: after the frontmatter, also in a list item, ```{theme} and ```.theme too, none
+/// inside another fence.
+QList<FencedBlock> fencedBlocks(QStringView content, const QString &language);
+
 /// The ```luau block that contains `line` (0-based; a fence line counts) as code padded to its own
 /// lines like `source`, or "" when the line is in no such block. "Run Luau block" in the editor.
 QString codeBlockAt(QStringView content, int line);

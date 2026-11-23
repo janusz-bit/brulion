@@ -76,6 +76,33 @@ components — no Material/Fusion look, so all targets look identical.
   already in another slot swaps places with it); the top bar's **+** on phones (the quick note
   button) on or off. A family chosen on another device or since uninstalled falls back to the
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
+* **Themes** (Settings → Appearance → **Themes**, `qml/shell/ShellThemePages.qml`; C++
+  `ThemePages`, `src/app/shell/themepages.h`; core `extensions/themepage.h`): the notebook's
+  **theme pages** — pages tagged `#theme` / `#motyw` whose ```` ```theme ```` block declares tokens
+  (docs/SYNTAX.md §13 "Theme pages": colours for both modes or one, the radii, the spacing unit
+  `space`, the fonts) — listed by title next to **None** (the appearance settings alone), each with
+  its description (or how many tokens it sets, or "n line(s) ignored"), its background, accent and
+  text in the light and the dark mode as two small swatches over the settings in force, a button
+  that opens the page and a check mark on the one in force (`themePage_none`, `themePage_<n>`,
+  `themePageOpen_<n>`). A click applies it at once, in both modes: its tokens are the theme's bottom
+  layer (`AppScripting::setPageTheme`), under an extension's `b.app.theme` and an agent's live
+  theme, over the palette of the appearance settings (an `accent` brings its readable shades, as a
+  custom accent does). The choice is the **notebook's** — `themePage` in `.brulion/config.json`, so
+  every device that follows the notebook shows it after a sync — unless **Only on this device**
+  (`themePagesDeviceOnly`) is on: then this device keeps its own (`AppSettings`
+  "appearance/themePageOwn/<notebook id>", "appearance/themePage/<notebook id>"; switched on it
+  keeps what shows, switched off the notebook's applies again). A page in force applies again when
+  it changes (an edit's save, a sync); renamed or moved in the app it stays picked (the notebook's
+  setting follows it as `journalTemplate` does; the device's here); a choice whose page is not in
+  the notebook (deleted, not synced yet) applies nothing and a warning line says so
+  (`themePagesMissing`). **Save the look as a theme page** (`themePagesExport`) writes the look in
+  force — the palette of the accent and backgrounds in both modes, the chosen interface and code
+  fonts, every override in force — into a new page "Mój motyw" / "My theme" in the folder
+  "Motywy" / "Themes" and opens it: a theme is shared by copying that file. On a theme page the
+  page itself shows a muted chip at its bottom left (`pageThemeState`, as an extension page's
+  chip; none on an extension page): "Theme: in use" or "Theme: not in use" with **Use it**, how
+  many tokens it sets — or how many lines it ignored, the first one's reason and a button to its
+  line (`pageThemeLine`) —, "no ```theme block yet", and a button to these settings.
 * Typography: **bundled fonts** on every platform (`src/app/ui/uifonts.h`, `assets/fonts/ui`,
   made by `scripts/ui-fonts.py`; SIL OFL 1.1, no Reserved Font Names): **Inter** for the UI
   (Regular, Medium, SemiBold, Bold, Italic, Bold Italic) and, by default, note text (the editor's
@@ -6588,15 +6615,16 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   `listItemHeightDense`, `sidebarWidth`), and **the main window must bind its size**:
   `Binding { target: Theme; property: "windowWidth"; value: window.width }` (same for
   `windowHeight`) — `narrow` (< 900 px), `compact` (< 600 px) and `touchUi` derive from it.
-  **Overrides** (docs/EXTENSIONS.md "Theme": an extension's `b.app.theme`, an AI agent's live
-  theme): every token of the catalog (core `extensions/appapi.cpp` `themeTokens()` — the colours,
-  `radiusXs` … `radiusXl`, `focusRingWidth`, `fontUi` / `fontSans` / `fontSerif` / `fontMono`) can
-  be replaced. `AppScripting` merges the layers into `ui::ThemeOverrides` (one per process, a map per
+  **Overrides** (docs/EXTENSIONS.md "Theme": a theme page picked in Settings → Appearance →
+  Themes, an extension's `b.app.theme`, an AI agent's live theme): every token of the catalog (core
+  `extensions/appapi.cpp` `themeTokens()` — the colours, `radiusXs` … `radiusXl`, `focusRingWidth`,
+  the spacing unit `space` — `Theme.spaceUnit`, 4 px: `space1` … `space16` are its multiples —,
+  `fontUi` / `fontSans` / `fontSerif` / `fontMono`) can be replaced. `AppScripting` merges the layers into `ui::ThemeOverrides` (one per process, a map per
   mode); `ThemeColors` puts them over its own palette tokens (`fgOnAccent` is its `accentOn`) and
   exposes the mode's map as `palette.overrides`. Every other colour token of Theme.qml keeps its own
   value as `_<name>Base` and reads `_pick("<name>", _<name>Base)` — the override as text through
   `palette.pickText()`, a string bound to a `color`: a C++ method's `QColor` result cannot be stored
-  in a compiled `color` ("Compiled QML") —, the radii and `focusRingWidth`
+  in a compiled `color` ("Compiled QML") —, the radii, `focusRingWidth` and `space`
   `palette.pickNumber(palette.overrides, "<name>", <value>)`, the fonts `_pickFont()` (an installed
   family only, else the token's own). With no overrides each token is exactly its own value
   (`tst_ui_themepalette`); derived tokens follow the ones they are made of (`accentBg` an

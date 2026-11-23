@@ -1564,6 +1564,13 @@ bool Workspace::setConfig(const QVariantMap &map)
     // The flashcards' settings (the plugin's): a map of the keys to change.
     if (map.contains(u"flashcards"_s) && !applyFlashcardsConfig(c.flashcards, map.value(u"flashcards"_s).toMap()))
         return false;
+    // The notebook's theme page: a Markdown file's path in the notebook, "" none (ThemePages).
+    if (map.contains(u"themePage"_s)) {
+        const QString theme = paths::normalize(map.value(u"themePage"_s).toString());
+        if (!theme.isEmpty() && (!paths::isMarkdown(theme) || paths::isIgnored(theme)))
+            return false;
+        c.themePage = theme;
+    }
     if (sameVaultConfig(c, m_vault->config()))
         return true;
     if (!m_vault->saveConfig(c)) {

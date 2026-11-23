@@ -105,6 +105,11 @@ multi-line ones and the end marker are trimmed; an empty one is switched off, fo
 "none"); `tags` is a list (or a text "a, b") that without any falls back to the tags set on the
 device (Settings of the device, "flashcards/tags"). An invalid value is a warning and its default.
 
+`themePage` (Settings → Appearance → Themes; §13 "Theme pages"): the notebook's theme page, its path
+from the notebook's root (`"Motywy/Sepia.md"`) — written only while one is picked; a page renamed or
+moved in the app takes the setting along. A device may keep its own instead (docs/UI.md "Look &
+feel"). A path that is no Markdown file, or one in a hidden folder, is a warning and none.
+
 `agentHosts` (written by the desktop app while it shares its AI agents in a tailnet, docs/CLI.md
 "A phone finds the computer"): `[{"url": "http://nixos.tail1ea20e.ts.net:8790", "host": "nixos",
 "agents": [{"id": "claude", "name": "Claude Code"}]}]` — where a computer of the user's offers its
@@ -2555,6 +2560,58 @@ Every other app shows the block as code.
   month: 2026-11
   ```
 ````
+
+### Theme pages
+
+A page tagged `motyw` or `theme` at page level is a **theme**: its ```` ```theme ```` blocks
+declare tokens of the app's look — the tokens of `b.app.theme` (docs/EXTENSIONS.md "Theme"), as
+data: nothing on the page runs. Settings → Appearance → Themes lists the notebook's theme pages and
+applies the one picked, in the light and the dark mode, over the appearance settings (docs/UI.md
+"Look & feel"); the choice is the notebook's (`themePage` in `.brulion/config.json`, §1), so every
+device that follows the notebook shows it, unless a device keeps its own. A theme travels as the
+page's file: copy it into another notebook (or send it) and it is there. Every other app shows the
+block as code.
+
+````markdown
+---
+tags: [motyw]
+opis: Papier za dnia, morska zieleń zawsze.
+---
+```theme
+// akcent w obu trybach
+accent: #1f8a80
+radius: 9
+space: 5
+fontUi: Inter
+jasny:
+  bg: #f4ecd8
+  fg: #3b2f20
+dark:
+  bg: #14110c
+```
+````
+
+* **The lines**: `token: value` — blanks around the colon allowed, the value may be quoted (`"…"`
+  or `'…'`), ` // …` after it is a comment; `light:` or `dark:` (Polish `jasny:`, `ciemny:`) alone
+  start that mode's tokens: the lines after it indented deeper than it, up to the first line that
+  is not; blank lines and lines starting with `//` or `#` are skipped. A token named outside a mode
+  is for both modes; a mode's own wins in that mode. Of a token set twice in one mode the last
+  wins; several blocks on a page add up in order.
+* **Tokens** (any letter case: `BG` is `bg`): the colours of `b.app.theme` — `"#rgb"`, `"#rrggbb"`
+  or `"#aarrggbb"` (alpha first) —, the radii `radiusXs` … `radiusXl` and `focusRingWidth`, the
+  spacing unit `space` (3 … 6 px, 4 by default: every gap of the app is a multiple of it), each a
+  number in its range (`9` or `9px`), and the fonts `fontUi`, `fontSans`, `fontSerif`, `fontMono`
+  (a family installed on the device; empty: the app's own). `accent` brings its readable shades
+  (`accentText`, `accentSolid` …) unless they are set too.
+* **What is ignored**: a line that is no `token: value`, an unknown token (the nearest name is
+  suggested), a value of the wrong kind or out of its range, a font this device does not have, a
+  mode inside a mode, more than 200 tokens. The rest of the theme applies; the page shows a muted
+  chip at its bottom with the number of ignored lines, the first one's reason and a button to its
+  line. A page with the tag but no block applies nothing; a `#motyw` inside a block makes no page a
+  theme.
+* **Fences**: as for extension pages above — after the frontmatter, also in a list item,
+  ```` ```{theme} ```` and ```` ```.theme ````, none inside another fence; a block without its closing fence
+  runs to the end of the page.
 
 ## 14. Conversations with AI
 

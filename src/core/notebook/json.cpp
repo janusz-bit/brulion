@@ -400,7 +400,8 @@ QJsonObject vaultConfigJson(const VaultConfig &c)
                          {u"clozeHighlights"_s, c.flashcards.clozeHighlights},
                          {u"clozeBold"_s, c.flashcards.clozeBold},
                          {u"clozeCurly"_s, c.flashcards.clozeCurly},
-                         {u"foldersAsDecks"_s, c.flashcards.foldersAsDecks}}}};
+                         {u"foldersAsDecks"_s, c.flashcards.foldersAsDecks}}},
+            {u"themePage"_s, c.themePage}};
 }
 
 } // namespace brulion::notebook

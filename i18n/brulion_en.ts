@@ -624,7 +624,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1531"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4197"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4199"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -1328,6 +1328,22 @@
             <numerusform>Extension: runs · %n type warnings, %1</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="1168"/>
+        <source>%1 · %n line(s) ignored, %2</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="1169"/>
+        <source>%1 · %n token(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>PdfEmbedTile</name>
@@ -1542,7 +1558,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1241"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1244"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1550,7 +1566,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2931"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2934"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1558,7 +1574,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2796"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2799"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1566,7 +1582,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="381"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="382"/>
         <source>%n command(s)</source>
         <translation>
             <numerusform>%n command</numerusform>
@@ -1574,7 +1590,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="381"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="382"/>
         <source>%n view(s)</source>
         <translation>
             <numerusform>%n view</numerusform>
@@ -1582,7 +1598,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="382"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="383"/>
         <source>%n reaction(s)</source>
         <translation>
             <numerusform>%n reaction</numerusform>
@@ -1590,7 +1606,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2169"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2172"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1598,7 +1614,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2620"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2623"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1606,7 +1622,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2798"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2801"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1717,7 +1733,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="60"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="61"/>
         <source>Moved to the notebook root, %n link(s) and tag(s) updated</source>
         <translation>
             <numerusform>Moved to the notebook root, %n link or tag updated</numerusform>
@@ -1725,7 +1741,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="61"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="62"/>
         <source>Moved to the notebook root, %n link(s) updated</source>
         <translation>
             <numerusform>Moved to the notebook root, %n link updated</numerusform>
@@ -1733,7 +1749,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="64"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="65"/>
         <source>Moved to “%1”, %n link(s) and tag(s) updated</source>
         <translation>
             <numerusform>Moved to “%1”, %n link or tag updated</numerusform>
@@ -1741,7 +1757,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="65"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="66"/>
         <source>Moved to “%1”, %n link(s) updated</source>
         <translation>
             <numerusform>Moved to “%1”, %n link updated</numerusform>
@@ -1749,7 +1765,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="70"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="71"/>
         <source>Moved to the notebook root as “%1”, %n link(s) and tag(s) updated</source>
         <translation>
             <numerusform>Moved to the notebook root as “%1”, %n link or tag updated</numerusform>
@@ -1757,7 +1773,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="71"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="72"/>
         <source>Moved to the notebook root as “%1”, %n link(s) updated</source>
         <translation>
             <numerusform>Moved to the notebook root as “%1”, %n link updated</numerusform>
@@ -1765,7 +1781,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="74"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="75"/>
         <source>Moved to “%1” as “%2”, %n link(s) and tag(s) updated</source>
         <translation>
             <numerusform>Moved to “%1” as “%2”, %n link or tag updated</numerusform>
@@ -1773,7 +1789,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="75"/>
+        <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="76"/>
         <source>Moved to “%1” as “%2”, %n link(s) updated</source>
         <translation>
             <numerusform>Moved to “%1” as “%2”, %n link updated</numerusform>
@@ -1850,7 +1866,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8902"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8904"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1874,6 +1890,25 @@
         <translation>
             <numerusform>%n command has a shortcut of its own now.</numerusform>
             <numerusform>%n commands have a shortcut of their own now.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ShellThemePages</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellThemePages.qml" line="88"/>
+        <source>%n line(s) ignored: open the page to see why</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellThemePages.qml" line="90"/>
+        <source>%n token(s)</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
         </translation>
     </message>
 </context>

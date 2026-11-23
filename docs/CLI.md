@@ -347,7 +347,7 @@ Never compute a hash yourself.
 | `app unload <id>` | | take a live extension out (the page or built-in of its id runs again) | yes |
 | `app reload` | | load every extension again (live ones stay) | yes |
 | `app console` | `[--since N] [--limit N]` | the Luau console's lines `{lines [{n, kind, text, source}], next, first, last}` | |
-| `app settings` | | the settings a client may change: `{settings [{key, group, kind, label, value, options?, min?, max?, size?}]}` | |
+| `app settings` | | the settings a client may change: `{settings [{key, scope, group, kind, label, value, options?, min?, max?, size?}]}` — the device's (`scope: "device"`), then the open notebook's own (`"notebook"`: `.brulion/config.json`) | |
 | `app set <key> <value>` | a JSON value (a bare word is a string) | change one at once: `{key, value}` | yes |
 | `app theme` | `[--tokens JSON \| --stdin] [--clear] [--catalog]` | this client's theme tokens (checked first, exit 2 `bad_tokens`), cleared, or none: `{extensions, live, light, dark, catalog?}` | yes |
 | `app contributions` | `[--slot S]` | the items extensions put into the UI (toolbar, statusbar, sidebar, pageMenu, blockMenu, slash) | |
@@ -1367,9 +1367,12 @@ brulion-cli app changes && brulion-cli app revert          # what changed, and a
   version before it, if any, runs on): `ok: false` with the error and its line (exit 6).
 * **theme** sets this client's layer of tokens over the extensions' (`app theme --catalog` lists
   every token: colours `#rgb` / `#rrggbb` / `#aarrggbb`, sizes within a range, fonts); `dark` and
-  `light` hold tokens for one mode. **set** changes one of the settings `app settings` lists
-  (density, accent, fonts, the editor's width, sidebar entries, the built-in extensions …),
-  checked against its kind.
+  `light` hold tokens for one mode; it is over the extensions' and the theme page picked in
+  Settings → Appearance → Themes (`page` in the answer). **set** changes one of the settings `app
+  settings` lists (density, accent, fonts, the editor's width, sidebar entries, the built-in
+  extensions …, and the notebook's: its folders, file names, `weekStartsOn`, the flashcards'
+  settings, `themePage` — written to `.brulion/config.json`, synced), checked against its kind;
+  `revert` puts a notebook's setting back too.
 * **inspect** gives the window's items as a tree (or an item's, by its handle) — handle, QML
   type, objectName, text, geometry, visible; with `--properties` every property that is plain
   data (colours `#aarrggbb`, enums by name, an item as `{handle}`); a password field's text never.

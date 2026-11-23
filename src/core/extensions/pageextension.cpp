@@ -104,8 +104,9 @@ struct CodeBlock
     QStringList lines;
 };
 
-/// The code blocks of a page from its line `first` on (firstBodyLine()).
-QList<CodeBlock> codeBlocks(const QStringList &lines, qsizetype first)
+/// The code blocks of a page from its line `first` on (firstBodyLine()): those of `language`, the
+/// extension's Luau when it is "".
+QList<CodeBlock> codeBlocks(const QStringList &lines, qsizetype first, const QString &language = QString())
 {
     QList<CodeBlock> out;
     std::optional<Fence> fence;
@@ -115,7 +116,7 @@ QList<CodeBlock> codeBlocks(const QStringList &lines, qsizetype first)
         if (!fence) {
             fence = openingFence(line);
             if (fence) {
-                code = isCodeLanguage(fence->lang);
+                code = language.isEmpty() ? isCodeLanguage(fence->lang) : fence->lang == language;
                 if (code)
                     out.append(CodeBlock{i, -1, {}});
             }
@@ -207,6 +208,15 @@ QString extensionId(const QString &title)
     while (out.endsWith(u'-'))
         out.chop(1);
     return out.isEmpty() ? u"extension"_s : out;
+}
+
+QList<FencedBlock> fencedBlocks(QStringView content, const QString &language)
+{
+    const QStringList lines = linesOf(content);
+    QList<FencedBlock> out;
+    for (const CodeBlock &b : codeBlocks(lines, firstBodyLine(content), language.toLower()))
+        out.append(FencedBlock{int(b.open), int(b.close), b.lines});
+    return out;
 }
 
 ExtensionCode extensionCode(QStringView content)

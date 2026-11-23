@@ -8,7 +8,8 @@ import Brulion
 // again": AppController.restartIntro()), Appearance (theme,
 // accent colour with presets and BAccentDialog, light and dark backgrounds, text size, interface
 // font, density, reduce motion, back to the default look after a confirmation —
-// AppSettings.resetAppearance(), Theme inputs; Layout: sidebar entries and sections, the bottom
+// AppSettings.resetAppearance(), Theme inputs; Themes: the notebook's theme pages —
+// qml/shell/ShellThemePages, ThemePages; Layout: sidebar entries and sections, the bottom
 // navigation's buttons, the quick note button),
 // Editor (font — serif, sans or any installed family —, code font, size, line spacing, width,
 // source mode, spell checking — on/off, its languages, the personal dictionary's dialog, shown only
@@ -954,6 +955,8 @@ Item {
                 confirmText: qsTr("Restore")
                 onAccepted: AppSettings.resetAppearance()
             }
+            // The notebook's theme pages (qml/shell/ShellThemePages: ThemePages).
+            ShellThemePages {}
 
             SettingsGroup {
                 objectName: "settingsLayout"

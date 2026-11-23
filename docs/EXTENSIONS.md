@@ -1633,8 +1633,8 @@ end, { label = "Pirate", chat = true })
 
 ## The app (`b.app`)
 
-`b.app` is the running app itself: what it shows, its commands, the device's settings, its theme
-and its UI — the Emacs idea taken to the app's window. An extension reads all of it; changing it
+`b.app` is the running app itself: what it shows, its commands, the device's settings and the
+notebook's, its theme and its UI — the Emacs idea taken to the app's window. An extension reads all of it; changing it
 needs the permission **`app`** (`permissions: [app]`, Polish `aplikacja`), which the approval shows
 as "change the app". The Luau console has it (what is typed there is the user's own), and so has
 live code an agent sends ("Live code" below).
@@ -1644,8 +1644,8 @@ live code an agent sends ("Live code" below).
 | `b.app.state()` | `{ view, route, page?, path?, date?, sidePanel, platform, touch, narrow, dark, width, height, language, version }`: the main view (`"journals"`, `"page"`, `"calendar"` … — docs/UI.md "Navigation"), its whole route, the page or day on screen, whether the side panel shows, `"linux"` / `"android"` / `"windows"` / `"wasm"`, a touch UI, a narrow window (< 900 px), the dark theme in force, the window's size, the interface language and the app's version |
 | `b.app.commands()` | the command palette's commands `{ id, title, subtitle, shortcut, enabled }` — the app's own (`go.calendar`, `theme.toggle`, `page.source` …) and the extensions' (`ext.<extension>.<name>`) |
 | `b.app.run(id)` | runs one of them, as the palette does, once the call has returned (an unknown id is an error with the nearest one) |
-| `b.app.settings()` | the device settings an extension may read and change: `{ key, group, kind, label, value, options?, min?, max? }` — the theme (`theme`, `accent`, `customAccent`, `lightSurface`, `darkSurface`, `density`, `fontScale`, `uiFont`, `reducedMotion`), the layout (`sidebarHidden`, `sidebarSections`, `bottomNav`, `captureButton`, `railExpands`, `statusBar`, `sidePanel`), the editor (`editorFont`, `editorFontFamily`, `monoFont`, `editorFontSize`, `editorWidth`, `lineSpacing`, `sourceMode`, `focusMode`, `readingMode`, `typewriter`, `vim`, `spellCheck`, `wordCount` …), the built-in extensions (`gym`, `habits`, `flashcards`, `assistant`), reminders and the tray. Not there: anything secret or about trust — AI keys and providers, sync accounts, the remote control, the app lock, links out of the notebook |
-| `b.app.get(key)`, `b.app.set(key, value)` | one setting's value; a new one, checked against its kind (`"choice"` one of its `options`, `"number"` within `min` … `max`, `"toggle"` true / false, `"color"` `"#rrggbb"`, `"list"` of its options, `"text"` one line) and applied at once — the setting the user would change in Settings, kept on this device. Switching a built-in extension happens after the call |
+| `b.app.settings()` | the device settings an extension may read and change: `{ key, group, kind, label, value, options?, min?, max? }` — the theme (`theme`, `accent`, `customAccent`, `lightSurface`, `darkSurface`, `density`, `fontScale`, `uiFont`, `reducedMotion`), the layout (`sidebarHidden`, `sidebarSections`, `bottomNav`, `captureButton`, `railExpands`, `statusBar`, `sidePanel`), the editor (`editorFont`, `editorFontFamily`, `monoFont`, `editorFontSize`, `editorWidth`, `lineSpacing`, `sourceMode`, `focusMode`, `readingMode`, `typewriter`, `vim`, `spellCheck`, `wordCount` …), the built-in extensions (`gym`, `habits`, `flashcards`, `assistant`), reminders and the tray. Not there: anything secret or about trust — AI keys and providers, sync accounts, the remote control, the app lock, links out of the notebook. After them, while a notebook is open, **the notebook's own** (`scope = "notebook"`, the device's `scope = "device"`): the keys of `.brulion/config.json` (docs/SYNTAX.md §1) — `journalsFolder`, `journalFileFormat`, `journalTemplate`, `templatesFolder`, `newPagesFolder`, `attachmentsFolder`, `weeklyFolder`, `weeklyFileFormat`, `weeklyTemplate`, `monthlyFolder`, `monthlyFileFormat`, `monthlyTemplate`, `journalMode`, `pageMode`, `defaultReminderTime` (`"HH:mm"`), `weekStartsOn` (`"monday"` … `"sunday"`), the flashcards' card settings `flashcards.tags`, `flashcards.singleLineSeparator`, `flashcards.singleLineReversedSeparator`, `flashcards.multilineSeparator`, `flashcards.multilineReversedSeparator`, `flashcards.multilineEndMarker`, `flashcards.clozeHighlights`, `flashcards.clozeBold`, `flashcards.clozeCurly`, `flashcards.foldersAsDecks`, and `themePage` (the notebook's theme page, "Theme" below) |
+| `b.app.get(key)`, `b.app.set(key, value)` | one setting's value; a new one, checked against its kind (`"choice"` one of its `options`, `"number"` within `min` … `max`, `"toggle"` true / false, `"color"` `"#rrggbb"`, `"list"` of its options, `"text"` one line, `"path"` a folder or a page from the notebook's root, `""` the root) and applied at once — the setting the user would change in Settings: a device's kept on this device, the notebook's written to `.brulion/config.json`, so every device of the notebook gets it with the next sync. The notebook checks its own as Settings → Notebook does (a file name format that names one file for every day, a time that is none, a separator of two lines are errors; `themePage` is `""` or a theme page). Switching a built-in extension happens after the call |
 | `b.app.navigate(route)` | shows a view: its name (`"calendar"`, `"tasks"`, `"graph"`) or a route (`{ view = "tasks", query = "status:open" }`, `{ view = "extension", extension = "silownia", name = "today" }`); a route that lacks what it needs is an error |
 | `b.app.open(page, { line?, side? })` | opens a page (made when missing, as a link), at its line counted from 1, in the side panel with `side = true` |
 | `b.app.back()` | back, as the Back button |
@@ -1680,14 +1680,17 @@ while the extension runs — Obsidian's CSS snippets, typed and checked. A token
   `diffAddStrong`, `diffAddFg`, `diffDelBg`, `diffDelStrong`, `diffDelFg`, `scrollbar`,
   `switchThumb`, `shadow`;
 * the radii `radiusXs` (0 … 24), `radiusSm` (0 … 24), `radius` (0 … 32), `radiusLg` (0 … 40),
-  `radiusXl` (0 … 48) and `focusRingWidth` (1 … 6);
+  `radiusXl` (0 … 48) and `focusRingWidth` (1 … 6); the spacing unit `space` (3 … 6, 4 by
+  default: `Theme.space1`, every other gap of the app a multiple of it);
 * the fonts `fontUi`, `fontSans`, `fontSerif`, `fontMono` (a family installed on the device).
 
 Tokens of one mode go into `dark = { … }` or `light = { … }`, which win over the others in their
 mode. An unknown token is an error with the nearest name ("unknown token “bgg” (did you mean
 “bg”?)"), and so is a value of the wrong kind or out of range; nothing is kept then. Several
-extensions' themes add up in the order they were set (the last one set wins a token), and an
-agent's live theme is over all of them. The app checks no contrast here: a theme that makes text
+extensions' themes add up in the order they were set (the last one set wins a token), over the
+theme page picked in Settings → Appearance → Themes (a page tagged `#theme` whose ```` ```theme ````
+block declares the same tokens as data — docs/SYNTAX.md §13 "Theme pages"; `b.app.set("themePage",
+path)` picks one for the notebook), and an agent's live theme is over all of them. The app checks no contrast here: a theme that makes text
 unreadable is the extension's choice — switch it off in Settings → Extensions, or undo an agent's
 in the top bar's **Live** menu.
 
@@ -1810,6 +1813,23 @@ b.on("route", function(e)
         setWriting(draft)
     end
 end)
+```
+
+```luau
+-- The notebook's own settings (.brulion/config.json, synced): daily notes in "Dziennik", named
+-- like "23.11.2026", weeks from Monday — on every device of the notebook.
+b.command("journal-pl", function(ctx)
+    b.app.set("journalsFolder", "Dziennik")
+    b.app.set("journalFileFormat", "dd.MM.yyyy")
+    b.app.set("weekStartsOn", "monday")
+    local notebook = {}
+    for _, s in b.app.settings() do
+        if s.scope == "notebook" then
+            table.insert(notebook, `{s.key} = {s.value}`)
+        end
+    end
+    return table.concat(notebook, "\n")
+end, { label = "Daily notes in Dziennik" })
 ```
 
 `b.on("route", fn)` runs when the main view shows something else (a burst — a route replaced

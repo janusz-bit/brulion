@@ -485,15 +485,15 @@ end, { label = "How many open tasks" })
 `b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (the reply's `thoughts`: what the model thought — Claude's summary of its thinking, a server's reasoning, the model on the device's thoughts), `images` (pictures of the notebook for a model that sees: `b.ai({ prompt = "What does it say?", images = { "receipt.jpg" } })`), `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
 
 ## The app
-`b.app` is Brulion itself: what it shows, its commands, this device's settings, its colours and its toolbar, status bar and menus. Reading needs nothing; changing needs the permission `app` (`permissions: [app]`). What it changes is the app on this device — like the settings you change by hand — and what an extension put into the app goes away when it is switched off.
+`b.app` is Brulion itself: what it shows, its commands, this device's settings and the notebook's, its colours and its toolbar, status bar and menus. Reading needs nothing; changing needs the permission `app` (`permissions: [app]`). What it changes is the app on this device — like the settings you change by hand — and what an extension put into the app goes away when it is switched off.
 
 | Function | What it does |
 |---|---|
 | `b.app.state()` | what is on screen: `view` (`"journals"`, `"page"`, `"calendar"` …), `page`, `date`, `dark`, `touch`, `narrow`, `width`, `height`, `platform`, `language` |
 | `b.app.commands()` | the command palette's commands, each `{ id, title, shortcut, enabled }` |
 | `b.app.run(id)` | runs one: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
-| `b.app.settings()` | the settings an extension may change, with their values and what they take |
-| `b.app.get(key)`, `b.app.set(key, value)` | one setting: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)` |
+| `b.app.settings()` | the settings an extension may change, with their values and what they take: this device's (`scope = "device"`), then the notebook's own (`scope = "notebook"`, kept in `.brulion/config.json` and synced: `journalsFolder`, `journalFileFormat`, `journalTemplate`, `templatesFolder`, `newPagesFolder`, `weekStartsOn`, `defaultReminderTime`, the flashcards' `flashcards.tags`, `flashcards.clozeBold` …, `themePage`) |
+| `b.app.get(key)`, `b.app.set(key, value)` | one setting: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; the notebook's for every device of it: `b.app.set("journalsFolder", "Diary")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Themes/Sepia.md")` |
 | `b.app.navigate(view)` | shows a view: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
 | `b.app.open(page, { line = 12, side = true })` | opens a page, at a line, in the side panel |
 | `b.app.back()` | goes back |
@@ -504,7 +504,7 @@ end, { label = "How many open tasks" })
 
 Moving around (`navigate`, `open`, `back`, `run`) and messages happen after the call — in commands, actions and reactions, not while the page loads. `"route"` among the reactions runs when the screen shows something else: `e.view`, `e.page`, `e.date`.
 
-**Colours.** `b.app.theme` takes the names of Brulion's design tokens: `bg`, `bgElevated`, `bgSunken` (the surfaces), `fg`, `fgMuted` (text), `accent`, `link`, `tagFg`, `border`, `selection`, `mark` (highlights), `danger`, `warning`, `success` and more, the corners `radius`, `radiusSm`, `radiusLg`, and the fonts `fontUi`, `fontSans`, `fontSerif`, `fontMono`. A colour is `"#rrggbb"`; colours for one mode go into `dark = { … }` or `light = { … }`. A misspelt name is an error that names the right one.
+**Colours.** `b.app.theme` takes the names of Brulion's design tokens: `bg`, `bgElevated`, `bgSunken` (the surfaces), `fg`, `fgMuted` (text), `accent`, `link`, `tagFg`, `border`, `selection`, `mark` (highlights), `danger`, `warning`, `success` and more, the corners `radius`, `radiusSm`, `radiusLg`, the room between things `space` (3 to 6, normally 4), and the fonts `fontUi`, `fontSans`, `fontSerif`, `fontMono`. A colour is `"#rrggbb"`; colours for one mode go into `dark = { … }` or `light = { … }`. A misspelt name is an error that names the right one. The same names, as plain lines in a `theme` block, make a theme page that needs no code at all ([[Getting started#Themes|Themes]]); an extension's colours go over it.
 
 ```luau
 -- Sepia: paper-coloured pages in the light mode, a teal accent, rounder corners.

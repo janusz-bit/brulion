@@ -13,7 +13,8 @@
 // `pageMode` are "outline" or "document" (VaultConfig::journalMode / pageMode, the note modes of
 // markdown/notemode.h; case-insensitive when read). `flashcards` is an object of the plugin's card
 // settings (FlashcardsConfig, docs/SYNTAX.md §15 "Settings of the cards"): written only with the
-// values that differ from the defaults, its unknown keys kept.
+// values that differ from the defaults, its unknown keys kept. `themePage` is the notebook's theme
+// page (a Markdown file's vault path, docs/SYNTAX.md §13 "Theme pages"), written only while it is set.
 #pragma once
 
 #include "types.h"

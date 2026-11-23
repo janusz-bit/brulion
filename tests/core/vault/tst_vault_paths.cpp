@@ -618,6 +618,44 @@ private Q_SLOTS:
         QCOMPARE(normalizeFlashcardTags({u"#Żółw"_s, u"  "_s, u"#"_s, u"a b"_s, u"żółw"_s}), (QStringList{u"żółw"_s}));
     }
 
+    // The notebook's theme page (docs/SYNTAX.md §13 "Theme pages"): a Markdown file's path,
+    // written only while one is picked.
+    void themePage_data()
+    {
+        QTest::addColumn<QByteArray>("json");
+        QTest::addColumn<QString>("theme");
+        QTest::addColumn<int>("warnings");
+        QTest::newRow("none") << "{}"_ba << QString() << 0;
+        QTest::newRow("a page") << R"({"themePage":"Motywy/Sepia ciepła.md"})"_ba << u"Motywy/Sepia ciepła.md"_s << 0;
+        QTest::newRow("normalised") << "{\"themePage\":\"./Motywy//Żółty.md\"}"_ba << u"Motywy/Żółty.md"_s << 0;
+        QTest::newRow("empty") << R"({"themePage":""})"_ba << QString() << 0;
+        QTest::newRow("not a page") << R"({"themePage":"Motywy/obraz.png"})"_ba << QString() << 1;
+        QTest::newRow("hidden folder") << R"({"themePage":".obsidian/theme.md"})"_ba << QString() << 1;
+        QTest::newRow("kept in the notebook") << R"({"themePage":"../inny/Motyw.md"})"_ba << u"inny/Motyw.md"_s << 0;
+        QTest::newRow("a number") << R"({"themePage":3})"_ba << QString() << 1;
+    }
+    void themePage()
+    {
+        QFETCH(QByteArray, json);
+        QFETCH(QString, theme);
+        QFETCH(int, warnings);
+        const ParsedVaultConfig parsed = parseVaultConfig(json);
+        QCOMPARE(parsed.config.themePage, theme);
+        QCOMPARE(parsed.warnings.size(), warnings);
+        // Written back only while there is one; a file's invalid value goes with the save.
+        const QByteArray saved = serializeVaultConfig(parsed.config, parsed.raw);
+        QCOMPARE(saved.contains("themePage"), !theme.isEmpty());
+        const ParsedVaultConfig again = parseVaultConfig(saved);
+        QCOMPARE(again.config.themePage, theme);
+        QVERIFY(again.warnings.isEmpty());
+        VaultConfig other = parsed.config;
+        other.themePage = u"Motywy/Inny.md"_s;
+        QVERIFY(!sameVaultConfig(other, parsed.config));
+        // Cleared: gone from the file, whatever it held.
+        other.themePage.clear();
+        QVERIFY(!serializeVaultConfig(other, again.raw).contains("themePage"));
+    }
+
     void serializeRoundTrip()
     {
         VaultConfig config;

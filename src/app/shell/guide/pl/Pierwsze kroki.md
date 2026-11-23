@@ -60,13 +60,33 @@ Foldery porządkują strony jak katalogi na dysku: strona `Projekty/Dom` to plik
 Widoki bez własnego przycisku — centrum synchronizacji, import i eksport, kosz, sprzątanie — znajdziesz w menu **Więcej** (⋯, na telefonie ⋮) → **Notatnik** oraz w palecie poleceń; **Ustawienia** są też na dole paska ikon. Menu **Więcej** ma u góry akcje strony jako ikony (Ulubione, Nazwa, Przenieś, Historia), przełącznik **Tryb** (Dokument, Konspekt, Źródło) i — na komputerze — **Otwórz w** (Nowa karta, Okno, Panel boczny, Podziel). Rejestr zdarzeń jest w *Ustawienia → Aplikacja* i w palecie.
 
 ## Wygląd
-W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym urządzeniu:
+W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym urządzeniu (motyw z notatnika kładzie się na to, niżej):
 - **Motyw** jasny, ciemny albo zgodny z systemem; **kolor akcentu** (koralowy — domyślny —, czerwony, niebieski, zielony, morski, fioletowy, grafitowy albo **Własny…** — dowolny kolor z siatki lub wpisany jako `#3b7dd8`). Akcent wyróżnia dzisiejszy dzień, bieżącą kartę i zaznaczenia; tam, gdzie wybrany kolor byłby nieczytelny, Brulion sam bierze jego jaśniejszy albo ciemniejszy odcień. Ostrzeżenia i usuwanie zostają czerwone, przypomnienia i alarmy bursztynowe.
 - **Jasne tło**: papier albo białe; **ciemne tło**: grafit (domyślne: warstwy szarości), atrament (ciepłe, węglowe warstwy z ciepłym tekstem), granat albo czerń (oszczędza baterię na ekranach OLED).
 - **Rozmiar tekstu**, **czcionka interfejsu** (wbudowana Inter albo dowolna zainstalowana) i **gęstość** — zwarta mieści więcej na ekranie komputera (na telefonie przyciski zostają duże).
 - **Układ**: które pozycje i sekcje pokazuje pasek boczny, w jakiej kolejności są Strony, Ulubione i Ostatnie, jakie pięć widoków ma dolna nawigacja na telefonie i czy górny pasek ma przycisk szybkiej notatki **+**. Ukryte widoki zostają w palecie poleceń i pod skrótami.
 
 Czcionkę notatek (bezszeryfowa — Inter, domyślna —, szeryfowa — Literata — albo **Inna…**), czcionkę kodu (JetBrains Mono), rozmiar tekstu i **odstęp między wierszami** ustawisz w *Ustawienia → Edytor*. „Przywróć domyślny wygląd” wraca do kolorów i czcionek z początku. Brulion ma te trzy czcionki w sobie, więc notatki wyglądają tak samo na każdym urządzeniu. W przeglądarce nie ma wyboru czcionek — działają tylko wbudowane.
+
+### Motywy
+**Motyw** to strona notatnika z tagiem `#motyw` i blokiem `theme`: kolory Brulionu w trybie jasnym i ciemnym, czcionki, zaokrąglenie rogów i ilość miejsca między elementami — zapisane jako dane, nic w nim się nie uruchamia. *Ustawienia → Wygląd → Motywy* wypisuje strony motywów z notatnika obok pozycji **Brak**, każdą z jej kolorami w obu trybach; kliknięcie od razu ją włącza, ponad ustawieniami powyżej. Wybrany motyw należy do notatnika: po synchronizacji pokazuje go każde urządzenie, które idzie za notatnikiem. **Tylko na tym urządzeniu** zostawia zamiast tego własny wybór tego urządzenia — telefon może nosić ciemniejszy.
+
+````markdown
+---
+tags: [motyw]
+opis: Papier za dnia, morska zieleń zawsze.
+---
+```theme
+accent: #1f8a80
+radius: 9
+jasny:
+  bg: #f4ecd8
+ciemny:
+  bg: #14110c
+```
+````
+
+Zmień stronę, a motyw od razu za nią pójdzie. Wiersz, którego Brulion nie może użyć — nazwa z literówką, kolor, który nim nie jest, czcionka, której nie ma na tym urządzeniu — zostaje pominięty, a reszta działa; stonowana notka na dole strony mówi, który wiersz i dlaczego. **Zapisz wygląd jako stronę motywu** zapisuje obecny wygląd na nowej stronie: żeby podzielić się motywem, skopiuj plik jego strony do innego notatnika albo go wyślij. Nazwy kolorów są te same co w [[API rozszerzeń#Aplikacja|b.app.theme]].
 
 Na komputerze wzdłuż dołu okna biegnie cienki **pasek stanu**: po lewej stan synchronizacji (zielone „zsynchronizowano”; kliknięcie otwiera centrum synchronizacji), po prawej edytowany blok („Blok 3 z 12”), liczba słów i klawisz palety poleceń.
 

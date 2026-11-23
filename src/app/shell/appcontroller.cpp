@@ -1,6 +1,7 @@
 #include "appcontroller.h"
 
 #include "appscripting.h"
+#include "themepages.h"
 
 #include "blocktext.h"
 #include "dictation.h"
@@ -313,6 +314,11 @@ AppController::AppController(const Options &options, QObject *parent)
                 },
                 Qt::QueuedConnection);
     }
+    // The notebook's theme pages: the one picked is the theme's bottom layer; b.app.set("themePage")
+    // takes only one of them.
+    m_themePages = std::make_unique<ThemePages>(this);
+    m_scripting->setThemePageCheck(
+            [pages = m_themePages.get()](const QString &path) { return pages->isThemePageOrNone(path); });
     // The remote MCP server (Settings → Extensions → claude.ai and ChatGPT): the notebook open now
     // — while the documentation is on screen, the user's own last one — with its settings.
     m_mcpServer = std::make_unique<McpServerSupervisor>();

@@ -106,6 +106,7 @@ class QWindow;
 namespace brulion::shell {
 
 class AppScripting;
+class ThemePages;
 
 class CommandModel;
 class DeviceFolderFirstSync;
@@ -320,6 +321,8 @@ public:
     McpServerSupervisor *mcpServer() const { return m_mcpServer.get(); }
     /// The app as extensions and live clients change it (b.app; appscripting.h). QML: AppScripting.
     AppScripting *scripting() const { return m_scripting.get(); }
+    /// The notebook's theme pages (Settings → Appearance; themepages.h). QML: ThemePages.
+    ThemePages *themePages() const { return m_themePages.get(); }
     CommandModel *commands() const { return m_commands.get(); }
     /// The commands' keyboard shortcuts, custom ones included (Settings → Keyboard shortcuts).
     ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
@@ -928,6 +931,7 @@ private:
     std::unique_ptr<media::Transcriber> m_speech;
     std::unique_ptr<AppLockController> m_appLock;
     std::unique_ptr<AppScripting> m_scripting;
+    std::unique_ptr<ThemePages> m_themePages; // (after m_scripting: it gives scripting its layer)
     std::unique_ptr<McpServerSupervisor> m_mcpServer;
     std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<ShortcutMap> m_shortcuts;

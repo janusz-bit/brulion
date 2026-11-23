@@ -35,6 +35,7 @@ constexpr auto kMonthlyFolder = "monthlyFolder"_L1;
 constexpr auto kMonthlyFileFormat = "monthlyFileFormat"_L1;
 constexpr auto kMonthlyTemplate = "monthlyTemplate"_L1;
 constexpr auto kFlashcards = "flashcards"_L1;
+constexpr auto kThemePage = "themePage"_L1;
 
 // The keys of the "flashcards" object.
 constexpr auto kFcTags = "tags"_L1;
@@ -53,6 +54,17 @@ std::optional<QString> pathValue(const QJsonValue &v)
     if (!v.isString())
         return std::nullopt;
     return paths::normalize(v.toString());
+}
+
+/// A theme page: a Markdown file's vault path, "" none.
+std::optional<QString> themePageValue(const QJsonValue &v)
+{
+    if (!v.isString())
+        return std::nullopt;
+    const QString path = paths::normalize(v.toString());
+    if (!path.isEmpty() && (!paths::isMarkdown(path) || paths::isIgnored(path)))
+        return std::nullopt;
+    return path;
 }
 
 std::optional<QString> formatValue(const QJsonValue &v)
@@ -301,6 +313,7 @@ ParsedVaultConfig parseVaultConfig(QByteArrayView json)
     mergeKey(out, kMonthlyFileFormat, periodFormatValue<periodic::Period::Month>, &VaultConfig::monthlyFileFormat);
     mergeKey(out, kMonthlyTemplate, pathValue, &VaultConfig::monthlyTemplate);
     mergeFlashcards(out);
+    mergeKey(out, kThemePage, themePageValue, &VaultConfig::themePage);
     return out;
 }
 
@@ -332,6 +345,8 @@ QJsonObject vaultConfigToJson(const VaultConfig &config)
     o.insert(kMonthlyTemplate, paths::normalize(config.monthlyTemplate));
     if (const QJsonObject flashcards = flashcardsObject(config.flashcards); !flashcards.isEmpty())
         o.insert(kFlashcards, flashcards);
+    if (const QString theme = paths::normalize(config.themePage); !theme.isEmpty() && paths::isMarkdown(theme))
+        o.insert(kThemePage, theme);
     return o;
 }
 
@@ -339,6 +354,7 @@ QByteArray serializeVaultConfig(const VaultConfig &config, const QJsonObject &ra
 {
     QJsonObject out = raw;
     const QJsonObject known = vaultConfigToJson(config);
+    out.remove(kThemePage); // written only while there is one
     for (auto it = known.constBegin(); it != known.constEnd(); ++it)
         out.insert(it.key(), it.value());
     // "flashcards" holds only what differs from the defaults; its keys this version does not know
@@ -371,7 +387,8 @@ bool sameVaultConfig(const VaultConfig &a, const VaultConfig &b)
            && a.journalMode == b.journalMode && a.pageMode == b.pageMode && a.weeklyFolder == b.weeklyFolder
            && a.weeklyFileFormat == b.weeklyFileFormat && a.weeklyTemplate == b.weeklyTemplate
            && a.monthlyFolder == b.monthlyFolder && a.monthlyFileFormat == b.monthlyFileFormat
-           && a.monthlyTemplate == b.monthlyTemplate && a.flashcards == b.flashcards;
+           && a.monthlyTemplate == b.monthlyTemplate && a.flashcards == b.flashcards
+           && a.themePage == b.themePage;
 }
 
 QStringList normalizeFlashcardTags(const QStringList &tags)
