@@ -6,7 +6,8 @@ import Brulion
 // ChatView — route "chat" (docs/UI.md "AI chat"): conversations with the AI, as in a messenger.
 // Each conversation is a page in AI/ (Workspace.chats, core chat/chat.h): the user's messages on
 // the right, the AI's on the left — rendered note text (ChatMessageModel: links open their pages),
-// their pictures, the time each was written and the day above a day's first —, under them the
+// their charts, diagrams and formulas drawn (ChatSegments: a tap opens one large), their pictures,
+// the time each was written and the day above a day's first —, under them the
 // answer as the model writes it (the conversation's ChatTurn: partial; above it what the model
 // thinks, collapsed — opened, all of it —; under it how fast it writes) and what the AI does now
 // ("Czytam „Dom”…", turn.status; in line for the model on the device: its place) with Stop, a
@@ -675,17 +676,42 @@ FocusScope {
                         required property list<string> picturePaths
                         required property bool sent
                         required property bool firstSent
+                        /// Its parts when it has a drawing (ChatSegments), else [] (its rich text).
+                        required property list<var> segments
                         readonly property bool mine: message.sender === "user"
+                        readonly property bool inParts: message.segments.length > 0
                         property string hoveredLink
                         property point linkPoint
+                        /// The source of the drawing the menu was opened on ("" none: Copy source hidden).
+                        property string menuSource
                         readonly property real maxWidth: Math.min(message.width * (message.mine ? 0.82 : 0.92), 720)
                         readonly property real picturesWidth: message.pictures.length > 0 ? Math.min(message.maxWidth - 2 * Theme.space3, 280) : 0
                         width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
                         height: messageColumn.height
 
+                        /// The link at `pos` of the bubble's row (its handlers' points: under the day's
+                        /// line) — "" none.
+                        function linkAt(pos: point): string {
+                            if (message.inParts) {
+                                message.linkPoint = parts.mapFromItem(bubbleRow, pos.x, pos.y)
+                                return parts.linkAt(message.linkPoint.x, message.linkPoint.y)
+                            }
+                            message.linkPoint = body.mapFromItem(bubbleRow, pos.x, pos.y)
+                            return body.linkAt(message.linkPoint.x, message.linkPoint.y)
+                        }
+                        /// The menu at `pos` of the bubble's row: Copy source on a drawing.
+                        function openMenu(pos: point): void {
+                            const x = pos.x
+                            const y = pos.y
+                            message.menuSource = ""
+                            if (message.inParts) {
+                                message.linkPoint = parts.mapFromItem(bubbleRow, x, y)
+                                message.menuSource = parts.drawingSourceAt(message.linkPoint.x, message.linkPoint.y)
+                            }
+                            messageMenu.popup()
+                        }
                         function trackLink(pos: point): void {
-                            message.linkPoint = body.mapFromItem(message, pos.x, pos.y)
-                            const link = body.linkAt(message.linkPoint.x, message.linkPoint.y)
+                            const link = message.linkAt(pos)
                             const h = Js.startsWith(link, "task:") ? "" : link
                             if (h !== message.hoveredLink)
                                 message.hoveredLink = h
@@ -738,6 +764,7 @@ FocusScope {
                             }
 
                             Item {
+                                id: bubbleRow
                                 width: parent.width
                                 height: bubble.height
 
@@ -745,7 +772,8 @@ FocusScope {
                                     id: bubble
                                     objectName: message.mine ? "chatMessageUser" : "chatMessageAi"
                                     x: message.mine ? parent.width - width : 0
-                                    width: Math.min(message.maxWidth, Math.max(body.visible ? body.implicitWidth : 0, message.picturesWidth, 24) + 2 * Theme.space3)
+                                    width: Math.min(message.maxWidth, Math.max(body.visible ? body.implicitWidth : 0, message.inParts ? parts.naturalWidth : 0,
+                                                                               message.picturesWidth, 24) + 2 * Theme.space3)
                                     height: bubbleColumn.height + 2 * Theme.space2 + 2
                                     radius: Theme.radiusXl
                                     color: message.mine ? Theme.accentBg : Theme.bgElevated
@@ -791,12 +819,22 @@ FocusScope {
                                             id: body
                                             measured: true // (the bubble is as wide as its text)
                                             width: parent.width
-                                            visible: message.messageHtml !== ""
-                                            html: message.messageHtml
+                                            visible: message.messageHtml !== "" && !message.inParts
+                                            html: message.inParts ? "" : message.messageHtml
                                             hoveredLink: message.hoveredLink
                                             font.family: Theme.fontEditor
                                             font.pixelSize: Theme.textBase
                                             color: Theme.fg
+                                        }
+                                        // A message with a chart, a diagram or a formula: its parts.
+                                        ChatSegments {
+                                            id: parts
+                                            objectName: "chatSegments"
+                                            width: parent.width
+                                            visible: message.inParts
+                                            segments: message.segments
+                                            hoveredLink: message.hoveredLink
+                                            english: DatesHelper.locale === "en"
                                         }
                                     }
                                 }
@@ -809,19 +847,24 @@ FocusScope {
                                     onHoveredChanged: if (!hovered) message.hoveredLink = ""
                                 }
                                 TapHandler {
+                                    id: leftTap
                                     acceptedButtons: Qt.LeftButton
                                     gesturePolicy: TapHandler.ReleaseWithinBounds
                                     onTapped: (eventPoint, button) => {
-                                        message.linkPoint = body.mapFromItem(message, eventPoint.position.x, eventPoint.position.y)
-                                        const link = body.linkAt(message.linkPoint.x, message.linkPoint.y)
+                                        const at = eventPoint.position
+                                        const link = message.linkAt(at)
                                         if (link !== "" && !Js.startsWith(link, "task:"))
                                             tools.openLink(link, root.path, false)
+                                        else if (message.inParts)
+                                            parts.openAt(message.linkPoint.x, message.linkPoint.y) // (a drawing opens large)
                                     }
-                                    onLongPressed: messageMenu.popup()
+                                    onLongPressed: message.openMenu(leftTap.point.position)
                                 }
                                 TapHandler {
                                     acceptedButtons: Qt.RightButton
-                                    onTapped: messageMenu.popup()
+                                    // (A finger has no buttons: it would open the menu on every tap.)
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                                    onTapped: (eventPoint, button) => message.openMenu(eventPoint.position)
                                 }
                                 BMenu {
                                     id: messageMenu
@@ -831,6 +874,16 @@ FocusScope {
                                         iconName: "copy"
                                         onTriggered: {
                                             if (tools.copyText(message.markdown))
+                                                AppController.toast(qsTr("Copied"), "success")
+                                        }
+                                    }
+                                    BMenuItem {
+                                        objectName: "chatMessageCopySource"
+                                        visible: message.menuSource !== ""
+                                        text: qsTr("Copy source")
+                                        iconName: "code"
+                                        onTriggered: {
+                                            if (tools.copyText(message.menuSource))
                                                 AppController.toast(qsTr("Copied"), "success")
                                         }
                                     }
@@ -875,8 +928,12 @@ FocusScope {
                                 readonly property bool writing: root.liveShown && root.turn.partial !== ""
                                 readonly property bool thinking: root.liveShown && root.turn.thoughts !== ""
                                 readonly property real maxWidth: Math.min(footerColumn.width * 0.92, 720)
+                                /// Its finished blocks in parts when one is a drawing (ChatSegments), else [].
+                                readonly property list<var> settledParts: live.writing && root.turn.partialSettled !== ""
+                                                                          ? messages.segments(root.turn.partialSettled) : root.noVars
                                 visible: root.liveShown
-                                Layout.preferredWidth: Math.min(live.maxWidth, Math.max(live.writing ? Math.max(liveSettled.implicitWidth, liveTail.implicitWidth) : 0,
+                                Layout.preferredWidth: Math.min(live.maxWidth, Math.max(live.writing ? Math.max(liveSettled.implicitWidth, liveParts.visible ? liveParts.naturalWidth : 0,
+                                                                                                                liveTail.implicitWidth) : 0,
                                                                                         live.thinking ? (root.thoughtsOpen ? liveThoughts.implicitWidth : thoughtsHeader.implicitWidth) : 0, 24) + 2 * Theme.space3)
                                 implicitHeight: liveColumn.implicitHeight + 2 * Theme.space2 + 2
                                 radius: Theme.radiusXl
@@ -962,17 +1019,27 @@ FocusScope {
                                         objectName: "chatPartial"
                                         width: parent.width
                                         visible: live.writing
-                                        spacing: liveSettled.html !== "" ? 10 : 0 // (a paragraph's gap, as renderMessage's)
+                                        spacing: liveSettled.html !== "" || liveParts.visible ? 10 : 0 // (a paragraph's gap, as renderMessage's)
                                         BRichText {
                                             id: liveSettled
                                             measured: true // (the bubble is as wide as its text)
                                             objectName: "chatPartialSettled"
                                             width: parent.width
                                             visible: liveSettled.html !== ""
-                                            html: live.writing && root.turn.partialSettled !== "" ? messages.render(root.turn.partialSettled) : ""
+                                            html: live.writing && root.turn.partialSettled !== "" && live.settledParts.length === 0
+                                                  ? messages.render(root.turn.partialSettled) : ""
                                             font.family: Theme.fontEditor
                                             font.pixelSize: Theme.textBase
                                             color: Theme.fg
+                                        }
+                                        // A finished chart, diagram or formula: drawn (not while its block is written).
+                                        ChatSegments {
+                                            id: liveParts
+                                            objectName: "chatPartialParts"
+                                            width: parent.width
+                                            visible: live.settledParts.length > 0
+                                            segments: live.settledParts
+                                            english: DatesHelper.locale === "en"
                                         }
                                         BRichText {
                                             id: liveTail
@@ -1002,6 +1069,7 @@ FocusScope {
 
                             // What an AI agent does: its plan, its tool calls with their output.
                             ChatActivity {
+                                id: activity
                                 objectName: "chatActivity"
                                 Layout.fillWidth: true
                                 Layout.maximumWidth: 640
@@ -1048,7 +1116,11 @@ FocusScope {
                                             text: root.queuedHere
                                                   ? (root.turn.place <= 1 ? qsTr("Waiting for the model on this device: it answers another conversation first.")
                                                                           : qsTr("Waiting for the model on this device: %1 conversations are answered first.").arg(root.turn.place))
-                                                  : root.busyHere && root.turn.status !== "" ? root.turn.status : qsTr("The AI is answering…")
+                                                  : root.busyHere && root.turn.status !== ""
+                                                    ? (activity.hidesStatus(root.turn.status) // ("Tool calls in chat: Hide all")
+                                                       ? qsTranslate("brulion::shell::WorkspaceAgents", "%1 is working…").arg(root.partnerName(root.partnerHere))
+                                                       : root.turn.status)
+                                                    : qsTr("The AI is answering…")
                                             variant: "muted"
                                             wrapMode: Text.Wrap
                                         }

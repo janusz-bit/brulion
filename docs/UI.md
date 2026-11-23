@@ -1308,12 +1308,39 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   the first message of a day that day (`chatDay`: "Today", "Yesterday", "15 Nov"); a click on a link
   follows it (page:, tag:, ext: through `PageTools.openLink`, from the conversation's page), a long
   press or right-click has Copy (the message's Markdown) and "Show in the page" (the page at its
-  line). Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
+  line) — on a drawing (below) also **Copy source** (`chatMessageCopySource`). Above them a row
+  with who answers (`chatPartner`, shown when an extension offers a partner
   or the page names one: its menu, `chatPartnerMenu`, changes it for the next turns —
   `WorkspaceChats.setPartner()` writes the page's `partner:`), the page it is about (a chip that
   opens it), "Open the conversation as a page" (`chatOpenPage`) and, without the list, "New
   conversation". New messages scroll the list to its end (`WorkspaceChats.written`, the model's
   count).
+* **Drawings in an answer** (T3 Code's visual replies, Brulion's way: no web view, nothing of the
+  message runs): an AI message with a closed ```` ```chart ```` block whose table or calc block is in
+  the message itself, a closed ```` ```mermaid ```` diagram of a type Brulion draws, a
+  ```` ```math ```` / `latex` / `tex` block or a paragraph that is one `$$…$$` formula is shown in
+  parts one under another (`chatSegments`, `ChatSegments.qml` → `ChatSegment.qml`; the model's
+  `segments` role, `ChatMessageModel::renderSegments()`: [{kind `text` | `chart` | `diagram` |
+  `math`, html, code, source, chartData}]): the text between them as the bubble's rich text, a chart
+  by the editor's `ChartView` (`chatSegmentChart`: the numbers through `chart::resolveData` of the
+  message's own tables, numbers in the chat's language; a message runs no query), a diagram by
+  `MermaidView` (`chatSegmentDiagram`: scaled down to the bubble, never up), a formula as the
+  editor's `renderMath` rich text, centred and larger (`chatSegmentMath`). The bubble keeps its
+  width rules — as wide as its widest part (`naturalWidth`; a chart takes all of the 82 % / 92 %,
+  720 px). A message without a drawing stays one rich text (`messageHtml`, as before), and a drawing
+  that cannot be drawn shows its block as written: a chart's mistake or a column not there, a query,
+  an unterminated fence (an answer cut off), a Mermaid type not drawn; a diagram whose source fails
+  only when laid out falls back so in the view (MermaidView's `status`). A tap on a drawing opens it
+  large as a picture opens (`chatDrawingViewer`, `ChatDrawingViewer.qml`: a chart at the window's
+  width up to 1400 px, a diagram fitted — a small one laid out again with a larger font, up to
+  twice the text's, a large one scaled down; a click or `chatDrawingViewerSize` shows it at its own
+  size, scrolled —, a formula large; "Copy source", `chatDrawingViewerCopy`, the block as written;
+  Close or Escape). The answer being written draws them too once their block is finished
+  (`chatPartialParts`: `ChatMessageModel.segments()` of `ChatTurn.partialSettled`, rendered again
+  only when a block is finished — never per token; the block being written stays text). AI agents
+  are told they may answer so (`WorkspaceAgents::context()`); the built-in assistant's prompts are
+  not changed (a model on the device trained on them: docs/FINETUNE.md). The HTML exports of the
+  conversation's page draw them as any page's.
 * **A conversation too long for the model** (`WorkspaceChats.historyBudget`: 16 000 characters for
   the model on the device, 120 000 for a provider on the network — `chat::firstSent`, a picture
   counting 3 000): the turn sends it from a later turn on, whole turns from the oldest left out, the
@@ -1558,7 +1585,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   (`WorkspaceAgents::recoverable()` — Android ended the app meanwhile) runs again
   (`WorkspaceChats::recoverAgentTurns` → `WorkspaceAgents::recover`): "Claude Code is still working
   on raspberry-pi-4…" while `acp::fetchRemoteTurn` long-polls the computer, then the answer is
-  written as if the phone had been there (its text, else "Done:" and its tool calls), the
+  written as if the phone had been there (its text, else its tool calls in words and their
+  titles), the
   session's record goes on (the next message resumes it), and the foreground service runs
   meanwhile as for a turn. The same when the stream of a running turn ends (the computer not
   reached for 15 minutes, or it gave the stream up). Stop asks the computer to stop it
@@ -1608,12 +1636,26 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   (`chatThoughts`), what it does the title of its tool call in progress (`chatStatus`: "Read
   Dom.md"; "Claude Code is working…" before). Under the answer what the turn does (`chatActivity`,
   `ChatActivity.qml`: `ChatTurn.tools` and `ChatTurn.plan` — the plan, a step a line with its state
-  (`chatPlanEntry`); the newest four tool calls (`chatToolCall`, "N earlier steps" opens them all)
-  with an icon of their state and, under the one running or the last, its output's last lines —
+  (`chatPlanEntry`); a summary line of the tool calls in words (`chatToolsSummary`:
+  `WorkspaceChats.toolSummary()`, `shell/chattools.h` — a part per kind in the order the turn first
+  did them, "Read 3 files · ran 2 commands · edited 1 file", at most three named and the rest "N
+  other steps", failed calls counted apart, "1 step failed", plural forms through the translation)
+  that opens and closes their list: the newest four (`chatToolCall`, "N earlier steps" opens them
+  all) with an icon of their state — closed, the calls running and the failed ones stay — and,
+  under the one running or the last, its output's last lines —
   a terminal's as it comes (`chatToolOutput`, plain monospace text) —, a file's change behind "Show
   the change" as a diff (`chatToolDiffToggle`, `chatToolDiff`: BDiffView, unified); the first change
   at once, those after it ten times a second at most). The turn's answer is written as the AI's message with its
-  time, as any partner's; a turn of tool calls without words writes "Done:" and their titles.
+  time, as any partner's; a turn of tool calls without words writes their summary line and their
+  titles as a list ("Edited 1 file", then "- Edit Dom.md"; an agent on another computer keeps only
+  the titles: "Took 2 steps").
+* **Tool calls in chat** (Settings → Extensions → AI agents, `chatToolCallsRow` /
+  `chatToolCallsSetting`; `AppSettings.chatToolCalls`, key `ai/chatToolCalls`, this device's — T3
+  Code's setting): **Show all** (`all`, the default: the list open), **Hide finished**
+  (`hideFinished`: the list closed — a call shows while it runs and stays only if it failed; the
+  summary line still opens it) and **Hide all** (`hideAll`: no summary, only failed calls, and the
+  status line says only "Claude Code is working…" instead of the call's title). Questions, failures
+  and the plan always show.
 * **Sessions after a restart**: the session's id is kept in the notebook's device state (LocalStore
   `acp/sessions`: {conversation → agent, session, how many messages it has seen}); the
   conversation's next turn after the app started again resumes it (`session/resume`, else
@@ -1634,7 +1676,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   turn's commands ended, nothing more of that turn; a message sent meanwhile waits for the agent to
   end the cancelled turn.
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
-  program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one).
+  program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one),
+  `tst_shell_chattools` (the calls in words, English and Polish plural forms), the shell self-test's
+  `checkChatDrawings` (the drawings of an answer, ChatActivity under each "Tool calls in chat").
 
 ## AI in the editor
 

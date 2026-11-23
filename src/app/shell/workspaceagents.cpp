@@ -1,5 +1,6 @@
 #include "workspaceagents.h"
 
+#include "chattools.h"
 #include "workspace.h"
 
 #include "chat/chat.h"
@@ -381,6 +382,11 @@ QString WorkspaceAgents::context(const QString &root, const QString &conversatio
     if (!page.isEmpty())
         lines << u"The conversation is about the note \"%1\" (attached)."_s.arg(page);
     lines << u"Answer in Markdown, in the language of the user's message."_s;
+    // (The chat draws these: docs/UI.md "AI chat". Not in the built-in assistant's prompts, which a
+    // model trained for them depends on: docs/FINETUNE.md.)
+    lines << u"The chat draws ```mermaid diagrams (flowchart, sequenceDiagram, pie), a ```chart block under a "
+             u"Markdown table (lines \"type: bar\" — or line, pie — and \"title: …\") and $$…$$ formulas: use "
+             u"them when a picture says it better."_s;
     return lines.join(u'\n');
 }
 
@@ -661,13 +667,16 @@ void WorkspaceAgents::connectClient(Process *p)
             return;
         QString answer = text;
         if (answer.isEmpty()) {
-            // A turn of tool calls only: what it did.
-            QStringList done;
+            // A turn of tool calls only: what it did, in words and as a list (chattools.h).
+            QList<ToolStep> steps;
+            QStringList titles;
             if (const acp::TurnState *turn = client->lastTurn(path)) {
-                for (const acp::ToolCall &t : turn->tools)
-                    done << u"- "_s + t.title;
+                for (const acp::ToolCall &t : turn->tools) {
+                    steps.append({t.kind, t.status});
+                    titles << t.title;
+                }
             }
-            answer = done.isEmpty() ? tr("Done.") : tr("Done:") + u"\n\n"_s + done.join(u'\n');
+            answer = toolsAnswer(steps, titles);
         }
         store(path, Stored{id, client->sessionId(path), m_seen.value(path)});
         finish(path);
@@ -1229,10 +1238,11 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
     }
     QString answer = turn.text;
     if (answer.trimmed().isEmpty()) {
-        QStringList did;
-        for (const QString &t : turn.tools)
-            did << u"- "_s + t;
-        answer = did.isEmpty() ? tr("Done.") : tr("Done:") + u"\n\n"_s + did.join(u'\n');
+        // (The computer keeps only the calls' titles: other steps of an unknown kind.)
+        QList<ToolStep> steps;
+        for (qsizetype i = 0; i < turn.tools.size(); ++i)
+            steps.append({QString(), u"completed"_s});
+        answer = toolsAnswer(steps, turn.tools);
     }
     qCInfo(logging::lcApp, "AI agent %s: the answer of %s fetched from %s", qUtf8Printable(name), qUtf8Printable(path),
            qUtf8Printable(host));

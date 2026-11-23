@@ -1,6 +1,7 @@
 #include "workspacechats.h"
 
 #include "agentshare.h"
+#include "chattools.h"
 
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -245,6 +246,11 @@ bool WorkspaceChats::agentsAvailable() const
 bool WorkspaceChats::isAgent(const QString &partner) const
 {
     return WorkspaceAgents::isAgent(partner);
+}
+
+QString WorkspaceChats::toolSummary(const QVariantList &tools) const
+{
+    return shell::toolSummary(tools);
 }
 
 QVariantList WorkspaceChats::agentOptions(const QString &path, const QString &partner, int) const
