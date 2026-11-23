@@ -1,5 +1,7 @@
 #include "extensions/appapi.h"
 
+#include "markdown/inline.h"
+
 #include <QRegularExpression>
 #include <QSet>
 
@@ -383,6 +385,171 @@ QVariantMap contributionTable(const Contribution &item)
     if (item.order != 0)
         out.insert(u"order"_s, item.order);
     return out;
+}
+
+namespace {
+
+/// The fields of `table` are among `known` (listed in the error as `names`).
+bool knownFields(const QVariantMap &table, const QStringList &known, const QString &what, QString *error)
+{
+    for (auto it = table.cbegin(); it != table.cend(); ++it) {
+        if (!known.contains(it.key())) {
+            *error = u"%1 has no field “%2” (%3)"_s.arg(what, it.key(), known.join(u", "_s));
+            return false;
+        }
+    }
+    return true;
+}
+
+/// An optional boolean field: `fallback` when it is missing.
+bool boolField(const QVariantMap &table, const QString &key, bool fallback, bool *out, QString *error)
+{
+    const QVariant v = table.value(key);
+    if (!v.isValid() || v.isNull()) {
+        *out = fallback;
+        return true;
+    }
+    if (v.metaType().id() != QMetaType::Bool) {
+        *error = u"“%1” is true or false"_s.arg(key);
+        return false;
+    }
+    *out = v.toBool();
+    return true;
+}
+
+/// A tag as written ("#pilne", "#[[Jan Kowalski]]", "a/") as its name: no '#', no `[[…]]`, no
+/// trailing '/', NFC.
+QString tagName(const QString &tag)
+{
+    QString name = tag.trimmed();
+    if (name.startsWith(u'#'))
+        name.remove(0, 1);
+    if (name.startsWith(u"[[") && name.endsWith(u"]]") && name.size() >= 4)
+        name = name.mid(2, name.size() - 4);
+    name = name.trimmed().normalized(QString::NormalizationForm_C);
+    while (name.endsWith(u'/'))
+        name.chop(1);
+    return name;
+}
+
+bool hasLineBreak(const QString &text)
+{
+    for (const QChar c : text)
+        if (c == u'\n' || c == u'\r' || c == QChar(0x2028) || c == QChar(0x2029))
+            return true;
+    return false;
+}
+
+} // namespace
+
+bool inputRuleFrom(const QVariantMap &table, InputRule *out, QString *error)
+{
+    if (!knownFields(table, {u"match"_s, u"replace"_s, u"word"_s}, u"an input rule"_s, error))
+        return false;
+    InputRule rule;
+    const QVariant match = table.value(u"match"_s);
+    const QVariant replace = table.value(u"replace"_s);
+    if (match.metaType().id() != QMetaType::QString || match.toString().isEmpty()) {
+        *error = u"an input rule needs “match”: the text typed (\"->\")"_s;
+        return false;
+    }
+    if (replace.metaType().id() != QMetaType::QString) {
+        *error = u"an input rule needs “replace”: the text it becomes (\"→\")"_s;
+        return false;
+    }
+    rule.match = match.toString().normalized(QString::NormalizationForm_C);
+    rule.replace = replace.toString().normalized(QString::NormalizationForm_C);
+    if (!boolField(table, u"word"_s, false, &rule.word, error))
+        return false;
+    if (rule.match.size() > MaxInputRuleMatch) {
+        *error = u"“match” has at most %1 characters"_s.arg(MaxInputRuleMatch);
+        return false;
+    }
+    if (rule.replace.size() > MaxInputRuleReplace) {
+        *error = u"“replace” has at most %1 characters"_s.arg(MaxInputRuleReplace);
+        return false;
+    }
+    if (hasLineBreak(rule.match) || hasLineBreak(rule.replace)) {
+        *error = u"an input rule's texts are one line"_s;
+        return false;
+    }
+    if (rule.match == rule.replace) {
+        *error = u"“replace” is “match” itself"_s;
+        return false;
+    }
+    if (rule.word && (rule.match.front().isSpace() || rule.match.back().isSpace())) {
+        *error = u"a “word” rule's “match” has no spaces around it"_s;
+        return false;
+    }
+    *out = rule;
+    return true;
+}
+
+QVariantMap inputRuleTable(const InputRule &rule)
+{
+    return {{u"extension"_s, rule.extension},
+            {u"match"_s, rule.match},
+            {u"replace"_s, rule.replace},
+            {u"word"_s, rule.word}};
+}
+
+QStringList tagTints()
+{
+    return {u"accent"_s, u"success"_s, u"danger"_s, u"warning"_s, u"info"_s, u"neutral"_s};
+}
+
+QString tagStyleKey(const QString &tag)
+{
+    const QString name = tagName(tag);
+    if (name.isEmpty() || markdown::tagSyntax(name).isEmpty())
+        return {};
+    return name.toLower();
+}
+
+bool tagStyleFrom(const QVariantMap &table, TagStyle *out, QString *error)
+{
+    if (!knownFields(table, {u"tag"_s, u"tint"_s, u"fill"_s, u"bar"_s}, u"a tag style"_s, error))
+        return false;
+    TagStyle style;
+    const QVariant tag = table.value(u"tag"_s);
+    if (tag.metaType().id() != QMetaType::QString || tag.toString().trimmed().isEmpty()) {
+        *error = u"a tag style needs “tag”: the tag's name (\"pilne\")"_s;
+        return false;
+    }
+    if (tag.toString().size() > 200 || tagStyleKey(tag.toString()).isEmpty()) {
+        *error = u"“%1” is no tag's name"_s.arg(tag.toString().left(200));
+        return false;
+    }
+    style.tag = tagName(tag.toString());
+    const QVariant tint = table.value(u"tint"_s);
+    const QString tintText = tint.metaType().id() == QMetaType::QString ? tint.toString().trimmed() : QString();
+    if (tagTints().contains(tintText)) {
+        style.tint = tintText;
+    } else {
+        const QString color = normalizedThemeColor(tintText);
+        if (color.size() != 7) {
+            *error = u"“tint” is one of %1, or a colour \"#rrggbb\""_s.arg(tagTints().join(u", "_s));
+            return false;
+        }
+        style.tint = color;
+    }
+    if (!boolField(table, u"fill"_s, true, &style.fill, error) || !boolField(table, u"bar"_s, true, &style.bar, error))
+        return false;
+    if (!style.fill && !style.bar) {
+        *error = u"a tag style shows a “fill”, a “bar” or both"_s;
+        return false;
+    }
+    *out = style;
+    return true;
+}
+
+QVariantMap tagStyleTable(const TagStyle &style)
+{
+    return {{u"extension"_s, style.extension},
+            {u"tag"_s, style.tag},
+            {u"tint"_s, style.tint},
+            {u"fill"_s, style.fill},
+            {u"bar"_s, style.bar}};
 }
 
 QStringList appOperations()

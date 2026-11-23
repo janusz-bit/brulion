@@ -4,6 +4,7 @@
 #include "blocktext.h"
 #include "dayclock.h"
 #include "editorhost.h"
+#include "inputrules.h"
 #include "queryhost.h"
 #include "taskhelpers.h"
 
@@ -322,6 +323,7 @@ void PageController::setHost(EditorHost *host)
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
         connect(m_host, &EditorHost::pdfThumbnailChanged, m_model, &BlockListModel::pdfThumbnailChanged);
         connect(m_host, &EditorHost::macrosChanged, this, &PageController::onMacrosChanged);
+        connect(m_host, &EditorHost::tagStylesChanged, m_model, &BlockListModel::followTagStyles);
     }
     Q_EMIT hostChanged();
     if (m_host && !m_path.isEmpty())
@@ -1641,7 +1643,8 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
         return;
     if (cursor >= 0 && editingRow() == row)
         m_cursor = cursor;
-    if (edit == m_model->editTextAt(row))
+    const QString previous = m_model->editTextAt(row);
+    if (edit == previous)
         return;
     const markdown::BlockEntry &entry = m_model->document().at(row);
     const quint64 uid = entry.uid;
@@ -1676,7 +1679,56 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
         const int delta = int(edit.size() - now.size());
         m_cursor = same == at ? at : std::clamp(at - delta, 0, int(now.size()));
         Q_EMIT editTextReset(row, now, m_cursor);
+        return;
     }
+    applyInputRule(row, previous, now, cursor);
+}
+
+void PageController::applyInputRule(int row, const QString &previous, const QString &edit, int cursor)
+{
+    // Extensions' input rules (`->` → `→`, docs/UI.md "Input rules"): the text just typed before
+    // the caret replaced as a step of its own, so one undo brings the typed text back. Typing
+    // only — an insertion ending at the caret — in a paragraph, list item or heading being edited.
+    if (!m_host || cursor < 0 || editingRow() != row)
+        return;
+    const QList<InputRule> &rules = m_host->inputRules();
+    if (rules.isEmpty())
+        return;
+    const BlockView view = m_model->shapeAt(row).view;
+    if (view != BlockView::Text && view != BlockView::Heading)
+        return;
+    int same = 0;
+    const int shorter = int(std::min(previous.size(), edit.size()));
+    while (same < shorter && previous[same] == edit[same])
+        ++same;
+    int tail = 0;
+    while (tail < shorter - same && previous[previous.size() - 1 - tail] == edit[edit.size() - 1 - tail])
+        ++tail;
+    const int typed = int(edit.size()) - same - tail;
+    if (typed < 1 || cursor != same + typed)
+        return;
+    const std::optional<InputRuleHit> hit = inputRuleHit(edit, cursor, typed, rules);
+    if (!hit)
+        return;
+    const QString replaced = edit.left(hit->from) + hit->replace + edit.mid(hit->to);
+    const int caret = cursor - (hit->to - hit->from) + int(hit->replace.size());
+    const markdown::BlockEntry &entry = m_model->document().at(row);
+    const quint64 uid = entry.uid;
+    const QString body = bodyWithEditText(entry, replaced);
+    const BlockDocument::Version before = m_model->document().version();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+    if (!r.changed())
+        return;
+    m_undo->push(
+            new EditCommand(this, m_model->document().diffFrom(before), Focus{row, cursor}, Focus{row, caret}, uid));
+    // What is typed next is a step of its own: undo takes it away first, then the replacement.
+    m_typingOpen = false;
+    const bool ownTextOnly = r.changes.size() == 1 && r.changes.first().type == markdown::BlockChange::Type::Changed
+                             && r.changes.first().first == row && r.changes.first().count == 1;
+    markDirty(ownTextOnly ? uid : 0, !ownTextOnly || row == 0);
+    const QString now = m_model->editTextAt(row);
+    m_cursor = std::clamp(caret, 0, int(now.size()));
+    Q_EMIT editTextReset(row, now, m_cursor);
 }
 
 QVariantMap PageController::split(int row, int cursor)

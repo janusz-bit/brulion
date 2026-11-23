@@ -126,6 +126,19 @@ type AppItem = {
     insert: string?,
 }
 
+type InputRule = {
+    match: string,
+    replace: string,
+    word: boolean?,
+}
+
+type TagStyle = {
+    tag: string,
+    tint: string,
+    fill: boolean?,
+    bar: boolean?,
+}
+
 type AiReply = {
     text: string,
     model: string,
@@ -225,6 +238,10 @@ declare b: {
         contribute: (slot: string, item: AppItem) -> (),
         remove: (slot: string, id: string?) -> boolean,
         contributions: (slot: string?) -> { { [string]: any } },
+        inputRule: (rule: InputRule) -> (),
+        inputRules: () -> { { [string]: any } },
+        tagStyle: (style: TagStyle) -> (),
+        tagStyles: () -> { { [string]: any } },
     },
 
     -- the views' components

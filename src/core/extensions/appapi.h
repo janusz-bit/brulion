@@ -117,6 +117,59 @@ bool contributionFrom(const QString &slot, const QVariantMap &item, Contribution
 /// A Contribution as a table (b.app.contributions(), the remote control's `contributions`).
 QVariantMap contributionTable(const Contribution &item);
 
+// ---- Input rules: text replaced as it is typed (b.app.inputRule) ----------------------------------
+
+/// A replacement the block editor makes as the user types (`->` → `→`): declared once, kept by the
+/// app, applied without Luau (docs/EXTENSIONS.md "Input rules"). The editor's matcher:
+/// src/app/editor/inputrules.h.
+struct InputRule {
+    QString extension;
+    QString match;     ///< the text just typed before the caret: 1 … MaxInputRuleMatch characters, one line
+    QString replace;   ///< what it becomes: at most MaxInputRuleReplace characters, one line ("" removes it)
+    bool word = false; ///< a whole word only: replaced when a character that ends a word follows it
+    bool operator==(const InputRule &other) const = default;
+};
+
+inline constexpr int MaxInputRuleMatch = 32;
+inline constexpr int MaxInputRuleReplace = 200;
+inline constexpr int MaxInputRulesPerExtension = 64;
+inline constexpr int MaxInputRules = 256;
+
+/// A table of b.app.inputRule ({ match, replace, word? }) as an InputRule (its extension left
+/// empty): `match` a non-empty text of one line with no surrounding spaces when `word`, `replace`
+/// one line, `word` a boolean. Unknown fields are errors.
+bool inputRuleFrom(const QVariantMap &table, InputRule *out, QString *error);
+/// An InputRule as a table (b.app.inputRules()): {extension, match, replace, word}.
+QVariantMap inputRuleTable(const InputRule &rule);
+
+// ---- Styles of blocks by tag (b.app.tagStyle) -------------------------------------------------------
+
+/// Blocks carrying a tag drawn tinted (`#pilne` on a red band): the editor gives such a block a
+/// background and a bar at its left edge in the tint, in the light and the dark theme.
+struct TagStyle {
+    QString extension;
+    QString tag;      ///< as written after '#', NFC ("pilne", "Projekt/Dom", "Jan Kowalski")
+    QString tint;     ///< one of tagTints() (the theme's colours) or "#rrggbb"
+    bool fill = true; ///< the tinted background
+    bool bar = true;  ///< the bar at the left edge
+    bool operator==(const TagStyle &other) const = default;
+};
+
+inline constexpr int MaxTagStylesPerExtension = 64;
+inline constexpr int MaxTagStyles = 256;
+
+/// The tints that follow the theme: "accent", "success", "danger", "warning", "info", "neutral".
+QStringList tagTints();
+/// A tag as tag styles compare it: without '#' (and `[[…]]`), NFC, lower case; "" when no tag
+/// can be written so (docs/SYNTAX.md §3).
+QString tagStyleKey(const QString &tag);
+/// A table of b.app.tagStyle ({ tag, tint, fill?, bar? }) as a TagStyle (its extension left empty):
+/// `tag` a tag's name ("pilne", "#pilne", "#[[Jan Kowalski]]"), `tint` one of tagTints() or a
+/// colour "#rgb" / "#rrggbb" (kept as "#rrggbb"; no alpha), `fill` / `bar` booleans, not both false.
+bool tagStyleFrom(const QVariantMap &table, TagStyle *out, QString *error);
+/// A TagStyle as a table (b.app.tagStyles()): {extension, tag, tint, fill, bar}.
+QVariantMap tagStyleTable(const TagStyle &style);
+
 // ---- The app's operations (Host::app) -------------------------------------------------------------
 
 /// The operations b.app asks of the app through Host::app(), each with its arguments:

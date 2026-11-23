@@ -1644,10 +1644,13 @@ live code an agent sends ("Live code" below).
 | `b.app.toast(text, { tone?, button? })` | a message: `tone` `"success"`, `"danger"`, `"warning"`, `"info"`; `button = { label = "Undo", command = "undo" }` runs one of the extension's commands when pressed |
 | `b.app.theme(tokens)` | overrides tokens of the theme ("Theme" below); `nil` takes them away |
 | `b.app.contribute(slot, item)`, `b.app.remove(slot, id?)`, `b.app.contributions(slot?)` | puts an item into the app's UI, takes one (or all of a slot) away, lists those of every extension ("Items of the UI" below) |
+| `b.app.inputRule(rule)`, `b.app.inputRules()` | text the editor replaces as it is typed (`->` → `→`), every extension's rules ("Input rules" below); `b.app.remove("inputRule", match?)` takes one (or all) away |
+| `b.app.tagStyle(style)`, `b.app.tagStyles()` | blocks carrying a tag drawn tinted (`#pilne` on red), every extension's styles ("Styles of blocks by tag" below); `b.app.remove("tagStyle", tag?)` takes one (or all) away |
 
 What moves the UI — `navigate`, `open`, `back`, `run`, `toast` — happens after the call returns,
 never inside it, and is refused at an extension's top level (it would run on every save of the
-page: call it from a command, an action or a hook). `theme` and `contribute` are declarations:
+page: call it from a command, an action or a hook). `theme`, `contribute`, `inputRule` and
+`tagStyle` are declarations:
 they work at the top level, and what an extension set goes away when it is loaded again, switched
 off or removed. A macro or a template variable only reads (`b.app.state()` works there; a change
 is an error). In `brulion-cli extension run` there is no app: `b.app.state()` says
@@ -1771,6 +1774,74 @@ dueToday()
 b.on("change", function(e)
     dueToday()
 end)
+```
+
+### Input rules
+
+`b.app.inputRule({ match, replace, word? })` replaces text as it is typed in the block editor —
+`->` becomes `→` the moment `>` is typed, as a word processor's autocorrect. The rule is a
+declaration the app keeps: typing never waits for Luau, and no code of the extension runs while
+the user writes.
+
+* `match` is the text just typed before the caret (1 … 32 characters of one line, compared as
+  written: case and diacritics count), `replace` what it becomes (one line, at most 200
+  characters; `""` removes the typed text).
+* `word = true` replaces a whole word only: when a character that ends a word (a space,
+  punctuation) is typed after `match` and no letter or digit stands before it. That character
+  stays: `teh` + space is `the` + space.
+* One undo (Ctrl+Z, the toolbar's Undo) brings back the text as it was typed; the replacement is
+  a step of its own, and what is typed after it another one.
+* A rule fires on typing only — never on a paste, a deletion or text an extension writes — in
+  paragraphs, list items and headings, and never inside code (a code span, also one still open
+  before the caret, a fenced block, a code block), a formula (`$…$`, `$$…$$`), a `%%` comment, a
+  link's target (`[[…`, `](…`) or a URL.
+* Of the rules that match, the longest wins (`-->` over `->`), and of equally long ones the one
+  declared last. Declaring the same `match` again replaces the extension's rule in its place.
+  Each extension has at most 64 rules, all of them together 256.
+
+Brulion has none of its own: an extension declares the ones its user wants.
+
+```luau
+-- Arrows and typographic signs as they are typed, and two corrections of whole words.
+local rules = {
+    { "->", "→" }, { "<-", "←" }, { "=>", "⇒" }, { "<=>", "⇔" },
+    { "--", "–" }, { "...", "…" }, { "(c)", "©" }, { "+-", "±" }, { "!=", "≠" },
+}
+for _, r in rules do
+    b.app.inputRule({ match = r[1], replace = r[2] })
+end
+b.app.inputRule({ match = "teh", replace = "the", word = true })
+b.app.inputRule({ match = "zolw", replace = "żółw", word = true })
+print(`{#b.app.inputRules()} rules`)
+```
+
+### Styles of blocks by tag
+
+`b.app.tagStyle({ tag, tint, fill?, bar? })` draws every block carrying the tag tinted — in the
+editor, being edited or not, and in reading mode: a background and a bar down the block's left
+edge.
+
+* `tag` is the tag's name, with or without its `#` (`"pilne"`, `"#pilne"`, `"#[[Jan Kowalski]]"`),
+  matched in any case; a style of `projekt` also tints `#projekt/dom` (its own style wins).
+* `tint` is one of the theme's colours — `"accent"`, `"success"`, `"danger"`, `"warning"`,
+  `"info"`, `"neutral"`: the light and the dark theme's own pair, the soft one for the background
+  and the strong one for the bar — or a colour `"#rrggbb"` (also `"#rgb"`): the bar in it, the
+  background a translucent shade of it, which reads on light and dark paper. Nothing else of a
+  colour is taken (no alpha, no CSS).
+* `fill = false` leaves the background out, `bar = false` the bar (not both).
+* A block takes the style of the first styled tag in its own text (not its children's, not one
+  in code). Declaring a tag again replaces the extension's style and puts it last; of several
+  extensions' styles of one tag, the one declared last wins. Each extension has at most 64
+  styles, all of them together 256.
+
+```luau
+-- Urgent blocks on red, waiting ones with an amber bar, ideas on a soft violet.
+b.app.tagStyle({ tag = "pilne", tint = "danger" })
+b.app.tagStyle({ tag = "czeka", tint = "warning", fill = false })
+b.app.tagStyle({ tag = "pomysł", tint = "#8e6cd8" })
+for _, s in b.app.tagStyles() do
+    print(`#{s.tag}: {s.tint}`)
+end
 ```
 
 ### Settings and navigation

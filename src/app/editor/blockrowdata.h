@@ -45,6 +45,9 @@ class BlockRowData : public QObject {
     Q_PROPERTY(QVariantMap query READ query NOTIFY queryChanged FINAL)
     Q_PROPERTY(QVariantList properties READ properties NOTIFY propertiesChanged FINAL)
     Q_PROPERTY(QVariantMap propertiesInfo READ propertiesInfo NOTIFY propertiesInfoChanged FINAL)
+    /// An extension's style of blocks by tag: the tint ("" none) and what shows (1 fill, 2 bar, 3 both).
+    Q_PROPERTY(QString tagTint READ tagTint NOTIFY tagTintChanged FINAL)
+    Q_PROPERTY(int tagTintMode READ tagTintMode NOTIFY tagTintModeChanged FINAL)
 
 public:
     explicit BlockRowData(QObject *parent = nullptr);
@@ -61,6 +64,8 @@ public:
     QVariantMap query() const;
     QVariantList properties() const;
     QVariantMap propertiesInfo() const;
+    QString tagTint() const;
+    int tagTintMode() const;
 
 Q_SIGNALS:
     void htmlChanged();
@@ -75,6 +80,8 @@ Q_SIGNALS:
     void queryChanged();
     void propertiesChanged();
     void propertiesInfoChanged();
+    void tagTintChanged();
+    void tagTintModeChanged();
 
 private:
     enum Role {
@@ -90,6 +97,8 @@ private:
         Properties,
         PropertiesInfo,
         RenderedText,
+        TagTint,
+        TagTintMode,
         RoleCount
     };
     /// The value of `role` on the delegate's model object (invalid without one); the first read

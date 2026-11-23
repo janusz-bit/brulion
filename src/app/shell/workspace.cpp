@@ -176,6 +176,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_extensions->setPictureHost(this);
     m_chats = new WorkspaceChats(this, m_extensions, this);
     connect(m_extensions, &WorkspaceExtensions::macrosChanged, this, &EditorHost::macrosChanged);
+    connect(m_extensions, &WorkspaceExtensions::appRevisionChanged, this, &Workspace::followExtensionStyles);
     m_replacing = new ReplaceSession(this);
     m_encryption = new WorkspaceEncryption(this);
     m_sync = new WorkspaceSync(this);
@@ -1116,6 +1117,21 @@ QVariantList Workspace::suggestBlocks(const QString &text, int limit) const
 markdown::MacroView Workspace::macroView(const markdown::MacroSpan &macro, const QString &path) const
 {
     return m_extensions->macroView(macro, path);
+}
+
+void Workspace::followExtensionStyles()
+{
+    QList<editor::InputRule> rules;
+    for (const extensions::InputRule &r : m_extensions->inputRules())
+        rules.append({r.match, r.replace, r.word});
+    m_inputRules = rules;
+    QHash<QString, editor::BlockTagStyle> styles;
+    for (const extensions::TagStyle &t : m_extensions->tagStyles()) // a later one wins its tag
+        styles.insert(extensions::tagStyleKey(t.tag), editor::BlockTagStyle{t.tint, t.fill, t.bar});
+    if (styles != m_tagStyles) {
+        m_tagStyles = styles;
+        Q_EMIT tagStylesChanged();
+    }
 }
 
 QVariantList Workspace::suggestMacros(const QString &prefix, int limit) const

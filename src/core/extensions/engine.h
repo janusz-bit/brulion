@@ -247,7 +247,12 @@ public:
     QList<Contribution> contributions(const QString &slot = QString()) const;
     /// The extensions' overrides of the theme, the first set first (a later one wins per token).
     QList<ThemeInfo> themes() const;
-    /// Counts the changes of contributions() and themes().
+    /// The input rules extensions declared (b.app.inputRule), the first declared first.
+    QList<InputRule> inputRules() const { return m_inputRules; }
+    /// The styles of blocks by tag extensions declared (b.app.tagStyle), the first declared first
+    /// (a later one wins a tag).
+    QList<TagStyle> tagStyles() const { return m_tagStyles; }
+    /// Counts the changes of contributions(), themes(), inputRules() and tagStyles().
     int appRevision() const { return m_appRevision; }
 
     qint64 memoryUsed() const { return qint64(m_used); }
@@ -381,6 +386,10 @@ private:
     static int apiAppContribute(lua_State *L);
     static int apiAppRemove(lua_State *L);
     static int apiAppContributions(lua_State *L);
+    static int apiAppInputRule(lua_State *L);
+    static int apiAppInputRules(lua_State *L);
+    static int apiAppTagStyle(lua_State *L);
+    static int apiAppTagStyles(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -452,10 +461,14 @@ private:
     int appContributeImpl(lua_State *L);
     int appRemoveImpl(lua_State *L);
     int appContributionsImpl(lua_State *L);
+    int appInputRuleImpl(lua_State *L);
+    int appTagStyleImpl(lua_State *L);
+    /// b.app.remove("inputRule" | "tagStyle", key?): the extension's rules or styles taken away.
+    int appRemoveDeclarationImpl(lua_State *L, const QString &extension, const QString &kind, const QString &key);
     /// False, its error raised, when `extension` may not change the app now: no permission "app",
     /// a macro's or a template variable's call, or — `notWhileLoading` — its top level.
     bool mayChangeApp(lua_State *L, const QString &extension, const QString &function, bool notWhileLoading);
-    /// Drops the extension's contributions and theme; true when it had any.
+    /// Drops the extension's contributions, theme, input rules and tag styles; true when it had any.
     bool dropAppState(const QString &extension);
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
@@ -515,6 +528,8 @@ private:
     QHash<QString, QByteArray> m_moduleCode; // a module's bytecode by its hash (compiled once)
     QList<Contribution> m_contributions;     // in the order contributed
     QList<ThemeInfo> m_themes;               // in the order set
+    QList<InputRule> m_inputRules;           // in the order declared
+    QList<TagStyle> m_tagStyles;             // in the order declared
     int m_appRevision = 0;
 };
 

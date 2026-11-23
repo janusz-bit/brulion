@@ -500,6 +500,8 @@ end, { label = "Ile otwartych zadań" })
 | `b.app.theme({ … })` | kolory, zaokrąglenia i czcionki Brulionu, dopóki rozszerzenie działa (niżej) |
 | `b.app.contribute(miejsce, element)` | dodaje przycisk albo pozycję w aplikacji (niżej) |
 | `b.app.remove(miejsce, id)`, `b.app.contributions()` | zabiera jeden; wypisuje elementy wszystkich rozszerzeń |
+| `b.app.inputRule({ match = "->", replace = "→" })`, `b.app.inputRules()` | tekst zamieniany w trakcie pisania (niżej); reguły wszystkich rozszerzeń |
+| `b.app.tagStyle({ tag = "pilne", tint = "danger" })`, `b.app.tagStyles()` | bloki z tagiem w kolorze (niżej); style wszystkich rozszerzeń |
 
 Przechodzenie (`navigate`, `open`, `back`, `run`) i komunikaty dzieją się po wywołaniu — w poleceniach, akcjach i reakcjach, nie podczas wczytywania strony. Reakcja `"route"` uruchamia się, gdy ekran pokazuje coś innego: `e.view`, `e.page`, `e.date`.
 
@@ -539,6 +541,26 @@ b.app.contribute("slash", {
     label = "Notatka ze spotkania",
     insert = "## Spotkanie\n- Kto:\n- Ustalenia:\n- [ ] Następny krok",
 })
+```
+
+**W trakcie pisania.** `b.app.inputRule({ match, replace })` zamienia tekst w chwili, gdy go wpisujesz: `->` staje się `→`, gdy wpiszesz `>`. Jedno Ctrl+Z przywraca to, co wpisałeś. Z `word = true` zamieniane jest tylko całe słowo, gdy wpiszesz po nim spację albo znak interpunkcyjny. Nic nie jest zamieniane w kodzie, wzorach, celach linków ani adresach stron, ani przy wklejaniu. Brulion nie ma własnych reguł — rozszerzenie deklaruje te, których chcesz — a `b.app.remove("inputRule", "->")` zabiera jedną z nich.
+
+```luau
+-- Strzałki i półpauzy w trakcie pisania oraz poprawione słowo.
+b.app.inputRule({ match = "->", replace = "→" })
+b.app.inputRule({ match = "<-", replace = "←" })
+b.app.inputRule({ match = "--", replace = "–" })
+b.app.inputRule({ match = "...", replace = "…" })
+b.app.inputRule({ match = "zolw", replace = "żółw", word = true })
+```
+
+**Bloki według tagu.** `b.app.tagStyle({ tag, tint })` rysuje każdy blok z tym tagiem na kolorowym tle z paskiem przy lewej krawędzi. `tint` to jeden z kolorów motywu — `"accent"`, `"success"`, `"danger"`, `"warning"`, `"info"`, `"neutral"`, które dopasowują się do jasnego i ciemnego trybu — albo kolor `"#rrggbb"`. `fill = false` zostawia sam pasek, `bar = false` samo tło. Styl tagu `projekt` koloruje też `#projekt/dom`.
+
+```luau
+-- Pilne bloki na czerwono, czekające z bursztynowym paskiem.
+b.app.tagStyle({ tag = "pilne", tint = "danger" })
+b.app.tagStyle({ tag = "czeka", tint = "warning", fill = false })
+b.app.tagStyle({ tag = "pomysł", tint = "#8e6cd8" })
 ```
 
 Agent AI, z którym pracujesz, może zrobić to wszystko od razu w działającej aplikacji, bez strony — a Ty możesz to cofnąć w menu **Na żywo** na górnym pasku. Zobacz [[Rozszerzenia]] i opis dla programistów.

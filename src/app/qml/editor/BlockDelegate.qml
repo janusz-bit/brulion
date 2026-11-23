@@ -245,6 +245,48 @@ Item {
     readonly property real bandRight: contentRight + Theme.space2
     readonly property real bandTop: bandStart ? 1 : 0
     readonly property real bandBottom: bandEnd ? height - 1 : height
+    // ---- Style by tag (an extension's b.app.tagStyle: docs/UI.md "Styles of blocks by tag") -------
+    /// The tint of the block's styled tag ("" none): a colour of the theme by name, or "#rrggbb".
+    readonly property string tagTint: shown ? rowData.tagTint : ""
+    /// The colour of `tint`: the strong one (the bar) or the soft one (the background) — the
+    /// theme's own pair for its names, a translucent shade of a "#rrggbb" in both themes.
+    function tagTintColor(tint: string, strong: bool): color {
+        switch (tint) {
+        case "accent": return strong ? Theme.accent : Theme.accentBg
+        case "success": return strong ? Theme.success : Theme.successBg
+        case "danger": return strong ? Theme.danger : Theme.dangerBg
+        case "warning": return strong ? Theme.warning : Theme.warningBg
+        case "info": return strong ? Theme.info : Theme.infoBg
+        case "neutral": return strong ? Theme.borderStrong : Theme.bgSunken
+        }
+        return strong ? tagTintHex : tagTintHex.alpha(Theme.dark ? 0.2 : 0.13)
+    }
+    /// The tint as a colour when it is one ("#rrggbb").
+    readonly property color tagTintHex: Js.startsWith(tagTint, "#") ? tagTint : "transparent"
+    // Made only for blocks with a styled tag (none unless an extension declared a style).
+    Loader {
+        active: block.tagTint !== ""
+        x: block.ownBandX
+        y: 1
+        width: block.bandRight - x
+        height: Math.max(0, block.height - 2)
+        sourceComponent: Rectangle {
+            id: tintFrame
+            objectName: "tagTint"
+            readonly property int mode: block.rowData.tagTintMode
+            radius: Theme.radiusSm
+            color: (mode & 1) !== 0 ? block.tagTintColor(block.tagTint, false) : "transparent"
+            Rectangle {
+                objectName: "tagTintBar"
+                visible: (tintFrame.mode & 2) !== 0
+                width: 3
+                height: tintFrame.height
+                radius: 1.5
+                color: block.tagTintColor(block.tagTint, true)
+            }
+        }
+    }
+
     // Made only for selected blocks (most blocks never are).
     Loader {
         active: block.bandEdge !== ""

@@ -6,6 +6,7 @@
 // the editor and the shell are developed in parallel against it.
 #pragma once
 
+#include "inputrules.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "picturesize.h"
@@ -13,6 +14,8 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QList>
 #include <QObject>
 #include <QSize>
 #include <QString>
@@ -49,6 +52,16 @@ inline QVariantMap pageIconMap(const markdown::PageIcon &icon)
         kind = QStringLiteral("app");
     return {{QStringLiteral("kind"), kind}, {QStringLiteral("name"), kind.isEmpty() ? QString() : icon.name}};
 }
+
+/// How blocks carrying a tag are drawn (an extension's b.app.tagStyle; docs/UI.md "Styles of
+/// blocks by tag"): a tint of the theme ("accent", "success", "danger", "warning", "info",
+/// "neutral") or a colour "#rrggbb", as a background and / or a bar at the block's left edge.
+struct BlockTagStyle {
+    QString tint;
+    bool fill = true;
+    bool bar = true;
+    bool operator==(const BlockTagStyle &other) const = default;
+};
 
 } // namespace editor
 
@@ -350,6 +363,22 @@ public:
         return std::nullopt;
     }
 
+    // --- Input rules and styles of blocks by tag of extensions (docs/UI.md "Input rules") -----
+    /// The text replaced as it is typed (b.app.inputRule), in the order declared: asked after
+    /// every keystroke, so a plain list the host keeps (no Luau runs). None by default.
+    virtual const QList<editor::InputRule> &inputRules() const
+    {
+        static const QList<editor::InputRule> none;
+        return none;
+    }
+    /// How blocks carrying a tag are drawn (b.app.tagStyle), by the tag in lower case (NFC,
+    /// without '#'); tagStylesChanged() when they change. None by default.
+    virtual const QHash<QString, editor::BlockTagStyle> &tagStyles() const
+    {
+        static const QHash<QString, editor::BlockTagStyle> none;
+        return none;
+    }
+
     // --- Navigation --------------------------------------------------------------------------
     /// Open a route ({view: "page", path, line?, blockId?} / {view: "tag", tag} — the page the
     /// tag names / {view: "journal", date: "YYYY-MM-DD"}, see docs/UI.md); newPane = side
@@ -377,6 +406,8 @@ Q_SIGNALS:
     /// What macros show changed (a value computed, an extension approved, switched off or loaded
     /// again): editors ask macroView() again for the rows that show one.
     void macrosChanged();
+    /// The styles of blocks by tag changed (tagStyles()): editors draw their blocks again.
+    void tagStylesChanged();
 };
 
 /// What a path part of a link opens (markdown::LinkPartTarget) as EditorHost::linkPart() gives

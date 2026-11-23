@@ -98,6 +98,18 @@ QVariantMap checkExtension(Vault &vault, VaultIndex &index, const Extension &ext
         for (const ThemeInfo &t : engine.themes())
             if (t.extension == extension.id)
                 out.insert(u"theme"_s, themeLayerTable(t.layer));
+        // Its input rules and styles of blocks by tag (b.app.inputRule, b.app.tagStyle).
+        QVariantList rules, styles;
+        for (const InputRule &rule : engine.inputRules())
+            if (rule.extension == extension.id)
+                rules << inputRuleTable(rule);
+        for (const TagStyle &style : engine.tagStyles())
+            if (style.extension == extension.id)
+                styles << tagStyleTable(style);
+        if (!rules.isEmpty())
+            out.insert(u"inputRules"_s, rules);
+        if (!styles.isEmpty())
+            out.insert(u"tagStyles"_s, styles);
     } else {
         QString message = r.error;
         if (message.isEmpty())

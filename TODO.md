@@ -91,8 +91,9 @@ done in the repository simply disappears from the list.
   runs first: docs/FINETUNE.md); more slots (the tab bar's menu, the folder tree's menu, the
   phone's bottom navigation, the editor's toolbar on the keyboard, the share sheet); replacing a
   built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
-  editor input rules (`->` → `→` as typed, declarative so nothing waits for Luau); styles of blocks
-  by tag (a block tagged `#pilne` tinted); a theme as a page of its own (`#theme`, a `theme` block,
+  input rules (`b.app.inputRule`) in source mode too (its TextEdit has an undo stack of its own) and
+  the tint of `b.app.tagStyle` in rows drawn by `PageItem` / `JournalDayItem` (behind their
+  switches) and in exports; a theme as a page of its own (`#theme`, a `theme` block,
   picked in Settings → Appearance and synced); `b.app.settings()` for the notebook's own settings
   (`.brulion/config.json`: journal folder, templates) beside the device's.
 * **Focus after a click in the top bar (desktop)** — a mouse click on the top bar while a day of

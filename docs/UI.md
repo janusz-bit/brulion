@@ -3700,6 +3700,39 @@ in; "Remove highlight" takes the highlight around the caret away (`PageControlle
 several lines, or one cutting a highlight's marker, is refused with a toast. Tests:
 `tst_markdown_highlight`, `tst_editor_look` (the controller's edit and undo).
 
+### Input rules
+
+Text an extension replaces as it is typed (`b.app.inputRule`, docs/EXTENSIONS.md "Input rules":
+`->` → `→`). The shell's `Workspace` keeps the rules of the extensions running as a plain list
+(`EditorHost::inputRules()`, made again when they change the app), so a keystroke never waits for
+Luau. `PageController::setEditText()` — the inline editor's every keystroke — pushes the typing
+step, then asks `inputRuleHit()` (`src/app/editor/inputrules.h`, pure) about the text before the
+caret: only an insertion that ends at the caret and is no longer than the match (a paste is
+not typed), in a paragraph, list item or heading being edited, after a keystroke the controller did
+not normalise. A hit is a step of its own (`applyInputRule()`): the inline editor gets the new
+text and caret (`editTextReset`), one undo brings back the typed text with the caret after it, and
+what is typed next starts another step. Nothing fires in code — a code span (also one still open
+before the caret), a fenced block or `$$` lines inside the text, a code block —, an inline
+formula (also one a `$` typed at the caret would close), a `%%` comment, a wiki link or embed
+not yet closed, a Markdown link's destination or a URL (`inputRuleProtected()`). Source mode has
+its own TextEdit and undo stack and replaces nothing. Tests: `tst_editor_inputrules`.
+
+### Styles of blocks by tag
+
+A block carrying a tag an extension styled (`b.app.tagStyle`, docs/EXTENSIONS.md "Styles of
+blocks by tag") is drawn on a tinted band from its own level to the text column's end with a 3 px
+bar at its left edge (`BlockDelegate`'s `tagTint` Loader, under the selection band and the
+flash; made only for such blocks). `EditorHost::tagStyles()` holds the styles by the tag in lower
+case; `BlockListModel`'s roles `tagTint` (the tint, "" none) and `tagTintMode` (1 the background,
+2 the bar, 3 both; read through `BlockRowData`) take the first tag of the block's own text with a
+style or a parent with one (`#projekt/dom` by `projekt`); tags in code are none. The roles are
+among the text's roles (typing a tag tints at once) and `EditorHost::tagStylesChanged` tells every
+row again. The theme's tints are its pairs (`Theme.danger` / `Theme.dangerBg` …, `neutral`:
+`Theme.borderStrong` / `Theme.bgSunken`); a `#rrggbb` is the bar as it is and the background at
+13 % (light) or 20 % (dark) opacity. Rows drawn by `PageItem` or `JournalDayItem` (behind their
+environment switches) show no tint yet. Tests: `tst_editor_inputrules` (the roles), the playground's
+self-test (`--editor-script selftest`: `checkTagStyles`).
+
 ### Selecting and copying
 
 One block is edited at a time (its `InlineEditor` selects characters inside it); a selection that

@@ -334,6 +334,10 @@ public:
     markdown::MacroView macroView(const markdown::MacroSpan &macro, const QString &path) const override;
     QVariantList suggestMacros(const QString &prefix, int limit = 20) const override;
     QVariantList embeddableViews() const override;
+    /// The extensions' input rules and styles of blocks by tag (b.app.inputRule, b.app.tagStyle),
+    /// kept as the editor reads them and made again when the extensions change the app.
+    const QList<editor::InputRule> &inputRules() const override { return m_inputRules; }
+    const QHash<QString, editor::BlockTagStyle> &tagStyles() const override { return m_tagStyles; }
     std::optional<QString> templateVariable(const QString &extension, const QString &name, const QString &arguments,
                                             const QVariantMap &context) override;
     Q_INVOKABLE QUrl assetUrl(const QString &path) const override;
@@ -920,6 +924,10 @@ private:
     WorkspaceCalendars *m_calendars = nullptr;
     WorkspaceBackups *m_backups = nullptr;
     WorkspaceExtensions *m_extensions = nullptr;
+    QList<editor::InputRule> m_inputRules;             // m_extensions' (followExtensionStyles())
+    QHash<QString, editor::BlockTagStyle> m_tagStyles; // by tag, lower case
+    /// The extensions changed the app: their input rules and tag styles taken again.
+    void followExtensionStyles();
     WorkspaceChats *m_chats = nullptr;
     ReplaceSession *m_replacing = nullptr;
     WorkspaceEncryption *m_encryption = nullptr;

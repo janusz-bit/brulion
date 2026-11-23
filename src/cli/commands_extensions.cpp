@@ -476,6 +476,9 @@ QJsonObject checkJson(Call &call, const Target &t, bool *loaded)
             o.insert(u"contributions"_s, QJsonValue::fromVariant(r.value(u"contributions"_s)).toArray());
         if (r.contains(u"theme"_s))
             o.insert(u"theme"_s, QJsonValue::fromVariant(r.value(u"theme"_s)).toObject());
+        for (const QString &key : {u"inputRules"_s, u"tagStyles"_s})
+            if (r.contains(key))
+                o.insert(key, QJsonValue::fromVariant(r.value(key)).toArray());
     } else {
         QJsonObject error{{u"status"_s, r.value(u"status"_s).toString()}, {u"message"_s, r.value(u"error"_s).toString()}};
         if (r.contains(u"line"_s))

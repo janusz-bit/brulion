@@ -104,6 +104,8 @@ class Scope;
 
 namespace brulion::editor {
 
+struct BlockTagStyle;
+
 class BlockListModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
@@ -155,6 +157,12 @@ public:
         /// The `html` as markdown::RenderedText with its source map (RenderedTextRef, for
         /// RenderedTextItem: docs/UI.md "Rendered text without rich text"); rendered only when read.
         RenderedTextRole,
+        /// How an extension's style of blocks by tag (EditorHost::tagStyles) draws the block: its
+        /// tint ("danger", "#rrggbb"; "" for none) — the first tag of the block's text that has a
+        /// style, or a parent of it (`#projekt/dom` by the style of `projekt`) —, and what shows
+        /// (tagTintMode: 1 the background, 2 the bar at its left edge, 3 both; 0 none).
+        TagTintRole,
+        TagTintModeRole,
     };
 
     /// Nested embeds rendered inside a transclusion (deeper ones become a "depth" note).
@@ -291,6 +299,8 @@ public:
     /// What macros show changed (EditorHost::macrosChanged): the rows whose rendering showed a
     /// macro ask the host again and render again when it shows something else.
     void followMacros();
+    /// The styles of blocks by tag changed (EditorHost::tagStylesChanged): every row's tint again.
+    void followTagStyles();
 
     /// The typing fast path of apply() (on by default): an edit that only changes the text of
     /// blocks and keeps their kind, depth, children, frontmatter and lines refreshes those rows
@@ -559,6 +569,8 @@ private:
     quint64 m_editingUid = 0;
     QSet<quint64> m_selectedUids;
 
+    /// The style of blocks by tag that draws `e` (TagTintRole), none when no tag of it has one.
+    BlockTagStyle tagStyleOf(const markdown::BlockEntry &e) const;
     QPointer<EditorHost> m_host;
     QString m_path;
     markdown::Palette m_palette;
