@@ -22,7 +22,11 @@
 -- (params deck). Actions: reveal, grade, undo, reset. Commands (palette = false: the app, `brulion-cli
 -- card …` and tests run them with ctx.args): count, list, show, grade, stats, schedule (FSRS alone).
 -- Settings come with params / ctx.args: tags ("flashcards, fiszki"), newPerDay (20), retention
--- (0.9), maxInterval (36500).
+-- (0.9), maxInterval (36500) and the plugin's card settings the notebook keeps in
+-- `.brulion/config.json` (the host passes them): singleLineSeparator ("::"),
+-- singleLineReversedSeparator (":::"), multilineSeparator ("?"), multilineReversedSeparator ("??"),
+-- multilineEndMarker (""), clozeHighlights (true), clozeBold (false), clozeCurly (false),
+-- foldersAsDecks (false).
 --
 -- Time is local wall-clock time counted in minutes since 1970-01-01 00:00 (a day is 1440 minutes,
 -- no time zones, no DST); only the formats other apps read are UTC (b.toUtc / b.fromUtc).
@@ -47,6 +51,16 @@ type Settings = {
     learning: { number }, -- minutes
     relearning: { number },
     fuzz: boolean,
+    -- The plugin's card settings (docs/SYNTAX.md §15 "Settings of the cards"):
+    inline: { { sep: string, kind: string } }, -- the single-line separators, the longest first
+    multi: string, -- "" = off
+    multiRev: string,
+    endMarker: string, -- "" = a blank line ends a multi-line card
+    clozeHighlights: boolean,
+    clozeBold: boolean,
+    clozeCurly: boolean,
+    foldersAsDecks: boolean,
+    parseKey: string, -- what a note's cards depend on: cached cards are valid for the same key
 }
 type Card = {
     id: string,
@@ -62,7 +76,8 @@ type Card = {
     path: string,
     line: number, -- the card's first line (1-based)
     lastLine: number,
-    decks: { string }, -- tag paths ("flashcards/geografia")
+    decks: { string }, -- tag paths ("flashcards/geografia"), or the folder's (foldersAsDecks)
+    folderDeck: boolean,
     folder: string,
     memory: Memory,
     -- where the state is written: a comment line, or a Logseq block
@@ -788,7 +803,7 @@ end
 -- A line of a note: its text as written and its ref (b.lines).
 type Line = { text: string, ref: string }
 -- A card as the parser finds it: its kind, its lines (1-based, inclusive).
-type Found = { kind: string, first: number, last: number }
+type Found = { kind: string, first: number, last: number, sep: string? }
 
 -- A `key:: value` line that is no list item: a property as Brulion and Logseq read it (a page's
 -- or a block's), never a card — `Stolica:: Warszawa` is one, `Stolica :: Warszawa` and
@@ -815,9 +830,10 @@ local function inCode(line: string, at: number): boolean
     return before % 2 == 1 and after % 2 == 1
 end
 
--- The separator of a single-line card: ":::" (both ways) or "::", where its first occurrence is
--- not in inline code (the plugin looks at the first only); nil for no card.
-local function inlineSeparator(line: string): string?
+-- The separator of a single-line card, as the plugin looks: the separators longest first (":::"
+-- before "::"), the first whose first occurrence is not in inline code (the plugin looks at the
+-- first only); nil for no card. `kind` is "basic" or "reversed".
+local function inlineSeparator(st: Settings, line: string): { sep: string, kind: string }?
     if isProperty(line) or line:sub(1, 7) == "<!--SR:" then
         return nil
     end
@@ -827,13 +843,11 @@ local function inlineSeparator(line: string): string?
             return string.rep(" ", #m)
         end)
     end
-    local triple = string.find(line, ":::", 1, true)
-    if triple and not inCode(line, triple) then
-        return ":::"
-    end
-    local double = string.find(line, "::", 1, true)
-    if double and not inCode(line, double) then
-        return "::"
+    for _, s in st.inline do
+        local at = string.find(line, s.sep, 1, true)
+        if at and not inCode(line, at) then
+            return s
+        end
     end
     return nil
 end
@@ -842,14 +856,15 @@ end
 -- its hint.
 type Deletion = { from: number, to: number, answer: string, number: number, hint: string?, pattern: number }
 
--- What a deletion's inside holds: its answer, its number (0: none) and its hint.
+-- What a deletion's inside holds: its answer, its number (0: none) and its hint. Pattern 2 is
+-- Anki's `c1::answer::hint`, the others the plugin's `1;;answer;;hint`.
 local function deletionInside(inner: string, pattern: number): (string, number, string?)
-    local sep = if pattern == 1 then ";;" else "::"
+    local sep = if pattern == 2 then "::" else ";;"
     local number, rest
-    if pattern == 1 then
-        number, rest = string.match(inner, "^(%d+);;(.+)$")
-    else
+    if pattern == 2 then
         number, rest = string.match(inner, "^[cC]?(%d+)::(.+)$")
+    else
+        number, rest = string.match(inner, "^(%d+);;(.+)$")
     end
     local answer, hint = rest or inner, nil
     local h = string.find(answer, sep, 1, true)
@@ -859,11 +874,17 @@ local function deletionInside(inner: string, pattern: number): (string, number, 
     return answer, tonumber(number) or 0, hint
 end
 
--- The deletions of a line: the plugin's `==answer==`, `==1;;answer;;hint==` (pattern 1) and Anki's
--- `{{c1::answer::hint}}` / `{{1::answer::hint}}` (pattern 2; the plugin reads them with a pattern
--- of its own). Not in inline code (the plugin would take them there too). Linear in the line.
-local function deletionsOf(line: string): { Deletion }
+-- The deletions of a line, by the plugin's cloze patterns: `==answer==`, `==1;;answer;;hint==`
+-- (pattern 1; "Convert ==highlights== to clozes", on), `**answer**` (pattern 3; "Convert **bold
+-- text** to clozes", off), `{{answer}}` (pattern 4; "Convert {{curly brackets}} to clozes", off)
+-- and Anki's `{{c1::answer::hint}}` / `{{1::answer::hint}}` (pattern 2; the plugin reads them with
+-- a pattern of its own, always on here). Not in inline code (the plugin would take them there
+-- too). Linear in the line.
+local function deletionsOf(st: Settings, line: string): { Deletion }
     local out: { Deletion } = {}
+    if not (st.clozeHighlights or st.clozeBold or st.clozeCurly or string.find(line, "{{", 1, true)) then
+        return out
+    end
     -- Inline code blanked (the same length): its `==` and `{{` are code.
     local scan = line
     if string.find(line, "`", 1, true) then
@@ -871,28 +892,34 @@ local function deletionsOf(line: string): { Deletion }
             return string.rep(" ", #fence * 2 + #inner)
         end)
     end
-    local at = 1
-    while true do
-        local a = string.find(scan, "==", at, true)
-        if not a then
-            break
+    -- A deletion that opens and closes with the same two characters (`==`, `**`).
+    local function pairs2(mark: string, pattern: number)
+        local at = 1
+        while true do
+            local a = string.find(scan, mark, at, true)
+            if not a then
+                break
+            end
+            local z = string.find(scan, mark, a + 3, true)
+            if not z then
+                break
+            end
+            local answer, number, hint = deletionInside(line:sub(a + 2, z - 1), pattern)
+            if trim(answer) ~= "" then
+                table.insert(out, { from = a, to = z + 1, answer = answer, number = number, hint = hint, pattern = pattern })
+            end
+            at = z + 2
         end
-        local z = string.find(scan, "==", a + 3, true)
-        if not z then
-            break
-        end
-        local answer, number, hint = deletionInside(line:sub(a + 2, z - 1), 1)
-        if trim(answer) ~= "" then
-            table.insert(out, { from = a, to = z + 1, answer = answer, number = number, hint = hint, pattern = 1 })
-        end
-        at = z + 2
     end
-    at = 1
-    while true do
-        local a = string.find(scan, "{{", at, true)
-        if not a then
-            break
-        end
+    if st.clozeHighlights then
+        pairs2("==", 1)
+    end
+    if st.clozeBold then
+        pairs2("**", 3)
+    end
+    local at = 1
+    while string.find(scan, "{{", at, true) do
+        local a = string.find(scan, "{{", at, true) :: number
         local z = string.find(scan, "}}", a + 2, true)
         if not z then
             break
@@ -902,6 +929,11 @@ local function deletionsOf(line: string): { Deletion }
             local answer, number, hint = deletionInside(inner, 2)
             if trim(answer) ~= "" then
                 table.insert(out, { from = a, to = z + 1, answer = answer, number = number, hint = hint, pattern = 2 })
+            end
+        elseif st.clozeCurly and not string.find(inner, "^cloze[%s:]") then
+            local answer, number, hint = deletionInside(inner, 4)
+            if trim(answer) ~= "" then
+                table.insert(out, { from = a, to = z + 1, answer = answer, number = number, hint = hint, pattern = 4 })
             end
         end
         at = z + 2
@@ -926,19 +958,25 @@ end
 
 -- The cards of a note's lines, as the Obsidian Spaced Repetition plugin's parser finds them: a
 -- single-line card is its line (and a scheduling comment on the next line), a multi-line card the
--- paragraph around its `?` / `??` line, a cloze card the paragraph of a line with a deletion; a
--- blank line ends a paragraph, code fences are skipped whole, an HTML comment starting a line
--- (not a scheduling one) is skipped to its end. Lines in `skip` (Logseq's cards) are no part of
--- any. Unlike the plugin, a property line ends a paragraph as a blank line does, and the line after
--- a one-line HTML comment counts.
-local function findCards(lines: { Line }, from: number, skip: { [number]: boolean }): { Found }
+-- paragraph around its `?` / `??` line (the separators are the settings'), a cloze card the
+-- paragraph of a line with a deletion; a blank line ends a paragraph — unless the settings have an
+-- end-of-card marker: then a card goes on through blank lines up to a line that is the marker —,
+-- code fences are skipped whole, an HTML comment starting a line (not a scheduling one) is skipped
+-- to its end. Lines in `skip` (Logseq's cards) are no part of any. Unlike the plugin, a property
+-- line ends a paragraph as a blank line does, and the line after a one-line HTML comment counts.
+local function findCards(st: Settings, lines: { Line }, from: number, skip: { [number]: boolean }): { Found }
     local found: { Found } = {}
     local n = #lines
     local kind: string? = nil
     local first = from
     local count = 0 -- lines in the paragraph so far
+    local marker = st.endMarker
     local function close(last: number)
         if kind ~= nil and count > 0 then
+            -- (Blank lines before the marker are no part of the card: its state goes to its last line.)
+            while last > first and trim(lines[last].text) == "" do
+                last -= 1
+            end
             table.insert(found, { kind = kind :: string, first = first, last = last })
         end
         kind = nil
@@ -948,9 +986,19 @@ local function findCards(lines: { Line }, from: number, skip: { [number]: boolea
     while i <= n do
         local line = lines[i].text
         local t = trim(line)
-        if skip[i] or t == "" or isProperty(line) then
+        if skip[i] or isProperty(line) or (marker ~= "" and t == marker) then
             close(i - 1)
             first = i + 1
+            i += 1
+            continue
+        end
+        if t == "" then
+            if kind ~= nil and marker ~= "" then
+                count += 1 -- inside a card that only its marker ends
+            else
+                close(i - 1)
+                first = i + 1
+            end
             i += 1
             continue
         end
@@ -967,14 +1015,14 @@ local function findCards(lines: { Line }, from: number, skip: { [number]: boolea
             first = i
         end
         count += 1
-        local sep = inlineSeparator(line)
-        if sep then
+        local inline = inlineSeparator(st, line)
+        if inline then
             -- A single-line card ends the paragraph: the lines above it are no part of it.
             local last = i
             if i + 1 <= n and lines[i + 1].text:sub(1, 7) == "<!--SR:" then
                 last = i + 1
             end
-            table.insert(found, { kind = if sep == ":::" then "reversed" else "basic", first = i, last = last })
+            table.insert(found, { kind = inline.kind, first = i, last = last, sep = inline.sep })
             kind = nil
             count = 0
             i = last + 1
@@ -982,11 +1030,11 @@ local function findCards(lines: { Line }, from: number, skip: { [number]: boolea
             continue
         end
         local fence = isFence(line)
-        if t == "?" then
+        if st.multi ~= "" and t == st.multi then
             if count > 1 then
                 kind = "multiline"
             end
-        elseif t == "??" then
+        elseif st.multiRev ~= "" and t == st.multiRev then
             if count > 1 then
                 kind = "multireversed"
             end
@@ -999,7 +1047,7 @@ local function findCards(lines: { Line }, from: number, skip: { [number]: boolea
                 i += 1
                 count += 1
             end
-        elseif kind == nil and #deletionsOf(line) > 0 then
+        elseif kind == nil and #deletionsOf(st, line) > 0 then
             kind = "cloze"
         end
         i += 1
@@ -1108,11 +1156,11 @@ end
 
 -- A cloze side: the deletions of card `k` hidden ([...] or [hint]) on the question's side,
 -- highlighted on the answer's; the other deletions show their answer as text.
-local function clozeSide(texts: { string }, wanted: (Deletion, number) -> boolean, answerSide: boolean): { string }
+local function clozeSide(st: Settings, texts: { string }, wanted: (Deletion, number) -> boolean, answerSide: boolean): { string }
     local out = {}
     local ordinal = 0 -- the deletion's place in the paragraph
     for _, t in texts do
-        local ds = deletionsOf(t)
+        local ds = deletionsOf(st, t)
         if #ds == 0 then
             table.insert(out, t)
             continue
@@ -1183,7 +1231,7 @@ end
 
 -- One card per sibling of what findCards found on a page.
 local function cardsOfFound(st: Settings, page: string, path: string, lines: { Line }, f: Found, decks: { string },
-                            context: string, out: { Card })
+                            folderDeck: boolean, context: string, out: { Card })
     local texts = textsOf(lines, f.first, f.last)
     -- Where the state goes: a comment line of its own after the card (the plugin's default), else
     -- the card's last line (Brulion writes the comment there, as the plugin's "on the same line").
@@ -1211,13 +1259,15 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
     local sides: { { q: string, a: string } } = {}
     if f.kind == "basic" or f.kind == "reversed" then
         local line = body[1]
-        local sep = if f.kind == "reversed" then ":::" else "::"
+        local sep = f.sep :: string
         local at = string.find(line, sep, 1, true) :: number
         -- A tag at the start of the card is the deck of this card alone.
         local q = line:sub(1, at - 1)
         local lead = string.match(trim(q), "^#([^%s#]+)")
         if lead and isCardTag(st, b.lower(lead :: string)) then
-            decks = { b.lower(lead :: string) }
+            if not folderDeck then
+                decks = { b.lower(lead :: string) }
+            end
             q = trim(q):gsub("^#[^%s#]+%s*", "")
         end
         local question = cleanSide(st, { q })
@@ -1227,7 +1277,7 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
             table.insert(sides, { q = answer, a = question })
         end
     elseif f.kind == "multiline" or f.kind == "multireversed" then
-        local mark = if f.kind == "multireversed" then "??" else "?"
+        local mark = if f.kind == "multireversed" then st.multiRev else st.multi
         local split = #body
         for i, t in body do
             if trim(t) == mark then
@@ -1252,7 +1302,7 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
         local all: { Deletion } = {}
         local numbered = false
         for _, t in body do
-            for _, d in deletionsOf(t) do
+            for _, d in deletionsOf(st, t) do
                 table.insert(all, d)
                 numbered = numbered or d.number > 0
             end
@@ -1266,8 +1316,8 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
                 local function wanted(d: Deletion, _ordinal: number): boolean
                     return d.number == k
                 end
-                local q = cleanSide(st, clozeSide(body, wanted, false))
-                local a = cleanSide(st, clozeSide(body, wanted, true))
+                local q = cleanSide(st, clozeSide(st, body, wanted, false))
+                local a = cleanSide(st, clozeSide(st, body, wanted, true))
                 table.insert(sides, { q = q, a = a })
             end
         else
@@ -1276,8 +1326,8 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
                 local function wanted(_d: Deletion, ordinal: number): boolean
                     return ordinal == k
                 end
-                local q = cleanSide(st, clozeSide(body, wanted, false))
-                local a = cleanSide(st, clozeSide(body, wanted, true))
+                local q = cleanSide(st, clozeSide(st, body, wanted, false))
+                local a = cleanSide(st, clozeSide(st, body, wanted, true))
                 table.insert(sides, { q = q, a = a })
             end
         end
@@ -1308,6 +1358,7 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
             line = f.first,
             lastLine = f.last,
             decks = decks,
+            folderDeck = folderDeck,
             folder = folderOf(path),
             memory = memory or newMemory(),
             stateRef = lines[stateLine].ref,
@@ -1346,7 +1397,7 @@ local function pageCards(st: Settings, name: string, skip: { [number]: boolean }
             table.insert(frontDecks, b.lower(t))
         end
     end
-    local found = findCards(lines, from, skip)
+    local found = findCards(st, lines, from, skip)
     local inCard: { [number]: boolean } = {}
     for _, f in found do
         for i = f.first, f.last do
@@ -1401,7 +1452,13 @@ local function pageCards(st: Settings, name: string, skip: { [number]: boolean }
         if #decks == 0 then
             decks = if firstTag then { firstTag :: string } else { st.tags[1] }
         end
-        cardsOfFound(st, info.name, path, lines, f, decks, contextOf(info.name, headings, f.first), out)
+        -- "Convert folders to decks": the plugin gives every card of a note in a folder that folder's
+        -- deck, whatever its tags say (notes outside any folder keep the tags').
+        local folderDeck = st.foldersAsDecks and folderOf(path) ~= ""
+        if folderDeck then
+            decks = { b.lower(folderOf(path)) }
+        end
+        cardsOfFound(st, info.name, path, lines, f, decks, folderDeck, contextOf(info.name, headings, f.first), out)
     end
 end
 
@@ -1525,6 +1582,7 @@ local function logseqCards(st: Settings, out: { Card }, skipByPage: { [string]: 
             line = first,
             lastLine = last,
             decks = decks,
+            folderDeck = false,
             folder = folderOf(path),
             memory = logseqMemory(props),
             stateRef = block.ref,
@@ -1546,8 +1604,19 @@ local cache = { revision = -1, tags = "", cards = {} :: { Card }, byId = {} :: {
 -- parsed again (a note changed elsewhere changes the revision, not this page's cards).
 local pageCache: { [string]: { text: string, tags: string, cards: { Card } } } = {}
 
+-- Is `path` a page of the review log ("Fiszki/Powtórki 2026-11")?
+local function isLogPage(path: string): boolean
+    for _, w in { WRITTEN.pl, WRITTEN.en } do
+        local prefix = w.logFolder .. "/" .. (string.match(w.logPage, "^(.-)%%s") or "")
+        if path:sub(1, #prefix) == prefix and folderOf(path) == w.logFolder then
+            return true
+        end
+    end
+    return false
+end
+
 local function collect(st: Settings): { Card }
-    local tagsKey = table.concat(st.tags, ",")
+    local tagsKey = st.parseKey
     if cache.revision == b.revision() and cache.tags == tagsKey then
         return cache.cards
     end
@@ -1565,6 +1634,25 @@ local function collect(st: Settings): { Card }
                 if not names[item.page] and #list < MAX_PAGES then
                     names[item.page] = true
                     table.insert(list, item.page)
+                end
+            end
+            offset += #result.items
+        until #result.items == 0 or offset >= result.total or #list >= MAX_PAGES
+    end
+    -- "Convert folders to decks": every note in a folder is read, tagged or not (the review log
+    -- pages are not: they are lines of grades, not cards).
+    if st.foldersAsDecks then
+        local offset = 0
+        repeat
+            local result = b.query("type:pages", 1000, offset)
+            for _, item in result.items do
+                if not names[item.page] and #list < MAX_PAGES then
+                    local info = b.page(item.page)
+                    local path: string = if info then info.path else ""
+                    if folderOf(path) ~= "" and not isLogPage(path) then
+                        names[item.page] = true
+                        table.insert(list, item.page)
+                    end
                 end
             end
             offset += #result.items
@@ -1739,8 +1827,60 @@ local function settingsOf(args: { [string]: any }?): Settings
     local given = tonumber(a.retention)
     local retention = if finite(given) and (given :: number) > 1 then (given :: number) / 100 else given
     retention = if finite(retention) then math.clamp(retention :: number, 0.7, 0.99) else 0.9
+    -- The plugin's card settings (a missing key is its default; "" switches a separator off, as
+    -- clearing the plugin's field does; a line break or a text of more than 40 characters is none).
+    local function text(key: string, default: string): string
+        local v = a[key]
+        if type(v) ~= "string" or #v > 40 or string.find(v, "[\r\n]") then
+            return default
+        end
+        return v :: string
+    end
+    local function flag(key: string, default: boolean): boolean
+        local v = a[key]
+        if v == true or v == "true" then
+            return true
+        elseif v == false or v == "false" then
+            return false
+        end
+        return default
+    end
+    local single, singleRev = text("singleLineSeparator", "::"), text("singleLineReversedSeparator", ":::")
+    local inline = {}
+    -- (The plugin sorts them longest first; the basic one first when they are as long.)
+    if single ~= "" then
+        table.insert(inline, { sep = single, kind = "basic" })
+    end
+    if singleRev ~= "" then
+        table.insert(inline, { sep = singleRev, kind = "reversed" })
+    end
+    table.sort(inline, function(x, y)
+        if #x.sep ~= #y.sep then
+            return #x.sep > #y.sep
+        end
+        return x.kind == "basic" and y.kind ~= "basic"
+    end)
+    local multi = trim(text("multilineSeparator", "?"))
+    local multiRev = trim(text("multilineReversedSeparator", "??"))
+    local endMarker = trim(text("multilineEndMarker", ""))
+    local highlights, bold, curly = flag("clozeHighlights", true), flag("clozeBold", false), flag("clozeCurly", false)
+    local folders = flag("foldersAsDecks", false)
+    local key = table.concat({
+        table.concat(clean, ","), single, singleRev, multi, multiRev, endMarker,
+        if highlights then "h" else "-", if bold then "b" else "-", if curly then "c" else "-",
+        if folders then "f" else "-",
+    }, "\n")
     return {
         tags = clean,
+        inline = inline,
+        multi = multi,
+        multiRev = multiRev,
+        endMarker = endMarker,
+        clozeHighlights = highlights,
+        clozeBold = bold,
+        clozeCurly = curly,
+        foldersAsDecks = folders,
+        parseKey = key,
         newPerDay = math.floor(num("newPerDay", 20, 0, 9999)),
         retention = retention,
         maxInterval = math.floor(num("maxInterval", 36500, 1, 36500)),
@@ -2088,7 +2228,7 @@ local function reviewView(params: { [string]: any }): Node
     local deck = if type(params.deck) == "string" then params.deck else ""
     local ahead, more = numberParam(params, "ahead"), numberParam(params, "more")
     local cards = collect(st)
-    local s = sessionFor(deck .. "|" .. ahead .. "|" .. more .. "|" .. table.concat(st.tags, ","), now)
+    local s = sessionFor(deck .. "|" .. ahead .. "|" .. more .. "|" .. st.parseKey, now)
     local q = queueOf(st, cards, deck, now, ahead, more)
     local left = #q.review + #q.learning + #q.new
     s.total = math.max(s.total, s.done + left)
@@ -2294,7 +2434,7 @@ local function decksOf(cards: { Card }, group: string): { { deck: string, title:
                     local key = "tag:" .. path
                     if not seen[key] then
                         seen[key] = true
-                        table.insert(out, { deck = key, title = if k == 1 then "#" .. part else part, depth = k - 1 })
+                        table.insert(out, { deck = key, title = if k == 1 and not c.folderDeck then "#" .. part else part, depth = k - 1 })
                     end
                 end
             end

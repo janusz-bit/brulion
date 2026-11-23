@@ -443,6 +443,192 @@ private Q_SLOTS:
         QCOMPARE(shortCards(), expected);
     }
 
+    // The plugin's card settings (docs/SYNTAX.md §15 "Settings of the cards"): separators of one's
+    // own (the longest looked for first), a separator switched off, the end-of-card marker, the
+    // cloze kinds; cases of the plugin's own parser tests with Polish text and malformed input.
+    void cardSettings_data()
+    {
+        QTest::addColumn<QString>("note");
+        QTest::addColumn<QVariantMap>("settings");
+        QTest::addColumn<QStringList>("expected");
+        const QString tag = u"---\ntags: [fiszki]\n---\n"_s;
+        const auto s = [](const QString &key, const QVariant &value) { return QVariantMap{{key, value}}; };
+        QTest::newRow("a single-line separator of one's own")
+                << tag + u"stolica => Warszawa\nżółw::turtle\n"_s << s(u"singleLineSeparator"_s, u"=>"_s)
+                << QStringList{u"basic 1/1 stolica → Warszawa"_s};
+        QTest::newRow("both ways: the longer separator first")
+                << tag + u"a <=> b\nc => d\n"_s
+                << QVariantMap{{u"singleLineSeparator"_s, u"=>"_s}, {u"singleLineReversedSeparator"_s, u"<=>"_s}}
+                << QStringList{u"reversed 1/2 a → b"_s, u"reversed 2/2 b → a"_s, u"basic 1/1 c → d"_s};
+        QTest::newRow("the both-ways separator off: :: is looked for")
+                << tag + u"a:::b\n"_s << s(u"singleLineReversedSeparator"_s, QString())
+                << QStringList{u"basic 1/1 a → :b"_s};
+        QTest::newRow("the single-line separator off")
+                << tag + u"a::b\nc:::d\n"_s << s(u"singleLineSeparator"_s, QString())
+                << QStringList{u"reversed 1/2 c → d"_s, u"reversed 2/2 d → c"_s};
+        QTest::newRow("a separator in inline code is none, of one's own too")
+                << tag + u"`a=>b` i c=>d\nPytanie `kod`=>odpowiedź\n"_s << s(u"singleLineSeparator"_s, u"=>"_s)
+                << QStringList{u"basic 1/1 Pytanie `kod` → odpowiedź"_s};
+        QTest::newRow("multi-line separators of one's own")
+                << tag + u"Pytanie\n---\nOdpowiedź\n\nGęś\n----\ngoose\n\nZ\n?\nX\n"_s
+                << QVariantMap{{u"multilineSeparator"_s, u"---"_s}, {u"multilineReversedSeparator"_s, u"----"_s}}
+                << QStringList{u"multiline 1/1 Pytanie → Odpowiedź"_s, u"multireversed 1/2 Gęś → goose"_s,
+                               u"multireversed 2/2 goose → Gęś"_s};
+        QTest::newRow("a multi-line separator written with spaces still is a line of its own")
+                << tag + u"Pytanie\n  ///  \nOdpowiedź\n"_s << s(u"multilineSeparator"_s, u" /// "_s)
+                << QStringList{u"multiline 1/1 Pytanie → Odpowiedź"_s};
+        QTest::newRow("multi-line separator off")
+                << tag + u"Q\n?\nA\n\nG\n??\nB\n"_s << s(u"multilineSeparator"_s, QString())
+                << QStringList{u"multireversed 1/2 G → B"_s, u"multireversed 2/2 B → G"_s};
+        QTest::newRow("an end marker: blank lines inside a card")
+                << tag + u"Pytanie pierwsze\n?\nOdpowiedź\n\nz pustą linią\n---\nDrugie\n?\nodp\n---\n"_s
+                << s(u"multilineEndMarker"_s, u"---"_s)
+                << QStringList{u"multiline 1/1 Pytanie pierwsze → Odpowiedź\n\nz pustą linią"_s,
+                               u"multiline 1/1 Drugie → odp"_s};
+        QTest::newRow("an end marker: a blank line before no card, text after it, the last card unterminated")
+                << tag + u"tekst::karta\n\nA\n?\nB\n\n\nC\n---\nluźne\n\nD\n?\nE"_s
+                << s(u"multilineEndMarker"_s, u"---"_s)
+                << QStringList{u"basic 1/1 tekst → karta"_s, u"multiline 1/1 A → B\n\n\nC"_s,
+                               u"multiline 1/1 D → E"_s};
+        QTest::newRow("an end marker: a cloze card goes on through blank lines")
+                << tag + u"Stolica ==Polski== to\n\nWarszawa ==jest==\n---\n"_s << s(u"multilineEndMarker"_s, u"---"_s)
+                << QStringList{u"cloze 1/2 Stolica **[…]** to\n\nWarszawa jest → Stolica ==Polski== to\n\nWarszawa jest"_s,
+                               u"cloze 2/2 Stolica Polski to\n\nWarszawa **[…]** → Stolica Polski to\n\nWarszawa ==jest=="_s};
+        QTest::newRow("no end marker: a blank line ends a card (the default)")
+                << tag + u"A\n?\nB\n\nC\n---\n"_s << QVariantMap{} << QStringList{u"multiline 1/1 A → B"_s};
+        QTest::newRow("bold clozes are off by default") << tag + u"Stolicą jest **Warszawa**.\n"_s << QVariantMap{}
+                                                        << QStringList{};
+        QTest::newRow("bold clozes")
+                << tag + u"Stolicą jest **Warszawa**.\n"_s << s(u"clozeBold"_s, true)
+                << QStringList{u"cloze 1/1 Stolicą jest **[…]**. → Stolicą jest ==Warszawa==."_s};
+        QTest::newRow("numbered bold clozes with a hint")
+                << tag + u"**1;;Kopernik;;astronom** w **2;;Toruniu**\n"_s << s(u"clozeBold"_s, true)
+                << QStringList{u"cloze 1/2 **[astronom]** w Toruniu → ==Kopernik== w Toruniu"_s,
+                               u"cloze 2/2 Kopernik w **[…]** → Kopernik w ==Toruniu=="_s};
+        QTest::newRow("bold in inline code and an unclosed bold are text")
+                << tag + u"`**kod**` i **tekst** oraz **otwarte\n"_s << s(u"clozeBold"_s, true)
+                << QStringList{u"cloze 1/1 `**kod**` i **[…]** oraz **otwarte → `**kod**` i ==tekst== oraz **otwarte"_s};
+        QTest::newRow("highlights off: ==x== is text, Anki's still a cloze")
+                << tag + u"Są ==Rysy== i {{c1::Giewont}}.\n"_s << s(u"clozeHighlights"_s, false)
+                << QStringList{u"cloze 1/1 Są ==Rysy== i **[…]**. → Są ==Rysy== i ==Giewont==."_s};
+        QTest::newRow("highlights and bold together")
+                << tag + u"==a== i **b**\n"_s << s(u"clozeBold"_s, true)
+                << QStringList{u"cloze 1/2 **[…]** i b → ==a== i b"_s, u"cloze 2/2 a i **[…]** → a i ==b=="_s};
+        QTest::newRow("curly clozes")
+                << tag + u"{{Warszawa}} i {{Kraków}}\n"_s << s(u"clozeCurly"_s, true)
+                << QStringList{u"cloze 1/2 **[…]** i Kraków → ==Warszawa== i Kraków"_s,
+                               u"cloze 2/2 Warszawa i **[…]** → Warszawa i ==Kraków=="_s};
+        QTest::newRow("numbered curly clozes ask only the numbered (the plugin's rule)")
+                << tag + u"Stolica to {{Warszawa}}, a {{1;;Kraków;;dawna}}.\n"_s << s(u"clozeCurly"_s, true)
+                << QStringList{u"cloze 1/1 Stolica to Warszawa, a **[dawna]**. → Stolica to Warszawa, a ==Kraków==."_s};
+        QTest::newRow("curly clozes leave Anki's and Logseq's alone")
+                << tag + u"{{c1::żółw}} {{cloze Paryż}}\n\n{{cloze Rzym}}\n"_s << s(u"clozeCurly"_s, true)
+                << QStringList{u"cloze 1/1 **[…]** {{cloze Paryż}} → ==żółw== {{cloze Paryż}}"_s};
+        QTest::newRow("curly clozes off by default") << tag + u"{{Warszawa}}\n"_s << QVariantMap{} << QStringList{};
+        QTest::newRow("empty curly and bold clozes are none")
+                << tag + u"{{}} i **** i {{  }}\n"_s << QVariantMap{{u"clozeCurly"_s, true}, {u"clozeBold"_s, true}}
+                << QStringList{};
+        QTest::newRow("settings that cannot be used are the defaults")
+                << tag + u"a::b\nc\n?\nd\n"_s
+                << QVariantMap{{u"singleLineSeparator"_s, 5},
+                               {u"multilineSeparator"_s, u"x\ny"_s},
+                               {u"multilineEndMarker"_s, QString(41, u'x')},
+                               {u"clozeBold"_s, u"maybe"_s}}
+                << QStringList{u"basic 1/1 a → b"_s, u"multiline 1/1 c → d"_s};
+        QTest::newRow("a property line is no card whatever the separators")
+                << tag + u"Stolica:: Warszawa\nid:: 64a1\nx => y\n"_s << s(u"singleLineSeparator"_s, u"=>"_s)
+                << QStringList{u"basic 1/1 x → y"_s};
+    }
+    void cardSettings()
+    {
+        QFETCH(QString, note);
+        QFETCH(QVariantMap, settings);
+        QFETCH(QStringList, expected);
+        QVERIFY(open({{u"Nauka.md"_s, note}}));
+        QCOMPARE(shortCards(settings), expected);
+    }
+
+    // The cards depend on the settings: the same notebook read with other settings is read again.
+    void cardSettingsChangeTheCards()
+    {
+        QVERIFY(open({{u"Nauka.md"_s, u"#fiszki\n\nA => B\n\nC::D\n\nE ==F==\n"_s}}));
+        QCOMPARE(shortCards().size(), 2);
+        QCOMPARE(shortCards({{u"singleLineSeparator"_s, u"=>"_s}}),
+                 (QStringList{u"basic 1/1 A → B"_s, u"cloze 1/1 E **[…]** → E ==F=="_s}));
+        QCOMPARE(shortCards({{u"clozeHighlights"_s, false}}), (QStringList{u"basic 1/1 C → D"_s}));
+        QCOMPARE(shortCards().size(), 2);
+    }
+
+    // A grade of a card with an end marker writes its state on the card's last line, not on a blank
+    // line before the marker; the line is found again.
+    void endMarkerState()
+    {
+        const QVariantMap markers{{u"multilineEndMarker"_s, u"---"_s}};
+        QVERIFY(open({{u"Nauka.md"_s, u"#fiszki\n\nPytanie\n?\nOdpowiedź\n\n\n---\nInne::karta\n"_s}}));
+        QVariantMap args = markers;
+        const QList<QVariantMap> list = cards(markers);
+        QCOMPARE(list.size(), 2);
+        args.insert(u"id"_s, list.first().value(u"id"_s));
+        args.insert(u"grade"_s, u"good"_s);
+        const QVariantMap r = command(u"grade"_s, args);
+        QVERIFY2(r.value(u"error"_s).toString().isEmpty(), qPrintable(r.value(u"message"_s).toString()));
+        const QStringList lines = onDisk(u"Nauka.md"_s).split(u'\n');
+        QCOMPARE(lines.size(), 10);
+        QVERIFY2(lines[4].startsWith(u"Odpowiedź <!--SR:!fsrs,"_s), qPrintable(lines[4]));
+        QCOMPARE(lines[5], QString());
+        QCOMPARE(lines[6], QString());
+        QCOMPARE(lines[7], u"---"_s);
+        QCOMPARE(lines[8], u"Inne::karta"_s);
+        QCOMPARE(cards(markers).first().value(u"memory"_s).toMap().value(u"state"_s).toString(), u"learning"_s);
+    }
+
+    // "Folders as decks" (the plugin's convertFoldersToDecks): every note in a folder is read, tagged
+    // or not, and its cards are in its folder's deck whatever their tags say; notes outside any
+    // folder keep their tags'; the review log's pages are no cards.
+    void foldersAsDecks()
+    {
+        QVERIFY(open({{u"Nauka/Hiszpański/Czasowniki.md"_s, u"comer::jeść\n\n#fiszki/inne uno::jeden\n"_s},
+                      {u"Nauka/Historia.md"_s, u"---\ntags: [fiszki]\n---\nKopernik::astronom\n"_s},
+                      {u"Żywność/Owoce.md"_s, u"jabłko::apple\n"_s},
+                      {u"Luźne.md"_s, u"#fiszki/x\n\ncat::kot\n"_s},
+                      {u"Luźne bez tagu.md"_s, u"a::b\n"_s},
+                      {u"Fiszki/Powtórki 2026-11.md"_s, u"- 2026-11-20 18:30 dobrze · nowa · A::B\n"_s},
+                      {u"Flashcards/Reviews 2026-11.md"_s, u"- 2026-11-20 18:30 good · new · C::D\n"_s}}));
+        // Off: only the tagged notes.
+        QStringList questions;
+        for (const QVariantMap &c : cards())
+            questions << c.value(u"question"_s).toString();
+        QCOMPARE(questions, (QStringList{u"cat"_s, u"Kopernik"_s, u"comer"_s, u"uno"_s})); // (a tag on a card line: a deck note)
+        const QVariantMap on{{u"foldersAsDecks"_s, true}};
+        QHash<QString, QStringList> decks;
+        for (const QVariantMap &c : cards(on))
+            decks.insert(c.value(u"question"_s).toString(), c.value(u"decks"_s).toStringList());
+        QCOMPARE(decks.size(), 5);
+        QCOMPARE(decks.value(u"comer"_s), QStringList{u"nauka/hiszpański"_s});
+        QCOMPARE(decks.value(u"uno"_s), QStringList{u"nauka/hiszpański"_s}); // its own tag is no deck
+        QCOMPARE(decks.value(u"Kopernik"_s), QStringList{u"nauka"_s});
+        QCOMPARE(decks.value(u"jabłko"_s), QStringList{u"żywność"_s});
+        QCOMPARE(decks.value(u"cat"_s), QStringList{u"fiszki/x"_s}); // outside any folder: its tag's
+        QVERIFY(!decks.contains(u"a"_s));
+        QVERIFY(!decks.contains(u"A"_s));
+        QVERIFY(!decks.contains(u"C"_s));
+        QCOMPARE(cards({{u"foldersAsDecks"_s, true}, {u"deck"_s, u"tag:nauka"_s}}).size(), 3);
+        QCOMPARE(cards({{u"foldersAsDecks"_s, true}, {u"deck"_s, u"tag:nauka/hiszpański"_s}}).size(), 2);
+        QCOMPARE(cards({{u"foldersAsDecks"_s, true}, {u"deck"_s, u"tag:Żywność"_s}}).size(), 1);
+        // The decks by tag are the folders, shown without a "#".
+        QStringList titles;
+        for (const QVariantMap &n : nodes(render(u"decks"_s, on)))
+            if (n.value(u"type"_s) == u"open"_s && n.value(u"view"_s) == u"review"_s)
+                titles << n.value(u"label"_s).toString().trimmed() + u'|' + n.value(u"params"_s).toMap().value(u"deck"_s).toString();
+        QCOMPARE(titles, (QStringList{u"Ucz się wszystkich|"_s, u"#fiszki|tag:fiszki"_s, u"x|tag:fiszki/x"_s,
+                                      u"nauka|tag:nauka"_s, u"hiszpański|tag:nauka/hiszpański"_s,
+                                      u"żywność|tag:żywność"_s}));
+        // A notebook with no folders is the same with it on.
+        QVERIFY(open({{u"Płaska.md"_s, u"#fiszki\n\nx::y\n"_s}}));
+        QCOMPARE(cards(on).size(), 1);
+        QCOMPARE(cards(on).first().value(u"decks"_s).toStringList(), QStringList{u"fiszki"_s});
+    }
+
     // Decks: the frontmatter's tags, a line of tags above (the last one), a card's own tag at its
     // start; sub-decks are in their parent deck too.
     void decks()

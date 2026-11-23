@@ -25,6 +25,14 @@ Wiersz w rodzaju `stolica:: Warszawa` — jedno słowo, `::` i spacja, nie punkt
 
 W **Logsequ** fiszka to blok z tagiem `#card`: blok jest pytaniem, a bloki pod nim odpowiedzią. `{{cloze Paryż}}` w nim jest ukryte, gdy padnie pytanie, a `{{cloze Paryż \\ miasto}}` pokazuje podpowiedź `(miasto)`. Fiszki z Logseqa działają w Brulionie bez zmian.
 
+## Ustawienia fiszek
+Wtyczka Spaced Repetition pozwala zmienić sposób zapisu fiszek i Brulion ma te same ustawienia. Są zapisane w notatniku (w jego `.brulion/config.json`), więc każde urządzenie czyta Twoje notatki tak samo — **Ustawienia → Rozszerzenia → Fiszki**:
+
+- **Separatory** — tekst między pytaniem a odpowiedzią (`::`, a w obie strony `:::`) i wiersz dzielący fiszkę z kilku wierszy (`?`, a w obie strony `??`) mogą być dowolne, na przykład `->` i `<->`. Puste pole wyłącza separator.
+- **Koniec fiszki z kilku wierszy** — ustaw na przykład `---`, a fiszka trwa do wiersza, w którym jest tylko to, więc może mieć puste wiersze.
+- **Luki** — oprócz zakreśleń, jak w `a ==b==`, lukami mogą być tekst `**pogrubiony**` albo w `{{klamrach}}`; luki Anki, `{{c1::…}}`, są zawsze.
+- **Foldery jako talie** — każda notatka w folderze jest czytana, z tagiem czy bez, a jej fiszki są w talii tego folderu: `Języki/Hiszpański` staje się `#języki/hiszpański`.
+
 ## Talie
 **Fiszki** na pasku bocznym (i na dolnym pasku telefonu, gdy je tam wybierzesz) pokazują, ile fiszek czeka dziś — ta sama liczba jest na ich ikonie. Karta **Talie** pokazuje talie **według tagów** — `#fiszki/hiszpański` z podtaliami pod nim —, **według stron** albo **według folderów**, każdą z liczbą fiszek do powtórki i nowych, których możesz się dziś nauczyć. Stuknięcie talii zaczyna jej sesję; jej menu **⋯** daje też naukę z wyprzedzeniem i statystyki talii. **Ucz się wszystkich** (albo Enter) to nauka wszystkich talii naraz.
 

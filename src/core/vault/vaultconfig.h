@@ -11,7 +11,9 @@
 // device saves the file. `weekStartsOn` uses the JavaScript convention of the v1 app
 // (0 = Sunday, 1 = Monday, … 6 = Saturday); 7 is accepted as Sunday too. `journalMode` /
 // `pageMode` are "outline" or "document" (VaultConfig::journalMode / pageMode, the note modes of
-// markdown/notemode.h; case-insensitive when read).
+// markdown/notemode.h; case-insensitive when read). `flashcards` is an object of the plugin's card
+// settings (FlashcardsConfig, docs/SYNTAX.md §15 "Settings of the cards"): written only with the
+// values that differ from the defaults, its unknown keys kept.
 #pragma once
 
 #include "types.h"
@@ -20,6 +22,7 @@
 #include <QByteArrayView>
 #include <QJsonObject>
 #include <QStringList>
+#include <QVariantMap>
 
 namespace brulion {
 
@@ -43,6 +46,19 @@ QByteArray serializeVaultConfig(const VaultConfig &config, const QJsonObject &ra
 
 /// True when every field of `a` equals the one of `b`.
 bool sameVaultConfig(const VaultConfig &a, const VaultConfig &b);
+
+/// `tags` as the flashcards' tags: without "#", lower case, no white space inside, no duplicates.
+QStringList normalizeFlashcardTags(const QStringList &tags);
+
+/// The notebook's flashcard settings as the flashcards extension takes them (its params / ctx.args):
+/// tags (one text, only when the notebook sets any: else the host's own) and the plugin's card
+/// settings (docs/SYNTAX.md §15 "Settings of the cards").
+QVariantMap flashcardsSettings(const FlashcardsConfig &config);
+
+/// Sets the keys of `values` (the "flashcards" object's: tags as a text or a list, the separators
+/// and the end marker as texts, the cloze kinds and foldersAsDecks as booleans) in `config`.
+/// False, with `config` unchanged, for an unknown key or a value that cannot be used.
+bool applyFlashcardsConfig(FlashcardsConfig &config, const QVariantMap &values);
 
 /// True when `format` (Qt QDate format) gives distinct names for distinct days, months and
 /// years — a format without day/month/year fields would put every journal into one file.

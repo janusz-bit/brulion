@@ -234,9 +234,9 @@ done in the repository simply disappears from the list.
 * **Flashcards: what is still missing** — cards of the Spaced Repetition plugin and of Logseq, FSRS-6,
   the state next to each card, decks, sessions and statistics are there (docs/SYNTAX.md §15,
   docs/UI.md "Flashcards"); missing: FSRS parameters fitted to one's own reviews (an optimizer; the
-  review log names no card yet), the settings per notebook rather than per device, the plugin's
-  other settings (separators of one's own, bold and curly clozes, an end-of-card marker, folders as
-  decks) and its whole-note reviews (`sr-due:` in the frontmatter), the recall fork's FSRS state
+  review log names no card yet), the plugin's whole-note reviews (`sr-due:` in the frontmatter),
+  the plugin's remaining settings (the tags to ignore, "cloze patterns" of one's own, cards shown
+  as inputs, a bold or curly cloze drawn as one in the editor), the recall fork's FSRS state
   kept outside the notes (`tracked_files.json`), SiYuan's cards (their state is no Markdown), picture
   occlusion, typing the answer, and a session checked by hand on a real phone and tablet.
 

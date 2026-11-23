@@ -399,6 +399,11 @@ with the `habits` there are; a name that cannot be written as a check (it would 
 another) is exit 2 `bad_name`. Example: `brulion-cli habit tick Medytacja`, `brulion-cli habit set
 "Czytanie książek" skipped --date wczoraj`.
 
+The `card` commands read the notebook's flashcard settings from `.brulion/config.json` (the tags of
+decks, the plugin's separators, end marker, cloze kinds and folders as decks: docs/SYNTAX.md §15
+"Settings of the cards"; `brulion-cli info` shows them as `config.flashcards`); `--tags` overrides
+the tags.
+
 The `card` commands are run by the built-in flashcards extension (`fiszki.luau`, its commands
 `list`, `show`, `grade` and `stats` with the options as `ctx.args`) as the app's Flashcards view
 runs them: a grade's two writes — the card's note and the month's review log (made when missing) —

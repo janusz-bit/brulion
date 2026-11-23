@@ -389,7 +389,18 @@ QJsonObject vaultConfigJson(const VaultConfig &c)
             {u"weeklyTemplate"_s, c.weeklyTemplate},
             {u"monthlyFolder"_s, c.monthlyFolder},
             {u"monthlyFileFormat"_s, c.monthlyFileFormat},
-            {u"monthlyTemplate"_s, c.monthlyTemplate}};
+            {u"monthlyTemplate"_s, c.monthlyTemplate},
+            {u"flashcards"_s,
+             QJsonObject{{u"tags"_s, c.flashcards.tags.join(u", "_s)},
+                         {u"singleLineSeparator"_s, c.flashcards.singleLineSeparator},
+                         {u"singleLineReversedSeparator"_s, c.flashcards.singleLineReversedSeparator},
+                         {u"multilineSeparator"_s, c.flashcards.multilineSeparator},
+                         {u"multilineReversedSeparator"_s, c.flashcards.multilineReversedSeparator},
+                         {u"multilineEndMarker"_s, c.flashcards.multilineEndMarker},
+                         {u"clozeHighlights"_s, c.flashcards.clozeHighlights},
+                         {u"clozeBold"_s, c.flashcards.clozeBold},
+                         {u"clozeCurly"_s, c.flashcards.clozeCurly},
+                         {u"foldersAsDecks"_s, c.flashcards.foldersAsDecks}}}};
 }
 
 } // namespace brulion::notebook
