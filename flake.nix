@@ -58,7 +58,7 @@
           # The app for Google Play (docs/GOOGLE_PLAY.md): its APK and AAB, arm64-v8a.
           brulion-android-play = apk {
             abi = "arm64-v8a";
-            play = true;
+            googlePlay = true;
           };
           # Search by meaning: the embedding model's speed on a phone (nix/android/embedbench.nix).
           embedbench-android = pkgs.callPackage ./nix/android/embedbench.nix { };

@@ -47,15 +47,15 @@
   # The app for Google Play (CMake's BRULION_PLAY, docs/GOOGLE_PLAY.md): the package
   # io.github.januszbit.brulion.play without "All files access" and USE_EXACT_ALARM — an APK and
   # an AAB (brulion-<version>-<abi>-play-unsigned.{apk,aab}).
-  play ? false,
+  googlePlay ? false,
 }:
 
 let
   # Google Play takes bundles only.
-  bundle = withAab || play;
-  package = "io.github.januszbit.brulion" + lib.optionalString play ".play";
+  bundle = withAab || googlePlay;
+  package = "io.github.januszbit.brulion" + lib.optionalString googlePlay ".play";
   # What the outputs' names carry after the ABI.
-  tag = lib.optionalString play "-play";
+  tag = lib.optionalString googlePlay "-play";
   # Keep in sync with scripts/android-build.sh and src/app/CMakeLists.txt (compile/target SDK).
   ndkVersion = "27.2.12479018"; # r27c, the NDK Qt 6.12 is built with
   buildToolsVersion = "36.0.0";
@@ -230,7 +230,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     "-DBRULION_WERROR=${if werror then "ON" else "OFF"}"
     # Qt's own Polish texts (qtbase_pl.qm…), bundled as resources.
     "-DBRULION_QT_TRANSLATIONS_DIR=${qt6.qttranslations}/translations"
-    "-DBRULION_PLAY=${if play then "ON" else "OFF"}"
+    "-DBRULION_PLAY=${if googlePlay then "ON" else "OFF"}"
   ]
   ++ lib.optionals (androidOpenssl != null) [
     # The pinned checkout instead of CMake's download (src/app/CMakeLists.txt).
@@ -348,11 +348,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     [[ $badging == *"versionName='${version}'"* ]] || fail "versionName is not ${version}"
     [[ $badging == *"native-code: '${abi}'"* ]] || fail "native code is not ${abi}"
     for permission in POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK \
-      USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE ${if play then "" else "MANAGE_EXTERNAL_STORAGE USE_EXACT_ALARM"}; do
+      USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE ${
+        if googlePlay then "" else "MANAGE_EXTERNAL_STORAGE USE_EXACT_ALARM"
+      }; do
       [[ $badging == *"uses-permission: name='android.permission.$permission'"* ]] ||
         fail "permission $permission missing from the merged manifest"
     done
-    ${lib.optionalString play ''
+    ${lib.optionalString googlePlay ''
       # What Google Play keeps for other kinds of apps (android/play/AndroidManifest.xml).
       for permission in MANAGE_EXTERNAL_STORAGE USE_EXACT_ALARM READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE; do
         [[ $badging != *"uses-permission: name='android.permission.$permission'"* ]] ||
@@ -443,7 +445,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       abi
       withAab
       withLocalAi
-      play
+      googlePlay
       llamaSrc
       whisperSrc
       qtAndroid
@@ -455,7 +457,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   };
 
   meta = {
-    description = "Brulion for Android (${abi}${lib.optionalString play ", Google Play"}): unsigned release APK${lib.optionalString bundle " and AAB"}";
+    description = "Brulion for Android (${abi}${lib.optionalString googlePlay ", Google Play"}): unsigned release APK${lib.optionalString bundle " and AAB"}";
     homepage = "https://github.com/janusz-bit/brulion";
     license = lib.licenses.agpl3Plus;
     # Brulion's code built from source, with Qt's prebuilt libraries and Java libraries (androidx).

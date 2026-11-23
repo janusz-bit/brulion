@@ -1022,8 +1022,9 @@ void WorkspaceChats::notifyUser(const QString &path, const QString &text)
 {
     if (path.isEmpty() || m_notifyMode == u"never")
         return;
-    const bool active =
-            m_appActive ? m_appActive() : qGuiApp && QGuiApplication::applicationState() == Qt::ApplicationActive;
+    const bool active = m_appActive ? m_appActive()
+                                    : qobject_cast<QGuiApplication *>(QCoreApplication::instance()) != nullptr
+                                              && QGuiApplication::applicationState() == Qt::ApplicationActive;
     // On screen in an active window: seen there.
     if (active && (isShown(path) || m_notifyMode != u"always"))
         return;
@@ -1186,7 +1187,8 @@ QStringList WorkspaceChats::addPicturesTo(const QStringList &attached, const QLi
 
 QString WorkspaceChats::addClipboardPicture()
 {
-    const QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    const QClipboard *clipboard =
+            qobject_cast<QGuiApplication *>(QCoreApplication::instance()) ? QGuiApplication::clipboard() : nullptr;
     const QMimeData *data = clipboard ? clipboard->mimeData() : nullptr;
     if (!data || !m_workspace->ready())
         return {};
