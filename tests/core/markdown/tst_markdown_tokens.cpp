@@ -1,5 +1,6 @@
 // Metadata tokens, task markers, property values, masking and line helpers.
 // Test cases ported from archive/web-v1 (tokens/properties/mask/lines tests).
+#include "dates/local.h"
 #include "markdown/inline.h"
 #include "markdown/lines_p.h"
 #include "markdown/properties.h"
@@ -319,6 +320,44 @@ private Q_SLOTS:
         QFETCH(QString, input);
         QFETCH(QString, expected);
         QCOMPARE(markdown::stripTokens(input), expected);
+    }
+
+    /// A reminder chip's words (rendered text, the edited block's chip): relative to today in the
+    /// UI language, the local wall-clock time as written, 🔔 for an alarm.
+    void reminderChipLabel_data()
+    {
+        QTest::addColumn<QString>("spec");
+        QTest::addColumn<bool>("alarm");
+        QTest::addColumn<bool>("english");
+        QTest::addColumn<QDate>("today");
+        QTest::addColumn<QString>("expected");
+        const QDate monday(2026, 11, 23);
+        QTest::newRow("dziś") << u"2026-11-23 18:00"_s << false << false << monday << u"⏰ dziś 18:00"_s;
+        QTest::newRow("jutro") << u"2026-11-24 18:00"_s << false << false << monday << u"⏰ jutro 18:00"_s;
+        QTest::newRow("wczoraj bez godziny") << u"2026-11-22"_s << false << false << monday << u"⏰ wczoraj"_s;
+        QTest::newRow("budzik w piątek") << u"2026-11-27 06:30"_s << true << false << monday << u"🔔 pt 27 lis 06:30"_s;
+        QTest::newRow("o północy") << u"2026-11-24 00:00"_s << false << false << monday << u"⏰ jutro 00:00"_s;
+        QTest::newRow("inny rok") << u"2027-01-05 09:00"_s << false << false << monday << u"⏰ 5 sty 2027 09:00"_s;
+        QTest::newRow("today") << u"2026-11-23 18:00"_s << false << true << monday << u"⏰ today 18:00"_s;
+        QTest::newRow("tomorrow alarm") << u"2026-11-24 07:15"_s << true << true << monday << u"🔔 tomorrow 07:15"_s;
+        QTest::newRow("Friday") << u"2026-11-27"_s << false << true << monday << u"⏰ Fri, Nov 27"_s;
+        // A year's last day seen from its eve, then the next year's first day from the last one.
+        QTest::newRow("sylwester") << u"2026-12-31 23:59"_s << false << false << QDate(2026, 12, 30) << u"⏰ jutro 23:59"_s;
+        QTest::newRow("nowy rok") << u"2027-01-01 00:30"_s << false << false << QDate(2026, 12, 31) << u"⏰ jutro 00:30"_s;
+        QTest::newRow("no today") << u"2026-11-24 18:00"_s << false << true << QDate() << u"⏰ Nov 24, 2026 18:00"_s;
+        QTest::newRow("invalid") << QString() << false << false << monday << u"⏰"_s;
+    }
+    void reminderChipLabel()
+    {
+        QFETCH(QString, spec);
+        QFETCH(bool, alarm);
+        QFETCH(bool, english);
+        QFETCH(QDate, today);
+        QFETCH(QString, expected);
+        const DateSpec at = dates::parseDateSpec(spec).value_or(DateSpec{});
+        QCOMPARE(markdown::reminderChipLabel(at, alarm, english ? dates::UiLocale::English : dates::UiLocale::Polish,
+                                             today),
+                 expected);
     }
 
     void formatReminder()

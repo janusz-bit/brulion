@@ -1203,7 +1203,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             case TokenKind::ReminderCompat:
                 // docs/UI.md: ⏰ reminders, a bell for alarms.
                 html = linkChip(u"reminder:"_s + bodyRange(tok.from, tok.to), tok.alarm ? pal.alarm : pal.reminder,
-                                (tok.alarm ? u"🔔 "_s : u"⏰ "_s) + human(tok));
+                                reminderChipLabel(tok.spec(), tok.alarm, m_ctx.locale, m_ctx.today));
                 break;
             case TokenKind::Priority:
                 // A prio: link with RenderContext::dateLinks, not underlined (the emoji looks the same).

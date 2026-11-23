@@ -1,5 +1,6 @@
 #include "markdown/tokens.h"
 
+#include "dates/format.h"
 #include "dates/local.h"
 #include "dates/recurrence.h"
 #include "markdown/tokens_p.h"
@@ -618,6 +619,13 @@ QString stripTokens(QStringView text)
 QString formatReminderToken(const DateSpec &at, bool alarm)
 {
     return (alarm ? tokens::Alarm : tokens::Reminder).toString() + u' ' + at.toString();
+}
+
+QString reminderChipLabel(const DateSpec &at, bool alarm, dates::UiLocale locale, QDate today)
+{
+    const QString bell = alarm ? u"🔔"_s : u"⏰"_s;
+    const QString when = dates::formatHuman(at, locale, today);
+    return when.isEmpty() ? bell : bell + u' ' + when;
 }
 
 } // namespace brulion::markdown

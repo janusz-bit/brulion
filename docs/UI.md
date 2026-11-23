@@ -3782,13 +3782,28 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in words of the UI language. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete), a date chip the date dialog on that date (with "+": "Date, reminder or
-  alarm" below); a click on a 🔁 chip or a priority edits the text (an I-beam cursor). While its block is edited a ⏰ / ⏰! token stays a chip: its raw text
-  (`⏰ 2026-10-15 18:00`) on a pill of the chip's colours (`MarkdownHighlighter.reminderChips` /
-  `chipShapes`: one shape per line the token spans, under the text of `InlineEditor`); a click or
-  tap on it (a pointing hand) opens the same reminder dialog on that token (`BlockEditor.
-  editReminderInText`, the edit text's range plus `PageController.editOffsetAt`) without moving the
-  caret, and the block is edited again when the dialog closes; the keys still move through the
-  token's text and edit it (ctest `tst_editor_qml_datechips`, `_touch`). "today"/"tomorrow" and overdue colours of open pages move on at midnight
+  alarm" below); a click on a 🔁 chip or a priority edits the text (an I-beam cursor). While its block is edited a ⏰ / ⏰! token stays a chip
+  with the rendered chip's words (`markdown::reminderChipLabel()`: "⏰ dziś 18:00", "🔔 jutro 06:30",
+  relative to `PageController.todayDate` in the UI language) on a pill of the chip's colours, while
+  the edited text and the file keep the token byte for byte (`MarkdownHighlighter.reminderChips` /
+  `chipShapes`, `label` drawn over the pill by `InlineEditor`): the token's characters are laid out
+  invisible, the first one as wide as the words and the others with no width, so the chip never
+  wraps inside (a line too short moves it whole to the next). A click or tap on it (a pointing
+  hand) opens the same reminder dialog on that token (`BlockEditor.editReminderInText`, the edit
+  text's range plus `PageController.editOffsetAt`) without moving the caret, and the block is edited
+  again when the dialog closes; a right-click or a long press (a finger) opens its `DateChipMenu`
+  as on the rendered chip — An hour later, Tomorrow at this time, A week later, Alarm, Repeat,
+  Change date and time…, Delete reminder (`BlockEditor.openReminderMenuInText`,
+  `PageController.editTextChip`; `applyTokenAction` keeps a caret after the token where it was in
+  the words) —, the block stays edited, the keyboard back in it when the menu closes, one undo step
+  per choice. To the keys a chip is one unit (`InlineEditor.chipKey` / `chipSnap`, the
+  highlighter's `chipEndingAt` / `chipStartingAt` / `chipFromAround` / `chipToAround`): Left /
+  Right step over it, Shift+Left / Shift+Right select it whole, Backspace after it and Delete
+  before it remove it whole (one step of the block's typing), a caret put inside it (Up / Down, a
+  click beside it, the controller) goes to its end, where it is drawn, and a selection's moving end
+  takes it whole; Vim's command modes and a word being composed leave it alone. Its text is edited
+  by hand in source mode, which shows tokens as written (ctest `tst_editor_qml_datechips`,
+  `_touch`; `tst_editor_highlighter`). "today"/"tomorrow" and overdue colours of open pages move on at midnight
   (`DayClock`). Links to daily notes read as dates (`[[2026-10-13]]` → "Tue, Oct 13").
 * **Token and link menus.** A right-click (mouse, touchpad, stylus) or a long press (a finger,
   outside the selection mode) on a token or a link of rendered text opens its menu instead of the
