@@ -14,6 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
@@ -454,7 +455,7 @@ private Q_SLOTS:
                 text.startsWith(
                         u"katalog:: incline-dumbbell-press\nmiesnie:: klatka piersiowa\n"
                         "miesnie-pomocnicze:: barki, triceps\nsprzet:: hantle\nkategoria:: siłowe\n"
-                        "poziom:: początkujący\n\n## Wykonanie\n\nOpis po angielsku, z free-exercise-db (Unlicense).\n\n1. "_s),
+                        "poziom:: początkujący\n\n## Wykonanie\n\n1. "_s), // Polish instructions: no note
                 qPrintable(text));
         QVERIFY(text.contains(u"\n2. "_s) && text.endsWith(u"\n"_s));
         // one match is taken at once; an existing page is kept; English names find it too
@@ -562,6 +563,78 @@ private Q_SLOTS:
         QCOMPARE(squat.value(u"source"_s).toString(), u"Barbell_Squat"_s);
         QVERIFY(squat.value(u"instructions"_s).toList().size() >= 3);
         QCOMPARE(search({{u"id"_s, u"nie-ma"_s}}).value(u"unknown"_s).toString(), u"id"_s);
+    }
+
+    // Polish instructions (exercise-instructions-pl.json): at least 120 common exercises, each an
+    // exercise of the catalog with an English description, step for step — a step of one is a step of
+    // the other — written in Polish (diacritics), none left empty.
+    void polishInstructionsMatchTheEnglish()
+    {
+        const QVariantMap data = builtinExtension(u"silownia"_s).data;
+        const QVariantMap polish = data.value(u"instructions-pl"_s).toMap();
+        const QVariantMap english = data.value(u"instructions"_s).toMap();
+        QSet<QString> ids;
+        for (const QVariant &e : data.value(u"exercises"_s).toMap().value(u"exercises"_s).toList())
+            ids.insert(e.toMap().value(u"id"_s).toString());
+        QVERIFY2(polish.size() >= 120, qPrintable(QString::number(polish.size())));
+        int withDiacritics = 0;
+        for (auto it = polish.cbegin(); it != polish.cend(); ++it) {
+            const QString id = it.key();
+            QVERIFY2(ids.contains(id), qPrintable(id));
+            const QVariantList steps = it.value().toList();
+            QVERIFY2(english.contains(id), qPrintable(id));
+            QCOMPARE_NE(steps.size(), 0);
+            QVERIFY2(steps.size() == english.value(id).toList().size(), qPrintable(id));
+            const QVariantList original = english.value(id).toList();
+            for (int i = 0; i < steps.size(); ++i) {
+                const QString text = steps.at(i).toString();
+                QVERIFY2(text.size() >= 5 && text == text.trimmed(), qPrintable(id + u": "_s + text));
+                QVERIFY2(text != original.at(i).toString(), qPrintable(id));
+            }
+            if (steps.constFirst().toString().contains(QRegularExpression(u"[ąćęłńóśźż]"_s)))
+                ++withDiacritics;
+        }
+        QVERIFY(withDiacritics >= polish.size() * 9 / 10);
+    }
+
+    // The exercise view and the page made from the catalog show the Polish instructions to a Polish
+    // reader, English (with the note that it is English) where there is no translation, and the
+    // English to an English one.
+    void polishInstructionsAreShown()
+    {
+        const QVariantMap polish = builtinExtension(u"silownia"_s).data.value(u"instructions-pl"_s).toMap();
+        const QVariantMap english = builtinExtension(u"silownia"_s).data.value(u"instructions"_s).toMap();
+        QVERIFY(polish.contains(u"back-squat"_s) && !polish.contains(u"zottman-curl"_s));
+        const QString firstPolish = polish.value(u"back-squat"_s).toList().constFirst().toString();
+        const QString firstEnglish = english.value(u"back-squat"_s).toList().constFirst().toString();
+        const QString noteEnglish = u"Opis po angielsku"_s;
+
+        QVERIFY(open(sampleNotes()));
+        auto shown = [this](const QString &id) {
+            return QString::fromUtf8(QJsonDocument::fromVariant(render(u"exercise"_s, {{u"id"_s, id}})).toJson());
+        };
+        const QString squat = shown(u"back-squat"_s);
+        QVERIFY(squat.contains(firstPolish.left(30)));
+        QVERIFY(!squat.contains(firstEnglish.left(30)) && !squat.contains(noteEnglish));
+        const QString zottman = shown(u"zottman-curl"_s);
+        QVERIFY(zottman.contains(noteEnglish));
+        QVERIFY(zottman.contains(english.value(u"zottman-curl"_s).toList().constFirst().toString().left(30)));
+        // the page: Polish steps without the note, an untranslated exercise's English with it
+        Result r = m_engine->act(u"silownia"_s, u"exercise"_s, u"createPage"_s, {{u"id"_s, u"back-squat"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QString page = file(m_host->pathOf(u"Przysiad ze sztangą"_s));
+        QVERIFY(page.contains(u"## Wykonanie\n\n1. "_s + firstPolish + u"\n"_s));
+        QVERIFY(!page.contains(noteEnglish));
+        r = m_engine->act(u"silownia"_s, u"exercise"_s, u"createPage"_s, {{u"id"_s, u"zottman-curl"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        page = file(m_host->pathOf(u"Uginanie Zottmana"_s));
+        QVERIFY(page.contains(noteEnglish));
+
+        // an English reader: the English steps, no note
+        QVERIFY(open(sampleNotes(), u"en"_s));
+        QVERIFY(shown(u"back-squat"_s).contains(firstEnglish.left(30)));
+        QVERIFY(!shown(u"back-squat"_s).contains(firstPolish.left(30)));
+        QVERIFY(!shown(u"back-squat"_s).contains(noteEnglish));
     }
 
     void catalogSearch_data()

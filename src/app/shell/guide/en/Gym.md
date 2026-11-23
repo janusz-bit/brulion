@@ -56,7 +56,7 @@ A weigh-in is an ordinary journal item tagged `#weight` (or `#waga`):
 The weight with `kg` or `lb` (a number alone: the unit of the settings), the body fat in per cent if you like, any other words a note. Several weigh-ins a day: the last one counts. **Gym: log body weight** in the palette writes one too, and `{{ext:silownia/waga}}` in any note shows the latest weigh-in and the trend.
 
 ## The exercise catalog
-The **Exercise catalog** (a button in Today, or the palette) has over 870 exercises: Brulion's 51 and all of free-exercise-db (public domain). Search by name — in English or Polish, any case — and narrow by muscle, equipment or kind. An exercise shows its muscles, two pictures of the movement (where it starts and where it ends) and its instructions; add it to today's workout or create its page:
+The **Exercise catalog** (a button in Today, or the palette) has over 870 exercises: Brulion's 51 and all of free-exercise-db (public domain). Search by name — in English or Polish, any case — and narrow by muscle, equipment or kind. An exercise shows its muscles, two pictures of the movement (where it starts and where it ends) and its instructions (in Polish for the 144 most common exercises, free-exercise-db's English for the rest); add it to today's workout or create its page:
 
 ```markdown
 catalog:: back-squat

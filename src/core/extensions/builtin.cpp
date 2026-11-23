@@ -32,10 +32,13 @@ QList<BuiltinExtension> builtinExtensions()
         gym.extension.source = QString::fromUtf8(resource(u"silownia.luau"_s));
         gym.extension.permissions = {u"write"_s};
         // The catalog (scripts/gym-catalog.py): the exercises, and their instructions by id —
-        // b.data("instructions", id) gives one exercise's.
+        // b.data("instructions", id) gives one exercise's (English; free-exercise-db's), and
+        // b.data("instructions-pl", id) its Polish translation, written for the common ones only.
         gym.extension.data.insert(u"exercises"_s, QJsonDocument::fromJson(resource(u"exercises.json"_s)).toVariant());
         gym.extension.data.insert(u"instructions"_s,
                                   QJsonDocument::fromJson(resource(u"exercise-instructions.json"_s)).toVariant());
+        gym.extension.data.insert(u"instructions-pl"_s,
+                                  QJsonDocument::fromJson(resource(u"exercise-instructions-pl.json"_s)).toVariant());
         gym.titleEn = u"Gym"_s;
         gym.titlePl = u"Siłownia"_s;
         BuiltinExtension assistant;
