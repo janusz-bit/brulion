@@ -308,6 +308,17 @@ void applyToTodo(io::ical::Component &todo, const TaskFields &f, unsigned mask, 
         else
             setProperty(todo, u"DESCRIPTION"_s, io::ical::escapeText(f.description));
     }
+    if (mask & FieldParent) {
+        // Only the PARENT relation: CHILD and SIBLING ones stay as the server has them.
+        todo.properties.removeIf([](const io::ical::Property &p) {
+            if (p.name != u"RELATED-TO")
+                return false;
+            const QString type = p.param(u"RELTYPE"_s).toUpper();
+            return type.isEmpty() || type == u"PARENT";
+        });
+        if (!f.parentUid.isEmpty())
+            todo.properties.append({u"RELATED-TO"_s, {{u"RELTYPE"_s, u"PARENT"_s}}, io::ical::escapeText(f.parentUid)});
+    }
     if (mask & (FieldReminders | FieldStatus)) {
         // A done or cancelled task rings no more (SYNTAX §6): its alarms are not sent.
         TaskFields ringing = f;
@@ -400,6 +411,7 @@ TaskFields TaskFields::normalized() const
     cats.sort();
     n.categories = cats;
     n.description = normalizedDescription(description);
+    n.parentUid = parentUid.trimmed();
     return n;
 }
 
@@ -497,6 +509,8 @@ unsigned changedFields(const TaskFields &x, const TaskFields &y)
         m |= FieldCategories;
     if (a.description != b.description)
         m |= FieldDescription;
+    if (a.parentUid != b.parentUid)
+        m |= FieldParent;
     return m;
 }
 
@@ -523,6 +537,8 @@ TaskFields withFields(const TaskFields &to, const TaskFields &from, unsigned mas
         out.categories = from.categories;
     if (mask & FieldDescription)
         out.description = from.description;
+    if (mask & FieldParent)
+        out.parentUid = from.parentUid;
     return out;
 }
 
@@ -919,8 +935,6 @@ QByteArray newTodo(const QString &uid, const TaskFields &fields, const TodoConte
     bool usedZone = false;
     applyToTodo(todo, fields, AllFields, context, &usedZone);
     stamp(todo, context, false);
-    if (!fields.parentUid.isEmpty())
-        todo.properties.append({u"RELATED-TO"_s, {{u"RELTYPE"_s, u"PARENT"_s}}, io::ical::escapeText(fields.parentUid)});
     cal.children.append(todo);
     if (usedZone)
         ensureTimezone(cal, context);

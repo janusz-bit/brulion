@@ -77,7 +77,7 @@ private:
     NoteInfo *note(const QString &path);
     std::optional<Located> locate(const TrackedTask &task);
     TaskFields fieldsOf(const NoteInfo &info, int block) const;
-    QString parentUidOf(const NoteInfo &info, int block) const;
+    QString parentUidOf(const ParsedNote &parsed, int block) const;
     void writeNotes();
     QDateTime remoteTime(const QByteArray &ics) const;
     QDateTime localTime(const QString &path) const;

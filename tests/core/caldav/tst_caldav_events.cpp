@@ -60,6 +60,8 @@ private Q_SLOTS:
     void vtimezoneGapAndRepeat();
     void allDayAndMultiDay();
     void recurrenceWithExceptions();
+    void thisAndFuture_data();
+    void thisAndFuture();
     void rdatesAndUntil();
     void daylightSavingOnBothSides();
     void polishText();
@@ -190,6 +192,123 @@ void TestCalDavEvents::recurrenceWithExceptions()
     const CalendarData orphan = parseCalendarData(calendar(vevent(
             u"o"_s, u"RECURRENCE-ID:20261105T100000Z\r\nDTSTART:20261105T110000Z\r\nSUMMARY:Jedno spotkanie\r\n"_s)));
     QCOMPARE(starts(orphan, QDate(2026, 11, 1), QDate(2026, 11, 30)), QStringList{u"2026-11-05 12:00 Jedno spotkanie"_s});
+}
+
+void TestCalDavEvents::thisAndFuture_data()
+{
+    QTest::addColumn<QString>("body");
+    QTest::addColumn<QDate>("from");
+    QTest::addColumn<QDate>("to");
+    QTest::addColumn<QStringList>("expected");
+
+    const QString weekly = vevent(u"s"_s, u"DTSTART;TZID=Europe/Warsaw:20261102T090000\r\n"
+                                         u"DTEND;TZID=Europe/Warsaw:20261102T094500\r\n"
+                                         u"RRULE:FREQ=WEEKLY;COUNT=6\r\nEXDATE;TZID=Europe/Warsaw:20261123T090000\r\n"
+                                         u"SUMMARY:Stand-up\r\n"_s);
+    // From 16 November on: another hour and title, 45 minutes became one hour.
+    const QString later = vevent(u"s"_s, u"RECURRENCE-ID;TZID=Europe/Warsaw;RANGE=THISANDFUTURE:20261116T090000\r\n"
+                                        u"DTSTART;TZID=Europe/Warsaw:20261116T103000\r\n"
+                                        u"DTEND;TZID=Europe/Warsaw:20261116T113000\r\n"
+                                        u"SUMMARY:Stand-up (nowa pora)\r\n"_s);
+    QTest::newRow("moved to another hour")
+            << weekly + later << QDate(2026, 11, 1) << QDate(2026, 12, 31)
+            << QStringList{u"2026-11-02 09:00 Stand-up"_s, u"2026-11-09 09:00 Stand-up"_s,
+                           u"2026-11-16 10:30 Stand-up (nowa pora)"_s,
+                           u"2026-11-30 10:30 Stand-up (nowa pora)"_s, u"2026-12-07 10:30 Stand-up (nowa pora)"_s};
+    // An EXDATE of a later instance still takes it out (23 November above); a plain override of one
+    // instance beats the range it falls in.
+    const QString one = vevent(u"s"_s, u"RECURRENCE-ID;TZID=Europe/Warsaw:20261130T090000\r\n"
+                                      u"DTSTART;TZID=Europe/Warsaw:20261130T150000\r\n"
+                                      u"SUMMARY:Tylko ten\r\n"_s);
+    QTest::newRow("one instance in the range")
+            << weekly + later + one << QDate(2026, 11, 20) << QDate(2026, 12, 31)
+            << QStringList{u"2026-11-30 15:00 Tylko ten"_s, u"2026-12-07 10:30 Stand-up (nowa pora)"_s};
+    // Cancelled from the second instance on: the series ends there.
+    QTest::newRow("cancelled from a day on")
+            << weekly
+                       + vevent(u"s"_s, u"RECURRENCE-ID;RANGE=THISANDFUTURE;TZID=Europe/Warsaw:20261109T090000\r\n"
+                                        u"DTSTART;TZID=Europe/Warsaw:20261109T090000\r\nSTATUS:CANCELLED\r\nSUMMARY:Stand-up\r\n"_s)
+            << QDate(2026, 11, 1) << QDate(2026, 12, 31) << QStringList{u"2026-11-02 09:00 Stand-up"_s};
+    // Moved a day later: Tuesdays from then on, one of them coming into a window that the
+    // original Monday is outside of.
+    const QString tuesday = vevent(u"s"_s, u"RECURRENCE-ID;TZID=Europe/Warsaw;RANGE=THISANDFUTURE:20261116T090000\r\n"
+                                          u"DTSTART;TZID=Europe/Warsaw:20261117T090000\r\n"
+                                          u"DTEND;TZID=Europe/Warsaw:20261117T094500\r\nSUMMARY:Stand-up (wtorek)\r\n"_s);
+    QTest::newRow("a day later, window after the original")
+            << weekly + tuesday << QDate(2026, 12, 1) << QDate(2026, 12, 1)
+            << QStringList{u"2026-12-01 09:00 Stand-up (wtorek)"_s};
+    // Wall-clock time over a daylight-saving change: 20:00 -> 21:00 stays 21:00 after 25 October.
+    const QString dst = vevent(u"d"_s, u"DTSTART;TZID=Europe/Warsaw:20261017T200000\r\nDTEND;TZID=Europe/Warsaw:20261017T210000\r\n"
+                                       u"RRULE:FREQ=WEEKLY;COUNT=4\r\nSUMMARY:Próba chóru\r\n"_s)
+                      + vevent(u"d"_s, u"RECURRENCE-ID;RANGE=THISANDFUTURE;TZID=Europe/Warsaw:20261024T200000\r\n"
+                                       u"DTSTART;TZID=Europe/Warsaw:20261024T210000\r\nDTEND;TZID=Europe/Warsaw:20261024T223000\r\n"
+                                       u"SUMMARY:Próba chóru (później)\r\n"_s);
+    QTest::newRow("across the end of daylight saving")
+            << dst << QDate(2026, 10, 1) << QDate(2026, 11, 30)
+            << QStringList{u"2026-10-17 20:00 Próba chóru"_s, u"2026-10-24 21:00 Próba chóru (później)"_s,
+                           u"2026-10-31 21:00 Próba chóru (później)"_s, u"2026-11-07 21:00 Próba chóru (później)"_s};
+    // A series in UTC, shown in Warsaw: the shift is an hour of the series' clock.
+    QTest::newRow("UTC series")
+            << vevent(u"u"_s, u"DTSTART:20261102T080000Z\r\nDTEND:20261102T090000Z\r\nRRULE:FREQ=WEEKLY;COUNT=3\r\nSUMMARY:Zażółć\r\n"_s)
+                       + vevent(u"u"_s, u"RECURRENCE-ID;RANGE=THISANDFUTURE:20261109T080000Z\r\n"
+                                        u"DTSTART:20261109T090000Z\r\nDTEND:20261109T093000Z\r\nSUMMARY:Gęślą\r\n"_s)
+            << QDate(2026, 11, 1) << QDate(2026, 11, 30)
+            << QStringList{u"2026-11-02 09:00 Zażółć"_s, u"2026-11-09 10:00 Gęślą"_s, u"2026-11-16 10:00 Gęślą"_s};
+    // All-day: three days later from then on.
+    QTest::newRow("all-day series")
+            << vevent(u"a"_s, u"DTSTART;VALUE=DATE:20261102\r\nRRULE:FREQ=WEEKLY;COUNT=3\r\nSUMMARY:Urlop\r\n"_s)
+                       + vevent(u"a"_s, u"RECURRENCE-ID;VALUE=DATE;RANGE=THISANDFUTURE:20261109\r\n"
+                                        u"DTSTART;VALUE=DATE:20261112\r\nSUMMARY:Urlop (czwartek)\r\n"_s)
+            << QDate(2026, 11, 1) << QDate(2026, 11, 30)
+            << QStringList{u"2026-11-02 00:00 Urlop"_s, u"2026-11-12 00:00 Urlop (czwartek)"_s,
+                           u"2026-11-19 00:00 Urlop (czwartek)"_s};
+    // Two ranges: the later one rules from its instance on.
+    QTest::newRow("two ranges")
+            << weekly + later
+                       + vevent(u"s"_s, u"RECURRENCE-ID;RANGE=THISANDFUTURE;TZID=Europe/Warsaw:20261207T090000\r\n"
+                                        u"DTSTART;TZID=Europe/Warsaw:20261207T120000\r\nSUMMARY:Ostatni\r\n"_s)
+            << QDate(2026, 11, 25) << QDate(2026, 12, 31)
+            << QStringList{u"2026-11-30 10:30 Stand-up (nowa pora)"_s, u"2026-12-07 12:00 Ostatni"_s};
+    // THISANDPRIOR is deprecated and unsupported: the override is one occurrence, like any other.
+    QTest::newRow("THISANDPRIOR is one instance")
+            << weekly
+                       + vevent(u"s"_s, u"RECURRENCE-ID;RANGE=THISANDPRIOR;TZID=Europe/Warsaw:20261116T090000\r\n"
+                                        u"DTSTART;TZID=Europe/Warsaw:20261116T120000\r\nSUMMARY:Jedno\r\n"_s)
+            << QDate(2026, 11, 14) << QDate(2026, 11, 30)
+            << QStringList{u"2026-11-16 12:00 Jedno"_s, u"2026-11-30 09:00 Stand-up"_s};
+    // Without its series the override shows alone, once.
+    QTest::newRow("range without a series")
+            << later << QDate(2026, 11, 1) << QDate(2026, 12, 31) << QStringList{u"2026-11-16 10:30 Stand-up (nowa pora)"_s};
+    // An instance the series does not have: the override is shown at its own start, and the later
+    // instances take its properties.
+    QTest::newRow("range at no instance")
+            << weekly
+                       + vevent(u"s"_s, u"RECURRENCE-ID;RANGE=THISANDFUTURE;TZID=Europe/Warsaw:20261117T090000\r\n"
+                                        u"DTSTART;TZID=Europe/Warsaw:20261117T090000\r\nSUMMARY:Wtorek\r\n"_s)
+            << QDate(2026, 11, 14) << QDate(2026, 12, 1)
+            << QStringList{u"2026-11-16 09:00 Stand-up"_s, u"2026-11-17 09:00 Wtorek"_s, u"2026-11-30 09:00 Wtorek"_s};
+    // Lower-case range and a floating start.
+    QTest::newRow("lower case, floating")
+            << vevent(u"f"_s, u"DTSTART:20261102T090000\r\nRRULE:FREQ=DAILY;COUNT=3\r\nSUMMARY:Zwykłe\r\n"_s)
+                       + vevent(u"f"_s, u"RECURRENCE-ID;RANGE=thisandfuture:20261103T090000\r\n"
+                                        u"DTSTART:20261103T100000\r\nSUMMARY:Późniejsze\r\n"_s)
+            << QDate(2026, 11, 1) << QDate(2026, 11, 30)
+            << QStringList{u"2026-11-02 09:00 Zwykłe"_s, u"2026-11-03 10:00 Późniejsze"_s, u"2026-11-04 10:00 Późniejsze"_s};
+}
+
+void TestCalDavEvents::thisAndFuture()
+{
+    QFETCH(QString, body);
+    QFETCH(QDate, from);
+    QFETCH(QDate, to);
+    QFETCH(QStringList, expected);
+    const CalendarData data = parseCalendarData(calendar(body));
+    QCOMPARE(starts(data, from, to), expected);
+    // The instance an occurrence of the range reports is the series' own (what editing it names).
+    for (const Occurrence &o : occurrences(data, from, to, Warsaw)) {
+        if (data.events.at(o.event).thisAndFuture && o.recurring)
+            QVERIFY(o.instance);
+    }
 }
 
 void TestCalDavEvents::rdatesAndUntil()

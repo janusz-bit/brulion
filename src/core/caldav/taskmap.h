@@ -66,7 +66,8 @@ enum Field : unsigned {
     FieldReminders = 1u << 7,
     FieldCategories = 1u << 8,
     FieldDescription = 1u << 9,
-    AllFields = (1u << 10) - 1,
+    FieldParent = 1u << 10, ///< RELATED-TO;RELTYPE=PARENT ↔ the task the line is nested in
+    AllFields = (1u << 11) - 1,
 };
 unsigned changedFields(const TaskFields &a, const TaskFields &b);
 /// `to` with the fields of `mask` taken from `from`.

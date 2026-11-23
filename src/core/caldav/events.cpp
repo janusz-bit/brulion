@@ -99,6 +99,26 @@ io::ical::DateTimeValue withNaive(const io::ical::DateTimeValue &like, const Nai
     return v;
 }
 
+/// Where an instance stands in time, for comparing it with a RECURRENCE-ID: the instant of a timed
+/// value (a floating one is read as UTC), the day of an all-day one.
+qint64 orderKey(const io::ical::DateTimeValue &v, const ZoneTable &zones)
+{
+    if (!v.time)
+        return QDateTime(v.date, QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
+    if (const auto ms = zones.instant(v))
+        return *ms;
+    return QDateTime(v.date, *v.time, QTimeZone::UTC).toMSecsSinceEpoch();
+}
+
+/// A RECURRENCE-ID;RANGE=THISANDFUTURE override (RFC 5545 §3.8.4.4): from the instance it names on,
+/// every instance of the series is replaced by this one's properties, its start and end moved by
+/// as much as the override moved the named instance.
+struct FutureOverride {
+    qsizetype index = -1;
+    qint64 from = 0; ///< order key of the instance it names
+    qint64 shiftSecs = 0; ///< wall-clock shift of the start on the series' clock
+};
+
 struct Builder {
     const CalendarData &data;
     const QTimeZone &target;
@@ -107,6 +127,7 @@ struct Builder {
     ExpandLimits limits;
     bool truncated = false;
     QList<Occurrence> out;
+    QSet<qsizetype> usedFuture; ///< THISANDFUTURE overrides that produced the instance they name
 
     qint64 targetMs(const NaiveDateTime &t) const
     {
@@ -164,10 +185,45 @@ struct Builder {
                             .addSecs(-span.secs - (span.days + 1) * 86400);
             sTo = data.zones.inZoneOf(targetMs(windowTo), m.start, target).addSecs(86400);
         }
+        // THISANDFUTURE overrides, by the instance they name; a plain override of one instance
+        // beats the range it falls in.
+        QList<FutureOverride> future;
         QSet<QString> overridden;
         for (qsizetype i : overrides) {
-            if (const auto &rid = data.events.at(i).recurrenceId)
-                overridden.insert(instanceKey(*rid, data.zones));
+            const Event &o = data.events.at(i);
+            if (!o.recurrenceId)
+                continue;
+            if (!o.thisAndFuture) {
+                overridden.insert(instanceKey(*o.recurrenceId, data.zones));
+                continue;
+            }
+            FutureOverride f;
+            f.index = i;
+            f.from = orderKey(*o.recurrenceId, data.zones);
+            if (o.allDay() == m.allDay() && !m.allDay()) {
+                // On the series' clock: a move of the start by an hour stays an hour in summer.
+                const auto ms = data.zones.instant(o.start);
+                const auto rms = data.zones.instant(*o.recurrenceId);
+                if (ms && rms) {
+                    const NaiveDateTime a = data.zones.inZoneOf(*ms, m.start, target);
+                    const NaiveDateTime r = data.zones.inZoneOf(*rms, m.start, target);
+                    f.shiftSecs = r.secsTo(a);
+                } else {
+                    f.shiftSecs = NaiveDateTime{o.recurrenceId->date, o.recurrenceId->time.value_or(QTime(0, 0))}.secsTo(
+                            {o.start.date, o.start.time.value_or(QTime(0, 0))});
+                }
+            } else if (o.allDay() && m.allDay()) {
+                f.shiftSecs = o.recurrenceId->date.daysTo(o.start.date) * 86400;
+            }
+            future.append(f);
+        }
+        std::ranges::sort(future, {}, &FutureOverride::from);
+        qint64 widen = 0; // a shifted instance may come into the window from outside it
+        for (const FutureOverride &f : std::as_const(future))
+            widen = std::max(widen, std::min<qint64>(qAbs(f.shiftSecs), 400LL * 86400));
+        if (widen > 0) {
+            sFrom = sFrom.addSecs(-widen);
+            sTo = sTo.addSecs(widen);
         }
         QSet<QString> excluded;
         QSet<qint64> excludedDays; // EXDATE;VALUE=DATE on a timed series: the whole day
@@ -223,6 +279,28 @@ struct Builder {
                 || excludedDays.contains(s.date.toJulianDay()))
                 continue;
             seen.insert(key);
+            const FutureOverride *range = nullptr;
+            const qint64 order = orderKey(s, data.zones);
+            for (const FutureOverride &f : std::as_const(future)) {
+                if (f.from <= order)
+                    range = &f; // the last one that began at or before this instance
+            }
+            if (range) {
+                const Event &o = data.events.at(range->index);
+                if (order == range->from)
+                    usedFuture.insert(range->index);
+                if (o.cancelled())
+                    continue;
+                io::ical::DateTimeValue moved = s;
+                if (range->shiftSecs != 0) {
+                    const NaiveDateTime n = NaiveDateTime{s.date, s.time.value_or(QTime(0, 0))}.addSecs(range->shiftSecs);
+                    moved = withNaive(s, n);
+                }
+                // The span of the override when it is of the series' kind (a timed one in an
+                // all-day series would be a different event).
+                add(range->index, moved, o.allDay() == m.allDay() ? spanOf(o, data.zones) : span, s, true);
+                continue;
+            }
             add(master, s, span, recurring ? std::optional(s) : std::nullopt, recurring);
         }
         Q_UNUSED(uid);
@@ -397,7 +475,7 @@ QList<Occurrence> occurrences(const CalendarData &data, QDate from, QDate to, co
         *truncated = false;
     if (!from.isValid() || !to.isValid() || from > to)
         return {};
-    Builder b{data, target, {from, QTime(0, 0)}, {to.addDays(1), QTime(0, 0)}, limits, false, {}};
+    Builder b{data, target, {from, QTime(0, 0)}, {to.addDays(1), QTime(0, 0)}, limits, false, {}, {}};
     // Masters and overrides of each UID, in file order.
     QHash<QString, std::pair<qsizetype, QList<qsizetype>>> byUid;
     QStringList order;
@@ -422,7 +500,7 @@ QList<Occurrence> occurrences(const CalendarData &data, QDate from, QDate to, co
             continue;
         for (qsizetype i : overrides) {
             const Event &e = data.events.at(i);
-            if (e.cancelled())
+            if (e.cancelled() || b.usedFuture.contains(i))
                 continue;
             b.add(i, e.start, spanOf(e, data.zones), e.recurrenceId, master >= 0);
         }

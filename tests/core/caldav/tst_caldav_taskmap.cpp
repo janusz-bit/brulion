@@ -39,6 +39,15 @@ TaskFields fromTodo(const QString &todoLines, const QString &extra = {})
     return fieldsFromTodo(*firstTodo(roots), zones, Warsaw, QTime(9, 0));
 }
 
+TaskFields todoFields(const QByteArray &ics)
+{
+    const QList<io::ical::Component> roots = io::ical::parse(ics);
+    ZoneTable zones;
+    for (const io::ical::Component &r : roots)
+        zones.addCalendar(r);
+    return fieldsFromTodo(*firstTodo(roots), zones, Warsaw, QTime(9, 0));
+}
+
 } // namespace
 
 class TestCalDavTaskMap : public QObject {
@@ -53,6 +62,8 @@ private Q_SLOTS:
     void lineStaysLineAfterEdits();
     void patchKeepsUnknown();
     void newTodoHasZone();
+    void patchRelatedTo_data();
+    void patchRelatedTo();
     void uids();
     void json();
     void normalisation();
@@ -295,6 +306,55 @@ void TestCalDavTaskMap::newTodoHasZone()
     // UTC: no zone.
     ctx.zone = QTimeZone(QTimeZone::UTC);
     QVERIFY(!QString::fromUtf8(newTodo(u"u"_s, f, ctx)).contains(u"VTIMEZONE"_s));
+}
+
+void TestCalDavTaskMap::patchRelatedTo_data()
+{
+    QTest::addColumn<QString>("lines");
+    QTest::addColumn<QString>("parent");
+    QTest::addColumn<QStringList>("has");
+    QTest::addColumn<QStringList>("hasNot");
+
+    QTest::newRow("none to a parent") << u"SUMMARY:Zażółć\r\n"_s << u"rodzic"_s
+                                      << QStringList{u"RELATED-TO;RELTYPE=PARENT:rodzic"_s, u"SUMMARY:Zażółć"_s} << QStringList{};
+    QTest::newRow("parent changed") << u"SUMMARY:A\r\nRELATED-TO;RELTYPE=PARENT:stary\r\n"_s << u"nowy"_s
+                                    << QStringList{u"RELTYPE=PARENT:nowy"_s} << QStringList{u"stary"_s};
+    QTest::newRow("no RELTYPE is the parent") << u"SUMMARY:A\r\nRELATED-TO:stary\r\n"_s << u"nowy"_s
+                                              << QStringList{u"RELTYPE=PARENT:nowy"_s} << QStringList{u"RELATED-TO:stary"_s};
+    QTest::newRow("out to the top level") << u"SUMMARY:A\r\nRELATED-TO;RELTYPE=PARENT:stary\r\n"_s << QString()
+                                          << QStringList{u"SUMMARY:A"_s} << QStringList{u"RELATED-TO"_s};
+    QTest::newRow("other relations stay")
+            << u"SUMMARY:A\r\nRELATED-TO;RELTYPE=CHILD:dziecko\r\nRELATED-TO;RELTYPE=PARENT:stary\r\n"
+               u"RELATED-TO;RELTYPE=SIBLING:brat\r\n"_s
+            << u"nowy"_s
+            << QStringList{u"RELTYPE=CHILD:dziecko"_s, u"RELTYPE=SIBLING:brat"_s, u"RELTYPE=PARENT:nowy"_s}
+            << QStringList{u"stary"_s};
+    QTest::newRow("an escaped uid") << u"SUMMARY:A\r\n"_s << u"a,b;c"_s << QStringList{u"RELTYPE=PARENT:a\\,b\\;c"_s}
+                                    << QStringList{};
+}
+
+void TestCalDavTaskMap::patchRelatedTo()
+{
+    QFETCH(QString, lines);
+    QFETCH(QString, parent);
+    QFETCH(QStringList, has);
+    QFETCH(QStringList, hasNot);
+    const QByteArray ics = ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:x\r\n" + lines.toUtf8()
+                            + "END:VTODO\r\nEND:VCALENDAR\r\n");
+    TodoContext ctx;
+    ctx.now = QDateTime(QDate(2026, 11, 20), QTime(10, 0), Warsaw);
+    ctx.zone = Warsaw;
+    TaskFields f = todoFields(ics);
+    f.parentUid = parent;
+    const QString out = QString::fromUtf8(patchTodo(ics, f, FieldParent, ctx));
+    QVERIFY(!out.isEmpty());
+    for (const QString &h : has)
+        QVERIFY2(out.contains(h), qPrintable(h + u" in "_s + out));
+    for (const QString &h : hasNot)
+        QVERIFY2(!out.contains(h), qPrintable(h + u" in "_s + out));
+    // Read back, the parent is the one set (an escaped UID unescaped).
+    QCOMPARE(todoFields(out.toUtf8()).parentUid, parent);
+    QCOMPARE(changedFields(todoFields(ics), f), unsigned(parent == todoFields(ics).parentUid ? 0 : FieldParent));
 }
 
 void TestCalDavTaskMap::uids()
