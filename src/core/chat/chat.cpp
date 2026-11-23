@@ -23,6 +23,23 @@ constexpr QStringView kTimeFormat = u"yyyy-MM-dd HH:mm";
 
 QStringView markerOf(Role role) { return role == Role::User ? kUser : kAssistant; }
 
+/// The page a frontmatter's link value names: `[[AI/x|y]]` → "AI/x" (an alias, a heading or a
+/// block part left out; a value that is no link as written).
+QString linkTarget(const QString &value)
+{
+    QString target = value.trimmed();
+    if (target.startsWith(u"[["_s) && target.endsWith(u"]]"_s))
+        target = target.mid(2, target.size() - 4);
+    for (const QChar cut : {u'|', u'#', u'^'}) {
+        if (const qsizetype at = target.indexOf(cut); at >= 0)
+            target.truncate(at);
+    }
+    target = target.trimmed();
+    if (target.endsWith(u".md"_s, Qt::CaseInsensitive))
+        target.chop(3);
+    return target;
+}
+
 /// The page's lines without their line breaks ("\r\n" or "\n").
 QList<QStringView> splitLines(QStringView content)
 {
@@ -515,6 +532,47 @@ QString flowList(QList<int> numbers)
     return u'[' + items.join(u", "_s) + u']';
 }
 
+/// The keys of a frontmatter's mark, Polish first.
+std::pair<QStringView, QStringView> markKeys(Mark mark)
+{
+    return mark == Mark::Pinned ? std::pair<QStringView, QStringView>{u"przypięta", u"pinned"}
+                                : std::pair<QStringView, QStringView>{u"zarchiwizowana", u"archived"};
+}
+
+/// The value after `line`'s key when the key is one of `mark`'s (at the line's start, any letter
+/// case; spaces before the colon allowed); nullopt when it is no line of the mark.
+std::optional<QStringView> markValue(QStringView line, Mark mark)
+{
+    const qsizetype colon = line.indexOf(u':');
+    if (colon <= 0)
+        return std::nullopt;
+    const QStringView key = line.left(colon);
+    if (key.front().isSpace())
+        return std::nullopt;
+    const auto [pl, en] = markKeys(mark);
+    const QStringView bare = key.trimmed();
+    if (bare.compare(pl, Qt::CaseInsensitive) != 0 && bare.compare(en, Qt::CaseInsensitive) != 0)
+        return std::nullopt;
+    return line.mid(colon + 1).trimmed();
+}
+
+/// Whether a frontmatter line of `mark` says it is on (true / yes / tak / 1 / on, quoted or not);
+/// nullopt when the line is none of the mark's.
+std::optional<bool> markOn(QStringView line, Mark mark)
+{
+    const std::optional<QStringView> value = markValue(line, mark);
+    if (!value)
+        return std::nullopt;
+    QStringView v = *value;
+    if (v.size() >= 2 && (v.front() == u'"' || v.front() == u'\'') && v.back() == v.front())
+        v = v.mid(1, v.size() - 2).trimmed();
+    for (const QStringView yes : {u"true", u"yes", u"tak", u"1", u"on"}) {
+        if (v.compare(yes, Qt::CaseInsensitive) == 0)
+            return true;
+    }
+    return false;
+}
+
 } // namespace
 
 QString folder() { return u"AI"_s; }
@@ -531,22 +589,42 @@ Conversation parse(QStringView content)
     const QList<QStringView> lines = splitLines(content);
     qsizetype i = 0;
     // The frontmatter is no message, whatever its lines look like; its `partner:` says who
-    // answers.
+    // answers, its marks where the list shows it.
     if (!lines.isEmpty() && lines.first().trimmed() == u"---") {
         static const QRegularExpression partner(u"^partner:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression fork(u"^fork:[ \\t]*[\"']?\\[\\[([^\\[\\]|#]+)(?:[|#][^\\[\\]]*)?\\]\\][\"']?[ \\t]*$"_s,
+                                             QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression parent(u"^parent:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
+        const auto unquoted = [](QString value) {
+            value = value.trimmed();
+            if (value.size() >= 2 && (value.front() == u'"' || value.front() == u'\'') && value.back() == value.front())
+                value = value.mid(1, value.size() - 2).trimmed();
+            return value;
+        };
         QString named;
+        QString from;
+        QString forkedFrom;
+        bool pinned = false, archived = false;
         for (qsizetype j = 1; j < lines.size(); ++j) {
             if (lines.at(j).trimmed() == u"---" || lines.at(j).trimmed() == u"...") {
                 i = j + 1;
                 conversation.partner = named;
+                conversation.parent = from;
+                conversation.fork = forkedFrom;
+                conversation.pinned = pinned;
+                conversation.archived = archived;
                 break;
             }
-            if (const auto m = partner.matchView(lines.at(j)); m.hasMatch()) {
-                named = m.captured(1).trimmed();
-                if (named.size() >= 2 && (named.front() == u'"' || named.front() == u'\'')
-                    && named.back() == named.front())
-                    named = named.mid(1, named.size() - 2).trimmed();
-            }
+            if (const auto m = fork.matchView(lines.at(j)); m.hasMatch())
+                forkedFrom = m.captured(1).trimmed();
+            if (const std::optional<bool> on = markOn(lines.at(j), Mark::Pinned))
+                pinned = *on;
+            if (const std::optional<bool> on = markOn(lines.at(j), Mark::Archived))
+                archived = *on;
+            if (const auto m = partner.matchView(lines.at(j)); m.hasMatch())
+                named = unquoted(m.captured(1));
+            if (const auto m = parent.matchView(lines.at(j)); m.hasMatch())
+                from = linkTarget(unquoted(m.captured(1)));
         }
     }
     struct Open {
@@ -687,7 +765,7 @@ QString appendMessage(const QString &content, Role role, QStringView markdown, c
 }
 
 QString newConversation(QStringView question, QStringView page, QStringView language, const QDateTime &time,
-                        QStringView partner)
+                        QStringView partner, QStringView parent)
 {
     QString text = question.trimmed().toString();
     if (!page.trimmed().isEmpty()) {
@@ -703,7 +781,13 @@ QString newConversation(QStringView question, QStringView page, QStringView lang
     }
     const QString property = language == u"pl" ? u"zadania: ignoruj"_s : u"tasks: ignore"_s;
     const QString who = partner.trimmed().isEmpty() ? QString() : u"partner: "_s + partner.trimmed() + u'\n';
-    return u"---\n"_s + property + u'\n' + who + u"---\n"_s
+    // (A link, so a rename of the parent rewrites it; quoted: YAML reads "[[" as a list.)
+    QString from = parent.trimmed().toString();
+    if (from.endsWith(u".md"_s, Qt::CaseInsensitive))
+        from.chop(3);
+    from.remove(u'"');
+    const QString origin = from.isEmpty() ? QString() : u"parent: \"[["_s + from + u"]]\"\n"_s;
+    return u"---\n"_s + property + u'\n' + who + origin + u"---\n"_s
            + formatMessage(Role::User, text, u"\n", time, language == u"pl" ? u"pl" : u"en");
 }
 
@@ -825,6 +909,61 @@ QString setFlag(const QString &content, int number, Flag flag, QStringView langu
     for (const Edit &e : std::as_const(edits))
         out.replace(e.start, e.end - e.start, e.text);
     return out;
+}
+
+QString setMark(const QString &content, Mark mark, bool on, QStringView language)
+{
+    const QString newline = content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+    QString lang = languageOf(content);
+    if (lang.isEmpty())
+        lang = language == u"pl" ? u"pl"_s : u"en"_s;
+    const auto [pl, en] = markKeys(mark);
+    const QString wanted = lang == u"pl" ? pl.toString() + u": tak"_s : en.toString() + u": true"_s;
+    // The frontmatter's lines, with their line breaks (as they are).
+    const auto lineEnd = [&](qsizetype from) {
+        const qsizetype end = content.indexOf(u'\n', from);
+        return end < 0 ? content.size() : end + 1;
+    };
+    const auto bare = [&](qsizetype from, qsizetype to) {
+        QStringView line = QStringView(content).mid(from, to - from);
+        while (line.endsWith(u'\n') || line.endsWith(u'\r'))
+            line.chop(1);
+        return line;
+    };
+    if (bare(0, lineEnd(0)).trimmed() == u"---") {
+        QString out = content.left(lineEnd(0));
+        // (A line added ends as the frontmatter's first one.)
+        const QString ending = out.endsWith(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+        bool placed = false;
+        qsizetype at = lineEnd(0);
+        while (at < content.size()) {
+            const qsizetype end = lineEnd(at);
+            const QStringView line = bare(at, end);
+            if (line.trimmed() == u"---" || line.trimmed() == u"...") {
+                // Not there yet: before the frontmatter's end.
+                if (on && !placed)
+                    out += wanted + ending;
+                out += QStringView(content).mid(at);
+                return out;
+            }
+            if (const std::optional<bool> was = markOn(line, mark)) {
+                // The first line of the mark says it (kept as it is when it does already), the
+                // others go.
+                if (on && !placed) {
+                    out += *was ? line.toString() : wanted;
+                    out += QStringView(content).mid(at + line.size(), end - at - line.size());
+                    placed = true;
+                }
+            } else {
+                out += QStringView(content).mid(at, end - at);
+            }
+            at = end;
+        }
+        // (A frontmatter that never closes is no frontmatter: one is made before it.)
+    }
+    if (!on)
+        return content;
+    return u"---"_s + newline + wanted + newline + u"---"_s + newline + content;
 }
 
 QStringList picturesIn(QStringView markdown)
@@ -998,6 +1137,154 @@ QString preview(QStringView markdown, int max)
     if (out.size() > max)
         out = cutAt(out, std::max(1, max - 1)).trimmed() + u'…';
     return out;
+}
+
+// ---- rewinding and forking ------------------------------------------------------------------------
+
+namespace {
+
+/// Where line `line` (0-based) of `content` starts; content.size() past its last line.
+qsizetype lineStart(QStringView content, int line)
+{
+    qsizetype at = 0;
+    for (int i = 0; i < line; ++i) {
+        const qsizetype end = content.indexOf(u'\n', at);
+        if (end < 0)
+            return content.size();
+        at = end + 1;
+    }
+    return at;
+}
+
+} // namespace
+
+namespace {
+
+/// `content` without the reported and hidden marks of the messages after its first `count` (a page
+/// cut or forked: a later message of the same number is no answer the user reported).
+QString withoutFlagsAfter(QString content, int count)
+{
+    QList<int> beyond;
+    for (const FlagEntry &e : flagEntries(content, frontmatterOf(content))) {
+        for (const int n : e.numbers) {
+            if (n > count && !beyond.contains(n))
+                beyond.append(n);
+        }
+    }
+    for (const int n : std::as_const(beyond))
+        content = setFlag(content, n, Flag::None);
+    return content;
+}
+
+} // namespace
+
+QString truncated(const QString &content, int from)
+{
+    const Conversation conversation = parse(content);
+    if (from < 0 || from >= conversation.messages.size())
+        return content;
+    return withoutFlagsAfter(content.left(lineStart(content, conversation.messages.at(from).line)), from);
+}
+
+QString setFrontmatterValue(const QString &content, QStringView key, QStringView value)
+{
+    const QString name = key.trimmed().toString();
+    const QString text = value.trimmed().toString();
+    if (name.isEmpty())
+        return content;
+    const QString newline = content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+    const auto lineEnd = [&](qsizetype from) {
+        const qsizetype end = content.indexOf(u'\n', from);
+        return end < 0 ? content.size() : end + 1;
+    };
+    const auto bare = [&](qsizetype from, qsizetype to) {
+        QStringView line = QStringView(content).mid(from, to - from);
+        while (line.endsWith(u'\n') || line.endsWith(u'\r'))
+            line.chop(1);
+        return line;
+    };
+    const QString entry = name + u": "_s + text;
+    if (bare(0, lineEnd(0)).trimmed() == u"---") {
+        const QRegularExpression own(u"^"_s + QRegularExpression::escape(name) + u"[ \\t]*:"_s,
+                                     QRegularExpression::CaseInsensitiveOption);
+        qsizetype at = lineEnd(0);
+        while (at < content.size()) {
+            const qsizetype end = lineEnd(at);
+            const QStringView line = bare(at, end);
+            if (line.trimmed() == u"---" || line.trimmed() == u"...")
+                return text.isEmpty() ? content : content.left(at) + entry + newline + content.mid(at);
+            if (own.matchView(line).hasMatch()) {
+                if (text.isEmpty())
+                    return content.left(at) + content.mid(end);
+                return content.left(at) + entry + content.mid(at + line.size(), end - at - line.size())
+                       + content.mid(end);
+            }
+            at = end;
+        }
+    }
+    if (text.isEmpty())
+        return content;
+    return u"---"_s + newline + entry + newline + u"---"_s + newline + content;
+}
+
+QString forkLink(QStringView source)
+{
+    QString title = source.trimmed().toString();
+    if (title.endsWith(u".md"_s, Qt::CaseInsensitive))
+        title.chop(3);
+    return u"\"[["_s + title + u"]]\""_s;
+}
+
+QString forked(const QString &content, int upTo, QStringView source)
+{
+    const Conversation conversation = parse(content);
+    if (upTo < 0 || upTo >= conversation.messages.size())
+        return {};
+    QString out = content.left(lineStart(content, conversation.messages.at(upTo).endLine + 1));
+    if (!out.isEmpty() && !out.endsWith(u'\n'))
+        out += content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+    // (A fork is the user's own: no sub-conversation of the source's parent, neither pinned nor
+    // archived as the source may be.)
+    out = setFrontmatterValue(out, u"parent", {});
+    out = setMark(out, Mark::Pinned, false, u"pl");
+    out = setMark(out, Mark::Archived, false, u"pl");
+    out = withoutFlagsAfter(out, upTo + 1);
+    return source.trimmed().isEmpty() ? out : setFrontmatterValue(out, u"fork", forkLink(source));
+}
+
+QStringList prompts(const Conversation &conversation)
+{
+    QStringList out;
+    static const QRegularExpression about(u"[ \\t]*\\(\\[\\[[^\\[\\]]+\\]\\]\\)[ \\t]*$"_s);
+    for (qsizetype i = conversation.messages.size() - 1; i >= 0; --i) {
+        const Message &m = conversation.messages.at(i);
+        if (m.role != Role::User)
+            continue;
+        QString text = withoutPictures(m.text);
+        if (i == 0 || std::none_of(conversation.messages.cbegin(), conversation.messages.cbegin() + i,
+                                   [](const Message &before) { return before.role == Role::User; })) {
+            // (The first question's link to the page it is about went along by itself.)
+            const qsizetype end = text.indexOf(u'\n');
+            QString first = text.left(end < 0 ? text.size() : end);
+            first.remove(about);
+            text = end < 0 ? first : first + text.mid(end);
+        }
+        text = text.trimmed();
+        if (!text.isEmpty() && !out.contains(text))
+            out.append(text);
+    }
+    return out;
+}
+
+QString quoted(QStringView markdown)
+{
+    const QString text = withoutPictures(markdown).trimmed();
+    if (text.isEmpty())
+        return {};
+    QStringList lines;
+    for (const QStringView line : splitLines(text))
+        lines.append(line.trimmed().isEmpty() ? u">"_s : u"> "_s + line.toString());
+    return lines.join(u'\n') + u"\n\n"_s;
 }
 
 } // namespace brulion::chat

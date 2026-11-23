@@ -18,7 +18,11 @@
 //   the running app live (docs/CLI.md "Live changes"), reaching it with a grant the app makes for
 //   the agent's process (setAppGrants(): RemoteControl in the desktop app) — its token only in the
 //   tools' environment (BRULION_APP_TOKEN, with BRULION_APP_CLIENT the agent's name), revoked when
-//   the process stops.
+//   the process stops. Every session with Brulion's tools also gets `--app-chat` and a grant of
+//   the app's chat alone for its conversation (setChatGrants(): BRULION_APP_CHAT_TOKEN): the agent
+//   may give another partner of the chat a task — a sub-conversation of its own, whose answer it
+//   waits for (ChatControl, docs/UI.md "Agents delegate"). A sub-conversation's agent gets no tools
+//   that change the app, and one MaxDepth levels down no chat tools (setLineage()).
 // * The notebook's files (`fs/read_text_file`, `fs/write_text_file`): through the Workspace, so a
 //   page the agent changes is seen at once by the editor and kept in its history — only files of
 //   the notebook's folder, never an encrypted page.
@@ -156,7 +160,7 @@ public:
     /// the conversation's page, the page it is about, whether Brulion's tools are there and (`app`)
     /// whether they may change the running app.
     static QString context(const QString &root, const QString &conversation, const QString &page, bool tools,
-                           bool app = false);
+                           bool app = false, bool chat = false);
     /// The conversation so far as one text for a new session ("" when there is none before the
     /// newest message): `history` as WorkspaceChats builds it ({role, content}).
     static QString transcript(const QVariantList &history);
@@ -174,6 +178,16 @@ public:
     using GrantFunction = std::function<QString(const QString &client)>;
     using RevokeFunction = std::function<void(const QString &token)>;
     void setAppGrants(GrantFunction grant, RevokeFunction revoke);
+    /// Grants of the running app's chat alone (RemoteControl::chatGrant: hello and the chat's
+    /// methods), one per conversation of an agent with Brulion's tools — so its tools may hand
+    /// another partner a task as a sub-conversation of that conversation. Unset: no chat tools.
+    void setChatGrants(GrantFunction grant, RevokeFunction revoke);
+    /// The conversation whose chat grant `token` is ("" none: no such grant, or a full one).
+    QString grantConversation(const QString &token) const;
+    /// How deep a conversation is among sub-conversations (ChatLineage::depth) and whether it is
+    /// one: a sub-conversation's agent gets no live tools, and one at ChatLineage::MaxDepth no chat
+    /// grant. Unset: every conversation is the user's own.
+    void setLineage(std::function<int(const QString &path)> depth, std::function<bool(const QString &path)> isChild);
 
     void setAgents(const QList<AgentConfig> &agents);
     QList<AgentConfig> agents() const { return m_agents; }
@@ -181,6 +195,8 @@ public:
     QVariantList partners() const;
     /// An agent's name ("" for no agent set up here).
     QString label(const QString &partner) const;
+    /// What the program of agent `id` said it is in its initialize (its name; "" not started).
+    QString programName(const QString &id) const;
 
     /// Runs the turn of the conversation `path` with the agent `partner`: `history` its messages
     /// ({role, content, images}, the user's last; images named as in notes), `page` the name of the
@@ -227,6 +243,39 @@ public:
     QVariantMap questionDiff(const QString &path) const;
     /// Answers it with `option` (one of questionOptions()).
     void answer(const QString &path, const QString &option);
+    /// The plan the question asks the user to approve (Claude Code leaving its plan mode),
+    /// Markdown; "" none.
+    QString questionPlan(const QString &path) const;
+
+    /// How the agent's questions in the conversation `path` are answered ("Approvals", as T3
+    /// Code's permission modes): "ask" — each one is shown —, "edits" — changes of files (edit,
+    /// move) and reads are allowed by themselves —, "all" — everything is, but a plan to approve
+    /// and a sign-in. Kept per conversation in the notebook's device state ("chat/approvals"),
+    /// never in its page (a page that syncs from elsewhere must not allow anything); a
+    /// conversation never set has the mode chosen last ("" path: that one).
+    QString approvals(const QString &path) const;
+    /// Sets it for `path` (and as the mode of the next new conversations); "" `path`: only that.
+    void setApprovals(const QString &path, const QString &mode);
+    /// The option an agent's question is answered with by itself under `mode` ("" none: it is
+    /// asked): the first allow_once option, else allow_always.
+    static QString autoAnswer(const QString &mode, const acp::Permission &permission);
+
+    /// The files of the notebook the last turn of `path` changed (as T3 Code's turn diffs), each
+    /// {path, oldText, newText, existed, exists, known}: `known` false when the text before is not
+    /// (the change came before the app saw the call): no undo for it. Followed through the
+    /// agent's tool calls that name files (edit, move, delete) and its fs/write_text_file; kept
+    /// until its next turn starts (in memory). [] none — or the agent is on another computer.
+    QVariantList changes(const QString &path) const;
+    /// Puts each of them back as it was before the turn (a file it made goes to the trash), unless
+    /// it changed since: {undone (how many), skipped (their paths)}.
+    QVariantMap undoChanges(const QString &path);
+    /// Forgets them (the card is closed).
+    void forgetChanges(const QString &path);
+    /// A file's text before a tool call from a snapshot of it: a snapshot taken after the agent
+    /// changed the file already (it holds the diff's new text once, not its old one) is turned
+    /// back with the diff; `known` false when that cannot be told. Pure.
+    static QString textBefore(const QString &snapshot, const std::optional<acp::Diff> &diff, bool done,
+                              bool *known = nullptr);
 
     /// What the running turn of `path` does: its tool calls {title, status, kind, output, diffPath,
     /// diffOld, diffNew} (a terminal's output as it comes; the change of a file it made) and its
@@ -277,6 +326,13 @@ Q_SIGNALS:
     void activityChanged(const QString &path);
     /// options(), commands() or usage() changed (of `path`, or of an agent's: "").
     void sessionChanged(const QString &path);
+    /// changes() of `path` changed (its turn ended, they were undone or forgotten).
+    void changesChanged(const QString &path);
+    /// approvals() changed.
+    void approvalsChanged();
+    /// An agent's question was answered by itself under the conversation's approvals: what, for
+    /// the user to see.
+    void autoAnswered(const QString &path, const QString &text);
     /// The options of agent `id` were chosen or learnt: AppSettings keeps them.
     void remembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     void checked(const QString &id, bool ok, const QString &text);
@@ -300,6 +356,7 @@ private:
         QStringList ids; ///< the agent's option ids (a permission), the methods' (a sign-in)
         bool signIn = false;
         acp::Diff diff;  ///< the change of a file it would make (path "": none)
+        QString plan{};  ///< a plan to approve (Markdown), "" none
         /// A question of a turn recovered from another computer: the computer's id of it (it is
         /// answered there: acp::answerRemoteQuestion()).
         QString remote{};
@@ -321,13 +378,38 @@ private:
     void finish(const QString &path);
     const AgentConfig *config(const QString &id) const;
     /// What every turn of the agent's process `p` sends: the folder, Brulion's tools (with its
-    /// grant's live tools), the options.
-    acp::TurnInput baseInput(const AgentConfig &config, const Process *p) const;
-    /// The grant of `p`'s process ends (it stopped).
+    /// grant's live tools unless `child`, and with `chatToken` the chat's), the options.
+    acp::TurnInput baseInput(const AgentConfig &config, const Process *p, const QString &chatToken = QString(),
+                             bool child = false) const;
+    /// The grants of `p`'s process end (it stopped): its own and its conversations' chat grants.
     void releaseGrant(Process *p);
+    /// The chat grant of the conversation `path` answered by `config`'s process (made when first
+    /// asked); "" none (no grant provider, no tools, too deep).
+    QString chatGrantFor(const AgentConfig &config, const QString &path);
     void handle(Process *p, const QString &key, const QJsonValue &id, const QString &method, const QJsonObject &params);
     void readFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params);
-    void writeFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params);
+    void writeFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params);
+
+    // The files a running turn changes (m_tracking, by conversation) and those its last one
+    // changed (m_changes).
+    struct FileChange {
+        QString path;   ///< the notebook's
+        QString before; ///< its text before the turn
+        bool existed = false;
+        bool known = true;
+        QString after{};
+        bool exists = false;
+    };
+    QHash<QString, QList<FileChange>> m_tracking;
+    QHash<QString, QList<FileChange>> m_changes;
+    /// Keeps the text of `file` (the notebook's) before the turn of `path` changes it, unless kept
+    /// already; `diff` and `done`: the call that names it (textBefore()).
+    void snapshot(const QString &path, const QString &file, const std::optional<acp::Diff> &diff = std::nullopt,
+                  bool done = false);
+    /// The turn's tool calls so far: their files kept before they change.
+    void followTools(acp::Client *client, const QString &path);
+    /// The turn of `path` ended: what it changed, as it is now.
+    void settleChanges(const QString &path);
     void terminalRequest(Process *p, const QString &key, const QJsonValue &id, const QString &method,
                          const QJsonObject &params);
     void endTerminals(const QString &agent, const QString &key = QString());
@@ -391,6 +473,17 @@ private:
     std::unique_ptr<sync::HttpTransport> m_ownTransport;
     GrantFunction m_grant;
     RevokeFunction m_revoke;
+    GrantFunction m_chatGrant;
+    RevokeFunction m_chatRevoke;
+    std::function<int(const QString &)> m_depth;
+    std::function<bool(const QString &)> m_isChild;
+    /// The chat grants: token → the agent whose process has it and its conversation (a rename
+    /// follows it).
+    struct ChatGrant {
+        QString agent;
+        QString conversation;
+    };
+    QHash<QString, ChatGrant> m_chatGrants;
 };
 
 } // namespace brulion::shell

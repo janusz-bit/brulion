@@ -6,9 +6,12 @@
 // closed), the first lines of a new page, its name, the journal's line, the history b.ai gets and
 // the previews of the list; the time of each message (its `czas::` / `time::` line, old pages
 // without one), pictures sent with a message (embeds, the newest of them as the model's images),
-// who answers (the frontmatter's `partner:`), a conversation too long for the model cut by whole
-// turns, and the answers the user reported or hid (the frontmatter's `zgłoszone:` / `ukryte:`
-// lists of message numbers: read in their forms, set, taken away, the rest byte for byte).
+// who answers (the frontmatter's `partner:`), the conversation a sub-conversation was started from
+// (`parent:`), the list's marks (pinned, archived: read in either language, set and taken out byte
+// for byte), a conversation too long for the model cut by whole turns, going back and forking
+// (a page cut before a message, a copy up to one), the questions brought back, quotes, and the
+// answers the user reported or hid (the frontmatter's `zgłoszone:` / `ukryte:` lists of message
+// numbers: read in their forms, set, taken away, the rest byte for byte).
 #include "chat/chat.h"
 
 #include <QTest>
@@ -548,6 +551,118 @@ private Q_SLOTS:
                  u"---\nzadania: ignoruj\npartner: pirat\n---\n- 🧑 Ahoj\n"_s);
     }
 
+    void parentOfAPage()
+    {
+        // A sub-conversation: the link to the one it was started from, quoted for YAML.
+        const QString child = newConversation(u"Sprawdź plan"_s, u"Dom"_s, u"en"_s, QDateTime(), u"acp:codex"_s,
+                                              u"AI/2026-11-22 Plan wyjazdu.md"_s);
+        QCOMPARE(child, u"---\ntasks: ignore\npartner: acp:codex\nparent: \"[[AI/2026-11-22 Plan wyjazdu]]\"\n---\n"
+                        "- 🧑 Sprawdź plan ([[Dom]])\n"_s);
+        const Conversation c = parse(child);
+        QCOMPARE(c.parent, u"AI/2026-11-22 Plan wyjazdu"_s);
+        QCOMPARE(c.partner, u"acp:codex"_s);
+        QCOMPARE(c.page, u"Dom"_s);
+        // As others write it: unquoted, an alias, a heading, any letter case of the key; none.
+        QCOMPARE(parse(u"---\nParent: [[AI/Rozmowa|tamta]]\n---\n- 🧑 Ą\n"_s).parent, u"AI/Rozmowa"_s);
+        QCOMPARE(parse(u"---\nparent: '[[AI/Żółw#Koniec]]'\n---\n- 🧑 Ą\n"_s).parent, u"AI/Żółw"_s);
+        QCOMPARE(parse(u"---\r\nparent: \"[[AI/a.md]]\"\r\n---\r\n- 🧑 Ą\r\n"_s).parent, u"AI/a"_s);
+        QCOMPARE(parse(u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s).parent, QString());
+        QCOMPARE(parse(u"- 🧑 Ą\n  parent:: [[AI/x]]\n"_s).parent, QString()); // (no frontmatter's)
+        QCOMPARE(parse(u"---\nparent: \"[[]]\"\n---\n- 🧑 Ą\n"_s).parent, QString());
+        // Its partner set later keeps the link.
+        QCOMPARE(parse(setPartner(child, u"acp:claude"_s)).parent, u"AI/2026-11-22 Plan wyjazdu"_s);
+        // No parent: nothing written for it; a quote in a name cannot break the YAML.
+        QVERIFY(!newConversation(u"Ahoj"_s, QString(), u"pl"_s).contains(u"parent"_s));
+        QCOMPARE(parse(newConversation(u"Ahoj"_s, QString(), u"pl"_s, QDateTime(), QString(), u"AI/a\"b"_s)).parent,
+                 u"AI/ab"_s);
+    }
+
+    void marks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("mark"); // 0 pinned, 1 archived
+        QTest::addColumn<bool>("on");
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("expected");
+
+        QTest::newRow("pinned in Polish") << u"---\nzadania: ignoruj\n---\n- 🧑 Żółw\n"_s << 0 << true << u"en"_s
+                                          << u"---\nzadania: ignoruj\nprzypięta: tak\n---\n- 🧑 Żółw\n"_s;
+        QTest::newRow("archived in English")
+                << u"---\ntasks: ignore\npartner: acp:claude\n---\n- 🧑 Ą\n"_s << 1 << true << u"pl"_s
+                << u"---\ntasks: ignore\npartner: acp:claude\narchived: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("by its times' key") << u"---\n---\n- 🧑 Ą\n  time:: 2026-11-15 09:12\n"_s << 0 << true << u"pl"_s
+                                           << u"---\npinned: true\n---\n- 🧑 Ą\n  time:: 2026-11-15 09:12\n"_s;
+        QTest::newRow("no frontmatter: the notebook's language")
+                << u"- 🧑 Ą\n"_s << 1 << true << u"pl"_s << u"---\nzarchiwizowana: tak\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("said already") << u"---\nPinned:  \"yes\"\n---\n- 🧑 Ą\n"_s << 0 << true << u"pl"_s
+                                      << u"---\nPinned:  \"yes\"\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("false replaced in place")
+                << u"---\nzarchiwizowana: nie\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << 1 << true << u"en"_s
+                << u"---\nzarchiwizowana: tak\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("taken out, both languages")
+                << u"---\nprzypięta: tak\nzadania: ignoruj\npinned: true\n---\n- 🧑 Ą\n"_s << 0 << false << u"pl"_s
+                << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("a second one goes") << u"---\narchived: true\nzarchiwizowana: tak\n---\n- 🧑 Ą\n"_s << 1 << true
+                                           << u"pl"_s << u"---\narchived: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("taken out, none there") << u"- 🧑 Ą\n"_s << 0 << false << u"pl"_s << u"- 🧑 Ą\n"_s;
+        QTest::newRow("the other mark stays") << u"---\nprzypięta: tak\n---\n- 🧑 Ą\n"_s << 1 << false << u"pl"_s
+                                              << u"---\nprzypięta: tak\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("CRLF") << u"---\r\nzadania: ignoruj\r\n---\r\n- 🧑 Ą\r\n- 🤖 Ę\r\n"_s << 0 << true << u"pl"_s
+                              << u"---\r\nzadania: ignoruj\r\nprzypięta: tak\r\n---\r\n- 🧑 Ą\r\n- 🤖 Ę\r\n"_s;
+        QTest::newRow("CRLF, taken out") << u"---\r\npinned: on\r\n---\r\n- 🧑 Ą"_s << 0 << false << u"pl"_s
+                                         << u"---\r\n---\r\n- 🧑 Ą"_s;
+        QTest::newRow("a key that only begins so") << u"---\npinnedAt: 1\n---\n- 🧑 Ą\n"_s << 0 << true << u"en"_s
+                                                   << u"---\npinnedAt: 1\npinned: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("an indented one is no mark")
+                << u"---\nlista:\n  pinned: true\n---\n- 🧑 Ą\n"_s << 0 << true << u"en"_s
+                << u"---\nlista:\n  pinned: true\npinned: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("an unclosed frontmatter")
+                << u"---\n- 🧑 Ą\n"_s << 1 << true << u"en"_s << u"---\narchived: true\n---\n---\n- 🧑 Ą\n"_s;
+    }
+    void marks()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, mark);
+        QFETCH(bool, on);
+        QFETCH(QString, language);
+        QFETCH(QString, expected);
+        const Mark which = mark == 0 ? Mark::Pinned : Mark::Archived;
+        const QString changed = setMark(content, which, on, language);
+        QCOMPARE(changed, expected);
+        const Conversation c = parse(changed);
+        QCOMPARE(which == Mark::Pinned ? c.pinned : c.archived, on);
+        QCOMPARE(setMark(changed, which, on, language), changed); // (again: nothing more)
+        QCOMPARE(c.messages.size(), parse(content).messages.size());
+    }
+
+    void marksOfAPage_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<bool>("pinned");
+        QTest::addColumn<bool>("archived");
+
+        QTest::newRow("none") << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("Polish") << u"---\nprzypięta: tak\nzarchiwizowana: TAK\n---\n- 🧑 Ą\n"_s << true << true;
+        QTest::newRow("English") << u"---\npinned: yes\narchived: 1\n---\n- 🧑 Ą\n"_s << true << true;
+        QTest::newRow("capitals in the key") << u"---\nPRZYPIĘTA: tak\n---\n- 🧑 Ą\n"_s << true << false;
+        QTest::newRow("quoted") << u"---\narchived: 'true'\n---\n- 🧑 Ą\n"_s << false << true;
+        QTest::newRow("said no") << u"---\npinned: false\nzarchiwizowana: nie\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("something else") << u"---\npinned: maybe\narchived:\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("the last one says") << u"---\npinned: true\npinned: false\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("in a message, not the frontmatter") << u"- 🧑 Ą\n  pinned: true\n"_s << false << false;
+        QTest::newRow("an unclosed frontmatter") << u"---\npinned: true\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("CRLF") << u"---\r\narchived: on\r\n---\r\n- 🧑 Ą\r\n"_s << false << true;
+    }
+    void marksOfAPage()
+    {
+        QFETCH(QString, content);
+        QFETCH(bool, pinned);
+        QFETCH(bool, archived);
+        const Conversation c = parse(content);
+        QCOMPARE(c.pinned, pinned);
+        QCOMPARE(c.archived, archived);
+    }
+
     void pictures_data()
     {
         QTest::addColumn<QString>("markdown");
@@ -690,6 +805,142 @@ private Q_SLOTS:
         QFETCH(int, max);
         QFETCH(QString, preview);
         QCOMPARE(chat::preview(markdown, max), preview);
+    }
+    // ---- rewinding, forking, prompts, quotes ----------------------------------------------------
+
+    void truncates_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("from");
+        QTest::addColumn<QString>("expected");
+        const QString page = u"---\nzadania: ignoruj\n---\n- 🧑 Co mam jutro? ([[Dom]])\n  czas:: 2026-11-15 09:12\n"
+                             "- 🤖 Trzy zadania:\n\n  - zapłacić czynsz\n- 🧑 A pojutrze?\n- 🤖 Nic.\n"_s;
+        QTest::newRow("from the second question") << page << 2
+                                                  << u"---\nzadania: ignoruj\n---\n- 🧑 Co mam jutro? ([[Dom]])\n  czas:: 2026-11-15 09:12\n"
+                                                     "- 🤖 Trzy zadania:\n\n  - zapłacić czynsz\n"_s;
+        QTest::newRow("from the first") << page << 0 << u"---\nzadania: ignoruj\n---\n"_s;
+        QTest::newRow("the last") << page << 3 << page.left(page.indexOf(u"- 🤖 Nic."_s));
+        QTest::newRow("no such message") << page << 4 << page;
+        QTest::newRow("negative") << page << -1 << page;
+        QTest::newRow("crlf kept") << u"- 🧑 Pytanie\r\n- 🤖 Odpowiedź\r\n- 🧑 Źle\r\n"_s << 2
+                                   << u"- 🧑 Pytanie\r\n- 🤖 Odpowiedź\r\n"_s;
+        QTest::newRow("no final break") << u"- 🧑 A\n- 🤖 B"_s << 1 << u"- 🧑 A\n"_s;
+        QTest::newRow("a fenced look-alike is no message")
+                << u"- 🧑 Kod?\n- 🤖 Proszę:\n  ```\n- 🧑 nie wiadomość\n  ```\n- 🧑 Dzięki\n"_s << 2
+                << u"- 🧑 Kod?\n- 🤖 Proszę:\n  ```\n- 🧑 nie wiadomość\n  ```\n"_s;
+        // The marks of the answers cut away go with them: a later answer of that number is new.
+        QTest::newRow("marks after the cut taken out")
+                << u"---\nzadania: ignoruj\nzgłoszone: [2, 4]\nukryte: [3]\n---\n- 🧑 Ą\n- 🤖 Ę\n- 🧑 Ó\n- 🤖 Ł\n"_s << 2
+                << u"---\nzadania: ignoruj\nzgłoszone: [2]\n---\n- 🧑 Ą\n- 🤖 Ę\n"_s;
+    }
+    void truncates()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, from);
+        QFETCH(QString, expected);
+        QCOMPARE(truncated(content, from), expected);
+    }
+
+    void forks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("upTo");
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<QString>("expected");
+        const QString page = u"---\nzadania: ignoruj\npartner: acp:claude\n---\n- 🧑 Plan podróży ([[Kraków]])\n"
+                             "  czas:: 2026-11-15 09:12\n- 🤖 Pociąg o 7:15.\n  czas:: 2026-11-15 09:13\n- 🧑 A autobus?\n"_s;
+        QTest::newRow("up to the answer")
+                << page << 1 << u"AI/2026-11-15 Plan podróży.md"_s
+                << u"---\nzadania: ignoruj\npartner: acp:claude\nfork: \"[[AI/2026-11-15 Plan podróży]]\"\n---\n"
+                   "- 🧑 Plan podróży ([[Kraków]])\n  czas:: 2026-11-15 09:12\n- 🤖 Pociąg o 7:15.\n  czas:: 2026-11-15 09:13\n"_s;
+        QTest::newRow("the whole") << page << 2 << u"AI/x"_s
+                                   << u"---\nzadania: ignoruj\npartner: acp:claude\nfork: \"[[AI/x]]\"\n---\n"
+                                      "- 🧑 Plan podróży ([[Kraków]])\n  czas:: 2026-11-15 09:12\n- 🤖 Pociąg o 7:15.\n"
+                                      "  czas:: 2026-11-15 09:13\n- 🧑 A autobus?\n"_s;
+        QTest::newRow("no frontmatter, crlf, no final break")
+                << u"- 🧑 Ąę\r\n- 🤖 Óź"_s << 1 << u"AI/b.md"_s
+                << u"---\r\nfork: \"[[AI/b]]\"\r\n---\r\n- 🧑 Ąę\r\n- 🤖 Óź\r\n"_s;
+        QTest::newRow("a fork of a fork: its link replaced")
+                << u"---\nfork: \"[[AI/a]]\"\n---\n- 🧑 X\n"_s << 0 << u"AI/b"_s
+                << u"---\nfork: \"[[AI/b]]\"\n---\n- 🧑 X\n"_s;
+        QTest::newRow("no such message") << page << 3 << u"AI/x"_s << QString();
+        QTest::newRow("a sub-conversation's parent left out")
+                << u"---\nparent: \"[[AI/rodzic]]\"\npartner: acp:codex\n---\n- 🧑 Zadanie\n"_s << 0 << u"AI/dziecko"_s
+                << u"---\npartner: acp:codex\nfork: \"[[AI/dziecko]]\"\n---\n- 🧑 Zadanie\n"_s;
+        QTest::newRow("pinned and archived left out")
+                << u"---\nprzypięta: tak\npinned: true\nzarchiwizowana: tak\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << 0
+                << u"AI/a"_s << u"---\nzadania: ignoruj\nfork: \"[[AI/a]]\"\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("marks of the answers left out taken out")
+                << u"---\nreported: [2, 4]\nhidden:\n  - 4\n---\n- 🧑 A\n- 🤖 B\n- 🧑 C\n- 🤖 D\n"_s << 1 << u"AI/a"_s
+                << u"---\nreported: [2]\nfork: \"[[AI/a]]\"\n---\n- 🧑 A\n- 🤖 B\n"_s;
+    }
+    void forks()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, upTo);
+        QFETCH(QString, source);
+        QFETCH(QString, expected);
+        const QString out = forked(content, upTo, source);
+        QCOMPARE(out, expected);
+        if (!expected.isEmpty()) {
+            QString title = source;
+            if (title.endsWith(u".md"_s))
+                title.chop(3);
+            QCOMPARE(parse(out).fork, title);
+            QCOMPARE(parse(out).messages.size(), upTo + 1);
+        }
+    }
+
+    void frontmatterValues_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QString>("value");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("added") << u"---\nzadania: ignoruj\n---\n- 🧑 A\n"_s << u"fork"_s << u"x"_s
+                               << u"---\nzadania: ignoruj\nfork: x\n---\n- 🧑 A\n"_s;
+        QTest::newRow("replaced, case") << u"---\nFork: y\n---\n"_s << u"fork"_s << u"x"_s << u"---\nfork: x\n---\n"_s;
+        QTest::newRow("removed") << u"---\nfork: y\nzadania: ignoruj\n---\n"_s << u"fork"_s << QString()
+                                 << u"---\nzadania: ignoruj\n---\n"_s;
+        QTest::newRow("removing what is not there") << u"- 🧑 A\n"_s << u"fork"_s << QString() << u"- 🧑 A\n"_s;
+        QTest::newRow("made") << u"- 🧑 A\n"_s << u"fork"_s << u"x"_s << u"---\nfork: x\n---\n- 🧑 A\n"_s;
+        QTest::newRow("a key that only starts alike stays") << u"---\nforkage: 1\n---\n"_s << u"fork"_s << u"2"_s
+                                                            << u"---\nforkage: 1\nfork: 2\n---\n"_s;
+        QTest::newRow("crlf") << u"---\r\na: b\r\n---\r\n"_s << u"c"_s << u"d"_s << u"---\r\na: b\r\nc: d\r\n---\r\n"_s;
+    }
+    void frontmatterValues()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, key);
+        QFETCH(QString, value);
+        QFETCH(QString, expected);
+        QCOMPARE(setFrontmatterValue(content, key, value), expected);
+    }
+
+    void promptsBack()
+    {
+        const Conversation c = parse(u"- 🧑 Co mam jutro? ([[Dom]])\n- 🤖 Nic.\n- 🧑 A pojutrze?\n  ![[foto.png]]\n"
+                                     "- 🤖 Też nic.\n- 🧑 A pojutrze?\n- 🧑 Zażółć\n  gęślą jaźń\n"_s);
+        QCOMPARE(prompts(c), (QStringList{u"Zażółć\ngęślą jaźń"_s, u"A pojutrze?"_s, u"Co mam jutro?"_s}));
+        QCOMPARE(prompts(parse(u"- 🧑 ![[x.png]]\n"_s)), QStringList());
+        QCOMPARE(prompts(parse(u"- 🤖 Cześć\n- 🧑 Pytanie ([[Strona]]) dalej\n"_s)),
+                 QStringList{u"Pytanie ([[Strona]]) dalej"_s});
+    }
+
+    void quotes_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("one line") << u"Pociąg o 7:15."_s << u"> Pociąg o 7:15.\n\n"_s;
+        QTest::newRow("lines, a blank one") << u"Pierwsza\n\n- druga"_s << u"> Pierwsza\n>\n> - druga\n\n"_s;
+        QTest::newRow("pictures out") << u"Zdjęcie:\n![[a.png]]"_s << u"> Zdjęcie:\n\n"_s;
+        QTest::newRow("only a picture") << u"![[a.png]]"_s << QString();
+    }
+    void quotes()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QString, expected);
+        QCOMPARE(quoted(markdown), expected);
     }
 };
 

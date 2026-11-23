@@ -6,7 +6,8 @@ import Brulion
 // ChatView — route "chat" (docs/UI.md "AI chat"): conversations with the AI, as in a messenger.
 // Each conversation is a page in AI/ (Workspace.chats, core chat/chat.h): the user's messages on
 // the right, the AI's on the left — rendered note text (ChatMessageModel: links open their pages),
-// their pictures, the time each was written and the day above a day's first —, under them the
+// their charts, diagrams and formulas drawn (ChatSegments: a tap opens one large), their pictures,
+// the time each was written and the day above a day's first —, under them the
 // answer as the model writes it (the conversation's ChatTurn: partial; above it what the model
 // thinks, collapsed — opened, all of it —; under it how fast it writes) and what the AI does now
 // ("Czytam „Dom”…", turn.status; in line for the model on the device: its place) with Stop, a
@@ -20,18 +21,26 @@ import Brulion
 //
 //   {view: "chat"}                          the conversations (a wide window: beside a new one)
 //   {view: "chat", path: "AI/….md"}         one conversation
+//   {view: "chat", path, line}              … at its message at the page's line (a search's match)
 //   {view: "chat", new: true, page, prompt} a new one about `page`; `prompt` is sent at once
+//   {view: "chat", new: true, fromLink, draft, partner, page, hidden, capped, pageMissing,
+//    partnerMissing}                        a prompt link's (brulion://chat): `draft` in the field,
+//                                           never sent; a note says what the link brought
 //
 // Wide windows (≥ 720 px, not in the side panel) show the list beside the conversation; narrow
 // ones one of them (the list → a conversation is a step of the history, Back returns). The first
 // message of a new conversation replaces the route with the conversation's (in the side panel:
-// pins it there again). The list's rows have a menu (right-click, a long press): Rename…, Delete
-// (to the trash, with Undo). A message's menu (right-click, a long press): Copy, Show in the page
-// and, for the AI's, Report response… (ShellAiReportDialog: the report opened as a GitHub issue
-// or an email, or the answer only hidden) — an answer reported or hidden is a folded line until
-// Show opens it (its page's frontmatter keeps the mark: chat::setFlag). Several conversations
-// answer at once: each its own turn. Contract with the shell (qml/shell/ShellRouteView.qml):
-// `route`, `title`.
+// pins it there again). The list's rows have a menu (right-click, a long press): Rename…, Pin,
+// Archive, Delete (to the trash; each with Undo); the pinned on top, the archived folded at the
+// bottom, those that need the user (a question, a failure, an unread answer) first, a search
+// field over the names and the messages (a match opens at its message: the route's `line`);
+// with a keyboard ↑/↓ move in the list, Enter opens, Alt+1…9 the first nine, F2 renames.
+// A message's menu (right-click, a long press) has, for the AI's, Report response…
+// (ShellAiReportDialog: the report opened as a GitHub issue or an email, or the answer only
+// hidden) — an answer reported or hidden is a folded line until Show opens it (its page's
+// frontmatter keeps the mark: chat::setFlag).
+// Several conversations answer at once: each its own turn. Contract with the shell
+// (qml/shell/ShellRouteView.qml): `route`, `title`.
 FocusScope {
     id: root
 
@@ -75,9 +84,29 @@ FocusScope {
     readonly property list<var> noVars: []
     readonly property string failure: root.turn !== null ? root.turn.failure : ""
     readonly property bool failedHere: root.failure !== ""
+    /// Messages written while this conversation's turn runs: they wait for it ({id, text,
+    /// pictures}); held after a stop or a failure (Resume).
+    readonly property list<var> waitingHere: root.path !== "" ? root.chats.queued(root.path, root.chats.queueSerial) : root.noVars
+    readonly property bool heldHere: root.path !== "" && root.chats.queueHeld(root.path, root.chats.queueSerial)
+    /// A plan an AI agent asks to approve (Markdown; "" none).
+    readonly property string planHere: root.asking ? root.chats.questionPlan(root.path, root.questionSerial) : ""
+    /// The files the agent's last turn changed ({path, oldText, newText, existed, exists, known}).
+    readonly property list<var> changesHere: root.path !== "" && !root.busyHere ? root.chats.changes(root.path, root.chats.changesSerial) : root.noVars
+    /// How an agent's questions are answered here: "ask", "edits", "all".
+    readonly property string approvalsHere: root.chats.approvals(root.path, root.chats.agentSerial)
+    /// The conversation this one was forked from ("" none).
+    property string forkSource
+    /// Up in an empty field: the questions asked before, newest first (recallIndex: the one
+    /// shown, -1 none).
+    property list<string> recallList
+    property int recallIndex: -1
 
     /// The list follows the answer being written while it is at its end (scrolled up: it stays).
     property bool following: true
+    /// The message to show once the conversation is read (the route's `line`: a search's match;
+    /// -1 none) and the one shown so, tinted for a moment.
+    property int seekLine: -1
+    property int foundLine: -1
     /// The answer as it is written: what the model thinks first, then its words.
     readonly property bool liveShown: root.busyHere && !root.queuedHere && !root.asking
                                       && (root.turn.partial !== "" || root.turn.thoughts !== "")
@@ -90,12 +119,22 @@ FocusScope {
     /// The field waits for dictation's text / a photo from the camera (this view asked for it).
     property bool dictating: false
     property bool takingPhoto: false
+    /// Dictation records or makes what it heard into text for this view (the field waits).
+    readonly property bool dictationBusy: root.dictating && (root.chats.listening || root.chats.recognizing)
+    /// What a prompt link brought, said above the field ("" none) — with the warning tint when it
+    /// had hidden characters.
+    property string linkNote
+    property bool linkWarning: false
+
+    /// The words a search found, in the list's rows (TextHelper.markMatches).
+    readonly property string matchColor: Theme.accentText.toString()
 
     /// The conversation this view tells Workspace.chats it shows ("" none).
     property string registered
     readonly property string shownPath: root.visible && root.conversationShown ? root.path : ""
     onShownPathChanged: root.register()
     Component.onDestruction: {
+        root.keepDraft()
         if (root.registered !== "")
             Workspace.chats.showing(root.registered, false)
         // Pictures picked but never sent: not left in the notebook.
@@ -115,17 +154,49 @@ FocusScope {
     }
 
     function syncRoute(): void {
+        // What was written and not sent stays with its conversation.
+        root.keepDraft()
         root.path = AppController.routeText(root.route, "path")
+        root.loadDraft()
         root.page = AppController.routeText(root.route, "page")
         root.starting = root.path === "" && AppController.routeFlag(root.route, "new")
         root.thoughtsOpen = false
+        root.linkNote = ""
+        root.seekLine = root.path !== "" ? AppController.routeInt(root.route, "line", -1) : -1
+        root.foundLine = -1
         const prompt = AppController.routeText(root.route, "prompt")
-        if (root.starting && prompt !== "") {
+        if (root.starting && AppController.routeFlag(root.route, "fromLink")) {
+            // A prompt link: its prompt in the field, never sent — the user reads it first.
+            // (Typed through this file's functions: values a later call cannot change.)
+            const hidden = root.routeNumber("hidden")
+            const capped = root.routeBool("capped")
+            const pageMissing = root.routeString("pageMissing")
+            const partnerMissing = root.routeString("partnerMissing")
+            const partner = root.routeString("partner")
+            const draft = root.routeString("draft")
+            const note = root.linkNoteText(hidden, capped, pageMissing, partnerMissing)
+            // (Its partner, or the default: not the one an earlier draft had.)
+            root.newPartner = partner
+            input.text = draft
+            input.cursorPosition = input.length
+            root.linkWarning = hidden > 0
+            root.linkNote = note
+            focusLater.restart()
+        } else if (root.starting && prompt !== "") {
             input.text = prompt
             sendLater.restart()
         } else if (root.conversationShown && (root.starting || !Theme.touchUi)) {
             focusLater.restart()
         }
+    }
+    function routeString(key: string): string {
+        return AppController.routeText(root.route, key)
+    }
+    function routeNumber(key: string): int {
+        return AppController.routeInt(root.route, key, 0)
+    }
+    function routeBool(key: string): bool {
+        return AppController.routeFlag(root.route, key)
     }
     onRouteChanged: root.syncRoute()
     Component.onCompleted: {
@@ -138,6 +209,18 @@ FocusScope {
     Connections {
         target: root.chats
         function onPartnersChanged() { root.refreshPartners() }
+    }
+    /// A list of strings of a map (a result's).
+    function routeList(map: var, key: string): list<string> {
+        return AppController.routeStrings(map, key)
+    }
+    /// `pictures` go with the message too.
+    function attachAll(pictures: list<string>): void {
+        root.attached = Js.uniqueStrings(Js.concatStrings(root.attached, pictures))
+    }
+    /// The approvals' mode in words ("ask", "edits", "all").
+    function approvalsLabel(mode: string): string {
+        return mode === "all" ? qsTr("Allow everything") : mode === "edits" ? qsTr("Allow note edits") : qsTr("Ask first")
     }
     /// A partner's name as the chat shows it (one not running: its id).
     function partnerName(id: string): string {
@@ -154,16 +237,45 @@ FocusScope {
         else
             AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path })
     }
-    function send(): void {
-        const text = Js.trim(input.typedText)
-        if ((text === "" && root.attached.length === 0) || root.busyHere)
+    /// Opens the conversation `path` at its message at the page's line `line` (a search's match;
+    /// -1: as open()).
+    function openAt(path: string, line: int): void {
+        if (line < 0) {
+            root.open(path, false)
             return
+        }
+        if (root.inSidePanel)
+            AppController.navigate({ view: "chat", path: path, line: line }, true)
+        else
+            AppController.navigate({ view: "chat", path: path, line: line })
+    }
+    /// The list's row `row` opened (Enter, a click, Alt+1…9).
+    function openRow(row: int): void {
+        const path = conversations.pathAt(row)
+        if (path !== "")
+            root.openAt(path, conversations.query !== "" ? conversations.matchLineAt(row) : -1)
+    }
+    function send(): void {
+        // Dictating: Enter and Send finish it (what was heard goes into the field).
+        if (root.dictationBusy) {
+            if (root.chats.listening)
+                root.chats.stopDictation()
+            return
+        }
+        const text = Js.trim(input.typedText)
+        if (text === "" && root.attached.length === 0)
+            return
+        // While a turn runs (or messages wait): it waits for the answer, then goes.
+        if (root.path !== "" && (root.busyHere || root.waitingHere.length > 0)) {
+            if (root.chats.queue(root.path, text, root.attached))
+                root.clearField()
+            return
+        }
         const sent = root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
                                      root.path === "" ? root.newPartner : "")
         if (sent === "")
             return
-        input.text = ""
-        root.attached = root.noStrings
+        root.clearField()
         root.following = true
         if (root.path === "") {
             root.path = sent
@@ -178,6 +290,145 @@ FocusScope {
     function suggest(text: string): void {
         input.text = text
         root.send()
+    }
+    /// The field's text as the draft of the conversation shown (`draftPath`).
+    property string draftPath
+    property bool draftLoaded: false
+    function keepDraft(): void {
+        if (root.draftLoaded)
+            root.chats.setDraft(root.draftPath, input.text)
+    }
+    function loadDraft(): void {
+        root.draftPath = root.path
+        root.draftLoaded = true
+        input.text = root.chats.draft(root.path)
+        input.cursorPosition = input.length
+        root.recallIndex = -1
+    }
+    function clearField(): void {
+        input.text = ""
+        root.attached = root.noStrings
+        root.recallIndex = -1
+        root.linkNote = ""
+        toEnd.restart()
+    }
+    /// Ctrl+Enter while a turn runs: the message now — the turn stops, it is answered first.
+    function steer(): void {
+        const text = Js.trim(input.typedText)
+        if (text === "" && root.attached.length === 0)
+            return
+        if (root.chats.steer(root.path, text, root.attached))
+            root.clearField()
+    }
+    /// Up / Down in the field: the questions asked before (Up from an empty field, or from one
+    /// brought back).
+    function recall(older: bool): bool {
+        if (root.path === "")
+            return false
+        const shown = root.recallIndex >= 0 && root.recallIndex < root.recallList.length
+                      && input.text === root.recallList[root.recallIndex]
+        if (input.text !== "" && !shown)
+            return false
+        if (!shown)
+            root.recallList = root.chats.prompts(root.path)
+        const next = older ? (shown ? root.recallIndex + 1 : 0) : root.recallIndex - 1
+        if (older && next >= root.recallList.length)
+            return shown // (the oldest: it stays)
+        if (!older && !shown)
+            return false
+        root.recallIndex = next
+        input.text = next >= 0 ? root.recallList[next] : ""
+        input.cursorPosition = input.length
+        return true
+    }
+    /// A page named at the caret: its link in place of what was typed ("@Do" → "[[Dom]] ").
+    function insertMention(title: string): void {
+        const caret = 0 + input.cursorPosition
+        const typed = "" + input.text
+        const next = "" + root.chats.withMention(typed, caret, title)
+        if (next === "")
+            return
+        input.text = next
+        input.cursorPosition = root.chats.mentionEnd(typed, caret, title)
+        input.forceActiveFocus()
+    }
+    /// A message's text as a quote at the field's start.
+    function quoteMessage(markdown: string): void {
+        const quote = root.chats.quote(markdown)
+        if (quote === "")
+            return
+        input.insert(0, quote)
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
+    /// "Edit from here": the message and those after it out of the conversation, its text back in
+    /// the field (Undo in the toast).
+    function rewindTo(line: int): void {
+        const text = "" + root.chats.rewind(root.path, line)
+        if (text === "")
+            return
+        input.text = Js.trim(text)
+        root.attached = root.chats.takenPictures()
+        root.recallIndex = -1
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
+    /// A waiting message back in the field, to change it (sent again with Enter).
+    function editWaiting(id: int): void {
+        const text = "" + root.chats.unqueue(root.path, id, true)
+        const before = "" + Js.trim(input.text)
+        input.text = before === "" ? text : before + "\n\n" + text
+        root.attachAll(root.chats.takenPictures())
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
+    /// The files of the agent's last turn back as they were.
+    function undoChanges(): void {
+        AppController.toast(root.chats.undoChanges(root.path), "info")
+    }
+    /// "Fork from here": a new conversation up to the message, opened.
+    function forkAt(line: int): void {
+        const forked = "" + root.chats.fork(root.path, line)
+        if (forked === "") {
+            AppController.toast(qsTr("The conversation could not be forked."), "error")
+            return
+        }
+        AppController.toast(qsTr("Forked: the new conversation goes on by itself"), "success")
+        root.open(forked, false)
+    }
+    /// What a prompt link brought, in sentences: its hidden characters (or that it came from a
+    /// link), a prompt cut short, a page or a partner not here.
+    function linkNoteText(hidden: int, capped: bool, pageMissing: string, partnerMissing: string): string {
+        let note = hidden > 0
+                ? qsTr("This prompt came from a link with %n hidden character(s), taken out now: they can hide instructions. Read it before you send it.", "", hidden)
+                : qsTr("This prompt came from a link: read it before you send it.")
+        if (capped)
+            note += "\n" + qsTr("It was longer than 8,000 characters: the rest was left out.")
+        if (pageMissing !== "")
+            note += "\n" + qsTr("The page “%1” is not in this notebook: the conversation is about no page.").arg(pageMissing)
+        if (partnerMissing !== "")
+            note += "\n" + qsTr("“%1” is not set up on this device: the AI assistant answers instead.").arg(partnerMissing)
+        return note
+    }
+    /// The prompt link of `text` (brulion://chat: it opens a new conversation with it, never sent)
+    /// to the clipboard, with who answers and the page it is about.
+    function copyPromptLink(text: string, partner: string, page: string): void {
+        if (Js.trim(text) === "") {
+            AppController.toast(qsTr("Write the prompt first"), "info")
+            return
+        }
+        if (tools.copyText(AppController.chatPromptLink(text, partner, page)))
+            AppController.toast(qsTr("Prompt link copied: it opens a new conversation with this prompt, never sends it"), "success")
+    }
+    Connections {
+        target: AppController
+        // The palette's "AI: Copy prompt link": the draft being written.
+        function onUiActionRequested(action: string) {
+            if (action !== "chat:copyPromptLink" || !root.visible || !root.conversationShown)
+                return
+            root.copyPromptLink(input.text, root.path !== "" ? root.partnerHere : root.newPartner,
+                                root.path === "" ? root.page : "")
+        }
     }
 
     // ---- Pictures with the message --------------------------------------------------------------
@@ -211,9 +462,29 @@ FocusScope {
             root.chats.stopDictation()
             return
         }
+        if (root.chats.recognizing)
+            return
+        // The app's own recognizer without a speech model: its download first.
+        if (!root.chats.dictationReady) {
+            dictationSetup.open()
+            return
+        }
         root.dictating = root.chats.startDictation()
         if (!root.dictating)
             AppController.toast(qsTr("Dictation could not start"), "error")
+    }
+    /// Esc while dictating: nothing goes into the field, the recording is thrown away.
+    function cancelDictation(): void {
+        if (!root.dictationBusy)
+            return
+        root.dictating = false
+        root.chats.cancelDictation()
+    }
+    /// "1:05" of `ms`.
+    function clockText(ms: int): string {
+        const seconds = Math.floor(Math.max(0, ms) / 1000)
+        const rest = seconds % 60
+        return Math.floor(seconds / 60) + ":" + (rest < 10 ? "0" : "") + rest
     }
     Connections {
         target: root.chats
@@ -264,12 +535,35 @@ FocusScope {
         onAccepted: root.attachFiles(selectedFiles)
     }
 
-    // ---- The list's menu: rename, delete ----------------------------------------------------------
-    /// The conversation the list's menu is about.
+    // ---- The list's menu: rename, pin, archive, delete --------------------------------------------
+    /// The conversation the list's menu is about, and its marks.
     property string menuPath
-    function openRowMenu(path: string, item: Item): void {
+    property bool menuPinned
+    property bool menuArchived
+    function openRowMenu(path: string, item: Item, pinned: bool, archived: bool): void {
         root.menuPath = path
+        root.menuPinned = pinned
+        root.menuArchived = archived
         rowMenu.popup(item, Theme.space4, item.height)
+    }
+    function startRename(path: string): void {
+        if (path === "")
+            return
+        renameField.text = root.chats.nameOf(path)
+        renameDialog.path = path
+        renameDialog.open()
+    }
+    /// Pins / unpins (`on`) the conversation, or archives / unarchives it (`archive`), with Undo.
+    function mark(path: string, archive: bool, on: bool): void {
+        const name = "" + root.chats.nameOf(path)
+        const done = archive ? root.chats.setArchived(path, on) : root.chats.setPinned(path, on)
+        if (!done) {
+            AppController.toast(qsTr("The conversation could not be changed"), "error")
+            return
+        }
+        const text = archive ? (on ? qsTr("“%1” archived").arg(name) : qsTr("“%1” back in the list").arg(name))
+                             : (on ? qsTr("“%1” pinned").arg(name) : qsTr("“%1” unpinned").arg(name))
+        AppController.toastUndoChatMark(text, qsTr("Undo"), path, archive ? "archived" : "pinned", on)
     }
     function rename(path: string, name: string): void {
         // (Copies, read before the rename: compiled calls take no arguments a call before may change.)
@@ -305,11 +599,20 @@ FocusScope {
             objectName: "chatRename"
             text: qsTr("Rename…")
             iconName: "pencil"
-            onTriggered: {
-                renameField.text = root.chats.nameOf(root.menuPath)
-                renameDialog.path = root.menuPath
-                renameDialog.open()
-            }
+            onTriggered: root.startRename(root.menuPath)
+        }
+        BMenuItem {
+            objectName: "chatPin"
+            visible: !root.menuArchived
+            text: root.menuPinned ? qsTr("Unpin") : qsTr("Pin")
+            iconName: "pin"
+            onTriggered: root.mark(root.menuPath, false, !root.menuPinned)
+        }
+        BMenuItem {
+            objectName: "chatArchive"
+            text: root.menuArchived ? qsTr("Unarchive") : qsTr("Archive")
+            iconName: root.menuArchived ? "inbox" : "folder-input"
+            onTriggered: root.mark(root.menuPath, true, !root.menuArchived)
         }
         BMenuItem {
             objectName: "chatOpenAsPage"
@@ -373,6 +676,79 @@ FocusScope {
         if (mark !== "")
             messages.reveal(number - 1, false)
     }
+    // Dictating with the focus elsewhere (the microphone's button): Esc still throws it away.
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.dictationBusy && root.visible
+        onActivated: root.cancelDictation()
+    }
+    // Dictation needs a speech model first: the voice notes' (Settings → Extensions → Speech),
+    // downloaded from here.
+    BDialog {
+        id: dictationSetup
+        objectName: "chatDictationSetup"
+        title: AppController.speech.ready ? qsTr("Dictation is ready") : qsTr("Dictation needs a speech model")
+        iconName: "mic"
+        acceptText: AppController.speech.ready ? qsTr("Dictate") : qsTr("Close")
+        showReject: AppController.speech.ready
+        onAccepted: {
+            if (AppController.speech.ready)
+                root.toggleDictation()
+        }
+        BText {
+            Layout.fillWidth: true
+            text: AppController.speech.ready
+                  ? qsTr("Press the microphone, speak, and press it again or Enter: what you said goes into the field at the caret. Esc throws it away. At most five minutes.")
+                  : qsTr("Brulion makes what you say into text on this device with OpenAI's Whisper, the model voice notes use: %1 (%2) to download once, best over Wi-Fi. No sound leaves the device.").arg(AppController.speech.modelName).arg(AppController.speech.modelSize)
+            variant: "muted"
+            wrapMode: Text.Wrap
+        }
+        BText {
+            objectName: "chatDictationSetupState"
+            Layout.fillWidth: true
+            visible: !AppController.speech.ready && text !== ""
+            text: AppController.speech.checking ? qsTr("Checking the downloaded file…")
+                  : AppController.speech.downloading ? qsTr("Downloading: %1").arg(AppController.speech.progressText)
+                  : AppController.speech.downloadError !== "" ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.speech.downloadError)
+                  : ""
+            wrapMode: Text.Wrap
+        }
+        BProgressBar {
+            Layout.fillWidth: true
+            visible: AppController.speech.downloading
+            indeterminate: AppController.speech.checking
+            value: AppController.speech.progress
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: !AppController.speech.ready
+            spacing: Theme.space2
+            BButton {
+                objectName: "chatDictationDownload"
+                visible: !AppController.speech.downloading
+                enabled: !AppController.speech.downloadingOther
+                variant: "primary"
+                iconName: "download"
+                text: qsTr("Download")
+                onClicked: AppController.speech.download()
+            }
+            BButton {
+                visible: AppController.speech.downloading
+                text: qsTr("Stop")
+                onClicked: AppController.speech.cancelDownload()
+            }
+            BButton {
+                objectName: "chatDictationSettings"
+                variant: "ghost"
+                iconName: "settings"
+                text: qsTr("Speech settings")
+                onClicked: {
+                    dictationSetup.close()
+                    AppController.navigate({ view: "settings", section: "extensions" })
+                }
+            }
+        }
+    }
 
     Later {
         id: sendLater
@@ -384,7 +760,43 @@ FocusScope {
     }
     Later {
         id: toEnd
-        onTriggered: list.positionViewAtEnd()
+        onTriggered: {
+            // A search's match: its message once it is a row, tinted a moment; else the end.
+            if (root.seekLine >= 0 && messages.count === 0)
+                return // (not read yet)
+            const row = root.seekLine >= 0 ? messages.rowOfLine(root.seekLine) : -1
+            root.seekLine = -1
+            if (row >= 0) {
+                list.positionViewAtIndex(row, ListView.Center)
+                root.foundLine = messages.lineOf(row)
+                root.following = false
+                foundTimer.restart()
+                return
+            }
+            list.positionViewAtEnd()
+        }
+    }
+    Timer {
+        id: foundTimer
+        interval: 2500
+        onTriggered: root.foundLine = -1
+    }
+
+    // Alt+1…9: the list's first nine conversations; the find command's key (Ctrl+F): the search
+    // field (docs/UI.md "AI chat").
+    Keys.onPressed: (event) => {
+        if (event.modifiers === Qt.AltModifier && event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+            root.openRow(event.key - Qt.Key_1)
+            event.accepted = true
+        }
+    }
+    Shortcut {
+        sequence: ShortcutMap.sequences["page.find"] || ""
+        enabled: root.visible && root.listShown && root.activeFocus
+        onActivated: {
+            searchField.forceActiveFocus()
+            searchField.selectAll()
+        }
     }
     Connections {
         target: root.chats
@@ -427,7 +839,10 @@ FocusScope {
             neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
         })
         onCountChanged: toEnd.restart()
-        onLoaded: root.partnerHere = root.path !== "" ? root.chats.partnerOf(root.path) : ""
+        onLoaded: {
+            root.partnerHere = root.path !== "" ? root.chats.partnerOf(root.path) : ""
+            root.forkSource = root.path !== "" ? root.chats.forkedFrom(root.path) : ""
+        }
     }
     ChatListModel {
         id: conversations
@@ -481,6 +896,29 @@ FocusScope {
                 }
             }
 
+            // Search: the names and the messages (ChatListModel.query).
+            BSearchField {
+                id: searchField
+                objectName: "chatSearch"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space3
+                Layout.bottomMargin: Theme.space2
+                visible: conversations.count > 0 || conversations.archivedCount > 0 || conversations.query !== ""
+                placeholderText: qsTr("Search conversations")
+                shortcut: ShortcutMap.sequences["page.find"] || ""
+                onSearch: (query) => conversations.query = query
+                // ↓ to the list's first row; Enter opens it.
+                Keys.onDownPressed: (event) => {
+                    if (conversationList.count === 0)
+                        return
+                    conversationList.currentIndex = 0
+                    conversationList.forceActiveFocus()
+                    event.accepted = true
+                }
+                onAccepted: if (conversations.count > 0 && conversations.query !== "") root.openRow(0)
+            }
+
             ListView {
                 id: conversationList
                 objectName: "chatConversations"
@@ -488,13 +926,66 @@ FocusScope {
                 Layout.fillHeight: true
                 clip: true
                 model: conversations
+                currentIndex: -1
+                keyNavigationEnabled: true
                 TouchFlick.enabled: true
                 boundsBehavior: Flickable.StopAtBounds
                 BRowScrollBar { list: conversationList }
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Conversations")
+                // F2 renames the row with the keyboard (else the conversation shown).
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_F2 && event.modifiers === Qt.NoModifier) {
+                        root.startRename(conversationList.currentIndex >= 0 ? conversations.pathAt(conversationList.currentIndex) : root.path)
+                        event.accepted = true
+                    }
+                }
+
+                // The pinned, the others (named only under pinned ones), the archived.
+                section.property: "section"
+                section.criteria: ViewSection.FullString
+                section.delegate: Item {
+                    id: sectionItem
+                    required property string section
+                    readonly property bool shown: sectionItem.section !== "recent" || conversations.pinnedCount > 0
+                    width: conversationList.width
+                    height: sectionItem.shown ? sectionHeader.implicitHeight : 0
+                    // (The list shows its section items itself: the header is what hides.)
+                    BSectionHeader {
+                        id: sectionHeader
+                        objectName: "chatSection_" + sectionItem.section
+                        visible: sectionItem.shown
+                        width: parent.width
+                        text: sectionItem.section === "pinned" ? qsTr("Pinned")
+                            : sectionItem.section === "archived" ? qsTr("Archived") : qsTr("Recent")
+                        count: sectionItem.section === "archived" ? conversations.archivedCount : -1
+                        // (Found by a query: no folding.)
+                        collapsible: sectionItem.section === "archived" && conversations.query === ""
+                        expanded: true
+                        onExpandedToggled: (open) => conversations.showArchived = open
+                    }
+                }
+                // The archived, folded: "Archived 12" at the end opens them.
+                footer: Item {
+                    width: conversationList.width
+                    height: archivedToggle.visible ? archivedToggle.implicitHeight + Theme.space2 : 0
+                    BSectionHeader {
+                        id: archivedToggle
+                        objectName: "chatArchived"
+                        y: Theme.space2
+                        width: parent.width
+                        visible: !conversations.showArchived && conversations.archivedCount > 0 && conversations.query === ""
+                        text: qsTr("Archived")
+                        count: conversations.archivedCount
+                        collapsible: true
+                        expanded: false
+                        onExpandedToggled: (open) => conversations.showArchived = open
+                    }
+                }
+
                 delegate: BListItem {
                     id: conversation
+                    required property int index
                     required property string path
                     required property string title
                     required property string preview
@@ -502,30 +993,84 @@ FocusScope {
                     required property bool fromAi
                     required property bool running
                     required property bool queued
+                    required property bool pinned
+                    required property bool archived
+                    required property bool asking
+                    required property string question
+                    required property string failure
+                    required property bool unread
+                    required property list<var> titleMatches
+                    required property string matchText
+                    required property list<var> matchMatches
+                    required property int matchLine
+                    /// What its second line says: a search's match, what it asks, why it failed,
+                    /// else its last message.
+                    readonly property string line: conversation.matchText !== "" ? conversation.matchText
+                                                   : conversation.asking && conversation.question !== "" ? conversation.question
+                                                   : conversation.failure !== "" ? conversation.failure
+                                                   : (conversation.fromAi ? "🤖 " : "") + conversation.preview
                     objectName: "chatConversation_" + conversation.title
                     width: ListView.view.width
-                    iconName: "message-square"
+                    iconName: conversation.pinned && !conversation.archived ? "pin" : "message-square"
                     text: conversation.title
-                    subtitle: (conversation.fromAi ? "🤖 " : "") + conversation.preview
+                    titleMarkup: conversation.titleMatches.length > 0
+                                 ? TextHelper.markMatches(conversation.title, conversation.titleMatches, root.matchColor) : ""
+                    subtitle: conversation.line
+                    subtitleMarkup: conversation.matchText !== "" && conversation.matchMatches.length > 0
+                                    ? TextHelper.markMatches(conversation.matchText, conversation.matchMatches, root.matchColor) : ""
+                    subtitleColor: conversation.matchText === "" && !conversation.asking && conversation.failure !== ""
+                                   ? Theme.dangerText : Theme.fgMuted
+                    strong: conversation.unread
                     selected: conversation.path === root.path
                     selectionBar: true
                     trailing: Item {
-                        implicitWidth: conversation.running ? runningMark.implicitWidth : dateText.implicitWidth
-                        implicitHeight: Math.max(runningMark.implicitHeight, dateText.implicitHeight)
+                        implicitWidth: conversation.running && !conversation.asking ? runningMark.implicitWidth
+                                       : Math.max(dateText.implicitWidth, badge.implicitWidth)
+                        implicitHeight: Math.max(runningMark.implicitHeight, dateText.implicitHeight + badge.implicitHeight)
                         BText {
                             id: dateText
-                            anchors.verticalCenter: parent.verticalCenter
                             anchors.right: parent.right
-                            visible: !conversation.running
+                            anchors.top: parent.top
+                            anchors.topMargin: badge.visible ? 0 : (parent.height - dateText.implicitHeight) / 2
+                            visible: !conversation.running || conversation.asking
                             text: conversation.dateLabel
                             variant: "caption"
-                            color: Theme.fgFaint
+                            color: conversation.unread ? Theme.accent : Theme.fgFaint
+                        }
+                        // What needs the user: a question (accent), a failure (danger), an
+                        // unread answer (a dot).
+                        Item {
+                            id: badge
+                            readonly property bool marked: conversation.asking || conversation.failure !== ""
+                            objectName: conversation.asking ? "chatAsking" : conversation.failure !== "" ? "chatFailed" : "chatUnread"
+                            anchors.right: parent.right
+                            anchors.top: dateText.bottom
+                            anchors.topMargin: 2
+                            visible: dateText.visible && (badge.marked || conversation.unread)
+                            implicitWidth: Theme.iconSizeSm
+                            implicitHeight: Theme.iconSizeSm
+                            BIcon {
+                                anchors.right: parent.right
+                                visible: badge.marked
+                                name: conversation.asking ? "circle-help" : "circle-alert"
+                                size: Theme.iconSizeSm
+                                color: conversation.asking ? Theme.accent : Theme.dangerText
+                            }
+                            Rectangle {
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: !badge.marked
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: Theme.accent
+                            }
                         }
                         RowLayout {
                             id: runningMark
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.right: parent.right
-                            visible: conversation.running
+                            visible: conversation.running && !conversation.asking
                             spacing: Theme.space1
                             BIcon {
                                 visible: conversation.queued
@@ -541,14 +1086,22 @@ FocusScope {
                             }
                         }
                     }
-                    Accessible.name: conversation.title + (conversation.running ? ", " + (conversation.queued ? qsTr("waiting for the model") : qsTr("the AI is answering")) : "")
-                    onClicked: root.open(conversation.path, false)
-                    onPressAndHold: root.openRowMenu(conversation.path, conversation)
+                    Accessible.name: conversation.title
+                                     + (conversation.asking ? ", " + qsTr("needs your answer")
+                                        : conversation.failure !== "" ? ", " + qsTr("failed")
+                                        : conversation.running ? ", " + (conversation.queued ? qsTr("waiting for the model") : qsTr("the AI is answering"))
+                                        : conversation.unread ? ", " + qsTr("unread") : "")
+                                     + (conversation.line !== "" ? ", " + conversation.line : "")
+                    onClicked: {
+                        conversationList.currentIndex = conversation.index
+                        root.openAt(conversation.path, conversation.matchLine)
+                    }
+                    onPressAndHold: root.openRowMenu(conversation.path, conversation, conversation.pinned, conversation.archived)
                     TapHandler {
                         // Right-click only (a finger's tap opens the conversation).
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                         acceptedButtons: Qt.RightButton
-                        onTapped: root.openRowMenu(conversation.path, conversation)
+                        onTapped: root.openRowMenu(conversation.path, conversation, conversation.pinned, conversation.archived)
                     }
                 }
             }
@@ -556,13 +1109,23 @@ FocusScope {
             BEmptyState {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: Theme.space8
-                visible: conversations.count === 0
+                visible: conversations.count === 0 && conversations.archivedCount === 0 && conversations.query === ""
                 compact: root.wide
                 iconName: "message-square"
                 title: qsTr("No conversations yet")
                 description: qsTr("Ask the AI about your notes, or ask it to do something in them. Each conversation is a page in the folder %1.").arg(root.chats.folder())
                 actionText: root.wide ? "" : qsTr("New conversation")
                 onActionTriggered: root.open("", true)
+            }
+            BEmptyState {
+                objectName: "chatNoMatch"
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: Theme.space8
+                visible: conversations.count === 0 && conversations.query !== ""
+                compact: true
+                iconName: "search"
+                title: qsTr("No conversation found")
+                description: qsTr("None of the names or messages has “%1”.").arg(conversations.query)
             }
         }
 
@@ -603,6 +1166,28 @@ FocusScope {
                     Accessible.name: qsTr("Answered by %1").arg(partnerChip.text)
                     onClicked: partnerMenu.popup(partnerChip, 0, partnerChip.height)
                 }
+                // How an AI agent's questions are answered here (T3 Code's permission modes).
+                BChip {
+                    id: approvalsChip
+                    objectName: "chatApprovals"
+                    visible: root.chats.isAgent(root.partnerHere)
+                    iconName: "shield-check"
+                    text: root.approvalsLabel(root.approvalsHere)
+                    interactive: true
+                    outlined: false
+                    Accessible.name: qsTr("Approvals: %1").arg(approvalsChip.text)
+                    onClicked: approvalsMenu.popup(approvalsChip, 0, approvalsChip.height)
+                }
+                BChip {
+                    objectName: "chatForkSource"
+                    visible: root.forkSource !== ""
+                    Layout.maximumWidth: 220
+                    iconName: "git-branch"
+                    text: qsTr("Forked from %1").arg(root.chats.nameOf(root.forkSource))
+                    interactive: true
+                    outlined: false
+                    onClicked: root.open(root.forkSource, false)
+                }
                 Item {
                     Layout.fillWidth: true
                 }
@@ -639,6 +1224,41 @@ FocusScope {
                 Layout.topMargin: Theme.space1
                 path: root.path
                 partner: root.partnerHere
+            }
+            // Where it came from, and its sub-conversations: AI agents' tasks for other partners.
+            ChatLineageRow {
+                objectName: "chatLineage"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space2
+                Layout.topMargin: Theme.space1
+                path: root.path
+                onOpened: (path) => root.open(path, false)
+            }
+            BMenu {
+                id: approvalsMenu
+                objectName: "chatApprovalsMenu"
+                BMenuItem {
+                    objectName: "chatApprovalsAsk"
+                    text: root.approvalsLabel("ask")
+                    hint: qsTr("each change and command waits for your answer")
+                    iconName: root.approvalsHere === "ask" ? "check" : ""
+                    onTriggered: root.chats.setApprovals(root.path, "ask")
+                }
+                BMenuItem {
+                    objectName: "chatApprovalsEdits"
+                    text: root.approvalsLabel("edits")
+                    hint: qsTr("changes of notes go by themselves; commands ask")
+                    iconName: root.approvalsHere === "edits" ? "check" : ""
+                    onTriggered: root.chats.setApprovals(root.path, "edits")
+                }
+                BMenuItem {
+                    objectName: "chatApprovalsAll"
+                    text: root.approvalsLabel("all")
+                    hint: qsTr("nothing asks but a plan and a sign-in")
+                    iconName: root.approvalsHere === "all" ? "check" : ""
+                    onTriggered: root.chats.setApprovals(root.path, "all")
+                }
             }
             BMenu {
                 id: partnerMenu
@@ -704,19 +1324,44 @@ FocusScope {
                         required property bool firstSent
                         required property string flag
                         required property bool revealed
+                        /// Its parts when it has a drawing (ChatSegments), else [] (its rich text).
+                        required property list<var> segments
                         readonly property bool mine: message.sender === "user"
                         /// The user reported or hid it: a line in its place until it is opened.
                         readonly property bool folded: message.flag !== "" && !message.revealed
+                        readonly property bool inParts: message.segments.length > 0
                         property string hoveredLink
                         property point linkPoint
+                        /// The source of the drawing the menu was opened on ("" none: Copy source hidden).
+                        property string menuSource
                         readonly property real maxWidth: Math.min(message.width * (message.mine ? 0.82 : 0.92), 720)
                         readonly property real picturesWidth: message.pictures.length > 0 ? Math.min(message.maxWidth - 2 * Theme.space3, 280) : 0
                         width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
                         height: messageColumn.height
 
+                        /// The link at `pos` of the bubble's row (its handlers' points: under the day's
+                        /// line) — "" none.
+                        function linkAt(pos: point): string {
+                            if (message.inParts) {
+                                message.linkPoint = parts.mapFromItem(bubbleRow, pos.x, pos.y)
+                                return parts.linkAt(message.linkPoint.x, message.linkPoint.y)
+                            }
+                            message.linkPoint = body.mapFromItem(bubbleRow, pos.x, pos.y)
+                            return body.linkAt(message.linkPoint.x, message.linkPoint.y)
+                        }
+                        /// The menu at `pos` of the bubble's row: Copy source on a drawing.
+                        function openMenu(pos: point): void {
+                            const x = pos.x
+                            const y = pos.y
+                            message.menuSource = ""
+                            if (message.inParts) {
+                                message.linkPoint = parts.mapFromItem(bubbleRow, x, y)
+                                message.menuSource = parts.drawingSourceAt(message.linkPoint.x, message.linkPoint.y)
+                            }
+                            messageMenu.popup()
+                        }
                         function trackLink(pos: point): void {
-                            message.linkPoint = body.mapFromItem(message, pos.x, pos.y)
-                            const link = body.linkAt(message.linkPoint.x, message.linkPoint.y)
+                            const link = message.linkAt(pos)
                             const h = Js.startsWith(link, "task:") ? "" : link
                             if (h !== message.hoveredLink)
                                 message.hoveredLink = h
@@ -800,6 +1445,7 @@ FocusScope {
                             }
 
                             Item {
+                                id: bubbleRow
                                 width: parent.width
                                 height: bubble.height
                                 visible: !message.folded
@@ -808,11 +1454,15 @@ FocusScope {
                                     id: bubble
                                     objectName: message.mine ? "chatMessageUser" : "chatMessageAi"
                                     x: message.mine ? parent.width - width : 0
-                                    width: Math.min(message.maxWidth, Math.max(body.visible ? body.implicitWidth : 0, message.picturesWidth, 24) + 2 * Theme.space3)
+                                    width: Math.min(message.maxWidth, Math.max(body.visible ? body.implicitWidth : 0, message.inParts ? parts.naturalWidth : 0,
+                                                                               message.picturesWidth, 24) + 2 * Theme.space3)
                                     height: bubbleColumn.height + 2 * Theme.space2 + 2
                                     radius: Theme.radiusXl
                                     color: message.mine ? Theme.accentBg : Theme.bgElevated
-                                    border.color: message.mine ? "transparent" : Theme.borderSubtle
+                                    // (A search's match, a moment: the accent's border.)
+                                    border.color: message.line === root.foundLine ? Theme.accent
+                                                  : message.mine ? "transparent" : Theme.borderSubtle
+                                    border.width: message.line === root.foundLine ? 2 : 1
                                     opacity: message.sent ? 1 : 0.6
                                     Accessible.role: Accessible.StaticText
                                     Accessible.name: (message.mine ? qsTr("You") : qsTr("AI")) + (message.time !== "" ? " " + message.time : "") + ": " + message.markdown
@@ -854,12 +1504,22 @@ FocusScope {
                                             id: body
                                             measured: true // (the bubble is as wide as its text)
                                             width: parent.width
-                                            visible: message.messageHtml !== ""
-                                            html: message.messageHtml
+                                            visible: message.messageHtml !== "" && !message.inParts
+                                            html: message.inParts ? "" : message.messageHtml
                                             hoveredLink: message.hoveredLink
                                             font.family: Theme.fontEditor
                                             font.pixelSize: Theme.textBase
                                             color: Theme.fg
+                                        }
+                                        // A message with a chart, a diagram or a formula: its parts.
+                                        ChatSegments {
+                                            id: parts
+                                            objectName: "chatSegments"
+                                            width: parent.width
+                                            visible: message.inParts
+                                            segments: message.segments
+                                            hoveredLink: message.hoveredLink
+                                            english: DatesHelper.locale === "en"
                                         }
                                     }
                                 }
@@ -872,28 +1532,75 @@ FocusScope {
                                     onHoveredChanged: if (!hovered) message.hoveredLink = ""
                                 }
                                 TapHandler {
+                                    id: leftTap
                                     acceptedButtons: Qt.LeftButton
                                     gesturePolicy: TapHandler.ReleaseWithinBounds
                                     onTapped: (eventPoint, button) => {
-                                        message.linkPoint = body.mapFromItem(message, eventPoint.position.x, eventPoint.position.y)
-                                        const link = body.linkAt(message.linkPoint.x, message.linkPoint.y)
+                                        const at = eventPoint.position
+                                        const link = message.linkAt(at)
                                         if (link !== "" && !Js.startsWith(link, "task:"))
                                             tools.openLink(link, root.path, false)
+                                        else if (message.inParts)
+                                            parts.openAt(message.linkPoint.x, message.linkPoint.y) // (a drawing opens large)
                                     }
-                                    onLongPressed: messageMenu.popup()
+                                    onLongPressed: message.openMenu(leftTap.point.position)
                                 }
                                 TapHandler {
                                     acceptedButtons: Qt.RightButton
-                                    onTapped: messageMenu.popup()
+                                    // (A finger has no buttons: it would open the menu on every tap.)
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                                    onTapped: (eventPoint, button) => message.openMenu(eventPoint.position)
                                 }
                                 BMenu {
                                     id: messageMenu
+                                    BMenuItem {
+                                        objectName: "chatMessageQuote"
+                                        text: qsTr("Quote")
+                                        iconName: "quote"
+                                        onTriggered: root.quoteMessage(message.markdown)
+                                    }
+                                    BMenuItem {
+                                        objectName: "chatMessageEdit"
+                                        visible: message.mine
+                                        height: visible ? implicitHeight : 0
+                                        text: qsTr("Edit from here")
+                                        hint: qsTr("this and what follows come out")
+                                        iconName: "pencil"
+                                        onTriggered: root.rewindTo(message.line)
+                                    }
+                                    BMenuItem {
+                                        objectName: "chatMessageFork"
+                                        text: qsTr("Fork from here")
+                                        hint: qsTr("a new conversation")
+                                        iconName: "git-branch"
+                                        onTriggered: root.forkAt(message.line)
+                                    }
                                     BMenuItem {
                                         objectName: "chatMessageCopy"
                                         text: qsTr("Copy")
                                         iconName: "copy"
                                         onTriggered: {
                                             if (tools.copyText(message.markdown))
+                                                AppController.toast(qsTr("Copied"), "success")
+                                        }
+                                    }
+                                    // A link that opens a new conversation with this message in
+                                    // its field (brulion://chat; never sent by itself).
+                                    BMenuItem {
+                                        objectName: "chatCopyPromptLink"
+                                        visible: message.mine
+                                        height: visible ? implicitHeight : 0
+                                        text: qsTr("Copy prompt link")
+                                        iconName: "link"
+                                        onTriggered: root.copyPromptLink(message.markdown, root.partnerHere, "")
+                                    }
+                                    BMenuItem {
+                                        objectName: "chatMessageCopySource"
+                                        visible: message.menuSource !== ""
+                                        text: qsTr("Copy source")
+                                        iconName: "code"
+                                        onTriggered: {
+                                            if (tools.copyText(message.menuSource))
                                                 AppController.toast(qsTr("Copied"), "success")
                                         }
                                     }
@@ -948,6 +1655,18 @@ FocusScope {
                             width: parent.width
                             spacing: Theme.space2
 
+                            // The files the agent's last turn changed, with Undo (T3 Code's turn diff).
+                            ChatChanges {
+                                objectName: "chatChanges"
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: 640
+                                visible: root.changesHere.length > 0
+                                changes: root.changesHere
+                                onOpenFile: (file) => AppController.openPage(file)
+                                onUndo: root.undoChanges()
+                                onDismiss: root.chats.forgetChanges(root.path)
+                            }
+
                             // The answer as the model writes it — above it, what the model thinks.
                             Rectangle {
                                 id: live
@@ -955,8 +1674,12 @@ FocusScope {
                                 readonly property bool writing: root.liveShown && root.turn.partial !== ""
                                 readonly property bool thinking: root.liveShown && root.turn.thoughts !== ""
                                 readonly property real maxWidth: Math.min(footerColumn.width * 0.92, 720)
+                                /// Its finished blocks in parts when one is a drawing (ChatSegments), else [].
+                                readonly property list<var> settledParts: live.writing && root.turn.partialSettled !== ""
+                                                                          ? messages.segments(root.turn.partialSettled) : root.noVars
                                 visible: root.liveShown
-                                Layout.preferredWidth: Math.min(live.maxWidth, Math.max(live.writing ? Math.max(liveSettled.implicitWidth, liveTail.implicitWidth) : 0,
+                                Layout.preferredWidth: Math.min(live.maxWidth, Math.max(live.writing ? Math.max(liveSettled.implicitWidth, liveParts.visible ? liveParts.naturalWidth : 0,
+                                                                                                                liveTail.implicitWidth) : 0,
                                                                                         live.thinking ? (root.thoughtsOpen ? liveThoughts.implicitWidth : thoughtsHeader.implicitWidth) : 0, 24) + 2 * Theme.space3)
                                 implicitHeight: liveColumn.implicitHeight + 2 * Theme.space2 + 2
                                 radius: Theme.radiusXl
@@ -1042,17 +1765,27 @@ FocusScope {
                                         objectName: "chatPartial"
                                         width: parent.width
                                         visible: live.writing
-                                        spacing: liveSettled.html !== "" ? 10 : 0 // (a paragraph's gap, as renderMessage's)
+                                        spacing: liveSettled.html !== "" || liveParts.visible ? 10 : 0 // (a paragraph's gap, as renderMessage's)
                                         BRichText {
                                             id: liveSettled
                                             measured: true // (the bubble is as wide as its text)
                                             objectName: "chatPartialSettled"
                                             width: parent.width
                                             visible: liveSettled.html !== ""
-                                            html: live.writing && root.turn.partialSettled !== "" ? messages.render(root.turn.partialSettled) : ""
+                                            html: live.writing && root.turn.partialSettled !== "" && live.settledParts.length === 0
+                                                  ? messages.render(root.turn.partialSettled) : ""
                                             font.family: Theme.fontEditor
                                             font.pixelSize: Theme.textBase
                                             color: Theme.fg
+                                        }
+                                        // A finished chart, diagram or formula: drawn (not while its block is written).
+                                        ChatSegments {
+                                            id: liveParts
+                                            objectName: "chatPartialParts"
+                                            width: parent.width
+                                            visible: live.settledParts.length > 0
+                                            segments: live.settledParts
+                                            english: DatesHelper.locale === "en"
                                         }
                                         BRichText {
                                             id: liveTail
@@ -1082,6 +1815,7 @@ FocusScope {
 
                             // What an AI agent does: its plan, its tool calls with their output.
                             ChatActivity {
+                                id: activity
                                 objectName: "chatActivity"
                                 Layout.fillWidth: true
                                 Layout.maximumWidth: 640
@@ -1128,7 +1862,11 @@ FocusScope {
                                             text: root.queuedHere
                                                   ? (root.turn.place <= 1 ? qsTr("Waiting for the model on this device: it answers another conversation first.")
                                                                           : qsTr("Waiting for the model on this device: %1 conversations are answered first.").arg(root.turn.place))
-                                                  : root.busyHere && root.turn.status !== "" ? root.turn.status : qsTr("The AI is answering…")
+                                                  : root.busyHere && root.turn.status !== ""
+                                                    ? (activity.hidesStatus(root.turn.status) // ("Tool calls in chat: Hide all")
+                                                       ? qsTranslate("brulion::shell::WorkspaceAgents", "%1 is working…").arg(root.partnerName(root.partnerHere))
+                                                       : root.turn.status)
+                                                    : qsTr("The AI is answering…")
                                             variant: "muted"
                                             wrapMode: Text.Wrap
                                         }
@@ -1174,9 +1912,43 @@ FocusScope {
                                         oldLabel: AppController.routeText(root.questionDiff, "path")
                                         newLabel: AppController.routeText(root.questionDiff, "path")
                                     }
+                                    // A plan to approve: as a message, with "Save as a page".
+                                    Rectangle {
+                                        objectName: "chatQuestionPlan"
+                                        Layout.fillWidth: true
+                                        visible: root.planHere !== ""
+                                        implicitHeight: planText.implicitHeight + 2 * Theme.space3
+                                        radius: Theme.radius
+                                        color: Theme.bgSunken
+                                        BRichText {
+                                            id: planText
+                                            x: Theme.space3
+                                            y: Theme.space3
+                                            width: parent.width - 2 * Theme.space3
+                                            html: root.planHere !== "" ? messages.render(root.planHere) : ""
+                                            font.family: Theme.fontEditor
+                                            font.pixelSize: Theme.textBase
+                                            color: Theme.fg
+                                        }
+                                    }
+                                    BButton {
+                                        objectName: "chatSavePlan"
+                                        visible: root.planHere !== ""
+                                        size: "small"
+                                        variant: "ghost"
+                                        iconName: "file-output"
+                                        text: qsTr("Save the plan as a page")
+                                        onClicked: {
+                                            const saved = root.chats.savePlan(root.path)
+                                            if (saved === "")
+                                                AppController.toast(qsTr("The plan could not be saved."), "error")
+                                            else
+                                                AppController.toast(qsTr("Saved as “%1”").arg(Workspace.pageTitle(saved)), "success")
+                                        }
+                                    }
                                     Rectangle {
                                         Layout.fillWidth: true
-                                        visible: root.questionTitleEnd >= 0 && !root.questionHasDiff
+                                        visible: root.questionTitleEnd >= 0 && !root.questionHasDiff && root.planHere === ""
                                         implicitHeight: questionDetails.implicitHeight + 2 * Theme.space2
                                         radius: Theme.radius
                                         color: Theme.bgSunken
@@ -1255,6 +2027,107 @@ FocusScope {
                                         label: qsTr("Dismiss")
                                         iconName: "x"
                                         onClicked: root.chats.dismissFailure(root.path)
+                                    }
+                                }
+                            }
+
+                            // Messages written meanwhile: they wait for the answer (held after a
+                            // stop or a failure: Resume).
+                            RowLayout {
+                                objectName: "chatHeld"
+                                Layout.fillWidth: true
+                                visible: root.heldHere && !root.busyHere
+                                spacing: Theme.space2
+                                Item { Layout.fillWidth: true }
+                                BText {
+                                    text: qsTr("%n message(s) wait: the answer before them stopped.", "", root.waitingHere.length)
+                                    variant: "muted"
+                                    wrapMode: Text.Wrap
+                                }
+                                BButton {
+                                    objectName: "chatResume"
+                                    size: "small"
+                                    iconName: "play"
+                                    text: qsTr("Resume")
+                                    onClicked: root.chats.resumeQueue(root.path)
+                                }
+                            }
+                            Repeater {
+                                model: root.waitingHere
+                                delegate: Item {
+                                    id: waiting
+                                    required property var modelData
+                                    readonly property int waitingId: AppController.routeInt(waiting.modelData, "id", -1)
+                                    readonly property string text: AppController.routeText(waiting.modelData, "text")
+                                    readonly property list<string> pictures: root.routeList(waiting.modelData, "pictures")
+                                    readonly property int pictureCount: waiting.pictures.length
+                                    objectName: "chatWaiting"
+                                    Layout.fillWidth: true
+                                    implicitHeight: waitingBubble.height
+                                    Rectangle {
+                                        id: waitingBubble
+                                        readonly property real maxWidth: Math.min(parent.width * 0.82, 720)
+                                        x: parent.width - width
+                                        width: Math.min(waitingBubble.maxWidth, Math.max(waitingText.implicitWidth, waitingActions.implicitWidth) + 2 * Theme.space3)
+                                        height: waitingColumn.implicitHeight + 2 * Theme.space2
+                                        radius: Theme.radiusXl
+                                        color: "transparent"
+                                        border.color: Theme.accent
+                                        border.width: 1
+                                        opacity: 0.85
+                                        ColumnLayout {
+                                            id: waitingColumn
+                                            x: Theme.space3
+                                            y: Theme.space2
+                                            width: parent.width - 2 * Theme.space3
+                                            spacing: Theme.space1
+                                            BText {
+                                                id: waitingText
+                                                Layout.fillWidth: true
+                                                // Plain text: what the user wrote, as written.
+                                                text: waiting.text + (waiting.pictureCount > 0 ? (waiting.text !== "" ? "  " : "") + qsTr("[%n picture(s)]", "", waiting.pictureCount) : "")
+                                                textFormat: Text.PlainText
+                                                wrapMode: Text.Wrap
+                                                maximumLineCount: 8
+                                                elide: Text.ElideRight
+                                            }
+                                            RowLayout {
+                                                id: waitingActions
+                                                Layout.alignment: Qt.AlignRight
+                                                spacing: Theme.space1
+                                                BIcon {
+                                                    name: "clock"
+                                                    size: Theme.iconSizeSm
+                                                    color: Theme.fgFaint
+                                                }
+                                                BText {
+                                                    text: root.heldHere ? qsTr("held") : qsTr("waits")
+                                                    variant: "caption"
+                                                    color: Theme.fgFaint
+                                                }
+                                                BIconButton {
+                                                    objectName: "chatWaitingNow"
+                                                    size: "small"
+                                                    label: qsTr("Send now")
+                                                    iconName: "zap"
+                                                    onClicked: root.chats.sendNow(root.path, waiting.waitingId)
+                                                }
+                                                BIconButton {
+                                                    objectName: "chatWaitingEdit"
+                                                    size: "small"
+                                                    label: qsTr("Edit")
+                                                    iconName: "pencil"
+                                                    onClicked: root.editWaiting(waiting.waitingId)
+                                                }
+                                                BIconButton {
+                                                    objectName: "chatWaitingRemove"
+                                                    size: "small"
+                                                    label: qsTr("Remove")
+                                                    iconName: "x"
+                                                    onClicked: root.chats.unqueue(root.path, waiting.waitingId, false)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1363,10 +2236,49 @@ FocusScope {
                 Layout.margins: Theme.narrow ? Theme.space2 : Theme.space3
                 spacing: Theme.space2
 
+                // What a prompt link brought: read it before sending (hidden characters taken out,
+                // a page or a partner not here).
+                Rectangle {
+                    objectName: "chatLinkNote"
+                    Layout.fillWidth: true
+                    visible: root.linkNote !== "" && root.path === ""
+                    implicitHeight: linkNoteRow.implicitHeight + 2 * Theme.space2
+                    radius: Theme.radius
+                    color: root.linkWarning ? Theme.warningBg : Theme.bgSunken
+                    border.color: root.linkWarning ? Theme.warningText : Theme.borderSubtle
+                    RowLayout {
+                        id: linkNoteRow
+                        anchors.fill: parent
+                        anchors.margins: Theme.space2
+                        spacing: Theme.space2
+                        BIcon {
+                            Layout.alignment: Qt.AlignTop
+                            name: root.linkWarning ? "triangle-alert" : "link"
+                            size: Theme.iconSizeSm
+                            color: root.linkWarning ? Theme.warningText : Theme.fgMuted
+                        }
+                        BText {
+                            objectName: "chatLinkNoteText"
+                            Layout.fillWidth: true
+                            text: root.linkNote
+                            variant: "caption"
+                            color: root.linkWarning ? Theme.warningText : Theme.fgMuted
+                            wrapMode: Text.Wrap
+                        }
+                        BIconButton {
+                            Layout.alignment: Qt.AlignTop
+                            size: "small"
+                            label: qsTr("Close")
+                            iconName: "x"
+                            onClicked: root.linkNote = ""
+                        }
+                    }
+                }
+
                 // A new conversation: the page that goes along, who answers.
                 Flow {
                     Layout.fillWidth: true
-                    visible: root.path === "" && (root.page !== "" || root.choosesPartner)
+                    visible: root.path === "" && (root.page !== "" || root.choosesPartner || root.chats.isAgent(root.newPartner))
                     spacing: Theme.space2
                     BChip {
                         objectName: "chatPage"
@@ -1384,6 +2296,16 @@ FocusScope {
                         text: qsTr("goes along with the question")
                         variant: "caption"
                         color: Theme.fgFaint
+                    }
+                    BChip {
+                        id: newApprovalsChip
+                        objectName: "chatNewApprovals"
+                        visible: root.chats.isAgent(root.newPartner)
+                        iconName: "shield-check"
+                        text: root.approvalsLabel(root.approvalsHere)
+                        interactive: true
+                        Accessible.name: qsTr("Approvals: %1").arg(newApprovalsChip.text)
+                        onClicked: approvalsMenu.popup(newApprovalsChip, 0, newApprovalsChip.height)
                     }
                     BChip {
                         id: newPartnerChip
@@ -1431,6 +2353,31 @@ FocusScope {
                                 input.cursorPosition = input.length
                                 input.forceActiveFocus()
                             }
+                        }
+                    }
+                }
+
+                // A page being named ("@Dom", "[[Do"): the pages it may be; a tap (or Tab: the
+                // first) writes its link — an AI agent gets the pages a message names.
+                Flow {
+                    id: mentionList
+                    objectName: "chatMentions"
+                    readonly property list<var> pages: root.chats.mentions(root.path, input.text, input.cursorPosition, 8)
+                    Layout.fillWidth: true
+                    visible: mentionList.pages.length > 0
+                    spacing: Theme.space1
+                    Repeater {
+                        model: mentionList.pages
+                        delegate: BChip {
+                            id: mentionChip
+                            required property var modelData
+                            objectName: "chatMention"
+                            size: "small"
+                            interactive: true
+                            iconName: "file-text"
+                            text: AppController.routeText(mentionChip.modelData, "title")
+                            Accessible.name: qsTr("Name the page %1").arg(mentionChip.text)
+                            onClicked: root.insertMention(mentionChip.text)
                         }
                     }
                 }
@@ -1548,9 +2495,12 @@ FocusScope {
                                 width: inputFlick.width
                                 background: null
                                 wrapMode: TextEdit.Wrap
+                                // (Read-only while dictation records: its text goes in at the caret.)
+                                readOnly: root.dictationBusy
                                 placeholderText: root.chats.listening && root.dictating ? qsTr("Listening…")
+                                                 : root.chats.recognizing && root.dictating ? qsTr("Making what you said into text…")
                                                  : root.queuedHere ? qsTr("Waiting for the model on this device…")
-                                                 : root.busyHere ? qsTr("The AI is answering…")
+                                                 : root.busyHere ? qsTr("Write on: it waits for the answer (Ctrl+Enter: now)")
                                                  : qsTr("Ask, or ask to do something…")
                                 accessibleName: qsTr("Message to the AI")
                                 onCursorRectangleChanged: inputFlick.keepCaret()
@@ -1560,36 +2510,77 @@ FocusScope {
                                 Keys.onPressed: (event) => {
                                     const key = event.key
                                     const shift = (event.modifiers & Qt.ShiftModifier) !== 0
-                                    if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && !Theme.touchUi) {
+                                    const control = (event.modifiers & Qt.ControlModifier) !== 0
+                                    // Dictating: Enter finishes, Esc throws it away.
+                                    if (root.dictationBusy && (key === Qt.Key_Return || key === Qt.Key_Enter || key === Qt.Key_Escape)) {
+                                        event.accepted = true
+                                        if (key === Qt.Key_Escape)
+                                            root.cancelDictation()
+                                        else if (root.chats.listening)
+                                            root.chats.stopDictation()
+                                    } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && control && root.busyHere) {
+                                        event.accepted = true
+                                        root.steer()
+                                    } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && !Theme.touchUi) {
                                         event.accepted = true
                                         root.send()
                                     } else if (event.matches(StandardKey.Paste) && root.pastePicture()) {
                                         event.accepted = true
+                                    } else if ((key === Qt.Key_Up || key === Qt.Key_Down) && !shift && !control
+                                               && root.recall(key === Qt.Key_Up)) {
+                                        event.accepted = true
+                                    } else if (key === Qt.Key_Tab && mentionList.pages.length > 0) {
+                                        event.accepted = true
+                                        root.insertMention(AppController.routeText(mentionList.pages[0], "title"))
                                     }
                                 }
                             }
                         }
+                    }
+                    // How long dictation has recorded (of its five minutes), then that it is heard.
+                    BText {
+                        id: dictationTime
+                        objectName: "chatDictationTime"
+                        Layout.alignment: Qt.AlignBottom
+                        Layout.bottomMargin: Theme.space2
+                        visible: root.dictationBusy && (root.chats.recognizing || root.chats.dictationElapsed >= 0)
+                        text: root.chats.recognizing
+                              ? qsTr("Transcribing…")
+                              : root.chats.dictationLimit > 0
+                                ? qsTr("%1 / %2", "dictation: recorded / at most").arg(root.clockText(root.chats.dictationElapsed)).arg(root.clockText(root.chats.dictationLimit))
+                                : root.clockText(root.chats.dictationElapsed)
+                        variant: "caption"
+                        color: root.chats.recognizing ? Theme.fgMuted : Theme.dangerText
+                        font.features: { "tnum": 1 }
+                        Accessible.name: root.chats.recognizing ? dictationTime.text : qsTr("Recorded %1").arg(dictationTime.text)
                     }
                     // Dictation: the system's speech recognizer (or the app's own).
                     BIconButton {
                         objectName: "chatDictate"
                         Layout.alignment: Qt.AlignBottom
                         visible: root.chats.dictationAvailable
+                        enabled: !(root.chats.recognizing && root.dictating)
                         variant: root.chats.listening && root.dictating ? "secondary" : "ghost"
                         iconColor: root.chats.listening && root.dictating ? Theme.danger : Theme.fgMuted
-                        label: root.chats.listening && root.dictating ? qsTr("Stop dictating") : qsTr("Dictate")
-                        iconName: "mic"
+                        label: root.chats.listening && root.dictating ? qsTr("Stop dictating (Enter); Esc throws it away")
+                               : root.chats.recognizing && root.dictating ? qsTr("Transcribing…")
+                               : qsTr("Dictate")
+                        iconName: root.chats.listening && root.dictating ? "square" : "mic"
                         onClicked: root.toggleDictation()
                     }
                     BButton {
-                        objectName: root.busyHere ? "chatStop" : "chatSend"
+                        id: sendButton
+                        /// A message being written while a turn runs: it waits (Stop shows with an empty field).
+                        readonly property bool hasText: Js.trim(input.typedText) !== "" || root.attached.length > 0
+                        readonly property bool stops: root.busyHere && !sendButton.hasText
+                        objectName: sendButton.stops ? "chatStop" : root.busyHere ? "chatQueue" : "chatSend"
                         Layout.alignment: Qt.AlignBottom
-                        variant: root.busyHere ? "secondary" : "primary"
-                        iconName: root.busyHere ? "square" : "arrow-up"
-                        enabled: root.busyHere || Js.trim(input.typedText) !== "" || root.attached.length > 0
-                        Accessible.name: root.busyHere ? qsTr("Stop") : qsTr("Send")
+                        variant: sendButton.stops ? "secondary" : "primary"
+                        iconName: sendButton.stops ? "square" : root.busyHere ? "clock" : "arrow-up"
+                        enabled: sendButton.stops || sendButton.hasText
+                        Accessible.name: sendButton.stops ? qsTr("Stop") : root.busyHere ? qsTr("Send after the answer") : qsTr("Send")
                         onClicked: {
-                            if (root.busyHere)
+                            if (sendButton.stops)
                                 root.chats.stop(root.path)
                             else
                                 root.send()

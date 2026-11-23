@@ -1,11 +1,15 @@
 #include "chatmodels.h"
 #include "calc/table.h"
+#include "chart/chart.h"
+#include "diagram/diagram.h"
+#include "markdown/math.h"
 
 #include "chat/chat.h"
 #include "contentutil.h"
 #include "dates/dates.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
+#include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "workspace.h"
@@ -14,6 +18,9 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -125,57 +132,195 @@ QString renderTable(const QString &body, const markdown::InlineRenderer &rendere
 
 } // namespace
 
-QString ChatMessageModel::renderMessage(const QString &markdown, const markdown::RenderContext &context)
+namespace {
+
+/// The parts of a message rendered: its blocks as rich text (`html`, the bubble's text) and, when
+/// it has a drawing — a chart, a diagram, a display formula —, the segments shown one under
+/// another (`segments`, else empty).
+struct Rendered {
+    QString html;
+    QVariantList segments;
+};
+
+/// The rich text of `parts` as one: no space under the last paragraph (the bubble's padding, or
+/// the gap between segments, is the room). "" for none.
+QString joinParts(QStringList parts)
+{
+    if (parts.isEmpty())
+        return QString();
+    static const QRegularExpression room(u"margin-bottom:\\d+px;"_s);
+    parts.last().replace(room, u"margin-bottom:0px;"_s);
+    return parts.join(QString());
+}
+
+/// A fenced block's text between its fences — only when it is closed: an answer cut off mid-way
+/// leaves its drawing open, and it is shown as written.
+std::optional<QString> closedFence(const QString &body)
+{
+    QStringList lines = body.split(u'\n');
+    if (lines.size() < 2)
+        return std::nullopt;
+    const QString open = lines.first().trimmed();
+    const QString close = lines.last().trimmed();
+    if (open.isEmpty() || (open.at(0) != u'`' && open.at(0) != u'~'))
+        return std::nullopt;
+    const QChar marker = open.at(0);
+    qsizetype length = 0;
+    while (length < open.size() && open.at(length) == marker)
+        ++length;
+    if (close.size() < length || std::ranges::any_of(close, [marker](QChar c) { return c != marker; }))
+        return std::nullopt;
+    lines.removeFirst();
+    lines.removeLast();
+    return lines.join(u'\n');
+}
+
+/// The LaTeX of a paragraph that is one display formula (`$$…$$` and nothing else), nullopt
+/// otherwise.
+std::optional<QString> displayFormula(const QString &body)
+{
+    const QString text = body.trimmed();
+    if (!text.startsWith(u"$$"_s) || !text.endsWith(u"$$"_s))
+        return std::nullopt;
+    const QList<markdown::MathSpan> spans = markdown::findMathSpans(text);
+    if (spans.size() != 1 || !spans.first().display || spans.first().from != 0 || spans.first().to != text.size())
+        return std::nullopt;
+    const markdown::MathSpan &span = spans.first();
+    return text.sliced(span.contentFrom, span.contentTo - span.contentFrom).trimmed();
+}
+
+/// The numbers of a ```chart block of a message (BlockListModel's chartData: ok, labels, labelsName,
+/// series), read from the message's own tables and calc blocks; nullopt when it cannot be drawn
+/// (a mistake, no such table, a query — a message runs none): it is shown as written then.
+std::optional<QVariantMap> messageChart(const QString &markdown, int line, const QString &source,
+                                        calc::CalcLocale locale)
+{
+    const chart::SpecResult spec = chart::parseSpec(source);
+    if (spec.error || spec.spec.source == chart::SourceKind::Query)
+        return std::nullopt;
+    const chart::DataResult data = chart::resolveData(spec.spec, chart::pageSources(markdown, line, locale));
+    if (data.error)
+        return std::nullopt;
+    QVariantList series;
+    for (const chart::Series &serie : data.data.series) {
+        QVariantList values;
+        values.reserve(serie.values.size());
+        for (const double v : serie.values)
+            values.append(std::isfinite(v) ? QVariant(v) : QVariant()); // a gap: null
+        series.append(QVariantMap{{u"name"_s, serie.name}, {u"values"_s, values}});
+    }
+    return QVariantMap{{u"ok"_s, true},
+                       {u"labels"_s, data.data.labels},
+                       {u"labelsName"_s, data.data.labelsName},
+                       {u"series"_s, series}};
+}
+
+/// A segment of a message: every key every kind has (the delegates read them all).
+QVariantMap segment(const QString &kind, const QString &html, const QString &code = QString(),
+                    const QString &source = QString(), const QVariantMap &chartData = QVariantMap())
+{
+    return QVariantMap{{u"kind"_s, kind}, {u"html"_s, html}, {u"code"_s, code}, {u"source"_s, source},
+                       {u"chartData"_s, chartData}};
+}
+
+Rendered renderParts(const QString &markdown, const markdown::RenderContext &context)
 {
     const markdown::BlockDocument doc(markdown);
     const markdown::InlineRenderer renderer(context);
+    const calc::CalcLocale calcLocale =
+            context.locale == dates::UiLocale::English ? calc::CalcLocale::English : calc::CalcLocale::Polish;
     static const QRegularExpression ordered(u"^\\s*(\\d{1,9}[.)])"_s);
-    QStringList parts;
+    QStringList parts;   // every block's rich text (the whole message's)
+    QStringList run;     // the blocks since the last drawing (a text segment)
+    QVariantList segments;
+    bool drawn = false;  // a segment that is a drawing
+    const auto endRun = [&] {
+        if (!run.isEmpty())
+            segments.append(segment(u"text"_s, joinParts(std::exchange(run, {}))));
+    };
     for (int i = 0; i < doc.count(); ++i) {
         const markdown::BlockEntry &b = doc.at(i);
         const int indent = b.depth * kIndent;
         // Room under a block: more after a blank line (a paragraph's end), little between the
         // items of a list.
         const int below = b.trailing.contains(u'\n') ? 10 : b.kind == BlockKind::ListItem ? 2 : 6;
-        if (b.kind == BlockKind::Table) {
-            const QString table = renderTable(b.body, renderer, context.palette.muted, below, indent);
-            if (!table.isEmpty()) {
-                parts.append(table);
-                continue;
+        QString part;
+        if (b.kind == BlockKind::Table)
+            part = renderTable(b.body, renderer, context.palette.muted, below, indent);
+        if (!part.isEmpty()) {
+            // (A table.)
+        } else if (b.kind == BlockKind::Code || b.kind == BlockKind::Table || b.kind == BlockKind::Html
+                   || b.kind == BlockKind::Frontmatter) {
+            part = u"<pre style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</pre>"_s.arg(below).arg(indent).arg(
+                    (b.kind == BlockKind::Code ? codeOf(b.body) : b.body).toHtmlEscaped());
+        } else if (b.kind == BlockKind::Rule) {
+            part = u"<hr/>"_s;
+        } else {
+            QString html = renderer.renderBlock(b.body, b.kind);
+            if (b.kind == BlockKind::Heading)
+                html = u"<b>"_s + html + u"</b>"_s;
+            if (b.kind == BlockKind::ListItem && !b.taskStatus) {
+                const auto number = ordered.match(b.prefix);
+                html = (number.hasMatch() ? number.captured(1) + u"&nbsp;"_s : u"•&nbsp;"_s) + html;
+            }
+            if (!html.isEmpty())
+                part = u"<p style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</p>"_s.arg(below).arg(indent).arg(html);
+        }
+        if (part.isEmpty())
+            continue;
+        parts.append(part);
+        // A drawing (docs/UI.md "AI chat"): a closed ```chart block whose numbers are in the message,
+        // a closed ```mermaid block of a type Brulion draws, a ```math block or a paragraph that is
+        // one $$…$$ formula. Its segment keeps the block's rich text as written: the view shows it
+        // when the diagram cannot be drawn after all.
+        QVariantMap visual;
+        if (b.kind == BlockKind::Code) {
+            const QString lang = b.lang.toLower();
+            if (const std::optional<QString> inner = closedFence(b.body); inner && !inner->trimmed().isEmpty()) {
+                if (lang == u"chart") {
+                    if (const std::optional<QVariantMap> data = messageChart(markdown, b.line, *inner, calcLocale))
+                        visual = segment(u"chart"_s, joinParts({part}), *inner, b.body, *data);
+                } else if (lang == u"mermaid") {
+                    const diagram::Kind kind = diagram::detectKind(*inner);
+                    if (kind != diagram::Kind::Unsupported && kind != diagram::Kind::Unknown)
+                        visual = segment(u"diagram"_s, joinParts({part}), *inner, b.body);
+                } else if (lang == u"math" || lang == u"latex" || lang == u"tex") {
+                    if (const QString formula = markdown::renderMath(*inner, true); !formula.isEmpty())
+                        visual = segment(u"math"_s, formula, *inner, b.body);
+                }
+            }
+        } else if (b.kind == BlockKind::Paragraph) {
+            if (const std::optional<QString> latex = displayFormula(b.body)) {
+                if (const QString formula = markdown::renderMath(*latex, true); !formula.isEmpty())
+                    visual = segment(u"math"_s, formula, *latex, b.body);
             }
         }
-        switch (b.kind) {
-        case BlockKind::Code:
-        case BlockKind::Table:
-        case BlockKind::Html:
-        case BlockKind::Frontmatter:
-            parts.append(u"<pre style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</pre>"_s.arg(below).arg(indent).arg(
-                    (b.kind == BlockKind::Code ? codeOf(b.body) : b.body).toHtmlEscaped()));
+        if (visual.isEmpty()) {
+            run.append(part);
             continue;
-        case BlockKind::Rule:
-            parts.append(u"<hr/>"_s);
-            continue;
-        default:
-            break;
         }
-        QString html = renderer.renderBlock(b.body, b.kind);
-        if (b.kind == BlockKind::Heading)
-            html = u"<b>"_s + html + u"</b>"_s;
-        if (b.kind == BlockKind::ListItem && !b.taskStatus) {
-            const auto number = ordered.match(b.prefix);
-            html = (number.hasMatch() ? number.captured(1) + u"&nbsp;"_s : u"•&nbsp;"_s) + html;
-        }
-        if (html.isEmpty())
-            continue;
-        parts.append(u"<p style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</p>"_s.arg(below).arg(indent).arg(html));
+        endRun();
+        segments.append(visual);
+        drawn = true;
     }
-    if (parts.isEmpty())
-        return u"…"_s;
-    // (No space under the last paragraph: the bubble's padding is the room.)
-    QString &last = parts.last();
-    static const QRegularExpression room(u"margin-bottom:\\d+px;"_s);
-    last.replace(room, u"margin-bottom:0px;"_s);
-    return parts.join(QString());
+    endRun();
+    Rendered out;
+    out.html = parts.isEmpty() ? u"…"_s : joinParts(parts);
+    if (drawn)
+        out.segments = segments;
+    return out;
+}
+
+} // namespace
+
+QString ChatMessageModel::renderMessage(const QString &markdown, const markdown::RenderContext &context)
+{
+    return renderParts(markdown, context).html;
+}
+
+QVariantList ChatMessageModel::renderSegments(const QString &markdown, const markdown::RenderContext &context)
+{
+    return renderParts(markdown, context).segments;
 }
 
 QString ChatMessageModel::render(const QString &markdown) const
@@ -185,6 +330,15 @@ QString ChatMessageModel::render(const QString &markdown) const
         return QString();
     return renderMessage(markdown, renderContext(vaultIndex(), m_path, effectiveToday(QString(), ws),
                                                  uiLocale(m_locale), paletteFromMap(m_palette)));
+}
+
+QVariantList ChatMessageModel::segments(const QString &markdown) const
+{
+    shell::Workspace *ws = workspace();
+    if (markdown.isEmpty() || !ws || !ws->isOpen())
+        return {};
+    return renderSegments(markdown, renderContext(vaultIndex(), m_path, effectiveToday(QString(), ws),
+                                                  uiLocale(m_locale), paletteFromMap(m_palette)));
 }
 
 void ChatMessageModel::refresh()
@@ -213,7 +367,11 @@ void ChatMessageModel::refresh()
             r.text = m.text;
             // (The pictures are shown apart: the bubble's text is the rest.)
             const QString words = m.pictures.isEmpty() ? m.text : chat::withoutPictures(m.text);
-            r.html = words.trimmed().isEmpty() && !m.pictures.isEmpty() ? QString() : renderMessage(words, context);
+            if (!words.trimmed().isEmpty() || m.pictures.isEmpty()) {
+                Rendered rendered = renderParts(words, context);
+                r.html = std::move(rendered.html);
+                r.segments = std::move(rendered.segments);
+            }
             r.line = m.line;
             if (m.time.isValid()) {
                 r.time = m.time.toString(u"HH:mm"_s);
@@ -252,9 +410,9 @@ void ChatMessageModel::refresh()
     applyRows(
             m_rows, next, [](const Row &r) { return r.number; },
             [](const Row &a, const Row &b) {
-                return a.role == b.role && a.text == b.text && a.html == b.html && a.line == b.line && a.time == b.time
-                       && a.day == b.day && a.pictures == b.pictures && a.sent == b.sent && a.firstSent == b.firstSent
-                       && a.flag == b.flag;
+                return a.role == b.role && a.text == b.text && a.html == b.html && a.segments == b.segments
+                       && a.line == b.line && a.time == b.time && a.day == b.day && a.pictures == b.pictures
+                       && a.sent == b.sent && a.firstSent == b.firstSent && a.flag == b.flag;
             });
     m_page = page;
     m_title = title;
@@ -277,6 +435,7 @@ QVariant ChatMessageModel::data(const QModelIndex &index, int role) const
     case DayRole: return r.day;
     case PicturesRole: return QVariant::fromValue(r.pictures);
     case PicturePathsRole: return r.picturePaths;
+    case SegmentsRole: return r.segments;
     case SentRole: return r.sent;
     case FirstSentRole: return r.firstSent;
     case FlagRole: return r.flag;
@@ -292,7 +451,8 @@ QHash<int, QByteArray> ChatMessageModel::roleNames() const
             {TimeRole, "time"},           {DayRole, "day"},
             {PicturesRole, "pictures"},   {SentRole, "sent"},
             {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"},
-            {FlagRole, "flag"},           {RevealedRole, "revealed"}};
+            {FlagRole, "flag"},           {RevealedRole, "revealed"},
+            {SegmentsRole, "segments"}};
 }
 
 QString ChatMessageModel::textAt(int row) const
@@ -330,17 +490,41 @@ void ChatMessageModel::reveal(int row, bool shown)
     Q_EMIT dataChanged(index(row), index(row), {RevealedRole});
 }
 
+int ChatMessageModel::lineOf(int row) const
+{
+    return row >= 0 && row < m_rows.size() ? m_rows.at(row).line : -1;
+}
+
+int ChatMessageModel::rowOfLine(int line) const
+{
+    int found = -1;
+    for (int i = 0; i < m_rows.size() && m_rows.at(i).line <= line; ++i)
+        found = i;
+    return line < 0 ? -1 : found;
+}
+
 // ---- ChatListModel ---------------------------------------------------------------------------------
 
 ChatListModel::ChatListModel(QObject *parent)
     : WorkspaceListModel(parent)
 {
-    // The turns that run or wait: the rows say so (no reading of the pages).
+    // The turns that run, wait, ask or failed and the unread answers: the rows say so, the ones
+    // that need the user come first (no reading of the pages). Coalesced: a turn changes a lot.
+    m_stateTimer.setSingleShot(true);
+    m_stateTimer.setInterval(0);
+    connect(&m_stateTimer, &QTimer::timeout, this, &ChatListModel::rebuild);
     connect(this, &WorkspaceListModel::workspaceChanged, this, [this] {
-        disconnect(m_turnsChanged);
-        if (shell::Workspace *ws = workspace())
-            m_turnsChanged =
-                    connect(ws->chats(), &shell::WorkspaceChats::stateChanged, this, &ChatListModel::turnsChanged);
+        for (const QMetaObject::Connection &c : std::as_const(m_turnsChanged))
+            disconnect(c);
+        m_turnsChanged.clear();
+        if (shell::Workspace *ws = workspace()) {
+            shell::WorkspaceChats *chats = ws->chats();
+            m_turnsChanged = {
+                    connect(chats, &shell::WorkspaceChats::stateChanged, this, &ChatListModel::turnsChanged),
+                    connect(chats, &shell::WorkspaceChats::questionsChanged, this, &ChatListModel::turnsChanged),
+                    connect(chats, &shell::WorkspaceChats::attentionChanged, this, &ChatListModel::turnsChanged),
+            };
+        }
     });
 }
 
@@ -348,6 +532,8 @@ void ChatListModel::turnsChanged()
 {
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {RunningRole, QueuedRole});
+    if (!m_stateTimer.isActive())
+        m_stateTimer.start();
 }
 
 void ChatListModel::setLocale(const QString &locale)
@@ -359,14 +545,49 @@ void ChatListModel::setLocale(const QString &locale)
     scheduleRefresh();
 }
 
+void ChatListModel::setQuery(const QString &query)
+{
+    if (m_query == query)
+        return;
+    m_query = query;
+    Q_EMIT queryChanged();
+    rebuild();
+}
+
+void ChatListModel::setShowArchived(bool show)
+{
+    if (m_showArchived == show)
+        return;
+    m_showArchived = show;
+    Q_EMIT showArchivedChanged();
+    rebuild();
+}
+
 std::pair<QString, QString> ChatListModel::splitTitle(const QString &title)
 {
     return chat::splitTitle(title);
 }
 
+QString ChatListModel::matchExcerpt(const QString &line, const QStringList &terms)
+{
+    constexpr int Before = 24; // characters kept before the first match
+    const QString words = chat::preview(line, 400);
+    const QList<int> at = matchPositions(words, terms, false);
+    if (at.isEmpty() || at.first() <= Before + 8)
+        return words;
+    // From a word a little before it.
+    qsizetype from = at.first() - Before;
+    const qsizetype space = words.indexOf(u' ', from);
+    if (space >= 0 && space < at.first())
+        from = space + 1;
+    if (words.at(from).isLowSurrogate())
+        ++from;
+    return u"…"_s + words.mid(from);
+}
+
 void ChatListModel::refresh()
 {
-    QList<Row> next;
+    QList<Entry> next;
     shell::Workspace *ws = workspace();
     if (ws && ws->isOpen() && ws->vault()) {
         const QList<FileStat> files = ws->vault()->markdownFiles();
@@ -380,29 +601,114 @@ void ChatListModel::refresh()
             const chat::Conversation conversation = chat::parse(content);
             if (conversation.messages.isEmpty())
                 continue;
-            Row r;
-            r.path = f.path;
+            Entry e;
+            e.path = f.path;
             const auto [date, title] = splitTitle(paths::pageTitle(f.path));
-            r.date = date;
-            r.title = title;
-            r.modified = f.mtime;
+            e.date = date;
+            e.title = title;
+            e.foldedTitle = text::foldKey(title);
+            e.modified = f.mtime;
             const chat::Message &last = conversation.messages.last();
             // (An answer the user reported or hid is not shown here either.)
-            r.preview = last.flag == chat::Flag::Reported ? tr("Reported response")
+            e.preview = last.flag == chat::Flag::Reported ? tr("Reported response")
                         : last.flag == chat::Flag::Hidden ? tr("Hidden response")
                                                           : chat::preview(last.text);
-            r.fromAi = last.role == chat::Role::Assistant;
-            r.messages = int(conversation.messages.size());
-            next.append(r);
+            e.fromAi = last.role == chat::Role::Assistant;
+            e.messages = int(conversation.messages.size());
+            e.pinned = conversation.pinned;
+            e.archived = conversation.archived;
+            e.texts.reserve(conversation.messages.size());
+            for (const chat::Message &m : conversation.messages)
+                e.texts.append({m.line, m.text, text::foldKey(m.text)});
+            next.append(e);
         }
-        std::sort(next.begin(), next.end(), [](const Row &a, const Row &b) {
-            return a.modified != b.modified ? a.modified > b.modified : a.path < b.path;
-        });
     }
-    applyRows(m_rows, next, [](const Row &r) { return r.path; }, [](const Row &a, const Row &b) {
-        return a.title == b.title && a.date == b.date && a.modified == b.modified && a.preview == b.preview
-               && a.fromAi == b.fromAi && a.messages == b.messages;
+    m_all = std::move(next);
+    rebuild();
+}
+
+void ChatListModel::rebuild()
+{
+    m_stateTimer.stop();
+    const shell::Workspace *ws = workspace();
+    shell::WorkspaceChats *chats = ws ? ws->chats() : nullptr;
+    const QStringList terms = searchTerms(m_query);
+    const bool searching = !terms.isEmpty();
+    const auto hasAll = [&terms](const QString &folded) {
+        return std::ranges::all_of(terms, [&folded](const QString &t) { return folded.contains(t); });
+    };
+    QList<Row> next;
+    int archived = 0, pinned = 0;
+    for (const Entry &e : std::as_const(m_all)) {
+        Row r;
+        if (searching) {
+            if (hasAll(e.foldedTitle)) {
+                r.titleMatches = matchPositions(e.title, terms, false);
+            } else {
+                // The newest message that has all of the words, at its line that has the most.
+                const auto found = std::find_if(e.texts.crbegin(), e.texts.crend(),
+                                                [&](const Entry::Text &t) { return hasAll(t.folded); });
+                if (found == e.texts.crend())
+                    continue;
+                QString best;
+                qsizetype most = -1;
+                for (const QString &line : found->text.split(u'\n')) {
+                    const QString folded = text::foldKey(line);
+                    const qsizetype n =
+                            std::ranges::count_if(terms, [&](const QString &t) { return folded.contains(t); });
+                    if (n > most) {
+                        most = n;
+                        best = line;
+                    }
+                }
+                r.matchText = matchExcerpt(best, terms);
+                r.matchMatches = matchPositions(r.matchText, terms, false);
+                r.matchLine = found->line;
+            }
+        }
+        if (e.archived)
+            ++archived;
+        else if (e.pinned)
+            ++pinned;
+        if (e.archived && !m_showArchived && !searching)
+            continue;
+        r.path = e.path;
+        r.title = e.title;
+        r.date = e.date;
+        r.modified = e.modified;
+        r.preview = e.preview;
+        r.fromAi = e.fromAi;
+        r.messages = e.messages;
+        r.pinned = e.pinned;
+        r.archived = e.archived;
+        r.section = e.archived ? u"archived"_s : e.pinned ? u"pinned"_s : u"recent"_s;
+        if (chats) {
+            r.asking = chats->asking(e.path);
+            r.question = r.asking ? chats->questionText(e.path).section(u'\n', 0, 0).trimmed() : QString();
+            r.failure = chats->failureOf(e.path).section(u'\n', 0, 0).trimmed();
+            r.unread = chats->isUnread(e.path);
+            r.cameBack =
+                    r.asking || !r.failure.isEmpty() || r.unread ? std::max<qint64>(chats->cameBack(e.path), 1) : 0;
+        }
+        next.append(r);
+    }
+    const auto rank = [](const Row &r) { return r.archived ? 2 : r.pinned ? 0 : 1; };
+    std::sort(next.begin(), next.end(), [&rank](const Row &a, const Row &b) {
+        if (rank(a) != rank(b))
+            return rank(a) < rank(b);
+        // What needs the user first: by when it came back to them.
+        if ((a.cameBack > 0) != (b.cameBack > 0))
+            return a.cameBack > 0;
+        if (a.cameBack != b.cameBack)
+            return a.cameBack > b.cameBack;
+        return a.modified != b.modified ? a.modified > b.modified : a.path < b.path;
     });
+    applyRows(m_rows, next, [](const Row &r) { return r.path; }, [](const Row &a, const Row &b) { return a == b; });
+    if (archived != m_archivedCount || pinned != m_pinnedCount) {
+        m_archivedCount = archived;
+        m_pinnedCount = pinned;
+        Q_EMIT sectionsChanged();
+    }
 }
 
 QVariant ChatListModel::data(const QModelIndex &index, int role) const
@@ -410,6 +716,13 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
     if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
         return {};
     const Row &r = m_rows.at(index.row());
+    const auto positions = [](const QList<int> &list) {
+        QVariantList out;
+        out.reserve(list.size());
+        for (const int p : list)
+            out.append(p);
+        return out;
+    };
     switch (role) {
     case PathRole: return r.path;
     case TitleRole: return r.title;
@@ -425,21 +738,59 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
             return false;
         return role == RunningRole ? ws->chats()->isRunning(r.path) : ws->chats()->isQueued(r.path);
     }
+    case PinnedRole: return r.pinned;
+    case ArchivedRole: return r.archived;
+    case SectionRole: return r.section;
+    case AskingRole: return r.asking;
+    case QuestionRole: return r.question;
+    case FailureRole: return r.failure;
+    case UnreadRole: return r.unread;
+    case TitleMatchesRole: return positions(r.titleMatches);
+    case MatchTextRole: return r.matchText;
+    case MatchMatchesRole: return positions(r.matchMatches);
+    case MatchLineRole: return r.matchLine;
     default: return {};
     }
 }
 
 QHash<int, QByteArray> ChatListModel::roleNames() const
 {
-    return {{PathRole, "path"},           {TitleRole, "title"},     {DateRole, "date"},
-            {DateLabelRole, "dateLabel"}, {PreviewRole, "preview"}, {FromAiRole, "fromAi"},
-            {MessagesRole, "messages"},   {RunningRole, "running"}, {QueuedRole, "queued"}};
+    return {{PathRole, "path"},
+            {TitleRole, "title"},
+            {DateRole, "date"},
+            {DateLabelRole, "dateLabel"},
+            {PreviewRole, "preview"},
+            {FromAiRole, "fromAi"},
+            {MessagesRole, "messages"},
+            {RunningRole, "running"},
+            {QueuedRole, "queued"},
+            {PinnedRole, "pinned"},
+            {ArchivedRole, "archived"},
+            {SectionRole, "section"},
+            {AskingRole, "asking"},
+            {QuestionRole, "question"},
+            {FailureRole, "failure"},
+            {UnreadRole, "unread"},
+            {TitleMatchesRole, "titleMatches"},
+            {MatchTextRole, "matchText"},
+            {MatchMatchesRole, "matchMatches"},
+            {MatchLineRole, "matchLine"}};
 }
 
 int ChatListModel::rowOf(const QString &path) const
 {
     const auto it = std::ranges::find_if(m_rows, [&path](const Row &r) { return r.path.compare(path, Qt::CaseInsensitive) == 0; });
     return rowIndex(m_rows, it);
+}
+
+QString ChatListModel::pathAt(int row) const
+{
+    return row >= 0 && row < m_rows.size() ? m_rows.at(row).path : QString();
+}
+
+int ChatListModel::matchLineAt(int row) const
+{
+    return row >= 0 && row < m_rows.size() ? m_rows.at(row).matchLine : -1;
 }
 
 } // namespace brulion::content

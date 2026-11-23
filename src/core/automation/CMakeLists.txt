@@ -12,4 +12,5 @@ brulion_add_core_module(automation
         policy.h policy.cpp
         edits.h edits.cpp
         plan.h plan.cpp
+        chatlink.h chatlink.cpp
     DEPS util text dates markdown vault index notebook)

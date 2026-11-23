@@ -180,6 +180,12 @@ struct Permission
     QString details; ///< what it would do: a file's new text, the tool's input as JSON ("" none)
     QList<PermissionOption> options;
     QList<Diff> diffs{}; ///< the changes of files it would make (shown as a diff)
+    /// Its tool call's kind ("edit", "execute", "switch_mode" …: the request's, else the one the
+    /// turn knows for the call; "" not said).
+    QString kind{};
+    /// A plan the agent asks the user to approve (Claude Code leaving its plan mode: the tool
+    /// input's `plan`, Markdown), "" none — then it is the details too.
+    QString plan{};
 };
 
 /// One value a session option may take.
@@ -247,6 +253,9 @@ struct ToolCall
     QString terminal; ///< the id of a terminal it shows ("" none)
     QString output;   ///< the end of its text content (a command's output, a result)
     std::optional<Diff> diff{}; ///< the change of a file it shows (its first)
+    /// The files it works on: its `locations` and its diffs' paths (absolute, as the agent
+    /// names them), each once.
+    QStringList paths{};
     friend bool operator==(const ToolCall &, const ToolCall &) = default;
 };
 
@@ -361,7 +370,8 @@ struct SessionInfo
 
 /// A question of the agent as the user sees it (pure): its title (the call's, else one known from
 /// the turn), what it would do, its options; nullopt when it offers none.
-std::optional<Permission> readPermission(const QJsonObject &params, const QHash<QString, QString> &titles);
+std::optional<Permission> readPermission(const QJsonObject &params, const QHash<QString, QString> &titles,
+                                         const QHash<QString, QString> &kinds = {});
 
 /// The agent's sign-in methods (initialize's authMethods).
 QList<AuthMethod> readAuthMethods(const QJsonValue &methods);

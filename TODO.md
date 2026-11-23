@@ -12,6 +12,17 @@ done in the repository simply disappears from the list.
   remote MCP server (`brulion-cli mcp serve`, docs/CLI.md "Remote MCP server") from claude.ai and
   ChatGPT themselves (it passes the official MCP Python SDK and reads their published client
   documents) — also as the desktop app runs it (Settings → Extensions → claude.ai and ChatGPT) —.
+* **T3 Code's features in the AI chat: what is still missing** — the queue and Send now, Edit from
+  here, forks, quotes, @-named pages, drafts, approvals, plans to approve, a turn's changed files
+  with Undo, delegation between partners, scheduled conversations, subscription limits, dictation
+  on the desktop, prompt links, drawings in answers, tool calls in words, the list's pins, archive,
+  search, badges and notifications are there (docs/UI.md "AI chat", "AI agents (ACP)"). Not yet:
+  side chats (`/btw`: a fork shown only inside its conversation); a delegated conversation that
+  wakes its parent when it ends (today an agent starts and waits); webhooks that start a scheduled
+  conversation; a secret the agent asks for in a private card (T3's `request_secret`); a usage
+  history with costs (T3 reads the agents' own session logs); a session renamed while a stopped
+  turn of it is still on its way keeps its old key in `acp::Client` (the next turn starts a new
+  session); all of it tried with a real Claude Code and Codex.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
@@ -39,9 +50,13 @@ done in the repository simply disappears from the list.
   from the camera app for a message (the activity recreated while the camera is in front loses the
   photo's path, kept only in memory) and dictation with Google's recognizer and with none
   (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's summarised thinking with a real
-  key (`thoughts = true`, `ai::showsThinking`); dictation elsewhere than Android waits for on-device
-  speech recognition (`platform::setSpeechRecognizer`); the browser picks no picture files for the
-  chat yet (its file picker is the editor's own, `platform/wasm/wasmfiles.h`).
+  key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
+  real microphone on Windows; the browser picks no picture files for the chat yet (its file picker is
+  the editor's own, `platform/wasm/wasmfiles.h`); the chat's notifications (an answer, a failure, a
+  question while the app is behind another: docs/UI.md "AI chat") on a real phone — Android shows
+  them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser;
+  conversations untouched for a while archived by themselves (a setting, off by default: T3 Code's
+  auto-settle) are not there.
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",

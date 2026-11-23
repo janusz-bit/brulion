@@ -27,11 +27,13 @@
 #include "ai/local.h"
 #include "aireport/aireport.h"
 #include "chat/chat.h"
+#include "vault/localstore.h"
 #include "vault/vault.h"
 
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QJsonObject>
 #include <QLocale>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -125,11 +127,18 @@ class TestContentChat : public QObject {
     QDateTime m_now{QDate(2026, 11, 15), QTime(10, 30)};
     Model m_model;
 
-    std::unique_ptr<Workspace> open(const QHash<QString, QString> &files, bool assistant = true)
+    std::unique_ptr<Workspace> open(const QHash<QString, QString> &files, bool assistant = true,
+                                    const QHash<QString, QDateTime> &times = {})
     {
         const QString root = m_tmp.filePath(u"vault-%1"_s.arg(++m_n));
         for (auto it = files.cbegin(); it != files.cend(); ++it)
             writeRaw(root + u'/' + it.key(), it.value().toUtf8());
+        // (When each page last changed: the list's order.)
+        for (auto it = times.cbegin(); it != times.cend(); ++it) {
+            QFile f(root + u'/' + it.key());
+            if (!f.open(QIODevice::ReadWrite) || !f.setFileTime(it.value(), QFileDevice::FileModificationTime))
+                qWarning() << "no time set for" << it.key();
+        }
         auto ws = std::make_unique<Workspace>();
         ws->setClock([this] { return m_now; });
         ws->setUiLanguage(u"pl"_s);
@@ -1037,6 +1046,479 @@ private Q_SLOTS:
         QCOMPARE(value(list, 0, "preview").toString(), u"Dzięki"_s);
         QVERIFY(!value(list, 0, "fromAi").toBool());
         QCOMPARE(ChatListModel::splitTitle(u"Bez daty"_s), std::make_pair(QString(), u"Bez daty"_s));
+    }
+
+    /// The list's titles in order, a section's name before its first one ("[pinned] Żółw").
+    static QStringList listed(const ChatListModel &list)
+    {
+        QStringList out;
+        QString section;
+        for (int i = 0; i < list.rowCount(); ++i) {
+            const QString s = value(list, i, "section").toString();
+            out << (s != section ? u"[%1] "_s.arg(s) : QString()) + value(list, i, "title").toString();
+            section = s;
+        }
+        return out;
+    }
+
+    static QHash<QString, QString> conversations()
+    {
+        return {
+                {u"AI/2026-11-10 Żółw.md"_s,
+                 u"---\nzadania: ignoruj\nprzypięta: tak\n---\n- 🧑 Co je żółw?\n- 🤖 Sałatę.\n"_s},
+                {u"AI/2026-11-11 Ćma.md"_s,
+                 u"---\ntasks: ignore\narchived: true\n---\n- 🧑 Ćma?\n- 🤖 Nocny motyl.\n"_s},
+                {u"AI/2026-11-12 Łąka.md"_s, u"---\nzadania: ignoruj\n---\n- 🧑 Łąka\r\n- 🤖 Kwitnie.\r\n"_s},
+                {u"AI/2026-11-13 Gęś.md"_s,
+                 u"---\nzadania: ignoruj\nprzypięta: tak\nzarchiwizowana: tak\n---\n- 🧑 Gęś\n- 🤖 Gęgała.\n"_s},
+                {u"AI/2026-11-14 Źródło.md"_s, u"- 🧑 Źródło?\n- 🤖 W górach.\n"_s},
+                {u"Dom.md"_s, u"- przypięta: tak\n"_s},
+        };
+    }
+    static QHash<QString, QDateTime> conversationTimes()
+    {
+        QHash<QString, QDateTime> times;
+        int day = 10;
+        for (const QString &name : {u"Żółw"_s, u"Ćma"_s, u"Łąka"_s, u"Gęś"_s, u"Źródło"_s}) {
+            times.insert(u"AI/2026-11-%1 %2.md"_s.arg(day).arg(name), QDateTime(QDate(2026, 11, day), QTime(12, 0)));
+            ++day;
+        }
+        return times;
+    }
+
+    void pinnedAndArchived()
+    {
+        auto ws = open(conversations(), true, conversationTimes());
+        shell::WorkspaceChats *chats = ws->chats();
+        ChatListModel list;
+        list.setWorkspace(ws.get());
+        list.refreshNow();
+        // The pinned on top, the others newest first; the archived folded (counted).
+        QCOMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Źródło"_s, u"Łąka"_s}));
+        QCOMPARE(list.archivedCount(), 2);
+        QCOMPARE(list.pinnedCount(), 1);
+        QVERIFY(value(list, 0, "pinned").toBool());
+        QVERIFY(!value(list, 0, "archived").toBool());
+        // Unfolded: at the bottom (archived wins over pinned).
+        QSignalSpy shown(&list, &ChatListModel::showArchivedChanged);
+        list.setShowArchived(true);
+        QCOMPARE(shown.size(), 1);
+        QCOMPARE(listed(list),
+                 (QStringList{u"[pinned] Żółw"_s, u"[recent] Źródło"_s, u"Łąka"_s, u"[archived] Gęś"_s, u"Ćma"_s}));
+        QVERIFY(value(list, 3, "pinned").toBool() && value(list, 3, "archived").toBool());
+        list.setShowArchived(false);
+
+        // Pinned from the menu: its frontmatter, the rest byte for byte (CRLF lines too).
+        const QString meadow = u"AI/2026-11-12 Łąka.md"_s;
+        QVERIFY(chats->setPinned(meadow, true));
+        QCOMPARE(ws->read(meadow), u"---\nzadania: ignoruj\nprzypięta: tak\n---\n- 🧑 Łąka\r\n- 🤖 Kwitnie.\r\n"_s);
+        list.refreshNow();
+        QCOMPARE(listed(list), (QStringList{u"[pinned] Łąka"_s, u"Żółw"_s, u"[recent] Źródło"_s}));
+        QVERIFY(chats->setPinned(meadow, true)); // (said already: nothing written)
+        QVERIFY(chats->setPinned(meadow, false));
+        QCOMPARE(ws->read(meadow), u"---\nzadania: ignoruj\n---\n- 🧑 Łąka\r\n- 🤖 Kwitnie.\r\n"_s);
+        // Archived: out of the list; a page without a frontmatter gets one in the notebook's language.
+        const QString spring = u"AI/2026-11-14 Źródło.md"_s;
+        QVERIFY(chats->setArchived(spring, true));
+        QCOMPARE(ws->read(spring), u"---\nzarchiwizowana: tak\n---\n- 🧑 Źródło?\n- 🤖 W górach.\n"_s);
+        list.refreshNow();
+        QCOMPARE(list.rowOf(spring), -1);
+        QCOMPARE(list.archivedCount(), 3);
+        QVERIFY(chats->setArchived(spring, false));
+        list.refreshNow();
+        QVERIFY(list.rowOf(spring) >= 0);
+        // An English page: its key.
+        const QString moth = u"AI/2026-11-11 Ćma.md"_s;
+        QVERIFY(chats->setPinned(moth, true));
+        QCOMPARE(ws->read(moth),
+                 u"---\ntasks: ignore\narchived: true\npinned: true\n---\n- 🧑 Ćma?\n- 🤖 Nocny motyl.\n"_s);
+        QVERIFY(!chats->setPinned(u"AI/nie ma.md"_s, true));
+        QVERIFY(!chats->setArchived(QString(), true));
+    }
+
+    void whatNeedsTheUserComesFirst()
+    {
+        auto ws = open(conversations(), true, conversationTimes());
+        shell::WorkspaceChats *chats = ws->chats();
+        ChatListModel list;
+        list.setWorkspace(ws.get());
+        list.refreshNow();
+        QCOMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Źródło"_s, u"Łąka"_s}));
+
+        // An answer nobody saw: unread — in the notebook's device state, never in the page.
+        const QString meadow = u"AI/2026-11-12 Łąka.md"_s;
+        QSignalSpy attention(chats, &shell::WorkspaceChats::attentionChanged);
+        m_model.replies = {answer(u"Pachnie.\n\nI brzęczy."_s)};
+        QCOMPARE(chats->send(meadow, u"Czym pachnie łąka?"_s), meadow);
+        QTRY_VERIFY(!chats->isRunning(meadow));
+        QVERIFY(chats->isUnread(meadow));
+        QVERIFY(!attention.isEmpty());
+        QVERIFY(chats->cameBack(meadow) > 0);
+        QVERIFY(ws->vault()->store()->get(u"chat/unread"_s).toObject().contains(meadow.toLower()));
+        QVERIFY(!ws->read(meadow).contains(u"unread"_s));
+        // Another conversation changes after it: the unread one stays on top.
+        const QString spring = u"AI/2026-11-14 Źródło.md"_s;
+        QVERIFY(ws->write(spring, ws->read(spring) + u"- 🧑 A w dolinach?\n"_s));
+        list.refreshNow();
+        QCOMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Łąka"_s, u"Źródło"_s}));
+        QVERIFY(value(list, 1, "unread").toBool());
+        QVERIFY(!value(list, 2, "unread").toBool());
+        // Read: a view shows it.
+        chats->showing(meadow, true);
+        QVERIFY(!chats->isUnread(meadow));
+        QVERIFY(!ws->vault()->store()->contains(u"chat/unread"_s));
+        QTRY_COMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Źródło"_s, u"Łąka"_s}));
+        // Shown while answered: never unread.
+        m_model.replies = {answer(u"Miodem."_s)};
+        QCOMPARE(chats->send(meadow, u"A czym jeszcze?"_s), meadow);
+        QTRY_VERIFY(!chats->isRunning(meadow));
+        QVERIFY(!chats->isUnread(meadow));
+        chats->showing(meadow, false);
+
+        // A failure: on top, its reason as the row's line.
+        ai::Reply broken;
+        broken.error = u"brak połączenia"_s;
+        m_model.replies = {broken};
+        QCOMPARE(chats->send(spring, u"Halo?"_s), spring);
+        QTRY_VERIFY(!chats->failureOf(spring).isEmpty());
+        QTRY_COMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Źródło"_s, u"Łąka"_s}));
+        QVERIFY2(value(list, 1, "failure").toString().contains(u"brak połączenia"_s),
+                 qPrintable(value(list, 1, "failure").toString()));
+        // An answer unread meanwhile comes back later: above the failure.
+        m_model.replies = {answer(u"Tak."_s)};
+        QCOMPARE(chats->send(meadow, u"Na pewno?"_s), meadow);
+        QTRY_VERIFY(chats->isUnread(meadow));
+        QTRY_COMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Łąka"_s, u"Źródło"_s}));
+        chats->dismissFailure(spring);
+        QTRY_COMPARE(value(list, list.rowOf(spring), "failure").toString(), QString());
+        QVERIFY(chats->cameBack(spring) == 0);
+
+        // A question of the turn: on top, what it asks as the line; the pinned stay above.
+        m_model.replies = {calling(u"append_to_page"_s, {{u"name"_s, u"Dom"_s}, {u"markdown"_s, u"- żółty"_s}}),
+                           answer(u"Dopisane."_s)};
+        QCOMPARE(chats->send(spring, u"Dopisz żółty do domu"_s), spring);
+        QTRY_VERIFY(chats->asking(spring));
+        QTRY_COMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Źródło"_s, u"Łąka"_s}));
+        QVERIFY(value(list, 1, "asking").toBool());
+        QVERIFY2(value(list, 1, "question").toString().contains(u"Dom"_s),
+                 qPrintable(value(list, 1, "question").toString()));
+        QVERIFY(!value(list, 1, "question").toString().contains(u'\n'));
+        ws->extensions()->answerChoice(ws->extensions()->questionOptions().value(0));
+        QTRY_VERIFY(!chats->isRunning(spring));
+        QTRY_VERIFY(!value(list, list.rowOf(spring), "asking").toBool());
+
+        // Renamed: the unread answer follows; deleted: it goes.
+        const QString renamed = chats->rename(meadow, u"Łąka kwietna"_s);
+        QVERIFY(!renamed.isEmpty());
+        QVERIFY(chats->isUnread(renamed));
+        QVERIFY(!chats->isUnread(meadow));
+        QVERIFY(!chats->remove(renamed).isEmpty());
+        QVERIFY(!chats->isUnread(renamed));
+    }
+
+    void searchingTheConversations_data()
+    {
+        QTest::addColumn<QString>("query");
+        QTest::addColumn<QStringList>("titles");
+        QTest::addColumn<QString>("matchText");
+        QTest::addColumn<QString>("marked"); // the characters marked in it (or in the title)
+        QTest::addColumn<int>("matchLine");
+
+        QTest::newRow("nothing") << QString() << QStringList{u"Wakacje w górach"_s, u"Przepis na żurek"_s} << QString()
+                                 << QString() << -1;
+        QTest::newRow("a name, without diacritics")
+                << u"zurek"_s << QStringList{u"Przepis na żurek"_s} << QString() << u"żurek"_s << -1;
+        QTest::newRow("a message") << u"KIEŁBASY"_s << QStringList{u"Przepis na żurek"_s}
+                                   << u"Potrzebujesz zakwasu i białej kiełbasy."_s << u"kiełbasy"_s << 4;
+        QTest::newRow("archived ones too") << u"kiełbas"_s << QStringList{u"Przepis na żurek"_s, u"Stare"_s}
+                                           << u"Potrzebujesz zakwasu i białej kiełbasy."_s << u"kiełbas"_s << 4;
+        QTest::newRow("all the words, one message")
+                << u"szlakow zakopane"_s << QStringList{u"Wakacje w górach"_s}
+                << u"Zakopane albo Szczyrk — w Zakopanem jest więcej szlaków."_s << u"ZakopaneZakopaneszlaków"_s << 4;
+        QTest::newRow("words of two messages") << u"zakwas pojechać"_s << QStringList() << QString() << QString() << -1;
+        QTest::newRow("not the name: a message")
+                << u"góry"_s << QStringList{u"Wakacje w górach"_s} << u"Gdzie pojechać w góry?"_s << u"góry"_s << 3;
+        QTest::newRow("its user's") << u"ugotować"_s << QStringList{u"Przepis na żurek"_s} << u"Jak ugotować żurek?"_s
+                                    << u"ugotować"_s << 3;
+        QTest::newRow("no such words") << u"nic takiego"_s << QStringList() << QString() << QString() << -1;
+    }
+    void searchingTheConversations()
+    {
+        QFETCH(QString, query);
+        QFETCH(QStringList, titles);
+        QFETCH(QString, matchText);
+        QFETCH(QString, marked);
+        QFETCH(int, matchLine);
+        const QHash<QString, QString> files{
+                {u"AI/2026-11-10 Przepis na żurek.md"_s,
+                 u"---\nzadania: ignoruj\n---\n"
+                 "- 🧑 Jak ugotować żurek?\n"
+                 "- 🤖 Potrzebujesz zakwasu i białej kiełbasy.\n\n  - zakwas\n  - kiełbasa\n"_s},
+                {u"AI/2026-11-11 Wakacje w górach.md"_s,
+                 u"---\nzadania: ignoruj\n---\n"
+                 "- 🧑 Gdzie pojechać w góry?\n"
+                 "- 🤖 Zakopane albo Szczyrk — w Zakopanem jest więcej szlaków.\n"_s},
+                {u"AI/2026-11-12 Stare.md"_s,
+                 u"---\nzadania: ignoruj\nzarchiwizowana: tak\n---\n- 🧑 Co z kiełbasą?\n- 🤖 Zjedz ją.\n"_s},
+        };
+        const QHash<QString, QDateTime> times{
+                {u"AI/2026-11-10 Przepis na żurek.md"_s, QDateTime(QDate(2026, 11, 10), QTime(9, 0))},
+                {u"AI/2026-11-11 Wakacje w górach.md"_s, QDateTime(QDate(2026, 11, 11), QTime(9, 0))},
+                {u"AI/2026-11-12 Stare.md"_s, QDateTime(QDate(2026, 11, 12), QTime(9, 0))},
+        };
+        auto ws = open(files, true, times);
+        ChatListModel list;
+        list.setWorkspace(ws.get());
+        list.refreshNow();
+        QSignalSpy queried(&list, &ChatListModel::queryChanged);
+        list.setQuery(query);
+        QCOMPARE(queried.size(), query.isEmpty() ? 0 : 1);
+        QStringList got;
+        for (int i = 0; i < list.rowCount(); ++i)
+            got << value(list, i, "title").toString();
+        QCOMPARE(got, titles);
+        if (titles.isEmpty())
+            return;
+        QCOMPARE(value(list, 0, "matchText").toString(), matchText);
+        QCOMPARE(value(list, 0, "matchLine").toInt(), matchLine);
+        QCOMPARE(list.matchLineAt(0), matchLine);
+        // The marked characters: of the match's line, else of the title.
+        const QString text = matchText.isEmpty() ? value(list, 0, "title").toString() : matchText;
+        const QVariantList positions = value(list, 0, matchText.isEmpty() ? "titleMatches" : "matchMatches").toList();
+        QString marks;
+        for (const QVariant &p : positions)
+            marks += text.at(p.toInt());
+        QCOMPARE(marks, marked);
+    }
+
+    void aMatchFarIntoALine()
+    {
+        const QStringList terms{u"zolw"_s};
+        const QString line = u"**Na początku** była długa opowieść o lesie, rzece i górach, a potem [[Zwierzęta|o "
+                             "zwierzętach]]: na końcu przyszedł żółw."_s;
+        const QString excerpt = ChatListModel::matchExcerpt(line, terms);
+        QVERIFY2(excerpt.startsWith(u"…"_s) && excerpt.endsWith(u"przyszedł żółw."_s), qPrintable(excerpt));
+        QVERIFY2(!excerpt.contains(u"**"_s) && !excerpt.contains(u"[["_s), qPrintable(excerpt));
+        QVERIFY(excerpt.size() < 60);
+        // Near the start: all of it.
+        QCOMPARE(ChatListModel::matchExcerpt(u"- Żółw je sałatę"_s, terms), u"Żółw je sałatę"_s);
+    }
+
+    void notifications()
+    {
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        bool active = true;
+        chats->setAppActive([&active] { return active; });
+        QSignalSpy wanted(chats, &shell::WorkspaceChats::notificationWanted);
+        QCOMPARE(chats->notifyMode(), u"background"_s);
+
+        // In front: no notification (the list says it); behind another app: one.
+        m_model.replies = {answer(u"Jutro **czynsz**.\n\nI raport."_s)};
+        const QString path = chats->send(QString(), u"Co jutro?"_s);
+        QTRY_VERIFY(!chats->isRunning(path));
+        QVERIFY(wanted.isEmpty());
+        active = false;
+        m_model.replies = {answer(u"\n- Pojutrze nic.\n- Naprawdę."_s)};
+        QCOMPARE(chats->send(path, u"A pojutrze?"_s), path);
+        QTRY_COMPARE(wanted.size(), 1);
+        QCOMPARE(wanted.at(0).at(0).toString(), path);
+        QCOMPARE(wanted.at(0).at(1).toString(), u"Co jutro"_s);
+        QCOMPARE(wanted.at(0).at(2).toString(), u"Pojutrze nic."_s);
+        // Shown, but the window not active: the user is not looking.
+        chats->showing(path, true);
+        m_model.replies = {answer(u"Dobrze."_s)};
+        QCOMPARE(chats->send(path, u"Dzięki"_s), path);
+        QTRY_COMPARE(wanted.size(), 2);
+
+        // Always: also in front, unless a chat view shows it.
+        chats->setNotifyMode(u"always"_s);
+        active = true;
+        m_model.replies = {answer(u"Widzisz."_s)};
+        QCOMPARE(chats->send(path, u"Widzisz?"_s), path);
+        QTRY_VERIFY(!chats->isRunning(path));
+        QCOMPARE(wanted.size(), 2);
+        chats->showing(path, false);
+        m_model.replies = {answer(u"Nie widzisz."_s)};
+        QCOMPARE(chats->send(path, u"A teraz?"_s), path);
+        QTRY_COMPARE(wanted.size(), 3);
+        QCOMPARE(wanted.at(2).at(2).toString(), u"Nie widzisz."_s);
+
+        // A failure says why; a question what it asks.
+        ai::Reply broken;
+        broken.error = u"model się nie wczytał"_s;
+        m_model.replies = {broken};
+        QCOMPARE(chats->send(path, u"Jeszcze?"_s), path);
+        QTRY_COMPARE(wanted.size(), 4);
+        QVERIFY2(wanted.at(3).at(2).toString().contains(u"model się nie wczytał"_s),
+                 qPrintable(wanted.at(3).at(2).toString()));
+        m_model.replies = {calling(u"append_to_page"_s, {{u"name"_s, u"Zakupy"_s}, {u"markdown"_s, u"- mleko"_s}}),
+                           answer(u"Dopisałem."_s)};
+        QVERIFY(chats->retry(path));
+        QTRY_COMPARE(wanted.size(), 5);
+        QVERIFY2(wanted.at(4).at(2).toString().contains(u"Zakupy"_s), qPrintable(wanted.at(4).at(2).toString()));
+        QVERIFY(!wanted.at(4).at(2).toString().contains(u'\n'));
+        ws->extensions()->answerChoice(ws->extensions()->questionOptions().value(0));
+        QTRY_COMPARE(wanted.size(), 6); // (and its answer)
+        QCOMPARE(wanted.at(5).at(2).toString(), u"Dopisałem."_s);
+
+        // Never: none.
+        chats->setNotifyMode(u"never"_s);
+        active = false;
+        m_model.replies = {answer(u"Cicho."_s)};
+        QCOMPARE(chats->send(path, u"Cisza?"_s), path);
+        QTRY_VERIFY(!chats->isRunning(path));
+        QCOMPARE(wanted.size(), 6);
+        chats->setNotifyMode(u"cokolwiek"_s);
+        QCOMPARE(chats->notifyMode(), u"background"_s);
+        // A stopped turn: nothing to say.
+        m_model.hold = true;
+        QCOMPARE(chats->send(path, u"Długo?"_s), path);
+        QTRY_COMPARE(m_model.held != nullptr, true);
+        chats->stop(path);
+        m_model.release();
+        QCoreApplication::processEvents();
+        QCOMPARE(wanted.size(), 6);
+    }
+
+    void segments_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QStringList>("kinds"); // [] = text only: the bubble's one rich text
+        const QString table = u"| Miesiąc | Przychód |\n|---|--:|\n| Styczeń | 1 200 zł |\n| Luty | 1 500 zł |\n\n"_s;
+        QTest::newRow("plain text") << u"Zwykła odpowiedź z **pogrubieniem** i `kodem`."_s << QStringList();
+        QTest::newRow("a fence without a language") << u"```\nflowchart LR\nA-->B\n```"_s << QStringList();
+        QTest::newRow("code") << u"```luau\nprint(\"<b>\")\n```"_s << QStringList();
+        QTest::newRow("a diagram between words")
+                << u"Oto schemat:\n\n```mermaid\nflowchart LR\n  A[Pomysł] --> B{Czy warto?}\n```\n\nI dalej."_s
+                << QStringList{u"text"_s, u"diagram"_s, u"text"_s};
+        QTest::newRow("Mermaid in capitals") << u"```Mermaid\ngraph TD\nA-->B\n```"_s << QStringList{u"diagram"_s};
+        QTest::newRow("a sequence, Polish") << u"Zażółć gęślą jaźń:\n\n```mermaid\nsequenceDiagram\nAla->>Ola: Cześć\n```"_s
+                                           << QStringList{u"text"_s, u"diagram"_s};
+        QTest::newRow("a pie, tildes") << u"~~~mermaid\npie\n\"Tak\" : 3\n\"Nie\" : 1\n~~~"_s << QStringList{u"diagram"_s};
+        QTest::newRow("a type not drawn") << u"```mermaid\nclassDiagram\nA <|-- B\n```"_s << QStringList();
+        QTest::newRow("no diagram type") << u"```mermaid\nzażółć gęślą jaźń\n```"_s << QStringList();
+        QTest::newRow("an empty diagram") << u"```mermaid\n```"_s << QStringList();
+        QTest::newRow("unterminated") << u"Rysuję:\n\n```mermaid\nflowchart LR\nA-->B"_s << QStringList();
+        QTest::newRow("nested backticks") << u"````markdown\n```mermaid\nflowchart LR\nA-->B\n```\n````"_s << QStringList();
+        QTest::newRow("a longer closing fence") << u"```mermaid\nflowchart LR\nA-->B\n````"_s << QStringList{u"diagram"_s};
+        QTest::newRow("a shorter closing fence") << u"````mermaid\nflowchart LR\nA-->B\n```"_s << QStringList();
+        QTest::newRow("a chart of the table above") << table + u"```chart\ntype: bar\ntitle: Budżet\n```"_s
+                                                    << QStringList{u"text"_s, u"chart"_s};
+        QTest::newRow("a chart in Polish keys") << table + u"```chart\ntyp: kołowy\ntytuł: Przychody\n```"_s
+                                                << QStringList{u"text"_s, u"chart"_s};
+        QTest::newRow("a chart without a table") << u"```chart\ntype: bar\n```"_s << QStringList();
+        QTest::newRow("a chart that fails") << table + u"```chart\ntype: bar\nkolor: zielony\n```"_s << QStringList();
+        QTest::newRow("a chart of a column not there") << table + u"```chart\ny: Koszt\n```"_s << QStringList();
+        QTest::newRow("a chart of a query") << u"```chart\nquery: type:tasks group:status\n```"_s << QStringList();
+        QTest::newRow("an unterminated chart") << table + u"```chart\ntype: bar"_s << QStringList();
+        QTest::newRow("a math block") << u"```math\n\\frac{a}{b}\n```"_s << QStringList{u"math"_s};
+        QTest::newRow("latex, tex") << u"```latex\nE = mc^2\n```\n\n```tex\n\\sqrt{2}\n```"_s
+                                    << QStringList{u"math"_s, u"math"_s};
+        QTest::newRow("an empty math block") << u"```math\n```"_s << QStringList();
+        QTest::newRow("a display formula") << u"Wzór:\n\n$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$\n\nKoniec."_s
+                                           << QStringList{u"text"_s, u"math"_s, u"text"_s};
+        QTest::newRow("a formula in a sentence") << u"Wynik to $$x^2$$ i tyle."_s << QStringList();
+        QTest::newRow("an inline formula") << u"Cena $x$ zł."_s << QStringList();
+        QTest::newRow("a diagram, then a formula") << u"```mermaid\nflowchart TD\nA-->B\n```\n\n```math\nx^2\n```"_s
+                                                   << QStringList{u"diagram"_s, u"math"_s};
+    }
+
+    void segments()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QStringList, kinds);
+        markdown::RenderContext context;
+        context.locale = dates::UiLocale::Polish;
+        const QVariantList segments = ChatMessageModel::renderSegments(markdown, context);
+        QStringList got;
+        for (const QVariant &segment : segments)
+            got << segment.toMap().value(u"kind"_s).toString();
+        QCOMPARE(got, kinds);
+        // The bubble's rich text stays as it was (the code shown as written).
+        QVERIFY(!ChatMessageModel::renderMessage(markdown, context).isEmpty());
+        for (const QVariant &v : segments) {
+            const QVariantMap segment = v.toMap();
+            // Every key of every part (the delegates read them all).
+            QCOMPARE(segment.keys(), (QStringList{u"chartData"_s, u"code"_s, u"html"_s, u"kind"_s, u"source"_s}));
+            const QString kind = segment.value(u"kind"_s).toString();
+            const QString html = segment.value(u"html"_s).toString();
+            QVERIFY2(!html.isEmpty(), qPrintable(kind));
+            if (kind == u"text") {
+                // No room under its last paragraph: the gap between the parts is the room.
+                const qsizetype at = html.lastIndexOf(u"margin-bottom:"_s);
+                QVERIFY2(at < 0 || QStringView(html).sliced(at).startsWith(u"margin-bottom:0px"), qPrintable(html));
+                continue;
+            }
+            // A drawing: what it draws and the block as written (Copy source).
+            const QString code = segment.value(u"code"_s).toString();
+            const QString source = segment.value(u"source"_s).toString();
+            QVERIFY2(!code.isEmpty() && markdown.contains(code), qPrintable(code));
+            QVERIFY2(markdown.contains(source.trimmed()) && source.contains(code), qPrintable(source));
+            QCOMPARE(segment.value(u"chartData"_s).toMap().isEmpty(), kind != u"chart");
+            if (kind == u"diagram")
+                QVERIFY2(html.contains(u"<pre"_s), qPrintable(html)); // (shown when it cannot be drawn)
+        }
+    }
+
+    void segmentsOfAChart()
+    {
+        // The numbers come from the message's own table, as the editor reads a page's (Polish numbers).
+        markdown::RenderContext context;
+        const QString message = u"Przychody:\n\n| Miesiąc | Przychód | Koszt |\n|---|--:|--:|\n| Styczeń | 1 200 zł | 900 |\n"
+                                "| Luty | 1 500,50 zł | n/d |\n\n```chart\ntype: line\ntitle: Budżet 2026\n```\n\nTak to wygląda."_s;
+        const QVariantList segments = ChatMessageModel::renderSegments(message, context);
+        QCOMPARE(segments.size(), 3);
+        const QVariantMap chart = segments.at(1).toMap();
+        QCOMPARE(chart.value(u"code"_s).toString(), u"type: line\ntitle: Budżet 2026"_s);
+        QCOMPARE(chart.value(u"source"_s).toString(), u"```chart\ntype: line\ntitle: Budżet 2026\n```"_s);
+        const QVariantMap data = chart.value(u"chartData"_s).toMap();
+        QVERIFY(data.value(u"ok"_s).toBool());
+        QCOMPARE(data.value(u"labels"_s).toStringList(), (QStringList{u"Styczeń"_s, u"Luty"_s}));
+        QCOMPARE(data.value(u"labelsName"_s).toString(), u"Miesiąc"_s);
+        const QVariantList series = data.value(u"series"_s).toList();
+        QCOMPARE(series.size(), 2);
+        QCOMPARE(series.at(0).toMap().value(u"name"_s).toString(), u"Przychód"_s);
+        const QVariantList income = series.at(0).toMap().value(u"values"_s).toList();
+        QCOMPARE(income.at(0).toDouble(), 1200.0);
+        QCOMPARE(income.at(1).toDouble(), 1500.5);
+        const QVariantList cost = series.at(1).toMap().value(u"values"_s).toList();
+        QCOMPARE(cost.at(0).toDouble(), 900.0);
+        QVERIFY(cost.at(1).isNull()); // (a gap)
+        // The table stays a rich-text table of the text before it; the words after, their own part.
+        QVERIFY(segments.at(0).toMap().value(u"html"_s).toString().contains(u"<table"_s));
+        QVERIFY(segments.at(2).toMap().value(u"html"_s).toString().contains(u"Tak to wygląda."_s));
+        // English numbers in an English chat.
+        context.locale = dates::UiLocale::English;
+        const QVariantList english =
+                ChatMessageModel::renderSegments(u"| Day | Km |\n|---|--:|\n| Mon | 12.5 |\n\n```chart\ntype: bar\n```"_s, context);
+        QCOMPARE(english.size(), 2);
+        const QVariantList km = english.at(1).toMap().value(u"chartData"_s).toMap().value(u"series"_s).toList();
+        QCOMPARE(km.first().toMap().value(u"values"_s).toList().first().toDouble(), 12.5);
+    }
+
+    void segmentsOfAConversation()
+    {
+        // The model's rows: a message with a drawing in parts, one without none; pictures apart.
+        auto ws = open({{u"AI/2026-11-22 Schemat.md"_s,
+                         u"---\ntasks: ignore\n---\n- 🧑 Narysuj proces\n- 🤖 Proszę:\n\n  ```mermaid\n  flowchart LR\n"
+                         "    A[Zamówienie] --> B[Wysyłka]\n  ```\n\n  Gotowe.\n- 🤖 Bez rysunku.\n"_s}});
+        ChatMessageModel model;
+        model.setWorkspace(ws.get());
+        model.setPath(u"AI/2026-11-22 Schemat.md"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 3);
+        QVERIFY(value(model, 0, "segments").toList().isEmpty());
+        const QVariantList parts = value(model, 1, "segments").toList();
+        QCOMPARE(parts.size(), 3);
+        QCOMPARE(parts.at(1).toMap().value(u"kind"_s).toString(), u"diagram"_s);
+        QCOMPARE(parts.at(1).toMap().value(u"code"_s).toString(), u"flowchart LR\n  A[Zamówienie] --> B[Wysyłka]"_s);
+        QVERIFY(value(model, 1, "messageHtml").toString().contains(u"<pre"_s)); // (as before)
+        QVERIFY(value(model, 2, "segments").toList().isEmpty());
+        // The answer being written: its finished blocks in parts too.
+        QCOMPARE(model.segments(u"```math\nx^2\n```"_s).size(), 1);
+        QVERIFY(model.segments(u"Tylko tekst."_s).isEmpty());
+        QVERIFY(model.segments(QString()).isEmpty());
     }
 };
 

@@ -32,6 +32,9 @@ public:
     /// The environment variables of a grant's token and of the client's name.
     static constexpr auto TokenVariable = "BRULION_APP_TOKEN";
     static constexpr auto ClientVariable = "BRULION_APP_CLIENT";
+    /// A grant of the app's chat alone (an AI agent's conversation, docs/CLI.md "Conversations"):
+    /// what `brulion-cli app chat …` shows, before BRULION_APP_TOKEN.
+    static constexpr auto ChatTokenVariable = "BRULION_APP_CHAT_TOKEN";
     /// Who connect() says it is (default: the environment's); "" sends nothing of it.
     void setIdentity(const QString &token, const QString &client);
     QString token() const { return m_token; }

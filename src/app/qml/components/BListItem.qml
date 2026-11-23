@@ -16,6 +16,10 @@ import Brulion
 //              never raw note content
 // subtitle:    second line (muted, plain text: a file name is never markup); the row grows to
 //              the two-line height
+// subtitleMarkup: optional escaped rich text for the subtitle (TextHelper.markMatches: a
+//              search's match) — never raw note content; `subtitle` still says it to
+//              accessibility and decides the height
+// subtitleColor: the subtitle's colour (default fgMuted; a failure's danger)
 // subtitleInline: the subtitle after the title on the same line instead (textSm, fgMuted,
 //              Theme.space2 apart, on the title's baseline): the row keeps the one-line height.
 //              The title keeps its width first; the subtitle elides and is dropped under 48 px
@@ -23,6 +27,7 @@ import Brulion
 // count:       badge on the right (≥ 0 shows); `trailing`: any item on the right
 // selected:    current item (tinted background, bold title, accent bar on the left when
 //              `selectionBar`); hover/press/keyboard focus states built in
+// strong:      the title semibold also when not selected (an unread conversation)
 // dense:       a navigation list's row (sidebar, drawer, tree): listItemHeightDense with a
 //              mouse, exactly the touch target (44 px) on touch UIs; a two-line row keeps
 //              listItemHeightTwoLine
@@ -34,9 +39,12 @@ T.ItemDelegate {
     property color iconColor: selected ? Theme.fg : Theme.fgMuted
     property string titleMarkup
     property string subtitle
+    property string subtitleMarkup
+    property color subtitleColor: Theme.fgMuted
     property bool subtitleInline: false
     property int count: -1
     property bool selected: false
+    property bool strong: false
     property bool selectionBar: false
     property Item trailing: null
     property bool dense: false
@@ -122,7 +130,7 @@ T.ItemDelegate {
                 textFormat: control.titleMarkup !== "" ? Text.StyledText : Text.PlainText
                 font.family: control.font.family
                 font.pixelSize: control.font.pixelSize
-                font.weight: control.selected ? Theme.weightSemiBold : Theme.weightNormal
+                font.weight: control.selected || control.strong ? Theme.weightSemiBold : Theme.weightNormal
                 color: Theme.fg
                 elide: Text.ElideRight
                 maximumLineCount: 1
@@ -136,12 +144,13 @@ T.ItemDelegate {
                 y: textColumn.inline ? titleLabel.baselineOffset - baselineOffset : titleLabel.height + 1
                 width: Math.max(0, room)
                 visible: control.subtitle !== "" && (!textColumn.inline || room >= 48)
-                text: control.subtitle
-                textFormat: Text.PlainText
+                text: control.subtitleMarkup !== "" ? control.subtitleMarkup : control.subtitle
+                textFormat: control.subtitleMarkup !== "" ? Text.StyledText : Text.PlainText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
-                color: Theme.fgMuted
-                elide: Text.ElideMiddle
+                color: control.subtitleColor
+                // (A match is near the excerpt's start: its end goes.)
+                elide: control.subtitleMarkup !== "" ? Text.ElideRight : Text.ElideMiddle
                 maximumLineCount: 1
             }
         }

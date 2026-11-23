@@ -22,11 +22,15 @@
 //   Workspace.chats.turn(path).running / queued / status / partial / thoughts / failure
 //   Workspace.chats.stop(path) / retry(path) / dismissFailure(path)
 //   Workspace.chats.rename(path, "Nowa nazwa") / remove(path)        // the list's menu
+//   Workspace.chats.setPinned(path, true) / setArchived(path, true)   // its frontmatter's marks
 //   Workspace.chats.partners() / asking(path, questionSerial) / answer(path, option)
 //
 // Single-threaded (the GUI thread).
 
+#include "agentlimits.h"
 #include "agentshare.h"
+#include "chatlineage.h"
+#include "chatschedules.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -34,12 +38,14 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 
+#include <functional>
 #include <utility>
 
 namespace brulion::shell {
@@ -135,6 +141,8 @@ private:
     QString m_speed;
     QVariantList m_tools;
     QVariantList m_plan;
+    bool m_asking = false; // its question was seen (questionsMoved)
+    qint64 m_cameBack = 0; // when its failure or question came (ms since the epoch), 0 none
     QString m_nextPartial; // what comes, said by m_partialTimer
     QString m_nextThoughts;
     QList<std::pair<qint64, int>> m_samples; // the request's {writing ms, tokens}, for its speed
@@ -161,11 +169,23 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(bool dictationAvailable READ dictationAvailable NOTIFY dictationChanged FINAL)
     /// Dictation listens now.
     Q_PROPERTY(bool listening READ listening NOTIFY dictationChanged FINAL)
+    /// Dictation can listen now (false: the app's own recognizer has no speech model yet).
+    Q_PROPERTY(bool dictationReady READ dictationReady NOTIFY dictationChanged FINAL)
+    /// What dictation heard is being made into text (the app's own recognizer).
+    Q_PROPERTY(bool recognizing READ recognizing NOTIFY dictationChanged FINAL)
+    /// How long dictation has listened and the longest it listens, in ms (-1 / 0: not told).
+    Q_PROPERTY(int dictationElapsed READ dictationElapsed NOTIFY dictationElapsedChanged FINAL)
+    Q_PROPERTY(int dictationLimit READ dictationLimit NOTIFY dictationChanged FINAL)
     /// Changes whenever a question of a turn comes or goes (asking() and the rest ask again).
     Q_PROPERTY(int questionSerial READ questionSerial NOTIFY questionsChanged FINAL)
     /// Changes whenever an AI agent's session options, commands or usage change (agentOptions()
     /// and the rest ask again).
     Q_PROPERTY(int agentSerial READ agentSerial NOTIFY agentsChanged FINAL)
+    /// Changes whenever a conversation's messages waiting to be sent change (queued() and the rest
+    /// ask again).
+    Q_PROPERTY(int queueSerial READ queueSerial NOTIFY queueChanged FINAL)
+    /// Changes whenever the files an AI agent's last turn changed change (changes() asks again).
+    Q_PROPERTY(int changesSerial READ changesSerial NOTIFY changesChanged FINAL)
     /// AI agents answer here: programs of this device (the desktop app), or agents on another
     /// computer (also Android).
     Q_PROPERTY(bool agentsAvailable READ agentsAvailable CONSTANT FINAL)
@@ -174,6 +194,12 @@ class WorkspaceChats : public QObject {
     /// "Share agents with the phone": this computer's agents for the user's other devices, and the
     /// agents other computers offer in the notebook (agentshare.h).
     Q_PROPERTY(brulion::shell::AgentShare *share READ share CONSTANT FINAL)
+    /// The subscription limits of the agents that are Claude Code or Codex (agentlimits.h).
+    Q_PROPERTY(brulion::shell::AgentLimits *limits READ limits CONSTANT FINAL)
+    /// Which conversations AI agents started from which (sub-conversations: chatlineage.h).
+    Q_PROPERTY(brulion::shell::ChatLineage *lineage READ lineage CONSTANT FINAL)
+    /// Scheduled conversations (chatschedules.h).
+    Q_PROPERTY(brulion::shell::ChatSchedules *schedules READ schedules CONSTANT FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -207,15 +233,20 @@ public:
     /// The turn of `path` runs (or waits in line) / waits in line — without making a ChatTurn.
     bool isRunning(const QString &path) const;
     bool isQueued(const QString &path) const;
+    /// What the conversation does, in a word: "asking" (its turn waits for the user's answer),
+    /// "queued", "running", "failed" (`*failure`: why), else "idle" — without making a ChatTurn.
+    QString stateOf(const QString &path, QString *failure = nullptr) const;
 
     /// Writes `text` and `pictures` (vault paths, addPicture…) into the conversation `path` and
     /// runs the AI's turn; "" `path`: a new conversation about the page `page` (its name as a link
     /// names it; "" for none) answered by `partner` ("" the built-in assistant). Returns the
     /// conversation's path, "" when nothing was sent: no text nor picture, a turn of it running,
     /// the assistant off (said in the turn's failure), no notebook, a page that could not be
-    /// written.
+    /// written. `parent`: a new conversation is a sub-conversation of that one (its page names it:
+    /// an AI agent's task for another partner, ChatControl).
     Q_INVOKABLE QString send(const QString &path, const QString &text, const QString &page = QString(),
-                             const QStringList &pictures = QStringList(), const QString &partner = QString());
+                             const QStringList &pictures = QStringList(), const QString &partner = QString(),
+                             const QString &parent = QString());
     /// The AI's turn again on the conversation as it is (its last message the user's): after a
     /// failure or a stop. False when it cannot run now.
     Q_INVOKABLE bool retry(const QString &path);
@@ -249,6 +280,30 @@ public:
     /// Moves the conversation to the trash (its turn stops); the trash's path ("" on failure), for
     /// Undo (Workspace::restore).
     Q_INVOKABLE QString remove(const QString &path);
+    /// Pins the conversation on top of the list (`on`) or unpins it / archives it (out of the
+    /// list, into its folded "Archived") or brings it back: its page's frontmatter (chat::setMark,
+    /// the notebook's language), so the user's other devices sort it so too. False when it could
+    /// not be written.
+    Q_INVOKABLE bool setPinned(const QString &path, bool on);
+    Q_INVOKABLE bool setArchived(const QString &path, bool on);
+
+    // ---- what needs the user: unread answers, failures, questions; notifications ----------------
+    /// An answer came while no chat view showed the conversation — until one shows it. Kept in the
+    /// notebook's device state (LocalStore "chat/unread"), never in the page: it syncs no change.
+    bool isUnread(const QString &path) const;
+    /// When the conversation came back to the user (its unread answer, its failure, its question;
+    /// ms since the epoch), 0 when nothing of it waits: the list puts such ones first.
+    qint64 cameBack(const QString &path) const;
+    /// Why its last turn failed ("" none), without making a ChatTurn.
+    QString failureOf(const QString &path) const;
+    /// When the user hears of an answer, a failure or a question by a system notification
+    /// (AppSettings::aiChatNotify): "always" (also while the app is in front, when no chat view
+    /// shows the conversation), "background" (only while the app is not active: the default) or
+    /// "never". Never for a conversation shown in an active window.
+    void setNotifyMode(const QString &mode);
+    QString notifyMode() const { return m_notifyMode; }
+    /// Whether the app is active now (tests; default: QGuiApplication::applicationState()).
+    void setAppActive(std::function<bool()> active) { m_appActive = std::move(active); }
 
     // ---- who answers ----------------------------------------------------------------------------
     /// Who may answer: the built-in assistant, the extensions' chat commands
@@ -264,6 +319,9 @@ public:
     bool agentsAvailable() const;
     /// The partner is an AI agent ("acp:…").
     Q_INVOKABLE bool isAgent(const QString &partner) const;
+    /// An AI agent's tool calls (ChatTurn.tools) in words: "Read 3 files · ran 2 commands"
+    /// (chattools.h; ChatActivity's summary line).
+    Q_INVOKABLE QString toolSummary(const QVariantList &tools) const;
     /// An AI agent's options for the conversation `path` ("" a new one) answered by `partner`
     /// (WorkspaceAgents::options(): {id, name, description, boolean, current, currentName,
     /// choices}); `serial`: agentSerial.
@@ -291,6 +349,9 @@ public:
     /// computer wants its code.
     Q_INVOKABLE void addOfferedAgent(const QString &address, const QString &agent);
     AgentShare *share() const { return m_share; }
+    AgentLimits *limits() const { return m_limits; }
+    ChatLineage *lineage() const { return m_lineage; }
+    ChatSchedules *schedules() const { return m_schedules; }
     /// The answers of agents on another computer that went on with a turn while this device was
     /// gone (Android ended the app): fetched from there (WorkspaceAgents::recover()). When the
     /// notebook is ready and when the agents change.
@@ -325,6 +386,25 @@ public:
     Q_INVOKABLE QVariantMap questionDiff(const QString &path, int serial = 0) const;
     /// Answers it with `option` (one of questionOptions()).
     Q_INVOKABLE void answer(const QString &path, const QString &option);
+    /// The plan an AI agent's question asks the user to approve (Markdown as the agent wrote it:
+    /// the view renders it as a message, escaped); "" none.
+    Q_INVOKABLE QString questionPlan(const QString &path, int serial = 0) const;
+    /// Saves that plan as a page of the notebook ("Plan – <the conversation's name>"): its path,
+    /// "" when it could not be written.
+    Q_INVOKABLE QString savePlan(const QString &path);
+
+    // ---- an AI agent's approvals and the files its turn changed -----------------------------------
+    /// How the agent's questions in `path` are answered: "ask", "edits", "all"
+    /// (WorkspaceAgents::approvals; "" path: a new conversation's). `serial`: agentSerial.
+    Q_INVOKABLE QString approvals(const QString &path, int serial = 0) const;
+    Q_INVOKABLE void setApprovals(const QString &path, const QString &mode);
+    /// The files the last turn of `path` changed ({path, oldText, newText, existed, exists, known};
+    /// WorkspaceAgents::changes). `serial`: changesSerial.
+    Q_INVOKABLE QVariantList changes(const QString &path, int serial = 0) const;
+    /// Puts them back as they were before that turn: what it did, in words (a toast's).
+    Q_INVOKABLE QString undoChanges(const QString &path);
+    Q_INVOKABLE void forgetChanges(const QString &path);
+    int changesSerial() const { return m_changesSerial; }
 
     // ---- pictures sent with a message -----------------------------------------------------------
     /// A picture picked from a file (a file dialog, a drop, a photo the camera took) stored as an
@@ -348,6 +428,13 @@ public:
     bool cameraAvailable() const;
     bool dictationAvailable() const;
     bool listening() const;
+    bool dictationReady() const;
+    bool recognizing() const;
+    int dictationElapsed() const;
+    int dictationLimit() const;
+    /// A recognizer of the app's own was registered (platform::setSpeechRecognizer()): the chat's
+    /// microphone follows it from now on.
+    void useSpeechRecognizer();
     /// Asks the camera app for a photo: photoTaken(its vault path, stored as addPicture() stores a
     /// file) or captureFailed(why) follow (nothing when none was taken). False: no camera here.
     Q_INVOKABLE bool takePhoto();
@@ -358,6 +445,70 @@ public:
     Q_INVOKABLE void stopDictation();
     /// Ends listening without a text.
     Q_INVOKABLE void cancelDictation();
+
+    // ---- messages written while a turn runs (as T3 Code's queue) ---------------------------------
+    /// Messages written while the conversation's turn runs wait for it, in order, and go one by
+    /// one when a turn answers (a new turn each). A turn that fails or is stopped holds them: they
+    /// wait for resumeQueue() (or Send now). Kept in the notebook's device state ("chat/queued"),
+    /// so they survive a restart — held then.
+    int queueSerial() const { return m_queueSerial; }
+    /// Adds `text` and `pictures` to the conversation `path`'s waiting messages; when no turn runs
+    /// (and none are held) it is sent at once instead. False: nothing to send, no notebook.
+    Q_INVOKABLE bool queue(const QString &path, const QString &text, const QStringList &pictures = QStringList());
+    /// The waiting messages of `path`: {id, text, pictures}, in the order they go.
+    Q_INVOKABLE QVariantList queued(const QString &path, int serial = 0) const;
+    /// They wait for resumeQueue(): the turn before them failed or was stopped.
+    Q_INVOKABLE bool queueHeld(const QString &path, int serial = 0) const;
+    /// Takes the waiting message `id` out (its pictures deleted again unless `keepPictures`): its
+    /// text — for the field, to edit it; its pictures: takenPictures() — "" when there is none.
+    Q_INVOKABLE QString unqueue(const QString &path, int id, bool keepPictures = false);
+    /// The pictures of the message unqueue() or rewind() gave back last (vault paths).
+    Q_INVOKABLE QStringList takenPictures() const { return m_taken; }
+    /// Sends the waiting message `id` now (-1: the first): a running turn is stopped first — an
+    /// agent cannot take a message in the middle of a turn — and the next go after it.
+    Q_INVOKABLE bool sendNow(const QString &path, int id = -1);
+    /// The held messages go on: the first is sent now.
+    Q_INVOKABLE bool resumeQueue(const QString &path);
+    /// `text` sent now (as T3 Code's steer, Ctrl+Enter while a turn runs): ahead of the waiting
+    /// messages, the running turn stopped first; sent at once when none runs.
+    Q_INVOKABLE bool steer(const QString &path, const QString &text, const QStringList &pictures = QStringList());
+
+    // ---- going back, forking, quoting -------------------------------------------------------------
+    /// The user's questions of `path`, newest first (Up in an empty field brings them back).
+    Q_INVOKABLE QStringList prompts(const QString &path) const;
+    /// "Edit from here": the conversation `path` without its message at `line` (the user's) and
+    /// every one after it — its turn stopped, its waiting messages dropped, an agent's next turn a
+    /// new session with what is left. Returns that message's text for the field (its pictures:
+    /// takenPictures(); "" when nothing changed); undoRewind() puts the page back as it was.
+    Q_INVOKABLE QString rewind(const QString &path, int line);
+    /// Puts back what the last rewind() of `path` took out (while the page was not changed since).
+    Q_INVOKABLE bool undoRewind(const QString &path);
+    /// "Fork from here": a new conversation, a copy of `path` up to its message at `line`, which
+    /// goes on by itself with the same partner (`fork:` names the source: docs/SYNTAX.md §14).
+    /// Its path, "" when it could not be written.
+    Q_INVOKABLE QString fork(const QString &path, int line);
+    /// The conversation `path` was forked from ("" none): its path.
+    Q_INVOKABLE QString forkedFrom(const QString &path) const;
+    /// What was written in the field of the conversation `path` and not sent ("" a new
+    /// conversation's): kept per conversation while another is shown, and over a restart (the
+    /// notebook's device state, "chat/drafts"). setDraft() with "" forgets it.
+    Q_INVOKABLE QString draft(const QString &path) const;
+    Q_INVOKABLE void setDraft(const QString &path, const QString &text);
+    /// A message as a quote for the field ("> …" lines and a blank line).
+    Q_INVOKABLE QString quote(const QString &markdown) const;
+    /// The page being named at `caret` of the field's `text` (as T3 Code's @-mentions): "@" and
+    /// the start of a name (not inside a word, an address), or "[[" and anything but "]": the
+    /// pages it may be ({title, path, folder, start, end} — `start`..`end` the text replaced by
+    /// the link), at most `limit` — not the conversation `path` itself; [] when no name is being
+    /// written.
+    Q_INVOKABLE QVariantList mentions(const QString &path, const QString &text, int caret, int limit = 8) const;
+    /// Where a page's name being written at `caret` starts and what it is so far ({start, query};
+    /// start -1: none). Pure.
+    static std::pair<int, QString> mentionAt(const QString &text, int caret);
+    /// `text` with the page's name being written at `caret` replaced by a link to `title` and a
+    /// space ("" when none is being written), and where the caret goes then.
+    Q_INVOKABLE QString withMention(const QString &text, int caret, const QString &title) const;
+    Q_INVOKABLE int mentionEnd(const QString &text, int caret, const QString &title) const;
 
     /// The notebook closed: no turn runs.
     void reset();
@@ -375,9 +526,20 @@ Q_SIGNALS:
     void partnersChanged();
     void questionsChanged();
     void agentsChanged();
+    void queueChanged();
+    /// rewind() took messages out of `path`: AppController offers Undo (undoRewind()).
+    void rewound(const QString &path, const QString &text);
+    void changesChanged();
     /// An AI agent asks something in the conversation `path`, which no chat view shows: `text`
     /// says who asks what (AppController shows it as a toast with Open).
     void questionWaiting(const QString &path, const QString &text);
+    /// isUnread() or cameBack() of a conversation changed.
+    void attentionChanged();
+    /// A turn of `path` was answered, failed or asks something, and the user hears of it
+    /// (setNotifyMode()): a system notification with `title`, the conversation's name, and
+    /// `text` — the answer's first line, why it failed, what it asks (workspaceintegration.cpp
+    /// shows it; a click opens the conversation).
+    void notificationWanted(const QString &path, const QString &title, const QString &text);
     void agentChecked(const QString &id, bool ok, const QString &text);
     /// A pairing ended: `text` says with whom and which agents, or why not ("" nothing to say:
     /// agentHostNeedsCode() came).
@@ -394,6 +556,7 @@ Q_SIGNALS:
     void photoTaken(const QString &path);
     void captureFailed(const QString &why);
     void dictationChanged();
+    void dictationElapsedChanged();
     /// What dictation heard so far (a recognizer that tells), and at the end.
     void dictationPartial(const QString &text);
     void dictated(const QString &text);
@@ -414,6 +577,13 @@ private:
     void setFailure(ChatTurn *turn, const QString &failure);
     void endTurn(ChatTurn *turn);
     void updateRunningShown();
+    bool setMark(const QString &path, int mark, bool on);
+    void setUnread(const QString &path, bool unread);
+    /// notificationWanted() when the mode and what is on screen say so.
+    void notifyUser(const QString &path, const QString &text);
+    /// Now, for cameBack(): ms since the epoch, later than the one before.
+    qint64 stamp();
+    qint64 m_lastStamp = 0;
 
     Workspace *m_workspace = nullptr;
     WorkspaceExtensions *m_extensions = nullptr;
@@ -422,6 +592,9 @@ private:
     int m_agentSerial = 0;
     bool m_agentPairing = false;
     AgentShare *m_share = nullptr;
+    AgentLimits *m_limits = nullptr;
+    ChatLineage *m_lineage = nullptr;
+    ChatSchedules *m_schedules = nullptr;
     QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
     QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order
@@ -429,7 +602,33 @@ private:
     QHash<QString, int> m_shown; // by path, lower case: the chat views showing it
     QStringList m_added;         // pictures added and not sent yet (dropPicture deletes only those)
     bool m_runningShown = false;
+    QString m_notifyMode = QStringLiteral("background");
+    std::function<bool()> m_appActive;
     QPointer<QObject> m_speech; // the recognizer connected to (platform::SpeechRecognizer)
+
+    // The messages waiting for a turn (by path, lower case) and those held after a stop or a
+    // failure; kept in the notebook's device state.
+    struct Waiting {
+        int id = 0;
+        QString text;
+        QStringList pictures;
+    };
+    QHash<QString, QList<Waiting>> m_queued;
+    QSet<QString> m_held;
+    int m_queueSerial = 0;
+    int m_changesSerial = 0;
+    int m_nextQueued = 1;
+    bool m_queueLoaded = false;
+    /// What the last rewind() of a conversation took out: {its page's content before, after}.
+    QHash<QString, std::pair<QString, QString>> m_rewound;
+    QStringList m_taken; // the pictures unqueue() / rewind() gave back last
+    void loadQueue();
+    void saveQueue();
+    void queueMoved();
+    /// The turn of `path` answered: its next waiting message goes (unless held).
+    void sendNextQueued(const QString &path);
+    /// The waiting messages of `from` follow a rename to `to` / go with a deleted page.
+    void moveQueue(const QString &from, const QString &to);
     /// Connects the recognizer of now (it may come later: one of the app's own).
     void connectSpeech();
 };

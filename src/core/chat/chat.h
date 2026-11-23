@@ -31,7 +31,9 @@
 // sent with a message is an embed of the attachment in it, `![[Pasted image 20261115091200.jpg]]`
 // (or `![](assets/foto.png)`), shown by any app; the model gets the pictures of the conversation's
 // newest messages (at most MaxPictures). Who answers is the frontmatter's `partner:` — an
-// extension's chat command (docs/EXTENSIONS.md "Chat partners"); none: the built-in assistant.
+// extension's chat command (docs/EXTENSIONS.md "Chat partners"); none: the built-in assistant. A
+// conversation an AI agent started from another one (a sub-conversation: docs/UI.md "Agents
+// delegate") names it in `parent: "[[AI/2026-11-15 …]]"`, a link that follows a rename.
 //
 //   ---
 //   zadania: ignoruj
@@ -53,6 +55,11 @@
 //   zadania: ignoruj
 //   zgłoszone: [2]
 //   ---
+//
+// The list of conversations reads two marks of the frontmatter (setMark()): `przypięta: tak` /
+// `pinned: true` puts the conversation among the pinned ones on top, `zarchiwizowana: tak` /
+// `archived: true` out of the list into its folded "Archived" (either language's key read, the
+// values true / yes / tak / 1 / on). They only sort: a page that says so by itself is harmless.
 #pragma once
 
 #include <QDate>
@@ -105,6 +112,22 @@ struct Conversation {
     /// Who answers: the frontmatter's `partner:` ("pirat/rozmowa": an extension and its chat
     /// command, "pirat": its first one); "" the built-in assistant.
     QString partner;
+    /// The conversation it was forked from: the frontmatter's `fork: "[[AI/…]]"` ("AI/…"; ""
+    /// none) — forked().
+    QString fork{};
+    /// The conversation this one was started from: the frontmatter's `parent:` link as written,
+    /// `"[[AI/2026-11-15 Plan]]"` → "AI/2026-11-15 Plan" (no alias, heading or block part); ""
+    /// none.
+    QString parent{};
+    /// The frontmatter's marks (setMark()): pinned on top of the list / archived out of it.
+    bool pinned = false;
+    bool archived = false;
+};
+
+/// A mark of a conversation's frontmatter that sorts the list of conversations.
+enum class Mark {
+    Pinned,  ///< `przypięta: tak` / `pinned: true`
+    Archived ///< `zarchiwizowana: tak` / `archived: true`
 };
 
 /// "AI": the folder of conversation pages (the same in every language).
@@ -135,10 +158,11 @@ QString appendMessage(const QString &content, Role role, QStringView markdown, c
 
 /// A new conversation page: the frontmatter that keeps its tasks out of the task lists, in the
 /// notebook's language ("pl": `zadania: ignoruj`, else `tasks: ignore`), its `partner:` when it
-/// is not "", and the user's first message — `question`, and ` ([[page]])` after its first line
-/// when it is about a page —, with its time when valid.
+/// is not "", its `parent:` link to the conversation `parent` (a page's name or vault path,
+/// ".md" left out) when it is not "", and the user's first message — `question`, and
+/// ` ([[page]])` after its first line when it is about a page —, with its time when valid.
 QString newConversation(QStringView question, QStringView page, QStringView language, const QDateTime &time = {},
-                        QStringView partner = {});
+                        QStringView partner = {}, QStringView parent = {});
 
 /// `content` with its frontmatter's `partner:` set to `partner` ("" takes the line out): the
 /// line replaced, or added at the frontmatter's end, or a frontmatter made for it; the rest byte
@@ -157,6 +181,14 @@ QString flagKey(Flag flag, QStringView language);
 /// line endings kept. A new key in the language the page is written in (its time's key, its
 /// `zadania:` / `tasks:`), else `language`. Unchanged for a `number` below 1 or a mark it has.
 QString setFlag(const QString &content, int number, Flag flag, QStringView language = u"pl");
+
+/// `content` with the frontmatter's `mark` set (`on`) or taken out: its line — in the page's
+/// language (its time's key, else its frontmatter's word for the tasks), else `language` ("pl":
+/// `przypięta: tak`, `zarchiwizowana: tak`; else `pinned: true`, `archived: true`) — replaces
+/// the mark's line in either language where it is (another one of it goes), or comes at the
+/// frontmatter's end, or a frontmatter is made for it; off takes every line of it out. The rest
+/// byte for byte, the line endings kept; unchanged when it says so already.
+QString setMark(const QString &content, Mark mark, bool on, QStringView language = u"pl");
 
 /// The pictures a message's Markdown embeds (Message::pictures), in order, each once.
 QStringList picturesIn(QStringView markdown);
@@ -198,6 +230,35 @@ int firstSent(const Conversation &conversation, int budget);
 
 /// What firstSent() counts for the message: its text's length and PictureChars a picture.
 int cost(const Message &message);
+
+/// `content` without the messages from index `from` on — "Edit from here" takes them back:
+/// everything before that message's first line byte for byte; `content` as it is when there is
+/// no such message.
+QString truncated(const QString &content, int from);
+
+/// A conversation that goes on from `content`'s message `upTo` (its index) in a page of its own
+/// ("Fork from here"): `content` up to that message's last line — its frontmatter, `partner:`,
+/// times and pictures as they are, line endings kept — with `fork: "[[source]]"` in its
+/// frontmatter (`source`: the page forked, its path with or without ".md"; "" none). "" when there
+/// is no such message.
+QString forked(const QString &content, int upTo, QStringView source);
+
+/// `fork:`'s value for `source` ("AI/2026-11-15 Dom.md" → `"[[AI/2026-11-15 Dom]]"`).
+QString forkLink(QStringView source);
+
+/// `content` with its frontmatter's `key:` set to `value` ("" takes the line out): the line
+/// replaced (its key matched without regard to case), or added at the frontmatter's end, or a
+/// frontmatter made for it; the rest byte for byte, its line endings kept.
+QString setFrontmatterValue(const QString &content, QStringView key, QStringView value);
+
+/// The user's questions, newest first, as the field gets them back (Up in an empty field): their
+/// text without the pictures they embed and without the first question's link to the page it is
+/// about, each once.
+QStringList prompts(const Conversation &conversation);
+
+/// A message as a quote for the next one: its lines after "> " (pictures out), a blank line after
+/// it; "" for a message of nothing but pictures.
+QString quoted(QStringView markdown);
 
 /// One line of plain text for a list of conversations: the message's text with Markdown's marks
 /// taken out ([[Page|alias]] → alias, `code` → code, **bold** → bold, list markers, a page link at

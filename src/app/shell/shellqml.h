@@ -15,6 +15,9 @@
 //                                       / .chats
 //   ChatTurn         uncreatable — Workspace.chats.turn(path): one conversation's turn
 //   AgentShare       uncreatable — Workspace.chats.share ("Share agents with the phone")
+//   AgentLimits      uncreatable — Workspace.chats.limits (Claude Code's and Codex's subscription limits)
+//   ChatLineage, ChatSchedules uncreatable — Workspace.chats.lineage / .schedules (sub-conversations,
+//                    scheduled conversations)
 //   WritingSession   creatable — WritingSession { workspace: Workspace } (the editor's AI assistant)
 //   AiReportDraft    creatable — AiReportDraft {} (Report response: the report of an AI answer)
 //   WorkspaceEncryption uncreatable — Workspace.encryption (encrypted notes)
@@ -51,6 +54,8 @@
 #include "workspacebackups.h"
 #include "workspacecalendars.h"
 #include "workspacechats.h"
+#include "chatlineage.h"
+#include "chatschedules.h"
 #include "workspaceencryption.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
@@ -276,6 +281,27 @@ struct AgentShareForeign {
     QML_FOREIGN(brulion::shell::AgentShare)
     QML_NAMED_ELEMENT(AgentShare)
     QML_UNCREATABLE("Use Workspace.chats.share")
+};
+
+struct AgentLimitsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AgentLimits)
+    QML_NAMED_ELEMENT(AgentLimits)
+    QML_UNCREATABLE("Use Workspace.chats.limits")
+};
+
+struct ChatLineageForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ChatLineage)
+    QML_NAMED_ELEMENT(ChatLineage)
+    QML_UNCREATABLE("Use Workspace.chats.lineage")
+};
+
+struct ChatSchedulesForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ChatSchedules)
+    QML_NAMED_ELEMENT(ChatSchedules)
+    QML_UNCREATABLE("Use Workspace.chats.schedules")
 };
 
 struct WritingSessionForeign {

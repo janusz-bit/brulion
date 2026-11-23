@@ -3,11 +3,14 @@
 #include "appcontroller.h"
 #include "appscripting.h"
 #include "appsettings.h"
+#include "chatcontrol.h"
 #include "commandmodel.h"
 #include "extensionmodels.h"
 #include "navigation.h"
 #include "util/unicode.h"
 #include "workspace.h"
+#include "workspaceagents.h"
+#include "workspacechats.h"
 #include "workspaceextensions.h"
 #include "workspacesync.h"
 
@@ -299,6 +302,14 @@ void RemoteControl::apply()
                              {u"error"_s, error}});
 }
 
+QString RemoteControl::chatGrant(const QString &client)
+{
+    const QString token = m_server.addGrant(client, ipc::GrantScope::Chat);
+    qCDebug(lcApp).noquote() << u"Remote control: a chat grant for the agent %1"_s.arg(ipc::cleanClientName(client));
+    apply();
+    return token;
+}
+
 QString RemoteControl::grant(const QString &client)
 {
     const QString token = m_server.addGrant(client);
@@ -416,16 +427,38 @@ void RemoteControl::handle(const ipc::ControlRequest &request, const ipc::Contro
         const int undone = m_app->scripting()->revert(p.value(u"who"_s).toString().trimmed());
         reply.ok(QJsonObject{{u"undone"_s, undone},
                              {u"changes"_s, QJsonArray::fromVariantList(m_app->scripting()->changes())}});
+    } else if (ChatControl::handles(method)) {
+        chatRequest(request, reply);
     } else {
         reply.fail(code(E::UnknownMethod), u"Unknown method %1"_s.arg(method));
     }
 }
 
+void RemoteControl::chatRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply)
+{
+    if (!m_chat)
+        m_chat = new ChatControl(m_app->workspace(), this);
+    ChatControl::Caller caller;
+    caller.granted = request.granted;
+    caller.client = request.client;
+    if (request.granted)
+        caller.conversation = m_app->workspace()->chats()->agents()->grantConversation(request.grant);
+    ChatControl::Reply answer;
+    answer.ok = [reply](const QJsonObject &result) { reply.ok(result); };
+    answer.fail = [reply](const QString &failure, const QString &message, const QJsonObject &details) {
+        reply.fail(failure, message, details);
+    };
+    answer.connected = [reply] { return reply.connected(); };
+    m_chat->handle(request.method, request.params, caller, answer);
+}
+
 QJsonObject RemoteControl::hello(const ipc::ControlRequest &request) const
 {
     QJsonArray methods;
-    for (const ipc::MethodSpec &m : ipc::controlMethods())
-        methods.append(m.name);
+    for (const ipc::MethodSpec &m : ipc::controlMethods()) {
+        if (m.chat || !request.chatOnly)
+            methods.append(m.name);
+    }
     return {{u"protocol"_s, ipc::ControlProtocolVersion},
             {u"app"_s, u"Brulion"_s},
             {u"version"_s, m_app->version()},

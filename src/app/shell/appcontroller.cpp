@@ -3,6 +3,7 @@
 #include "appscripting.h"
 
 #include "blocktext.h"
+#include "dictation.h"
 #include "mediaengine.h"
 #include "voicerecorder.h"
 
@@ -425,6 +426,29 @@ AppController::AppController(const Options &options, QObject *parent)
     // An agent's question in a conversation no chat view shows: a toast whose Open shows it.
     connect(m_workspace->chats(), &WorkspaceChats::questionWaiting, this, [this](const QString &path, const QString &text) {
         const int id = toastWithAction(text, u"info"_s, tr("Open"));
+        m_chatToasts.insert(id, path);
+    });
+    // "Edit from here" took messages out of a conversation: a toast whose Undo puts them back.
+    connect(m_workspace->chats(), &WorkspaceChats::rewound, this, [this](const QString &path, const QString &text) {
+        m_rewindToasts.insert(toastWithAction(text, u"info"_s, tr("Undo")), path);
+    });
+    // Scheduled conversations (chatschedules.h): kept on this device for the open notebook — never
+    // in it, nor for the documentation —, and said when one starts.
+    ChatSchedules *schedules = m_workspace->chats()->schedules();
+    const auto scheduleStorage = [this, schedules] {
+        if (!m_workspace->isOpen() || inDocsVault()) {
+            schedules->setStorage({}, {});
+            return;
+        }
+        const QString key = u"ai/schedules/"_s + Vault::idForPath(m_workspace->rootPath());
+        schedules->setStorage([this, key] { return m_settings->value(key).toString().toUtf8(); },
+                              [this, key](const QByteArray &json) { m_settings->setValue(key, QString::fromUtf8(json)); });
+    };
+    scheduleStorage();
+    connect(m_workspace.get(), &Workspace::openChanged, this, scheduleStorage);
+    connect(this, &AppController::inDocsVaultChanged, this, scheduleStorage);
+    connect(schedules, &ChatSchedules::ran, this, [this](const QString &, const QString &title, const QString &path) {
+        const int id = toastWithAction(tr("Scheduled conversation “%1” started").arg(title), u"info"_s, tr("Open"));
         m_chatToasts.insert(id, path);
     });
     // The model chosen in the settings is the one Settings → Extensions → AI downloads and removes.
@@ -1220,7 +1244,10 @@ void AppController::applyPendingNotification()
         return; // applied once that notebook is ready
     const QString path = std::exchange(m_pendingNotePath, {});
     const int line = std::exchange(m_pendingNoteLine, -1);
-    if (!docs && m_workspace->exists(path))
+    // An AI chat's notification: its conversation in the chat.
+    if (!docs && m_workspace->chats()->isConversation(path))
+        navigate(QVariantMap{{u"view"_s, u"chat"_s}, {u"path"_s, path}});
+    else if (!docs && m_workspace->exists(path))
         openPage(path, line);
     else if (back.isEmpty()) // else openRecentVault() said that its folder is gone
         toast(tr("The note of this reminder no longer exists."), u"warning"_s);
@@ -2040,6 +2067,15 @@ void AppController::setUpSpeech()
     media::VoiceRecorder::setClock([this] { return now(); });
     if (!media::mediaSupported())
         editor::setUnavailableSlashCommands({u"voiceNote"_s});
+#if !defined(Q_OS_ANDROID)
+    // The AI chat's dictation where the system has no recognizer (the desktop): recorded and heard
+    // here with the voice notes' speech model (docs/UI.md "AI chat" → Dictation). Android keeps its
+    // system's recognizer.
+    if (m_speech->available() && media::mediaSupported()) {
+        platform::setSpeechRecognizer(new media::Dictation(m_speech.get(), this));
+        m_workspace->chats()->useSpeechRecognizer();
+    }
+#endif
 }
 
 QVariantMap AppController::permissions() const
@@ -2469,6 +2505,15 @@ int AppController::toastUndoRename(const QString &text, const QString &actionTex
     return id;
 }
 
+int AppController::toastUndoChatMark(const QString &text, const QString &actionText, const QString &path,
+                                     const QString &mark, bool on)
+{
+    const int id = ++m_lastToastId;
+    m_chatMarkToasts.insert(id, {path, mark, on});
+    Q_EMIT toastWithActionRequested(id, text, u"success"_s, actionText);
+    return id;
+}
+
 void AppController::setToastHostId(int id, int hostId)
 {
     if (id > 0 && hostId > 0)
@@ -2505,6 +2550,19 @@ void AppController::hostToastActionTriggered(int hostId)
         navigate(QVariantMap{{u"view"_s, u"chat"_s}, {u"path"_s, m_chatToasts.take(id)}});
         return;
     }
+    if (m_rewindToasts.contains(id)) {
+        if (!m_workspace->chats()->undoRewind(m_rewindToasts.take(id)))
+            toast(tr("The conversation changed since: nothing was put back."), u"info"_s);
+        return;
+    }
+    if (m_chatMarkToasts.contains(id)) {
+        const auto [path, mark, on] = m_chatMarkToasts.take(id);
+        if (mark == u"pinned")
+            m_workspace->chats()->setPinned(path, !on);
+        else
+            m_workspace->chats()->setArchived(path, !on);
+        return;
+    }
     Q_EMIT toastActionTriggered(id);
 }
 
@@ -2515,6 +2573,8 @@ void AppController::hostToastRemoved(int hostId)
     m_renameToasts.remove(id);
     m_functionToasts.remove(id);
     m_chatToasts.remove(id);
+    m_rewindToasts.remove(id);
+    m_chatMarkToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));
 }

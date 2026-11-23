@@ -32,6 +32,7 @@ Spaces and Polish letters are written as `%20`, `%C5%BC` and so on — every app
 - **new** — a new page: `title=`, `folder=`, `template=` (a page from your templates folder), `text=`. A page with that name is never written over — it simply opens.
 - **search**, **view** — search for something, or open a view: `journals`, `calendar`, `tasks`, `habits`, `graph`, `pages`, `tags`, `settings`.
 - **run** — a command of an extension you approved on this device (`extension=` and `command=`).
+- **chat** — a new conversation of the AI chat with a prompt in its field (`prompt=`, at most 8,000 characters), about a page (`page=`), answered by an agent or extension set up on this device (`partner=acp:claude`). It is **never sent by itself**: you read it and press Send. Characters nobody can see (zero-width ones, direction marks, Unicode tags) are taken out first, and the conversation warns that they could have hidden instructions. **Copy prompt link** in a message's menu (right-click or long press) and the palette's **AI: Copy prompt link** make one.
 
 With several notebooks, `vault=` picks one by its name or folder. The full list of parameters is in the documentation for developers (docs/UI.md, "Automation").
 
@@ -41,7 +42,7 @@ A link can come from anywhere — a web page, a message, a note someone synced t
 - A link that **writes** first shows **"Write from a link?"**: where it would write and exactly what. Nothing is saved before you press **Write**.
 - Your own automations skip that question with the notebook's **automation key**: **Settings → Automation → Create a key**, then add `&key=…` to the link (or tick "With the key" in the link builder). Keep the key private, like a password. It stays on this device and is never synced; **New key** makes the old one stop working.
 - **Links without the key** in the same settings: **Ask** (the default), **Only open** (writing only with the key) or **Off**.
-- A link never deletes anything and never writes over a page: it only adds a block or creates a page with a free name. An extension's command runs only when you approved the extension.
+- A link never deletes anything and never writes over a page: it only adds a block or creates a page with a free name. An extension's command runs only when you approved the extension. A prompt link only fills the chat's field.
 
 ## On a computer
 - **Linux**: Brulion's desktop entry takes brulion:// links, so `xdg-open 'brulion://daily'` works, and so does a keyboard shortcut of GNOME or KDE with that command. A running Brulion comes to the front and does it.

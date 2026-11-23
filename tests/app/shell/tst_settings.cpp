@@ -230,6 +230,33 @@ private Q_SLOTS:
         QCOMPARE(s.aiLocalModel(), QString());
     }
 
+    void theChatsNotifications()
+    {
+        // "Notify when the AI answers": only in the background by default; kept; anything else
+        // (a setting of another version) is the default.
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.aiChatNotify(), u"background"_s);
+            QSignalSpy changed(&s, &AppSettings::aiChatNotifyChanged);
+            s.setAiChatNotify(u"always"_s);
+            QCOMPARE(s.aiChatNotify(), u"always"_s);
+            s.setAiChatNotify(u"always"_s);
+            QCOMPARE(changed.size(), 1);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.aiChatNotify(), u"always"_s);
+            s.setAiChatNotify(u"never"_s);
+            QCOMPARE(s.aiChatNotify(), u"never"_s);
+            s.setAiChatNotify(u"czasem"_s);
+            QCOMPARE(s.aiChatNotify(), u"background"_s);
+        }
+        QSettings(file, QSettings::IniFormat).setValue(u"ai/chatNotify"_s, u"głośno"_s);
+        AppSettings s(file, m_tmp.path());
+        QCOMPARE(s.aiChatNotify(), u"background"_s);
+    }
+
     void followsOutsideLinksPersists()
     {
         // Device-local: in this device's settings, never in the synced .brulion/config.json.
@@ -1242,6 +1269,51 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), want == AppSettings::defaultTrayClick() ? 0 : 1);
         s.setTrayClick(want);
         QCOMPARE(changed.size(), want == AppSettings::defaultTrayClick() ? 0 : 1);
+    }
+
+    void chatToolCalls_data()
+    {
+        QTest::addColumn<QString>("stored");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("all") << u"all"_s << u"all"_s;
+        QTest::newRow("hide finished") << u"hideFinished"_s << u"hideFinished"_s;
+        QTest::newRow("hide all") << u"hideAll"_s << u"hideAll"_s;
+        QTest::newRow("po polsku") << u"ukryj"_s << u"all"_s;
+        QTest::newRow("small letters") << u"hidefinished"_s << u"all"_s;
+        QTest::newRow("empty") << QString() << u"all"_s;
+        QTest::newRow("spaces") << u" hideAll "_s << u"all"_s;
+        QTest::newRow("zażółć") << u"zażółć"_s << u"all"_s;
+    }
+
+    void chatToolCalls()
+    {
+        // "Tool calls in chat" (docs/UI.md "AI agents (ACP)"): a value in the file — another
+        // version's, a hand edit — reads as a valid one, the default "all".
+        QFETCH(QString, stored);
+        QFETCH(QString, expected);
+        const QString file = nextFile();
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"ai/chatToolCalls"_s, stored);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.chatToolCalls(), expected);
+        }
+        // Set from QML: an unknown value stores the default; signals only on a change; kept.
+        const QString set = nextFile();
+        {
+            AppSettings s(set, m_tmp.path());
+            QCOMPARE(s.chatToolCalls(), u"all"_s);
+            QSignalSpy changed(&s, &AppSettings::chatToolCallsChanged);
+            s.setChatToolCalls(stored);
+            QCOMPARE(s.chatToolCalls(), expected);
+            QCOMPARE(changed.size(), expected == u"all" ? 0 : 1);
+            s.setChatToolCalls(expected);
+            QCOMPARE(changed.size(), expected == u"all" ? 0 : 1);
+        }
+        AppSettings again(set, m_tmp.path());
+        QCOMPARE(again.chatToolCalls(), expected);
     }
 
     void genericValuesKeepTheirType()

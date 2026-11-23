@@ -20,7 +20,11 @@
 // it). An AI agent let change the app (a stand-in that answers `initialize`, started by Settings →
 // AI agents → Check): its tools get the grant's token in session/new's env, the socket stays for it
 // when the setting goes off — the command line without the token is refused, with it served as
-// the agent — and closes once the agent stops. Without a private runtime folder the app still
+// the agent — and closes once the agent stops. The AI chat through `brulion-cli app chat …` with a
+// real ACP agent (fakeacpagent.cpp): its partners, a conversation started and waited for, listed
+// and read, busy while its turn runs, a wait that runs out, Stop, a sub-conversation shown as a
+// chip under its parent in the chat view, a scheduled conversation added, listed with its next
+// run, run now and shown in Settings. Without a private runtime folder the app still
 // starts, with neither socket in the shared temp folder. The app's log must hold no QML TypeError, ReferenceError or
 // binding loop.
 #include "controlclient.h"
@@ -37,6 +41,7 @@
 #include <QLocalSocket>
 #include <QProcess>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -117,6 +122,7 @@ class TestRemoteControl : public QObject {
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
         env.remove(u"BRULION_VAULT"_s);
         env.remove(u"BRULION_APP_TOKEN"_s);
+        env.remove(u"BRULION_APP_CHAT_TOKEN"_s);
         env.remove(u"BRULION_APP_CLIENT"_s);
         if (!m_toolsDir.isEmpty()) // (the app finds brulion-cli there for an agent's tools)
             env.insert(u"PATH"_s, m_toolsDir + u':' + env.value(u"PATH"_s));
@@ -1158,6 +1164,94 @@ private Q_SLOTS:
         QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
         settings.remove(u"ai/agents"_s);
         settings.setValue(u"devtools/remoteControl"_s, false);
+    }
+
+    void chatConversations()
+    {
+        {
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.setValue(u"devtools/remoteControl"_s, true);
+            settings.setValue(u"ai/agents"_s,
+                              QString::fromUtf8(QJsonDocument(QJsonArray{QJsonObject{
+                                                                      {u"id"_s, u"fake"_s},
+                                                                      {u"name"_s, u"Fałszywy"_s},
+                                                                      {u"command"_s, u"\"%1\""_s.arg(QStringLiteral(FAKE_ACP_AGENT))},
+                                                                      {u"tools"_s, false}}})
+                                                        .toJson(QJsonDocument::Compact)));
+        }
+        // (Whatever way the test ends, the next one starts without this app and its settings.)
+        const auto cleanUp = qScopeGuard([this] {
+            stopApp();
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.remove(u"ai/agents"_s);
+            settings.remove(u"ai/schedules"_s);
+            settings.setValue(u"devtools/remoteControl"_s, false);
+        });
+        startApp(false);
+        Run r;
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [](const Run &x) { return x.code == 0 && x.result().value(u"ready"_s).toBool(); }, kStartMs,
+                         &r),
+                 qPrintable(r.describe()));
+        r = app({u"chat"_s, u"partners"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QVERIFY(QJsonDocument(r.result()).toJson().contains("acp:fake"));
+        // A conversation started and waited for.
+        r = app({u"chat"_s, u"start"_s, u"Co słychać w notatkach?"_s, u"--partner"_s, u"acp:fake"_s, u"--wait"_s,
+                 u"--timeout"_s, QString::number(30000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"state"_s).toString(), u"idle"_s);
+        QVERIFY(r.result().value(u"answer"_s).toObject().value(u"text"_s).toString().startsWith(u"Odpowiedź na:"_s));
+        const QString path = r.result().value(u"path"_s).toString();
+        QVERIFY2(path.startsWith(u"AI/2026-10-14 Co słychać w notatkach"_s), qPrintable(path));
+        r = app({u"chat"_s, u"list"_s});
+        QCOMPARE(r.result().value(u"conversations"_s).toArray().at(0).toObject().value(u"path"_s).toString(), path);
+        QCOMPARE(r.result().value(u"conversations"_s).toArray().at(0).toObject().value(u"partner"_s).toString(),
+                 u"acp:fake"_s);
+        r = app({u"chat"_s, u"read"_s, u"Co słychać w notatkach"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 2);
+        QCOMPARE(r.result().value(u"messages"_s).toArray().at(0).toObject().value(u"role"_s).toString(), u"user"_s);
+        // Busy while its turn runs; a wait runs out; Stop.
+        QCOMPARE(app({u"chat"_s, u"send"_s, path, u"czekaj"_s}).code, 0);
+        r = app({u"chat"_s, u"send"_s, path, u"I jeszcze"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"busy"_s);
+        r = app({u"chat"_s, u"wait"_s, path, u"--timeout"_s, u"300"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"timeout"_s);
+        r = app({u"chat"_s, u"stop"_s, path});
+        QVERIFY(r.result().value(u"stopped"_s).toBool());
+        // A sub-conversation: a chip under its parent in the chat.
+        r = app({u"chat"_s, u"start"_s, u"Podrzędna rozmowa"_s, u"--partner"_s, u"acp:fake"_s, u"--parent"_s, path,
+                 u"--wait"_s, u"--timeout"_s, QString::number(30000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"path"_s).toString().isEmpty(), false);
+        QCOMPARE(app({u"navigate"_s, QString::fromUtf8(QJsonDocument(QJsonObject{{u"view"_s, u"chat"_s}, {u"path"_s, path}})
+                                                            .toJson(QJsonDocument::Compact))})
+                         .code,
+                 0);
+        r = app({u"wait"_s, u"--object-name"_s, u"chatSubConversation"_s, u"--timeout"_s,
+                 QString::number(20000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        // A scheduled conversation: its next run in words, run now, shown in Settings.
+        r = app({u"chat"_s, u"schedule"_s, u"add"_s, u"Plan dnia, proszę"_s, u"--when"_s, u"codziennie o 7:30"_s,
+                 u"--partner"_s, u"acp:fake"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        const QString id = r.result().value(u"id"_s).toString();
+        QCOMPARE(r.result().value(u"next"_s).toString(), u"2026-10-15 07:30"_s);
+        QCOMPARE(r.result().value(u"rule"_s).toString(), u"every day at 7:30"_s); // (the interface is English)
+        r = app({u"chat"_s, u"schedule"_s, u"add"_s, u"Ą"_s, u"--when"_s, u"co 5 minut"_s});
+        QCOMPARE(r.code, 2);
+        r = app({u"chat"_s, u"schedule"_s, u"run"_s, id});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QVERIFY(r.result().value(u"path"_s).toString().startsWith(u"AI/"_s));
+        r = app({u"chat"_s, u"schedule"_s, u"list"_s});
+        QCOMPARE(r.result().value(u"schedules"_s).toArray().size(), 1);
+        QCOMPARE(app({u"navigate"_s, uR"({"view":"settings","section":"extensions"})"_s}).code, 0);
+        r = app({u"wait"_s, u"--object-name"_s, u"chatScheduleRow"_s, u"--timeout"_s, QString::number(20000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
     }
 
     // No private runtime folder ($XDG_RUNTIME_DIR unset, Qt's <temp>/runtime-<user> not to be

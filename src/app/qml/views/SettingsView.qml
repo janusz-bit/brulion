@@ -1624,6 +1624,7 @@ Item {
                 readonly property bool local: AppSettings.aiProvider === "local"
                 readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
                 readonly property list<var> providersWithLocal: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }, { value: "local", text: qsTr("On this device") }]
+                readonly property list<var> notifyModes: [{ value: "always", text: qsTr("Always") }, { value: "background", text: qsTr("In the background") }, { value: "never", text: qsTr("Never") }]
 
                 SettingSwitch {
                     objectName: "assistantSetting"
@@ -1845,6 +1846,18 @@ Item {
                         onClicked: Workspace.extensions.testAi()
                     }
                 }
+                // The AI chat's notifications (WorkspaceChats::setNotifyMode; docs/UI.md "AI chat").
+                ShellSettingRow {
+                    title: qsTr("Notify when the AI answers")
+                    description: qsTr("A notification when a conversation is answered, fails or asks you something — never for one on screen. A click opens it.")
+                    BSegmented {
+                        objectName: "aiChatNotifySetting"
+                        accessibleName: qsTr("Notify when the AI answers")
+                        model: aiGroup.notifyModes
+                        currentValue: AppSettings.aiChatNotify
+                        onActivated: (value) => AppSettings.aiChatNotify = "" + value
+                    }
+                }
             }
 
             // AI agents of the user's own (the Agent Client Protocol: shell/workspaceagents.h) that
@@ -1854,6 +1867,7 @@ Item {
                 objectName: "acpAgentsSettings"
                 visible: AppSettings.acpAvailable
                 heading: qsTr("AI agents")
+                readonly property list<var> toolCallChoices: [{ value: "all", text: qsTr("Show all") }, { value: "hideFinished", text: qsTr("Hide finished") }, { value: "hideAll", text: qsTr("Hide all") }]
 
                 // A brulion://pair link (the QR code of acp pair, opened by the camera): the pairing
                 // dialog filled in, once — the user pairs.
@@ -1897,6 +1911,11 @@ Item {
                         Layout.fillWidth: true
                         title: AppController.routeText(agentRow.modelData, "name")
                         description: AppController.routeText(agentRow.modelData, "summary")
+                        // Claude Code's and Codex's subscription limits.
+                        ChatAgentLimits {
+                            objectName: "acpAgentLimits"
+                            partner: agentRow.remote ? "" : "acp:" + agentRow.agentId
+                        }
                         BButton {
                             objectName: "acpAgentCheck"
                             size: "small"
@@ -1932,6 +1951,19 @@ Item {
                     name: "notifications"
                     title: qsTr("Notifications")
                     description: qsTr("While an agent on another computer answers, a notification says so, with Stop; Brulion keeps fetching its answer with the screen off.")
+                }
+                // How an agent's tool calls show in the AI chat (AppSettings.chatToolCalls; ChatActivity).
+                ShellSettingRow {
+                    objectName: "chatToolCallsRow"
+                    title: qsTr("Tool calls in chat")
+                    description: qsTr("What an agent reads, runs and changes, under its answer. Hide finished keeps the failed ones; questions, failures and its plan always show.")
+                    BSegmented {
+                        objectName: "chatToolCallsSetting"
+                        accessibleName: qsTr("Tool calls in chat")
+                        model: agentsGroup.toolCallChoices
+                        currentValue: AppSettings.chatToolCalls
+                        onActivated: (value) => AppSettings.chatToolCalls = "" + value
+                    }
                 }
                 ShellSettingRow {
                     title: qsTr("Add an agent")
@@ -2265,6 +2297,9 @@ Item {
                     }
                 }
             }
+
+            // Scheduled conversations (shell/chatschedules.h): kept on this device per notebook.
+            ShellChatSchedules {}
 
             // The remote MCP server for claude.ai and ChatGPT (desktop: AppController.mcpServer,
             // shell/mcpserversupervisor.h; docs/CLI.md "Remote MCP server"): `brulion-cli mcp

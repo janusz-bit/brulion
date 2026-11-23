@@ -49,10 +49,11 @@ enum class Action {
     View,    ///< a view of the app (calendar, tasks, …)
     Run,     ///< a command of an extension approved on this device
     Pair,    ///< pairing with a computer's AI agents (brulion-cli acp pair): the dialog, filled in
+    Chat,    ///< a new conversation of the AI chat with a prompt in its field (never sent: chatlink.h)
 };
 
 /// The action's name in addresses ("open", "daily", "new", "append", "prepend", "task", "capture",
-/// "search", "view", "run", "pair").
+/// "search", "view", "run", "pair", "chat").
 QString actionName(Action action);
 /// The action an address names; also the aliases "journal" and "today" (daily), "create" (new),
 /// "command" (run). Case-insensitive.

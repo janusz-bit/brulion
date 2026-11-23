@@ -761,9 +761,10 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | Ctrl+E | Markdown source mode of the page / journal |
 | Ctrl+F / Ctrl+H | find in the note — in the journal stream over its days (the PDF viewer and the graph keep their own Ctrl+F) / with its replace row ("Find and replace") |
 | Ctrl+; | add a page property (the properties panel's add row; "Page properties") |
+| Alt+1 … Alt+9 | (in the AI chat) its list's first nine conversations; ↑ / ↓, Enter and F2 in the list ("AI chat") |
 | Ctrl+Enter | (in dialogs) accept |
 
-Every key of this table but Delete and Ctrl+Enter is a command's shortcut and can be changed
+Every key of this table but Delete, Alt+1 … Alt+9 and Ctrl+Enter is a command's shortcut and can be changed
 ("Custom shortcuts" below); the block editor's keys below cannot. With Vim keys on, the editor's keys are Vim's
 first ("Vim mode" below).
 
@@ -1276,18 +1277,74 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
 
 * **Routes**: `{view: "chat"}` the conversations; `{view: "chat", path}` one; `{view: "chat", new:
   true, page?, prompt?}` a new one about `page` (a page name as a link names it), `prompt` sent at
-  once ("Summarise this page"). The first message of a new one replaces the route with the
+  once ("Summarise this page"); `{view: "chat", new: true, fromLink, draft, partner?, page?, hidden?,
+  capped?, pageMissing?, partnerMissing?}` a prompt link's ("Automation" below: `brulion://chat`) —
+  `draft` put into the field and **never sent** (the user reads it and presses Send), `partner` who
+  answers, and a note above the field (`chatLinkNote`, `chatLinkNoteText`; × closes it, a sent message
+  takes it away) that says it came from a link — with the warning tint "This prompt came from a link
+  with N hidden characters, taken out now: they can hide instructions. Read it before you send it."
+  when it had some —, that it was cut at 8 000 characters, that its page is not in this notebook or
+  its partner not set up here (the AI assistant answers instead). The first message of a new one replaces the route with the
   conversation's (`AppController.replaceRoute`; in the side panel, where the view also opens, it
   pins the conversation there again). Title: the conversation's name without its date, else "AI
   chat".
 * **Layout**: from 720 px (not in the side panel) the list (300 px) beside the conversation; under
   that one of them — a conversation opened from the list is a step of the history, Back returns.
-  The list (`chatConversations`, `ChatListModel`: newest change first): an item per conversation
+  The list (`chatConversations`, `ChatListModel`): an item per conversation
   (`chatConversation_<name>`) — its name, its last message as one line (🤖 before the AI's), when
   it last changed, or while its turn runs a small spinner (an hourglass while it waits for the model
   on the device: the rows' `running` / `queued`) — and "New" (`chatNew`); empty: "No conversations
   yet" with the folder named.
-* **The list's menu** (`chatRowMenu`: a right-click, a long press): **Rename…** (`chatRename` →
+* **Its sections** (`section`: ListView sections, `chatSection_<name>` headers): **Pinned** on
+  top (the rows' `pinned`: the page's `przypięta: tak` / `pinned: true`, docs/SYNTAX.md §14; a pin
+  icon), then the others — "Recent", named only under pinned ones —, newest change first; the
+  **archived** (`zarchiwizowana: tak` / `archived: true`) out of it, folded at the bottom as
+  "Archived 12" (`chatArchived`, the list's footer, `archivedCount`): a click unfolds them
+  (`showArchived`) under their own header, which folds them again. Archived wins over pinned.
+* **What needs the user** (T3 Code's "came back to you"): a row whose turn asks something
+  (`asking`: a change to allow, an agent's permission or sign-in — `chatAsking`, a question mark in
+  the accent, the row's line what it asks, `question`), whose turn failed (`failure`: `chatFailed`,
+  the alert icon and the reason as its line in the danger tint) or with an **unread** answer
+  (`unread`: an answer written while no chat view showed it — `chatUnread`, an accent dot, its
+  name semibold, its time in the accent; a view that shows the conversation reads it) comes to the
+  top of its section, the newest that came back first (`WorkspaceChats.cameBack`); a turn that
+  runs leaves the row where it is. Unread is kept in the notebook's device state (LocalStore
+  `chat/unread`: {path in lower case → when}), never in the page, so it syncs no change; it follows
+  a rename and goes with the page.
+* **Search** (`chatSearch`, a `BSearchField` above the list, shown when there are conversations):
+  `ChatListModel.query` keeps the conversations whose name or one of whose messages has all of
+  its words (case and diacritics aside: folded, `searchTerms`) — the archived ones too, under their
+  header (unfolded, not foldable meanwhile). A name's match marks its words in the title
+  (`titleMatches`); a message's, the newest such one, shows its line with the most of the words
+  as the row's line (`matchText`: plain words, from a little before the first one when it is far
+  in — `ChatListModel::matchExcerpt` —, the words marked: `matchMatches`, `TextHelper.markMatches`)
+  and opens the conversation at that message (the route's `line`, `matchLine`: the message is
+  scrolled to the middle and its bubble has the accent's border for 2.5 s). The model keeps the
+  messages' text (and its folded form) it read at its last refresh, so a keystroke reads no page;
+  nothing found: "No conversation found" (`chatNoMatch`).
+* **Keyboard** (desktop): the find command's key (Ctrl+F, `page.find`) while the chat has the focus
+  goes to the search field, ↓ there to the first row; ↑ / ↓ move in the list without opening
+  (`keyNavigationEnabled`), Enter opens the row (a match at its message), **Alt+1 … Alt+9** open the
+  list's first nine conversations (reserved in ShortcutMap, area "chat": no command takes them), F2
+  renames the row with the keyboard (else the conversation shown).
+* **Notifications** (`WorkspaceChats::notificationWanted` → `workspaceintegration.cpp`): a turn
+  answered (the answer's first line), failed (why) or asking (its question's first line) shows a
+  system notification titled with the conversation's name — the platform's notifier as a message
+  of the app (`notify::isMessage()`, its id `brulion-message:<path>`: one per conversation, a newer
+  one replaces it; the desktop's has **Open** and OK, no Snooze; Android shows it as a timer's
+  end, "OK" alone; the browser's while the page is open); a click opens the conversation
+  (`AppController::openNotification`: a conversation goes to the chat, not the editor). **Settings →
+  Extensions → AI → Notify when the AI answers** (`aiChatNotifySetting`, `AppSettings.aiChatNotify`,
+  key `ai/chatNotify`): **Always** (also while the app is in front, when no chat view shows the
+  conversation), **In the background** (only while the app is not active, the default) or
+  **Never**; never for a conversation shown in an active window. The app lock's "Hide the note's
+  text in notifications" makes it "AI chat" — "Something new in a conversation". The toast for a
+  question nobody sees stays as it was.
+* **The list's menu** (`chatRowMenu`: a right-click, a long press): **Pin** / **Unpin**
+  (`chatPin`, not on an archived one) and **Archive** / **Unarchive** (`chatArchive`):
+  `WorkspaceChats.setPinned()` / `setArchived()` write the page's frontmatter (`chat::setMark`, the
+  notebook's language), a toast says so with **Undo** (`AppController.toastUndoChatMark`, also once
+  the view is gone); **Rename…** (`chatRename` →
   `chatRenameDialog` with the name without its date, `chatRenameField`; `WorkspaceChats.rename()`
   keeps the date in front and goes through `Workspace::renamePage`, so the day's link follows; the
   toast's **Undo** renames it back — `AppController.toastUndoRename`, also once the view is gone),
@@ -1308,7 +1365,22 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   the first message of a day that day (`chatDay`: "Today", "Yesterday", "15 Nov"); a click on a link
   follows it (page:, tag:, ext: through `PageTools.openLink`, from the conversation's page), a long
   press or right-click has Copy (the message's Markdown), "Show in the page" (the page at its
-  line) and, on the AI's, **Report response…** (below). Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
+  line), on the AI's **Report response…** (below), **Quote** (`chatMessageQuote`: its text as a quote, "> …" lines, at the start of the field —
+  `WorkspaceChats.quote()`, core `chat::quoted`), **Edit from here** (`chatMessageEdit`, the user's
+  messages: as T3 Code's rewind — the message and every one after it come out of the page
+  (`WorkspaceChats.rewind()`, core `chat::truncated`: the page before it byte for byte), its turn
+  and its waiting messages stop, its text and pictures go back into the field; an AI agent's next
+  turn is a new session with what is left; a toast's **Undo** puts the page back while it did not
+  change since — `undoRewind()`, AppController's `m_rewindToasts`) and **Fork from here**
+  (`chatMessageFork`: a new conversation, today's, a copy of this one up to that message —
+  `WorkspaceChats.fork()`, core `chat::forked`, its journal line too — that goes on by itself with
+  the same partner and a session of its own; its frontmatter's `fork:` names the source,
+  docs/SYNTAX.md §14, and its header has a chip "Forked from …", `chatForkSource`, that opens it),
+  and on the user's own messages **Copy prompt link** (`chatCopyPromptLink`: a `brulion://chat`
+  link with the message and the conversation's partner, no notebook named —
+  `AppController.chatPromptLink()`; the palette's **AI: Copy prompt link**, `ai.copyPromptLink` while
+  the chat shows, copies the draft's with its page through the uiAction `chat:copyPromptLink`) — on a drawing (below) also **Copy source** (`chatMessageCopySource`).
+  Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
   or the page names one: its menu, `chatPartnerMenu`, changes it for the next turns —
   `WorkspaceChats.setPartner()` writes the page's `partner:`), the page it is about (a chip that
   opens it), "Open the conversation as a page" (`chatOpenPage`) and, without the list, "New
@@ -1354,6 +1426,32 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   restart; another app and an older Brulion show the answer as before. The model still gets a
   marked answer with the conversation (the mark is the user's view of it). The writing assistant's
   result has the action too ("AI in the editor").
+* **Drawings in an answer** (T3 Code's visual replies, Brulion's way: no web view, nothing of the
+  message runs): an AI message with a closed ```` ```chart ```` block whose table or calc block is in
+  the message itself, a closed ```` ```mermaid ```` diagram of a type Brulion draws, a
+  ```` ```math ```` / `latex` / `tex` block or a paragraph that is one `$$…$$` formula is shown in
+  parts one under another (`chatSegments`, `ChatSegments.qml` → `ChatSegment.qml`; the model's
+  `segments` role, `ChatMessageModel::renderSegments()`: [{kind `text` | `chart` | `diagram` |
+  `math`, html, code, source, chartData}]): the text between them as the bubble's rich text, a chart
+  by the editor's `ChartView` (`chatSegmentChart`: the numbers through `chart::resolveData` of the
+  message's own tables, numbers in the chat's language; a message runs no query), a diagram by
+  `MermaidView` (`chatSegmentDiagram`: scaled down to the bubble, never up), a formula as the
+  editor's `renderMath` rich text, centred and larger (`chatSegmentMath`). The bubble keeps its
+  width rules — as wide as its widest part (`naturalWidth`; a chart takes all of the 82 % / 92 %,
+  720 px). A message without a drawing stays one rich text (`messageHtml`, as before), and a drawing
+  that cannot be drawn shows its block as written: a chart's mistake or a column not there, a query,
+  an unterminated fence (an answer cut off), a Mermaid type not drawn; a diagram whose source fails
+  only when laid out falls back so in the view (MermaidView's `status`). A tap on a drawing opens it
+  large as a picture opens (`chatDrawingViewer`, `ChatDrawingViewer.qml`: a chart at the window's
+  width up to 1400 px, a diagram fitted — a small one laid out again with a larger font, up to
+  twice the text's, a large one scaled down; a click or `chatDrawingViewerSize` shows it at its own
+  size, scrolled —, a formula large; "Copy source", `chatDrawingViewerCopy`, the block as written;
+  Close or Escape). The answer being written draws them too once their block is finished
+  (`chatPartialParts`: `ChatMessageModel.segments()` of `ChatTurn.partialSettled`, rendered again
+  only when a block is finished — never per token; the block being written stays text). AI agents
+  are told they may answer so (`WorkspaceAgents::context()`); the built-in assistant's prompts are
+  not changed (a model on the device trained on them: docs/FINETUNE.md). The HTML exports of the
+  conversation's page draw them as any page's.
 * **A conversation too long for the model** (`WorkspaceChats.historyBudget`: 16 000 characters for
   the model on the device, 120 000 for a provider on the network — `chat::firstSent`, a picture
   counting 3 000): the turn sends it from a later turn on, whole turns from the oldest left out, the
@@ -1387,8 +1485,36 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   **Stop** (`chatStop`: `Workspace.chats.stop(path)`: nothing is written for that turn, the question
   stays for Try again, and the request itself ends — the model on the device stops writing, a
   provider's connection is closed —, so it holds up no other question).
+* **Writing on while it answers** (as T3 Code's queue): the field stays open; Enter (or the send
+  button, a clock then: `chatQueue`) puts the message in line — it waits under the answer as a
+  bubble with the accent's outline (`chatWaiting`) with **Send now** (`chatWaitingNow`), **Edit**
+  (`chatWaitingEdit`: back into the field, its pictures too) and **Remove** (`chatWaitingRemove`),
+  and goes by itself, a turn of its own, when the answer is written (`WorkspaceChats.queue()`,
+  `queued()`, `unqueue()`, `sendNow()`). **Ctrl+Enter** sends it now (`steer()`: the turn stops — an
+  agent takes no message in the middle of one — and it is answered first, with the question the
+  stopped turn did not answer). With an empty field the button is Stop. A turn that fails or is
+  stopped **holds** them (`chatHeld`: "2 messages wait: the answer before them stopped." with
+  **Resume**, `chatResume` → `resumeQueue()`; a new message resumes them too, and waits after
+  them); they are kept in the notebook's device state
+  (LocalStore `chat/queued`), so a restart keeps them, held, and they follow a rename.
+* **Naming a page** (as T3 Code's @-mentions): "@" and the start of a name (at the start or after a
+  space — not an address), or "[[" and anything but "]", offers the pages it may be as chips above
+  the field (`chatMentions`, `chatMention`: `WorkspaceChats.mentions()` through
+  `Workspace.suggestPages`, at most 8); a tap or Tab (the first) writes its link, `[[Zakupy]] `
+  (`withMention()`, `mentionEnd()`). An AI agent gets the pages its newest message names — at most
+  5, not the conversation nor the page it is about — with the message: their text where it takes
+  embedded context, else links (an encrypted page: a link); the built-in assistant reads them with
+  its own tools.
+* **Drafts**: what is written in the field and not sent stays with its conversation while another
+  is shown, and over a restart (`WorkspaceChats.draft()` / `setDraft()`, the notebook's device
+  state `chat/drafts`, following a rename; a new conversation's draft under ""); its pictures stay
+  with the field.
+* **Questions asked before**: Up in an empty field brings back the user's questions of the
+  conversation, newest first (Down goes forward again, to an empty field; editing one makes it a
+  new message — `WorkspaceChats.prompts()`, core `chat::prompts`: without their pictures and the
+  first one's link to the page it is about).
 * **Several conversations at once**: every conversation has a turn of its own — one per
-  conversation (its field waits while its own turn runs, "The AI is answering…") —, and with a
+  conversation (a message written meanwhile waits for it: above) —, and with a
   provider on the network they all answer side by side. **The model on the device** answers one turn
   at a time: the others wait in line, in the order they were sent (`ChatTurn.queued`, its `place`):
   the conversation shows an hourglass and "Waiting for the model on this device: it answers another
@@ -1429,9 +1555,25 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   (`WorkspaceChats.seesPictures`).
 * **Dictation** (`chatDictate`, the microphone, shown while `WorkspaceChats.dictationAvailable`):
   Android's speech recognizer through its intent (the system's dialog listens; no microphone
-  permission of Brulion's own); what it heard goes into the field at the caret. Elsewhere there is
-  none yet: a recognizer of the app's own (on-device speech recognition) registers itself with
-  `platform::setSpeechRecognizer()` and the button appears (`platform/capture.h`).
+  permission of Brulion's own); what it heard goes into the field at the caret. On the desktop
+  (Linux, Windows) the app's own: `media::Dictation` (`src/app/media/dictation.h`), registered by
+  `AppController::setUpSpeech()` with `platform::setSpeechRecognizer()` where this build transcribes
+  (`Transcriber.available`) and records — a `VoiceRecorder` (the system's default microphone, WAV into
+  the cache's `dictation` folder) heard on the device by the voice notes' Whisper model
+  (`Transcriber::transcribeFile()` → `heard()`: nothing placed in a note; in the dictation's language,
+  the UI's, unless Settings → Speech names one). Pressed, it records: the button becomes a stop square
+  in the danger colour, the field's frame red and read-only ("Listening…"), and beside the button the
+  time recorded of its five minutes (`chatDictationTime`, "0:12 / 5:00", `WorkspaceChats.dictationElapsed`
+  / `dictationLimit`); pressed again, **Enter** or Send finish it ("Transcribing…",
+  `WorkspaceChats.recognizing`), and the text goes in at the caret; **Esc** (in the field, or a
+  `Shortcut` while the focus is elsewhere) throws it away. At five minutes it stops by itself and is
+  heard. The recording is deleted when heard or cancelled, and leftovers of an app that ended
+  meanwhile when the next dictation starts. Without a speech model (`WorkspaceChats.dictationReady`
+  false) the microphone opens `chatDictationSetup`: what it needs (the model's name and size), its
+  download with the progress (`chatDictationDownload`, the voice notes' `AppController.speech`), and
+  **Speech settings** (`chatDictationSettings`); once the model is there "Dictation is ready" with
+  **Dictate**. A recognizer tells `SpeechRecognizer::ready()`, `elapsedMs()`, `maxMs()`,
+  `recognizing()` (`platform/capture.h`; the system's: ready, no time). Tests: `tst_media_dictation`.
 * **The field** (`chatInput`, a `BTextArea` in a frame that grows to 168 px, then scrolls with the
   caret kept in view): with a keyboard Enter sends and Shift+Enter is a new line; on touch the
   keyboard's Enter is a new line and the round button sends (`chatSend`, an arrow up, disabled
@@ -1448,11 +1590,15 @@ page deleted meanwhile ends the turn), `chatFailed` keeps the reason in the conv
 `ChatTurn`; `turn(path)` (a `ChatTurn`: `running`, `queued`, `place`, `status`, `failure`,
 `omitted`, `partial`, `partialSettled`, `partialTail`, `thoughts`, `allThoughts`, `speed`),
 `retry(path)`, `stop(path)`, `stopAll()`, `dismissFailure(path)`, `isConversation(path)`,
-`showing()` / `isShown()`, `rename()`, `remove()`, `nameOf()`, `partnerOf()` / `setPartner()`,
+`showing()` / `isShown()`, `rename()`, `remove()`, `setPinned()` / `setArchived()`, what needs the
+user (`isUnread()`, `cameBack()`, `failureOf()`, `attentionChanged`) and its notifications
+(`setNotifyMode()`, `notificationWanted`), `nameOf()`, `partnerOf()` / `setPartner()`,
 `setFlag()` (an AI's answer reported or hidden) / `modelName()` (who answered, for a report), the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
 `picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
-`stopDictation` / `cancelDictation` → `dictated`), `historyBudget`, `seesPictures`, `onDevice`,
+`stopDictation` / `cancelDictation` → `dictated`; `dictationReady`, `recognizing`, `dictationElapsed`,
+`dictationLimit`, `useSpeechRecognizer()`), the agents' subscription limits (`limits`: AgentLimits,
+"AI agents (ACP)" → "Its limits"), `historyBudget`, `seesPictures`, `onDevice`,
 `runningCount`, `runningShown`; a turn's partial answer and thoughts (`ChatTurn.partialChanged`,
 coalesced to ten a second; `thoughtsTail()`: the last 240 characters from a word on) from
 `WorkspaceExtensions::chatPartial` — every request of a chat's turn goes out with an
@@ -1569,7 +1715,39 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   a switch chip: the option's name, highlighted while on, a click toggles it (no bare "Off"). A choice is remembered for the agent (`AgentConfig::options`, with the options
   its last session offered, `known`) and set on every new session before its first prompt — so a
   model the account cannot use is chosen once (Codex on a ChatGPT Free plan). After them the
-  session's usage (`chatAgentUsage`: "4.3 % of the context · 0.21 USD", the agent's `usage_update`).
+  session's usage (`chatAgentUsage`: "4.3 % of the context · 0.21 USD", the agent's `usage_update`)
+  and the subscription's limits (below).
+* **Its limits** (`chatAgentLimits`, `ChatAgentLimits.qml`; `Workspace.chats.limits`,
+  `src/app/shell/agentlimits.h`; core `agentlimits/`): for an agent **of this computer** that is
+  Claude Code or Codex — known by its command (`agentlimits::providerOf()`: the presets,
+  `claude-agent-acp`, `claude-code-acp`, `codex-acp`, a program named `claude` or `codex`) or by the
+  name its program gave in `initialize` (`WorkspaceAgents::programName()`) — how much of the
+  signed-in account's windows is used: a pill "5 h: 12 % · week: 68 %" (a month where neither is:
+  Codex Free), in the warning colours above 80 % and the danger colours at 100 % of any window; its
+  tooltip the plan, each window — the five hours, the week, a model's own week ("Week, Opus", Codex's
+  "GPT-5.3-Codex-Spark, 5-hour window"), Claude's extra usage this month — with its reset in local
+  time ("resets at 18:40", "resets Fri 08:00", "resets 2 Dec 09:00") and when they were read; a click
+  opens them as a menu (`chatAgentLimitsMenu`, `chatAgentLimitsWindow`) with **Refresh**
+  (`chatAgentLimitsRefresh`). Also on the agent's row in Settings → AI agents (`acpAgentLimits`).
+  Read when shown and every five minutes while shown, **at most every five minutes per account**
+  (`agentlimits::LimitsReader`; an account is its sign-in file: two agents of one share a reading),
+  Refresh at once; a reading that needed no request (no sign-in file, an expired token) is tried
+  again the next time. Claude: `GET https://api.anthropic.com/api/oauth/usage` with the access token
+  of `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json` (`claudeAiOauth.accessToken`, its
+  `expiresAt`, `subscriptionType`), `anthropic-beta: oauth-2025-04-20` and Claude Code's user agent;
+  Codex: `GET https://chatgpt.com/backend-api/wham/usage` with `tokens.access_token` of
+  `${CODEX_HOME:-~/.codex}/auth.json` and `Chatgpt-Account-Id` (`tokens.account_id`) — the folders as
+  the agent's command sets them (`VAR=… prog`, `env VAR=… prog`), else the app's environment. The
+  token is read for each request, kept only in memory for it (registered with the event log's
+  redaction meanwhile: `logging::ScopedSecret`), sent only to that provider's host over https (the
+  transport follows no redirect to another server), never refreshed (that would rotate the agent's
+  own sign-in) and never logged — the log says "claude limits read: 4 windows" or why not. What to do
+  when they cannot be shown, in the pill's few words ("Limits: not signed in", "Limits: sign in
+  again", "Limits: offline", "Limits: not available") and the tooltip's sentence: run `claude` and
+  `/login`, or `codex login`, in a terminal; an API key's sign-in has no limits; an expired token is
+  renewed by using the agent once; asked too often, try again in a few minutes. Not for an agent on
+  another computer (its sign-in is that computer's) nor where no programs run. Tests: `tst_agentlimits`
+  (recorded answers, malformed ones, the requests, the reader's rhythm), `tst_shell_agentlimits`.
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that
   match are chips above it (`chatCommands`, `chatCommand`: `available_commands_update` of the
   session, or of the agent's last one); a tap writes "/name " — the agent reads it as it is.
@@ -1599,7 +1777,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   (`WorkspaceAgents::recoverable()` — Android ended the app meanwhile) runs again
   (`WorkspaceChats::recoverAgentTurns` → `WorkspaceAgents::recover`): "Claude Code is still working
   on raspberry-pi-4…" while `acp::fetchRemoteTurn` long-polls the computer, then the answer is
-  written as if the phone had been there (its text, else "Done:" and its tool calls), the
+  written as if the phone had been there (its text, else its tool calls in words and their
+  titles), the
   session's record goes on (the next message resumes it), and the foreground service runs
   meanwhile as for a turn. The same when the stream of a running turn ends (the computer not
   reached for 15 minutes, or it gave the stream up). Stop asks the computer to stop it
@@ -1626,7 +1805,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   `BRULION_APP_CLIENT`; never in its arguments), so its `brulion_app_*` tools reach the app — also
   while the remote control's setting is off — and change it live (docs/CLI.md "Live changes"); the
   context says so, every change shows in the top bar's live indicator under the agent's name, and
-  the grant ends when the process does. What it writes to its
+  the grant ends when the process does. Every session also gets the chat's own grant for its
+  conversation ("Agents delegate" below). What it writes to its
   standard error goes to the log; when it ends, its turns fail with its last line ("stopped: it
   ended with code 1: …") and the next turn starts it again. A changed program or a removed agent
   stops; a notebook closed stops them all.
@@ -1649,12 +1829,26 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   (`chatThoughts`), what it does the title of its tool call in progress (`chatStatus`: "Read
   Dom.md"; "Claude Code is working…" before). Under the answer what the turn does (`chatActivity`,
   `ChatActivity.qml`: `ChatTurn.tools` and `ChatTurn.plan` — the plan, a step a line with its state
-  (`chatPlanEntry`); the newest four tool calls (`chatToolCall`, "N earlier steps" opens them all)
-  with an icon of their state and, under the one running or the last, its output's last lines —
+  (`chatPlanEntry`); a summary line of the tool calls in words (`chatToolsSummary`:
+  `WorkspaceChats.toolSummary()`, `shell/chattools.h` — a part per kind in the order the turn first
+  did them, "Read 3 files · ran 2 commands · edited 1 file", at most three named and the rest "N
+  other steps", failed calls counted apart, "1 step failed", plural forms through the translation)
+  that opens and closes their list: the newest four (`chatToolCall`, "N earlier steps" opens them
+  all) with an icon of their state — closed, the calls running and the failed ones stay — and,
+  under the one running or the last, its output's last lines —
   a terminal's as it comes (`chatToolOutput`, plain monospace text) —, a file's change behind "Show
   the change" as a diff (`chatToolDiffToggle`, `chatToolDiff`: BDiffView, unified); the first change
   at once, those after it ten times a second at most). The turn's answer is written as the AI's message with its
-  time, as any partner's; a turn of tool calls without words writes "Done:" and their titles.
+  time, as any partner's; a turn of tool calls without words writes their summary line and their
+  titles as a list ("Edited 1 file", then "- Edit Dom.md"; an agent on another computer keeps only
+  the titles: "Took 2 steps").
+* **Tool calls in chat** (Settings → Extensions → AI agents, `chatToolCallsRow` /
+  `chatToolCallsSetting`; `AppSettings.chatToolCalls`, key `ai/chatToolCalls`, this device's — T3
+  Code's setting): **Show all** (`all`, the default: the list open), **Hide finished**
+  (`hideFinished`: the list closed — a call shows while it runs and stays only if it failed; the
+  summary line still opens it) and **Hide all** (`hideAll`: no summary, only failed calls, and the
+  status line says only "Claude Code is working…" instead of the call's title). Questions, failures
+  and the plan always show.
 * **Sessions after a restart**: the session's id is kept in the notebook's device state (LocalStore
   `acp/sessions`: {conversation → agent, session, how many messages it has seen}); the
   conversation's next turn after the app started again resumes it (`session/resume`, else
@@ -1674,8 +1868,110 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
 * **Stop** (`WorkspaceChats.stop`): `session/cancel`, a question waiting answered "cancelled", the
   turn's commands ended, nothing more of that turn; a message sent meanwhile waits for the agent to
   end the cancelled turn.
+* **Approvals** (`chatApprovals` in the conversation's row, `chatNewApprovals` before a new one's
+  first message; menu `chatApprovalsMenu`; as T3 Code's permission modes): how the agent's
+  questions are answered — **Ask first** (`ask`, each one shown), **Allow note edits** (`edits`: a
+  change of a file — the call's kind `edit` or `move` — and reads go by themselves, commands and the
+  rest ask) or **Allow everything** (`all`); a plan to approve and a sign-in always ask
+  (`WorkspaceAgents::autoAnswer()`: the question's first `allow_once` option, else `allow_always`;
+  what was allowed shows as the turn's status, "Allowed by your approvals: Write Zgoda.md"). Kept
+  per conversation in the notebook's device state (LocalStore `chat/approvals`, following a rename)
+  — never in the page, which syncs from anywhere —; a new conversation gets the mode chosen last.
+* **A plan to approve** (Claude Code leaving its plan mode: a `switch_mode` call with the plan in
+  its input — acp::Permission::plan): the question shows the plan rendered as a message
+  (`chatQuestionPlan`, `WorkspaceChats.questionPlan()` through ChatMessageModel.render — escaped,
+  never the agent's HTML) instead of the input as JSON, with **Save the plan as a page**
+  (`chatSavePlan`: "Plan – <the conversation's name>.md" in the notebook's top folder, a link back
+  to the conversation under it — `savePlan()`), and the agent's options ("Yes", "No, keep planning").
+* **What a turn changed** (`chatChanges`, `ChatChanges.qml`, under the last answer once the turn
+  ended; as T3 Code's turn diff): "Changed 3 files" with **Undo these changes** (`chatChangesUndo`)
+  and × (`chatChangesDismiss`: kept as they are), a row per file (`chatChange`: its path — a tap
+  opens it —, changed / new / deleted, **Show the change** with a unified diff of its text before the
+  turn and now, `chatChangeDiff`). Followed by `WorkspaceAgents` while an agent of this device
+  answers (`m_tracking`): a file is kept as it was the moment the app first sees it named — a
+  question about its change (before the agent can make it), a tool call of the kinds edit, move or
+  delete naming it (`locations`, its diff's path: Claude Code changes files with tools of its own,
+  never asking the app) or the agent's `fs/write_text_file`; a snapshot that already holds the
+  call's change (the app saw the call late) is turned back with the call's diff
+  (`WorkspaceAgents::textBefore()`), or marked "not known before". Undo writes each file back as it
+  was (a file the turn made goes to the trash) unless it changed since — those stay, said in the
+  toast (`undoChanges()`). In memory until the conversation's next turn starts; not for an agent
+  on another computer (its files are there), nor for Brulion's own MCP tools (another process:
+  their writes are in the pages' history).
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
-  program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one).
+  program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one),
+  `tst_shell_chattools` (the calls in words, English and Polish plural forms), the shell self-test's
+  `checkChatDrawings` (the drawings of an answer, ChatActivity under each "Tool calls in chat").
+
+### Agents delegate
+
+An AI agent that answers a conversation may give another partner of the chat a task — Claude Code
+asks Codex for a second opinion, hands a research subtask to another agent, has the assistant write a
+note — and get the answer back, as T3 Code's subagents: a **sub-conversation**, an ordinary
+conversation page whose frontmatter names the one it came from (`parent: "[[AI/…]]"`, docs/SYNTAX.md
+§14). Desktop: every agent of this computer with Brulion's tools gets `--app-chat` and, for each of
+its conversations, a grant of the app's chat alone (`WorkspaceAgents::setChatGrants()` →
+`RemoteControl::chatGrant()`, the token in its tools' environment as `BRULION_APP_CHAT_TOKEN`), so its
+`brulion_app_chat_*` tools (docs/CLI.md "Conversations") reach the running app — also while the remote
+control's setting is off; the context tells it in a sentence (`WorkspaceAgents::context()`). The
+built-in assistant's tools do not change (docs/FINETUNE.md).
+
+* **In the parent conversation** (`chatLineage`, `ChatLineageRow.qml` under the header): "Sub-conversations:"
+  and a chip per sub-conversation (`chatSubConversation`: its name · who answers, an icon of its
+  state — answered, answering, waiting for the model on the device, waiting for your answer
+  (highlighted), failed (the danger tint) — and the state in its tooltip); a click opens it. In a
+  sub-conversation a chip "From: …" (`chatParent`) opens the conversation it came from.
+  `Workspace.chats.lineage` (`shell/chatlineage.h`): `children(path, serial)`, `parentOf()`,
+  `depthOf()`, `isDescendant()`, `runningChildren()` — the parents read from the pages once and
+  again when a conversation's page changes (another device's too).
+* **Questions**: a sub-conversation's agent asks as any conversation's does — its question card in
+  it, a toast with Open when no view shows it; the parent's agent learns from its wait that the
+  sub-conversation waits for the user (`waiting_for_user`) and tells them.
+* **Limits** (`ChatControl`, `shell/chatcontrol.h`): an agent starts sub-conversations of its own
+  conversation only, sends to and stops only its own sub-conversations, at most **three levels** deep
+  (one that deep gets no chat grant) and **four** of one conversation running at once; a
+  sub-conversation's agent never gets the live tools ("Let it change the app"), whatever its setting.
+* The protocol's chat methods (`chats`, `chatRead`, `chatStart`, `chatSend`, `chatWait`, `chatStop`,
+  `chatPartners`, `chatSchedule*`) are `ChatControl`'s: GUI-free over `WorkspaceChats`
+  (`send(…, partner, parent)`, `stateOf()`: idle, running, queued, asking, failed), the desktop's
+  `RemoteControl` passing them on with who asks.
+
+### Scheduled conversations
+
+**Settings → Extensions → Scheduled conversations** (`ShellChatSchedules.qml`, shown with a notebook of
+the user's open; `chatSchedulesSettings`): a message sent to a partner of the chat when a rule
+written in words says — "codziennie o 7:30", "w poniedziałki o 9:00", "w dni robocze o 8", "co 3
+godziny", "jutro o 8" (once), "every day at 7:30" (core `schedule/schedule.h`, through the dates
+module's natural dates and recurrence rules) —, each run a new conversation or the next message of
+one conversation (T3 Code's scheduled tasks).
+
+* A row per schedule (`chatScheduleRow`): its title, then its rule in words, who answers, "a new
+  conversation each time" or "one conversation", its next run ("next: jutro 07:30"; "off", "done"
+  for a single one that ran), who set it up when an agent did, and why its last run did not start;
+  **Run now** (`chatScheduleRun`: it runs at once and the conversation opens; the next run counts
+  from now), **Edit…** (`chatScheduleEdit`) and **Delete** (`chatScheduleDelete`); **Add…**
+  (`chatScheduleAdd`). Empty: "None yet." (`chatSchedulesEmpty`).
+* The dialog (`chatScheduleDialog`): the message (`chatSchedulePrompt`), when (`chatScheduleWhen`:
+  checked as it is typed — the rule in words and its first run under it, `chatScheduleWhenText`,
+  or why not: "At most every 15 minutes…", "That time has passed.", "Not understood…"), who answers
+  (`chatSchedulePartner`, the chat's partners), each time a new conversation or the same one
+  (`chatScheduleDestination`), a name (`chatScheduleTitle`; default the message's first words) and
+  On (`chatScheduleEnabled`).
+* **Kept on this device** (AppSettings `ai/schedules/<the notebook's id>`, JSON; at most 50) —
+  never in the notebook, which syncs from anywhere: a synced file must not start agents; none for
+  the documentation. `Workspace.chats.schedules` (`shell/chatschedules.h`): `rows`, `check()`,
+  `add()`, `update()`, `setEnabled()`, `remove()`, `runNow()`, `lastError()`; AppController gives it
+  its storage when a notebook opens.
+* **Runs while the app runs** (the desktop tray keeps it running; on Android while it is open, with
+  partners that answer there): looked at every half minute and when the notebook is ready, so a run
+  missed while the app was closed runs once at its next start — not once per missed occurrence. A
+  toast says "Scheduled conversation “…” started" with Open. Skipped, with why: a partner that does
+  not answer on this device, its one conversation still answering the last run.
+* Times are local wall-clock time: a time the spring skips runs at the first minute after the gap,
+  one the autumn repeats runs once; an interval counts the hours that pass.
+* Agents and scripts manage them too (`brulion-cli app chat schedule list | add | set | remove |
+  run`, docs/CLI.md "Conversations"); one an AI agent sets up names it and its conversation, its runs
+  are sub-conversations of it, and the agent changes only those.
 
 ## AI in the editor
 
@@ -2192,6 +2488,7 @@ brulion://<action>[/<page path>]?<parameter>=<value>&…
 | `view` | `name` (journals, calendar, tasks, habits, graph, search, allPages / pages, tags, sync, importExport, trash, cleanup, settings, logs, chat) and its parameters: `date` (journals, calendar), `mode` (calendar), `query` (tasks, search), `folder` (search, allPages), `tab` (sync, importExport), `section` (settings) | shows the view |
 | `run` (`command`) | `extension`, `command` (or `extension=silownia/rekord`), `args` (a JSON object: the command's `ctx.args`), `page` (its `ctx` page) | runs the command of an extension **approved on this device** (docs/EXTENSIONS.md); an extension waiting for approval, off or without that command is an error (`not_approved`) — an address never approves code |
 | `pair` | `url` (also `address`: a computer that runs `brulion-cli acp serve`), `code` (its `acp pair` code) | Settings → Extensions → AI agents with the pairing dialog filled in ("AI agents (ACP)"); the user pairs — a link never pairs by itself. `acp pair` shows it as a QR code the phone's camera opens |
+| `chat` | `prompt` (at most 8 000 characters once what nobody sees is taken out; the rest left out), `partner` (who answers: `acp:<id>`, an extension's `id/command`, or the name the chat shows — only one set up on this device, else the default with a note), `page` (the page it is about, when the notebook has it) | a **prompt link**: a new conversation of the AI chat with the prompt in its field — **never sent**, the user reads it and presses Send ("AI chat": `fromLink`, `draft`). Zero-width characters, bidirectional marks and controls, Unicode tag characters, variation selectors that hide bytes and every other format character are taken out first (core `automation/chatlink.h`: `cleanPrompt()`; an emoji's own joiners and presentation selector stay), and the view warns that they can hide instructions. Made by "Copy prompt link" and `brulion-cli uri build chat` |
 
 Common parameters: `vault` (also `notebook`: a notebook of this device by its name or its folder's,
 or its absolute folder; another one than the open is opened first; a name several notebooks share
@@ -2202,8 +2499,8 @@ link says), `id` (echoed in results), `x-success` / `x-error` / `x-cancel` (call
 
 Any web page, any app and any program of the device can fire an address, so (`policy.h`):
 
-* **Opening** — `open`, `daily`, `search`, `view`, `capture` without text, `pair` — **runs at once**; it
-  changes nothing.
+* **Opening** — `open`, `daily`, `search`, `view`, `capture` without text, `pair`, `chat` — **runs at
+  once**; it changes nothing (a prompt link only fills the chat's field).
 * **Writing** (`new`, `append`, `prepend`, `task`, `capture` with text) and **running an
   extension's command** need the notebook's **automation key** in the address (`key=…`) — or the
   user's **Write** in the dialog **"Write from a link?"** (`ShellAutomationDialog`), which says where
@@ -4869,7 +5166,9 @@ failure says why with **Try again**. It stops by itself after three hours.
   works the player's card says so ("Reading the recording…", "Opening the speech model…",
   "Transcribing… 42 %") with **Stop**; a toast says when it is done or why not (no speech heard, the
   note no longer has the recording). The model stays in memory five minutes after the last one.
-  Absent in builds without the model on the device (`BRULION_LOCAL_AI` / `BRULION_SPEECH`).
+  The AI chat's dictation on the desktop hears its recordings with the same model
+  (`Transcriber::transcribeFile()`: "AI chat" → Dictation). Absent in builds without the model on the
+  device (`BRULION_LOCAL_AI` / `BRULION_SPEECH`).
 * **Tests without a microphone**: with `BRULION_TEST_MICROPHONE` set every recorder hears a made-up
   voice (a tone that swells and fades) — the shell self-test's voice note, screenshots.
 

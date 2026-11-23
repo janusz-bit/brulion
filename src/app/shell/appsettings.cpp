@@ -76,6 +76,8 @@ constexpr auto kMcpServerReadOnly = "mcpServer/readOnly"_L1;
 constexpr auto kAcpShare = "ai/share"_L1;
 constexpr auto kAcpShareAddress = "ai/shareAddress"_L1;
 constexpr auto kAcpShareTrust = "ai/shareTrust"_L1;
+constexpr auto kAiChatNotify = "ai/chatNotify"_L1;
+constexpr auto kChatToolCalls = "ai/chatToolCalls"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
 constexpr auto kEditorMonoFamily = "editor/monoFamily"_L1;
@@ -139,6 +141,7 @@ constexpr std::array kLineSpacingChoices{u"normal", u"compact", u"relaxed"};
 constexpr std::array kSpellLanguageChoices{u"auto", u"pl", u"en", u"pl,en", u"en,pl"};
 constexpr std::array kWebPictureExportChoices{u"link", u"include"};
 constexpr std::array kTrayClickChoices{u"calendar", u"window"};
+constexpr std::array kChatToolCallsChoices{u"all", u"hideFinished", u"hideAll"};
 
 QString cleanPath(const QString &path)
 {
@@ -650,6 +653,30 @@ void AppSettings::setAcpShareTrust(bool on)
 {
     if (store(kAcpShareTrust, on, acpShareTrust()))
         Q_EMIT acpShareChanged();
+}
+
+QString AppSettings::aiChatNotify() const
+{
+    const QString mode = m_settings->value(kAiChatNotify).toString();
+    return mode == u"always" || mode == u"never" ? mode : u"background"_s;
+}
+
+void AppSettings::setAiChatNotify(const QString &mode)
+{
+    const QString value = mode == u"always" || mode == u"never" ? mode : u"background"_s;
+    if (store(kAiChatNotify, value, aiChatNotify()))
+        Q_EMIT aiChatNotifyChanged();
+}
+
+QString AppSettings::chatToolCalls() const
+{
+    return oneOf(m_settings->value(kChatToolCalls).toString(), kChatToolCallsChoices);
+}
+
+void AppSettings::setChatToolCalls(const QString &shown)
+{
+    if (store(kChatToolCalls, oneOf(shown, kChatToolCallsChoices), chatToolCalls()))
+        Q_EMIT chatToolCallsChanged();
 }
 
 bool AppSettings::flashcardsEnabled() const

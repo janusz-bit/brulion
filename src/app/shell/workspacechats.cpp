@@ -1,6 +1,9 @@
 #include "workspacechats.h"
 
 #include "agentshare.h"
+#include "chatlineage.h"
+#include "chatschedules.h"
+#include "chattools.h"
 
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -13,17 +16,42 @@
 #include "chat/chat.h"
 #include "log/categories.h"
 #include "util/paths.h"
+#include "vault/localstore.h"
+#include "vault/vault.h"
 
 #include <QBuffer>
 #include <QClipboard>
+#include <QDateTime>
 #include <QGuiApplication>
 #include <QImage>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QLocale>
 #include <QMimeData>
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
+
+namespace {
+
+/// The notebook's device state of the conversations with an unread answer: {path, lower case: ms}.
+const QString UnreadKey = u"chat/unread"_s;
+
+/// The first line of `text` with words as the list shows them (chat::preview), for a
+/// notification.
+QString firstLineOf(const QString &text)
+{
+    for (const QString &line : text.split(u'\n')) {
+        const QString words = chat::preview(line, 200);
+        if (!words.isEmpty())
+            return words;
+    }
+    return chat::preview(text, 200);
+}
+
+} // namespace
 
 // ---- ChatTurn -------------------------------------------------------------------------------------
 
@@ -85,8 +113,14 @@ void ChatTurn::clearPartial()
 
 WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent)
     : QObject(parent), m_workspace(workspace), m_extensions(extensions), m_agents(new WorkspaceAgents(workspace, this)),
-      m_share(new AgentShare(workspace, m_agents, this))
+      m_share(new AgentShare(workspace, m_agents, this)), m_limits(new AgentLimits(m_agents, this)),
+      m_lineage(new ChatLineage(workspace, this, this)), m_schedules(new ChatSchedules(workspace, this, this))
 {
+    // A conversation's sub-conversations (an agent's tasks for other partners) are told which one
+    // they come from: WorkspaceAgents gives their agents no tools that change the app, and none of
+    // the chat's from MaxDepth levels down.
+    m_agents->setLineage([workspace](const QString &path) { return ChatLineage::depth(workspace, path); },
+                         [workspace](const QString &path) { return !ChatLineage::writtenParent(workspace, path).isEmpty(); });
     connect(m_extensions, &WorkspaceExtensions::chatAnswered, this, &WorkspaceChats::answered);
     connect(m_extensions, &WorkspaceExtensions::chatFailed, this, &WorkspaceChats::failed);
     connect(m_extensions, &WorkspaceExtensions::chatStatus, this, &WorkspaceChats::setStatus);
@@ -119,6 +153,16 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         Q_EMIT agentsChanged();
     });
     connect(m_agents, &WorkspaceAgents::checked, this, &WorkspaceChats::agentChecked);
+    connect(m_agents, &WorkspaceAgents::changesChanged, this, [this] {
+        ++m_changesSerial;
+        Q_EMIT changesChanged();
+    });
+    connect(m_agents, &WorkspaceAgents::approvalsChanged, this, [this] {
+        ++m_agentSerial;
+        Q_EMIT agentsChanged();
+    });
+    // A question the approvals answered: what was allowed, as what the agent does now.
+    connect(m_agents, &WorkspaceAgents::autoAnswered, this, &WorkspaceChats::setStatus);
     connect(m_agents, &WorkspaceAgents::paired, this,
             [this](bool ok, const QString &text, const QList<AgentConfig> &agents) {
                 m_agentPairing = false;
@@ -166,9 +210,29 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         Q_EMIT t->stateChanged();
         Q_EMIT stateChanged();
     });
+    // (The waiting messages and the draft follow their conversation, whether a turn ran or not.)
+    connect(m_workspace, &Workspace::pathRenamed, this, &WorkspaceChats::moveQueue);
+    connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
+        if (const QString text = draft(from); !text.isEmpty()) {
+            setDraft(from, QString());
+            setDraft(to, text);
+        }
+    });
+    // An unread answer follows its conversation (a rename, a move) and goes with it.
+    connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
+        if (!isUnread(from))
+            return;
+        setUnread(from, false);
+        if (!isShown(to))
+            setUnread(to, true);
+    });
     connect(m_workspace, &Workspace::pathRemoved, this, [this](const QString &path) {
         if (ChatTurn *t = find(path); t && t->m_running)
             stop(path);
+        moveQueue(path, QString());
+        m_rewound.remove(path.toLower());
+        setDraft(path, QString());
+        setUnread(path, false);
     });
     connect(this, &WorkspaceChats::stateChanged, this, &WorkspaceChats::updateRunningShown);
     connect(this, &WorkspaceChats::shownChanged, this, &WorkspaceChats::updateRunningShown);
@@ -207,7 +271,25 @@ void WorkspaceChats::setWriting(const QString &key, const QString &text, const Q
 void WorkspaceChats::questionsMoved()
 {
     ++m_questionSerial;
+    // A turn that asks now came back to the user (the list puts it first; a notification says
+    // what it asks); one whose question went, no longer.
+    bool moved = false;
+    for (ChatTurn *t : std::as_const(m_turns)) {
+        const bool asks = t->m_running && asking(t->m_path);
+        if (asks == t->m_asking)
+            continue;
+        t->m_asking = asks;
+        moved = true;
+        if (asks) {
+            t->m_cameBack = stamp();
+            notifyUser(t->m_path, questionText(t->m_path).section(u'\n', 0, 0).trimmed());
+        } else if (t->m_failure.isEmpty()) {
+            t->m_cameBack = 0;
+        }
+    }
     Q_EMIT questionsChanged();
+    if (moved)
+        Q_EMIT attentionChanged();
 }
 
 QVariantList WorkspaceChats::partners() const
@@ -226,6 +308,7 @@ void WorkspaceChats::setAgents(const QList<AgentConfig> &agents)
         return;
     m_agents->setAgents(agents);
     m_share->agentsChanged();
+    m_limits->agentsChanged();
     Q_EMIT partnersChanged();
     recoverAgentTurns();
 }
@@ -246,6 +329,11 @@ bool WorkspaceChats::agentsAvailable() const
 bool WorkspaceChats::isAgent(const QString &partner) const
 {
     return WorkspaceAgents::isAgent(partner);
+}
+
+QString WorkspaceChats::toolSummary(const QVariantList &tools) const
+{
+    return shell::toolSummary(tools);
 }
 
 QVariantList WorkspaceChats::agentOptions(const QString &path, const QString &partner, int) const
@@ -345,6 +433,55 @@ void WorkspaceChats::answer(const QString &path, const QString &option)
         m_agents->answer(path, option);
     else
         m_extensions->answerChat(path, option);
+}
+
+QString WorkspaceChats::questionPlan(const QString &path, int) const
+{
+    return m_agents->questionOptions(path).isEmpty() ? QString() : m_agents->questionPlan(path);
+}
+
+QString WorkspaceChats::savePlan(const QString &path)
+{
+    const QString plan = questionPlan(path);
+    if (plan.isEmpty() || !m_workspace->ready())
+        return {};
+    const QString title = tr("Plan – %1").arg(nameOf(path));
+    const QString target = paths::uniquePath(paths::sanitizeFileName(title) + u".md"_s,
+                                             [this](const QString &p) { return m_workspace->exists(p); });
+    const QString from = u"[["_s + (path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path) + u"]]"_s;
+    return m_workspace->write(target, plan + u"\n\n"_s + tr("From the conversation %1").arg(from) + u'\n') ? target
+                                                                                                         : QString();
+}
+
+QString WorkspaceChats::approvals(const QString &path, int) const
+{
+    return m_agents->approvals(path);
+}
+
+void WorkspaceChats::setApprovals(const QString &path, const QString &mode)
+{
+    m_agents->setApprovals(path, mode);
+}
+
+QVariantList WorkspaceChats::changes(const QString &path, int) const
+{
+    return m_agents->changes(path);
+}
+
+QString WorkspaceChats::undoChanges(const QString &path)
+{
+    const QVariantMap result = m_agents->undoChanges(path);
+    const int undone = result.value(u"undone"_s).toInt();
+    const int skipped = int(result.value(u"skipped"_s).toStringList().size());
+    if (skipped == 0)
+        return tr("%n file(s) put back as they were", "", undone);
+    return tr("%n file(s) put back", "", undone) + u"; "_s
+           + tr("%n changed since or not known before: left as they are (their history has them)", "", skipped);
+}
+
+void WorkspaceChats::forgetChanges(const QString &path)
+{
+    m_agents->forgetChanges(path);
 }
 
 double WorkspaceChats::tokensPerSecond(const QList<std::pair<qint64, int>> &samples, qint64 windowMs)
@@ -473,6 +610,8 @@ void WorkspaceChats::showing(const QString &path, bool shown)
     else
         m_shown.insert(key, n);
     Q_EMIT shownChanged();
+    if (shown && isUnread(path))
+        setUnread(path, false); // (read)
 }
 
 bool WorkspaceChats::isShown(const QString &path) const { return !path.isEmpty() && m_shown.contains(path.toLower()); }
@@ -503,6 +642,16 @@ bool WorkspaceChats::isQueued(const QString &path) const
     return t && t->m_queued;
 }
 
+QString WorkspaceChats::stateOf(const QString &path, QString *failure) const
+{
+    const ChatTurn *t = find(path);
+    if (failure)
+        *failure = t && !t->m_running ? t->m_failure : QString();
+    if (t && t->m_running)
+        return asking(path) ? u"asking"_s : (t->m_queued ? u"queued"_s : u"running"_s);
+    return t && !t->m_failure.isEmpty() ? u"failed"_s : u"idle"_s;
+}
+
 ChatTurn *WorkspaceChats::turn(const QString &path)
 {
     if (ChatTurn *t = find(path))
@@ -513,7 +662,7 @@ ChatTurn *WorkspaceChats::turn(const QString &path)
 }
 
 QString WorkspaceChats::send(const QString &path, const QString &text, const QString &page, const QStringList &pictures,
-                             const QString &partner)
+                             const QString &partner, const QString &parent)
 {
     const QString message = text.trimmed();
     QStringList sent;
@@ -538,7 +687,7 @@ QString WorkspaceChats::send(const QString &path, const QString &text, const QSt
         // A new conversation: its page, named after the question, and a line in today's journal.
         const QString title = chat::pageTitle(message, now.date(), language);
         target = paths::uniquePath(title + u".md"_s, [this](const QString &p) { return m_workspace->exists(p); });
-        if (!m_workspace->write(target, chat::newConversation(markdown, page, language, now, who))) {
+        if (!m_workspace->write(target, chat::newConversation(markdown, page, language, now, who, parent))) {
             setFailure(turn(QString()), tr("The conversation could not be saved."));
             return {};
         }
@@ -679,7 +828,11 @@ void WorkspaceChats::answered(const QString &key, const QString &text)
     // Written before the turn ends: a view shows the message in place of the answer being
     // written, never neither of them.
     Q_EMIT written(path);
+    if (!isShown(path))
+        setUnread(path, true);
     endTurn(t);
+    notifyUser(path, firstLineOf(text));
+    sendNextQueued(path);
 }
 
 void WorkspaceChats::failed(const QString &key, const QString &error)
@@ -689,6 +842,13 @@ void WorkspaceChats::failed(const QString &key, const QString &error)
         return;
     endTurn(t);
     setFailure(t, error);
+    notifyUser(t->m_path, error.section(u'\n', 0, 0).trimmed());
+    // (The messages waiting for it wait for the user: Resume, or Send now.)
+    loadQueue();
+    if (!m_queued.value(t->m_path.toLower()).isEmpty() && !m_held.contains(t->m_path.toLower())) {
+        m_held.insert(t->m_path.toLower());
+        queueMoved();
+    }
 }
 
 void WorkspaceChats::stop(const QString &path)
@@ -696,6 +856,12 @@ void WorkspaceChats::stop(const QString &path)
     ChatTurn *t = find(path);
     if (!t || !t->m_running)
         return;
+    // Stopped: what waits for it is held (Resume sends it).
+    loadQueue();
+    if (!m_queued.value(t->m_path.toLower()).isEmpty() && !m_held.contains(t->m_path.toLower())) {
+        m_held.insert(t->m_path.toLower());
+        queueMoved();
+    }
     if (t->m_queued) {
         m_waiting.removeAll(QPointer<ChatTurn>(t));
         t->m_queued = false;
@@ -741,11 +907,19 @@ void WorkspaceChats::reset()
         t->m_status.clear();
         t->m_failure.clear();
         t->m_omitted = 0;
+        t->m_asking = false;
+        t->m_cameBack = 0;
         t->clearPartial();
         Q_EMIT t->stateChanged();
     }
     for (const QString &picture : std::exchange(m_added, {}))
         m_workspace->discardImport(picture);
+    // (The notebook's waiting messages stay in its device state, for when it opens again.)
+    m_queued.clear();
+    m_held.clear();
+    m_rewound.clear();
+    m_queueLoaded = false;
+    queueMoved();
     Q_EMIT stateChanged();
 }
 
@@ -760,6 +934,9 @@ void WorkspaceChats::endTurn(ChatTurn *t)
     t->m_queued = false;
     t->m_place = 0;
     t->m_status.clear();
+    t->m_asking = false; // (its question went with it)
+    if (t->m_failure.isEmpty())
+        t->m_cameBack = 0;
     t->clearPartial();
     t->setActivity({}, {});
     Q_EMIT t->stateChanged();
@@ -778,8 +955,79 @@ void WorkspaceChats::setFailure(ChatTurn *t, const QString &failure)
     if (!t || t->m_failure == failure)
         return;
     t->m_failure = failure;
+    if (!failure.isEmpty())
+        t->m_cameBack = stamp();
+    else if (!t->m_asking)
+        t->m_cameBack = 0;
     Q_EMIT t->stateChanged();
     Q_EMIT stateChanged();
+    Q_EMIT attentionChanged();
+}
+
+// ---- what needs the user --------------------------------------------------------------------------
+
+bool WorkspaceChats::isUnread(const QString &path) const
+{
+    const LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    return store && !path.isEmpty() && store->get(UnreadKey).toObject().contains(path.toLower());
+}
+
+void WorkspaceChats::setUnread(const QString &path, bool unread)
+{
+    LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store || path.isEmpty())
+        return;
+    QJsonObject all = store->get(UnreadKey).toObject();
+    const QString key = path.toLower();
+    if (all.contains(key) == unread && !unread)
+        return;
+    if (unread)
+        all.insert(key, double(stamp()));
+    else
+        all.remove(key);
+    store->set(UnreadKey, all.isEmpty() ? QJsonValue(QJsonValue::Undefined) : QJsonValue(all));
+    Q_EMIT attentionChanged();
+}
+
+qint64 WorkspaceChats::stamp()
+{
+    // (Two in one millisecond keep their order.)
+    m_lastStamp = std::max(QDateTime::currentMSecsSinceEpoch(), m_lastStamp + 1);
+    return m_lastStamp;
+}
+
+qint64 WorkspaceChats::cameBack(const QString &path) const
+{
+    qint64 at = 0;
+    if (const LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+        store && !path.isEmpty())
+        at = qint64(store->get(UnreadKey).toObject().value(path.toLower()).toDouble());
+    if (const ChatTurn *t = find(path); t && (!t->m_failure.isEmpty() || t->m_asking))
+        at = std::max(at, t->m_cameBack);
+    return at;
+}
+
+QString WorkspaceChats::failureOf(const QString &path) const
+{
+    const ChatTurn *t = path.isEmpty() ? nullptr : find(path);
+    return t ? t->m_failure : QString();
+}
+
+void WorkspaceChats::setNotifyMode(const QString &mode)
+{
+    m_notifyMode = mode == u"always" || mode == u"never" ? mode : u"background"_s;
+}
+
+void WorkspaceChats::notifyUser(const QString &path, const QString &text)
+{
+    if (path.isEmpty() || m_notifyMode == u"never")
+        return;
+    const bool active =
+            m_appActive ? m_appActive() : qGuiApp && QGuiApplication::applicationState() == Qt::ApplicationActive;
+    // On screen in an active window: seen there.
+    if (active && (isShown(path) || m_notifyMode != u"always"))
+        return;
+    Q_EMIT notificationWanted(path, nameOf(path), text);
 }
 
 // ---- the list's menu ------------------------------------------------------------------------------
@@ -807,6 +1055,28 @@ QString WorkspaceChats::remove(const QString &path)
         return {};
     stop(path);
     return m_workspace->deletePage(path);
+}
+
+bool WorkspaceChats::setPinned(const QString &path, bool on)
+{
+    return setMark(path, int(chat::Mark::Pinned), on);
+}
+
+bool WorkspaceChats::setArchived(const QString &path, bool on)
+{
+    return setMark(path, int(chat::Mark::Archived), on);
+}
+
+bool WorkspaceChats::setMark(const QString &path, int mark, bool on)
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return false;
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    if (!ok)
+        return false;
+    const QString changed = chat::setMark(content, chat::Mark(mark), on, m_extensions->language());
+    return changed == content || m_workspace->write(path, changed);
 }
 
 // ---- who answers ----------------------------------------------------------------------------------
@@ -973,6 +1243,36 @@ bool WorkspaceChats::listening() const
     return speech && speech->listening();
 }
 
+bool WorkspaceChats::dictationReady() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech && speech->ready();
+}
+
+bool WorkspaceChats::recognizing() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech && speech->recognizing();
+}
+
+int WorkspaceChats::dictationElapsed() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech ? int(speech->elapsedMs()) : -1;
+}
+
+int WorkspaceChats::dictationLimit() const
+{
+    const platform::SpeechRecognizer *speech = platform::speechRecognizer();
+    return speech ? int(speech->maxMs()) : 0;
+}
+
+void WorkspaceChats::useSpeechRecognizer()
+{
+    connectSpeech();
+    Q_EMIT dictationChanged();
+}
+
 bool WorkspaceChats::takePhoto()
 {
     const QPointer<WorkspaceChats> self(this);
@@ -1004,6 +1304,8 @@ void WorkspaceChats::connectSpeech()
     connect(speech, &platform::SpeechRecognizer::recognized, this, &WorkspaceChats::dictated);
     connect(speech, &platform::SpeechRecognizer::failed, this, &WorkspaceChats::dictationFailed);
     connect(speech, &platform::SpeechRecognizer::listeningChanged, this, &WorkspaceChats::dictationChanged);
+    connect(speech, &platform::SpeechRecognizer::readyChanged, this, &WorkspaceChats::dictationChanged);
+    connect(speech, &platform::SpeechRecognizer::elapsedChanged, this, &WorkspaceChats::dictationElapsedChanged);
 }
 
 bool WorkspaceChats::startDictation()
@@ -1036,6 +1338,456 @@ QUrl WorkspaceChats::pictureUrl(const QString &name, const QString &conversation
         return {};
     const QString resolved = m_workspace->resolveLink(name, conversation);
     return m_workspace->assetUrl(resolved.isEmpty() ? name : resolved);
+}
+
+// ---- messages written while a turn runs -----------------------------------------------------------
+
+namespace {
+
+const QString QueueKey = u"chat/queued"_s;
+
+} // namespace
+
+void WorkspaceChats::loadQueue()
+{
+    if (m_queueLoaded)
+        return;
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local)
+        return;
+    m_queueLoaded = true;
+    const QJsonObject all = local->get(QueueKey).toObject();
+    for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+        QList<Waiting> list;
+        for (const QJsonValue &v : it.value().toArray()) {
+            const QJsonObject o = v.toObject();
+            Waiting w{m_nextQueued++, o.value(u"text"_s).toString(), {}};
+            for (const QJsonValue &picture : o.value(u"pictures"_s).toArray())
+                w.pictures << picture.toString();
+            if (!w.text.trimmed().isEmpty() || !w.pictures.isEmpty())
+                list.append(w);
+        }
+        if (!list.isEmpty()) {
+            m_queued.insert(it.key().toLower(), list);
+            m_held.insert(it.key().toLower()); // (after a restart they wait for the user)
+        }
+    }
+}
+
+void WorkspaceChats::saveQueue()
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local || !m_queueLoaded)
+        return;
+    QJsonObject all;
+    for (auto it = m_queued.constBegin(); it != m_queued.constEnd(); ++it) {
+        QJsonArray list;
+        for (const Waiting &w : it.value())
+            list.append(QJsonObject{{u"text"_s, w.text}, {u"pictures"_s, QJsonArray::fromStringList(w.pictures)}});
+        if (!list.isEmpty())
+            all.insert(it.key(), list);
+    }
+    local->set(QueueKey, all);
+}
+
+void WorkspaceChats::queueMoved()
+{
+    ++m_queueSerial;
+    Q_EMIT queueChanged();
+}
+
+void WorkspaceChats::moveQueue(const QString &from, const QString &to)
+{
+    loadQueue();
+    const QString key = from.toLower();
+    if (!m_queued.contains(key))
+        return;
+    QList<Waiting> list = m_queued.take(key);
+    const bool held = m_held.remove(key);
+    if (to.isEmpty()) {
+        for (const Waiting &w : std::as_const(list)) {
+            for (const QString &picture : w.pictures)
+                m_workspace->discardImport(picture);
+        }
+    } else {
+        m_queued.insert(to.toLower(), list);
+        if (held)
+            m_held.insert(to.toLower());
+    }
+    saveQueue();
+    queueMoved();
+}
+
+bool WorkspaceChats::queue(const QString &path, const QString &text, const QStringList &pictures)
+{
+    if (!m_workspace->ready())
+        return false;
+    QStringList sent;
+    for (const QString &picture : pictures) {
+        if (!picture.trimmed().isEmpty() && !sent.contains(picture.trimmed()))
+            sent.append(picture.trimmed());
+    }
+    if (text.trimmed().isEmpty() && sent.isEmpty())
+        return false;
+    loadQueue();
+    const QString key = path.toLower();
+    if (path.isEmpty() || (!isRunning(path) && m_queued.value(key).isEmpty()))
+        return !send(path, text, QString(), sent).isEmpty();
+    m_queued[key].append(Waiting{m_nextQueued++, text.trimmed(), sent});
+    for (const QString &picture : std::as_const(sent))
+        m_added.removeAll(picture); // (the queue keeps them now)
+    // (Nothing runs — after a restart, a stop, a failure — and the user writes on: what was held
+    // goes on, this one after it, as T3 Code's queue resumes with a new message.)
+    if (!isRunning(path)) {
+        m_held.remove(key);
+        if (ChatTurn *t = find(path))
+            setFailure(t, QString());
+        saveQueue();
+        queueMoved();
+        sendNextQueued(path);
+        return true;
+    }
+    saveQueue();
+    queueMoved();
+    return true;
+}
+
+QVariantList WorkspaceChats::queued(const QString &path, int) const
+{
+    const_cast<WorkspaceChats *>(this)->loadQueue();
+    QVariantList out;
+    for (const Waiting &w : m_queued.value(path.toLower()))
+        out.append(QVariantMap{{u"id"_s, w.id}, {u"text"_s, w.text}, {u"pictures"_s, w.pictures}});
+    return out;
+}
+
+bool WorkspaceChats::queueHeld(const QString &path, int) const
+{
+    const_cast<WorkspaceChats *>(this)->loadQueue();
+    const QString key = path.toLower();
+    return m_held.contains(key) && !m_queued.value(key).isEmpty();
+}
+
+QString WorkspaceChats::unqueue(const QString &path, int id, bool keepPictures)
+{
+    loadQueue();
+    m_taken.clear();
+    const QString key = path.toLower();
+    auto it = m_queued.find(key);
+    if (it == m_queued.end())
+        return {};
+    for (qsizetype i = 0; i < it->size(); ++i) {
+        if (it->at(i).id != id)
+            continue;
+        const Waiting w = it->takeAt(i);
+        if (it->isEmpty()) {
+            m_queued.erase(it);
+            m_held.remove(key);
+        }
+        for (const QString &picture : w.pictures) {
+            if (keepPictures)
+                m_added.append(picture); // (the field's again: dropped when taken off there)
+            else
+                m_workspace->discardImport(picture);
+        }
+        saveQueue();
+        queueMoved();
+        if (keepPictures)
+            m_taken = w.pictures;
+        return w.text;
+    }
+    return {};
+}
+
+void WorkspaceChats::sendNextQueued(const QString &path)
+{
+    loadQueue();
+    const QString key = path.toLower();
+    auto it = m_queued.find(key);
+    if (it == m_queued.end() || it->isEmpty() || m_held.contains(key) || isRunning(path))
+        return;
+    const Waiting w = it->takeFirst();
+    if (it->isEmpty())
+        m_queued.erase(it);
+    saveQueue();
+    queueMoved();
+    if (send(path, w.text, QString(), w.pictures).isEmpty()) {
+        // Not sent (the assistant off, a page not written): back in front, held.
+        m_queued[key].prepend(w);
+        m_held.insert(key);
+        saveQueue();
+        queueMoved();
+    }
+}
+
+bool WorkspaceChats::sendNow(const QString &path, int id)
+{
+    loadQueue();
+    const QString key = path.toLower();
+    auto it = m_queued.find(key);
+    if (it == m_queued.end() || it->isEmpty())
+        return false;
+    qsizetype at = 0;
+    if (id >= 0) {
+        at = -1;
+        for (qsizetype i = 0; i < it->size(); ++i) {
+            if (it->at(i).id == id)
+                at = i;
+        }
+        if (at < 0)
+            return false;
+    }
+    // That one goes first; the turn running is stopped (the others wait for this one's answer).
+    it->move(at, 0);
+    if (ChatTurn *t = find(path); t && t->m_running) {
+        const QString turnKey = t->m_key;
+        const bool wasQueued = t->m_queued;
+        if (wasQueued)
+            m_waiting.removeAll(QPointer<ChatTurn>(t));
+        endTurn(t);
+        if (!wasQueued) {
+            m_extensions->stopChat(turnKey);
+            m_agents->stop(turnKey);
+        }
+    }
+    m_held.remove(key);
+    sendNextQueued(path);
+    return true;
+}
+
+bool WorkspaceChats::steer(const QString &path, const QString &text, const QStringList &pictures)
+{
+    if (path.isEmpty() || !isRunning(path))
+        return queue(path, text, pictures);
+    loadQueue();
+    const int before = m_nextQueued;
+    if (!queue(path, text, pictures) || m_nextQueued == before)
+        return false;
+    return sendNow(path, before);
+}
+
+bool WorkspaceChats::resumeQueue(const QString &path)
+{
+    loadQueue();
+    const QString key = path.toLower();
+    if (m_queued.value(key).isEmpty())
+        return false;
+    m_held.remove(key);
+    queueMoved();
+    if (ChatTurn *t = find(path))
+        setFailure(t, QString());
+    sendNextQueued(path);
+    return true;
+}
+
+// ---- going back, forking, quoting -----------------------------------------------------------------
+
+QStringList WorkspaceChats::prompts(const QString &path) const
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return {};
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    return ok ? chat::prompts(chat::parse(content)) : QStringList();
+}
+
+QString WorkspaceChats::rewind(const QString &path, int line)
+{
+    m_taken.clear();
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return {};
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    if (!ok)
+        return {};
+    const chat::Conversation conversation = chat::parse(content);
+    int index = -1;
+    for (int i = 0; i < conversation.messages.size(); ++i) {
+        if (conversation.messages.at(i).line == line)
+            index = i;
+    }
+    if (index < 0 || conversation.messages.at(index).role != chat::Role::User)
+        return {};
+    const chat::Message message = conversation.messages.at(index);
+    // Nothing more of the turn, nor of what waited for it: the conversation goes on from here.
+    if (ChatTurn *t = find(path); t && t->m_running) {
+        const QString turnKey = t->m_key;
+        const bool wasQueued = t->m_queued;
+        if (wasQueued)
+            m_waiting.removeAll(QPointer<ChatTurn>(t));
+        endTurn(t);
+        if (!wasQueued) {
+            m_extensions->stopChat(turnKey);
+            m_agents->stop(turnKey);
+        }
+    }
+    moveQueue(path, QString());
+    const QString shorter = chat::truncated(content, index);
+    if (shorter == content || !m_workspace->write(path, shorter))
+        return {};
+    m_rewound.insert(path.toLower(), {content, shorter});
+    if (ChatTurn *t = find(path))
+        setFailure(t, QString());
+    Q_EMIT written(path);
+    const int gone = int(conversation.messages.size()) - index;
+    Q_EMIT rewound(path, tr("%n message(s) taken out of the conversation", "", gone));
+    // The text as it was asked (the first question keeps its link to the page it is about: the
+    // page goes along again), its pictures for the field.
+    m_taken = message.pictures;
+    const QString text = chat::withoutPictures(message.text);
+    return text.isEmpty() ? u" "_s : text; // (a message of pictures only: not "")
+}
+
+bool WorkspaceChats::undoRewind(const QString &path)
+{
+    const auto it = m_rewound.constFind(path.toLower());
+    if (it == m_rewound.cend() || !m_workspace->ready() || !m_workspace->exists(path))
+        return false;
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    if (!ok || content != it->second || isRunning(path))
+        return false;
+    const QString before = it->first;
+    m_rewound.remove(path.toLower());
+    if (!m_workspace->write(path, before))
+        return false;
+    Q_EMIT written(path);
+    return true;
+}
+
+QString WorkspaceChats::fork(const QString &path, int line)
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return {};
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    if (!ok)
+        return {};
+    const chat::Conversation conversation = chat::parse(content);
+    int index = -1;
+    for (int i = 0; i < conversation.messages.size(); ++i) {
+        if (conversation.messages.at(i).line == line)
+            index = i;
+    }
+    const QString copy = chat::forked(content, index, path);
+    if (copy.isEmpty())
+        return {};
+    // Today's, with the source's name (" 2" and on when it is in use).
+    const QString name = chat::splitTitle(paths::pageTitle(path)).second;
+    const QString title = chat::folder() + u'/' + m_workspace->now().date().toString(u"yyyy-MM-dd"_s) + u' ' + name;
+    const QString target = paths::uniquePath(title + u".md"_s, [this](const QString &p) { return m_workspace->exists(p); });
+    if (!m_workspace->write(target, copy))
+        return {};
+    m_workspace->appendJournalBlocks(chat::journalEntry(target.chopped(3)));
+    return target;
+}
+
+QString WorkspaceChats::forkedFrom(const QString &path) const
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return {};
+    bool ok = false;
+    const QString source = chat::parse(m_workspace->read(path, &ok)).fork;
+    if (!ok || source.isEmpty())
+        return {};
+    return m_workspace->resolveLink(source, path);
+}
+
+QString WorkspaceChats::quote(const QString &markdown) const
+{
+    return chat::quoted(markdown);
+}
+
+namespace {
+
+const QString DraftsKey = u"chat/drafts"_s;
+
+} // namespace
+
+QString WorkspaceChats::draft(const QString &path) const
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    return local ? local->get(DraftsKey).toObject().value(path.toLower()).toString() : QString();
+}
+
+void WorkspaceChats::setDraft(const QString &path, const QString &text)
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local)
+        return;
+    QJsonObject all = local->get(DraftsKey).toObject();
+    const QString key = path.toLower();
+    if (text.trimmed().isEmpty()) {
+        if (!all.contains(key))
+            return;
+        all.remove(key);
+    } else {
+        if (all.value(key).toString() == text)
+            return;
+        all.insert(key, text.left(120000));
+    }
+    while (all.size() > 200)
+        all.remove(all.keys().first());
+    local->set(DraftsKey, all);
+}
+
+std::pair<int, QString> WorkspaceChats::mentionAt(const QString &text, int caret)
+{
+    if (caret < 0 || caret > text.size())
+        return {-1, {}};
+    // "[[" and the name so far (no "]", no line break).
+    for (qsizetype i = caret - 1; i >= 1; --i) {
+        const QChar c = text.at(i);
+        if (c == u']' || c == u'\n' || (c == u'[' && text.at(i - 1) != u'['))
+            break;
+        if (c == u'[' && text.at(i - 1) == u'[') {
+            if (i >= 2 && text.at(i - 2) == u'!')
+                break; // (an embed)
+            return {int(i - 1), text.mid(i + 1, caret - i - 1)};
+        }
+    }
+    // "@" and a word: letters, digits, "-", "_", "/" and ".", at the start or after a space.
+    qsizetype at = caret;
+    while (at > 0) {
+        const QChar c = text.at(at - 1);
+        if (!(c.isLetterOrNumber() || c == u'-' || c == u'_' || c == u'/' || c == u'.' || c.isMark()))
+            break;
+        --at;
+    }
+    if (at > 0 && text.at(at - 1) == u'@' && (at == 1 || text.at(at - 2).isSpace() || text.at(at - 2) == u'('))
+        return {int(at - 1), text.mid(at, caret - at)};
+    return {-1, {}};
+}
+
+QString WorkspaceChats::withMention(const QString &text, int caret, const QString &title) const
+{
+    const int start = mentionAt(text, caret).first;
+    if (start < 0 || title.trimmed().isEmpty())
+        return {};
+    return text.left(start) + u"[["_s + title.trimmed() + u"]] "_s + text.mid(caret);
+}
+
+int WorkspaceChats::mentionEnd(const QString &text, int caret, const QString &title) const
+{
+    const int start = mentionAt(text, caret).first;
+    return start < 0 ? caret : start + int(title.trimmed().size()) + 5;
+}
+
+QVariantList WorkspaceChats::mentions(const QString &path, const QString &text, int caret, int limit) const
+{
+    const auto [start, query] = mentionAt(text, caret);
+    if (start < 0 || !m_workspace->ready())
+        return {};
+    QVariantList out;
+    for (const QVariant &v : m_workspace->suggestPages(query, limit + 1)) {
+        QVariantMap m = v.toMap();
+        if (m.value(u"path"_s).toString().compare(path, Qt::CaseInsensitive) == 0 || out.size() >= limit)
+            continue;
+        m.insert(u"start"_s, start);
+        m.insert(u"end"_s, caret);
+        out.append(m);
+    }
+    return out;
 }
 
 } // namespace brulion::shell

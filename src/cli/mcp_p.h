@@ -17,6 +17,9 @@ struct McpPolicy {
     bool readOnly = false;
     bool allowDestructive = false;
     bool appControl = false; ///< the tools that drive the running app (never over the network)
+    /// The running app's AI chat alone (app chat …: `mcp --app-chat`, what every AI agent the app
+    /// starts with Brulion's tools gets; --app-control has them too).
+    bool appChat = false;
     bool remote = false;     ///< over the network: no app.* tools at all, no paths of this computer
 };
 

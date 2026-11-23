@@ -637,6 +637,14 @@ int main(int argc, char *argv[])
                         if (control)
                             control->revokeGrant(token);
                     });
+            // Every agent with Brulion's tools may hand other partners of the chat a task (a
+            // sub-conversation): a grant of the chat alone for each of its conversations.
+            controller->workspace()->chats()->agents()->setChatGrants(
+                    [control](const QString &client) { return control ? control->chatGrant(client) : QString(); },
+                    [control](const QString &token) {
+                        if (control)
+                            control->revokeGrant(token);
+                    });
         }
 #endif
 #ifdef Q_OS_WASM

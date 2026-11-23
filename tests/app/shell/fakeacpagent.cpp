@@ -16,6 +16,11 @@
 //                     tool call showing it: "Wyjście (4): <its output>"
 //   "… pokaż …"       a plan, a call done, a command that runs until the turn is cancelled
 //   "… plan …"        a plan of two steps, then "Plan gotowy."
+//   "… zatwierdź …"   asks to approve a plan (Claude Code leaving its plan mode: a switch_mode call,
+//                     the plan in its input): "Plan przyjęty." / "Planuję dalej."
+//   "… edytuj …"      changes Dom.md by itself, as Claude Code's own Edit does: a pending edit call
+//                     naming the file, then the file changed, then the call completed with its diff:
+//                     "Zmieniono Dom.md."
 //   "… narzędzia …"   a tool call and no words
 //   "… model …"       "Model: <the model option now>"
 //   "… sesja …"       "Sesja: <the session's id>"
@@ -352,6 +357,44 @@ int main(int argc, char **argv)
                                          {u"title"_s, u"grep -rn '- [ ]' ."_s}, {u"kind"_s, u"execute"_s}, {u"status"_s, u"in_progress"_s},
                                          {u"content"_s, QJsonArray{QJsonObject{{u"type"_s, u"terminal"_s}, {u"terminalId"_s, terminal}}}}});
                     });
+                continue;
+            }
+            if (text.contains(u"zatwierdź"_s)) {
+                update(session, {{u"sessionUpdate"_s, u"tool_call"_s}, {u"toolCallId"_s, u"x1"_s},
+                                 {u"title"_s, u"Approve Plan"_s}, {u"kind"_s, u"switch_mode"_s}, {u"status"_s, u"pending"_s}});
+                ask(u"session/request_permission"_s,
+                    {{u"sessionId"_s, session},
+                     {u"toolCall"_s, QJsonObject{{u"toolCallId"_s, u"x1"_s}, {u"title"_s, u"Ready to code?"_s},
+                                                 {u"rawInput"_s, QJsonObject{{u"plan"_s, u"# Porządki\n\n1. Połączyć notatki\n2. Usunąć duplikaty"_s}}}}},
+                     {u"options"_s, QJsonArray{QJsonObject{{u"optionId"_s, u"yes"_s}, {u"name"_s, u"Yes"_s}, {u"kind"_s, u"allow_always"_s}},
+                                               QJsonObject{{u"optionId"_s, u"no"_s}, {u"name"_s, u"No, keep planning"_s},
+                                                           {u"kind"_s, u"reject_once"_s}}}}},
+                    [end](const QJsonObject &a) {
+                        const QJsonObject outcome = a.value(u"result"_s).toObject().value(u"outcome"_s).toObject();
+                        end(outcome.value(u"optionId"_s).toString() == u"yes" ? u"Plan przyjęty."_s : u"Planuję dalej."_s);
+                    });
+                continue;
+            }
+            if (text.contains(u"edytuj"_s)) {
+                const QString file = QDir(cwd).filePath(u"Dom.md"_s);
+                update(session, {{u"sessionUpdate"_s, u"tool_call"_s}, {u"toolCallId"_s, u"n1"_s}, {u"title"_s, u"Edit Dom.md"_s},
+                                 {u"kind"_s, u"edit"_s}, {u"status"_s, u"pending"_s},
+                                 {u"locations"_s, QJsonArray{QJsonObject{{u"path"_s, file}}}}});
+                QThread::msleep(300); // (the client sees the call before the file changes)
+                QFile f(file);
+                QByteArray before;
+                if (f.open(QIODevice::ReadOnly))
+                    before = f.readAll();
+                f.close();
+                const QByteArray after = QByteArray(before).replace("Zapłacić czynsz", "Zapłacić czynsz i prąd");
+                if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                    f.write(after);
+                f.close();
+                update(session, {{u"sessionUpdate"_s, u"tool_call_update"_s}, {u"toolCallId"_s, u"n1"_s}, {u"status"_s, u"completed"_s},
+                                 {u"content"_s, QJsonArray{QJsonObject{{u"type"_s, u"diff"_s}, {u"path"_s, file},
+                                                                       {u"oldText"_s, u"Zapłacić czynsz"_s},
+                                                                       {u"newText"_s, u"Zapłacić czynsz i prąd"_s}}}}});
+                end(u"Zmieniono Dom.md."_s);
                 continue;
             }
             if (text.contains(u"plan"_s)) {

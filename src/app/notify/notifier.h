@@ -35,6 +35,14 @@
 
 namespace brulion::notify {
 
+/// The id prefix of the app's own messages shown now — an AI chat's answer, failure or question
+/// (docs/UI.md "AI chat"): no "Snooze", no "Done"; a click opens `path`.
+inline constexpr QStringView MessageIdPrefix = u"brulion-message:";
+inline bool isMessage(const ScheduledNotification &notification)
+{
+    return notification.id.startsWith(MessageIdPrefix);
+}
+
 class Notifier : public QObject, public brulion::NotificationSink {
     Q_OBJECT
 
@@ -73,6 +81,10 @@ public:
 
     // NotificationSink: schedule() remembers the set (subclasses arm it); showNow() is theirs.
     void schedule(const QList<ScheduledNotification> &notifications) override;
+    /// Shows a message of the app now (isMessage(): its id has MessageIdPrefix) — by default as
+    /// showNow() does (the desktop leaves its "Snooze" out); Android as a timer's end ("OK"
+    /// alone, nothing to snooze or arm again).
+    virtual void showMessage(const ScheduledNotification &notification) { showNow(notification); }
 
     // ---- Timers (an extension's b.timer: WorkspaceExtensions, docs/EXTENSIONS.md "Timers") -----
 

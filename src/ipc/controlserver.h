@@ -18,7 +18,11 @@
 // While the server is not open (setOpen(false): the remote control's setting off, the socket
 // there only for grants) every request of a connection that showed no grant's token is answered
 // `unauthorized`; a wrong token is refused also while it is open. revokeGrant() ends the grant
-// and drops the connections that showed it. Grants outlive close() and listen().
+// and drops the connections that showed it. Grants outlive close() and listen(). A grant of the
+// chat alone (GrantScope::Chat: every agent the app starts with Brulion's tools, one per
+// conversation) lets its connection call hello and the chat's methods (MethodSpec::chat) only:
+// anything else is answered `unauthorized`. The handler learns the token a request came with
+// (ControlRequest::grant), and whether it is such a grant (chatOnly).
 #pragma once
 
 #include "controlprotocol.h"
@@ -56,6 +60,12 @@ private:
     std::shared_ptr<bool> m_sent = std::make_shared<bool>(false);
 };
 
+/// What a grant lets its connection do.
+enum class GrantScope {
+    Full, ///< every method (an AI agent let change the app)
+    Chat, ///< hello and the chat's methods (MethodSpec::chat)
+};
+
 class ControlServer : public QObject {
     Q_OBJECT
 public:
@@ -81,7 +91,7 @@ public:
     void setOpen(bool open);
     bool isOpen() const { return m_open; }
     /// A new grant for `client` (its name in the app, cleanClientName()): its token.
-    QString addGrant(const QString &client);
+    QString addGrant(const QString &client, GrantScope scope = GrantScope::Full);
     /// Ends the grant of `token` and drops its connections; false when there is none.
     bool revokeGrant(const QString &token);
     int grantCount() const { return int(m_grants.size()); }
@@ -95,11 +105,16 @@ private:
         bool granted = false;
         QString client;
         QString token;
+        GrantScope scope = GrantScope::Full;
+    };
+    struct Grant {
+        QString client;
+        GrantScope scope = GrantScope::Full;
     };
     void accept(QLocalSocket *socket);
     void readLines(QLocalSocket *socket);
-    /// The client name of the grant `token` (compared in constant time); nullopt for none.
-    std::optional<QString> grantFor(const QString &token) const;
+    /// The grant of `token` (compared in constant time); nullopt for none.
+    std::optional<Grant> grantFor(const QString &token) const;
     /// hello's token and client name taken in by `peer`; false (and answered) when the token is none.
     bool introduce(Peer &peer, const ControlRequest &request, QLocalSocket *socket);
 
@@ -107,7 +122,7 @@ private:
     Handler m_handler;
     QString m_error;
     bool m_open = true;
-    QHash<QString, QString> m_grants; // token → client
+    QHash<QString, Grant> m_grants; // by token
     QHash<QLocalSocket *, Peer> m_peers;
 };
 

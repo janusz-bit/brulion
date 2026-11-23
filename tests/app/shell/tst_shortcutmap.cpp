@@ -95,6 +95,8 @@ private Q_SLOTS:
         QTest::newRow("move block") << u"journal.today"_s << u"Alt+Up"_s << u"reserved"_s << QString();
         QTest::newRow("drawing duplicate") << u"journal.today"_s << u"Ctrl+D"_s << u"reserved"_s << QString();
         QTest::newRow("pdf next match") << u"journal.today"_s << u"F3"_s << u"reserved"_s << QString();
+        QTest::newRow("the chat's third conversation")
+                << u"journal.today"_s << u"Alt+3"_s << u"reserved"_s << QString();
         QTest::newRow("altgr ą") << u"journal.today"_s << u"Ctrl+Alt+A"_s << u"reserved"_s << QString();
         QTest::newRow("altgr ż") << u"journal.today"_s << u"Ctrl+Alt+Z"_s << u"reserved"_s << QString();
         QTest::newRow("altgr capital Ś") << u"journal.today"_s << u"Ctrl+Alt+Shift+S"_s << u"reserved"_s << QString();
