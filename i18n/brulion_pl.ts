@@ -323,7 +323,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="64"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9294"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9339"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -2150,7 +2150,7 @@
 <context>
     <name>BlockMenu</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="230"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="268"/>
         <source>Copy %n block(s)</source>
         <translation>
             <numerusform>Kopiuj %n blok</numerusform>
@@ -2159,12 +2159,12 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="230"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="268"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="244"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="282"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Wytnij %n blok</numerusform>
@@ -2173,202 +2173,222 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="244"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="282"/>
         <source>Cut</source>
         <translation>Wytnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="258"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="296"/>
         <source>Copy as plain text</source>
         <translation>Kopiuj jako tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="271"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="309"/>
         <source>QR code…</source>
         <translation>Kod QR…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="293"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="331"/>
         <source>Rewrite with AI…</source>
         <translation>Przepisz z AI…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="300"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="338"/>
         <source>Continue writing with AI</source>
         <translation>Pisz dalej z AI</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="307"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="345"/>
         <source>Summarize with AI</source>
         <translation>Streść z AI</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="351"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="352"/>
+        <source>Copy cells</source>
+        <translation>Kopiuj komórki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="359"/>
+        <source>Copy cells as Markdown</source>
+        <translation>Kopiuj komórki jako Markdown</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="366"/>
+        <source>Cut cells</source>
+        <translation>Wytnij komórki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="373"/>
+        <source>Clear cells</source>
+        <translation>Wyczyść komórki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="421"/>
         <source>Select</source>
         <translation>Zaznacz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="363"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="433"/>
         <source>Row</source>
         <translation>Wiersz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="368"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="438"/>
         <source>Insert row above</source>
         <translation>Wstaw wiersz powyżej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="375"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="445"/>
         <source>Insert row below</source>
         <translation>Wstaw wiersz poniżej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="383"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="453"/>
         <source>Move row up</source>
         <translation>Przenieś wiersz w górę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="395"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="465"/>
         <source>Move row down</source>
         <translation>Przenieś wiersz w dół</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="408"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="478"/>
         <source>Delete row</source>
         <translation>Usuń wiersz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="422"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="492"/>
         <source>Column</source>
         <translation>Kolumna</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="427"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="497"/>
         <source>Insert column on the left</source>
         <translation>Wstaw kolumnę po lewej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="433"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="503"/>
         <source>Insert column on the right</source>
         <translation>Wstaw kolumnę po prawej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="453"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="523"/>
         <source>Move column left</source>
         <translation>Przenieś kolumnę w lewo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="465"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="535"/>
         <source>Move column right</source>
         <translation>Przenieś kolumnę w prawo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="476"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="546"/>
         <source>Align left</source>
         <translation>Wyrównaj do lewej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="477"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="547"/>
         <source>Align center</source>
         <translation>Wyśrodkuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="478"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="548"/>
         <source>Align right</source>
         <translation>Wyrównaj do prawej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="479"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="549"/>
         <source>Default alignment</source>
         <translation>Wyrównanie domyślne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="483"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="553"/>
         <source>Delete column</source>
         <translation>Usuń kolumnę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="497"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="567"/>
         <source>Zoom in</source>
         <translation>Przybliż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="507"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="577"/>
         <source>Expand</source>
         <translation>Rozwiń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="507"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="577"/>
         <source>Collapse</source>
         <translation>Zwiń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="519"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="589"/>
         <source>Copy link</source>
         <translation>Kopiuj link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="525"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="595"/>
         <source>Block reference ((…))</source>
         <translation>Odwołanie do bloku ((…))</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="529"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="599"/>
         <source>Link to block [[…#^…]]</source>
         <translation>Link do bloku [[…#^…]]</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="534"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="604"/>
         <source>Link to heading [[…#…]]</source>
         <translation>Link do nagłówka [[…#…]]</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="537"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="607"/>
         <source>Embed</source>
         <translation>Osadzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="541"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="611"/>
         <source>Insert picture…</source>
         <translation>Wstaw obraz…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="552"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="622"/>
         <source>Insert drawing</source>
         <translation>Wstaw rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="563"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="633"/>
         <source>Insert a drawing on a picture or PDF…</source>
         <translation>Wstaw rysunek na obrazie lub PDF…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="597"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="667"/>
         <source>Indent</source>
         <translation>Zwiększ wcięcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="605"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="675"/>
         <source>Outdent</source>
         <translation>Zmniejsz wcięcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="614"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="684"/>
         <source>Move up</source>
         <translation>Przenieś w górę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="622"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="692"/>
         <source>Move down</source>
         <translation>Przenieś w dół</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="632"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="702"/>
         <source>Delete block</source>
         <translation>Usuń blok</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="632"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="702"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Usuń %n blok</numerusform>
@@ -2377,47 +2397,70 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="438"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="508"/>
         <source>Sort ascending</source>
         <translation>Sortuj rosnąco</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="439"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="509"/>
         <source>Sort descending</source>
         <translation>Sortuj malejąco</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="211"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="249"/>
         <source>The rows are in that order already.</source>
         <translation>Wiersze są już w tej kolejności.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="442"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="512"/>
         <source>Filter by this column…</source>
         <translation>Filtruj według tej kolumny…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="314"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="384"/>
         <source>Copy as CSV</source>
         <translation>Kopiuj jako CSV</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="141"/>
+        <source>Cut %n cell(s)</source>
+        <translation>
+            <numerusform>Wycięto %n komórkę</numerusform>
+            <numerusform>Wycięto %n komórki</numerusform>
+            <numerusform>Wycięto %n komórek</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="141"/>
+        <source>Copied %n cell(s)</source>
+        <translation>
+            <numerusform>Skopiowano %n komórkę</numerusform>
+            <numerusform>Skopiowano %n komórki</numerusform>
+            <numerusform>Skopiowano %n komórek</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="319"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="143"/>
+        <source>Could not copy: the clipboard is not available</source>
+        <translation>Nie udało się skopiować: schowek jest niedostępny</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="389"/>
         <source>The table was copied as CSV.</source>
         <translation>Skopiowano tabelę jako CSV.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="325"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="395"/>
         <source>Save as CSV…</source>
         <translation>Zapisz jako CSV…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="336"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="406"/>
         <source>Hide filters</source>
         <translation>Ukryj filtry</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="336"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="406"/>
         <source>Filter rows</source>
         <translation>Filtruj wiersze</translation>
     </message>
@@ -5524,7 +5567,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="117"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8527"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8572"/>
         <source>Attachments (%1)</source>
         <translation>Załączniki (%1)</translation>
     </message>
@@ -5545,7 +5588,7 @@
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="144"/>
         <location filename="../src/app/qml/views/CleanupView.qml" line="234"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8540"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8585"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -7408,32 +7451,32 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>DatabaseView</name>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="68"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="71"/>
         <source>Board</source>
         <translation>Tablica</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="69"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="72"/>
         <source>Gallery</source>
         <translation>Galeria</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="70"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="73"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="71"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="74"/>
         <source>List</source>
         <translation>Lista</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="72"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="75"/>
         <source>Table</source>
         <translation>Tabela</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="91"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n zadanie</numerusform>
@@ -7442,7 +7485,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="91"/>
         <source>%n row(s)</source>
         <translation>
             <numerusform>%n wiersz</numerusform>
@@ -7451,195 +7494,195 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="89"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="92"/>
         <source>%1 of %2</source>
         <translation>%1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="95"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="98"/>
         <source>Changed “%1”</source>
         <translation>Zmieniono „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="206"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="280"/>
         <source>The new row could not be made.</source>
         <translation>Nie udało się utworzyć nowego wiersza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="271"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="345"/>
         <source>Views of this base</source>
         <translation>Widoki tej bazy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="281"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="355"/>
         <source>Previous month</source>
         <translation>Poprzedni miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="300"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="374"/>
         <source>Next month</source>
         <translation>Następny miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="309"/>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="367"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="383"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="441"/>
         <source>New task</source>
         <translation>Nowe zadanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="309"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="383"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="318"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="392"/>
         <source>Columns</source>
         <translation>Kolumny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="331"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="405"/>
         <source>This view cannot be shown.</source>
         <translation>Nie można pokazać tego widoku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="334"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="408"/>
         <source>Nothing matches this view.</source>
         <translation>Nic nie pasuje do tego widoku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="334"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="408"/>
         <source>Nothing yet — the notebook is still being indexed.</source>
         <translation>Jeszcze nic — notatnik jest nadal indeksowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="367"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="441"/>
         <source>Title of the new page</source>
         <translation>Tytuł nowej strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="398"/>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="479"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="472"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="553"/>
         <source>Add column</source>
         <translation>Dodaj kolumnę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="412"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="486"/>
         <source>Other…</source>
         <translation>Inna…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="418"/>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="449"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="492"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="523"/>
         <source>Hide column</source>
         <translation>Ukryj kolumnę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="433"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="507"/>
         <source>Remove the sort</source>
         <translation>Usuń sortowanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="443"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="517"/>
         <source>Sort ascending</source>
         <translation>Sortuj rosnąco</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="444"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="518"/>
         <source>Sort descending</source>
         <translation>Sortuj malejąco</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="446"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="520"/>
         <source>Move left</source>
         <translation>Przesuń w lewo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="447"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="521"/>
         <source>Move right</source>
         <translation>Przesuń w prawo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="463"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="537"/>
         <source>To do</source>
         <translation>Do zrobienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="464"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="538"/>
         <source>In progress</source>
         <translation>W toku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="465"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="539"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="466"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="540"/>
         <source>Deferred</source>
         <translation>Oczekujące</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="467"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="541"/>
         <source>Cancelled</source>
         <translation>Anulowane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="468"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="542"/>
         <source>Highest</source>
         <translation>Najwyższy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="469"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="543"/>
         <source>High</source>
         <translation>Wysoki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="470"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="544"/>
         <source>Medium</source>
         <translation>Średni</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="471"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="545"/>
         <source>Normal</source>
         <translation>Normalny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="472"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="546"/>
         <source>Low</source>
         <translation>Niski</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="473"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="547"/>
         <source>Lowest</source>
         <translation>Najniższy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="480"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="554"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="489"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="563"/>
         <source>A property, e.g. status or formula.total</source>
         <translation>Właściwość, np. status albo formula.razem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="489"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="563"/>
         <source>A property, or Label = expression</source>
         <translation>Właściwość albo Etykieta = wyrażenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="526"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="600"/>
         <source>a, b, [[Page]]</source>
         <translation>a, b, [[Strona]]</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1174"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1281"/>
         <source>New in “%1”</source>
         <translation>Nowy w „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1353"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1460"/>
         <source>+%1 more</source>
         <translation>jeszcze %1</translation>
     </message>
@@ -15252,7 +15295,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Nazwa właściwości</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/editor/blockviews.cpp" line="320"/>
+        <location filename="../src/app/editor/blockviews.cpp" line="345"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n strona</numerusform>
@@ -15357,7 +15400,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Element</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/blockviews.cpp" line="340"/>
+        <location filename="../src/app/editor/blockviews.cpp" line="365"/>
         <source>page</source>
         <translation>strona</translation>
     </message>
@@ -15477,7 +15520,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Wartość „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/blockviews.cpp" line="339"/>
+        <location filename="../src/app/editor/blockviews.cpp" line="364"/>
         <source>page</source>
         <translation>strona</translation>
     </message>
@@ -18428,7 +18471,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="539"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="954"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10435"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10480"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -20717,7 +20760,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="319"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8807"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8852"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -20728,7 +20771,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="330"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8830"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8875"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -21604,7 +21647,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="127"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10544"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10589"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -22252,7 +22295,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="19"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9608"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9653"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -22635,7 +22678,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8922"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8967"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -22654,7 +22697,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8859"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8904"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -23618,13 +23661,13 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="109"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="11935"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="11980"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="110"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="11925"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="11970"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -23984,7 +24027,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="649"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8648"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8693"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
@@ -24856,7 +24899,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/views/SyncView.qml" line="358"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8623"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8668"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
@@ -25170,37 +25213,83 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
 <context>
     <name>TableBlockView</name>
     <message>
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="92"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="99"/>
         <source>Table</source>
         <translation>Tabela</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="466"/>
+        <source>Cut %n cell(s)</source>
+        <translation>
+            <numerusform>Wycięto %n komórkę</numerusform>
+            <numerusform>Wycięto %n komórki</numerusform>
+            <numerusform>Wycięto %n komórek</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="466"/>
+        <source>Copied %n cell(s)</source>
+        <translation>
+            <numerusform>Skopiowano %n komórkę</numerusform>
+            <numerusform>Skopiowano %n komórki</numerusform>
+            <numerusform>Skopiowano %n komórek</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="617"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="468"/>
+        <source>Could not copy: the clipboard is not available</source>
+        <translation>Nie udało się skopiować: schowek jest niedostępny</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="498"/>
+        <source>Nothing to paste</source>
+        <translation>Nic do wklejenia</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="506"/>
+        <source>Pasted %n cell(s)</source>
+        <translation>
+            <numerusform>Wklejono %n komórkę</numerusform>
+            <numerusform>Wklejono %n komórki</numerusform>
+            <numerusform>Wklejono %n komórek</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="508"/>
+        <source>%n column(s) of the pasted text did not fit the table and were left out</source>
+        <translation>
+            <numerusform>%n kolumna wklejonego tekstu nie zmieściła się w tabeli i została pominięta</numerusform>
+            <numerusform>%n kolumny wklejonego tekstu nie zmieściły się w tabeli i zostały pominięte</numerusform>
+            <numerusform>%n kolumn wklejonego tekstu nie zmieściło się w tabeli i zostało pominiętych</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="968"/>
         <source>Cell %1</source>
         <translation>Komórka %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="848"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="1273"/>
         <source>Row</source>
         <translation>Wiersz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="859"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="1284"/>
         <source>Column</source>
         <translation>Kolumna</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="388"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="717"/>
         <source>Filter</source>
         <translation>Filtr</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="389"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="718"/>
         <source>Filter of column %1</source>
         <translation>Filtr kolumny %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="823"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="1248"/>
         <source>%1 of %n row(s) shown</source>
         <translation>
             <numerusform>Pokazano %1 z %n wiersza</numerusform>
@@ -25209,7 +25298,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="838"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="1263"/>
         <source>Clear filters</source>
         <translation>Wyczyść filtry</translation>
     </message>
@@ -33375,29 +33464,29 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::editor::PageController</name>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4518"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4608"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4518"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4608"/>
         <source>Pictures (%1)</source>
         <extracomment>%1: the file name patterns of pictures, e.g. &quot;*.png *.jpg *.jpeg&quot;</extracomment>
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4799"/>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="5083"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4889"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="5173"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4812"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4902"/>
         <source>Drawing %1</source>
         <translation>Rysunek %1</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4882"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4972"/>
         <source>Drawing</source>
         <translation>Rysunek</translation>
     </message>
@@ -33414,7 +33503,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>%1 (rysunek)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="5019"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="5109"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -33475,7 +33564,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="11184"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="11229"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
@@ -33525,7 +33614,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nazwy tego pliku nie da się użyć w linku</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4107"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4197"/>
         <source>CSV files (*.csv *.tsv *.txt)</source>
         <translation>Pliki CSV (*.csv *.tsv *.txt)</translation>
     </message>
