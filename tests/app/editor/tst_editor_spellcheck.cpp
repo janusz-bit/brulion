@@ -216,8 +216,8 @@ private Q_SLOTS:
         std::atomic<bool> offMain = false;
         SpellCheck spell({u"pl"_s}, wordLists(&made, &offMain));
         spell.setUiLanguage(u"pl"_s);
-        // Nothing is made before it is needed.
-        QCOMPARE(made.load(), 0);
+        // Made once, on the worker, as soon as its language is known (so a check that none is made
+        // yet would race the worker's thread).
         QCOMPARE(settled(spell, u"kot"_s), SpellCheck::Verdict::Correct);
         QCOMPARE(made.load(), 1);
         QVERIFY(offMain.load());
