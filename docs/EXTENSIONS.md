@@ -874,12 +874,20 @@ end, { description = "Open tasks, of a tag or all of them", args = { "tag" }, ex
   this version" approves the version read), asks to switch it on, opens the code at its error, or
   says that no running extension offers it (ShellMacroDialog). An error is in the
   Luau console and the event log too.
-* **Exports** decide per format: HTML (a page, a site), PDF, DOCX and Pandoc show what the macro
-  showed in the app (computed then when it was not yet, a few seconds for the whole export), as
-  text; the Markdown, Obsidian and Logseq exports and the data ones keep `{{ext:…}}` as written,
-  and so do the clipboard's HTML, query results, the rows of the Tasks view and of the linked
-  references and `brulion-cli` (no extension runs there); a page or block embedded in a page
-  (`![[…]]`) shows its macros as its own page does. A macro inside code (a code span, a fenced block) or a
+* **Wherever the app shows a note's text.** The rows of the Tasks view, the linked references (and
+  a tag's blocks), the results of a ```` ```query ```` or ```` ```dataview ```` block and the cells
+  of a database view show a macro as the editor does: from the same cache, for the note the macro
+  is in (its `ctx.page`, not the page that shows the result), "…" until it is computed, the
+  placeholder while its extension waits for approval. When a value changes only the rows that
+  show a macro are drawn again (a hidden list once it is shown). A placeholder there is no button:
+  the dialog is the editor's (a reference's row opens its block).
+* **Exports and the clipboard** decide per format: HTML (a page, a site), PDF, DOCX and Pandoc and
+  the formatted text of copied blocks (the clipboard's HTML, for a mail or an office app) show what
+  the macro showed in the app (computed then when it was not yet: a few seconds for a whole export,
+  a second for a copy), as text; a macro that shows a placeholder stays as written there. The
+  Markdown, Obsidian and Logseq exports, the data ones, the copied Markdown and `brulion-cli` (no
+  extension runs there) keep `{{ext:…}}` as written; a page or block embedded in a page (`![[…]]`)
+  shows its macros as its own page does. A macro inside code (a code span, a fenced block) or a
   comment is text everywhere.
 
 ## Template variables
@@ -2280,7 +2288,7 @@ Home:7
 | `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list (a ```` ```view ```` block's source, a note's params, `live`); `qml/shell/ShellExtensionView.qml` draws it — on its own or `embedded` in a page (`qml/editor/ViewBlockView.qml`) and in the side panel (`ContentSidePanel`) |
 | `src/core/markdown/macros.h` | the syntax: `findMacros` (`{{ext:…}}`), `macroArguments`, `findMacrosInNote` / `replaceMacros` (outside code), `parseViewBlock`, `MacroView` — what the renderer shows (`RenderContext::macro`) |
 | `src/core/extensions/macros.h` | `macroViewFrom` (a value as pieces, bounded), `variableTextFrom`, `MacroCache` (values with what their calls read, stale when that changes) |
-| `src/app/shell/workspacemacros.cpp` | `WorkspaceExtensions`' macros (the cache, the calls after the frame, the budgets, `macrosChanged`), template variables, panels, the views a block can show, what an export's documents show |
+| `src/app/shell/workspacemacros.cpp` | `WorkspaceExtensions`' macros (the cache, the calls after the frame, the budgets, `macrosChanged`), template variables, panels, the views a block can show, what an export's documents and the clipboard's HTML show (`macroTexts`, `withMacroTexts`) |
 | `src/core/syntax/luau.h` | Luau's syntax colours: `lexLuauLine` (the editor's `MarkdownHighlighter`) |
 | `qml/shell/ShellMacroDialog.qml` | what a macro's (or a view block's) placeholder offers: run, switch on, the code, why |
 | `qml/views/ConsoleView.qml`, `qml/views/ExtensionRouteView.qml` | the Luau console (route `console`), an extension page's view (route `extension`) |
@@ -2402,5 +2410,8 @@ extension that arrived as a sync would (the macro a placeholder), runs it from t
 and the dialog with real taps, sees the macro's value, types into the view's text field and sees
 the macro follow the note the view's action wrote. `tests/app/shell/tst_macros.cpp`
 (`tst_shell_macros`) runs macros, template variables, view blocks, panels and the new controls in
-the app's classes, `tst_editor_controller` the editor's side (rendering, the rows drawn again, the
-`{{` completion, "View: …", a template's variables).
+the app's classes and what copied blocks' HTML is made from, `tst_editor_controller` the editor's
+side (rendering, the rows drawn again, the `{{` completion, "View: …", a template's variables);
+macros in the other places that show a note's text: `tst_planning_macros` (the Tasks view's rows),
+`tst_editor_queryresults` (query results, a database view's cells), `tst_content_models` (the
+linked references and the clipboard's HTML on a real Workspace).

@@ -270,6 +270,41 @@ private Q_SLOTS:
         QCOMPARE(texts.value(kJournal).value(u"{{ext:pomiary/waga}}"_s), u"**82 kg** [[Waga]]"_s);
     }
 
+    // The copied blocks' Markdown for the clipboard's HTML: placeholders stay as written, values
+    // are computed now when not yet, code and comments are text.
+    void copiedBlocksShowValues_data()
+    {
+        QTest::addColumn<QString>("copied");
+        QTest::addColumn<QString>("before");
+        QTest::addColumn<QString>("after");
+        QTest::newRow("value") << u"- Waga: {{ext:pomiary/waga}}\n"_s << u"- Waga: {{ext:pomiary/waga}}\n"_s
+                               << u"- Waga: **82 kg** [[Waga]]\n"_s;
+        QTest::newRow("arguments, the note's context")
+                << u"- {{ext:pomiary/echo a, \"b, c\"}} — żółw\r\n"_s << u"- {{ext:pomiary/echo a, \"b, c\"}} — żółw\r\n"_s
+                << u"- 2026-11-20\\|2026-11-20\\|a;b, c — żółw\r\n"_s;
+        QTest::newRow("code and comments")
+                << u"- `{{ext:pomiary/waga}}` %%{{ext:pomiary/waga}}%%\n```\n{{ext:pomiary/waga}}\n```\n"_s
+                << u"- `{{ext:pomiary/waga}}` %%{{ext:pomiary/waga}}%%\n```\n{{ext:pomiary/waga}}\n```\n"_s
+                << u"- `{{ext:pomiary/waga}}` %%{{ext:pomiary/waga}}%%\n```\n{{ext:pomiary/waga}}\n```\n"_s;
+        QTest::newRow("unknown macro, unknown extension")
+                << u"{{ext:pomiary/nie-ma}} {{ext:nikt/x}}"_s << u"{{ext:pomiary/nie-ma}} {{ext:nikt/x}}"_s
+                << u"{{ext:pomiary/nie-ma}} {{ext:nikt/x}}"_s;
+        QTest::newRow("a loop: as written")
+                << u"{{ext:pomiary/petla}}"_s << u"{{ext:pomiary/petla}}"_s << u"{{ext:pomiary/petla}}"_s;
+        QTest::newRow("no macro") << u"- zwykły tekst {{nie makro}}"_s << u"- zwykły tekst {{nie makro}}"_s
+                                  << u"- zwykły tekst {{nie makro}}"_s;
+    }
+    void copiedBlocksShowValues()
+    {
+        QFETCH(QString, copied);
+        QFETCH(QString, before);
+        QFETCH(QString, after);
+        // Waiting for approval on this device: as written, nothing runs.
+        QCOMPARE(m_ext->withMacroTexts(copied, kJournal), before);
+        m_ext->approve(kPage);
+        QCOMPARE(m_ext->withMacroTexts(copied, kJournal), after);
+    }
+
     void viewBlockAndControls()
     {
         m_ext->approve(kPage);

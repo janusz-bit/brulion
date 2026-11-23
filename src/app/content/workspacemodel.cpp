@@ -89,6 +89,14 @@ void WorkspaceListModel::contentChanged()
         m_stale = true;
 }
 
+void WorkspaceListModel::markShownChanged()
+{
+    if (m_active)
+        scheduleRefresh(0);
+    else
+        m_stale = true;
+}
+
 bool WorkspaceListModel::affectedBy(const IndexChanges &changes) const
 {
     Q_UNUSED(changes);

@@ -29,7 +29,8 @@ QString Workspace::renderHtml(const QString &markdown, const QString &fromPath) 
         return QUrl::fromLocalFile(m_vault->absolutePath(*path)).toString();
     };
     options.blockText = [this](const QString &id) { return blockText(id); };
-    return io::clipboardHtml(markdown, options);
+    // Macros of extensions show what they show in the editor (as the document exports do).
+    return io::clipboardHtml(m_extensions ? m_extensions->withMacroTexts(markdown, from) : markdown, options);
 }
 
 QString Workspace::htmlToMarkdown(const QString &html) const

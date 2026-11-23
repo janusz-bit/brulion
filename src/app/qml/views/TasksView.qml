@@ -162,6 +162,8 @@ FocusScope {
     TaskListModel {
         id: taskModel
         vaultIndex: PlanningContext.vaultIndex
+        // What the tasks' macros of extensions show ({{ext:…}}), as the editor shows them.
+        host: PlanningContext.host
         // Hidden (kept by ShellRouteView): index changes only mark the list stale, it is computed when shown.
         active: root.visible
         today: DatesHelper.today

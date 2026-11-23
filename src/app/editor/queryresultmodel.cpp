@@ -113,16 +113,8 @@ QVariant QueryResultModel::data(const QModelIndex &index, int role) const
     case CellsRole:
         if (r.group)
             return role == CellsRole ? QVariant(QStringList()) : QVariant(QString());
-        if (!r.htmlValid) {
-            r.html = renderItem(item);
-            r.cells.clear();
-            if (m_type == u"table") {
-                const QStringList cells = item.value(u"cells"_s).toStringList();
-                for (const QString &cell : cells)
-                    r.cells.append(renderMarkdown(cell));
-            }
-            r.htmlValid = true;
-        }
+        if (!r.htmlValid)
+            renderRow(r);
         return role == CellsRole ? QVariant(r.cells) : QVariant(r.html);
     case StatusRole: return r.status;
     case IsTaskRole: return !r.group && !r.status.isEmpty();
@@ -197,8 +189,10 @@ void QueryResultModel::connectHost()
         if (m_host)
             disconnect(m_host, nullptr, this, nullptr);
         m_host = host;
-        if (m_host)
+        if (m_host) {
             connect(m_host, &EditorHost::indexChanged, this, &QueryResultModel::schedule);
+            connect(m_host, &EditorHost::macrosChanged, this, &QueryResultModel::followMacros);
+        }
         m_ready = false;
         Q_EMIT availableChanged();
     }
@@ -417,6 +411,36 @@ void QueryResultModel::rebuildRows()
     endResetModel();
 }
 
+void QueryResultModel::renderRow(const Row &r) const
+{
+    r.showsMacro = false;
+    r.html = renderItem(r.item, &r.showsMacro);
+    r.cells.clear();
+    if (m_type == u"table") {
+        const QString path = r.item.value(u"path"_s).toString();
+        const QStringList cells = r.item.value(u"cells"_s).toStringList();
+        for (const QString &cell : cells)
+            r.cells.append(renderMarkdown(cell, path, &r.showsMacro));
+    }
+    r.htmlValid = true;
+}
+
+void QueryResultModel::followMacros()
+{
+    // Values computed after the frame that asked for them ("…" until then): only the rows that
+    // show a macro are rendered again, and signalled when they show something else.
+    for (int i = 0; i < m_rows.size(); ++i) {
+        const Row &r = m_rows.at(i);
+        if (r.group || !r.htmlValid || !r.showsMacro)
+            continue;
+        const QString html = r.html;
+        const QStringList cells = r.cells;
+        renderRow(r);
+        if (r.html != html || r.cells != cells)
+            Q_EMIT dataChanged(index(i), index(i), {HtmlRole, CellsRole});
+    }
+}
+
 void QueryResultModel::invalidateHtml()
 {
     for (Row &r : m_rows)
@@ -425,22 +449,25 @@ void QueryResultModel::invalidateHtml()
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {HtmlRole, CellsRole, OverdueRole});
 }
 
-QString QueryResultModel::renderMarkdown(const QString &markdown) const
+QString QueryResultModel::renderMarkdown(const QString &markdown, const QString &path, bool *showsMacro) const
 {
     if (!m_controller)
         return markdown::InlineRenderer::escape(markdown);
     markdown::RenderContext ctx = m_controller->blocks()->renderContextFor(m_controller->path(), markdown, 0);
+    detail::showMacrosOf(ctx, m_host, path.isEmpty() ? m_controller->path() : path, showsMacro);
     ctx.inlineCalc = nullptr;
     ctx.hideTransclusions = false;
     ctx.dateLinks = false;
     return markdown::InlineRenderer(ctx).render(markdown);
 }
 
-QString QueryResultModel::renderItem(const QVariantMap &item) const
+QString QueryResultModel::renderItem(const QVariantMap &item, bool *showsMacro) const
 {
     // Dataview's LIST rows: one Markdown text ("[[Page]]: value"); TABLE rows draw their cells.
     if (item.contains(u"cells"_s))
-        return m_type == u"table" ? QString() : renderMarkdown(item.value(u"cells"_s).toStringList().value(0));
+        return m_type == u"table" ? QString()
+                                  : renderMarkdown(item.value(u"cells"_s).toStringList().value(0),
+                                                   item.value(u"path"_s).toString(), showsMacro);
     const QString title = item.value(u"title"_s).toString();
     const QString raw = item.value(u"raw"_s).toString();
     if (m_type == u"pages" || raw.trimmed().isEmpty())
@@ -454,6 +481,7 @@ QString QueryResultModel::renderItem(const QVariantMap &item) const
         return markdown::InlineRenderer::escape(plainTextOf(e, 300));
     markdown::RenderContext ctx =
             m_controller->blocks()->renderContextFor(item.value(u"path"_s).toString(), raw, 0);
+    detail::showMacrosOf(ctx, m_host, item.value(u"path"_s).toString(), showsMacro);
     ctx.inlineCalc = nullptr; // the item's page variables are not at hand: `= expr` shown as written
     ctx.hideTransclusions = false; // no embed frames in result rows: placeholder links
     const markdown::InlineRenderer renderer(ctx);

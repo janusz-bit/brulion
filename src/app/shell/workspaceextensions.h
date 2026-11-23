@@ -489,6 +489,12 @@ public:
     /// macroTexts): the values computed, those not computed yet computed now — a few seconds for
     /// the whole export at most.
     QHash<QString, QHash<QString, QString>> macroTexts(const QList<io::FileEntry> &files);
+    /// `markdown` (text of the note `path`: copied blocks) with its macros replaced by what they
+    /// show, as Markdown (markdown::macroMarkdown) — the clipboard's HTML is made from it. Values
+    /// not computed yet are computed now, within a second for all of them; a macro that shows a
+    /// placeholder (its extension waits for approval, is off, unknown; it failed) stays as written,
+    /// as in the exports. Macros inside code and comments are text.
+    QString withMacroTexts(const QString &markdown, const QString &path);
     /// A macro's placeholder was clicked in the editor: macroHelpRequested() for the dialog that
     /// offers to run, switch on or open its extension.
     Q_INVOKABLE void showMacro(const QString &extension, const QString &name, const QString &arguments);
@@ -646,6 +652,11 @@ private:
     void noteMacrosChanged();
     /// Computes one macro now and keeps its value (runMacros(), macroTexts()).
     markdown::MacroView computeMacro(const QString &key, const extensions::MacroRequest &request, qint64 now);
+    /// What `macro` of the note `path` shows for a document made from it (macroTexts(),
+    /// withMacroTexts()): the value kept, computed now when there is none or it is stale and
+    /// `compute`; nullopt when its extension does not run or offers no such macro.
+    std::optional<markdown::MacroView> documentMacro(const markdown::MacroSpan &macro, const QString &path, qint64 now,
+                                                     bool compute);
     /// The ctx a macro or a variable of the note `path` gets.
     QVariantMap macroContext(const QString &arguments, const QString &path) const;
 

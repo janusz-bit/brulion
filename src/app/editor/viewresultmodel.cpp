@@ -2,6 +2,7 @@
 #include "viewresultmodel.h"
 
 #include "blocklistmodel.h"
+#include "blockrender_p.h"
 #include "blocktext.h"
 #include "editorhost.h"
 #include "pagecontroller.h"
@@ -78,6 +79,7 @@ struct ViewResultModel::Row {
     bool isTask = false;
     QString cover;
     QString coverColor;
+    bool showsMacro = false; ///< a cell shows a macro of an extension (followMacros())
 };
 
 namespace {
@@ -188,6 +190,7 @@ void ViewResultModel::connectHost()
         if (m_host) {
             connect(m_host, &EditorHost::indexChanged, this, &ViewResultModel::schedule);
             connect(m_host, &EditorHost::webPictureChanged, this, &ViewResultModel::rebuild);
+            connect(m_host, &EditorHost::macrosChanged, this, &ViewResultModel::followMacros);
         }
         m_ready = false;
         Q_EMIT availableChanged();
@@ -493,11 +496,12 @@ void ViewResultModel::refresh()
     rebuild();
 }
 
-QString ViewResultModel::render(const QString &markdown) const
+QString ViewResultModel::render(const QString &markdown, const QString &path, bool *showsMacro) const
 {
     if (!m_controller)
         return markdown::InlineRenderer::escape(markdown);
     markdown::RenderContext ctx = m_controller->blocks()->renderContextFor(m_controller->path(), markdown, 0);
+    detail::showMacrosOf(ctx, m_host, path.isEmpty() ? m_controller->path() : path, showsMacro);
     ctx.inlineCalc = nullptr;
     ctx.hideTransclusions = false;
     ctx.dateLinks = false;
@@ -518,6 +522,46 @@ QUrl ViewResultModel::coverUrl(const QString &cover, const QString &kind) const
     return {};
 }
 
+void ViewResultModel::renderCells(Row &r, qsizetype i, const markdown::Palette &palette) const
+{
+    const views::Row &v = m_view->rows.at(i);
+    r.cells.clear();
+    r.texts.clear();
+    r.details.clear();
+    r.showsMacro = false;
+    for (qsizetype c = 0; c < v.cells.size(); ++c) {
+        const views::Cell &cell = v.cells.at(c);
+        r.cells.append(cell.error ? markdown::InlineRenderer::escape(cell.markdown)
+                                  : render(cell.markdown, v.path, &r.showsMacro));
+        r.texts.append(cell.text);
+    }
+    r.headline = r.cells.value(0);
+    for (qsizetype c = 1; c < v.cells.size(); ++c) {
+        if (c == m_view->groupColumn || v.cells.at(c).empty || c >= m_view->columns.size())
+            continue;
+        r.details.append(u"<span style=\"color:"_s + palette.muted + u"\">"_s
+                         + markdown::InlineRenderer::escape(m_view->columns.at(c).label) + u"</span>&nbsp; "_s
+                         + r.cells.at(c));
+    }
+}
+
+void ViewResultModel::followMacros()
+{
+    // What a macro shows arrived or changed: only the rows that show one, signalled when changed.
+    if (m_rows.size() != m_view->rows.size())
+        return;
+    const markdown::Palette palette = m_controller ? m_controller->rendererPalette() : markdown::Palette();
+    for (qsizetype i = 0; i < m_rows.size(); ++i) {
+        Row &r = m_rows[i];
+        if (!r.showsMacro)
+            continue;
+        const QStringList before = r.cells;
+        renderCells(r, i, palette);
+        if (r.cells != before)
+            Q_EMIT dataChanged(index(int(i)), index(int(i)), {CellsRole, HeadlineRole, DetailsRole});
+    }
+}
+
 void ViewResultModel::rebuild()
 {
     QList<Row> rows;
@@ -527,19 +571,7 @@ void ViewResultModel::rebuild()
     for (qsizetype i = 0; i < m_view->rows.size(); ++i) {
         const views::Row &v = m_view->rows.at(i);
         Row r;
-        for (qsizetype c = 0; c < v.cells.size(); ++c) {
-            const views::Cell &cell = v.cells.at(c);
-            r.cells.append(cell.error ? markdown::InlineRenderer::escape(cell.markdown) : render(cell.markdown));
-            r.texts.append(cell.text);
-        }
-        r.headline = r.cells.value(0);
-        for (qsizetype c = 1; c < v.cells.size(); ++c) {
-            if (c == m_view->groupColumn || v.cells.at(c).empty || c >= m_view->columns.size())
-                continue;
-            r.details.append(u"<span style=\"color:"_s + palette.muted + u"\">"_s
-                             + markdown::InlineRenderer::escape(m_view->columns.at(c).label) + u"</span>&nbsp; "_s
-                             + r.cells.at(c));
-        }
+        renderCells(r, i, palette);
         const QVariantMap source = resultRows.value(i).toMap();
         r.status = statusOf(source);
         r.isTask = !r.status.isEmpty();

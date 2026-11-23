@@ -20,6 +20,9 @@ if(TARGET brulion_editor)
     # FakeEditorHost (the editor's in-memory EditorHost) stands in for the Workspace.
     brulion_add_test(tst_planning_actions SOURCES tst_planning_actions.cpp planningtest.h
         LIBS brulion_planning brulion_editor)
+    # The Tasks view's rows with macros of extensions (TaskListModel.host).
+    brulion_add_test(tst_planning_macros SOURCES tst_planning_macros.cpp planningtest.h
+        LIBS brulion_planning brulion_editor)
 endif()
 
 # The views in their real QML (qml-smoke.sh): every planning view and its dialogs at desktop and

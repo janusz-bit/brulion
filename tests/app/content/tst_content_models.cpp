@@ -5,7 +5,9 @@
 // the tag list, the page list (Polish order, sorting, filters, backlink counts), search results
 // (scopes, folders, highlight positions, diacritics), the history list (newest first, reasons,
 // restore, deleted pages), the outline and the page tools (rename impact, title checks, summary,
-// wiki links, export); lists that are not `active` (a hidden view) only go stale.
+// wiki links, export); lists that are not `active` (a hidden view) only go stale; macros of
+// extensions in the linked references and the copied blocks' HTML (a placeholder, then the value
+// once the extension runs, following what the macro read).
 #include "historymodel.h"
 #include "journallistmodel.h"
 #include "outlinemodel.h"
@@ -19,6 +21,7 @@
 #include "contentutil.h"
 #include "pdfpages.h"
 #include "workspace.h"
+#include "workspaceextensions.h"
 
 #include "markdown/inlinerenderer.h"
 #include "text/text.h"
@@ -823,6 +826,60 @@ private Q_SLOTS:
         QVERIFY(ws->writeFile(u"Inna.md"_s, u"---\nicon: 🌳\n---\n- inna strona, zmieniona\n"_s));
         QTest::qWait(400);
         QCOMPARE(refreshed.size(), count);
+    }
+
+    // A block's macro of an extension shows in the linked references what it shows in the editor:
+    // the placeholder while the extension waits for approval, then its value (computed after the
+    // frame), again when what it read changes — though the references themselves do not.
+    void referencesShowMacros()
+    {
+        const QString extension = u"Rozszerzenia/Licznik.md"_s;
+        auto ws = open({{extension, u"---\ntags: [rozszerzenie]\n---\n```luau\n"
+                                    "b.macro(\"waga\", function(ctx)\n"
+                                    "    local text = b.read(\"Waga\") or \"\"\n"
+                                    "    return b.ui.heading((text:match(\"(%d+) kg\") or \"?\") .. \" kg\")\n"
+                                    "end)\n"
+                                    "b.macro(\"znaki\", function(ctx) return \"<i>a & b</i>\" end)\n"
+                                    "```\n"_s},
+                        {u"Waga.md"_s, u"- 82 kg\n"_s},
+                        {u"Cel.md"_s, u"- strona celu\n"_s},
+                        {u"Źródło.md"_s, u"- [[Cel]]: waga {{ext:licznik/waga}}, `{{ext:licznik/waga}}`\n"_s}});
+        QTRY_VERIFY(!ws->extensions()->pageState(extension).isEmpty());
+        BacklinksModel linked;
+        linked.setWorkspace(ws.get());
+        linked.setPath(u"Cel.md"_s);
+        linked.refreshNow();
+        QCOMPARE(linked.refCount(), 1);
+        const auto html = [&linked] { return linked.data(linked.index(1), BacklinksModel::HtmlRole).toString(); };
+        QVERIFY2(html().contains(u"uruchomić?"_s), qPrintable(html()));
+        // In a code span a macro is text.
+        QVERIFY2(html().contains(u"<code"_s) && html().contains(u"{{ext:licznik/waga}}"_s), qPrintable(html()));
+        // The copied blocks' HTML: a placeholder is the macro as written.
+        const QString copied = u"- waga {{ext:licznik/waga}}, `{{ext:licznik/waga}}` {{ext:licznik/znaki}}\n"_s;
+        QVERIFY(ws->renderHtml(copied, u"Źródło.md"_s).contains(u"waga {{ext:licznik/waga}}"_s));
+
+        ws->extensions()->approve(extension);
+        QTRY_VERIFY2(html().contains(u"82 kg"_s), qPrintable(html()));
+        QVERIFY(!html().contains(u"uruchomić?"_s));
+        // The value is computed at once for the clipboard, escaped; code stays text.
+        const QString clipboard = ws->renderHtml(copied, u"Źródło.md"_s);
+        QVERIFY2(clipboard.contains(u"82 kg"_s), qPrintable(clipboard));
+        QVERIFY2(clipboard.contains(u"&lt;i&gt;a &amp; b&lt;/i&gt;"_s), qPrintable(clipboard));
+        QVERIFY2(!clipboard.contains(u"<i>"_s), qPrintable(clipboard));
+        QVERIFY2(clipboard.contains(u"{{ext:licznik/waga}}"_s), qPrintable(clipboard));
+
+        // The note the macro read changes (no reference does): the row shows the new value.
+        QVERIFY(ws->writeFile(u"Waga.md"_s, u"- 81 kg\n"_s));
+        QTRY_VERIFY2(html().contains(u"81 kg"_s), qPrintable(html()));
+        QCOMPARE(linked.refCount(), 1);
+
+        // Hidden: the value waits until the list is shown again.
+        linked.setActive(false);
+        QVERIFY(ws->writeFile(u"Waga.md"_s, u"- 80 kg\n"_s));
+        QTRY_VERIFY(linked.isStale());
+        QVERIFY(html().contains(u"81 kg"_s));
+        linked.setActive(true);
+        QTRY_VERIFY2(html().contains(u"80 kg"_s), qPrintable(html()));
     }
 
     // A list that is not active (its view kept hidden) computes nothing when notes change: it only
