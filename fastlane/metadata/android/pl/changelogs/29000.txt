@@ -1,0 +1,20 @@
+Nowości w 0.29.0:
+• Dojrzalszy czat z AI
+• Zgłoś odpowiedź AI
+• Przypomnienia słowami
+• Tabele z klawiatury
+• Dataview: zapytania w tekście i kalendarze
+• Szukanie w dokumentach
+• Witryny chronione hasłem
+• Wydarzenia z kalendarza dzwonią
+• Motywy jako strony
+• Pisownia wszędzie
+• Opcje notatki
+• Fiszki
+• Klawisze Vima
+• Rozszerzenia
+• Kopie zapasowe
+• I więcej
+• Poprawki
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.29.0

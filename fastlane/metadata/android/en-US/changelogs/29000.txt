@@ -1,0 +1,20 @@
+What's new in 0.29.0:
+• The AI chat grows up
+• Report an AI answer
+• Reminders in words
+• Tables by keyboard
+• Dataview: inline queries and calendars
+• Search inside documents
+• Password-protected websites
+• Calendar events ring
+• Themes as pages
+• Spelling everywhere
+• Note options
+• Flashcards
+• Vim keys
+• Extensions
+• Backups
+• And more
+• Fixes
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.29.0
