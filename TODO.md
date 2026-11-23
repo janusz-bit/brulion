@@ -354,8 +354,11 @@ done in the repository simply disappears from the list.
 
 * **iOS, iPadOS and macOS** — today only the browser version; Obsidian, Joplin, Anytype and others
   have apps there. On iOS alarms, access to the notebook folder and Syncthing would need solving.
-* **Stores and repositories** — Flathub, winget, AUR, Homebrew. Google Play restricts all files
-  access, which the Syncthing folder needs (docs/ANDROID.md).
+* **Stores and repositories** — Flathub, winget, AUR, Homebrew. Google Play: the app for it is
+  ready in the repository (docs/GOOGLE_PLAY.md); left is the owner's part in Play Console — the
+  developer account, the closed test (12 testers, 14 days), the declarations (the foreground
+  service's video), the first upload — and registering the GitHub/F-Droid app for Android's
+  developer verification.
 * **More interface languages** — translations beyond Polish and English, and with them natural
   language dates, the calculator and the introduction (Obsidian: many languages, also at the
   start).

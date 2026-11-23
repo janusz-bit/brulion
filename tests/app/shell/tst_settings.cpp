@@ -710,6 +710,49 @@ private Q_SLOTS:
         QVERIFY(!s.nextcloudEnabled());
     }
 
+    void deviceFolderBelongsToNotebook()
+    {
+        // A notebook in the app's storage and the folder of the phone it syncs with (Android: the
+        // picked folder's tree URI): per notebook, one folder for one notebook.
+        AppSettings s(nextFile(), m_tmp.path());
+        const QString uri = u"content://com.android.externalstorage.documents/tree/primary%3ASyncthing%2FNotatki"_s;
+        s.setCurrentVault(u"/data/Brulion/Folders/Notatki"_s);
+        QVERIFY(!s.deviceFolderLinked());
+        QSignalSpy changed(&s, &AppSettings::deviceFolderChanged);
+        s.setDeviceFolderLink(s.currentVault(), {uri, u"Notatki"_s, u"primary:Syncthing/Notatki"_s});
+        QCOMPARE(changed.size(), 1);
+        QVERIFY(s.deviceFolderLinked());
+        QCOMPARE(s.deviceFolderName(), u"Notatki"_s);
+        QCOMPARE(s.deviceFolderWhere(), u"Phone storage › Syncthing/Notatki"_s);
+        QCOMPARE(AppSettings::deviceFolderPlace(u"1A2B-3C4D:Notatki/Łódź"_s), u"Memory card › Notatki/Łódź"_s);
+        QCOMPARE(AppSettings::deviceFolderPlace(u"/home/jan/Notatki"_s), u"/home/jan/Notatki"_s);
+        QCOMPARE(AppSettings::deviceFolderPlace(QString()), QString());
+        QCOMPARE(s.deviceFolderNotebook(uri), u"/data/Brulion/Folders/Notatki"_s);
+        QVERIFY(s.deviceFolderNotebook(uri + u"2"_s).isEmpty());
+        // The same link again changes nothing.
+        s.setDeviceFolderLink(s.currentVault(), {uri, u"Notatki"_s, u"primary:Syncthing/Notatki"_s});
+        QCOMPARE(changed.size(), 1);
+
+        // Another notebook has none; switching back brings it again.
+        s.setCurrentVault(u"/data/Brulion/Brulion"_s);
+        QCOMPARE(changed.size(), 2);
+        QVERIFY(!s.deviceFolderLinked());
+        s.setCurrentVault(u"/data/Brulion/Folders/Notatki"_s);
+        QVERIFY(s.deviceFolderLinked());
+
+        // Kept in the file.
+        {
+            AppSettings again(s.fileName(), m_tmp.path());
+            QCOMPARE(again.deviceFolderLink(u"/data/Brulion/Folders/Notatki"_s).address, uri);
+        }
+        s.setDeviceFolderLink(s.currentVault(), {});
+        QVERIFY(!s.deviceFolderLinked());
+        QVERIFY(s.deviceFolderNotebook(uri).isEmpty());
+        // Without a notebook nothing is linked.
+        s.setDeviceFolderLink(QString(), {uri, u"x"_s, QString()});
+        QVERIFY(s.deviceFolderNotebook(uri).isEmpty());
+    }
+
     void nextcloudNeedsANotebook()
     {
         // With no notebook open (the start screen) nothing syncs and nothing can be switched on;

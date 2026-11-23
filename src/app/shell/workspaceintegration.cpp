@@ -203,7 +203,9 @@ void wireBackgroundCheck(AppController *app, notify::Notifier *notifier)
         target.intervalMinutes = interval;
         target.followOutsideLinks = settings->followsOutsideLinks();
         target.hideText = app->appLock()->hidesNotificationText();
-        if (sync->active()) {
+        if (sync->active() && sync->usesDeviceFolder()) {
+            target.folder = background::Target::Folder{sync->deviceFolderSettings().address, sync->deviceName()};
+        } else if (sync->active()) {
             target.nextcloud = background::Target::Nextcloud{sync->currentDavUrl(), settings->nextcloudUser().trimmed(),
                                                              sync->deviceName()};
         }
@@ -250,6 +252,12 @@ void wireSync(AppController *app)
         sync->setDeviceName(settings->value(u"sync/deviceName"_s, QString()).toString());
         sync->setNextcloud(n);
     };
+    // A notebook in the app's storage kept in sync with a folder of the device (AppSettings' link
+    // of the current notebook): it takes Nextcloud's place for that notebook.
+    const auto applyDeviceFolder = [settings, sync] {
+        const AppSettings::DeviceFolderLink link = settings->deviceFolderLink(settings->currentVault());
+        sync->setDeviceFolder(DeviceFolderSettings{link.address, link.name});
+    };
     const auto applySyncthing = [settings, sync] {
         SyncthingSettings s;
         s.apiKey = syncthingApiKey(settings);
@@ -257,6 +265,7 @@ void wireSync(AppController *app)
         sync->setSyncthing(s);
     };
     applyNextcloud();
+    applyDeviceFolder();
     applySyncthing();
     // Changed Syncthing values are applied together, when the event loop runs again: the setup form saves
     // the key, then the address, and each apply asks Syncthing at once — the new key would reach the old address.
@@ -265,6 +274,7 @@ void wireSync(AppController *app)
     syncthingApply->setInterval(0);
     QObject::connect(syncthingApply, &QTimer::timeout, sync, applySyncthing);
     QObject::connect(settings, &AppSettings::nextcloudChanged, sync, applyNextcloud);
+    QObject::connect(settings, &AppSettings::deviceFolderChanged, sync, applyDeviceFolder);
     QObject::connect(settings, &AppSettings::nextcloudPasswordChanged, sync, applyNextcloud);
     QObject::connect(settings, &AppSettings::valueChanged, sync, [applyNextcloud, syncthingApply](const QString &key) {
         if (key == u"sync/deviceName")

@@ -20,7 +20,9 @@
 #                by Wayland's layer shell: one backend per build, below), crashreport (a crash's
 #                signal, thread and stack on stderr: Linux with glibc, nothing elsewhere), capture (a
 #                photo from the camera and dictation for the AI chat: one backend per build, below;
-#                the hook for a speech recognizer of the app's own). Tests: tests/platform.
+#                the hook for a speech recognizer of the app's own), devicefolder (the folder of
+#                this device a notebook in the app's storage syncs with: Android's picked folders
+#                through android/safstorage, a local folder elsewhere). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
@@ -40,10 +42,14 @@ qt_add_library(brulion_platform STATIC
     crashreport.h crashreport.cpp
     filesync.h filesync.cpp
     capture.h capture.cpp
+    devicefolder.h devicefolder.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
 brulion_set_warnings(brulion_platform)
+# platform::playStoreBuild(): the app for Google Play (the top CMakeLists.txt's BRULION_PLAY).
+set_property(SOURCE platform.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    "BRULION_PLAY_STORE=$<BOOL:${BRULION_PLAY}>")
 
 # PDF pages as pictures (pdfpages.h; sizes and the choice: docs/PERFORMANCE.md "Size"):
 # Android — the system's PdfRenderer through JNI (no library); the browser — none (Qt has no Qt PDF
@@ -215,6 +221,7 @@ endif()
 if(ANDROID)
     target_sources(brulion_platform PRIVATE
         android/androidbridge.h android/androidbridge.cpp
+        android/safstorage.h android/safstorage.cpp
     )
     option(BRULION_ANDROID_SELFTEST
         "Also build brulion_android_selftest, an APK exercising the bridge on a device/emulator" OFF)

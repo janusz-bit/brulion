@@ -8,6 +8,8 @@
 #include "dates/dates.h"
 #include "log/categories.h"
 #include "log/redact.h"
+#include "devicefolder.h" // src/platform
+#include "sync/foldertransport.h"
 #include "sync/sync.h"
 #include "sync/synchistory.h"
 #include "util/paths.h"
@@ -33,6 +35,10 @@ namespace brulion::shell {
 namespace {
 
 constexpr qint64 kDailyMs = 24LL * 60 * 60 * 1000;
+/// A folder of this device: looked at every 5 minutes (Syncthing brings changes at any time; a
+/// listing costs no network), edits handed on 5 s after the last one.
+constexpr qint64 kFolderIntervalMs = 5LL * 60 * 1000;
+constexpr qint64 kFolderDebounceMs = 5000;
 
 QString isoOf(const QDateTime &time)
 {
@@ -278,6 +284,33 @@ void WorkspaceSync::setNextcloud(const NextcloudSettings &settings)
     rebuild();
 }
 
+void WorkspaceSync::setDeviceFolder(const DeviceFolderSettings &settings)
+{
+    if (settings == m_deviceFolder)
+        return;
+    m_deviceFolder = settings;
+    m_folderNotice.clear();
+    rebuild();
+}
+
+void WorkspaceSync::setFolderOpener(FolderOpener opener)
+{
+    m_folderOpener = std::move(opener);
+    rebuild();
+}
+
+void WorkspaceSync::setFolderSynchronous(bool on)
+{
+    m_folderSynchronous = on;
+    if (m_folderTransport)
+        m_folderTransport->setSynchronous(on);
+}
+
+QString WorkspaceSync::deviceFolderUrl() const
+{
+    return usesDeviceFolder() ? sync::deviceFolderUrl(sync::deviceFolderId(m_deviceFolder.address)) : QString();
+}
+
 void WorkspaceSync::setSyncthing(const SyncthingSettings &settings)
 {
     if (settings == m_syncthingSettings)
@@ -327,6 +360,7 @@ void WorkspaceSync::teardown()
     m_scheduler.reset();
     m_engine.reset();
     m_client.reset();
+    m_folderTransport.reset(); // (waits for the folder's operation in progress)
     suspendPdfReaders(false); // (a run abandoned: no runFinished)
     holdReadyIfIdle();
     m_liveTimer.stop();
@@ -344,6 +378,35 @@ void WorkspaceSync::teardown()
 void WorkspaceSync::rebuild()
 {
     teardown();
+    if (usesDeviceFolder()) {
+        // A folder of this device: Nextcloud's settings of the notebook wait meanwhile.
+        if (!m_vault) {
+            Q_EMIT configurationChanged();
+            Q_EMIT statusChanged();
+            return;
+        }
+        std::shared_ptr<sync::FolderStorage> storage = m_folderOpener ? m_folderOpener(m_deviceFolder.address)
+                                                                      : platform::openDeviceFolder(m_deviceFolder.address);
+        if (!storage) {
+            if (m_folderNotice != m_deviceFolder.address) {
+                m_folderNotice = m_deviceFolder.address;
+                qCWarning(logging::lcSync).noquote()
+                        << u"Folder sync: this device cannot reach the folder %1"_s.arg(m_deviceFolder.address);
+            }
+            Q_EMIT configurationChanged();
+            Q_EMIT statusChanged();
+            return;
+        }
+        const QString base = deviceFolderUrl();
+        m_folderTransport = std::make_unique<sync::FolderDavTransport>(storage, base);
+        m_folderTransport->setSynchronous(m_folderSynchronous);
+        m_client = std::make_unique<sync::WebDavClient>(base, u"device"_s, QString(), m_folderTransport.get());
+        // One request at a time: the folder's storage answers them one after another anyway.
+        m_client->setListConcurrency(1);
+        startEngine(kFolderIntervalMs, kFolderDebounceMs, false);
+        qCInfo(logging::lcSync).noquote() << u"Folder sync: \"%1\" (%2)"_s.arg(m_deviceFolder.name, storage->describe());
+        return;
+    }
     if (m_vault && folderShared()) {
         // Two notebooks of this device in one server folder (0.3.1–0.3.5 could do that): every
         // sync would mix their notes, so none runs until one of them gets a folder of its own.
@@ -365,15 +428,33 @@ void WorkspaceSync::rebuild()
     }
     const QString base = currentDavUrl();
     m_client = std::make_unique<sync::WebDavClient>(base, m_nextcloud.user.trimmed(), m_nextcloud.password, transport());
+    startEngine(m_nextcloud.intervalMinutes > 0 ? qint64(m_nextcloud.intervalMinutes) * 60'000 : kDailyMs, 0, true);
+    // Which account and folder (never the password): the first lines to look at in a log.
+    const QUrl server = QUrl::fromUserInput(m_nextcloud.url.trimmed());
+    qCInfo(logging::lcSync).noquote() << u"Nextcloud sync: user %1 at %2, folder %3, every %4"_s.arg(
+            m_nextcloud.user.trimmed(),
+            server.adjusted(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment).toString(),
+            defaultFolder(m_nextcloud.folder),
+            m_nextcloud.intervalMinutes > 0 ? u"%1 min"_s.arg(m_nextcloud.intervalMinutes) : u"day"_s);
+}
+
+void WorkspaceSync::startEngine(qint64 intervalMs, qint64 debounceMs, bool needsNetwork)
+{
     m_engine = std::make_unique<sync::SyncEngine>(m_vault.data(), m_client.get(), m_vault->store(), deviceName());
     if (m_clock)
         m_engine->setClock(m_clock);
     if (m_history)
         m_engine->setNextRunNumber(m_history->nextNumber());
+    if (!needsNetwork)
+        m_engine->setConcurrency(1);
     m_scheduler = std::make_unique<sync::SyncScheduler>(m_engine.get());
     m_scheduler->setHeld(m_held);
-    m_scheduler->setInterval(m_nextcloud.intervalMinutes > 0 ? qint64(m_nextcloud.intervalMinutes) * 60'000 : kDailyMs);
-    if (m_onlineCheck)
+    m_scheduler->setInterval(intervalMs);
+    if (debounceMs > 0)
+        m_scheduler->setDebounce(debounceMs);
+    if (!needsNetwork)
+        m_scheduler->setOnlineCheck([] { return true; }); // a folder of this device: no network
+    else if (m_onlineCheck)
         m_scheduler->setOnlineCheck(m_onlineCheck);
     else
         m_scheduler->useSystemNetworkInformation();
@@ -391,13 +472,6 @@ void WorkspaceSync::rebuild()
     connect(m_scheduler.get(), &sync::SyncScheduler::runFinished, this, &WorkspaceSync::holdReadyIfIdle,
             Qt::QueuedConnection);
     connect(m_scheduler.get(), &sync::SyncScheduler::synced, this, &WorkspaceSync::onSynced);
-    // Which account and folder (never the password): the first lines to look at in a log.
-    const QUrl server = QUrl::fromUserInput(m_nextcloud.url.trimmed());
-    qCInfo(logging::lcSync).noquote() << u"Nextcloud sync: user %1 at %2, folder %3, every %4"_s.arg(
-            m_nextcloud.user.trimmed(),
-            server.adjusted(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment).toString(),
-            defaultFolder(m_nextcloud.folder),
-            m_nextcloud.intervalMinutes > 0 ? u"%1 min"_s.arg(m_nextcloud.intervalMinutes) : u"day"_s);
     if (m_automatic)
         m_startTimer.start();
     Q_EMIT configurationChanged();
@@ -492,6 +566,23 @@ QString WorkspaceSync::human(const QDateTime &time) const
 
 QString WorkspaceSync::errorText(const QString &code, const QString &fallback) const
 {
+    if (usesDeviceFolder()) {
+        // The folder of this device: its answers mean other things than a server's.
+        const QString name = m_deviceFolder.name;
+        if (code == u"forbidden")
+            return tr("Brulion no longer has access to the folder “%1”. Choose it again in Settings → Sync.").arg(name);
+        if (code == u"not-found")
+            return tr("The folder “%1” is gone. Choose it again in Settings → Sync.").arg(name);
+        if (code == u"server")
+            return tr("The folder “%1” cannot be reached (a memory card taken out?). Brulion will try again later.")
+                    .arg(name);
+        if (code == u"timeout" || code == u"stalled")
+            return tr("The folder “%1” stopped answering, so the sync was stopped. Brulion will try again.").arg(name);
+        if (code == u"remote-empty")
+            return tr("Sync paused: the folder “%1” is empty although it was synced before.").arg(name);
+        if (code == u"insufficient-storage")
+            return tr("There is no space left on the storage of the folder “%1”.").arg(name);
+    }
     if (code == u"auth")
         return tr("Wrong user name or app password.");
     if (code == u"forbidden")
@@ -545,22 +636,33 @@ QString WorkspaceSync::folderSharedWith() const
 
 QString WorkspaceSync::statusText() const
 {
-    if (!m_nextcloud.isComplete())
+    const bool folder = usesDeviceFolder();
+    if (folder) {
+        if (!m_scheduler) {
+            return m_vault ? tr("This device cannot reach the folder “%1”.").arg(m_deviceFolder.name)
+                           : tr("No notebook open");
+        }
+    } else if (!m_nextcloud.isComplete()) {
         return m_nextcloud.enabled ? tr("Nextcloud is not set up completely") : QString();
+    }
     if (!m_scheduler)
         return m_vault && folderShared() ? sharedFolderText() : tr("No notebook open");
     const sync::SyncStatus s = m_scheduler->status();
     switch (s.state) {
     case sync::SyncState::Syncing:
         if (s.abandoning)
-            return tr("Stopping: the server is not answering…");
-        if (s.stalled)
-            return tr("The server has not answered for %1…").arg(durationText(s.stalledMs));
+            return folder ? tr("Stopping: the folder is not answering…") : tr("Stopping: the server is not answering…");
+        if (s.stalled) {
+            return folder ? tr("The folder has not answered for %1…").arg(durationText(s.stalledMs))
+                          : tr("The server has not answered for %1…").arg(durationText(s.stalledMs));
+        }
         if (!s.progress)
             return tr("Connecting…");
         switch (s.progress->phase) {
         case sync::SyncProgress::Phase::Connecting: return tr("Connecting…");
-        case sync::SyncProgress::Phase::Listing: return tr("Checking files on the server…");
+        case sync::SyncProgress::Phase::Listing:
+            return folder ? tr("Checking files in the folder “%1”…").arg(m_deviceFolder.name)
+                          : tr("Checking files on the server…");
         case sync::SyncProgress::Phase::ListingLocal: return tr("Checking files on this device…");
         case sync::SyncProgress::Phase::Comparing: return tr("Comparing changes…");
         case sync::SyncProgress::Phase::Syncing:

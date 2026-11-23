@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  Merged over AndroidManifest.xml in the app for Google Play only (CMake's BRULION_PLAY; the build
+  folder's brulion-android.properties tells android/settings.gradle). Google Play keeps these
+  permissions for other kinds of apps (docs/GOOGLE_PLAY.md "Permissions"):
+
+  * MANAGE_EXTERNAL_STORAGE ("All files access": file managers, backup and antivirus apps) and the
+    older READ/WRITE_EXTERNAL_STORAGE with requestLegacyExternalStorage — the notebook folder is
+    one picked in the system's dialog (ACTION_OPEN_DOCUMENT_TREE), which needs no permission, kept
+    in sync with the app's own copy (docs/ANDROID.md "A folder picked in the system's dialog");
+  * USE_EXACT_ALARM (alarm clocks and calendars only) — SCHEDULE_EXACT_ALARM on every Android
+    version instead: Android 13+ grants it with the switch in "Alarms & reminders", which Brulion
+    opens (the same screen as on Android 12); without it reminders come a few minutes late.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.USE_EXACT_ALARM"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        tools:remove="android:maxSdkVersion" />
+
+    <application tools:remove="android:requestLegacyExternalStorage" />
+</manifest>

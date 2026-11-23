@@ -18,6 +18,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QRegularExpression>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -119,6 +120,8 @@ constexpr auto kNcSharedFolder = "sync/nextcloud/folder"_L1;
 constexpr auto kNcSharedOwner = "sync/nextcloud/sharedOwner"_L1;
 constexpr auto kNcNotebooks = "sync/nextcloud/notebooks"_L1;
 constexpr auto kSyncInterval = "sync/intervalMinutes"_L1;
+/// "<this>/<Vault::idForPath>/address|name|where|path": a notebook's folder of this device.
+constexpr auto kDeviceFolders = "sync/folder/notebooks"_L1;
 constexpr auto kRecentSearches = "search/recent"_L1;
 /// The server folder of a notebook without one (WorkspaceSync syncs with it then).
 constexpr auto kDefaultServerFolder = "Brulion"_L1;
@@ -1535,7 +1538,71 @@ void AppSettings::setCurrentVault(const QString &path)
     if (store(kCurrentVault, cleanPath(path), currentVault())) {
         Q_EMIT currentVaultChanged();
         Q_EMIT nextcloudChanged(); // the sync switch and folder belong to the notebook
+        Q_EMIT deviceFolderChanged();
     }
+}
+
+// ---- A folder of this device ------------------------------------------------------------------
+
+AppSettings::DeviceFolderLink AppSettings::deviceFolderLink(const QString &notebook) const
+{
+    const QString id = notebookId(notebook);
+    if (id.isEmpty())
+        return {};
+    const QString group = kDeviceFolders + u'/' + id + u'/';
+    DeviceFolderLink link;
+    link.address = m_settings->value(group + u"address"_s).toString();
+    if (link.address.isEmpty())
+        return {};
+    link.name = m_settings->value(group + u"name"_s).toString();
+    link.where = m_settings->value(group + u"where"_s).toString();
+    return link;
+}
+
+void AppSettings::setDeviceFolderLink(const QString &notebook, const DeviceFolderLink &link)
+{
+    const QString id = notebookId(notebook);
+    if (id.isEmpty() || link == deviceFolderLink(notebook))
+        return;
+    const QString group = kDeviceFolders + u'/' + id;
+    if (link.isEmpty()) {
+        m_settings->remove(group);
+    } else {
+        m_settings->setValue(group + u"/address"_s, link.address);
+        m_settings->setValue(group + u"/name"_s, link.name);
+        m_settings->setValue(group + u"/where"_s, link.where);
+        m_settings->setValue(group + u"/path"_s, absolutePath(notebook));
+    }
+    m_settings->sync();
+    Q_EMIT deviceFolderChanged();
+}
+
+QString AppSettings::deviceFolderPlace(const QString &where)
+{
+    // The phone's storage and memory cards name a folder "<volume>:<path>" (TreeFolder.kt).
+    static const QRegularExpression card(u"^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}:(.*)$"_s);
+    if (where.startsWith(u"primary:"_s))
+        return tr("Phone storage › %1").arg(where.mid(8));
+    if (const QRegularExpressionMatch m = card.match(where); m.hasMatch())
+        return tr("Memory card › %1").arg(m.captured(1));
+    return where;
+}
+
+QString AppSettings::deviceFolderNotebook(const QString &address) const
+{
+    if (address.isEmpty())
+        return {};
+    m_settings->beginGroup(kDeviceFolders);
+    const QStringList ids = m_settings->childGroups();
+    QString found;
+    for (const QString &id : ids) {
+        if (m_settings->value(id + u"/address"_s).toString() == address) {
+            found = m_settings->value(id + u"/path"_s).toString();
+            break;
+        }
+    }
+    m_settings->endGroup();
+    return found;
 }
 
 QVariantList AppSettings::recentVaults() const

@@ -3,6 +3,8 @@
 #include "workspace.h"
 #include "workspaceextensions.h"
 
+#include "aireport/aireport.h"
+
 #include <algorithm>
 
 using namespace Qt::StringLiterals;
@@ -37,6 +39,12 @@ void WritingSession::setWorkspace(Workspace *workspace)
 bool WritingSession::onDevice() const
 {
     return m_workspace && m_workspace->extensions()->aiSettings().provider == u"local";
+}
+
+QString WritingSession::modelName() const
+{
+    return u"Brulion's writing assistant · "_s
+           + (m_workspace ? aireport::modelDescription(m_workspace->extensions()->aiSettings()) : u"not known"_s);
 }
 
 QString WritingSession::presetLabel(const QString &preset) const

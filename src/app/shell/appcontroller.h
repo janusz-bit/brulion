@@ -107,6 +107,7 @@ namespace brulion::shell {
 class AppScripting;
 
 class CommandModel;
+class DeviceFolderFirstSync;
 class ShortcutMap;
 
 class AppController : public QObject {
@@ -178,6 +179,17 @@ class AppController : public QObject {
     Q_PROPERTY(bool isAndroid READ isAndroid CONSTANT FINAL)
     Q_PROPERTY(bool isWasm READ isWasm CONSTANT FINAL)
     Q_PROPERTY(bool isDesktop READ isDesktop CONSTANT FINAL)
+    /// The app for Google Play (platform::playStoreBuild()): no "All files access"; a notebook
+    /// folder of the device is one picked in the system's dialog, kept in sync with the app's copy.
+    Q_PROPERTY(bool playStore READ playStore CONSTANT FINAL)
+    /// A notebook in the app's storage can sync with a folder of this device picked in the
+    /// system's dialog (Android: openDeviceFolder(), linkDeviceFolder(); docs/ANDROID.md). On a
+    /// computer with BRULION_TEST_PLAY=1 too (local folders), which also sets playStore: the
+    /// interface of the app for Google Play without a phone.
+    Q_PROPERTY(bool deviceFoldersAvailable READ deviceFoldersAvailable CONSTANT FINAL)
+    /// What the splash says while a notebook opens ("" = the usual "Opening the notebook…"): the
+    /// first copy of a picked folder's notes, with its progress.
+    Q_PROPERTY(QString loadingText READ loadingText NOTIFY loadingTextChanged FINAL)
     /// Touch-first platform (Android).
     Q_PROPERTY(bool touch READ touch CONSTANT FINAL)
     Q_PROPERTY(QString version READ version CONSTANT FINAL)
@@ -432,6 +444,9 @@ public:
     bool isAndroid() const;
     bool isWasm() const;
     bool isDesktop() const;
+    bool playStore() const;
+    bool deviceFoldersAvailable() const;
+    QString loadingText() const { return m_loadingText; }
     bool touch() const { return isAndroid(); }
     QString version() const;
     bool trayAvailable() const { return m_trayAvailable; }
@@ -511,6 +526,24 @@ public:
     Q_INVOKABLE QString localPath(const QUrl &url) const;
     /// Whether a vault at `path` would need Android's "All files access" (shared storage).
     Q_INVOKABLE bool needsStoragePermission(const QString &path) const;
+    /// The notebook folder `path` lies in the app's own storage (such a notebook may sync with a
+    /// folder of the device).
+    Q_INVOKABLE bool inAppStorage(const QString &path) const;
+
+    // ---- A folder of this device (docs/ANDROID.md "A folder picked in the system's dialog") ----
+    /// A folder picked in the system's dialog (FilePicker.OpenFolder: content:// on Android): open
+    /// the notebook that syncs with it, or make one in the app's storage, named after the folder,
+    /// that does — its notes are copied in first (DeviceFolderFirstSync), then it opens.
+    Q_INVOKABLE void openDeviceFolder(const QUrl &picked);
+    /// The open notebook (in the app's storage) syncs with the picked folder from now on (its
+    /// first sync keeps the notes of both). False (a toast says why) when it cannot.
+    Q_INVOKABLE bool linkDeviceFolder(const QUrl &picked);
+    /// The open notebook stops syncing with its folder: the notes stay on both sides, the grant
+    /// to the folder is given back.
+    Q_INVOKABLE void unlinkDeviceFolder();
+    /// Where a new notebook for the folder `name` goes: <app data>/Folders/<name> (a number added
+    /// while that is taken).
+    QString deviceFolderNotebookPath(const QString &name) const;
 
     // ---- Permissions --------------------------------------------------------------------
     QVariantMap permissions() const;
@@ -758,6 +791,7 @@ Q_SIGNALS:
     /// dropOnView().
     void fileDroppedOnView(const QString &path, qreal sceneX, qreal sceneY);
     void statusChanged();
+    void loadingTextChanged();
     void introPendingChanged();
     void currentRouteChanged();
     void historyChanged();
@@ -877,6 +911,9 @@ private:
     /// Before the workspace (its extensions hand it their requests): destroyed after it.
     std::unique_ptr<LocalAi> m_localAi;
     std::unique_ptr<Workspace> m_workspace;
+    /// The first copy of a picked folder's notes (openDeviceFolder()), while it runs.
+    std::unique_ptr<DeviceFolderFirstSync> m_folderFirstSync;
+    QString m_loadingText;
     /// After the workspace (it writes transcripts there): destroyed before it.
     std::unique_ptr<media::Transcriber> m_speech;
     std::unique_ptr<AppLockController> m_appLock;

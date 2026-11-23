@@ -19,6 +19,31 @@ option(BRULION_BUILD_APP "Build the app (Qt Quick); OFF builds the core librarie
 # the message about one nor its switch in the settings — for builds that a store updates (F-Droid,
 # IzzyOnDroid; docs/ANDROID.md). Android and Windows only ask with ON (the default).
 option(BRULION_UPDATE_CHECK "Ask GitHub for a newer version (Android, Windows); OFF for store builds" ON)
+# ON: the Android app for Google Play (docs/GOOGLE_PLAY.md) — the package
+# io.github.januszbit.brulion.play, without the permissions Play keeps for other kinds of apps (all
+# files access, USE_EXACT_ALARM: android/play/AndroidManifest.xml), without the check for a newer
+# version; the notebook folder is a folder picked in the system's dialog, kept in sync with the
+# app's own copy (docs/ANDROID.md "A folder picked in the system's dialog").
+option(BRULION_PLAY "Build the Android app for Google Play" OFF)
+if(BRULION_PLAY)
+    if(NOT ANDROID)
+        message(FATAL_ERROR "BRULION_PLAY=ON builds the Android app for Google Play: an Android build only")
+    endif()
+    if(BRULION_UPDATE_CHECK)
+        message(STATUS "Brulion: BRULION_PLAY=ON turns BRULION_UPDATE_CHECK off (Google Play updates the app)")
+        set(BRULION_UPDATE_CHECK OFF CACHE BOOL "Ask GitHub for a newer version (Android, Windows); OFF for store builds" FORCE)
+    endif()
+endif()
+
+# "Report response" (docs/UI.md "AI chat"): an email address the reports of AI answers go to — a
+# mailto: link with the report, which the user sends in their mail app. Empty (the default): a new
+# issue of the repository on GitHub, prefilled, which the user sends there (public).
+set(BRULION_AI_REPORT_EMAIL "" CACHE STRING "Email address for reports of AI responses (empty: a GitHub issue)")
+string(STRIP "${BRULION_AI_REPORT_EMAIL}" BRULION_AI_REPORT_EMAIL)
+if(NOT BRULION_AI_REPORT_EMAIL STREQUAL ""
+   AND NOT BRULION_AI_REPORT_EMAIL MATCHES "^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$")
+    message(FATAL_ERROR "BRULION_AI_REPORT_EMAIL is no plain email address (name@example.com): ${BRULION_AI_REPORT_EMAIL}")
+endif()
 
 if(BRULION_BUILD_APP)
     # 6.12: the QML uses Item.mutabilityGroup (the renderer keeps text that changes often out of

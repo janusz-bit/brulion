@@ -19,6 +19,11 @@
 # and publishes the release once the tests passed and every build succeeded; then GitHub Pages get
 # the F-Droid repository with its APK, the download page with direct links to this release's files
 # and its browser version in app/ (fdroid.yml; not for an APK signed with a throwaway key).
+# Beside them, not a file of the release: the app for Google Play (android.yml with `play`), its AAB
+# signed with the upload key, kept as the workflow artifact "brulion-android-play" and — once the
+# release is published, when the secret PLAY_SERVICE_ACCOUNT_JSON is set — uploaded to Play's
+# internal testing track (docs/GOOGLE_PLAY.md "Releases from CI"). Not for a pre-release. Its
+# build never holds the release back: nothing of the release waits for it.
 # A tag with a suffix (v0.2.0-rc.1) becomes a pre-release (the repository keeps the last release);
 # the files carry the CMake version (0.2.0).
 name: Release
@@ -198,6 +203,21 @@ jobs:
     uses: ./.github/workflows/android.yml
     secrets: inherit
 
+  # The app for Google Play (docs/GOOGLE_PLAY.md): the AAB for Play Console, not a file of the
+  # release, so `publish` does not wait for it. Not for a pre-release (Play's tracks get releases
+  # only). Signed with the upload key (PLAY_UPLOAD_KEYSTORE_*), else the release key, else a
+  # throwaway key — then it is not uploaded (play-upload).
+  play:
+    name: Google Play
+    needs: draft
+    if: ${{ !contains(needs.draft.outputs.version, '-') }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/android.yml
+    with:
+      play: true
+    secrets: inherit
+
   # Without the Android emulator's check of the browsers' keyboards (skip-emulator).
   web:
     name: Web
@@ -264,6 +284,86 @@ jobs:
           url=$(gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F draft=false --jq .html_url)
           echo "Published $url"
           echo "### Released [$TAG]($url)" >> "$GITHUB_STEP_SUMMARY"
+
+  # The Play AAB to Google Play's internal testing track, with the version's "what's new" of
+  # fastlane/metadata/android (en-US, pl as pl-PL; scripts/release.sh writes them) — only once the
+  # release is published (Play keeps every versionCode it was given: an upload of a release that
+  # then failed would block that version), only with a key of the repository (the first upload
+  # makes its key Play's upload key), and only when the secret PLAY_SERVICE_ACCOUNT_JSON (a Google
+  # Cloud service account invited in Play Console, docs/GOOGLE_PLAY.md "Releases from CI") is set:
+  # without it the job only says so. The repository variable PLAY_RELEASE_STATUS is the release's
+  # status, "completed" by default; "draft" while the app is a draft in Play Console (never
+  # published to any track: the API refuses anything but drafts then).
+  # r0adkll/upload-google-play (the Google Play Developer API's edits: upload, track, notes, commit)
+  # pinned to the commit of its tag v1.1.5, as it handles the service account's key.
+  play-upload:
+    name: Upload to Google Play (internal testing)
+    needs: [draft, play, publish]
+    if: needs.play.outputs.signing == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      FILE_VERSION: ${{ needs.draft.outputs.file-version }}
+      HAS_SERVICE_ACCOUNT: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - name: Is there a service account?
+        if: env.HAS_SERVICE_ACCOUNT != 'true'
+        run: |
+          echo "::notice::No PLAY_SERVICE_ACCOUNT_JSON secret: the AAB stays in the artifact brulion-android-play (upload it in Play Console by hand)"
+          echo "### Google Play: not uploaded (no PLAY_SERVICE_ACCOUNT_JSON secret); the AAB is in the artifact brulion-android-play" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v7
+        if: env.HAS_SERVICE_ACCOUNT == 'true'
+        with:
+          sparse-checkout: fastlane
+
+      - uses: actions/download-artifact@v8
+        if: env.HAS_SERVICE_ACCOUNT == 'true'
+        with:
+          name: brulion-android-play
+          path: play
+
+      # Play's "what's new" per language: whatsnew-<BCP 47 tag> files; Play lists Polish as pl-PL.
+      - id: notes
+        name: The release notes from fastlane/metadata/android
+        if: env.HAS_SERVICE_ACCOUNT == 'true'
+        run: |
+          IFS=. read -r major minor patch <<< "$FILE_VERSION"
+          code=$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
+          mkdir -p whatsnew
+          for pair in en-US:en-US pl:pl-PL; do
+            from=fastlane/metadata/android/${pair%%:*}/changelogs/$code.txt
+            if [ ! -s "$from" ]; then
+              echo "::error file=$from::missing: the changelog of $FILE_VERSION (scripts/release.sh writes it)"
+              exit 1
+            fi
+            cp -- "$from" "whatsnew/whatsnew-${pair#*:}"
+          done
+          aab=$(find play -name "brulion-$FILE_VERSION-*-play.aab" | head -n 1)
+          [ -n "$aab" ] || { echo "::error::no brulion-$FILE_VERSION-*-play.aab in the artifact"; exit 1; }
+          echo "aab=$aab" >> "$GITHUB_OUTPUT"
+          ls -l whatsnew "$aab"
+
+      - name: Upload to the internal testing track
+        if: env.HAS_SERVICE_ACCOUNT == 'true'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: io.github.januszbit.brulion.play
+          releaseFiles: ${{ steps.notes.outputs.aab }}
+          releaseName: ${{ needs.draft.outputs.version }}
+          tracks: internal
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
+          whatsNewDirectory: whatsnew
+
+      - name: Summary
+        if: env.HAS_SERVICE_ACCOUNT == 'true'
+        env:
+          STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
+        run: |
+          echo "### Google Play: $TAG uploaded to the internal testing track (status $STATUS)" >> "$GITHUB_STEP_SUMMARY"
 
   # The F-Droid repository on GitHub Pages, with the APK and the browser version (app/) of this
   # release (fdroid.yml): from a tag only (the github-pages environment admits main and the tags v*),

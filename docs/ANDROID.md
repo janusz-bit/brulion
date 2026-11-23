@@ -3,7 +3,10 @@
 Brulion on Android is the same C++/Qt Quick app as on the desktop (Qt 6.12 for Android), with a
 native part in Kotlin (`android/src/io/github/januszbit/brulion/android/`) that:
 
-* gives access to the notes folder on shared storage ("All files access"),
+* gives access to the notes folder on shared storage ("All files access"), or to a folder picked
+  in the system's dialog that a notebook in the app's storage is kept in sync with ([A folder
+  picked in the system's dialog](#a-folder-picked-in-the-systems-dialog): the app for Google Play's
+  way, with no storage permission),
 * schedules reminders and alarms in the system (`AlarmManager`) — they work while the app is
   closed and after the phone restarts,
 * checks the notes in the background every 15–60 minutes (after a Nextcloud sync, when that is
@@ -26,7 +29,11 @@ Notes are plain `.md` files in a folder. On a phone the folder can:
   the "All files access" permission, described below;
 * live in the **app's private directory** (no extra permissions) and be synced with
   **Nextcloud** (WebDAV) from within Brulion — Settings → Sync (over HTTPS, see
-  [HTTPS and OpenSSL](#https-and-openssl)).
+  [HTTPS and OpenSSL](#https-and-openssl));
+* live in the app's private directory and be kept in sync with a **folder picked in the system's
+  dialog** — a Syncthing folder, say — with no storage permission (the app for Google Play,
+  docs/GOOGLE_PLAY.md, has no other way to a folder on shared storage): [A folder picked in the
+  system's dialog](#a-folder-picked-in-the-systems-dialog).
 
 Everything works offline. Sync (Syncthing or Nextcloud) never blocks writing.
 
@@ -71,6 +78,71 @@ Syncthing tips:
   `*.sync-conflict-*.svg`) and offers to merge them (drawings: **Merge drawings**, the strokes
   and elements of both versions).
 * File versioning in Syncthing ("Simple" or "Staggered") is a good extra safeguard.
+
+## A folder picked in the system's dialog
+
+The app for Google Play (CMake's `BRULION_PLAY`, docs/GOOGLE_PLAY.md) has no "All files access":
+Google Play keeps that permission for file managers, backup and antivirus apps. It reaches a
+Syncthing folder another way, and the APK of GitHub and F-Droid can do the same for a notebook in
+the app's storage:
+
+1. The start screen's **Choose a folder…** (the app for Google Play; there is no path to type), or
+   for a notebook in the app's storage the sync center's **Syncthing** tab → **A folder on this
+   phone** → **Choose a folder…** (also *Settings → Sync → Folder on this phone*) opens the system's
+   folder dialog (`ACTION_OPEN_DOCUMENT_TREE`, through the app's `FilePicker`). Pick the folder
+   Syncthing-Fork syncs, e.g. `Syncthing/Notatki`, and allow Brulion to use it. Android refuses the
+   roots of the phone's storage and of `Download` there.
+2. Brulion keeps the grant (`takePersistableUriPermission`: it lasts across restarts and updates,
+   until the app is uninstalled or the access is taken back in the system's settings) and links a
+   notebook to the folder (AppSettings: `sync/folder/notebooks/<notebook id>/address|name|where`):
+   from the start screen a new notebook in the app's storage (`files/Folders/<the folder's name>`,
+   a number added while that is taken) — the folder's notes are copied into it first
+   (`DeviceFolderFirstSync`), and the splash says how far it got, so that nothing the app writes
+   into a new notebook (the introduction's settings) is merged into the notes the folder already
+   has; then it opens. A folder already linked opens its notebook. From the sync center it is the
+   open notebook (Nextcloud's switch goes off for it: one way per notebook).
+3. From then on the notebook and the folder are kept the same by the sync engine of Nextcloud
+   (`src/core/sync`): three-way merges, conflict copies (`*.conflict-<device>-<time>.md`), the
+   guards against mass deletions and against a side that emptied, moves of folders, the history
+   and details of every run in the sync center. A sync runs ~5 s after edits, every 5 minutes, when
+   the app comes back to the front and, while it is closed, in the [background check of the
+   notes](#checking-notes-in-the-background) — so a reminder written on the computer rings on the
+   phone. No network is needed.
+
+How it works:
+
+* The notebook stays a folder of plain files in the app's storage: fast listings, atomic writes,
+  the file watcher, the index cache — everything the app does with files works as with any notebook.
+  The picked folder is reached only through Android's Storage Access Framework, which has none of
+  that: `sync::FolderDavTransport` (`src/core/sync/foldertransport.h`) puts it behind the WebDAV
+  client as a WebDAV server would (PROPFIND, GET, PUT with If-Match, DELETE, MKCOL; MOVE answers 405
+  and the engine copies and deletes instead), so the engine syncs with it as with Nextcloud, one
+  request at a time, on a worker thread. A file's ETag is its modification time and size.
+* `SafFolderStorage` (`src/platform/android/safstorage.cpp`) is that folder's `sync::FolderStorage`:
+  every operation goes through JNI to `TreeFolder.kt`, which uses `DocumentsContract` with the kept
+  grant. On the phone's storage and memory cards (`com.android.externalstorage.documents`) a
+  document's id is its path; other document providers are walked folder by folder (ids cached). A
+  file is created with the type `application/octet-stream` (the provider keeps the name as it is)
+  and replaced with the mode `"wt"`, its size checked afterwards; a provider that renames a new file
+  (`Plan (1).md`) has it deleted again and the file reported as not synced.
+* A folder that cannot be read is never taken for an empty one: "missing" is said only when its
+  folder lists without it; a grant taken back answers 403 ("Brulion no longer has access to the
+  folder … Choose it again"), a folder that cannot be reached (a memory card taken out) 503 — the
+  run fails, nothing is deleted, and it is tried again later. A picked folder that was deleted is
+  not made again (only the system's dialog makes it): choose it again.
+* Syncthing sees Brulion's writes as any other app's. Its own `.stfolder` and `.stversions` are
+  hidden folders, which the sync leaves alone; a `.stignore` with the recommended template keeps
+  Brulion's temporary files out (*Syncthing* tab).
+
+Verified on the emulator (Android 16, 2026-11-23): `scripts/android-emulator-test.sh
+--device-folder` — the folder picked in DocumentsUI, its three notes copied in 1.1 s, a note written
+into the folder arriving at the next start, a note changed in the app reaching the folder.
+
+Limitations: a change that keeps a file's size and modification time to the millisecond goes
+unseen until its next change (Syncthing gives a file it writes the time of the other device's
+version, so in practice every change is seen). Writing a file replaces it in place (the
+Storage Access Framework has no atomic rename over a file): a write cut off by the app being killed
+leaves a short file, which the next sync replaces again.
 
 An AI agent or a script on the computer (`brulion-cli`, [CLI.md](CLI.md)) works on the same
 folder on its side of the sync — there is no command line on Android. The phone arms the
@@ -187,7 +259,10 @@ through Syncthing or Nextcloud. So that it rings even while Brulion is closed, A
 * The notebook checked is the one whose reminders are set (the one opened last; the
   documentation does not count). When the notebook syncs with **Nextcloud**, one sync runs first
   (the same as in the app, with the same state), then the notes are read. With **Syncthing**,
-  Syncthing-Fork downloads the files itself and Brulion only reads them. **CalDAV calendars** that
+  Syncthing-Fork downloads the files itself and Brulion only reads them — or, for a notebook in the
+  app's storage kept in sync with a [folder picked in the system's
+  dialog](#a-folder-picked-in-the-systems-dialog), one sync with that folder runs first (the
+  `:background` process holds the app's grant too). **CalDAV calendars** that
   keep tasks in the notebook (docs/UI.md "Calendars") are synced next, so a reminder set on a task
   in another app (Nextcloud Tasks, Tasks.org, Thunderbird) rings on the phone too; subscriptions and
   the events of calendars are not fetched here (they ring nothing).
@@ -244,7 +319,8 @@ How it works:
   screen or started in the meantime (`BackgroundCheck.verdict`).
 * The app passes what to check through `AndroidBridge::setBackgroundCheck`:
   `{root, stateDir, vault, ringMinutes, language, intervalMinutes, followOutsideLinks, nextcloud:
-  {davUrl, user, device}}` (`followOutsideLinks`: the device's setting for folder links to outside
+  {davUrl, user, device}}`, or `folder: {address, device}` instead of `nextcloud` for a notebook
+  kept in sync with a picked folder (`followOutsideLinks`: the device's setting for folder links to outside
   the notebook; a target an older version left without it keeps following them, so its sync takes
   none of their files for deleted). The app password is not in it: the background process reads it from the app's file
   `secrets/nextcloud-password`. The app sends the target when its reminders start and when a
@@ -272,7 +348,9 @@ How it works:
 * **Foreground service** (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`: granted at install,
   no prompt): while an AI agent on another computer answers.
 * **Alarms & reminders** (exact alarms):
-  * Android 13+ — granted at install time (`USE_EXACT_ALARM`), nothing to do;
+  * Android 13+ — granted at install time (`USE_EXACT_ALARM`), nothing to do; the app for Google
+    Play has no `USE_EXACT_ALARM` (Play keeps it for alarm clocks and calendars) but
+    `SCHEDULE_EXACT_ALARM`: turned on with the switch Brulion opens, as on Android 12;
   * Android 12 — *Settings → Apps → Special app access → Alarms & reminders* (Brulion opens this
     screen). Once it is on, reminders are switched to exact ones at once;
   * Android 9–11 — no consent needed;
@@ -1423,6 +1501,7 @@ build directory is reused.
 scripts/android-build.sh            # result: dist-android/brulion-<version>-arm64-v8a.apk
 adb install -r dist-android/brulion-*.apk
 scripts/android-build.sh --help     # all environment variables
+BRULION_ANDROID_PLAY=1 scripts/android-build.sh   # the app for Google Play: …-play.aab and …-play.apk
 ```
 
 It needs a **Linux x86_64** host (the NDK and the Qt tools exist only for x86_64) — not the
@@ -1449,7 +1528,10 @@ Variables (all optional): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_
 with several architectures), `BRULION_ANDROID_BUILD_DIR` (by default `build-android`),
 `BRULION_ANDROID_BUILD_TYPE` (`Release`), `BRULION_ANDROID_AAB=1` (also an `.aab`),
 `BRULION_ANDROID_UNIT_TESTS=1` (Kotlin tests), `BRULION_ANDROID_LINT=1` (Android lint),
-`BRULION_ANDROID_SELFTEST=1` (also the bridge's test APK), `BRULION_ANDROID_VERSION_CODE`,
+`BRULION_ANDROID_SELFTEST=1` (also the bridge's test APK), `BRULION_ANDROID_PLAY=1` (the app for
+Google Play, the package `io.github.januszbit.brulion.play`, an APK and an AAB —
+[A note on distribution](#a-note-on-distribution), docs/GOOGLE_PLAY.md),
+`BRULION_ANDROID_VERSION_CODE`,
 `BRULION_ANDROID_CMAKE=system`, `BRULION_ANDROID_OPENSSL_DIR` (OpenSSL from a
 KDAB/android_openssl checkout instead of downloading), `BRULION_ANDROID_QT=source` and
 `BRULION_ANDROID_OPENSSL=source` (Qt and OpenSSL from source), `BRULION_ANDROID_SIGN=0` (an
@@ -1471,7 +1553,10 @@ from the same variables `androiddeployqt` reads:
 
 The release key is created (outside the repository) by `scripts/android-new-keystore.sh` — it
 also prints the `gh secret set` commands for GitHub Actions. **Back up the key and the
-password**: every update must be signed with the same key.
+password**: every update must be signed with the same key. The app for Google Play is signed with
+an upload key of its own instead, `scripts/android-new-keystore.sh --play` (the
+`PLAY_UPLOAD_KEYSTORE_*` secrets; Google signs what it delivers: docs/GOOGLE_PLAY.md "Play App
+Signing and the upload key").
 
 **Without a key** the script warns loudly and signs the APK with a **throwaway key**
 (`~/.cache/brulion-android/throwaway.jks`, created once per machine). Such an APK can be installed
@@ -1650,6 +1735,7 @@ exist only for x86_64; NixOS does not need nix-ld for this):
 nix build .#brulion-android           # arm64-v8a: result/brulion-<version>-arm64-v8a-unsigned.apk
 nix build .#brulion-android-x86_64    # for the emulator
 nix build .#brulion-android-aab       # arm64-v8a: APK + AAB (bundleRelease, about 10 s more)
+nix build .#brulion-android-play      # the app for Google Play: …-arm64-v8a-play-unsigned.{apk,aab} (docs/GOOGLE_PLAY.md)
 nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulion-<version>-arm64-v8a.apk
 ```
 
@@ -2073,11 +2159,13 @@ taps, swipes and types, and `adb exec-out screencap -p > ekran.png` takes a scre
 | `android/res/xml/network_security_config.xml` | trusted HTTPS certificate authorities: the system's and those the user installed — [HTTPS and OpenSSL](#https-and-openssl) |
 | `android/assets/licenses/` | licence texts of the bundled libraries (OpenSSL, Apache-2.0) |
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (compiled only when `ANDROID`) |
+| `src/platform/android/safstorage.{h,cpp}`, `android/src/…/TreeFolder.kt`, `src/platform/devicefolder.{h,cpp}` | a folder picked in the system's dialog as the other side of a notebook's sync (`sync::FolderStorage` over `DocumentsContract`; the grant kept and given back) — [A folder picked in the system's dialog](#a-folder-picked-in-the-systems-dialog) |
+| `android/play/AndroidManifest.xml` | the app for Google Play (`BRULION_PLAY`): merged over the manifest by `settings.gradle`, it leaves out "All files access", the older storage permissions and `USE_EXACT_ALARM` — docs/GOOGLE_PLAY.md |
 | `src/app/background/` | C++ of the background check of the notes: `backgroundcheck.{h,cpp}` (target, reminders, one check — built everywhere, tests in `tests/app/background`), `backgroundentry_android.cpp` (`main()` of the `:background` process) — [Checking notes in the background](#checking-notes-in-the-background); of automation requests: `automationrun.{h,cpp}` (one job — built everywhere, `tst_automation_run`), `automationentry_android.cpp` (`main()` of the `:automation` process) — [Automation](#automation-tasker-automate-macrodroid) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — an APK that tests the bridge on a device/emulator (only with `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | building + signing, the release key |
 | `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | descriptions, icon and screenshots for F-Droid and IzzyOnDroid, and their check — [F-Droid and IzzyOnDroid](#f-droid-and-izzyondroid) |
-| `scripts/android-emulator-test.sh` | end-to-end test on the emulator (Android 16, x86_64); `--keyboard`: the editing toolbar on the keyboard; `--selection`: selecting and copying with a finger; `--folders`: folders, block links, the parts of a link to a page in a folder, and tags with a finger; `--share`: "Share → Brulion"; `--automation`: brulion:// links, Tasker's intents with and without the key (a background write with the app's process gone), the Quick Settings tile and the launcher's shortcuts; `--widgets`: widgets and quick add; `--done`: "Done" in a notification (on screen and while the app is closed); `--background`: background check of the notes (a reminder added and deleted while the app is closed, the job run at once, the new reminder's alarm rings without opening Brulion); `--drawing`: text on a drawing from the on-screen keyboard; `--stylus`: stylus pressure, its eraser and side button in the drawing editor; `--web-pictures`: pictures from the internet; `--pickers`: the system file pickers (importing files and a folder, the export's "Save"); `--pdf`: PDF thumbnails, the PDF viewer, pinching, search from Android 15, "Open in another app", "Draw on this page", memory; `--relaunch`: activity recreated during startup (a restart instead of an empty window); `--local-ai`: the model on the device answers from the APK's own libraries, the screen kept on meanwhile (the model's files given with `BRULION_LOCAL_MODEL` and `BRULION_LOCAL_PROJECTOR`); `--web-keyboard dist-wasm`: the browser version in Chrome, Brave and Firefox — the toolbar on the keyboard (docs/WEB.md "On-screen keyboard") |
+| `scripts/android-emulator-test.sh` | end-to-end test on the emulator (Android 16, x86_64); `--keyboard`: the editing toolbar on the keyboard; `--selection`: selecting and copying with a finger; `--folders`: folders, block links, the parts of a link to a page in a folder, and tags with a finger; `--share`: "Share → Brulion"; `--automation`: brulion:// links, Tasker's intents with and without the key (a background write with the app's process gone), the Quick Settings tile and the launcher's shortcuts; `--widgets`: widgets and quick add; `--done`: "Done" in a notification (on screen and while the app is closed); `--background`: background check of the notes (a reminder added and deleted while the app is closed, the job run at once, the new reminder's alarm rings without opening Brulion); `--drawing`: text on a drawing from the on-screen keyboard; `--stylus`: stylus pressure, its eraser and side button in the drawing editor; `--web-pictures`: pictures from the internet; `--pickers`: the system file pickers (importing files and a folder, the export's "Save"); `--device-folder`: the app for Google Play (its debuggable APK) with a folder picked in the system's dialog — the start screen, DocumentsUI, the first copy, changes both ways; `--pdf`: PDF thumbnails, the PDF viewer, pinching, search from Android 15, "Open in another app", "Draw on this page", memory; `--relaunch`: activity recreated during startup (a restart instead of an empty window); `--local-ai`: the model on the device answers from the APK's own libraries, the screen kept on meanwhile (the model's files given with `BRULION_LOCAL_MODEL` and `BRULION_LOCAL_PROJECTOR`); `--web-keyboard dist-wasm`: the browser version in Chrome, Brave and Firefox — the toolbar on the keyboard (docs/WEB.md "On-screen keyboard") |
 | `nix/android.nix`, `nix/android/` | APK from the flake: derivation, Qt for Android (`qt.nix`), signing (`sign.nix`), locks (`*.json`) and `update-locks.sh` |
 
 `android/` is `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` copies it over the Qt template in
@@ -2561,5 +2649,32 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
 ### A note on distribution
 
 Google Play restricts the `MANAGE_EXTERNAL_STORAGE` (all files access) and `USE_EXACT_ALARM`
-permissions to selected app categories. Brulion is meant to be installed from an APK file (e.g.
-from the GitHub releases) or from F-Droid.
+permissions to selected app categories, so Brulion for Android is two apps built from the same
+source:
+
+* **`io.github.januszbit.brulion`** — the APK of the GitHub releases and of Brulion's F-Droid
+  repository, signed with the release key: "All files access" for a notebook folder anywhere on the
+  shared storage, `USE_EXACT_ALARM`, the check for a new version on GitHub;
+* **`io.github.januszbit.brulion.play`** — the app for Google Play (CMake option `BRULION_PLAY`,
+  `BRULION_ANDROID_PLAY=1 scripts/android-build.sh`, `nix build .#brulion-android-play`, the
+  Android workflow's input `play`): `android/play/AndroidManifest.xml` removes "All files access",
+  the older storage permissions and `USE_EXACT_ALARM` (`SCHEDULE_EXACT_ALARM` on every version
+  instead), the notebook folder is one picked in the system's dialog and kept in sync with the
+  app's own copy, there is no update check, and Google signs it (Play App Signing; uploads with an
+  upload key of its own).
+
+They install side by side with their own data, and neither updates the other. Publishing the Play
+app — the Play Console checklist, the Data safety answers, the declarations, the upload from
+`release.yml` — is in [docs/GOOGLE_PLAY.md](GOOGLE_PLAY.md); the privacy policy of both is
+[docs/PRIVACY.md](PRIVACY.md) (<https://janusz-bit.github.io/brulion/privacy.html>).
+
+**AI-generated content.** Google Play's AI-Generated Content policy asks that users can report or
+flag offensive AI output without leaving the app: every answer of the AI has **Report response…**
+(docs/UI.md "AI chat"), in every build. Where the report goes is the CMake cache variable
+`BRULION_AI_REPORT_EMAIL`, which `scripts/android-build.sh` passes on from the environment: an email
+address makes **Send report** open the user's mail app with the report (`mailto:`); empty — the
+default — a new public issue on GitHub, prefilled. Brulion itself sends nothing.
+
+```sh
+BRULION_ANDROID_PLAY=1 BRULION_AI_REPORT_EMAIL=ai-reports@example.com scripts/android-build.sh
+```

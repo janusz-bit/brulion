@@ -50,6 +50,7 @@ void ChatMessageModel::setPath(const QString &path)
     if (m_path == path)
         return;
     m_path = path;
+    m_revealed.clear();
     Q_EMIT pathChanged();
     scheduleRefresh();
 }
@@ -233,16 +234,27 @@ void ChatMessageModel::refresh()
             }
             r.sent = i >= omitted;
             r.firstSent = omitted > 0 && i == omitted;
+            r.number = int(i + 1);
+            r.flag = m.flag == chat::Flag::Reported ? u"reported"_s : m.flag == chat::Flag::Hidden ? u"hidden"_s : QString();
             next.append(r);
         }
     }
-    // Rows by their first line: a message keeps its place, a new one comes last (its delegate
-    // and the list's position stay as they are).
+    // A message opened again whose mark went: folded again when it is marked once more.
+    for (auto it = m_revealed.begin(); it != m_revealed.end();) {
+        if (*it > next.size() || next.at(*it - 1).flag.isEmpty())
+            it = m_revealed.erase(it);
+        else
+            ++it;
+    }
+    // Rows by their number: a message keeps its place, a new one comes last (its delegate and the
+    // list's position stay as they are) — also when the lines above move (a line of the
+    // frontmatter: a partner chosen, an answer reported).
     applyRows(
-            m_rows, next, [](const Row &r) { return r.line; },
+            m_rows, next, [](const Row &r) { return r.number; },
             [](const Row &a, const Row &b) {
-                return a.role == b.role && a.text == b.text && a.html == b.html && a.time == b.time && a.day == b.day
-                       && a.pictures == b.pictures && a.sent == b.sent && a.firstSent == b.firstSent;
+                return a.role == b.role && a.text == b.text && a.html == b.html && a.line == b.line && a.time == b.time
+                       && a.day == b.day && a.pictures == b.pictures && a.sent == b.sent && a.firstSent == b.firstSent
+                       && a.flag == b.flag;
             });
     m_page = page;
     m_title = title;
@@ -267,6 +279,8 @@ QVariant ChatMessageModel::data(const QModelIndex &index, int role) const
     case PicturePathsRole: return r.picturePaths;
     case SentRole: return r.sent;
     case FirstSentRole: return r.firstSent;
+    case FlagRole: return r.flag;
+    case RevealedRole: return !r.flag.isEmpty() && m_revealed.contains(r.number);
     default: return {};
     }
 }
@@ -277,12 +291,43 @@ QHash<int, QByteArray> ChatMessageModel::roleNames() const
             {TextRole, "markdown"},       {LineRole, "line"},
             {TimeRole, "time"},           {DayRole, "day"},
             {PicturesRole, "pictures"},   {SentRole, "sent"},
-            {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"}};
+            {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"},
+            {FlagRole, "flag"},           {RevealedRole, "revealed"}};
 }
 
 QString ChatMessageModel::textAt(int row) const
 {
     return row >= 0 && row < m_rows.size() ? m_rows.at(row).text : QString();
+}
+
+QString ChatMessageModel::questionBefore(int row) const
+{
+    if (row <= 0 || row >= m_rows.size())
+        return {};
+    int i = row - 1;
+    while (i >= 0 && m_rows.at(i).role != u"user")
+        --i; // (the answers of its turn before it)
+    QStringList questions;
+    for (; i >= 0 && m_rows.at(i).role == u"user"; --i) {
+        const QString text = chat::withoutPictures(m_rows.at(i).text).trimmed();
+        if (!text.isEmpty())
+            questions.prepend(text);
+    }
+    return questions.join(u"\n\n"_s);
+}
+
+void ChatMessageModel::reveal(int row, bool shown)
+{
+    if (row < 0 || row >= m_rows.size())
+        return;
+    const int number = m_rows.at(row).number;
+    if (shown == m_revealed.contains(number))
+        return;
+    if (shown)
+        m_revealed.insert(number);
+    else
+        m_revealed.remove(number);
+    Q_EMIT dataChanged(index(row), index(row), {RevealedRole});
 }
 
 // ---- ChatListModel ---------------------------------------------------------------------------------
@@ -342,7 +387,10 @@ void ChatListModel::refresh()
             r.title = title;
             r.modified = f.mtime;
             const chat::Message &last = conversation.messages.last();
-            r.preview = chat::preview(last.text);
+            // (An answer the user reported or hid is not shown here either.)
+            r.preview = last.flag == chat::Flag::Reported ? tr("Reported response")
+                        : last.flag == chat::Flag::Hidden ? tr("Hidden response")
+                                                          : chat::preview(last.text);
             r.fromAi = last.role == chat::Role::Assistant;
             r.messages = int(conversation.messages.size());
             next.append(r);

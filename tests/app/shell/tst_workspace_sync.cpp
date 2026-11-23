@@ -6,6 +6,7 @@
 // progress throttled to a few updates a second, the translated per-file texts, no secrets in
 // anything shown; the Syncthing status through a fake REST API, and reading Syncthing's
 // config.xml.
+#include "devicefolderfirstsync.h"
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -13,6 +14,7 @@
 #include "pdfrenderpool.h"
 #include "synctest.h"
 
+#include "sync/foldertransport.h"
 #include "sync/sync.h"
 #include "sync/synchistory.h"
 #include "vault/vault.h"
@@ -31,6 +33,8 @@
 #include <algorithm>
 
 using namespace Qt::StringLiterals;
+using brulion::shell::DeviceFolderFirstSync;
+using brulion::shell::DeviceFolderSettings;
 using brulion::shell::NextcloudSettings;
 using brulion::shell::SyncthingSettings;
 using brulion::shell::Workspace;
@@ -234,6 +238,109 @@ private Q_SLOTS:
         QVERIFY(!sync->active());
         QCOMPARE(sync->state(), u"disabled"_s);
         QCOMPARE(ws->readFile(u"Notatka.md"_s), merged);
+    }
+
+    /// A notebook in the app's storage kept in sync with a folder of this device (Android: one
+    /// picked in the system's dialog — here a plain folder through the opener seam).
+    void deviceFolderRoundTrip()
+    {
+        QTemporaryDir folder;
+        QVERIFY(synctest::writeFileBehind(folder.path(), u"Z laptopa.md"_s,
+                                          u"- przyszło przez Syncthing #telefon\n"_s.toUtf8()));
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto ws = open(&server, { { u"Notatka.md"_s, u"- napisane na telefonie\n"_s } });
+        WorkspaceSync *sync = ws->sync();
+        sync->setFolderSynchronous(false);
+        QStringList opened;
+        sync->setFolderOpener([&opened](const QString &address) {
+            opened.append(address);
+            return std::make_shared<brulion::sync::LocalFolderStorage>(address);
+        });
+        // Nextcloud is set up too: the folder takes its place for this notebook.
+        sync->setNextcloud(account(server));
+        QSignalSpy configuration(sync, &WorkspaceSync::configurationChanged);
+        sync->setDeviceFolder(DeviceFolderSettings{folder.path(), u"Notatki"_s});
+        QVERIFY(!configuration.isEmpty());
+        QVERIFY(sync->usesDeviceFolder());
+        QVERIFY(sync->active());
+        QCOMPARE(sync->deviceFolderName(), u"Notatki"_s);
+        QCOMPARE(opened, QStringList{folder.path()});
+        QVERIFY(brulion::sync::isDeviceFolderUrl(sync->deviceFolderUrl()));
+        QCOMPARE(sync->statusText(), u"Not synced yet"_s);
+
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(sync->state(), u"idle"_s);
+        QCOMPARE(ws->readFile(u"Z laptopa.md"_s), u"- przyszło przez Syncthing #telefon\n"_s);
+        QFile sent(folder.path() + u"/Notatka.md"_s);
+        QVERIFY(sent.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(sent.readAll()), u"- napisane na telefonie\n"_s);
+        QVERIFY(server.requests().isEmpty()); // nothing went to the server
+        QCOMPARE(sync->lastReport().value(u"downloaded"_s).toInt(), 1);
+        QCOMPARE(sync->history().size(), 1);
+
+        // The folder cannot be read any more: the run fails with the folder's words, nothing is deleted.
+        QVERIFY(QDir(folder.path()).removeRecursively());
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(sync->state(), u"error"_s);
+        QVERIFY2(sync->statusText().contains(u"Notatki"_s), qPrintable(sync->statusText()));
+        QCOMPARE(ws->readFile(u"Notatka.md"_s), u"- napisane na telefonie\n"_s);
+        QCOMPARE(ws->readFile(u"Z laptopa.md"_s), u"- przyszło przez Syncthing #telefon\n"_s);
+
+        // Unlinked: Nextcloud's settings count again.
+        sync->setDeviceFolder({});
+        QVERIFY(!sync->usesDeviceFolder());
+        QVERIFY(sync->active());
+        QCOMPARE(sync->currentDavUrl(), server.url(u"Brulion"_s));
+    }
+
+    void deviceFolderUnreachable()
+    {
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto ws = open(&server);
+        WorkspaceSync *sync = ws->sync();
+        sync->setFolderOpener([](const QString &) { return std::shared_ptr<brulion::sync::FolderStorage>(); });
+        sync->setDeviceFolder(DeviceFolderSettings{u"content://com.example/tree/x"_s, u"Notatki"_s});
+        QVERIFY(sync->usesDeviceFolder());
+        QVERIFY(!sync->active());
+        QVERIFY2(sync->statusText().contains(u"Notatki"_s), qPrintable(sync->statusText()));
+    }
+
+    /// A new notebook for a picked folder gets the folder's notes before it opens, with the
+    /// bookkeeping the app's sync goes on with: the next run has nothing to do.
+    void firstCopyBeforeOpening()
+    {
+        QTemporaryDir folder;
+        QVERIFY(synctest::writeFileBehind(folder.path(), u"Dziennik/2026-10-14.md"_s, u"- [ ] kupić chleb\n"_s.toUtf8()));
+        QVERIFY(synctest::writeFileBehind(folder.path(), u".brulion/config.json"_s, R"({"journalsFolder": "Dziennik"})"));
+        const QString notebook = m_tmp.filePath(u"Folders/Notatki"_s);
+        const QString state = notebook + u"-state"_s;
+        QVERIFY(QDir().mkpath(notebook));
+        DeviceFolderFirstSync first(notebook, state, std::make_shared<brulion::sync::LocalFolderStorage>(folder.path()),
+                                    folder.path(), u"Telefon"_s);
+        QSignalSpy finished(&first, &DeviceFolderFirstSync::finished);
+        first.start();
+        QVERIFY(finished.wait(20000));
+        QCOMPARE(finished.first().at(0).toBool(), true);
+        QCOMPARE(finished.first().at(1).toInt(), 2);
+        QVERIFY(QFileInfo::exists(notebook + u"/Dziennik/2026-10-14.md"_s));
+        QVERIFY(QFileInfo::exists(notebook + u"/.brulion/config.json"_s));
+
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto ws = std::make_unique<Workspace>();
+        ws->setClock(m_clock.fn());
+        WorkspaceSync *sync = ws->sync();
+        sync->setSyncthingDiscovery(false);
+        sync->setTransport(&server);
+        sync->setAutomatic(false);
+        sync->setDeviceName(u"Telefon"_s);
+        sync->setFolderOpener([](const QString &address) { return std::make_shared<brulion::sync::LocalFolderStorage>(address); });
+        sync->setDeviceFolder(DeviceFolderSettings{folder.path(), u"Notatki"_s});
+        QVERIFY(ws->open(notebook, state));
+        ws->finishIndexing();
+        QCOMPARE(ws->vault()->config().journalsFolder, u"Dziennik"_s); // the folder's settings, not a new notebook's
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(sync->lastReport().value(u"changes"_s).toInt(), 0);
     }
 
     void automaticSync()

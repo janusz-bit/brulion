@@ -8,6 +8,12 @@
 # QT_ANDROID_KEYSTORE_STORE_PASS, QT_ANDROID_KEYSTORE_KEY_PASS and QT_ANDROID_KEYSTORE_ALIAS
 # (create them with scripts/android-new-keystore.sh). Without them the APK is signed with a
 # throwaway key (see the warning in the run summary).
+# With the input `play`: the app for Google Play instead (BRULION_ANDROID_PLAY=1, docs/GOOGLE_PLAY.md),
+# its APK and AAB in the artifact "brulion-android-play", signed with the upload key of the secrets
+# PLAY_UPLOAD_KEYSTORE_BASE64, _STORE_PASS, _KEY_PASS and _ALIAS (scripts/android-new-keystore.sh
+# --play) — without them with the QT_ANDROID_KEYSTORE_* key, then with a throwaway one. Google Play
+# re-signs what it delivers with the app signing key it keeps (Play App Signing), so the upload key
+# only has to be the one registered in Play Console.
 name: Android
 
 on:
@@ -29,10 +35,18 @@ on:
         description: Also build an Android App Bundle (.aab)
         type: boolean
         default: false
+      play:
+        description: The app for Google Play (io.github.januszbit.brulion.play, APK + AAB, upload key)
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       aab:
         description: Also build an Android App Bundle (.aab)
+        type: boolean
+        default: false
+      play:
+        description: The app for Google Play (io.github.januszbit.brulion.play, APK + AAB, upload key)
         type: boolean
         default: false
     outputs:
@@ -40,11 +54,11 @@ on:
         description: App version of the built APK
         value: ${{ jobs.apk.outputs.version }}
       signing:
-        description: '"release" (repository keystore) or "throwaway" (generated key)'
+        description: '"release" (repository keystore; with `play` the upload key) or "throwaway" (generated key)'
         value: ${{ jobs.apk.outputs.signing }}
       artifact:
-        description: Name of the uploaded workflow artifact
-        value: brulion-android-apk
+        description: Name of the uploaded workflow artifact (brulion-android-apk, with `play` brulion-android-play)
+        value: ${{ jobs.apk.outputs.artifact }}
     secrets:
       QT_ANDROID_KEYSTORE_BASE64:
         required: false
@@ -54,15 +68,24 @@ on:
         required: false
       QT_ANDROID_KEYSTORE_ALIAS:
         required: false
+      PLAY_UPLOAD_KEYSTORE_BASE64:
+        required: false
+      PLAY_UPLOAD_KEYSTORE_STORE_PASS:
+        required: false
+      PLAY_UPLOAD_KEYSTORE_KEY_PASS:
+        required: false
+      PLAY_UPLOAD_KEYSTORE_ALIAS:
+        required: false
 
 permissions:
   contents: read
 
 # The literal prefix keeps this group distinct from the caller's when run via workflow_call;
 # github.workflow is the caller's name there ("Release"), so a push to main never cancels the
-# APK build of a release (and vice versa).
+# APK build of a release (and vice versa). The app for Google Play has a group of its own: a release
+# builds both at once, and one group would hold the second until the first is done.
 concurrency:
-  group: android-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  group: android-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}${{ inputs.play && '-play' || '' }}
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
@@ -74,13 +97,14 @@ env:
 
 jobs:
   apk:
-    name: Build APK
+    name: ${{ inputs.play && 'Build the app for Google Play (APK + AAB)' || 'Build APK' }}
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
       version: ${{ steps.build.outputs.version }}
       signing: ${{ steps.build.outputs.signing }}
+      artifact: ${{ steps.artifact.outputs.name }}
     steps:
       - uses: actions/checkout@v7
 
@@ -134,19 +158,45 @@ jobs:
         with:
           add-job-summary: on-failure
 
+      - id: artifact
+        name: Artifact name
+        run: echo "name=${{ inputs.play && 'brulion-android-play' || 'brulion-android-apk' }}" >> "$GITHUB_OUTPUT"
+
+      # The app for Google Play is signed with the upload key when its four secrets are there, all
+      # of them together (never a mix of two keys' secrets), else with the release key — Play
+      # accepts any key as the upload key on the first upload, and the owner may register the
+      # release key as it (docs/GOOGLE_PLAY.md "Play App Signing and the upload key").
       - id: build
-        name: Build, sign and check the APK (+ OpenSSL, Kotlin unit tests and lint)
+        name: Build, sign and check the ${{ inputs.play && 'app for Google Play' || 'APK' }} (+ OpenSSL, Kotlin unit tests and lint)
         env:
           ANDROID_NDK_ROOT: ${{ steps.sdk.outputs.ndk }}
           QT_ANDROID_KEYSTORE_BASE64: ${{ secrets.QT_ANDROID_KEYSTORE_BASE64 }}
           QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.QT_ANDROID_KEYSTORE_STORE_PASS }}
           QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.QT_ANDROID_KEYSTORE_KEY_PASS }}
           QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.QT_ANDROID_KEYSTORE_ALIAS }}
-          BRULION_ANDROID_AAB: ${{ inputs.aab && '1' || '0' }}
+          PLAY_UPLOAD_KEYSTORE_BASE64: ${{ inputs.play && secrets.PLAY_UPLOAD_KEYSTORE_BASE64 || '' }}
+          PLAY_UPLOAD_KEYSTORE_STORE_PASS: ${{ inputs.play && secrets.PLAY_UPLOAD_KEYSTORE_STORE_PASS || '' }}
+          PLAY_UPLOAD_KEYSTORE_KEY_PASS: ${{ inputs.play && secrets.PLAY_UPLOAD_KEYSTORE_KEY_PASS || '' }}
+          PLAY_UPLOAD_KEYSTORE_ALIAS: ${{ inputs.play && secrets.PLAY_UPLOAD_KEYSTORE_ALIAS || '' }}
+          # (The app for Google Play always with its AAB: scripts/android-build.sh builds one unless told
+          # BRULION_ANDROID_AAB=0, which only a test APK asks for.)
+          BRULION_ANDROID_AAB: ${{ (inputs.aab || inputs.play) && '1' || '0' }}
+          BRULION_ANDROID_PLAY: ${{ inputs.play && '1' || '0' }}
           BRULION_ANDROID_UNIT_TESTS: 1
           BRULION_ANDROID_LINT: 1
           BRULION_WERROR: 'ON'
-        run: bash scripts/android-build.sh
+        run: |
+          if [ "$BRULION_ANDROID_PLAY" = 1 ] && [ -n "$PLAY_UPLOAD_KEYSTORE_BASE64" ]; then
+            echo "Signing with the upload key (PLAY_UPLOAD_KEYSTORE_*)"
+            export QT_ANDROID_KEYSTORE_BASE64=$PLAY_UPLOAD_KEYSTORE_BASE64 \
+              QT_ANDROID_KEYSTORE_STORE_PASS=$PLAY_UPLOAD_KEYSTORE_STORE_PASS \
+              QT_ANDROID_KEYSTORE_KEY_PASS=$PLAY_UPLOAD_KEYSTORE_KEY_PASS \
+              QT_ANDROID_KEYSTORE_ALIAS=$PLAY_UPLOAD_KEYSTORE_ALIAS
+          elif [ "$BRULION_ANDROID_PLAY" = 1 ]; then
+            echo "No PLAY_UPLOAD_KEYSTORE_* secrets: signing with the release key (QT_ANDROID_KEYSTORE_*), if any"
+          fi
+          unset PLAY_UPLOAD_KEYSTORE_BASE64 PLAY_UPLOAD_KEYSTORE_STORE_PASS PLAY_UPLOAD_KEYSTORE_KEY_PASS PLAY_UPLOAD_KEYSTORE_ALIAS
+          bash scripts/android-build.sh
 
       - name: Summary
         env:
@@ -155,7 +205,7 @@ jobs:
           OPENSSL: ${{ steps.build.outputs.openssl }}
         run: |
           {
-            echo "### Brulion $VERSION for Android"
+            echo "### Brulion $VERSION for Android${{ inputs.play && ' — the app for Google Play' || '' }}"
             echo
             echo "HTTPS: $OPENSSL (KDAB android_openssl, Apache-2.0)"
             echo
@@ -174,7 +224,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: brulion-android-apk
+          name: ${{ steps.artifact.outputs.name }}
           path: dist-android/
           if-no-files-found: error
           retention-days: 30

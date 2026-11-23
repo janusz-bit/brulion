@@ -33,6 +33,14 @@ QString targetName()
 #endif
 }
 
+bool playStoreBuild()
+{
+#ifndef BRULION_PLAY_STORE
+#error "BRULION_PLAY_STORE (0 or 1) comes from the CMake option BRULION_PLAY"
+#endif
+    return BRULION_PLAY_STORE != 0;
+}
+
 QString logDirectory()
 {
 #if defined(Q_OS_WASM)

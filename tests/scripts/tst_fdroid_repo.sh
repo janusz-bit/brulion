@@ -194,6 +194,12 @@ expect "the fingerprint is the certificate's SHA-256" grep -qF "<code class=\"va
 expect "the link that adds the repository to F-Droid" \
   grep -qF "href=\"fdroidrepos://janusz-bit.github.io/brulion/repo?fingerprint=$fingerprint\"" "$page"
 expect "the source links" grep -qF 'href="https://github.com/janusz-bit/brulion/releases/latest"' "$page"
+privacy=$tmp/site/privacy.html
+expect "the privacy policy's page, from docs/PRIVACY.md" bash -c "grep -qF '<title>Brulion — privacy policy</title>' '$privacy' &&
+  grep -qF '<section lang=\"pl\">' '$privacy' && grep -qF '<h1 id=\"polityka-prywatnosci\">Polityka prywatności</h1>' '$privacy'"
+expect "... with nothing of the template or Markdown left" bash -c "! grep -qE '@[A-Z_]*@|\\*\\*|\\]\\(' '$privacy'"
+expect "the landing page links it, the Polish section to its Polish part" bash -c "grep -qF '<a href=\"privacy.html\">Privacy policy</a>' '$page' &&
+  grep -qF '<a href=\"privacy.html#polityka-prywatnosci\">Polityka prywatności</a>' '$page'"
 
 # The downloads: the newest release's files, linked directly.
 expect "the page's release is read with its files" \

@@ -30,6 +30,13 @@
 //     WebDavError{code, status, message, url}: Auth, Forbidden, NotFound, Precondition (412),
 //     Network, Timeout, Parse, …; errorCodeName(code) -> "auth", "not-found", …
 //
+//   A folder of this device                         sync/folderstorage.h, sync/foldertransport.h
+//     FolderStorage (stat, list, read, write, makeFolder, remove, move: relative paths, synchronous;
+//     LocalFolderStorage over QDir, Android's picked folders in src/platform/android/safstorage.h)
+//     behind FolderDavTransport, an HttpTransport answering a WebDavClient as a WebDAV server
+//     would (on a worker thread): the engine syncs a notebook with a folder on the device as with
+//     Nextcloud. deviceFolderUrl(id), deviceFolderId(address); ETag = modification time + size.
+//
 //   URLs and XML                                                    sync/url.h, sync/davxml.h
 //     nextcloudDavUrl(server, user, folder) -> ".../remote.php/dav/files/<user>/<folder>",
 //     encodePath, joinUrl, urlPathname, hrefPathname, relativeTo, normalizeEtag, quoteEtag,

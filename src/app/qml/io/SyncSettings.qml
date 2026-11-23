@@ -55,12 +55,30 @@ ColumnLayout {
                     variant: "success"
                 }
             }
+            // Android, a notebook in the app's storage: the folder of the phone it syncs with.
+            ShellSettingRow {
+                objectName: "settingsDeviceFolder"
+                visible: AppController.deviceFoldersAvailable && Workspace.isOpen && AppController.inAppStorage(Workspace.rootPath)
+                title: qsTr("Folder on this phone")
+                description: !AppSettings.deviceFolderLinked
+                             ? qsTr("None. Choose the folder Syncthing-Fork syncs, and this notebook stays in sync with it.")
+                             : section.sync.deviceFolder && section.sync.statusText !== ""
+                               ? qsTr("“%1”: %2").arg(AppSettings.deviceFolderName).arg(section.sync.statusText)
+                               : "“" + AppSettings.deviceFolderName + "”"
+                BButton {
+                    text: AppSettings.deviceFolderLinked ? qsTr("Show") : qsTr("Choose…")
+                    iconName: "folder-sync"
+                    size: "small"
+                    onClicked: AppController.navigate({ view: "sync", tab: "syncthing" })
+                }
+            }
             ShellSettingRow {
                 title: "Nextcloud"
-                description: section.sync.statusText !== "" ? section.sync.statusText
+                description: section.sync.deviceFolder ? qsTr("Off for this notebook: it syncs with a folder of the phone.")
+                             : section.sync.statusText !== "" ? section.sync.statusText
                              : qsTr("Not set up. Fill in the account below.")
                 BButton {
-                    visible: section.sync.active
+                    visible: section.sync.active && !section.sync.deviceFolder
                     text: qsTr("Sync now")
                     iconName: "refresh-cw"
                     size: "small"
@@ -111,5 +129,6 @@ ColumnLayout {
 
     NextcloudForm {
         Layout.topMargin: Theme.space2
+        visible: !section.sync.deviceFolder
     }
 }

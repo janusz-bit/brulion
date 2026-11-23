@@ -43,6 +43,16 @@
 //
 // A conversation too long for the model (a small one on the device) is sent from a later turn on:
 // firstSent() — whole turns from the oldest left out, the latest always sent.
+//
+// An answer the user reported (docs/UI.md "AI chat": Report response) or hid is listed by its
+// number — the page's messages counted from 1 — in the frontmatter, `zgłoszone: [2]` / `ukryte:
+// [4, 6]` (`reported:` / `hidden:` in an English notebook): the chat shows it folded. Another app,
+// and an older Brulion, reads the frontmatter as page properties and shows every message.
+//
+//   ---
+//   zadania: ignoruj
+//   zgłoszone: [2]
+//   ---
 #pragma once
 
 #include <QDate>
@@ -58,6 +68,10 @@
 namespace brulion::chat {
 
 enum class Role { User, Assistant };
+
+/// What the user marked a message as: reported (sent as a report of an offensive or wrong
+/// answer) or hidden (folded, nothing sent).
+enum class Flag { None, Reported, Hidden };
 
 /// The pictures of the conversation the model gets with its messages (ai::MaxRequestImages).
 inline constexpr int MaxPictures = 8;
@@ -78,6 +92,9 @@ struct Message {
     /// The pictures it embeds, as named there ("Pasted image 2026.jpg", "assets/foto.png"): the
     /// notebook's own files (no address on the internet), by their extension.
     QStringList pictures;
+    /// Reported or hidden: its number in the frontmatter's `zgłoszone:` / `ukryte:` list
+    /// (`reported:` / `hidden:`; both: reported).
+    Flag flag = Flag::None;
 };
 
 struct Conversation {
@@ -127,6 +144,19 @@ QString newConversation(QStringView question, QStringView page, QStringView lang
 /// line replaced, or added at the frontmatter's end, or a frontmatter made for it; the rest byte
 /// for byte, its line endings kept.
 QString setPartner(const QString &content, QStringView partner);
+
+/// The frontmatter's key of `flag` in the notebook's language: "zgłoszone" / "ukryte" ("pl"),
+/// else "reported" / "hidden" ("" for Flag::None).
+QString flagKey(Flag flag, QStringView language);
+
+/// `content` with its message `number` (1-based, the page's messages in order) marked `flag`
+/// (Flag::None: its mark taken away): the number taken out of the frontmatter's other list and put
+/// into this one (`zgłoszone: [2, 5]`, the numbers in order) — the entry written again as a flow
+/// list in place, added at the frontmatter's end, a list left empty taken out (a second entry of
+/// one flag, in the other language, too), a frontmatter made for it —; the rest byte for byte, its
+/// line endings kept. A new key in the language the page is written in (its time's key, its
+/// `zadania:` / `tasks:`), else `language`. Unchanged for a `number` below 1 or a mark it has.
+QString setFlag(const QString &content, int number, Flag flag, QStringView language = u"pl");
 
 /// The pictures a message's Markdown embeds (Message::pictures), in order, each once.
 QStringList picturesIn(QStringView markdown);

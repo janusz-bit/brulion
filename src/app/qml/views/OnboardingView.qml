@@ -46,6 +46,9 @@ Rectangle {
     /// After Delete: the row to give the focus to once the removed one is gone.
     property int focusAfterRemove: -1
     readonly property bool pending: AppController.pendingVaultPath !== ""
+    /// The app for Google Play: a folder of the phone only through the system's dialog (synced
+    /// with a notebook in the app's storage), no path to type.
+    readonly property bool pickedFolders: AppController.deviceFoldersAvailable && AppController.playStore
     /// What Brulion is ({ icon, title, text }).
     readonly property list<var> features: [
         { icon: "file-text", title: qsTr("Plain files"),
@@ -612,6 +615,8 @@ Rectangle {
                                 Layout.fillWidth: true
                                 text: AppController.isWasm
                                       ? qsTr("Notes are kept in this browser's storage on this device and work offline. Move them with import and export, or sync them with Nextcloud.")
+                                      : root.pickedFolders
+                                        ? qsTr("Keep the notes in the app's own storage, or choose a folder on the phone — for example the one Syncthing-Fork syncs. Brulion keeps its copy of the notebook in sync with that folder.")
                                       : AppController.isAndroid
                                         ? qsTr("To sync with Syncthing, use a folder on the phone's storage — Brulion then asks for “All files access”. Without it, keep the notes in the app's own storage and sync them with Nextcloud.")
                                         : qsTr("Choose a folder: a new one, one you sync with Syncthing, or an Obsidian vault — it opens as it is, no import needed. A missing folder is created.")
@@ -623,7 +628,7 @@ Rectangle {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Layout.topMargin: Theme.space1
-                                visible: !AppController.isWasm
+                                visible: !AppController.isWasm && !root.pickedFolders
                                 spacing: Theme.space2
 
                                 BTextField {
@@ -680,12 +685,25 @@ Rectangle {
                                 }
                             }
 
+                            // The app for Google Play: a folder of the phone, picked in the system's dialog.
+                            BButton {
+                                objectName: "onboardingChooseFolder"
+                                Layout.fillWidth: true
+                                Layout.topMargin: Theme.space1
+                                visible: root.pickedFolders && !root.pending
+                                fill: true
+                                size: "large"
+                                variant: "primary"
+                                text: qsTr("Choose a folder…")
+                                iconName: "folder-open"
+                                onClicked: folderDialog.open()
+                            }
                             BButton {
                                 id: openButton
                                 objectName: "onboardingOpen"
                                 Layout.fillWidth: true
                                 Layout.topMargin: Theme.space1
-                                visible: !root.pending
+                                visible: !root.pending && !root.pickedFolders
                                 fill: true
                                 size: "large"
                                 variant: "primary"
@@ -695,8 +713,9 @@ Rectangle {
                                 onClicked: root.openChosen()
                             }
                             BButton {
+                                objectName: "onboardingAppStorage"
                                 Layout.fillWidth: true
-                                visible: AppController.isAndroid && !root.pending
+                                visible: (AppController.isAndroid || root.pickedFolders) && !root.pending
                                 fill: true
                                 text: qsTr("Use app storage")
                                 iconName: "smartphone"
@@ -878,6 +897,11 @@ Rectangle {
         fileMode: FilePicker.OpenFolder
         dark: Theme.dark
         colors: Theme.colors
-        onAccepted: pathField.text = AppController.localPath(selectedFolder)
+        onAccepted: {
+            if (root.pickedFolders)
+                AppController.openDeviceFolder(selectedFolder)
+            else
+                pathField.text = AppController.localPath(selectedFolder)
+        }
     }
 }

@@ -7,6 +7,7 @@
 #include "log/redact.h"
 #include "notebook/session.h"
 #include "reminders/reminders.h"
+#include "sync/foldertransport.h"
 #include "sync/syncengine.h"
 #include "sync/webdavclient.h"
 #include "vault/vault.h"
@@ -62,6 +63,8 @@ QJsonObject Target::toJson() const
                                                 {u"user"_s, nextcloud->user},
                                                 {u"device"_s, nextcloud->device}});
     }
+    if (folder)
+        json.insert(u"folder"_s, QJsonObject{{u"address"_s, folder->address}, {u"device"_s, folder->device}});
     return json;
 }
 
@@ -83,6 +86,9 @@ std::optional<Target> Target::fromJson(const QJsonObject &json)
     const QString user = nc.value(u"user"_s).toString();
     if (!davUrl.isEmpty() && !user.isEmpty())
         t.nextcloud = Nextcloud{davUrl, user, nc.value(u"device"_s).toString()};
+    const QJsonObject folder = json.value(u"folder"_s).toObject();
+    if (const QString address = folder.value(u"address"_s).toString(); !address.isEmpty())
+        t.folder = Folder{address, folder.value(u"device"_s).toString()};
     return t;
 }
 
@@ -170,6 +176,34 @@ void Check::start()
 
 void Check::syncThenRead()
 {
+    if (m_target.folder) {
+        // A folder of this device (no network, no password): the app's engine over its storage.
+        std::shared_ptr<sync::FolderStorage> storage = m_folderOpener ? m_folderOpener(m_target.folder->address) : nullptr;
+        if (!storage) {
+            m_result.insert(u"sync"_s, u"skipped"_s);
+            syncCalendars();
+            return;
+        }
+        const QString base = sync::deviceFolderUrl(sync::deviceFolderId(m_target.folder->address));
+        m_folderTransport = std::make_unique<sync::FolderDavTransport>(storage, base);
+        m_folderTransport->setSynchronous(m_folderSynchronous);
+        m_client = std::make_unique<sync::WebDavClient>(base, u"device"_s, QString(), m_folderTransport.get());
+        m_client->setListConcurrency(1);
+        Vault &vault = m_notebook->vault();
+        m_engine = std::make_unique<sync::SyncEngine>(&vault, m_client.get(), vault.store(),
+                                                      m_target.folder->device.isEmpty() ? u"Android"_s
+                                                                                        : m_target.folder->device);
+        m_engine->setConcurrency(1);
+        if (m_clock)
+            m_engine->setClock(m_clock);
+        sync::SyncRunOptions options;
+        options.trigger = sync::SyncTrigger::Timer;
+        m_syncTimer.start(m_syncTimeoutMs);
+        m_engine->sync(options, [this](const sync::SyncReport &report) {
+            QMetaObject::invokeMethod(this, [this, report] { syncDone(report); }, Qt::QueuedConnection);
+        });
+        return;
+    }
     if (!m_target.nextcloud || !m_transport || m_password.isEmpty()) {
         if (m_target.nextcloud)
             m_result.insert(u"sync"_s, u"skipped"_s); // no password on this device (any more)
@@ -207,6 +241,7 @@ void Check::syncDone(const sync::SyncReport &report)
     m_result.insert(u"downloaded"_s, report.downloaded + report.merged);
     m_engine.reset();
     m_client.reset();
+    m_folderTransport.reset();
     // A failed sync changes nothing about the notes already here: their reminders still count.
     syncCalendars();
 }

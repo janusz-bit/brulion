@@ -6,7 +6,9 @@
 //   1. opens the notebook whose reminders are armed (Target: handed over by the app whenever its
 //      reminders start, kept by the Kotlin side) as brulion-cli does (notebook::Notebook);
 //   2. with Nextcloud sync set up for it, syncs it once (the same SyncEngine and sync bookkeeping as
-//      the app; the engine's lock keeps the app and this process from syncing at the same time);
+//      the app; the engine's lock keeps the app and this process from syncing at the same time) —
+//      or, a notebook in the app's storage linked to a folder of the device (a Syncthing folder
+//      picked in the system's dialog: docs/ANDROID.md), syncs it with that folder the same way;
 //   3. with CalDAV calendars syncing tasks into it (docs/UI.md "Calendars"), syncs them once (the
 //      core's CalendarSync over the notebook's device state; a lock keeps the app and this process
 //      apart) — a task's ⏰ set on another device rings here too;
@@ -46,6 +48,8 @@ class CalendarStore;
 class CalendarSync;
 } // namespace caldav
 namespace sync {
+class FolderDavTransport;
+class FolderStorage;
 class HttpTransport;
 class SyncEngine;
 class WebDavClient;
@@ -68,7 +72,8 @@ int normalizedInterval(int minutes);
 /// look. JSON (Kotlin keeps it, BackgroundCheck.kt):
 ///
 ///   { root, stateDir, vault, ringMinutes, language: "pl" | "en", intervalMinutes,
-///     followOutsideLinks, nextcloud: { davUrl, user, device } (absent: no Nextcloud sync) }
+///     followOutsideLinks, nextcloud: { davUrl, user, device } (absent: no Nextcloud sync),
+///     folder: { address, device } (a folder of the device instead; absent: none) }
 ///
 /// The Nextcloud app password is never part of it: the check reads it from the app's own file
 /// (AppSettings::nextcloudPassword()).
@@ -94,6 +99,13 @@ struct Target {
         friend bool operator==(const Nextcloud &, const Nextcloud &) = default;
     };
     std::optional<Nextcloud> nextcloud;
+    struct Folder {
+        QString address; ///< the folder of the device (Android: the picked folder's tree URI)
+        QString device;  ///< this device's name in conflict copies
+        friend bool operator==(const Folder &, const Folder &) = default;
+    };
+    /// A folder of the device the notebook syncs with (WorkspaceSync's; it wins over `nextcloud`).
+    std::optional<Folder> folder;
 
     /// A notebook to check, and checks are on.
     bool isValid() const;
@@ -125,6 +137,12 @@ public:
 
     /// The sync gives up after this long (the reminders are computed all the same).
     void setSyncTimeout(int msec) { m_syncTimeoutMs = msec; }
+    using FolderOpener = std::function<std::shared_ptr<sync::FolderStorage>(const QString &address)>;
+    /// How a target's folder becomes its storage (Android: platform::openDeviceFolder); none: the
+    /// folder is not synced here.
+    void setFolderOpener(FolderOpener opener) { m_folderOpener = std::move(opener); }
+    /// The folder's requests answered on this thread (tests).
+    void setFolderSynchronous(bool on) { m_folderSynchronous = on; }
     /// The passwords of the notebook's CalDAV accounts (from the app's secrets folder); none: the
     /// calendars are not synced here.
     void setCalendarPasswords(std::function<QString(const QString &accountId)> passwords)
@@ -153,6 +171,9 @@ private:
     std::function<QDateTime()> m_clock;
     int m_syncTimeoutMs = 3 * 60 * 1000;
     std::unique_ptr<notebook::Notebook> m_notebook;
+    FolderOpener m_folderOpener;
+    bool m_folderSynchronous = false;
+    std::unique_ptr<sync::FolderDavTransport> m_folderTransport;
     std::unique_ptr<sync::WebDavClient> m_client;
     std::unique_ptr<sync::SyncEngine> m_engine;
     std::function<QString(const QString &)> m_calendarPasswords;

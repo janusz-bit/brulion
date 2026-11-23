@@ -10,7 +10,9 @@ import Brulion
 //              Syncthing on every device; Nextcloud: your own server over WebDAV, also in the
 //              browser), their state, a notebook kept on GitHub, waiting conflicts and the
 //              mass-deletion guard
-//   Syncthing  steps, live status, the recommended .stignore, REST access (qml/io/SyncthingPanel)
+//   Syncthing  Android, a notebook in the app's storage: the folder of the phone it syncs with
+//              (qml/io/DeviceFolderPanel; with one, the sync's status and history below it);
+//              steps, live status, the recommended .stignore, REST access (qml/io/SyncthingPanel)
 //   Nextcloud  status with "Sync now", live progress, the last report, offline / error
 //              explanations, the deletion guard, the history of runs with their details
 //              (qml/io/SyncHistoryList, SyncRunDetails), the way to the event log, the account
@@ -37,6 +39,10 @@ FocusScope {
     readonly property int conflictCount: sync ? sync.conflictCount : 0
     readonly property string syncState: sync ? sync.state : ""
     readonly property string syncStatusText: sync ? sync.statusText : ""
+    /// The notebook syncs with a folder of this phone (not Nextcloud): its status is the sync's.
+    readonly property bool deviceFolder: sync ? sync.deviceFolder : false
+    /// Nextcloud's card and tab: the sync's state only while it is Nextcloud's.
+    readonly property string nextcloudState: deviceFolder ? "disabled" : syncState
     readonly property bool githubLinked: github ? github.linked : false
     readonly property string githubState: github ? github.state : ""
     readonly property int githubChanges: github ? github.changeCount : 0
@@ -84,8 +90,8 @@ FocusScope {
         if (chosenCopy !== "") {
             showTab("conflicts")
         } else if (AppController.routeFlag(route, "run")) {
-            // A run's details (the event log's links, screenshots): on the Nextcloud tab.
-            showTab("nextcloud")
+            // A run's details (the event log's links, screenshots): on the tab of the sync's way.
+            showTab(deviceFolder ? "syncthing" : "nextcloud")
             openRunLater.run = AppController.routeInt(route, "run", 0)
             openRunLater.restart()
         } else if (AppController.routeFlag(route, "tab")) {
@@ -96,7 +102,7 @@ FocusScope {
     Later {
         id: openRunLater
         property int run
-        onTriggered: historyList.open(run)
+        onTriggered: root.deviceFolder ? folderHistoryList.open(run) : historyList.open(run)
     }
 
     onRouteChanged: applyRoute()
@@ -212,19 +218,28 @@ FocusScope {
                         subtitle: qsTr("Without a server: your devices exchange the files directly.")
                         trailing: [
                             BBadge {
-                                visible: !AppController.isWasm && (Workspace.syncthingFolder
+                                visible: !AppController.isWasm && (root.deviceFolder || Workspace.syncthingFolder
                                                                    || (root.sync !== null && AppController.routeFlag(root.sync.syncthing, "enabled")))
-                                text: root.sync !== null && AppController.routeText(root.sync.syncthing, "state") === "idle" ? qsTr("Up to date") : qsTr("Shared")
-                                variant: "success"
+                                text: root.deviceFolder ? (root.syncState === "error" ? qsTr("Problem") : qsTr("On"))
+                                      : root.sync !== null && AppController.routeText(root.sync.syncthing, "state") === "idle" ? qsTr("Up to date") : qsTr("Shared")
+                                variant: root.deviceFolder && root.syncState === "error" ? "danger" : "success"
                             }
                         ]
                         Bullet { text: qsTr("For computers and Android phones (Syncthing-Fork).") }
                         Bullet { text: qsTr("Works in your home Wi-Fi even without internet.") }
                         Bullet { text: AppController.isWasm ? qsTr("Not available in the browser.") : qsTr("Nothing to sign up for; your notes never leave your devices.") }
+                        BText {
+                            Layout.fillWidth: true
+                            visible: root.deviceFolder && root.syncStatusText !== ""
+                            text: qsTr("Folder “%1” on this phone: %2").arg(root.sync !== null ? root.sync.deviceFolderName : "").arg(root.syncStatusText)
+                            variant: "small"
+                            color: root.syncState === "error" ? Theme.dangerText : Theme.fgMuted
+                            wrapMode: Text.Wrap
+                        }
                         Item { Layout.fillHeight: true }
                         BButton {
                             enabled: !AppController.isWasm
-                            text: Workspace.syncthingFolder ? qsTr("Show the status") : qsTr("Set up Syncthing")
+                            text: root.deviceFolder || Workspace.syncthingFolder ? qsTr("Show the status") : qsTr("Set up Syncthing")
                             iconName: "arrow-right"
                             iconRight: true
                             onClicked: root.showTab("syncthing")
@@ -238,9 +253,9 @@ FocusScope {
                         subtitle: qsTr("Through your own server (WebDAV) – also in the browser.")
                         trailing: [
                             BBadge {
-                                visible: root.sync !== null && root.syncState !== "disabled"
+                                visible: root.sync !== null && root.nextcloudState !== "disabled"
                                 text: {
-                                    switch (root.syncState) {
+                                    switch (root.nextcloudState) {
                                     case "syncing": return qsTr("Syncing")
                                     case "offline": return qsTr("Offline")
                                     case "error": return qsTr("Problem")
@@ -248,7 +263,7 @@ FocusScope {
                                     }
                                 }
                                 variant: {
-                                    switch (root.syncState) {
+                                    switch (root.nextcloudState) {
                                     case "syncing": return "info"
                                     case "offline": return "warning"
                                     case "error": return "danger"
@@ -262,7 +277,7 @@ FocusScope {
                         Bullet { text: qsTr("Changes from several devices are merged line by line.") }
                         BText {
                             Layout.fillWidth: true
-                            visible: root.syncStatusText !== ""
+                            visible: !root.deviceFolder && root.syncStatusText !== ""
                             text: root.syncStatusText
                             variant: "small"
                             color: root.syncState === "error" ? Theme.dangerText : Theme.fgMuted
@@ -285,7 +300,7 @@ FocusScope {
                                 onClicked: root.showTab("nextcloud")
                             }
                             BButton {
-                                visible: root.sync !== null && root.sync.active
+                                visible: root.sync !== null && root.sync.active && !root.deviceFolder
                                 text: qsTr("Sync now")
                                 iconName: "refresh-cw"
                                 variant: "primary"
@@ -363,6 +378,17 @@ FocusScope {
 
             // ---- Syncthing --------------------------------------------------------------------
             Page {
+                // Android: the folder of the phone a notebook in the app's storage syncs with.
+                DeviceFolderPanel {}
+                SyncDeletionGuard { visible: root.deviceFolder && root.sync !== null && root.sync.needsConfirmation }
+                SyncStatusPanel {
+                    visible: root.deviceFolder
+                    onShowConflicts: root.showTab("conflicts")
+                }
+                SyncHistoryList {
+                    id: folderHistoryList
+                    visible: root.deviceFolder && folderHistoryList.runs.length > 0
+                }
                 SyncthingPanel {
                     Layout.fillWidth: true
                 }
@@ -370,12 +396,28 @@ FocusScope {
 
             // ---- Nextcloud --------------------------------------------------------------------
             Page {
-                SyncDeletionGuard {}
+                // A notebook syncing with a folder of the phone: Nextcloud waits (one way per notebook).
+                IoCard {
+                    visible: root.deviceFolder
+                    iconName: "folder-sync"
+                    title: qsTr("This notebook syncs with a folder of the phone")
+                    subtitle: qsTr("It syncs with the folder “%1”, so Nextcloud is off for it. To sync it with Nextcloud instead, stop syncing with the folder on the Syncthing tab.").arg(root.sync !== null ? root.sync.deviceFolderName : "")
+                    BButton {
+                        text: qsTr("Show the folder")
+                        iconName: "arrow-right"
+                        iconRight: true
+                        onClicked: root.showTab("syncthing")
+                    }
+                }
+                SyncDeletionGuard { visible: !root.deviceFolder && root.sync !== null && root.sync.needsConfirmation }
                 SyncStatusPanel {
-                    visible: root.sync !== null && (root.sync.configured || root.sync.state !== "disabled")
+                    visible: root.sync !== null && !root.deviceFolder && (root.sync.configured || root.sync.state !== "disabled")
                     onShowConflicts: root.showTab("conflicts")
                 }
-                SyncHistoryList { id: historyList }
+                SyncHistoryList {
+                    id: historyList
+                    visible: !root.deviceFolder && historyList.runs.length > 0
+                }
                 // What the app and the sync did, step by step — to check or to send to us.
                 RowLayout {
                     Layout.fillWidth: true
@@ -395,7 +437,7 @@ FocusScope {
                         onClicked: AppController.navigate({ view: "logs", group: "sync" })
                     }
                 }
-                NextcloudForm {}
+                NextcloudForm { visible: !root.deviceFolder }
             }
 
             // ---- GitHub -----------------------------------------------------------------------
