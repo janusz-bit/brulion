@@ -172,6 +172,17 @@ public:
     void setWebPictureDataUrls(bool on) { m_webDataUrls = on; }
     /// PDFs open in the app's viewer (true) or go to another app (false, the default).
     Q_INVOKABLE void setPdfViewable(bool viewable) { m_pdfViewable = viewable; }
+    /// Input rules and styles of blocks by tag as an extension declares them (tests, the
+    /// playground's self-test): setTagStyle() emits tagStylesChanged(); an empty tint removes one.
+    void setInputRules(const QList<InputRule> &rules) { m_inputRules = rules; }
+    Q_INVOKABLE void addInputRule(const QString &match, const QString &replace, bool word = false)
+    {
+        m_inputRules.append({match, replace, word});
+    }
+    Q_INVOKABLE void clearInputRules() { m_inputRules.clear(); }
+    Q_INVOKABLE void setTagStyle(const QString &tag, const QString &tint, bool fill = true, bool bar = true);
+    const QList<InputRule> &inputRules() const override { return m_inputRules; }
+    const QHash<QString, BlockTagStyle> &tagStyles() const override { return m_tagStyles; }
     /// The thumbnail pdfThumbnail(path, any page) answers with; emits pdfThumbnailChanged(path).
     Q_INVOKABLE void setPdfThumbnail(const QString &path, const QVariantMap &thumbnail);
     /// The pages pdfThumbnail() was asked for, "path#page" (tests).
@@ -273,6 +284,8 @@ private:
     bool m_queriesFail = false;
     QStringList m_undecodable;
     bool m_pdfViewable = false;
+    QList<InputRule> m_inputRules;
+    QHash<QString, BlockTagStyle> m_tagStyles;
     QHash<QString, QVariantMap> m_pdfThumbnails;
     mutable QStringList m_pdfAsks;
     QStringList m_openedElsewhere;

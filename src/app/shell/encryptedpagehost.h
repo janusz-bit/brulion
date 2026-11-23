@@ -95,6 +95,8 @@ public:
     markdown::MacroView macroView(const markdown::MacroSpan &macro, const QString &path) const override;
     QVariantList suggestMacros(const QString &prefix, int limit = 20) const override;
     QVariantList embeddableViews() const override;
+    const QList<editor::InputRule> &inputRules() const override;
+    const QHash<QString, editor::BlockTagStyle> &tagStyles() const override;
     std::optional<QString> templateVariable(const QString &extension, const QString &name, const QString &arguments,
                                             const QVariantMap &context) override;
     void navigate(const QVariantMap &route, bool newPane = false) override;

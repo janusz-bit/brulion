@@ -811,10 +811,12 @@ void Engine::stop()
     m_requireFactoryRef = 0;
     m_moduleCode.clear();
     m_asking = false;
-    if (!m_contributions.isEmpty() || !m_themes.isEmpty())
+    if (!m_contributions.isEmpty() || !m_themes.isEmpty() || !m_inputRules.isEmpty() || !m_tagStyles.isEmpty())
         ++m_appRevision;
     m_contributions.clear();
     m_themes.clear();
+    m_inputRules.clear();
+    m_tagStyles.clear();
 }
 
 void Engine::arm()
@@ -934,6 +936,10 @@ void Engine::pushEnvironment(const QString &extension)
     set("contribute", &Engine::apiAppContribute);
     set("remove", &Engine::apiAppRemove);
     set("contributions", &Engine::apiAppContributions);
+    set("inputRule", &Engine::apiAppInputRule);
+    set("inputRules", &Engine::apiAppInputRules);
+    set("tagStyle", &Engine::apiAppTagStyle);
+    set("tagStyles", &Engine::apiAppTagStyles);
     lua_setreadonly(L, -1, true);
     lua_setfield(L, -2, "app");
     lua_setreadonly(L, -1, true);
@@ -1375,6 +1381,34 @@ int Engine::apiAppRemove(lua_State *L)
 int Engine::apiAppContributions(lua_State *L)
 {
     return finishApi(L, self(L)->appContributionsImpl(L));
+}
+int Engine::apiAppInputRule(lua_State *L)
+{
+    return finishApi(L, self(L)->appInputRuleImpl(L));
+}
+int Engine::apiAppInputRules(lua_State *L)
+{
+    Engine *engine = self(L);
+    QVariantList out;
+    for (const InputRule &rule : engine->m_inputRules)
+        out << inputRuleTable(rule);
+    Unlimited unlimited(&engine->m_unlimited);
+    pushVariant(L, out);
+    return finishApi(L, 1);
+}
+int Engine::apiAppTagStyle(lua_State *L)
+{
+    return finishApi(L, self(L)->appTagStyleImpl(L));
+}
+int Engine::apiAppTagStyles(lua_State *L)
+{
+    Engine *engine = self(L);
+    QVariantList out;
+    for (const TagStyle &style : engine->m_tagStyles)
+        out << tagStyleTable(style);
+    Unlimited unlimited(&engine->m_unlimited);
+    pushVariant(L, out);
+    return finishApi(L, 1);
 }
 int Engine::apiReplaceBlock(lua_State *L) { return finishApi(L, self(L)->replaceImpl(L)); }
 int Engine::apiDaysBetween(lua_State *L) { return finishApi(L, self(L)->daysImpl(L)); }
@@ -3281,8 +3315,14 @@ int Engine::appRemoveImpl(lua_State *L)
     QString slot, id;
     if (!argString(L, 1, "b.app.remove", &slot) || !argOptString(L, 2, "b.app.remove", &id))
         return kRaise;
+    if (slot == u"inputRule" || slot == u"tagStyle") {
+        if (!mayChangeApp(L, extension, u"b.app.remove"_s, false))
+            return kRaise;
+        return appRemoveDeclarationImpl(L, extension, slot, id);
+    }
     if (!isContributionSlot(slot))
-        return failWith(L, u"b.app.remove: unknown slot “%1” (%2)"_s.arg(slot, contributionSlots().join(u", "_s)));
+        return failWith(L, u"b.app.remove: unknown slot “%1” (%2, or inputRule, tagStyle)"_s.arg(
+                                   slot, contributionSlots().join(u", "_s)));
     if (!mayChangeApp(L, extension, u"b.app.remove"_s, false))
         return kRaise;
     const qsizetype removed = m_contributions.removeIf([&](const Contribution &c) {
@@ -3312,11 +3352,115 @@ int Engine::appContributionsImpl(lua_State *L)
     return 1;
 }
 
+int Engine::appInputRuleImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    if (!mayChangeApp(L, extension, u"b.app.inputRule"_s, false))
+        return kRaise;
+    if (lua_type(L, 1) != LUA_TTABLE)
+        return failWith(L, u"b.app.inputRule: argument 1 is the rule ({ match = \"->\", replace = \"→\" })"_s);
+    QVariant table;
+    if (!argValue(L, 1, "b.app.inputRule", &table))
+        return kRaise;
+    InputRule rule;
+    QString error;
+    if (!inputRuleFrom(table.toMap(), &rule, &error))
+        return failWith(L, u"b.app.inputRule: "_s + error);
+    rule.extension = extension;
+    int own = 0;
+    for (InputRule &r : m_inputRules) {
+        if (r.extension != extension)
+            continue;
+        if (r.match == rule.match) {
+            if (r == rule)
+                return 0;
+            r = rule; // the same text typed: replaced in its place
+            ++m_appRevision;
+            m_host->appChanged(extension);
+            return 0;
+        }
+        ++own;
+    }
+    if (own >= MaxInputRulesPerExtension)
+        return failWith(L, u"b.app.inputRule: at most %1 rules of one extension"_s.arg(MaxInputRulesPerExtension));
+    if (m_inputRules.size() >= MaxInputRules)
+        return failWith(L, u"b.app.inputRule: at most %1 rules of all extensions"_s.arg(MaxInputRules));
+    m_inputRules.append(rule);
+    ++m_appRevision;
+    m_host->appChanged(extension);
+    return 0;
+}
+
+int Engine::appTagStyleImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    if (!mayChangeApp(L, extension, u"b.app.tagStyle"_s, false))
+        return kRaise;
+    if (lua_type(L, 1) != LUA_TTABLE)
+        return failWith(L, u"b.app.tagStyle: argument 1 is the style ({ tag = \"pilne\", tint = \"danger\" })"_s);
+    QVariant table;
+    if (!argValue(L, 1, "b.app.tagStyle", &table))
+        return kRaise;
+    TagStyle style;
+    QString error;
+    if (!tagStyleFrom(table.toMap(), &style, &error))
+        return failWith(L, u"b.app.tagStyle: "_s + error);
+    style.extension = extension;
+    const QString key = tagStyleKey(style.tag);
+    qsizetype at = -1;
+    int own = 0;
+    for (qsizetype i = 0; i < m_tagStyles.size(); ++i) {
+        if (m_tagStyles[i].extension != extension)
+            continue;
+        if (tagStyleKey(m_tagStyles[i].tag) == key)
+            at = i;
+        else
+            ++own;
+    }
+    if (at >= 0) {
+        if (m_tagStyles[at] == style)
+            return 0;
+        m_tagStyles.removeAt(at); // declared again: last, so it wins the tag
+    } else if (own >= MaxTagStylesPerExtension) {
+        return failWith(L, u"b.app.tagStyle: at most %1 styles of one extension"_s.arg(MaxTagStylesPerExtension));
+    } else if (m_tagStyles.size() >= MaxTagStyles) {
+        return failWith(L, u"b.app.tagStyle: at most %1 styles of all extensions"_s.arg(MaxTagStyles));
+    }
+    m_tagStyles.append(style);
+    ++m_appRevision;
+    m_host->appChanged(extension);
+    return 0;
+}
+
+int Engine::appRemoveDeclarationImpl(lua_State *L, const QString &extension, const QString &kind, const QString &key)
+{
+    qsizetype removed = 0;
+    if (kind == u"inputRule") {
+        removed = m_inputRules.removeIf([&](const InputRule &r) {
+            return r.extension == extension
+                   && (key.isEmpty() || r.match == key.normalized(QString::NormalizationForm_C));
+        });
+    } else {
+        const QString folded = tagStyleKey(key);
+        removed = m_tagStyles.removeIf([&](const TagStyle &t) {
+            return t.extension == extension && (key.isEmpty() || tagStyleKey(t.tag) == folded);
+        });
+    }
+    if (removed > 0) {
+        ++m_appRevision;
+        m_host->appChanged(extension);
+    }
+    lua_pushboolean(L, removed > 0);
+    return 1;
+}
+
 bool Engine::dropAppState(const QString &extension)
 {
     const qsizetype items = m_contributions.removeIf([&](const Contribution &c) { return c.extension == extension; });
     const qsizetype themes = m_themes.removeIf([&](const ThemeInfo &t) { return t.extension == extension; });
-    if (items + themes == 0)
+    const qsizetype rules = m_inputRules.removeIf([&](const InputRule &r) { return r.extension == extension; });
+    const qsizetype styles = m_tagStyles.removeIf([&](const TagStyle &t) { return t.extension == extension; });
+    if (items + themes + rules + styles == 0)
         return false;
     ++m_appRevision;
     return true;

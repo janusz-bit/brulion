@@ -783,7 +783,56 @@ ApplicationWindow {
         window.selfTestDialogs()
         window.selfTestQueries()
         window.selfTestDocument()
+        window.selfTestExtensionStyles()
         window.selfTestProbes()
+    }
+    // ---- Extensions' input rules and styles of blocks by tag (docs/UI.md "Input rules", "Styles
+    // of blocks by tag"), typed with real keys: a rule replaces as it is typed, Ctrl+Z brings the
+    // typed text back, nothing in a code span; a styled tag tints its block. ----------------------
+    function selfTestExtensionStyles(): void {
+        if (window.at()) {
+            page.save()
+            host.addInputRule("->", "→", false)
+            host.setFile("Reguły.md", "- Strzałka\n- Zadanie #pilne\n- Zwykły blok\n")
+            page.path = "Reguły.md"
+        }
+        if (window.at()) check(page.loaded && rowOf("Strzałka") === 0, "the page of the input rules opens")
+        if (window.at()) editor.startEditing(0, -1)
+        if (window.at()) typeKeys(" ->")
+        if (window.at()) check(info(0).plainText === "Strzałka →" && editor.activeEditor !== null
+                               && editor.activeEditor.cursorPosition === 10,
+                               "an input rule replaces the text as it is typed: " + info(0).plainText)
+        if (window.at()) realKey(Qt.Key_Z, Qt.ControlModifier, "")
+        if (window.at()) check(info(0).plainText === "Strzałka ->", "Ctrl+Z brings the typed text back: " + info(0).plainText)
+        if (window.at()) typeKeys(" `a->")
+        if (window.at()) check(info(0).editText === "Strzałka -> `a->", "nothing is replaced in a code span: " + info(0).editText)
+        if (window.at()) {
+            page.stopEditing()
+            host.setTagStyle("pilne", "danger", true, true)
+        }
+        if (window.at()) {
+            const tagged = window.shownItem(rowOf("Zadanie"))
+            const plain = window.shownItem(rowOf("Zwykły"))
+            const tint = tagged ? window.findItem(tagged, "tagTint") : null
+            const bar = tagged ? window.findItem(tagged, "tagTintBar") : null
+            check(tint !== null && tint.visible && tint.width > 0 && tint.height > 0 && bar !== null && bar.visible,
+                  "a block with a styled tag is tinted, with a bar")
+            check(plain !== null && window.findItem(plain, "tagTint") === null, "a block without the tag is not")
+        }
+        if (window.at()) host.setTagStyle("pilne", "#12ab34", false, true)
+        if (window.at()) {
+            const tagged = window.shownItem(rowOf("Zadanie"))
+            const bar = tagged ? window.findItem(tagged, "tagTintBar") : null
+            check(bar !== null && bar.visible, "a colour's style shows its bar alone")
+        }
+        if (window.at()) {
+            host.setTagStyle("pilne", "", true, true)
+            host.clearInputRules()
+        }
+        if (window.at()) {
+            const tagged = window.shownItem(rowOf("Zadanie"))
+            check(tagged !== null && window.findItem(tagged, "tagTint") === null, "the style gone, so is the tint")
+        }
     }
     function selfTestOutline(): void {
         const r = window.baseRow

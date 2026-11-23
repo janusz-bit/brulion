@@ -440,6 +440,10 @@ public:
     Q_INVOKABLE QString contributionsKey(const QString &slot, int revision = 0) const;
     /// The theme overrides of the extensions running (Engine::themes()).
     QList<extensions::ThemeInfo> themes() const;
+    /// The input rules and the styles of blocks by tag of the extensions running
+    /// (Engine::inputRules(), Engine::tagStyles(); appRevisionChanged() when they change).
+    QList<extensions::InputRule> inputRules() const;
+    QList<extensions::TagStyle> tagStyles() const;
     /// The main view's route changed (AppController): "route" hooks hear {view, page?, path?,
     /// date?, previous} once it settled (a burst of changes is one event).
     void routeChanged(const QVariantMap &route);

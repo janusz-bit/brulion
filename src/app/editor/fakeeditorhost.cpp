@@ -1094,4 +1094,13 @@ void FakeEditorHost::setMacroView(const QString &macro, const markdown::MacroVie
     Q_EMIT macrosChanged();
 }
 
+void FakeEditorHost::setTagStyle(const QString &tag, const QString &tint, bool fill, bool bar)
+{
+    if (tint.isEmpty())
+        m_tagStyles.remove(tag.toLower());
+    else
+        m_tagStyles.insert(tag.toLower(), BlockTagStyle{tint, fill, bar});
+    Q_EMIT tagStylesChanged();
+}
+
 } // namespace brulion::editor

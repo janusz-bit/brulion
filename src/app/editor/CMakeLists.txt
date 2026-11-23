@@ -35,6 +35,7 @@ endif()
 
 qt_add_library(brulion_editor STATIC
     blocktext.h blocktext.cpp
+    inputrules.h inputrules.cpp
     blockrender_p.h
     blocklistmodel.h blocklistmodel.cpp blocklistmodel_transclusions.cpp
     blockrowdata.h blockrowdata.cpp

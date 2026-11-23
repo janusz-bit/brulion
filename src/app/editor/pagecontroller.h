@@ -1276,6 +1276,9 @@ private:
     /// mode), else when they are again.
     void onIndexChanged();
     /// EditorHost::macrosChanged: the rows that show a macro ask what it shows now (when shown).
+    /// After typing (setEditText): the host's input rules (EditorHost::inputRules) on the text
+    /// typed before the caret — a replacement as an undo step of its own.
+    void applyInputRule(int row, const QString &previous, const QString &edit, int cursor);
     void onMacrosChanged();
     /// What onIndexChanged() / onMacrosChanged() left for later, now that the rows may be shown.
     void followStaleRows();

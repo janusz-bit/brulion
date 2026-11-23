@@ -501,6 +501,8 @@ end, { label = "How many open tasks" })
 | `b.app.theme({ … })` | Brulion's colours, corners and fonts while the extension runs (below) |
 | `b.app.contribute(place, item)` | puts a button or an entry into the app (below) |
 | `b.app.remove(place, id)`, `b.app.contributions()` | takes one away; lists every extension's |
+| `b.app.inputRule({ match = "->", replace = "→" })`, `b.app.inputRules()` | text replaced as you type (below); every extension's rules |
+| `b.app.tagStyle({ tag = "pilne", tint = "danger" })`, `b.app.tagStyles()` | blocks with a tag drawn in a colour (below); every extension's styles |
 
 Moving around (`navigate`, `open`, `back`, `run`) and messages happen after the call — in commands, actions and reactions, not while the page loads. `"route"` among the reactions runs when the screen shows something else: `e.view`, `e.page`, `e.date`.
 
@@ -540,6 +542,26 @@ b.app.contribute("slash", {
     label = "Meeting notes",
     insert = "## Meeting\n- Who:\n- Decisions:\n- [ ] Next step",
 })
+```
+
+**As you type.** `b.app.inputRule({ match, replace })` replaces text the moment you type it: `->` becomes `→` when you type the `>`. One Ctrl+Z brings back what you typed. With `word = true` only a whole word is replaced, once you type a space or punctuation after it. Nothing is replaced in code, formulas, link targets or web addresses, nor when you paste. Brulion comes with no rules of its own — an extension declares the ones you want — and `b.app.remove("inputRule", "->")` takes one away.
+
+```luau
+-- Arrows and dashes as you type, and a word corrected.
+b.app.inputRule({ match = "->", replace = "→" })
+b.app.inputRule({ match = "<-", replace = "←" })
+b.app.inputRule({ match = "--", replace = "–" })
+b.app.inputRule({ match = "...", replace = "…" })
+b.app.inputRule({ match = "teh", replace = "the", word = true })
+```
+
+**Blocks by tag.** `b.app.tagStyle({ tag, tint })` draws every block with that tag on a coloured background with a bar at its left edge. The `tint` is one of the theme's colours — `"accent"`, `"success"`, `"danger"`, `"warning"`, `"info"`, `"neutral"`, which follow the light and the dark mode — or a colour `"#rrggbb"`. `fill = false` keeps only the bar, `bar = false` only the background. A style of `projekt` also colours `#projekt/dom`.
+
+```luau
+-- Urgent blocks on red, waiting ones with an amber bar.
+b.app.tagStyle({ tag = "pilne", tint = "danger" })
+b.app.tagStyle({ tag = "waiting", tint = "warning", fill = false })
+b.app.tagStyle({ tag = "idea", tint = "#8e6cd8" })
 ```
 
 An AI agent you work with can do all of this in the running app at once, without a page — and you can undo it in the top bar's **Live** menu. See [[Extensions]] and the developer's reference.

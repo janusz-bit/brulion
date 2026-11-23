@@ -85,6 +85,16 @@ QList<extensions::ThemeInfo> WorkspaceExtensions::themes() const
     return m_engine ? m_engine->themes() : QList<extensions::ThemeInfo>();
 }
 
+QList<extensions::InputRule> WorkspaceExtensions::inputRules() const
+{
+    return m_engine ? m_engine->inputRules() : QList<extensions::InputRule>();
+}
+
+QList<extensions::TagStyle> WorkspaceExtensions::tagStyles() const
+{
+    return m_engine ? m_engine->tagStyles() : QList<extensions::TagStyle>();
+}
+
 void WorkspaceExtensions::routeChanged(const QVariantMap &route)
 {
     // A burst (a route replaced while a view settles, back and forth) is one event, once it settled.
@@ -181,6 +191,17 @@ QVariantMap WorkspaceExtensions::loadLive(const QString &id, const QString &sour
         for (const extensions::ThemeInfo &t : m_engine->themes())
             if (t.extension == id)
                 out.insert(u"theme"_s, extensions::themeLayerTable(t.layer));
+        QVariantList rules, styles;
+        for (const extensions::InputRule &rule : m_engine->inputRules())
+            if (rule.extension == id)
+                rules << extensions::inputRuleTable(rule);
+        for (const extensions::TagStyle &style : m_engine->tagStyles())
+            if (style.extension == id)
+                styles << extensions::tagStyleTable(style);
+        if (!rules.isEmpty())
+            out.insert(u"inputRules"_s, rules);
+        if (!styles.isEmpty())
+            out.insert(u"tagStyles"_s, styles);
     }
     out.insert(u"commands"_s, commands);
     out.insert(u"views"_s, views);

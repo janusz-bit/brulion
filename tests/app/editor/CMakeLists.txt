@@ -392,3 +392,9 @@ set_tests_properties(tst_editor_pageitem PROPERTIES
 brulion_add_test(tst_editor_journalday
     SOURCES tst_editor_journalday.cpp
     LIBS brulion_editor brulion_core_markdown)
+# Extensions' input rules (b.app.inputRule: text replaced as it is typed, never in code, math or
+# link targets, one undo step of its own) and styles of blocks by tag (b.app.tagStyle: the rows'
+# tint).
+brulion_add_test(tst_editor_inputrules
+    SOURCES tst_editor_inputrules.cpp
+    LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)

@@ -96,4 +96,14 @@ QVariantMap BlockRowData::propertiesInfo() const
     return value(PropertiesInfo, "propertiesInfo", &BlockRowData::propertiesInfoChanged).toMap();
 }
 
+QString BlockRowData::tagTint() const
+{
+    return value(TagTint, "tagTint", &BlockRowData::tagTintChanged).toString();
+}
+
+int BlockRowData::tagTintMode() const
+{
+    return value(TagTintMode, "tagTintMode", &BlockRowData::tagTintModeChanged).toInt();
+}
+
 } // namespace brulion::editor

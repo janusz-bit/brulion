@@ -497,6 +497,241 @@ private Q_SLOTS:
         QCOMPARE(m_engine.contributions().size(), 1);
     }
 
+    // ---- input rules and styles of blocks by tag -------------------------------------------------------
+
+    void inputRulesAreChecked_data()
+    {
+        QTest::addColumn<QVariantMap>("table");
+        QTest::addColumn<QString>("error");
+        QTest::newRow("arrow") << QVariantMap{{u"match"_s, u"->"_s}, {u"replace"_s, u"→"_s}} << QString();
+        QTest::newRow("word") << QVariantMap{{u"match"_s, u"zolw"_s}, {u"replace"_s, u"żółw"_s}, {u"word"_s, true}}
+                              << QString();
+        QTest::newRow("spaces in the match")
+                << QVariantMap{{u"match"_s, u" - "_s}, {u"replace"_s, u" – "_s}} << QString();
+        QTest::newRow("removing the match") << QVariantMap{{u"match"_s, u"!!"_s}, {u"replace"_s, u""_s}} << QString();
+        QTest::newRow("no match") << QVariantMap{{u"replace"_s, u"→"_s}} << u"needs “match”"_s;
+        QTest::newRow("empty match") << QVariantMap{{u"match"_s, u""_s}, {u"replace"_s, u"→"_s}} << u"needs “match”"_s;
+        QTest::newRow("match not text") << QVariantMap{{u"match"_s, 5}, {u"replace"_s, u"→"_s}} << u"needs “match”"_s;
+        QTest::newRow("no replace") << QVariantMap{{u"match"_s, u"->"_s}} << u"needs “replace”"_s;
+        QTest::newRow("misspelt field") << QVariantMap{{u"match"_s, u"->"_s}, {u"replce"_s, u"→"_s}}
+                                        << u"no field “replce”"_s;
+        QTest::newRow("long match") << QVariantMap{{u"match"_s, QString(33, u'ą')}, {u"replace"_s, u"x"_s}}
+                                    << u"at most 32"_s;
+        QTest::newRow("long replace") << QVariantMap{{u"match"_s, u"x"_s}, {u"replace"_s, QString(201, u'ż')}}
+                                      << u"at most 200"_s;
+        QTest::newRow("line break") << QVariantMap{{u"match"_s, u"--"_s}, {u"replace"_s, u"a\nb"_s}} << u"one line"_s;
+        QTest::newRow("the same") << QVariantMap{{u"match"_s, u"--"_s}, {u"replace"_s, u"--"_s}} << u"itself"_s;
+        QTest::newRow("word with spaces")
+                << QVariantMap{{u"match"_s, u"teh "_s}, {u"replace"_s, u"the"_s}, {u"word"_s, true}}
+                << u"no spaces around"_s;
+        QTest::newRow("word not a boolean")
+                << QVariantMap{{u"match"_s, u"teh"_s}, {u"replace"_s, u"the"_s}, {u"word"_s, u"yes"_s}}
+                << u"“word” is true or false"_s;
+    }
+    void inputRulesAreChecked()
+    {
+        QFETCH(QVariantMap, table);
+        QFETCH(QString, error);
+        InputRule rule;
+        QString why;
+        const bool ok = inputRuleFrom(table, &rule, &why);
+        QCOMPARE(ok, error.isEmpty());
+        if (!ok)
+            QVERIFY2(why.contains(error), qPrintable(why));
+        else
+            QCOMPARE(rule.match, table.value(u"match"_s).toString());
+    }
+
+    void inputRulesFromLuau()
+    {
+        QVERIFY(m_engine.load(ext(u"strzalki"_s, uR"lua(
+            b.app.inputRule({ match = "->", replace = "→" })
+            b.app.inputRule({ match = "<-", replace = "←" })
+            b.app.inputRule({ match = "zolw", replace = "żółw", word = true })
+        )lua"_s))
+                        .ok());
+        QCOMPARE(m_engine.inputRules().size(), 3);
+        QCOMPARE(m_engine.inputRules().first().extension, u"strzalki"_s);
+        QCOMPARE(m_engine.inputRules().first().replace, u"→"_s);
+        QVERIFY(m_engine.inputRules().last().word);
+        QVERIFY(m_host.changed.contains(u"strzalki"_s));
+        const int revision = m_engine.appRevision();
+        // The same rule again changes nothing; the same match replaces the rule in its place.
+        QVERIFY(eval(u"b.app.inputRule({ match = \"->\", replace = \"→\" })"_s, u"strzalki"_s).ok());
+        QCOMPARE(m_engine.appRevision(), revision);
+        QVERIFY(eval(u"b.app.inputRule({ match = \"->\", replace = \"⇒\" })"_s, u"strzalki"_s).ok());
+        QCOMPARE(m_engine.inputRules().size(), 3);
+        QCOMPARE(m_engine.inputRules().first().replace, u"⇒"_s);
+        QVERIFY(m_engine.appRevision() > revision);
+        // Listed as tables, with their extension.
+        const Result list = eval(
+                u"local r = b.app.inputRules() return r[3].match .. r[3].replace .. tostring(r[3].word) .. r[1].extension"_s,
+                u"strzalki"_s);
+        QVERIFY2(list.ok(), qPrintable(list.error));
+        QCOMPARE(list.value.toString(), u"zolwżółwtruestrzalki"_s);
+        // Taken away one by one, or all of them.
+        const Result removed = eval(u"return b.app.remove(\"inputRule\", \"<-\")"_s, u"strzalki"_s);
+        QVERIFY(removed.ok() && removed.value.toBool());
+        QCOMPARE(m_engine.inputRules().size(), 2);
+        const Result again = eval(u"return b.app.remove(\"inputRule\", \"<-\")"_s, u"strzalki"_s);
+        QVERIFY(again.ok() && !again.value.toBool());
+        // An error names the function and keeps nothing.
+        const Result bad = eval(u"b.app.inputRule({ match = \"\", replace = \"x\" })"_s, u"strzalki"_s);
+        QVERIFY(!bad.ok());
+        QVERIFY2(bad.error.contains(u"b.app.inputRule: an input rule needs “match”"_s), qPrintable(bad.error));
+        const Result notTable = eval(u"b.app.inputRule(\"->\")"_s, u"strzalki"_s);
+        QVERIFY(!notTable.ok());
+        QVERIFY2(notTable.error.contains(u"argument 1 is the rule"_s), qPrintable(notTable.error));
+        QCOMPARE(m_engine.inputRules().size(), 2);
+        // Loaded again, the old version's rules go first; unloaded, all of them.
+        QVERIFY(m_engine.load(ext(u"strzalki"_s, u"b.app.inputRule({ match = \"(c)\", replace = \"©\" })"_s)).ok());
+        QCOMPARE(m_engine.inputRules().size(), 1);
+        QCOMPARE(m_engine.inputRules().first().match, u"(c)"_s);
+        QVERIFY(eval(u"b.app.remove(\"inputRule\")"_s, u"strzalki"_s).ok());
+        QVERIFY(m_engine.inputRules().isEmpty());
+        QVERIFY(eval(u"b.app.inputRule({ match = \"(c)\", replace = \"©\" })"_s, u"strzalki"_s).ok());
+        m_engine.unload(u"strzalki"_s);
+        QVERIFY(m_engine.inputRules().isEmpty());
+    }
+
+    void inputRulesHaveLimits()
+    {
+        const Result r = m_engine.load(ext(u"x"_s, uR"lua(
+            for i = 1, 65 do b.app.inputRule({ match = "r" .. i, replace = "R" }) end
+        )lua"_s));
+        QVERIFY(!r.ok());
+        QVERIFY2(r.error.contains(u"at most 64 rules of one extension"_s), qPrintable(r.error));
+        QVERIFY(m_engine.inputRules().isEmpty());
+        for (int e = 0; e < 4; ++e)
+            QVERIFY(m_engine.load(ext(u"e%1"_s.arg(e), uR"lua(
+                for i = 1, 64 do b.app.inputRule({ match = "r" .. i, replace = "R" }) end
+            )lua"_s))
+                            .ok());
+        const Result full = m_engine.load(ext(u"e4"_s, u"b.app.inputRule({ match = \"q\", replace = \"Q\" })"_s));
+        QVERIFY(!full.ok());
+        QVERIFY2(full.error.contains(u"of all extensions"_s), qPrintable(full.error));
+    }
+
+    void hostileRulesAndStyles()
+    {
+        // Thousands of calls with the same match or tag: one rule, one style, the engine fine.
+        const Result loop = m_engine.load(ext(u"h"_s, uR"lua(
+            for i = 1, 100000 do
+                b.app.inputRule({ match = "->", replace = "→" .. (i % 3) })
+                b.app.tagStyle({ tag = "t", tint = if i % 2 == 0 then "info" else "danger" })
+            end
+        )lua"_s));
+        QVERIFY2(loop.ok() || loop.status == Status::Timeout, qPrintable(loop.error));
+        QVERIFY(m_engine.inputRules().size() <= 1);
+        QVERIFY(m_engine.tagStyles().size() <= 1);
+        const Result big =
+                m_engine.load(ext(u"h"_s, u"b.app.inputRule({ match = \"x\", replace = string.rep(\"ą\", 1e6) })"_s));
+        QVERIFY(!big.ok());
+        QVERIFY2(big.error.contains(u"at most 200"_s), qPrintable(big.error));
+    }
+
+    void tagStylesAreChecked_data()
+    {
+        QTest::addColumn<QVariantMap>("table");
+        QTest::addColumn<QString>("tag");
+        QTest::addColumn<QString>("tint");
+        QTest::addColumn<QString>("error");
+        QTest::newRow("theme tint") << QVariantMap{{u"tag"_s, u"pilne"_s}, {u"tint"_s, u"danger"_s}} << u"pilne"_s
+                                    << u"danger"_s << QString();
+        QTest::newRow("with its hash") << QVariantMap{{u"tag"_s, u"#ważne"_s}, {u"tint"_s, u"warning"_s}} << u"ważne"_s
+                                       << u"warning"_s << QString();
+        QTest::newRow("a tag with spaces") << QVariantMap{{u"tag"_s, u"#[[Jan Kowalski]]"_s}, {u"tint"_s, u"info"_s}}
+                                           << u"Jan Kowalski"_s << u"info"_s << QString();
+        QTest::newRow("nested tag") << QVariantMap{{u"tag"_s, u"Projekt/Dom/"_s}, {u"tint"_s, u"neutral"_s}}
+                                    << u"Projekt/Dom"_s << u"neutral"_s << QString();
+        QTest::newRow("colour") << QVariantMap{{u"tag"_s, u"x"_s}, {u"tint"_s, u"#12AB34"_s}} << u"x"_s << u"#12ab34"_s
+                                << QString();
+        QTest::newRow("short colour") << QVariantMap{{u"tag"_s, u"x"_s}, {u"tint"_s, u"#abc"_s}} << u"x"_s
+                                      << u"#aabbcc"_s << QString();
+        QTest::newRow("bar only") << QVariantMap{{u"tag"_s, u"x"_s}, {u"tint"_s, u"accent"_s}, {u"fill"_s, false}}
+                                  << u"x"_s << u"accent"_s << QString();
+        QTest::newRow("no tag") << QVariantMap{{u"tint"_s, u"danger"_s}} << QString() << QString() << u"needs “tag”"_s;
+        QTest::newRow("no tag's name") << QVariantMap{{u"tag"_s, u"a]b"_s}, {u"tint"_s, u"danger"_s}} << QString()
+                                       << QString() << u"no tag's name"_s;
+        QTest::newRow("alpha colour") << QVariantMap{{u"tag"_s, u"x"_s}, {u"tint"_s, u"#80ff0000"_s}} << QString()
+                                      << QString() << u"“tint” is one of"_s;
+        QTest::newRow("CSS") << QVariantMap{{u"tag"_s, u"x"_s}, {u"tint"_s, u"red; background: url(x)"_s}} << QString()
+                             << QString() << u"“tint” is one of"_s;
+        QTest::newRow("unknown tint") << QVariantMap{{u"tag"_s, u"x"_s}, {u"tint"_s, u"pink"_s}} << QString()
+                                      << QString() << u"“tint” is one of"_s;
+        QTest::newRow("nothing shown") << QVariantMap{{u"tag"_s, u"x"_s},
+                                                      {u"tint"_s, u"info"_s},
+                                                      {u"fill"_s, false},
+                                                      {u"bar"_s, false}}
+                                       << QString() << QString() << u"a “fill”, a “bar” or both"_s;
+        QTest::newRow("misspelt field") << QVariantMap{{u"tag"_s, u"x"_s}, {u"tint"_s, u"info"_s}, {u"colour"_s, 1}}
+                                        << QString() << QString() << u"no field “colour”"_s;
+    }
+    void tagStylesAreChecked()
+    {
+        QFETCH(QVariantMap, table);
+        QFETCH(QString, tag);
+        QFETCH(QString, tint);
+        QFETCH(QString, error);
+        TagStyle style;
+        QString why;
+        const bool ok = tagStyleFrom(table, &style, &why);
+        QCOMPARE(ok, error.isEmpty());
+        if (!ok) {
+            QVERIFY2(why.contains(error), qPrintable(why));
+            return;
+        }
+        QCOMPARE(style.tag, tag);
+        QCOMPARE(style.tint, tint);
+        QCOMPARE(style.fill, table.value(u"fill"_s, true).toBool());
+    }
+
+    void tagStyleKeys()
+    {
+        QCOMPARE(tagStyleKey(u"#Pilne"_s), u"pilne"_s);
+        QCOMPARE(tagStyleKey(u"ŻÓŁW"_s), u"żółw"_s);
+        QCOMPARE(tagStyleKey(u"#[[Jan Kowalski]]"_s), u"jan kowalski"_s);
+        QCOMPARE(tagStyleKey(u"Projekt/Dom/"_s), u"projekt/dom"_s);
+        QCOMPARE(tagStyleKey(u"#"_s), QString());
+        QCOMPARE(tagStyleKey(u"a|b"_s), QString());
+    }
+
+    void tagStylesFromLuau()
+    {
+        QVERIFY(m_engine.load(ext(u"kolory"_s, uR"lua(
+            b.app.tagStyle({ tag = "pilne", tint = "danger" })
+            b.app.tagStyle({ tag = "projekt", tint = string.char(35) .. "1f8a80", fill = false })
+        )lua"_s))
+                        .ok());
+        QCOMPARE(m_engine.tagStyles().size(), 2);
+        QCOMPARE(m_engine.tagStyles().first().tint, u"danger"_s);
+        QCOMPARE(m_engine.tagStyles().last().tint, u"#1f8a80"_s);
+        QVERIFY(!m_engine.tagStyles().last().fill);
+        // The same tag (any case, with its '#'): replaced, and last now.
+        QVERIFY(eval(u"b.app.tagStyle({ tag = \"#PILNE\", tint = \"warning\" })"_s, u"kolory"_s).ok());
+        QCOMPARE(m_engine.tagStyles().size(), 2);
+        QCOMPARE(m_engine.tagStyles().last().tint, u"warning"_s);
+        QCOMPARE(m_engine.tagStyles().last().tag, u"PILNE"_s);
+        // Another extension's style of the tag is declared after it: it wins.
+        QVERIFY(m_engine.load(ext(u"inne"_s, u"b.app.tagStyle({ tag = \"pilne\", tint = \"info\" })"_s)).ok());
+        QCOMPARE(m_engine.tagStyles().last().extension, u"inne"_s);
+        const Result list = eval(
+                u"local s = b.app.tagStyles() return #s .. s[1].tag .. s[1].tint .. tostring(s[1].fill)"_s, u"inne"_s);
+        QVERIFY2(list.ok(), qPrintable(list.error));
+        QCOMPARE(list.value.toString(), u"3projekt#1f8a80false"_s);
+        // Removed by its tag (one cannot remove another's), then by the extension going.
+        const Result removed = eval(u"return b.app.remove(\"tagStyle\", \"#Pilne\")"_s, u"kolory"_s);
+        QVERIFY(removed.ok() && removed.value.toBool());
+        QCOMPARE(m_engine.tagStyles().size(), 2);
+        m_engine.unload(u"kolory"_s);
+        QCOMPARE(m_engine.tagStyles().size(), 1);
+        QCOMPARE(m_engine.tagStyles().first().extension, u"inne"_s);
+        const Result bad = eval(u"b.app.tagStyle({ tag = \"pilne\", tint = \"red\" })"_s, u"inne"_s);
+        QVERIFY(!bad.ok());
+        QVERIFY2(bad.error.contains(u"b.app.tagStyle: “tint” is one of"_s), qPrintable(bad.error));
+        QCOMPARE(m_engine.tagStyles().first().tint, u"info"_s);
+    }
+
     // ---- the app's operations ------------------------------------------------------------------------
 
     void readingNeedsNoPermission()
@@ -527,6 +762,9 @@ private Q_SLOTS:
         QTest::newRow("theme") << u"b.app.theme({ accent = \"#000\" })"_s;
         QTest::newRow("contribute") << u"b.app.contribute(\"statusbar\", { id = \"a\", label = \"A\" })"_s;
         QTest::newRow("remove") << u"b.app.remove(\"statusbar\")"_s;
+        QTest::newRow("inputRule") << u"b.app.inputRule({ match = \"->\", replace = \"→\" })"_s;
+        QTest::newRow("tagStyle") << u"b.app.tagStyle({ tag = \"pilne\", tint = \"danger\" })"_s;
+        QTest::newRow("remove inputRule") << u"b.app.remove(\"inputRule\")"_s;
     }
     void changesNeedThePermission()
     {
@@ -729,11 +967,16 @@ private Q_SLOTS:
             b.command("go", function() end)
             b.app.contribute("toolbar", { id = "go", label = "Go", icon = "play", command = "go" })
             b.app.theme({ accent = string.char(35) .. "123456" })
+            b.app.inputRule({ match = "->", replace = "→" })
+            b.app.tagStyle({ tag = "pilne", tint = "danger", bar = false })
         )lua"_s);
         const QVariantMap report = checkExtension(vault, index, e, options);
         QVERIFY2(report.value(u"ok"_s).toBool(), qPrintable(report.value(u"error"_s).toString()));
         QCOMPARE(report.value(u"contributions"_s).toList().size(), 1);
         QCOMPARE(report.value(u"theme"_s).toMap().value(u"accent"_s).toString(), u"#123456"_s);
+        QCOMPARE(report.value(u"inputRules"_s).toList().size(), 1);
+        QCOMPARE(report.value(u"inputRules"_s).toList().first().toMap().value(u"replace"_s).toString(), u"→"_s);
+        QCOMPARE(report.value(u"tagStyles"_s).toList().first().toMap().value(u"bar"_s).toBool(), false);
     }
 
     void appIsNotThereWithoutTheApp()

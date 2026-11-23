@@ -31,6 +31,7 @@ void EncryptedPageHost::setInner(EditorHost *inner)
         connect(m_inner, &EditorHost::webPictureChanged, this, &EditorHost::webPictureChanged);
         connect(m_inner, &EditorHost::pdfThumbnailChanged, this, &EditorHost::pdfThumbnailChanged);
         connect(m_inner, &EditorHost::macrosChanged, this, &EditorHost::macrosChanged);
+        connect(m_inner, &EditorHost::tagStylesChanged, this, &EditorHost::tagStylesChanged);
     }
     Q_EMIT innerChanged();
 }
@@ -399,6 +400,16 @@ bool EncryptedPageHost::rendersMacros() const
 markdown::MacroView EncryptedPageHost::macroView(const markdown::MacroSpan &macro, const QString &path) const
 {
     return m_inner ? m_inner->macroView(macro, path) : EditorHost::macroView(macro, path);
+}
+
+const QList<editor::InputRule> &EncryptedPageHost::inputRules() const
+{
+    return m_inner ? m_inner->inputRules() : EditorHost::inputRules();
+}
+
+const QHash<QString, editor::BlockTagStyle> &EncryptedPageHost::tagStyles() const
+{
+    return m_inner ? m_inner->tagStyles() : EditorHost::tagStyles();
 }
 
 QVariantList EncryptedPageHost::suggestMacros(const QString &prefix, int limit) const

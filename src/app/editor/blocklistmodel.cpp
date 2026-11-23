@@ -72,7 +72,9 @@ const QList<int> TextRoles{Qt::DisplayRole,
                            BlockListModel::PlainTextRole,
                            BlockListModel::TransclusionsRole,
                            BlockListModel::ListMarkerRole,
-                           BlockListModel::NoteModeOnlyRole};
+                           BlockListModel::NoteModeOnlyRole,
+                           BlockListModel::TagTintRole,
+                           BlockListModel::TagTintModeRole};
 
 /// Where a selected row sits in the band of selected visible rows (selectionEdge role).
 enum SelectionEdge : quint8 { NoEdge, SingleEdge, FirstEdge, MiddleEdge, LastEdge };
@@ -497,6 +499,8 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {PropertiesInfoRole, "propertiesInfo"},
             {TaskDatedRole, "taskDated"},
             {ShownRole, "shown"},
+            {TagTintRole, "tagTint"},
+            {TagTintModeRole, "tagTintMode"},
     };
     return names;
 }
@@ -2201,6 +2205,11 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case EditOffsetRole: return cachedShape(row).editOffset;
     case HtmlRole: return renderHtml(i);
     case RenderedTextRole: return QVariant::fromValue(RenderedTextRef{renderedTextAt(i)});
+    case TagTintRole: return tagStyleOf(e).tint;
+    case TagTintModeRole: {
+        const BlockTagStyle style = tagStyleOf(e);
+        return style.tint.isEmpty() ? 0 : (style.fill ? 1 : 0) | (style.bar ? 2 : 0);
+    }
     case DepthRole: return st.displayDepth;
     case DocDepthRole: return e.depth;
     case KindRole: return kindName(e.kind);
@@ -2632,6 +2641,36 @@ void BlockListModel::followIndex()
     emitRowsChanged(propertyRows, {PropertiesRole});
     emitRowsChanged(tableRows, {TableDataRole});
     emitRowsChanged(chartRows, {ChartDataRole});
+}
+
+BlockTagStyle BlockListModel::tagStyleOf(const markdown::BlockEntry &e) const
+{
+    if (!m_host)
+        return {};
+    const QHash<QString, BlockTagStyle> &styles = m_host->tagStyles();
+    if (styles.isEmpty() || e.kind == BlockKind::Code || e.kind == BlockKind::Frontmatter || e.kind == BlockKind::Html
+        || e.kind == BlockKind::Rule)
+        return {};
+    for (const markdown::TagSpan &tag : markdown::findTags(e.body)) {
+        // The tag itself, else its parents (`#projekt/dom` by the style of `projekt`).
+        QString name = tag.name.toLower();
+        while (!name.isEmpty()) {
+            const auto it = styles.constFind(name);
+            if (it != styles.cend())
+                return *it;
+            const qsizetype slash = name.lastIndexOf(u'/');
+            if (slash < 0)
+                break;
+            name.truncate(slash);
+        }
+    }
+    return {};
+}
+
+void BlockListModel::followTagStyles()
+{
+    if (!m_rows.isEmpty())
+        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {TagTintRole, TagTintModeRole});
 }
 
 void BlockListModel::followMacros()
