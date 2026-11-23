@@ -6,6 +6,7 @@
 #include "pdfrenderpool.h"
 #include "pdfsearch.h"
 
+#include "attachments/documenttext.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
 #include "text/text.h"
@@ -64,6 +65,16 @@ bool isOcrPicture(const QString &path)
             return true;
     }
     return false;
+}
+
+/// What the file is read as: a PDF, a document (DOCX, PPTX, ODT, EPUB) or else a picture.
+Kind kindOfFile(const QString &path)
+{
+    if (paths::isPdfPath(path))
+        return Kind::Pdf;
+    if (const std::optional<attachments::DocumentFormat> format = attachments::documentFormatOf(path))
+        return attachments::kindOf(*format);
+    return Kind::Picture;
 }
 
 /// This device decodes the picture's format (WebP needs Qt's image plugins, which some builds lack).
@@ -155,7 +166,8 @@ Page pageFromOcr(const platform::OcrResult &result, QSize picture, const QString
 
 bool isSearchableAttachment(const QString &path)
 {
-    return VaultIndex::isIndexable(path) && (paths::isPdfPath(path) || isOcrPicture(path));
+    return VaultIndex::isIndexable(path)
+           && (paths::isPdfPath(path) || isOcrPicture(path) || attachments::documentFormatOf(path).has_value());
 }
 
 QRectF unorientedBox(const QRectF &box, int transformation)
@@ -425,6 +437,18 @@ std::optional<QByteArray> IndexerWorker::hashOf(const QString &file)
 
 std::optional<Record> IndexerWorker::extract(const AttachmentIndexer::FileJob &job, Kind kind)
 {
+    if (const std::optional<attachments::DocumentFormat> format = attachments::documentFormatOf(kind)) {
+        // A document: its paragraphs from its XML, bounded (core attachments/documenttext.h) — quick
+        // enough to read whole between two checks of the stop flag.
+        QFile file(job.file);
+        if (!file.open(QIODevice::ReadOnly))
+            return std::nullopt; // (gone or unreadable now: a change queues it again)
+        const std::optional<attachments::DocumentText> text =
+                attachments::extractDocumentText(file, *format, {}, [this] { return stopped(); });
+        if (!text)
+            return std::nullopt; // (stopping)
+        return attachments::documentRecord(*format, *text, AttachmentIndexer::ExtractorVersion);
+    }
     Record record;
     record.kind = kind;
     record.extractor = AttachmentIndexer::ExtractorVersion;
@@ -500,7 +524,7 @@ void IndexerWorker::processText(const AttachmentIndexer::FileJob &job)
     // A link to a file elsewhere is never read (Vault::reaches()).
     if (QFileInfo(job.file).isSymLink())
         return;
-    const Kind kind = paths::isPdfPath(job.path) ? Kind::Pdf : Kind::Picture;
+    const Kind kind = kindOfFile(job.path);
     m_currentFile = job.path;
     m_currentPage = 0;
     m_currentPages = 0;
@@ -518,6 +542,13 @@ void IndexerWorker::processText(const AttachmentIndexer::FileJob &job)
             known = *it;
     }
     const bool ocr = settings.ocr && !settings.languages.isEmpty() && platform::ocrAvailable();
+    // A document too large to read (a hostile or a huge file): only its name is searched.
+    if (attachments::isDocumentKind(kind) && !known && QFileInfo(job.file).size() > attachments::DocumentLimits().maxFileBytes) {
+        Record name;
+        name.kind = kind;
+        postPrepared(job.path, ManifestEntry{}, AttachmentSearch::prepare(job.path, name));
+        return;
+    }
     // A picture is read only for OCR: without it — or in a format this device cannot decode, or huge —
     // only its name is searched (no reading, no hash).
     if (kind == Kind::Picture && !known
@@ -829,6 +860,15 @@ bool AttachmentIndexer::pdfTextAvailable() const
     return platform::pdfTextAvailable();
 }
 
+bool AttachmentIndexer::documentTextAvailable()
+{
+#if !QT_CONFIG(thread) || defined(Q_OS_WASM)
+    return false; // (no worker thread in the browser)
+#else
+    return true;
+#endif
+}
+
 void AttachmentIndexer::applyEngine(bool available, const QString &reason, const QString &name,
                                     const QStringList &languages, const QString &userDir)
 {
@@ -947,7 +987,7 @@ QString AttachmentIndexer::state() const
 {
     if (!m_enabled)
         return u"off"_s;
-    if (!platform::pdfTextAvailable() && !m_ocrAvailable && m_ocrReason != u"probing"_s)
+    if (!platform::pdfTextAvailable() && !documentTextAvailable() && !m_ocrAvailable && m_ocrReason != u"probing"_s)
         return u"unavailable"_s;
     if (m_paused.load())
         return u"paused"_s;

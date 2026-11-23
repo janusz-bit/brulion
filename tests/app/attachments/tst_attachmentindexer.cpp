@@ -14,6 +14,8 @@
 #include "pdfrenderpool.h"
 
 #include "testtiming.h"
+#include "attachments/documenttext.h"
+#include "io/zip.h"
 #include "text/text.h"
 #include "vault/vault.h"
 
@@ -168,6 +170,14 @@ private Q_SLOTS:
         QVERIFY(isSearchableAttachment(u"a/b.pdf"_s));
         QVERIFY(isSearchableAttachment(u"Zdjęcie.JPG"_s));
         QVERIFY(isSearchableAttachment(u"x.webp"_s));
+        QVERIFY(isSearchableAttachment(u"umowy/Umowa.docx"_s));
+        QVERIFY(isSearchableAttachment(u"Wykład.PPTX"_s));
+        QVERIFY(isSearchableAttachment(u"opis.odt"_s));
+        QVERIFY(isSearchableAttachment(u"książka.epub"_s));
+        QVERIFY(!isSearchableAttachment(u"makro.docm"_s));
+        QVERIFY(!isSearchableAttachment(u"stare.doc"_s));
+        QVERIFY(!isSearchableAttachment(u".trash/Umowa.docx"_s));
+        QVERIFY(!isSearchableAttachment(u"Umowa.sync-conflict-20260101-120000-ABCDEFG.docx"_s));
         QVERIFY(!isSearchableAttachment(u"rysunek.svg"_s));
         QVERIFY(!isSearchableAttachment(u"anim.gif"_s));
         QVERIFY(!isSearchableAttachment(u"Notatka.md"_s));
@@ -181,6 +191,154 @@ private Q_SLOTS:
         QCOMPARE(std::max(ocrPagePixels(QSizeF(5000, 3000)).width(), ocrPagePixels(QSizeF(5000, 3000)).height()), 4200);
         QCOMPARE(std::max(ocrPagePixels(QSizeF(50, 30)).width(), ocrPagePixels(QSizeF(50, 30)).height()), 1000);
         QVERIFY(ocrPagePixels(QSizeF()).isEmpty());
+    }
+
+    /// DOCX, PPTX, ODT and EPUB files of a notebook of their own: read without any PDF renderer or OCR,
+    /// by slide / part, the cache reused, a rename followed, a change read again; a damaged, an
+    /// encrypted, a bomb-like and a too large file found by its name only.
+    void documents()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString root = dir.filePath(u"Notatki"_s);
+        const QString cache = dir.filePath(u"cache/attachment-text"_s);
+        const QString manifest = cache + u"/notebooks/doc.manifest"_s;
+        QVERIFY(QDir().mkpath(root + u"/Dokumenty"_s));
+        const auto put = [&root](const QString &path, const QByteArray &bytes) {
+            QFile f(root + u'/' + path);
+            QVERIFY(QDir().mkpath(QFileInfo(f).absolutePath()));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            QCOMPARE(f.write(bytes), bytes.size());
+        };
+        const QString wns = u"xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'"_s;
+        const QString ans = u"xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' "
+                            "xmlns:p='http://schemas.openxmlformats.org/presentationml/2006/main'"_s;
+        const auto entry = [](const QString &path, const QString &xml) { return io::FileEntry{path, xml.toUtf8()}; };
+        const auto word = [&](const QString &text) {
+            return io::writeZip({entry(u"word/document.xml"_s,
+                                       u"<w:document "_s + wns + u"><w:body><w:p><w:r><w:t>"_s + text
+                                               + u"</w:t></w:r></w:p></w:body></w:document>"_s)});
+        };
+        const auto slide = [&](const QString &text) {
+            return u"<p:sld "_s + ans + u"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>"_s + text
+                   + u"</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"_s;
+        };
+        const QString Contract = u"Dokumenty/Umowa o dzieło.docx"_s;
+        const QString Slides = u"Wykłady/Algebra.pptx"_s;
+        const QString Text = u"Dokumenty/Opis.odt"_s;
+        const QString Book = u"Książki/Powieść.epub"_s;
+        const QString Broken = u"Dokumenty/Zepsuty.docx"_s;
+        const QString Locked = u"Dokumenty/Szyfrowany.docx"_s;
+        const QString Bomb = u"Dokumenty/Bomba.docx"_s;
+        const QString Huge = u"Dokumenty/Ogromny.docx"_s;
+        put(Contract, word(u"Umowa o dzieło: żółw zielony przechodzi przez łąkę"_s));
+        put(Slides,
+            io::writeZip({entry(u"ppt/slides/slide1.xml"_s, slide(u"Wstęp do algebry"_s)),
+                          entry(u"ppt/slides/slide2.xml"_s, slide(u"Macierze, wyznaczniki i gęślą jaźń"_s))}));
+        put(Text,
+            io::writeZip({entry(u"content.xml"_s,
+                                u"<office:document-content xmlns:office='urn:oasis:names:tc:opendocument:xmlns:office:1.0' "
+                                 "xmlns:text='urn:oasis:names:tc:opendocument:xmlns:text:1.0'><office:body><office:text>"
+                                 "<text:p>Opis łódki wąskiej</text:p></office:text></office:body></office:document-content>"_s)}));
+        put(Book,
+            io::writeZip({{u"mimetype"_s, "application/epub+zip"},
+                          entry(u"a.xhtml"_s, u"<html><body><p>Pewien wąż spotkał jeża</p></body></html>"_s)}));
+        put(Broken, QByteArray("to nie jest archiwum ZIP, tylko tekst z ąęś"));
+        put(Locked, QByteArray("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1") + QByteArray(2000, '\0'));
+        QString bomb = u"<w:document "_s + wns + u"><w:body><w:p><w:r><w:t>"_s + QString(64 << 20, u'a')
+                       + u"</w:t></w:r></w:p></w:body></w:document>"_s;
+        put(Bomb, io::writeZip({entry(u"word/document.xml"_s, bomb)}));
+        bomb.clear();
+        {
+            // A file over the limit: sparse where the file system allows (else the test skips this part).
+            QFile huge(root + u'/' + Huge);
+            QVERIFY(huge.open(QIODevice::WriteOnly));
+            huge.write(word(u"ukryty żółw"_s));
+            if (!huge.resize(attachments::DocumentLimits().maxFileBytes + 1000))
+                QVERIFY(huge.resize(100)); // (then it is small: read as damaged)
+        }
+        Vault vault(root);
+        QVERIFY(vault.open());
+        const auto open = [&] {
+            auto indexer = std::make_unique<AttachmentIndexer>();
+            indexer->setUiLanguage(u"pl"_s);
+            indexer->attach(&vault, cache, manifest);
+            indexer->start(0);
+            return indexer;
+        };
+        std::unique_ptr<AttachmentIndexer> indexer = open();
+        QVERIFY(waitFor([&] { return indexer->idle(); }));
+        QCOMPARE(indexer->state(), u"idle"_s);
+        QCOMPARE(indexer->indexedFiles(), 8);
+        // A text and a slide, by Polish words, diacritics optional.
+        QList<AttachmentSearch::Hit> hits = indexer->search(u"zolw lake"_s, 10);
+        const AttachmentSearch::Hit *contract = hitFor(hits, Contract);
+        QVERIFY(contract);
+        QCOMPARE(contract->kind, Kind::Docx);
+        QCOMPARE(contract->page, 1);
+        QCOMPARE(contract->pageCount, 1);
+        QVERIFY(!contract->ocr && !contract->nameOnly);
+        QVERIFY2(contract->excerpt.contains(u"żółw zielony"_s), qPrintable(contract->excerpt));
+        QVERIFY2(!contract->find.isEmpty(), "what to show the hit with");
+        hits = indexer->search(u"gesla jazn"_s, 10);
+        const AttachmentSearch::Hit *slides = hitFor(hits, Slides);
+        QVERIFY(slides);
+        QCOMPARE(slides->kind, Kind::Pptx);
+        QCOMPARE(slides->page, 2); // (the second slide)
+        QCOMPARE(slides->pageCount, 2);
+        QVERIFY(slides->excerpt.contains(u"Macierze"_s));
+        QCOMPARE(hitFor(indexer->search(u"lodki"_s, 10), Text)->kind, Kind::Odt);
+        QCOMPARE(hitFor(indexer->search(u"jeza waz"_s, 10), Book)->kind, Kind::Epub);
+        // Kinds: documents are not PDFs; the filter's words.
+        QVERIFY(hitFor(indexer->search(u"zolw"_s, 10, attachments::Scope::Documents), Contract));
+        QVERIFY(!hitFor(indexer->search(u"zolw"_s, 10, attachments::Scope::Pdf), Contract));
+        QVERIFY(!hitFor(indexer->search(u"zolw"_s, 10, attachments::Scope::Pictures), Contract));
+        // The page as the cache holds it.
+        const std::optional<attachments::Page> page = indexer->page(Slides, 2);
+        QVERIFY(page && page->source == attachments::PageSource::TextLayer && page->text.contains(u"wyznaczniki"_s));
+        // A damaged, an encrypted, a bomb-like and a too large file: found by name only, nothing of
+        // their bytes in the index.
+        for (const QString &path : {Broken, Locked, Bomb, Huge}) {
+            const AttachmentSearch::Hit *hit =
+                    hitFor(indexer->search(QFileInfo(path).completeBaseName(), 10), path);
+            QVERIFY2(hit && hit->nameOnly, qPrintable(path));
+        }
+        QVERIFY(!hitFor(indexer->search(u"ukryty"_s, 10), Huge));
+        QVERIFY(!hitFor(indexer->search(u"aaaaaaaa"_s, 10), Bomb));
+        // Records: one per readable content (and the damaged ones'), kept after the indexer goes.
+        const QHash<QString, qint64> before = records(cache);
+        QVERIFY(before.size() >= 5);
+        indexer.reset();
+        QVERIFY(QFileInfo::exists(manifest));
+
+        // Again: nothing read again.
+        QTest::qWait(20);
+        indexer = open();
+        QVERIFY(waitFor([&] { return indexer->idle(); }));
+        QVERIFY(hitFor(indexer->search(u"zolw"_s, 10), Contract));
+        QCOMPARE(records(cache), before);
+
+        // Renamed: the text follows.
+        const QString moved = u"Dokumenty/Umowa (stara).docx"_s;
+        QVERIFY(vault.rename(Contract, moved));
+        QVERIFY(waitFor([&] { return hitFor(indexer->search(u"zolw"_s, 10), moved) != nullptr; }));
+        QVERIFY(!hitFor(indexer->search(u"zolw"_s, 10), Contract));
+        QVERIFY(waitFor([&] { return indexer->idle(); }));
+        QCOMPARE(records(cache), before);
+        // Changed: read again.
+        QVERIFY(vault.writeBinary(moved, word(u"Aneks: kowalska jaźń i wąż"_s)));
+        QVERIFY(waitFor([&] { return hitFor(indexer->search(u"kowalska"_s, 10), moved) != nullptr; }));
+        QVERIFY(!hitFor(indexer->search(u"zolw"_s, 10), moved));
+        // Removed: gone.
+        QVERIFY(vault.remove(moved));
+        QVERIFY(waitFor([&] { return !indexer->index().contains(moved); }));
+        // Turned off: nothing found.
+        indexer->setEnabled(false);
+        QVERIFY(indexer->search(u"algebry"_s, 10).isEmpty());
+        indexer->setEnabled(true);
+        QVERIFY(waitFor([&] { return indexer->idle(); }));
+        QVERIFY(hitFor(indexer->search(u"algebry"_s, 10), Slides));
+        QVERIFY(AttachmentIndexer::documentTextAvailable());
     }
 
     void orientations_data()

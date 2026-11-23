@@ -1,4 +1,4 @@
-# brulion_attachments — the text of the notebook's PDFs and pictures for the whole-notebook search
+# brulion_attachments — the text of the notebook's PDFs, documents and pictures for the whole-notebook search
 # (docs/UI.md "Searching attachments"): AttachmentIndexer (attachmentindexer.h) reads the PDFs' text
 # layers (brulion_platform's pdfpages.h through brulion_pdfview's PdfReaderPool) and runs OCR
 # (platform/ocr.h) on a worker thread, keeps the result in the device's cache (core attachments:

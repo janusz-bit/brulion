@@ -2,11 +2,11 @@
 // narrow the results to kinds of files, the other words are searched. Part of the attachments
 // module — see attachments/attachments.h.
 //
-//   in:notes  in:pages  in:journals  in:attachments  in:pdf  in:pictures
+//   in:notes  in:pages  in:journals  in:attachments  in:pdf  in:pictures  in:documents
 //
 // The key may also be `type:`, or the Polish `w:` / `typ:`; the values in English or Polish
 // (notes/notatki, pages/strony, journals/dziennik, attachments/załączniki/files/pliki, pdf,
-// pictures/images/photos/obrazy/zdjęcia — singular forms too), case and diacritics optional
+// pictures/images/photos/obrazy/zdjęcia, documents/docs/dokumenty — singular forms too), case and diacritics optional
 // ("w:zalaczniki"). Several filters add up ("in:pdf in:pictures"); a word that only looks like
 // one ("in:xyz", "http://…", "12:30") stays a word of the query.
 #pragma once
@@ -26,13 +26,15 @@ enum class Scope : quint8 {
     Pdf = 4,
     /// Pictures (OCR).
     Pictures = 8,
+    /// Documents: DOCX, PPTX, ODT, EPUB (documenttext.h).
+    Documents = 16,
 };
 Q_DECLARE_FLAGS(Scopes, Scope)
 Q_DECLARE_OPERATORS_FOR_FLAGS(Scopes)
 
-inline constexpr Scopes AllScopes = Scopes(Scope::Pages) | Scope::Journals | Scope::Pdf | Scope::Pictures;
+inline constexpr Scopes AllScopes = Scopes(Scope::Pages) | Scope::Journals | Scope::Pdf | Scope::Pictures | Scope::Documents;
 inline constexpr Scopes NoteScopes = Scopes(Scope::Pages) | Scope::Journals;
-inline constexpr Scopes AttachmentScopes = Scopes(Scope::Pdf) | Scope::Pictures;
+inline constexpr Scopes AttachmentScopes = Scopes(Scope::Pdf) | Scope::Pictures | Scope::Documents;
 
 struct SearchFilters {
     /// The query without its filters (the other words in their order, single spaces).

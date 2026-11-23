@@ -2,6 +2,7 @@
 // backlinks, links, unlinked, calendar.
 #include "commands_p.h"
 
+#include "attachments/documenttext.h"
 #include "attachments/attachmentsearch.h"
 #include "attachments/manifest.h"
 #include "attachments/searchfilters.h"
@@ -212,7 +213,7 @@ Result query(Call &call)
     return call.ok(result, text);
 }
 
-/// The text of the notebook's PDFs and pictures as the app read it on this device (docs/UI.md
+/// The text of the notebook's PDFs, documents and pictures as the app read it on this device (docs/UI.md
 /// "Searching attachments": <app cache>/attachment-text — the notebook's manifest and the records it
 /// names), searched read-only: the command line reads no PDF and recognizes no text itself.
 QJsonArray attachmentHits(Call &call, const QString &text, int limit, attachments::Scopes kinds, QString &out)
@@ -254,7 +255,7 @@ QJsonArray attachmentHits(Call &call, const QString &text, int limit, attachment
     for (const attachments::AttachmentSearch::Hit &hit : index.search(text, limit, kinds, pageText)) {
         const bool pdf = hit.kind == attachments::Kind::Pdf;
         hits.append(QJsonObject{{u"path"_s, hit.path},
-                                {u"kind"_s, pdf ? u"pdf"_s : u"picture"_s},
+                                {u"kind"_s, attachments::kindName(hit.kind)},
                                 {u"page"_s, hit.page},
                                 {u"pageCount"_s, hit.pageCount},
                                 {u"matchedPages"_s, hit.matchedPages},
@@ -661,13 +662,13 @@ void addIndexCommands(QList<Command> &out)
             QT_TRANSLATE_NOOP("brulion::cli", "Full-text search, diacritic-insensitive (\"zolw\" finds \"żółw\")"),
             search,
             {positional(u"text"_s, ArgType::String,
-                        QT_TRANSLATE_NOOP("brulion::cli", "Words to find (in:pdf, in:pictures, in:notes, "
-                                                          "in:journals narrow it)"),
+                        QT_TRANSLATE_NOOP("brulion::cli", "Words to find (in:pdf, in:documents, in:pictures, "
+                                                          "in:notes, in:journals narrow it)"),
                         true, true),
              option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most this many hits (default 20)")),
              option(u"attachments"_s, ArgType::Bool,
-                    QT_TRANSLATE_NOOP("brulion::cli", "Also the text of PDFs and pictures the app has read on "
-                                                      "this device")),
+                    QT_TRANSLATE_NOOP("brulion::cli", "Also the text of PDFs, documents and pictures the app "
+                                                      "has read on this device")),
              option(u"semantic"_s, ArgType::Bool,
                     QT_TRANSLATE_NOOP("brulion::cli", "Also by meaning, as the app's search: the notes the app has "
                                                       "read by meaning on this device (its model and plugin)"))}));

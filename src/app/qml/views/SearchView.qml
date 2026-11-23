@@ -5,14 +5,15 @@ import QtQuick.Templates as T
 import Brulion
 
 // SearchView — route "search" ({query?, folder?}): full-text search over every note and the
-// notebook's PDFs and pictures (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of
-// the last word, fuzzy, titles first; attachments by their text layer and OCR, docs/UI.md
+// notebook's PDFs, documents (DOCX, PPTX, ODT, EPUB) and pictures (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of
+// the last word, fuzzy, titles first; attachments by their text layer, their XML and OCR, docs/UI.md
 // "Searching attachments") with the matched words highlighted in titles and excerpts, filters (All /
 // Pages / Journals / Attachments, the query's own in:pdf, in:pictures…, a folder: the route's — the
 // sidebar's "Search in folder", any depth — or a top-level one from the menu) and the recent
 // searches when the field is empty. A note's result opens its page at the matching line; a PDF's
 // opens the PDF viewer at its page with the hit highlighted (route open "search"), a picture's the
-// picture with the places of the words framed. While attachments are being read, a line under the
+// picture with the places of the words framed, a document's its file (read-only, "Open in another
+// app"; its row says the slide or part the words are in). While attachments are being read, a line under the
 // filters says so, with Pause / Resume (Workspace.attachments). With search by meaning on
 // (Workspace.semantic, docs/UI.md "Search by meaning") the notes closest in meaning come in too —
 // those without the words typed marked "Close in meaning" —, and while the notes are read by
@@ -66,7 +67,8 @@ FocusScope {
         if (kind === "pdf")
             AppController.navigate({ view: "page", path: path, pdfPage: AppController.routeInt(resultInfo.map, "page", 1),
                                      open: "search", search: find }, pane)
-        else if (kind === "picture")
+        else if (kind === "picture" || kind === "document" || kind === "presentation")
+            // (A document has no viewer of its own: its file, read-only, with "Open in another app".)
             AppController.navigate({ view: "page", path: path, search: find }, pane)
         else
             AppController.openPage(path, resultInfo.map.line, pane)
@@ -402,6 +404,15 @@ FocusScope {
                         return ""
                     if (hit.matchedPages === 0)
                         return qsTr("Found by its name")
+                    if (hit.kind === "document" || hit.kind === "presentation") {
+                        const slides = hit.kind === "presentation"
+                        const place = slides ? qsTr("Slide %1 of %2").arg(hit.page).arg(hit.pageCount)
+                                             : qsTr("Part %1 of %2").arg(hit.page).arg(hit.pageCount)
+                        if (hit.matchedPages <= 1)
+                            return place
+                        return place + " · " + (slides ? qsTr("%n more slide(s) match", "", hit.matchedPages - 1)
+                                                       : qsTr("%n more part(s) match", "", hit.matchedPages - 1))
+                    }
                     const where = hit.kind === "pdf" ? qsTr("Page %1 of %2").arg(hit.page).arg(hit.pageCount) : qsTr("Picture")
                     return hit.matchedPages > 1 ? where + " · " + qsTr("%n more page(s) match", "", hit.matchedPages - 1) : where
                 }
@@ -600,7 +611,7 @@ FocusScope {
                     Layout.topMargin: Theme.space12
                     iconName: "search"
                     title: qsTr("Search your notes")
-                    description: qsTr("Words anywhere in titles and text, and in PDFs and pictures. Polish letters are optional: “zolw” finds “Żółw”; the last word may be the start of a word. “in:pdf”, “in:pictures” or “in:notes” narrows the search.")
+                    description: qsTr("Words anywhere in titles and text, and in PDFs, documents and pictures. Polish letters are optional: “zolw” finds “Żółw”; the last word may be the start of a word. “in:pdf”, “in:documents” or “in:notes” narrows the search.")
                 }
             }
         }

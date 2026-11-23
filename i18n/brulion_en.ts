@@ -68,7 +68,7 @@
 <context>
     <name>AttachmentSettings</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="186"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="188"/>
         <source>%n file(s) read</source>
         <translation>
             <numerusform>%n file read</numerusform>
@@ -76,7 +76,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="187"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="189"/>
         <source>%n page(s) with text</source>
         <translation>
             <numerusform>%n page with text</numerusform>
@@ -1528,7 +1528,7 @@
 <context>
     <name>SearchView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="284"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="286"/>
         <source>%1 of %n result(s)</source>
         <translation>
             <numerusform>%1 of %n result</numerusform>
@@ -1536,7 +1536,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="285"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="287"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -1544,7 +1544,23 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="406"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="413"/>
+        <source>%n more slide(s) match</source>
+        <translation>
+            <numerusform>%n more slide matches</numerusform>
+            <numerusform>%n more slides match</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SearchView.qml" line="414"/>
+        <source>%n more part(s) match</source>
+        <translation>
+            <numerusform>%n more part matches</numerusform>
+            <numerusform>%n more parts match</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SearchView.qml" line="417"/>
         <source>%n more page(s) match</source>
         <translation>
             <numerusform>%n more page matches</numerusform>
@@ -1552,7 +1568,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="541"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="552"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>The filters hide %n result.</numerusform>

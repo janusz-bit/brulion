@@ -3031,7 +3031,7 @@ within 50 ms, insert mode's own cost within 0.1 ms, all times `BRULION_TEST_SLOW
 
 ### Searching attachments: text layers and OCR (2026-11-20)
 
-The whole-notebook search reads the notebook's PDFs and pictures (docs/UI.md "Searching
+The whole-notebook search reads the notebook's PDFs, documents and pictures (docs/UI.md "Searching
 attachments"); the rules that keep it out of the way:
 
 * **One worker thread at the lowest priority** (`QThread::IdlePriority`, SCHED_IDLE on Linux), one

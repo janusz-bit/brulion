@@ -304,18 +304,26 @@ done in the repository simply disappears from the list.
 
 ## Search
 
-* **Searching attachments — check on devices and further ideas.** The text of PDFs and pictures
-  in the whole-notebook search, OCR with Tesseract and the jump to the hit on the page (docs/UI.md
-  "Searching attachments") are checked automatically: the core's and the indexer's tests, Tesseract
-  in the Nix dev shell and `nix flake check`, the shell self-test. What remains:
+* **Searching attachments — check on devices and further ideas.** The text of PDFs, documents
+  (DOCX, PPTX, ODT, EPUB) and pictures in the whole-notebook search, OCR with Tesseract and the
+  jump to the hit on the page (docs/UI.md "Searching attachments") are checked automatically: the
+  core's and the indexer's tests, Tesseract in the Nix dev shell and `nix flake check`, the shell
+  self-test. What remains:
   * by hand: Windows with UB Mannheim's Tesseract installer (its MinGW DLL loaded into the MSVC
     program), the AppImage on Ubuntu / Fedora with the system's `tesseract-ocr` packages, PDFs'
     text on a real Android 15+ phone, a semester of real lecture scans (hundreds of MB) on a slower
     laptop — time, memory, the cache's size;
   * OCR on the phone (decided against for now: +25 MB per ABI, docs/ANDROID.md) — reconsider with an
     on-demand download of the engine and models;
-  * the text of other attachments (DOCX, ODT, EPUB, PPTX), the recognized text written into a scanned
-    PDF as its text layer ("Make searchable…"), handwriting in drawings.
+  * the text of other attachments: spreadsheets (XLSX, ODS), presentations in ODP, speaker notes of
+    PPTX, documents' headers and comments; a document's text shown in its read-only view instead of
+    its bytes (a hit now opens the file with "Open in another app"); DOC, PPT and RTF; the pictures
+    inside documents (OCR);
+  * the recognized text written into a scanned PDF as its text layer ("Make searchable…"),
+    handwriting in drawings;
+  * by hand: DOCX, PPTX, ODT and EPUB files made by real programs (Word, LibreOffice, Calibre, Google
+    Docs exports) on a phone and the AppImage — the extractor is tested on files built from the
+    formats' XML, not on files of every producer.
 
 ## Privacy and security
 
