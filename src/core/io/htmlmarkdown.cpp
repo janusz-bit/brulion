@@ -1,5 +1,6 @@
 #include "io/htmlmarkdown.h"
 
+#include "io/htmlmath_p.h"
 #include "io/htmlutil_p.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inline.h"
@@ -180,6 +181,7 @@ QString replaceTags(const QString &html, QStringView name, const F &fn)
 struct Prepared {
     QString html;
     QList<HtmlImage> images;
+    QList<detail::MathFormula> formulas; ///< what the math slots of `html` stand for
 };
 
 /// The address of the largest candidate of a `srcset` — by its width (`800w`), else its density
@@ -385,6 +387,16 @@ Prepared prepare(const QString &html, const HtmlToMarkdownOptions &options)
     // The marker characters must only ever come from us (icon fonts use private-use code points).
     static_assert(CheckedBox == UncheckedBox + 1 && LangOpen == UncheckedBox + 2 && LangClose == UncheckedBox + 3);
     s.removeIf([](QChar c) { return c.unicode() >= UncheckedBox && c.unicode() <= LangClose; });
+    if (options.mathFormulas) {
+        // The marks and slots must only ever come from us.
+        s.removeIf([](QChar c) {
+            return c.unicode() == detail::FormulaOpen || c.unicode() == detail::FormulaClose
+                   || c.unicode() == detail::MathSlotOpen || c.unicode() == detail::MathSlotClose;
+        });
+        detail::MathExtracted math = detail::extractMath(s);
+        s = std::move(math.html);
+        p.formulas = std::move(math.formulas);
+    }
     if (options.embedsAsLinks)
         s = embedsAsLinks(s);
     s = detail::removeElements(s, {u"script"_s, u"style"_s, u"noscript"_s, u"template"_s, u"iframe"_s, u"object"_s,
@@ -1777,6 +1789,93 @@ QList<qsizetype> strayDollarsOf(const QString &md, bool all)
     return out;
 }
 
+// --- math formulas of a page ---------------------------------------------------------------------
+
+/// `tex` for a table cell: a bar would end the cell, so it becomes `\vert` (`\|` `\Vert`).
+QString texWithoutBars(const QString &tex)
+{
+    QString out;
+    out.reserve(tex.size() + 8);
+    const auto command = [&](const QString &name, qsizetype next) {
+        out += name;
+        if (next < tex.size() && tex[next].isLetter())
+            out += u' ';
+    };
+    for (qsizetype i = 0; i < tex.size(); ++i) {
+        const QChar c = tex[i];
+        if (c == u'\\' && i + 1 < tex.size()) {
+            if (tex[i + 1] == u'|')
+                command(u"\\Vert"_s, i + 2);
+            else
+                out += QString(c) + tex[i + 1];
+            ++i;
+        } else if (c == u'|') {
+            command(u"\\vert"_s, i + 1);
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
+/// The formula as Markdown: `$…$` / `$$…$$` between the formula marks when the editor reads the
+/// whole as one formula (`isFormula`), else a code span with its TeX.
+QString formulaMarkdown(const detail::MathFormula &formula, bool inTable, bool *isFormula)
+{
+    const QString tex = inTable ? texWithoutBars(formula.tex).trimmed() : formula.tex;
+    const QString source = formula.display ? QString(u"$$"_s + tex + u"$$"_s) : QString(u"$"_s + tex + u"$"_s);
+    *isFormula = false;
+    if (!tex.contains(u'`') && markdown::maskInlineCode(source) == source) {
+        const QList<markdown::MathSpan> spans = markdown::findMathSpans(source);
+        if (spans.size() == 1 && spans.first().from == 0 && spans.first().to == source.size()) {
+            *isFormula = true;
+            return QChar(detail::FormulaOpen) + source + QChar(detail::FormulaClose);
+        }
+    }
+    return codeSpan(inTable ? QString(formula.tex).replace(u'|', u"\\|"_s) : formula.tex);
+}
+
+/// `markdown` with the math slots of detail::extractMath() replaced by their formulas between the
+/// formula marks. A letter, a digit or a dollar touching a formula is parted from it by a space
+/// ("Niech$x$" and "$x$ów" are no formulas), a formula in a table row has no bars.
+QString putFormulas(const QString &markdown, const QList<detail::MathFormula> &formulas)
+{
+    if (!markdown.contains(QChar(detail::MathSlotOpen)))
+        return markdown;
+    const auto touches = [](QChar c) {
+        return c.isLetterOrNumber() || c == u'$' || c == QChar(detail::FormulaClose);
+    };
+    QString out;
+    out.reserve(markdown.size() + 64);
+    for (qsizetype i = 0; i < markdown.size(); ++i) {
+        const QChar c = markdown[i];
+        if (c == QChar(detail::MathSlotClose))
+            continue;
+        if (c != QChar(detail::MathSlotOpen)) {
+            out += c;
+            continue;
+        }
+        const qsizetype close = markdown.indexOf(QChar(detail::MathSlotClose), i + 1);
+        if (close < 0)
+            break;
+        bool ok = false;
+        const int index = markdown.sliced(i + 1, close - i - 1).toInt(&ok);
+        i = close;
+        if (!ok || index < 0 || index >= formulas.size())
+            continue;
+        const qsizetype lineStart = out.lastIndexOf(u'\n') + 1;
+        bool isFormula = false;
+        const QString text = formulaMarkdown(formulas.at(index), lineStart < out.size() && out[lineStart] == u'|',
+                                             &isFormula);
+        if (isFormula && !out.isEmpty() && touches(out.back()))
+            out += u' ';
+        out += text;
+        if (isFormula && i + 1 < markdown.size() && touches(markdown[i + 1]))
+            out += u' ';
+    }
+    return out;
+}
+
 } // namespace
 
 QString detail::escapeTextFormulas(const QString &markdown)
@@ -2026,7 +2125,9 @@ HtmlMarkdown detail::htmlToMarkdownWithListLimit(const QString &html, const Html
                        split.parts > 0 ? listPartStarts(doc, split) : QHash<const QTextList *, qint64>());
     writer.frame(doc.rootFrame());
     HtmlMarkdown out;
-    out.markdown = escapeTextFormulas(writer.markdown());
+    out.markdown = escapeTextFormulas(putFormulas(writer.markdown(), prepared.formulas));
+    if (options.mathFormulas)
+        out.markdown.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
     out.title = doc.metaInformation(QTextDocument::DocumentTitle).simplified();
     return out;
 }

@@ -3,6 +3,7 @@
 
 #include "io/clipboardhtml.h"
 #include "io/htmlmarkdown.h"
+#include "io/htmlmath_p.h"
 #include "io/htmlrender_p.h"
 #include "io/htmlutil_p.h"
 #include "markdown/inline.h"
@@ -35,6 +36,24 @@ QString cat(std::initializer_list<QString> parts)
     for (const QString &part : parts)
         s += part;
     return s;
+}
+
+/// KaTeX's output of a formula: the MathML with the TeX source, then its HTML copy.
+QString katex(const QString &tex, const QString &mathml, bool display = false)
+{
+    const QString span = u"<span class=\"katex\"><span class=\"katex-mathml\"><math xmlns=\"http://www.w3.org/1998/Math/MathML\""_s
+                         + (display ? u" display=\"block\""_s : QString()) + u"><semantics><mrow>"_s + mathml
+                         + u"</mrow><annotation encoding=\"application/x-tex\">"_s + tex
+                         + u"</annotation></semantics></math></span><span class=\"katex-html\" aria-hidden=\"true\">"
+                           "<span class=\"base\"><span class=\"mord mathnormal\">ZDUBLOWANE</span></span></span></span>"_s;
+    return display ? u"<span class=\"katex-display\">"_s + span + u"</span>"_s : span;
+}
+
+HtmlMarkdown withMath(const QString &html)
+{
+    HtmlToMarkdownOptions o;
+    o.mathFormulas = true;
+    return htmlToMarkdown(html, o);
 }
 
 /// Random HTML with short lists in every shape QTextDocument has to cope with: nesting,
@@ -352,6 +371,245 @@ private Q_SLOTS:
         QFETCH(QString, html);
         QFETCH(QString, markdown);
         QCOMPARE(htmlToMarkdown(html).markdown, markdown);
+    }
+
+    // ---- math formulas of web pages (HtmlToMarkdownOptions::mathFormulas, docs/CLIPPER.md)
+    void mathFormulas_data()
+    {
+        QTest::addColumn<QString>("html");
+        QTest::addColumn<QString>("markdown");
+        const QString fraction = u"<mi>x</mi><mo>=</mo><mfrac><mrow><mo>−</mo><mi>b</mi></mrow><mrow><mn>2</mn><mi>a</mi></mrow></mfrac>"_s;
+        // KaTeX: the annotation's TeX; the rendered copy is dropped.
+        QTest::newRow("katex inline")
+                << u"<p>Niech "_s + katex(u"x = \\frac{-b}{2a}"_s, fraction) + u" będzie pierwiastkiem równania.</p>"_s
+                << u"Niech $x = \\frac{-b}{2a}$ będzie pierwiastkiem równania.\n"_s;
+        QTest::newRow("katex display")
+                << u"<p>Wzór Einsteina:</p><p>"_s + katex(u"E = mc^{2}"_s, u"<mi>E</mi>"_s, true) + u"</p><p>wiąże masę z energią.</p>"_s
+                << u"Wzór Einsteina:\n\n$$E = mc^{2}$$\n\nwiąże masę z energią.\n"_s;
+        QTest::newRow("katex display in a paragraph")
+                << u"<p>Wynik: "_s + katex(u"\\sum_{i=1}^{n} i"_s, u"<mi>i</mi>"_s, true) + u" — tyle.</p>"_s
+                << u"Wynik:\n\n$$\\sum_{i=1}^{n} i$$\n\n— tyle.\n"_s;
+        QTest::newRow("katex escaped TeX")
+                << u"<p>"_s + katex(u"a &lt; b \\land c &amp;&amp; d"_s, u"<mi>a</mi>"_s) + u"</p>"_s
+                << u"$a < b \\land c && d$\n"_s;
+        QTest::newRow("katex in a list and a heading")
+                << u"<h2>Pole "_s + katex(u"\\pi r^2"_s, u"<mi>π</mi>"_s) + u"</h2><ul><li>obwód "_s
+                           + katex(u"2\\pi r"_s, u"<mn>2</mn>"_s) + u"</li></ul>"_s
+                << u"## Pole $\\pi r^2$\n\n- obwód $2\\pi r$\n"_s;
+        QTest::newRow("katex bold and a link around")
+                << u"<p><b>"_s + katex(u"x"_s, u"<mi>x</mi>"_s) + u"</b> i <a href=\"https://matma.example/\">"_s
+                           + katex(u"y"_s, u"<mi>y</mi>"_s) + u"</a></p>"_s
+                << u"**$x$** i [$y$](https://matma.example/)\n"_s;
+        // MathJax 3: the assistive MathML (no TeX in it), converted; display="true" is a block.
+        QTest::newRow("mathjax 3 inline")
+                << u"<p>Kwadrat <mjx-container class=\"MathJax\" jax=\"CHTML\"><mjx-math class=\"MJX-TEX\"><mjx-msup><mjx-mi class=\"mjx-i\"><mjx-c class=\"mjx-c1D465\"></mjx-c></mjx-mi></mjx-msup></mjx-math>"
+                   "<mjx-assistive-mml unselectable=\"on\" display=\"inline\"><math xmlns=\"http://www.w3.org/1998/Math/MathML\"><msup><mi>x</mi><mn>2</mn></msup></math></mjx-assistive-mml></mjx-container> rośnie.</p>"_s
+                << u"Kwadrat $x^2$ rośnie.\n"_s;
+        QTest::newRow("mathjax 3 display")
+                << u"<mjx-container class=\"MathJax\" jax=\"SVG\" display=\"true\"><svg width=\"10\"><title>x</title><g><text>ZDUBLOWANE</text></g></svg>"
+                   "<mjx-assistive-mml unselectable=\"on\" display=\"block\"><math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msub><mi>a</mi><mi>i</mi></msub></math></mjx-assistive-mml></mjx-container>"_s
+                << u"$$\\sum_{i=1}^{n}a_i$$\n"_s;
+        QTest::newRow("mathjax 3 data attribute")
+                << u"<p>Dla <mjx-container data-tex=\"\\beta^2\"><mjx-math>ZDUBLOWANE</mjx-math></mjx-container> mamy</p>"_s
+                << u"Dla $\\beta^2$ mamy\n"_s;
+        QTest::newRow("mathjax 3 without a source stays as text")
+                << u"<p>Dla <mjx-container><mjx-math>β2</mjx-math></mjx-container> mamy</p>"_s << u"Dla β2 mamy\n"_s;
+        // MathJax 2: the script's TeX; the rendered spans are dropped, the display one a block.
+        QTest::newRow("mathjax 2 inline")
+                << u"<p>Suma <span class=\"MathJax_Preview\" style=\"color: inherit;\"></span><span class=\"MathJax\" id=\"MathJax-Element-1-Frame\" tabindex=\"0\"><nobr><span>ZDUBLOWANE</span></nobr>"
+                   "<span class=\"MJX_Assistive_MathML\"><math><mi>α</mi></math></span></span><script type=\"math/tex\" id=\"MathJax-Element-1\">\\alpha + \\beta</script> jest.</p>"_s
+                << u"Suma $\\alpha + \\beta$ jest.\n"_s;
+        QTest::newRow("mathjax 2 display")
+                << u"<p>Całka:</p><div class=\"MathJax_Display\"><span class=\"MathJax\" id=\"f\">ZDUBLOWANE</span></div>"
+                   "<script type=\"math/tex; mode=display\" id=\"MathJax-Element-2\">\\int_0^1 x\\,dx = \\tfrac{1}{2}</script>"_s
+                << u"Całka:\n\n$$\\int_0^1 x\\,dx = \\tfrac{1}{2}$$\n"_s;
+        QTest::newRow("mathjax 2 mathml script")
+                << u"<span class=\"MathJax\">ZDUBLOWANE</span><script type=\"math/mml\"><math><mfrac><mn>1</mn><mn>3</mn></mfrac></math></script>"_s
+                << u"$\\frac{1}{3}$\n"_s;
+        QTest::newRow("mathjax 2 script escapes nothing")
+                << u"<p><script type=\"math/tex\">a < b &amp; c</script></p>"_s << u"$a < b &amp; c$\n"_s;
+        QTest::newRow("a script of another type is dropped")
+                << u"<p>x<script type=\"text/javascript\">var math = 1;</script>y</p>"_s << u"xy\n"_s;
+        // The extension's copy of a page's math scripts (Readability removes scripts).
+        QTest::newRow("math source element after MathJax 2's rendering")
+                << u"<p>Suma <span class=\"MathJax_Preview\"></span><span class=\"MathJax\" id=\"f\"><span>ZDUBLOWANE</span></span>"
+                   "<brulion-math-source type=\"math/tex\" id=\"f2\">\\alpha</brulion-math-source> jest.</p>"_s
+                << u"Suma $\\alpha$ jest.\n"_s;
+        QTest::newRow("math source element")
+                << u"<p>Wzór <brulion-math-source type=\"math/tex\">a &lt; b</brulion-math-source> i "
+                   "<brulion-math-source type=\"math/tex; mode=display\">c^2</brulion-math-source></p>"_s
+                << u"Wzór $a < b$ i\n\n$$c^2$$\n"_s;
+        // Wikipedia: the MathML with its annotation, or only the fallback picture's alt.
+        QTest::newRow("wikipedia mathml")
+                << u"<p>Pole koła wynosi <span class=\"mwe-math-element mwe-math-element-inline\"><span class=\"mwe-math-mathml-inline mwe-math-mathml-a11y\" style=\"display: none;\">"
+                   "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" alttext=\"{\\displaystyle \\pi r^{2}}\"><semantics><mrow class=\"MJX-TeXAtom-ORD\"><mstyle displaystyle=\"true\" scriptlevel=\"0\"><mi>π</mi><msup><mi>r</mi><mrow><mn>2</mn></mrow></msup></mstyle></mrow>"
+                   "<annotation encoding=\"application/x-tex\">{\\displaystyle \\pi r^{2}}</annotation></semantics></math></span>"
+                   "<img src=\"https://wikimedia.example/svg/abc\" class=\"mwe-math-fallback-image-inline\" aria-hidden=\"true\" alt=\"{\\displaystyle \\pi r^{2}}\"></span>.</p>"_s
+                << u"Pole koła wynosi $\\pi r^{2}$.\n"_s;
+        QTest::newRow("wikipedia fallback picture only")
+                << u"<p>Twierdzenie <span class=\"mwe-math-element\"><img src=\"https://wikimedia.example/svg/d\" class=\"mwe-math-fallback-image-inline\" alt=\"{\\displaystyle a^{2}+b^{2}=c^{2}}\"></span>.</p>"_s
+                << u"Twierdzenie $a^{2}+b^{2}=c^{2}$.\n"_s;
+        QTest::newRow("wikipedia block")
+                << u"<dl><dd><span class=\"mwe-math-element mwe-math-element-block\"><img src=\"x.svg\" class=\"mwe-math-fallback-image-display\" alt=\"{\\displaystyle \\lambda =2}\"></span></dd></dl>"_s
+                << u"$$\\lambda =2$$\n"_s;
+        QTest::newRow("math with an alttext only")
+                << u"<p>x <math alttext=\"{\\displaystyle \\lambda }\"></math> y</p>"_s << u"x $\\lambda$ y\n"_s;
+        // Plain MathML (no TeX anywhere): converted.
+        QTest::newRow("mathml quadratic")
+                << u"<p>Pierwiastki: <math display=\"block\"><mi>x</mi><mo>=</mo><mfrac><mrow><mo>−</mo><mi>b</mi><mo>±</mo><msqrt><msup><mi>b</mi><mn>2</mn></msup><mo>−</mo><mn>4</mn><mi>a</mi><mi>c</mi></msqrt></mrow><mrow><mn>2</mn><mi>a</mi></mrow></mfrac></math></p>"_s
+                << u"Pierwiastki:\n\n$$x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}$$\n"_s;
+        QTest::newRow("mathml pi and Polish text")
+                << u"<p>Dla <math><mi>n</mi><mo>∈</mo><mi>ℕ</mi><mtext> oraz </mtext><mi>x</mi><mo>≥</mo><mn>3,14</mn></math> działa.</p>"_s
+                << u"Dla $n\\in\\mathbb{N}\\text{ oraz }x\\ge3{,}14$ działa.\n"_s;
+        // MathML with namespace prefixes and self-closing elements.
+        QTest::newRow("mathml with prefixes")
+                << u"<p><m:math xmlns:m=\"http://www.w3.org/1998/Math/MathML\"><m:mi>a</m:mi><m:mo>+</m:mo><m:mi>b</m:mi></m:math></p>"_s
+                << u"$a+b$\n"_s;
+        // Pandoc / Sphinx.
+        QTest::newRow("pandoc inline and display")
+                << u"<p>Znamy <span class=\"math inline\">\\(e^{i\\pi} + 1 = 0\\)</span>.</p><p><span class=\"math display\">\\[\\int_0^\\infty e^{-x}dx = 1\\]</span></p>"_s
+                << u"Znamy $e^{i\\pi} + 1 = 0$.\n\n$$\\int_0^\\infty e^{-x}dx = 1$$\n"_s;
+        QTest::newRow("a math class without delimiters is no formula")
+                << u"<div class=\"math\">Matematyka dla dzieci</div>"_s << u"Matematyka dla dzieci\n"_s;
+        // The text around: touching letters get a space, dollars of the text never join a formula.
+        QTest::newRow("a letter touches a formula")
+                << u"<p>wektor"_s + katex(u"v"_s, u"<mi>v</mi>"_s) + u", "_s + katex(u"x"_s, u"<mi>x</mi>"_s) + u"ów i "_s
+                           + katex(u"a"_s, u"<mi>a</mi>"_s) + katex(u"b"_s, u"<mi>b</mi>"_s) + u"</p>"_s
+                << u"wektor $v$, $x$ ów i $a$ $b$\n"_s;
+        QTest::newRow("prices beside a formula")
+                << u"<p>Cena $10 i "_s + katex(u"x"_s, u"<mi>x</mi>"_s) + u", razem 15$</p>"_s
+                << u"Cena \\$10 i $x$, razem 15$\n"_s;
+        QTest::newRow("a stray dollar before a formula")
+                << u"<p>zapłać 5$"_s + katex(u"x"_s, u"<mi>x</mi>"_s) + u"</p>"_s << u"zapłać 5$ $x$\n"_s;
+        // What the editor would not read as one formula is a code span.
+        QTest::newRow("tex with a backtick")
+                << u"<p>"_s + katex(u"a`b"_s, u"<mi>a</mi>"_s) + u"</p>"_s << u"`` a`b ``\n"_s;
+        QTest::newRow("tex ending in a backslash")
+                << u"<p>"_s + katex(u"a\\"_s, u"<mi>a</mi>"_s) + u"</p>"_s << u"`a\\`\n"_s;
+        // A table cell: no bars.
+        QTest::newRow("formula in a table cell")
+                << u"<table><tr><th>wartość</th><th>wzór</th></tr><tr><td>moduł</td><td>"_s
+                           + katex(u"|x| + \\|v\\|"_s, u"<mi>x</mi>"_s) + u"</td></tr></table>"_s
+                << u"| wartość | wzór |\n| --- | --- |\n| moduł | $\\vert x\\vert + \\Vert v\\Vert$ |\n"_s;
+        // Code is code.
+        QTest::newRow("math in code stays")
+                << u"<pre><code>"_s + katex(u"x"_s, u"<mi>x</mi>"_s) + u"</code></pre>"_s
+                << QString();
+        QTest::newRow("dollars in a code block stay")
+                << u"<article><pre><code>cena = $5 + $x$</code></pre></article>"_s
+                << u"```\ncena = $5 + $x$\n```\n"_s;
+        // Hostile input: our own marks and slots in a page, unclosed containers, a formula source
+        // that is not TeX.
+        QTest::newRow("slots in the page")
+                << u"<p>a\uE0F40\uE0F5b\uE0F2c\uE0F3d</p>"_s << u"a0bcd\n"_s;
+        QTest::newRow("an unclosed container still converts the math in it")
+                << u"<p>x<span class=\"katex\"><span class=\"katex-mathml\"><math><annotation encoding=\"application/x-tex\">y</annotation></math></p><p>z</p>"_s
+                << u"x $y$\n\nz\n"_s;
+        QTest::newRow("an annotation of another encoding")
+                << u"<p><math><semantics><mi>x</mi><annotation encoding=\"application/xhtml+xml\">&lt;b&gt;</annotation></semantics></math></p>"_s
+                << u"$x$\n"_s;
+        QTest::newRow("math in a comment") << u"<p>a<!-- <math><mi>x</mi></math> -->b</p>"_s << u"ab\n"_s;
+    }
+    void mathFormulas()
+    {
+        QFETCH(QString, html);
+        QFETCH(QString, markdown);
+        const QString out = withMath(html).markdown;
+        if (html.startsWith(u"<pre><code>"_s)) {
+            // The formula of a code block is its text: no slot, no mark, no "$".
+            QVERIFY2(!out.contains(QChar(detail::MathSlotOpen)) && !out.contains(QChar(detail::FormulaOpen)),
+                     qPrintable(out));
+            QVERIFY(out.startsWith(u"```\n"_s));
+            return;
+        }
+        QCOMPARE(out, markdown);
+        QVERIFY(!out.contains(u"ZDUBLOWANE"_s));
+    }
+
+    void mathFormulasAreOffByDefault()
+    {
+        const QString html = katex(u"x^2"_s, u"<mi>x</mi>"_s);
+        QVERIFY(!htmlToMarkdown(u"<p>"_s + html + u"</p>"_s).markdown.contains(u"$x^2$"_s));
+        QCOMPARE(htmlToMarkdown(u"<p>a<math><mi>x</mi></math>b</p>"_s).markdown, u"ab\n"_s);
+    }
+
+    void mathmlToTex_data()
+    {
+        QTest::addColumn<QString>("mathml");
+        QTest::addColumn<QString>("tex");
+        const auto row = [](const char *name, const QString &body, const QString &tex) {
+            QTest::newRow(name) << u"<math>"_s + body + u"</math>"_s << tex;
+        };
+        row("identifiers and numbers", u"<mi>x</mi><mo>+</mo><mn>12</mn>"_s, u"x+12"_s);
+        row("a fraction", u"<mfrac><mn>1</mn><mn>2</mn></mfrac>"_s, u"\\frac{1}{2}"_s);
+        row("a binomial", u"<mfrac linethickness=\"0\"><mi>n</mi><mi>k</mi></mfrac>"_s, u"\\binom{n}{k}"_s);
+        row("a root with an index", u"<mroot><mi>x</mi><mn>3</mn></mroot>"_s, u"\\sqrt[3]{x}"_s);
+        row("a power of a sum", u"<msup><mrow><mo>(</mo><mi>a</mi><mo>+</mo><mi>b</mi><mo>)</mo></mrow><mn>2</mn></msup>"_s,
+            u"(a+b)^2"_s);
+        row("a power of a sum without brackets", u"<msup><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow><mn>2</mn></msup>"_s,
+            u"{a+b}^2"_s);
+        row("a power of a number", u"<msup><mn>12</mn><mn>2</mn></msup>"_s, u"{12}^2"_s);
+        row("an index and an exponent", u"<msubsup><mi>x</mi><mi>i</mi><mn>10</mn></msubsup>"_s, u"x_i^{10}"_s);
+        row("a script of a script", u"<msup><msub><mi>x</mi><mi>i</mi></msub><mn>2</mn></msup>"_s, u"{x_i}^2"_s);
+        row("a sum", u"<munderover><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>0</mn></mrow><mi>n</mi></munderover><msup><mi>q</mi><mi>k</mi></msup>"_s,
+            u"\\sum_{k=0}^{n}q^k"_s);
+        row("an integral", u"<msubsup><mo>∫</mo><mn>0</mn><mn>1</mn></msubsup><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mi>d</mi><mi>x</mi>"_s,
+            u"\\int_{0}^{1}f(x)dx"_s);
+        row("a limit", u"<munder><mi>lim</mi><mrow><mi>x</mi><mo>→</mo><mn>0</mn></mrow></munder><mfrac><mrow><mi>sin</mi><mo>⁡</mo><mi>x</mi></mrow><mi>x</mi></mfrac>"_s,
+            u"\\lim_{x\\to0}\\frac{\\sin x}{x}"_s);
+        row("accents", u"<mover><mi>x</mi><mo>¯</mo></mover><mover><mi>v</mi><mo>→</mo></mover><mover accent=\"true\"><mi>a</mi><mo>^</mo></mover>"_s,
+            u"\\overline{x}\\vec{v}\\hat{a}"_s);
+        row("an underline and an overset", u"<munder><mi>x</mi><mo>_</mo></munder><mover><mo>=</mo><mi>def</mi></mover>"_s,
+            u"\\underline{x}\\overset{\\mathrm{def}}{=}"_s);
+        row("Greek letters", u"<mi>α</mi><mi>β</mi><mi>Ω</mi><mi>φ</mi><mi>ϕ</mi><mi>ε</mi>"_s,
+            u"\\alpha\\beta\\Omega\\varphi\\phi\\varepsilon"_s);
+        row("a word as an identifier", u"<mi>abc</mi><mi mathvariant=\"normal\">d</mi><mi mathvariant=\"bold\">v</mi>"_s,
+            u"\\mathrm{abc}\\mathrm{d}\\mathbf{v}"_s);
+        row("mathematical alphanumerics", u"<mi>𝑥</mi><mi>𝔸</mi><mi>ℝ</mi>"_s, u"x\\mathbb{A}\\mathbb{R}"_s);
+        row("text with Polish letters and specials", u"<mtext>dla każdego_x &amp; 50%</mtext>"_s,
+            u"\\text{dla każdego\\_x \\& 50\\%}"_s);
+        row("spaces", u"<mi>a</mi><mspace width=\"1em\"></mspace><mi>b</mi><mtext> </mtext><mi>c</mi>"_s,
+            u"a\\quad b\\ c"_s);
+        row("a decimal comma", u"<mn>0,5</mn><mo>+</mo><mn>1.5</mn>"_s, u"0{,}5+1.5"_s);
+        row("a matrix", u"<mrow><mo>(</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable><mo>)</mo></mrow>"_s,
+            u"\\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix}"_s);
+        row("cases", u"<mrow><mo>{</mo><mtable><mtr><mtd><mi>x</mi></mtd><mtd><mtext>dla </mtext><mi>x</mi><mo>&gt;</mo><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mtext>w p.p.</mtext></mtd></mtr></mtable></mrow>"_s,
+            u"\\begin{cases} x & \\text{dla }x>0 \\\\ 0 & \\text{w p.p.} \\end{cases}"_s);
+        row("fences", u"<mfenced open=\"[\" close=\"]\"><mi>a</mi><mi>b</mi></mfenced>"_s, u"[a,b]"_s);
+        row("a braced set", u"<mo>{</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>}</mo>"_s, u"\\{1,2\\}"_s);
+        row("semantics without TeX", u"<semantics><mrow><mi>y</mi></mrow><annotation encoding=\"MathML-Content\">ignored</annotation></semantics>"_s, u"y"_s);
+        row("an old square root", u"<mo>√</mo><mn>2</mn>"_s, u"\\sqrt{2}"_s);
+        row("a control word before a letter", u"<mi>π</mi><mi>r</mi><mo>≤</mo><mi>x</mi>"_s, u"\\pi r\\le x"_s);
+        row("an unknown element's text", u"<mglyph>ż</mglyph>"_s, u"\\text{ż}"_s);
+        row("empty", u"<mrow></mrow>"_s, QString());
+        QTest::newRow("no math element") << u"<p>x</p>"_s << QString();
+    }
+    void mathmlToTex()
+    {
+        QFETCH(QString, mathml);
+        QFETCH(QString, tex);
+        QCOMPARE(detail::mathmlToTex(mathml), tex);
+    }
+
+    void mathFormulasAreBounded()
+    {
+        // Deep MathML, a page of thousands of formulas and of unclosed containers: quick, bounded.
+        brulion::test::CpuTimer timer;
+        timer.start();
+        const QString deep = u"<p><math>"_s + u"<mrow>"_s.repeated(5000) + u"<mi>x</mi>"_s + u"</mrow>"_s.repeated(5000)
+                             + u"</math></p>"_s;
+        QVERIFY(withMath(deep).markdown.startsWith(u"$"_s));
+        QString many = u"<p>"_s;
+        for (int i = 0; i < 20000; ++i)
+            many += u"<span class=\"katex\"><math><mi>x</mi><annotation encoding=\"application/x-tex\">x_"_s
+                    + QString::number(i) + u"</annotation></math></span> "_s;
+        many += u"</p>"_s;
+        const QString out = withMath(many).markdown;
+        QVERIFY(out.contains(u"$x_9999$"_s));
+        QVERIFY(!out.contains(QChar(detail::MathSlotOpen)));
+        const QString unclosed = u"<span class=\"katex\"><math><mi>x</mi>"_s.repeated(50000);
+        QVERIFY(!withMath(unclosed).markdown.contains(QChar(detail::MathSlotOpen)));
+        QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
     }
 
     // The clipboard's HTML of copied blocks (io/clipboardhtml.h): semantic, escaped, no links into

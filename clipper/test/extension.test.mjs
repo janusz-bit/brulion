@@ -69,3 +69,27 @@ test('the page reader picks the largest srcset candidate', () => {
   assert.equal(largestSrcset(undefined), '');
   assert.equal(largestSrcset(',,, ,'), '');
 });
+
+test('the page reader keeps the TeX scripts of MathJax 2 as elements of the copy', () => {
+  const context = { document: {}, window: {}, Node: {} };
+  vm.createContext(context);
+  vm.runInContext(read('content/extract.js'), context);
+  const { keepMathSources } = context.brulionClipperHelpers;
+  const made = [];
+  const element = (type, text) => ({
+    getAttribute: (name) => (name === 'type' ? type : null),
+    textContent: text,
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    replaceWith(other) { this.replacedBy = other; },
+  });
+  const scripts = [element('math/tex', 'x_{\\alpha} < 1'), element('math/tex; mode=display', '\\frac{1}{2}')];
+  const root = {
+    ownerDocument: { createElement: (name) => { const e = element(null, ''); e.name = name; made.push(e); return e; } },
+    querySelectorAll: (selector) => { assert.equal(selector, 'script[type^="math/"]'); return scripts; },
+  };
+  keepMathSources(root);
+  assert.deepEqual(made.map((e) => [e.name, e.attributes.type, e.textContent]),
+    [['brulion-math-source', 'math/tex', 'x_{\\alpha} < 1'], ['brulion-math-source', 'math/tex; mode=display', '\\frac{1}{2}']]);
+  assert.ok(scripts.every((s, i) => s.replacedBy === made[i]));
+});

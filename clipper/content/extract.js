@@ -104,6 +104,22 @@
     return map;
   }
 
+  /**
+   * MathJax 2 keeps a formula's TeX in `<script type="math/tex">` (MathML in `type="math/mml"`),
+   * which Readability and the copies of the page drop with every script: each becomes a
+   * `<brulion-math-source type="…">` with the same text, which the host turns into `$…$`
+   * (docs/CLIPPER.md "Math formulas"). It is only an element of the copy; nothing of it runs.
+   */
+  function keepMathSources(root) {
+    const doc = root.ownerDocument || root;
+    for (const script of root.querySelectorAll('script[type^="math/"]')) {
+      const source = doc.createElement('brulion-math-source');
+      source.setAttribute('type', script.getAttribute('type'));
+      source.textContent = script.textContent;
+      script.replaceWith(source);
+    }
+  }
+
   function meta(...names) {
     for (const name of names) {
       const element =
@@ -177,6 +193,7 @@
         box.appendChild(fragment);
       }
     }
+    keepMathSources(box);
     absolutize(box, base);
     return { html: cut(box.innerHTML), text: cut(sel.toString()) };
   }
@@ -186,6 +203,7 @@
     try {
       // A copy: Readability changes the document it reads.
       const copy = document.cloneNode(true);
+      keepMathSources(copy);
       const parsed = new Readability(copy, { keepClasses: true, charThreshold: 300 }).parse();
       if (!parsed || !parsed.content) return null;
       // Parsed into a document of its own: nothing of it loads or runs.
@@ -207,6 +225,7 @@
       const current = sources.get(img);
       if (current && copies[i]) copies[i].setAttribute('src', current);
     });
+    keepMathSources(copy);
     for (const element of copy.querySelectorAll('script, style, noscript, template, link, meta')) element.remove();
     absolutize(copy, base);
     return cut(copy.innerHTML);
@@ -243,5 +262,5 @@
   }
 
   globalThis.brulionClipperExtract = extract;
-  globalThis.brulionClipperHelpers = { largestSrcset, absolute };
+  globalThis.brulionClipperHelpers = { largestSrcset, absolute, keepMathSources };
 })();

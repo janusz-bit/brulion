@@ -21,7 +21,7 @@ brulion_add_core_module(io
         csv.h csv.cpp
         tablecsv.h tablecsv.cpp
         ical.h ical.cpp
-        htmlmarkdown.h htmlmarkdown.cpp htmlutil_p.h
+        htmlmarkdown.h htmlmarkdown.cpp htmlutil_p.h htmlmath_p.h htmlmath.cpp
         links_p.h links.cpp
         logseq_p.h logseq.cpp
         importer.h importer.cpp importers_p.h

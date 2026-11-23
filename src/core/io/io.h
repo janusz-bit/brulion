@@ -58,9 +58,11 @@
 //                  toWallClock(value, zone), parseDuration / parseDurationParts (nominal days +
 //                  exact seconds, RFC 5545 3.3.6), parseRRule / formatRRule
 //                  (<-> dates::RecurrenceRule), escapeText / unescapeText / foldLine
-//   htmlmarkdown.h htmlToMarkdown(html, {image, link callbacks}) -> {markdown, title}
+//   htmlmarkdown.h htmlToMarkdown(html, {image, link callbacks, mathFormulas}) -> {markdown, title}
 //                  (QTextDocument parses — no resources ever loaded —, own Markdown writer:
-//                  no wrapping, GFM tables, checkboxes, code languages), htmlToPlainText,
+//                  no wrapping, GFM tables, checkboxes, code languages, with mathFormulas
+//                  the formulas of web pages — KaTeX, MathJax, Wikipedia, MathML — as `$…$`),
+//                  htmlToPlainText,
 //                  escapeMarkdownText(text, lineStart, linkLabel)
 //   clipboardhtml.h clipboardHtml(markdown, {config, attachmentUrl, blockText}) — copied blocks
 //                  as escaped HTML for the clipboard (pictures as links, never data: URLs)

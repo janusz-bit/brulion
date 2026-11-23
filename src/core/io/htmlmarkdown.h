@@ -29,6 +29,14 @@ struct HtmlToMarkdownOptions {
     /// (its label: the element's `title`, else the address); off: they are dropped with their
     /// content (the Web Clipper turns it on).
     bool embedsAsLinks = false;
+    /// Math formulas of web pages — KaTeX, MathJax 2 and 3, Wikipedia's and any `<math>` (MathML
+    /// converted to TeX) — become `$…$` (inline) and `$$…$$` (display, a paragraph of its own)
+    /// with their TeX source, the rendering they come with dropped (docs/CLIPPER.md "Math
+    /// formulas"); off: `<math>` is dropped with its content. A formula the editor would not read
+    /// as one (TeX with a backtick, a closing `$` before a letter…) is put in a code span; a letter
+    /// or digit touching a formula gets a space. The formula marks of htmlutil_p.h that callbacks
+    /// return are removed from the result when this is on.
+    bool mathFormulas = false;
 };
 
 struct HtmlMarkdown {

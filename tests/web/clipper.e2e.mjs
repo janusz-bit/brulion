@@ -47,6 +47,20 @@ const ARTICLE = `<!doctype html>
 <footer>© 2026 Przyroda Dziś</footer>
 </body></html>`;
 
+// Formulas of three kinds: KaTeX's MathML with its TeX, MathJax 2's script (which Readability drops: the
+// extension keeps it as an element of its copy) beside the rendered spans, and a MathML without any TeX.
+const FORMULAS = `<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>Wzory w ogrodzie</title></head><body>
+<nav class="menu"><a href="/">Strona główna</a></nav>
+<main><article>
+<h1>Wzory w ogrodzie</h1>
+<p>Ogrodnik liczy pole grządki, a potem wysiewa na niej nasiona w równych odstępach, dlatego od wiosny potrzebuje prostych wzorów, które da się zapisać na kartce i sprawdzić po pracy.</p>
+<p>Pole koła: <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>P</mi><mo>=</mo><mi>π</mi><msup><mi>r</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">P = \\pi r^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span>PIERWSZA KOPIA</span></span></span>, a obwód: <span class="MathJax_Preview"></span><span class="MathJax" id="MathJax-Element-1-Frame"><span>DRUGA KOPIA</span></span><script type="math/tex" id="MathJax-Element-1">L = 2\\pi r</script>.</p>
+<p>Średnia z pomiarów: <math><mover><mi>x</mi><mo>¯</mo></mover><mo>=</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msub><mi>x</mi><mi>i</mi></msub></math>, czyli tyle, ile wyszło po podzieleniu sumy przez liczbę grządek.</p>
+<p>Wzory z kartki warto przepisać do zeszytu ogrodnika razem z datą siewu i uwagami o pogodzie, bo za rok będą potrzebne do porównania plonów z poprzednim sezonem.</p>
+</article></main>
+</body></html>`;
+
 let server;
 let base;
 let work;
@@ -113,6 +127,9 @@ test.beforeAll(async () => {
     if (path === '/artykul.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(ARTICLE);
+    } else if (path === '/wzory.html') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(FORMULAS);
     } else if (path === '/zdjecia/zolw.png') {
       res.writeHead(200, { 'content-type': 'image/png' });
       res.end(picturePng());
@@ -254,6 +271,23 @@ test('a screenshot of the visible part becomes a page with the picture', async (
   expect(note).toMatch(/!\[\[Żółw stepowy w ogrodzie 1\.png\]\]/);
   const shot = readFileSync(join(vault, 'assets', 'Żółw stepowy w ogrodzie 1.png'));
   expect(shot.subarray(1, 4).toString()).toBe('PNG');
+  await page.close();
+});
+
+test('formulas of an article become $…$ with their TeX', async () => {
+  await setSettings({ place: 'page', folder: 'Wzory', templatePage: 'builtin:brulion' });
+  const page = await context.newPage();
+  await page.goto(`${base}/wzory.html`);
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${EXTENSION_ID}/popup.html?tab=${await tabOf(`${base}/wzory.html`)}`);
+  await expect(popup.locator('#form')).toBeVisible();
+  await popup.click('#save');
+  await expect(popup.locator('#result')).toBeVisible();
+  const note = readNote('Wzory/Wzory w ogrodzie.md');
+  expect(note).toContain('Pole koła: $P = \\pi r^2$, a obwód: $L = 2\\pi r$.');
+  expect(note).toContain('Średnia z pomiarów: $\\overline{x}=\\frac{1}{n}\\sum_{i=1}^{n}x_i$, czyli');
+  expect(note).not.toContain('KOPIA');
+  await popup.close();
   await page.close();
 });
 

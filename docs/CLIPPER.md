@@ -18,8 +18,8 @@ Nothing leaves the computer except the requests for the clip's pictures, to the 
 
 * [Installing](#installing): the extension, then `brulion-cli clip install` once.
 * [Clipping](#clipping): the popup, context menus, shortcuts.
-* [What a clip becomes](#what-a-clip-becomes), [pictures](#pictures), [templates](#templates),
-  [options](#options).
+* [What a clip becomes](#what-a-clip-becomes), [math formulas](#math-formulas),
+  [pictures](#pictures), [templates](#templates), [options](#options).
 * [Without the host](#without-the-host-phone-browser-version): the phone and the browser version.
 * [The host](#the-host): messages, limits, security; [privacy](#privacy); [packages](#packages);
   [tests](#tests); [troubleshooting](#troubleshooting).
@@ -143,6 +143,7 @@ ever loaded or run):
   a link to the page's own section (`#notes`, footnotes) keeps the page's address; `javascript:`,
   `data:` and `file:` links keep only their text; a picture linking to itself is the picture alone;
 * **players** (YouTube, Vimeo, `<iframe>`, `<video>`, `<audio>`) become links to them;
+* **math formulas** as `$…$` and `$$…$$` with their TeX ([Math formulas](#math-formulas));
 * scripts, styles, forms, `<svg>`, `<canvas>` and event handlers are dropped; text that would read
   as Markdown syntax is escaped (`\*`, `\#`), dollars that would pair into a formula too.
 
@@ -152,6 +153,42 @@ gets the site's name). **The journal** and **a heading's section** get one block
 indented under its first line, its YAML frontmatter turned into `key:: value` properties of the
 block (lists joined with commas, tags as `#tag`). The note's other bytes, its line endings and its
 BOM stay as they were.
+
+## Math formulas
+
+A formula of a page becomes what the notebook writes: `$…$` inside a line and `$$…$$` as a paragraph
+of its own (docs/SYNTAX.md §11), with the TeX source — the rendering the page shows (HTML, SVG, a
+picture) is dropped, not saved twice. The host reads the page's HTML by tags (`io/htmlmath.cpp`, no
+script and no DOM), so every source below works the same in an article, a selection and a whole
+page:
+
+| Source | Where the TeX comes from |
+|---|---|
+| **KaTeX** (`.katex`, `.katex-display`) | the `<annotation encoding="application/x-tex">` of its MathML; the `.katex-html` copy is dropped |
+| **MathJax 3** (`<mjx-container>`) | the TeX of an annotation in its assistive MathML, else that MathML converted; else a `data-tex` / `data-latex` attribute; `display="true"` makes a block |
+| **MathJax 2** (`<script type="math/tex">`, `; mode=display`; `type="math/mml"`) | the script's text; its rendered `.MathJax_Preview`, `.MathJax`, `.MathJax_Display` spans are dropped |
+| **Wikipedia** (`.mwe-math-element`) | the `<math>`'s annotation (`{\displaystyle …}` taken off), else the TeX in the `alt` of its fallback picture |
+| **any `<math>`** | the annotation's TeX, else the MathML converted to TeX, else its `alttext`, else its text |
+| **Pandoc, Sphinx** (`class="math"`) | the text inside `\( … \)`, `\[ … \]`, `$ … $` or `$$ … $$` |
+
+The MathML conversion knows `mi`, `mn`, `mo` (Greek letters, operators, arrows, relations, brackets),
+`mtext` (`\text{…}`, Polish letters kept; a decimal comma `3,14` is `3{,}14`), `mfrac` (`\binom` for a
+zero `linethickness`), `msqrt`, `mroot`, `msup`, `msub`, `msubsup`, `munder`, `mover`, `munderover`
+(sums, integrals and limits keep their limits as indices; accents such as a bar, hat, arrow and dot
+become `\overline`, `\hat`, `\vec`, `\dot`; other cases `\overset` / `\underset`), `mfenced`, `mtable`
+(a matrix between brackets is `pmatrix`, `bmatrix`, `vmatrix`; a brace before a table is `cases`),
+`mspace`, `mphantom`, `semantics`, and the letters of Unicode's mathematical alphabets (`𝑥` is `x`,
+`𝔸` is `\mathbb{A}`). An element it does not know gives its text as `\text{…}`.
+
+MathJax 2 keeps its TeX in `<script>` elements, which Readability and the page copies drop: the
+extension (`content/extract.js`, `keepMathSources`) puts each in a `<brulion-math-source type="…">`
+of the copy first. Formulas in `<pre>` and `<code>` stay code. A page's formula is never lost to the
+notebook's syntax rules: TeX the editor would not read as one formula (a backtick, a trailing
+backslash…) is written as a code span with its TeX; a letter, a digit or a dollar touching a formula
+is parted from it by a space (`Niech$x$` and `$x$ów` are no formulas); in a table cell the bars of
+the TeX become `\vert` / `\Vert`; the dollars of the page's own text are escaped as before ("Cena
+$10, … 15$"), so a price never joins a formula. Beyond 10 000 formulas a page keeps the rest as
+text. A page that renders its math as pictures only (no source anywhere) keeps those pictures.
 
 ## Pictures
 
@@ -351,6 +388,13 @@ no `key`), the version of CMakeLists.txt, sorted entries with fixed times. `--li
 Firefox's manifest asks for Firefox 140 (`data_collection_permissions`; 142 on Android, where native
 messaging is missing anyway). Publishing in the stores (signing for Firefox) is not done.
 
+**Where the packages are:** every release (`release.yml`, its source job) runs `scripts/clipper-pack.sh`
+with the release's version and attaches `brulion-clipper-<version>-chrome.zip` (the Chromium
+browsers) and `brulion-clipper-<version>-firefox.xpi` to the GitHub release beside the other files,
+with their lines in `SHA256SUMS.txt`. The Firefox package is **unsigned** — Mozilla has not signed it
+yet — so release Firefox loads it only as a temporary add-on (`about:debugging`); the release notes
+say so. The store package (`--store`) is not attached: it belongs to the store listing.
+
 `clipper/vendor/Readability.js` is Mozilla's Readability 0.6.0, unchanged (Apache License 2.0,
 `clipper/vendor/Readability-LICENSE.md`; `clipper/vendor/README.md` says how to update it).
 
@@ -358,8 +402,8 @@ messaging is missing anyway). Publishing in the stores (signing for Firefox) is 
 
 * `tst_clipper` (src/core/clipper): frames in any pieces, malformed and oversized ones; requests
   (hostile values refused or cleaned); templates (YAML, left-out lines, the built-ins, Polish); a
-  Polish article (`tests/core/clipper/fixtures/artykul.html` → `artykul.md`;
-  `BRULION_CLIPPER_UPDATE_FIXTURES=1` rewrites it) and HTML pieces (figures, code, links, players,
+  Polish article (`tests/core/clipper/fixtures/artykul.html` → `artykul.md`) and one with formulas of
+  every source (`wzory.html` → `wzory.md`; `BRULION_CLIPPER_UPDATE_FIXTURES=1` rewrites both) and HTML pieces (figures, code, links, players,
   scripts); pictures from a server on 127.0.0.1 (limits, private hosts, a silent server); manifests
   and their places on Linux, macOS and Windows; installing, reading and removing them in a private
   home (another program's file of the same name stays); the browsers' launch arguments.
@@ -367,10 +411,11 @@ messaging is missing anyway). Publishing in the stores (signing for Firefox) is 
   a heading's section with CRLF kept, previews and dry runs writing nothing, refusals, the host's
   frames (every request, another notebook, an unknown one, malformed and oversized frames), the
   browsers' arguments, `clip install` / `status` / `uninstall` / `manifest` in a private home.
-* `tst_io_html`: the converter's article rows.
+* `tst_io_html`: the converter's article rows and the math formulas of every source (KaTeX, MathJax 2
+  and 3, Wikipedia, plain MathML, Pandoc; the MathML → TeX table; the text around a formula; limits).
 * `tst_clipper_extension`: `node --test clipper/test/` — the clip request, settings, templates, the
   manifest's ids against the host's, the translations (both languages, every key used), the page
-  reader's `srcset` (skipped without node).
+  reader's `srcset` and its MathJax 2 script copies (skipped without node).
 * `scripts/web-test.sh --clipper` (`tests/web/clipper.e2e.mjs`, Playwright): the extension in a real
   Chromium with brulion-cli as its host — the popup clipping an article into a page with its picture
   (Polish texts, the preview), a selection and a link from the context menus into the journal, a
