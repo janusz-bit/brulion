@@ -319,6 +319,17 @@ endif()
 # Claude Code's and Codex's subscription limits as the chat shows them (agentlimits.h): which agents
 # have them, their texts in local time, read when shown or refreshed over a fake transport.
 brulion_add_test(tst_shell_agentlimits SOURCES tst_agentlimits.cpp LIBS brulion_shell brulion_core_agentlimits)
+# An agent's tool calls in words (chattools.h): a part per kind in the order done, at most three
+# named, the failed ones apart, the answer of a turn without words — in English and in Polish with
+# the app's own translations (i18n/*.ts, compiled here as for brulion-cli), their plural forms.
+brulion_add_test(tst_shell_chattools SOURCES tst_chattools.cpp LIBS brulion_shell)
+if(COMMAND qt_add_lrelease)
+    qt_add_lrelease(
+        TS_FILES ${PROJECT_SOURCE_DIR}/i18n/brulion_pl.ts ${PROJECT_SOURCE_DIR}/i18n/brulion_en.ts
+        LRELEASE_TARGET tst_shell_chattools_lrelease)
+    target_compile_definitions(tst_shell_chattools PRIVATE BRULION_QM_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+    add_dependencies(tst_shell_chattools tst_shell_chattools_lrelease)
+endif()
 # A brulion-cli server run while the app runs (serverprocess.h) with a server of the test's own
 # (fakeserver.cpp): Running on its first line, stopped by the end of its input (terminated when it
 # ignores it), started again after a crash with growing waits, a refusal final, new arguments.

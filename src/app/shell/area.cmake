@@ -85,6 +85,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/chatschedules.h ${_brulion_shell_dir}/chatschedules.cpp
     ${_brulion_shell_dir}/chatcontrol.h ${_brulion_shell_dir}/chatcontrol.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
+    ${_brulion_shell_dir}/chattools.h ${_brulion_shell_dir}/chattools.cpp
     ${_brulion_shell_dir}/agentshare.h ${_brulion_shell_dir}/agentshare.cpp
     ${_brulion_shell_dir}/agentlimits.h ${_brulion_shell_dir}/agentlimits.cpp
     ${_brulion_shell_dir}/serverprocess.h ${_brulion_shell_dir}/serverprocess.cpp

@@ -1181,11 +1181,13 @@ private Q_SLOTS:
         QCOMPARE(seenPlan.size(), 2);
         QCOMPARE(seenPlan.at(1).toMap().value(u"content"_s).toString(), u"Napisać plan"_s);
         QCOMPARE(seenPlan.at(1).toMap().value(u"status"_s).toString(), u"in_progress"_s);
-        // Tool calls without words: what it did is the answer.
+        // Tool calls without words: what it did is the answer — the calls in words (chattools.h;
+        // untranslated here: "file(s)"), then their titles.
         QCOMPARE(chats->send(path, u"Same narzędzia"_s), path);
         QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
         QCOMPARE(turn->failure(), QString());
-        QVERIFY2(ws->read(path).contains(u"- 🤖 Done:\n  czas:: 2026-11-20 09:15\n\n  - Edit Dom.md"_s), qPrintable(ws->read(path)));
+        QVERIFY2(ws->read(path).contains(u"- 🤖 Edited 1 file(s)\n  czas:: 2026-11-20 09:15\n\n  - Edit Dom.md"_s),
+                 qPrintable(ws->read(path)));
         // Its usage and its slash commands.
         QCOMPARE(chats->agentUsage(path), u"20 % of the context · 0.25 USD"_s);
         QCOMPARE(chats->agentCommands(path, u"acp:fake"_s, u"/"_s).size(), 2);
@@ -1596,6 +1598,8 @@ private Q_SLOTS:
         QVERIFY(context.contains(u"/home/ala/Notatki"_s));
         QVERIFY(context.contains(u"MCP server \"brulion\""_s));
         QVERIFY(!context.contains(u"about the note"_s));
+        // Answers may draw: the chat shows a chart, a diagram and a formula as the editor does.
+        QVERIFY(context.contains(u"```mermaid"_s) && context.contains(u"```chart"_s) && context.contains(u"$$…$$"_s));
         QCOMPARE(WorkspaceAgents::transcript({QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Tylko to"_s}}}), QString());
         QCOMPARE(WorkspaceAgents::transcript({QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Żółw?"_s}},
                                               QVariantMap{{u"role"_s, u"assistant"_s}, {u"content"_s, u" Je sałatę. "_s}},

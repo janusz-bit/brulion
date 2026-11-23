@@ -1196,6 +1196,146 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QCOMPARE(wanted.size(), 6);
     }
+
+    void segments_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QStringList>("kinds"); // [] = text only: the bubble's one rich text
+        const QString table = u"| Miesiąc | Przychód |\n|---|--:|\n| Styczeń | 1 200 zł |\n| Luty | 1 500 zł |\n\n"_s;
+        QTest::newRow("plain text") << u"Zwykła odpowiedź z **pogrubieniem** i `kodem`."_s << QStringList();
+        QTest::newRow("a fence without a language") << u"```\nflowchart LR\nA-->B\n```"_s << QStringList();
+        QTest::newRow("code") << u"```luau\nprint(\"<b>\")\n```"_s << QStringList();
+        QTest::newRow("a diagram between words")
+                << u"Oto schemat:\n\n```mermaid\nflowchart LR\n  A[Pomysł] --> B{Czy warto?}\n```\n\nI dalej."_s
+                << QStringList{u"text"_s, u"diagram"_s, u"text"_s};
+        QTest::newRow("Mermaid in capitals") << u"```Mermaid\ngraph TD\nA-->B\n```"_s << QStringList{u"diagram"_s};
+        QTest::newRow("a sequence, Polish") << u"Zażółć gęślą jaźń:\n\n```mermaid\nsequenceDiagram\nAla->>Ola: Cześć\n```"_s
+                                           << QStringList{u"text"_s, u"diagram"_s};
+        QTest::newRow("a pie, tildes") << u"~~~mermaid\npie\n\"Tak\" : 3\n\"Nie\" : 1\n~~~"_s << QStringList{u"diagram"_s};
+        QTest::newRow("a type not drawn") << u"```mermaid\nclassDiagram\nA <|-- B\n```"_s << QStringList();
+        QTest::newRow("no diagram type") << u"```mermaid\nzażółć gęślą jaźń\n```"_s << QStringList();
+        QTest::newRow("an empty diagram") << u"```mermaid\n```"_s << QStringList();
+        QTest::newRow("unterminated") << u"Rysuję:\n\n```mermaid\nflowchart LR\nA-->B"_s << QStringList();
+        QTest::newRow("nested backticks") << u"````markdown\n```mermaid\nflowchart LR\nA-->B\n```\n````"_s << QStringList();
+        QTest::newRow("a longer closing fence") << u"```mermaid\nflowchart LR\nA-->B\n````"_s << QStringList{u"diagram"_s};
+        QTest::newRow("a shorter closing fence") << u"````mermaid\nflowchart LR\nA-->B\n```"_s << QStringList();
+        QTest::newRow("a chart of the table above") << table + u"```chart\ntype: bar\ntitle: Budżet\n```"_s
+                                                    << QStringList{u"text"_s, u"chart"_s};
+        QTest::newRow("a chart in Polish keys") << table + u"```chart\ntyp: kołowy\ntytuł: Przychody\n```"_s
+                                                << QStringList{u"text"_s, u"chart"_s};
+        QTest::newRow("a chart without a table") << u"```chart\ntype: bar\n```"_s << QStringList();
+        QTest::newRow("a chart that fails") << table + u"```chart\ntype: bar\nkolor: zielony\n```"_s << QStringList();
+        QTest::newRow("a chart of a column not there") << table + u"```chart\ny: Koszt\n```"_s << QStringList();
+        QTest::newRow("a chart of a query") << u"```chart\nquery: type:tasks group:status\n```"_s << QStringList();
+        QTest::newRow("an unterminated chart") << table + u"```chart\ntype: bar"_s << QStringList();
+        QTest::newRow("a math block") << u"```math\n\\frac{a}{b}\n```"_s << QStringList{u"math"_s};
+        QTest::newRow("latex, tex") << u"```latex\nE = mc^2\n```\n\n```tex\n\\sqrt{2}\n```"_s
+                                    << QStringList{u"math"_s, u"math"_s};
+        QTest::newRow("an empty math block") << u"```math\n```"_s << QStringList();
+        QTest::newRow("a display formula") << u"Wzór:\n\n$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$\n\nKoniec."_s
+                                           << QStringList{u"text"_s, u"math"_s, u"text"_s};
+        QTest::newRow("a formula in a sentence") << u"Wynik to $$x^2$$ i tyle."_s << QStringList();
+        QTest::newRow("an inline formula") << u"Cena $x$ zł."_s << QStringList();
+        QTest::newRow("a diagram, then a formula") << u"```mermaid\nflowchart TD\nA-->B\n```\n\n```math\nx^2\n```"_s
+                                                   << QStringList{u"diagram"_s, u"math"_s};
+    }
+
+    void segments()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QStringList, kinds);
+        markdown::RenderContext context;
+        context.locale = dates::UiLocale::Polish;
+        const QVariantList segments = ChatMessageModel::renderSegments(markdown, context);
+        QStringList got;
+        for (const QVariant &segment : segments)
+            got << segment.toMap().value(u"kind"_s).toString();
+        QCOMPARE(got, kinds);
+        // The bubble's rich text stays as it was (the code shown as written).
+        QVERIFY(!ChatMessageModel::renderMessage(markdown, context).isEmpty());
+        for (const QVariant &v : segments) {
+            const QVariantMap segment = v.toMap();
+            // Every key of every part (the delegates read them all).
+            QCOMPARE(segment.keys(), (QStringList{u"chartData"_s, u"code"_s, u"html"_s, u"kind"_s, u"source"_s}));
+            const QString kind = segment.value(u"kind"_s).toString();
+            const QString html = segment.value(u"html"_s).toString();
+            QVERIFY2(!html.isEmpty(), qPrintable(kind));
+            if (kind == u"text") {
+                // No room under its last paragraph: the gap between the parts is the room.
+                const qsizetype at = html.lastIndexOf(u"margin-bottom:"_s);
+                QVERIFY2(at < 0 || QStringView(html).sliced(at).startsWith(u"margin-bottom:0px"), qPrintable(html));
+                continue;
+            }
+            // A drawing: what it draws and the block as written (Copy source).
+            const QString code = segment.value(u"code"_s).toString();
+            const QString source = segment.value(u"source"_s).toString();
+            QVERIFY2(!code.isEmpty() && markdown.contains(code), qPrintable(code));
+            QVERIFY2(markdown.contains(source.trimmed()) && source.contains(code), qPrintable(source));
+            QCOMPARE(segment.value(u"chartData"_s).toMap().isEmpty(), kind != u"chart");
+            if (kind == u"diagram")
+                QVERIFY2(html.contains(u"<pre"_s), qPrintable(html)); // (shown when it cannot be drawn)
+        }
+    }
+
+    void segmentsOfAChart()
+    {
+        // The numbers come from the message's own table, as the editor reads a page's (Polish numbers).
+        markdown::RenderContext context;
+        const QString message = u"Przychody:\n\n| Miesiąc | Przychód | Koszt |\n|---|--:|--:|\n| Styczeń | 1 200 zł | 900 |\n"
+                                "| Luty | 1 500,50 zł | n/d |\n\n```chart\ntype: line\ntitle: Budżet 2026\n```\n\nTak to wygląda."_s;
+        const QVariantList segments = ChatMessageModel::renderSegments(message, context);
+        QCOMPARE(segments.size(), 3);
+        const QVariantMap chart = segments.at(1).toMap();
+        QCOMPARE(chart.value(u"code"_s).toString(), u"type: line\ntitle: Budżet 2026"_s);
+        QCOMPARE(chart.value(u"source"_s).toString(), u"```chart\ntype: line\ntitle: Budżet 2026\n```"_s);
+        const QVariantMap data = chart.value(u"chartData"_s).toMap();
+        QVERIFY(data.value(u"ok"_s).toBool());
+        QCOMPARE(data.value(u"labels"_s).toStringList(), (QStringList{u"Styczeń"_s, u"Luty"_s}));
+        QCOMPARE(data.value(u"labelsName"_s).toString(), u"Miesiąc"_s);
+        const QVariantList series = data.value(u"series"_s).toList();
+        QCOMPARE(series.size(), 2);
+        QCOMPARE(series.at(0).toMap().value(u"name"_s).toString(), u"Przychód"_s);
+        const QVariantList income = series.at(0).toMap().value(u"values"_s).toList();
+        QCOMPARE(income.at(0).toDouble(), 1200.0);
+        QCOMPARE(income.at(1).toDouble(), 1500.5);
+        const QVariantList cost = series.at(1).toMap().value(u"values"_s).toList();
+        QCOMPARE(cost.at(0).toDouble(), 900.0);
+        QVERIFY(cost.at(1).isNull()); // (a gap)
+        // The table stays a rich-text table of the text before it; the words after, their own part.
+        QVERIFY(segments.at(0).toMap().value(u"html"_s).toString().contains(u"<table"_s));
+        QVERIFY(segments.at(2).toMap().value(u"html"_s).toString().contains(u"Tak to wygląda."_s));
+        // English numbers in an English chat.
+        context.locale = dates::UiLocale::English;
+        const QVariantList english =
+                ChatMessageModel::renderSegments(u"| Day | Km |\n|---|--:|\n| Mon | 12.5 |\n\n```chart\ntype: bar\n```"_s, context);
+        QCOMPARE(english.size(), 2);
+        const QVariantList km = english.at(1).toMap().value(u"chartData"_s).toMap().value(u"series"_s).toList();
+        QCOMPARE(km.first().toMap().value(u"values"_s).toList().first().toDouble(), 12.5);
+    }
+
+    void segmentsOfAConversation()
+    {
+        // The model's rows: a message with a drawing in parts, one without none; pictures apart.
+        auto ws = open({{u"AI/2026-11-22 Schemat.md"_s,
+                         u"---\ntasks: ignore\n---\n- 🧑 Narysuj proces\n- 🤖 Proszę:\n\n  ```mermaid\n  flowchart LR\n"
+                         "    A[Zamówienie] --> B[Wysyłka]\n  ```\n\n  Gotowe.\n- 🤖 Bez rysunku.\n"_s}});
+        ChatMessageModel model;
+        model.setWorkspace(ws.get());
+        model.setPath(u"AI/2026-11-22 Schemat.md"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 3);
+        QVERIFY(value(model, 0, "segments").toList().isEmpty());
+        const QVariantList parts = value(model, 1, "segments").toList();
+        QCOMPARE(parts.size(), 3);
+        QCOMPARE(parts.at(1).toMap().value(u"kind"_s).toString(), u"diagram"_s);
+        QCOMPARE(parts.at(1).toMap().value(u"code"_s).toString(), u"flowchart LR\n  A[Zamówienie] --> B[Wysyłka]"_s);
+        QVERIFY(value(model, 1, "messageHtml").toString().contains(u"<pre"_s)); // (as before)
+        QVERIFY(value(model, 2, "segments").toList().isEmpty());
+        // The answer being written: its finished blocks in parts too.
+        QCOMPARE(model.segments(u"```math\nx^2\n```"_s).size(), 1);
+        QVERIFY(model.segments(u"Tylko tekst."_s).isEmpty());
+        QVERIFY(model.segments(QString()).isEmpty());
+    }
 };
 
 QTEST_MAIN(TestContentChat)

@@ -143,6 +143,11 @@ class AppSettings : public QObject {
     /// "Notify when the AI answers" (key `ai/chatNotify`; WorkspaceChats::setNotifyMode): "always",
     /// "background" (only while the app is not in front: the default) or "never".
     Q_PROPERTY(QString aiChatNotify READ aiChatNotify WRITE setAiChatNotify NOTIFY aiChatNotifyChanged FINAL)
+    /// "Tool calls in chat" (key `ai/chatToolCalls`; docs/UI.md "AI agents (ACP)"): "all" (default:
+    /// every call of an agent's turn), "hideFinished" (a call shows while it runs and stays only if
+    /// it failed), "hideAll" (only failed ones; the status line says the agent works). Questions,
+    /// failures and the plan always show.
+    Q_PROPERTY(QString chatToolCalls READ chatToolCalls WRITE setChatToolCalls NOTIFY chatToolCallsChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
@@ -375,6 +380,8 @@ public:
     void setAcpShareTrust(bool on);
     QString aiChatNotify() const;
     void setAiChatNotify(const QString &mode);
+    QString chatToolCalls() const;
+    void setChatToolCalls(const QString &shown);
     bool acpAvailable() const;
     bool acpProgramsAvailable() const;
     bool mcpServerEnabled() const;
@@ -614,6 +621,7 @@ Q_SIGNALS:
     void mcpServerChanged();
     void acpShareChanged();
     void aiChatNotifyChanged();
+    void chatToolCallsChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();

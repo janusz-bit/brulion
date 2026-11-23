@@ -319,6 +319,9 @@ public:
     bool agentsAvailable() const;
     /// The partner is an AI agent ("acp:…").
     Q_INVOKABLE bool isAgent(const QString &partner) const;
+    /// An AI agent's tool calls (ChatTurn.tools) in words: "Read 3 files · ran 2 commands"
+    /// (chattools.h; ChatActivity's summary line).
+    Q_INVOKABLE QString toolSummary(const QVariantList &tools) const;
     /// An AI agent's options for the conversation `path` ("" a new one) answered by `partner`
     /// (WorkspaceAgents::options(): {id, name, description, boolean, current, currentName,
     /// choices}); `serial`: agentSerial.

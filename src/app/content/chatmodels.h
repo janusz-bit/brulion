@@ -10,10 +10,14 @@
 //   // above the first message of a day, "" otherwise), pictures (their addresses to show; their
 //   // vault paths: picturePaths, to open), sent
 //   // (the model gets it: chat::firstSent with `budget`), firstSent (the first one it gets after
-//   // some it does not: a line above it says so)
+//   // some it does not: a line above it says so), segments (a message with a drawing — a ```chart
+//   // of its own table, a ```mermaid diagram, a display formula —: its parts one under another,
+//   // [{kind: "text" | "chart" | "diagram" | "math", html, code, source, chartData}]; [] for text
+//   // only: messageHtml shows it)
 //   // page: the page the conversation is about ("" none), title: the page's name without the date,
 //   // omitted: the messages the model does not get
-//   // render(markdown): an answer being written as a message shows it
+//   // render(markdown): an answer being written as a message shows it; segments(markdown): its
+//   // parts when it has a drawing ([] text only)
 //
 //   ChatListModel { workspace: Workspace; locale: DatesHelper.locale; query: field.text;
 //                   showArchived: false }
@@ -40,6 +44,7 @@
 #include <QString>
 #include <QTimer>
 #include <QUrl>
+#include <QVariantList>
 #include <QVariantMap>
 
 namespace brulion::content {
@@ -74,7 +79,8 @@ public:
         PicturesRole,
         SentRole,
         FirstSentRole,
-        PicturePathsRole
+        PicturePathsRole,
+        SegmentsRole
     };
     explicit ChatMessageModel(QObject *parent = nullptr);
 
@@ -103,11 +109,24 @@ public:
     /// `markdown` as a message of this conversation shows it (renderMessage): the answer being
     /// written, before it is one of the rows.
     Q_INVOKABLE QString render(const QString &markdown) const;
+    /// The segments of `markdown` (renderSegments): the answer being written — rendered again only
+    /// when one of its blocks is finished (ChatTurn.partialSettled).
+    Q_INVOKABLE QVariantList segments(const QString &markdown) const;
 
     /// A message's Markdown as the bubble shows it: its blocks as rich text, one paragraph each —
     /// indented by their depth, a list item after its bullet or number (a task's box from the
     /// renderer), a heading in bold, code and tables as preformatted text. Static for tests.
     static QString renderMessage(const QString &markdown, const markdown::RenderContext &context);
+    /// A message with a drawing in parts shown one under another (docs/UI.md "AI chat"): the runs
+    /// of its other blocks as renderMessage's rich text ("text": `html`), and each drawing — a
+    /// closed ```chart block whose table or calc block is in the message ("chart": `chartData`, as
+    /// BlockListModel's), a closed ```mermaid block of a type Brulion draws ("diagram"), a
+    /// ```math / ```latex / ```tex block or a paragraph that is one `$$…$$` formula ("math": `html`
+    /// the formula) — with `code` (what it draws), `source` (the block as written: Copy source) and
+    /// `html` (the block as renderMessage shows it: shown when the diagram cannot be drawn). A
+    /// drawing that cannot be drawn (a chart's mistake, a query, an unterminated fence, a Mermaid
+    /// type not drawn) stays in its text. [] when there is no drawing. Static for tests.
+    static QVariantList renderSegments(const QString &markdown, const markdown::RenderContext &context);
 
 Q_SIGNALS:
     void pathChanged();
@@ -133,6 +152,7 @@ private:
         QStringList picturePaths;
         bool sent = true;
         bool firstSent = false;
+        QVariantList segments;
     };
     QList<Row> m_rows;
     QString m_path;

@@ -3,6 +3,7 @@
 #include "appcontroller.h"
 #include "applockcontroller.h"
 #include "appsettings.h"
+#include "chattools.h"
 #include "commandmodel.h"
 #include "demovault.h"
 #include "extensionviewmodel.h"
@@ -62,6 +63,7 @@
 #include <QPdfWriter>
 #include <QPointer>
 #include <QQmlApplicationEngine>
+#include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlExpression>
 #include <QQuickItem>
@@ -7389,6 +7391,162 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
     settle(300);
 }
 
+/// Drawings in an AI answer (docs/UI.md "AI chat"): a conversation whose answer holds a chart of its
+/// own table, a display formula and a Mermaid diagram shows them in parts, drawn by the editor's
+/// items, the bubble as wide as its widest part; a tap on the diagram opens it large, Close (Escape
+/// with a keyboard) closes it; its menu has Copy source. Then ChatActivity under each "Tool calls in chat": the summary line,
+/// which calls show — the list open, closed (the running and the failed ones), only the failed —,
+/// and the status line's title hidden with "Hide all".
+void checkChatDrawings(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    AppSettings *settings = app->settings();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    // (The chat's field takes the keyboard and goes with the view, the journal's editor takes it then:
+    // the focus is given back after.)
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    const QString talk = u"AI/2026-11-22 Rysunki w odpowiedzi.md"_s;
+    app->workspace()->writeFile(talk, u"---\ntasks: ignore\n---\n- 🧑 Pokaż przychody i proces\n- 🤖 Przychody:\n\n"
+                                      u"  | Miesiąc | Przychód |\n  |---|--:|\n  | Styczeń | 1 200 zł |\n  | Luty | 1 500 zł |\n\n"
+                                      u"  ```chart\n  type: bar\n  title: Budżet\n  ```\n\n  $$\\frac{a}{b}$$\n\n"
+                                      u"  ```mermaid\n  flowchart LR\n    A[Pomysł] --> B{Czy warto?}\n    B --> C[Zrób to]\n  ```\n"_s);
+    app->navigate({{u"view"_s, u"chat"_s}, {u"path"_s, talk}});
+    QQuickItem *diagram = nullptr;
+    check(waitFor([&] { return (diagram = named(u"chatSegmentDiagram"_s)) != nullptr; }),
+          "an answer with a diagram shows it drawn");
+    QQuickItem *chart = named(u"chatSegmentChart"_s);
+    check(chart && chart->property("status").toString() == u"ok" && chart->width() >= 200,
+          "the chart of the answer's own table is drawn across the bubble");
+    check(diagram && diagram->property("status").toString() == u"ok" && named(u"chatSegmentMath"_s) != nullptr,
+          "and the diagram and the display formula");
+    QQuickItem *answer = named(u"chatMessageAi"_s);
+    check(answer && chart && answer->width() >= chart->width(), "the bubble is as wide as its widest part");
+    // A tap on the diagram: it opens large; Close closes it. (The bubble's row takes the press, not
+    // the diagram, which has no handler of its own: steadyItem() would refuse it — its point only
+    // has to stay put.)
+    QPointF at;
+    const auto steadyDiagram = [&] {
+        QPointF was(-1, -1);
+        QQuickItem *found = nullptr;
+        const bool still = waitFor([&] {
+            found = named(u"chatSegmentDiagram"_s);
+            const QPointF now = found ? pointIn(found) : QPointF(-1, -1);
+            const bool same = found && now == was && uidriver::onScreen(window, found);
+            was = now;
+            if (!same)
+                settle(100);
+            return same;
+        });
+        at = was;
+        return still ? found : nullptr;
+    };
+    if (diagram)
+        uidriver::scrollIntoView(window, diagram);
+    mouseMove(window, QPointF(1, 1)); // (away: no tooltip opens)
+    diagram = steadyDiagram();
+    if (diagram)
+        tapOrClick(window, at, touch);
+    QQuickItem *large = nullptr;
+    check(waitFor([&] { return (large = named(u"chatDrawingViewerDiagram"_s)) != nullptr; }),
+          "a tap on the diagram opens it large");
+    check(large && large->property("status").toString() == u"ok" && large->width() > (diagram ? diagram->width() : 0) - 1,
+          "drawn there at the window's width");
+    check(named(u"chatDrawingViewerCopy"_s) != nullptr, "with Copy source");
+    // Close with a finger; Escape with a keyboard (a click would leave the pointer on the button,
+    // hidden with the viewer, and its tooltip open over the checks after).
+    if (touch) {
+        if (steadyItem(window, [&] { return named(u"chatDrawingViewerClose"_s); }, &at))
+            tapOrClick(window, at, touch);
+    } else {
+        uidriver::sendKey(window, Qt::Key_Escape, Qt::NoModifier, QString(), 50);
+    }
+    check(waitFor([&] { return named(u"chatDrawingViewerDiagram"_s) == nullptr; }),
+          touch ? "Close closes it" : "Escape closes it");
+    // Its menu: Copy source.
+    diagram = steadyDiagram();
+    if (diagram) {
+        if (touch)
+            longPressForMenu(window, at);
+        else
+            mouseClick(window, at, Qt::RightButton);
+    }
+    check(waitFor([&] { return named(u"chatMessageCopySource"_s) != nullptr; }), "the menu on a drawing has Copy source");
+    closeMenus(window);
+    mouseMove(window, QPointF(1, 1)); // (away: no tooltip opens)
+    app->back();
+    settle(200);
+    app->workspace()->deletePage(talk);
+    // (A tooltip of the chat's buttons, hidden now, would take the Back key of the checks after.)
+    closeToolTipsWaitingForDeletion(window);
+
+    // ChatActivity under "Tool calls in chat" (made here: a turn of an agent is no part of the
+    // self-test).
+    QQmlEngine *engine = qmlEngine(window->contentItem());
+    QQmlComponent component(engine);
+    component.setData("import QtQuick\nimport Brulion\nChatActivity { width: 420 }", QUrl(u"qrc:/selftest/ChatActivityCheck.qml"_s));
+    std::unique_ptr<QObject> made(component.create());
+    auto *card = qobject_cast<QQuickItem *>(made.get());
+    check(card != nullptr, qPrintable(u"ChatActivity is made (%1)"_s.arg(component.errorString())));
+    if (!card)
+        return;
+    card->setParentItem(window->contentItem());
+    card->setVisible(true);
+    const QString was = settings->chatToolCalls();
+    const auto call = [](const QString &title, const QString &kind, const QString &status) {
+        return QVariant(QVariantMap{{u"title"_s, title}, {u"kind"_s, kind}, {u"status"_s, status}, {u"output"_s, QString()},
+                                    {u"diffPath"_s, QString()}, {u"diffOld"_s, QString()}, {u"diffNew"_s, QString()}});
+    };
+    const QVariantList tools{call(u"Read Dom.md"_s, u"read"_s, u"completed"_s), call(u"Read Plan.md"_s, u"read"_s, u"completed"_s),
+                             call(u"Run make"_s, u"execute"_s, u"failed"_s), call(u"Edit Dom.md"_s, u"edit"_s, u"completed"_s),
+                             call(u"Run sh"_s, u"execute"_s, u"in_progress"_s), call(u"Search zadania"_s, u"search"_s, u"completed"_s)};
+    const auto shownCalls = [&] {
+        int n = 0;
+        for (QQuickItem *item : uidriver::allItems(card))
+            n += item->objectName() == u"chatToolCall" && item->isVisible();
+        return n;
+    };
+    const auto shownItem = [&](const QString &name) {
+        for (QQuickItem *item : uidriver::allItems(card)) {
+            if (item->objectName() == name && item->isVisible())
+                return item;
+        }
+        return static_cast<QQuickItem *>(nullptr);
+    };
+    settings->setChatToolCalls(u"all"_s);
+    card->setProperty("tools", tools);
+    QQuickItem *summary = shownItem(u"chatToolsSummaryText"_s);
+    check(summary && summary->property("text").toString() == shell::toolSummary(tools)
+                  && summary->property("text").toString().contains(u" · "_s),
+          qPrintable(u"the calls in words: “%1”"_s.arg(summary ? summary->property("text").toString() : QString())));
+    check(shownCalls() == 4 && shownItem(u"chatToolsEarlier"_s) != nullptr, "Show all: the newest four, the earlier ones behind a line");
+    // The summary closes the list (its tap): the running and the failed calls stay.
+    card->setProperty("listOpen", false);
+    check(waitFor([&] { return shownCalls() == 2 && shownItem(u"chatToolsEarlier"_s) == nullptr; }),
+          "closed: the call running and the one that failed");
+    settings->setChatToolCalls(u"hideFinished"_s);
+    check(waitFor([&] { return shownCalls() == 2 && shownItem(u"chatToolsSummary"_s) != nullptr; }),
+          "Hide finished: the same, the summary there to open the list");
+    settings->setChatToolCalls(u"hideAll"_s);
+    check(waitFor([&] { return shownCalls() == 1 && shownItem(u"chatToolsSummary"_s) == nullptr && card->isVisible(); }),
+          "Hide all: only the call that failed");
+    const auto hides = [&](const QString &status) {
+        QVariant result;
+        return uidriver::callQml(card, "hidesStatus", {status}, &result) && result.toBool();
+    };
+    check(hides(u"Run sh"_s) && !hides(u"Claude Code is working…"_s), "and the status line hides a call's title");
+    card->setProperty("tools", QVariantList{call(u"Read Dom.md"_s, u"read"_s, u"completed"_s)});
+    check(waitFor([&] { return !card->isVisible(); }), "nothing failed and no plan: nothing shown");
+    settings->setChatToolCalls(u"all"_s);
+    check(waitFor([&] { return card->isVisible() && shownCalls() == 1; }), "Show all again: the call");
+    check(!hides(u"Read Dom.md"_s), "its title in the status line");
+    settings->setChatToolCalls(was);
+    made.reset();
+    settle(100);
+    // (Where it was, as the checks after expect it — also on the ✨ button hidden meanwhile.)
+    if (focused)
+        focused->forceActiveFocus();
+}
+
 void clearToasts(QQuickWindow *window);
 
 /// The AI in the editor (docs/UI.md "AI in the editor") and the AI chat's list, the model on the
@@ -11444,6 +11602,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
     checkAiButton(window, app, check);
+    closeMenus(window);
+    // 3h-ai-draw. Drawings in an AI answer, opened large; the tool calls of a turn as the setting says.
+    checkChatDrawings(window, app, check);
     closeMenus(window);
     // 3h-ign. A page's tasks ignored from its menu, and back.
     checkIgnoreTasks(window, app, check);

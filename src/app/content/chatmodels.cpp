@@ -1,5 +1,8 @@
 #include "chatmodels.h"
 #include "calc/table.h"
+#include "chart/chart.h"
+#include "diagram/diagram.h"
+#include "markdown/math.h"
 
 #include "chat/chat.h"
 #include "contentutil.h"
@@ -15,6 +18,9 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -125,57 +131,195 @@ QString renderTable(const QString &body, const markdown::InlineRenderer &rendere
 
 } // namespace
 
-QString ChatMessageModel::renderMessage(const QString &markdown, const markdown::RenderContext &context)
+namespace {
+
+/// The parts of a message rendered: its blocks as rich text (`html`, the bubble's text) and, when
+/// it has a drawing — a chart, a diagram, a display formula —, the segments shown one under
+/// another (`segments`, else empty).
+struct Rendered {
+    QString html;
+    QVariantList segments;
+};
+
+/// The rich text of `parts` as one: no space under the last paragraph (the bubble's padding, or
+/// the gap between segments, is the room). "" for none.
+QString joinParts(QStringList parts)
+{
+    if (parts.isEmpty())
+        return QString();
+    static const QRegularExpression room(u"margin-bottom:\\d+px;"_s);
+    parts.last().replace(room, u"margin-bottom:0px;"_s);
+    return parts.join(QString());
+}
+
+/// A fenced block's text between its fences — only when it is closed: an answer cut off mid-way
+/// leaves its drawing open, and it is shown as written.
+std::optional<QString> closedFence(const QString &body)
+{
+    QStringList lines = body.split(u'\n');
+    if (lines.size() < 2)
+        return std::nullopt;
+    const QString open = lines.first().trimmed();
+    const QString close = lines.last().trimmed();
+    if (open.isEmpty() || (open.at(0) != u'`' && open.at(0) != u'~'))
+        return std::nullopt;
+    const QChar marker = open.at(0);
+    qsizetype length = 0;
+    while (length < open.size() && open.at(length) == marker)
+        ++length;
+    if (close.size() < length || std::ranges::any_of(close, [marker](QChar c) { return c != marker; }))
+        return std::nullopt;
+    lines.removeFirst();
+    lines.removeLast();
+    return lines.join(u'\n');
+}
+
+/// The LaTeX of a paragraph that is one display formula (`$$…$$` and nothing else), nullopt
+/// otherwise.
+std::optional<QString> displayFormula(const QString &body)
+{
+    const QString text = body.trimmed();
+    if (!text.startsWith(u"$$"_s) || !text.endsWith(u"$$"_s))
+        return std::nullopt;
+    const QList<markdown::MathSpan> spans = markdown::findMathSpans(text);
+    if (spans.size() != 1 || !spans.first().display || spans.first().from != 0 || spans.first().to != text.size())
+        return std::nullopt;
+    const markdown::MathSpan &span = spans.first();
+    return text.sliced(span.contentFrom, span.contentTo - span.contentFrom).trimmed();
+}
+
+/// The numbers of a ```chart block of a message (BlockListModel's chartData: ok, labels, labelsName,
+/// series), read from the message's own tables and calc blocks; nullopt when it cannot be drawn
+/// (a mistake, no such table, a query — a message runs none): it is shown as written then.
+std::optional<QVariantMap> messageChart(const QString &markdown, int line, const QString &source,
+                                        calc::CalcLocale locale)
+{
+    const chart::SpecResult spec = chart::parseSpec(source);
+    if (spec.error || spec.spec.source == chart::SourceKind::Query)
+        return std::nullopt;
+    const chart::DataResult data = chart::resolveData(spec.spec, chart::pageSources(markdown, line, locale));
+    if (data.error)
+        return std::nullopt;
+    QVariantList series;
+    for (const chart::Series &serie : data.data.series) {
+        QVariantList values;
+        values.reserve(serie.values.size());
+        for (const double v : serie.values)
+            values.append(std::isfinite(v) ? QVariant(v) : QVariant()); // a gap: null
+        series.append(QVariantMap{{u"name"_s, serie.name}, {u"values"_s, values}});
+    }
+    return QVariantMap{{u"ok"_s, true},
+                       {u"labels"_s, data.data.labels},
+                       {u"labelsName"_s, data.data.labelsName},
+                       {u"series"_s, series}};
+}
+
+/// A segment of a message: every key every kind has (the delegates read them all).
+QVariantMap segment(const QString &kind, const QString &html, const QString &code = QString(),
+                    const QString &source = QString(), const QVariantMap &chartData = QVariantMap())
+{
+    return QVariantMap{{u"kind"_s, kind}, {u"html"_s, html}, {u"code"_s, code}, {u"source"_s, source},
+                       {u"chartData"_s, chartData}};
+}
+
+Rendered renderParts(const QString &markdown, const markdown::RenderContext &context)
 {
     const markdown::BlockDocument doc(markdown);
     const markdown::InlineRenderer renderer(context);
+    const calc::CalcLocale calcLocale =
+            context.locale == dates::UiLocale::English ? calc::CalcLocale::English : calc::CalcLocale::Polish;
     static const QRegularExpression ordered(u"^\\s*(\\d{1,9}[.)])"_s);
-    QStringList parts;
+    QStringList parts;   // every block's rich text (the whole message's)
+    QStringList run;     // the blocks since the last drawing (a text segment)
+    QVariantList segments;
+    bool drawn = false;  // a segment that is a drawing
+    const auto endRun = [&] {
+        if (!run.isEmpty())
+            segments.append(segment(u"text"_s, joinParts(std::exchange(run, {}))));
+    };
     for (int i = 0; i < doc.count(); ++i) {
         const markdown::BlockEntry &b = doc.at(i);
         const int indent = b.depth * kIndent;
         // Room under a block: more after a blank line (a paragraph's end), little between the
         // items of a list.
         const int below = b.trailing.contains(u'\n') ? 10 : b.kind == BlockKind::ListItem ? 2 : 6;
-        if (b.kind == BlockKind::Table) {
-            const QString table = renderTable(b.body, renderer, context.palette.muted, below, indent);
-            if (!table.isEmpty()) {
-                parts.append(table);
-                continue;
+        QString part;
+        if (b.kind == BlockKind::Table)
+            part = renderTable(b.body, renderer, context.palette.muted, below, indent);
+        if (!part.isEmpty()) {
+            // (A table.)
+        } else if (b.kind == BlockKind::Code || b.kind == BlockKind::Table || b.kind == BlockKind::Html
+                   || b.kind == BlockKind::Frontmatter) {
+            part = u"<pre style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</pre>"_s.arg(below).arg(indent).arg(
+                    (b.kind == BlockKind::Code ? codeOf(b.body) : b.body).toHtmlEscaped());
+        } else if (b.kind == BlockKind::Rule) {
+            part = u"<hr/>"_s;
+        } else {
+            QString html = renderer.renderBlock(b.body, b.kind);
+            if (b.kind == BlockKind::Heading)
+                html = u"<b>"_s + html + u"</b>"_s;
+            if (b.kind == BlockKind::ListItem && !b.taskStatus) {
+                const auto number = ordered.match(b.prefix);
+                html = (number.hasMatch() ? number.captured(1) + u"&nbsp;"_s : u"•&nbsp;"_s) + html;
+            }
+            if (!html.isEmpty())
+                part = u"<p style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</p>"_s.arg(below).arg(indent).arg(html);
+        }
+        if (part.isEmpty())
+            continue;
+        parts.append(part);
+        // A drawing (docs/UI.md "AI chat"): a closed ```chart block whose numbers are in the message,
+        // a closed ```mermaid block of a type Brulion draws, a ```math block or a paragraph that is
+        // one $$…$$ formula. Its segment keeps the block's rich text as written: the view shows it
+        // when the diagram cannot be drawn after all.
+        QVariantMap visual;
+        if (b.kind == BlockKind::Code) {
+            const QString lang = b.lang.toLower();
+            if (const std::optional<QString> inner = closedFence(b.body); inner && !inner->trimmed().isEmpty()) {
+                if (lang == u"chart") {
+                    if (const std::optional<QVariantMap> data = messageChart(markdown, b.line, *inner, calcLocale))
+                        visual = segment(u"chart"_s, joinParts({part}), *inner, b.body, *data);
+                } else if (lang == u"mermaid") {
+                    const diagram::Kind kind = diagram::detectKind(*inner);
+                    if (kind != diagram::Kind::Unsupported && kind != diagram::Kind::Unknown)
+                        visual = segment(u"diagram"_s, joinParts({part}), *inner, b.body);
+                } else if (lang == u"math" || lang == u"latex" || lang == u"tex") {
+                    if (const QString formula = markdown::renderMath(*inner, true); !formula.isEmpty())
+                        visual = segment(u"math"_s, formula, *inner, b.body);
+                }
+            }
+        } else if (b.kind == BlockKind::Paragraph) {
+            if (const std::optional<QString> latex = displayFormula(b.body)) {
+                if (const QString formula = markdown::renderMath(*latex, true); !formula.isEmpty())
+                    visual = segment(u"math"_s, formula, *latex, b.body);
             }
         }
-        switch (b.kind) {
-        case BlockKind::Code:
-        case BlockKind::Table:
-        case BlockKind::Html:
-        case BlockKind::Frontmatter:
-            parts.append(u"<pre style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</pre>"_s.arg(below).arg(indent).arg(
-                    (b.kind == BlockKind::Code ? codeOf(b.body) : b.body).toHtmlEscaped()));
+        if (visual.isEmpty()) {
+            run.append(part);
             continue;
-        case BlockKind::Rule:
-            parts.append(u"<hr/>"_s);
-            continue;
-        default:
-            break;
         }
-        QString html = renderer.renderBlock(b.body, b.kind);
-        if (b.kind == BlockKind::Heading)
-            html = u"<b>"_s + html + u"</b>"_s;
-        if (b.kind == BlockKind::ListItem && !b.taskStatus) {
-            const auto number = ordered.match(b.prefix);
-            html = (number.hasMatch() ? number.captured(1) + u"&nbsp;"_s : u"•&nbsp;"_s) + html;
-        }
-        if (html.isEmpty())
-            continue;
-        parts.append(u"<p style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</p>"_s.arg(below).arg(indent).arg(html));
+        endRun();
+        segments.append(visual);
+        drawn = true;
     }
-    if (parts.isEmpty())
-        return u"…"_s;
-    // (No space under the last paragraph: the bubble's padding is the room.)
-    QString &last = parts.last();
-    static const QRegularExpression room(u"margin-bottom:\\d+px;"_s);
-    last.replace(room, u"margin-bottom:0px;"_s);
-    return parts.join(QString());
+    endRun();
+    Rendered out;
+    out.html = parts.isEmpty() ? u"…"_s : joinParts(parts);
+    if (drawn)
+        out.segments = segments;
+    return out;
+}
+
+} // namespace
+
+QString ChatMessageModel::renderMessage(const QString &markdown, const markdown::RenderContext &context)
+{
+    return renderParts(markdown, context).html;
+}
+
+QVariantList ChatMessageModel::renderSegments(const QString &markdown, const markdown::RenderContext &context)
+{
+    return renderParts(markdown, context).segments;
 }
 
 QString ChatMessageModel::render(const QString &markdown) const
@@ -185,6 +329,15 @@ QString ChatMessageModel::render(const QString &markdown) const
         return QString();
     return renderMessage(markdown, renderContext(vaultIndex(), m_path, effectiveToday(QString(), ws),
                                                  uiLocale(m_locale), paletteFromMap(m_palette)));
+}
+
+QVariantList ChatMessageModel::segments(const QString &markdown) const
+{
+    shell::Workspace *ws = workspace();
+    if (markdown.isEmpty() || !ws || !ws->isOpen())
+        return {};
+    return renderSegments(markdown, renderContext(vaultIndex(), m_path, effectiveToday(QString(), ws),
+                                                  uiLocale(m_locale), paletteFromMap(m_palette)));
 }
 
 void ChatMessageModel::refresh()
@@ -213,7 +366,11 @@ void ChatMessageModel::refresh()
             r.text = m.text;
             // (The pictures are shown apart: the bubble's text is the rest.)
             const QString words = m.pictures.isEmpty() ? m.text : chat::withoutPictures(m.text);
-            r.html = words.trimmed().isEmpty() && !m.pictures.isEmpty() ? QString() : renderMessage(words, context);
+            if (!words.trimmed().isEmpty() || m.pictures.isEmpty()) {
+                Rendered rendered = renderParts(words, context);
+                r.html = std::move(rendered.html);
+                r.segments = std::move(rendered.segments);
+            }
             r.line = m.line;
             if (m.time.isValid()) {
                 r.time = m.time.toString(u"HH:mm"_s);
@@ -242,7 +399,8 @@ void ChatMessageModel::refresh()
     applyRows(
             m_rows, next, [](const Row &r) { return r.line; },
             [](const Row &a, const Row &b) {
-                return a.role == b.role && a.text == b.text && a.html == b.html && a.time == b.time && a.day == b.day
+                return a.role == b.role && a.text == b.text && a.html == b.html && a.segments == b.segments
+                       && a.time == b.time && a.day == b.day
                        && a.pictures == b.pictures && a.sent == b.sent && a.firstSent == b.firstSent;
             });
     m_page = page;
@@ -266,6 +424,7 @@ QVariant ChatMessageModel::data(const QModelIndex &index, int role) const
     case DayRole: return r.day;
     case PicturesRole: return QVariant::fromValue(r.pictures);
     case PicturePathsRole: return r.picturePaths;
+    case SegmentsRole: return r.segments;
     case SentRole: return r.sent;
     case FirstSentRole: return r.firstSent;
     default: return {};
@@ -278,7 +437,8 @@ QHash<int, QByteArray> ChatMessageModel::roleNames() const
             {TextRole, "markdown"},       {LineRole, "line"},
             {TimeRole, "time"},           {DayRole, "day"},
             {PicturesRole, "pictures"},   {SentRole, "sent"},
-            {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"}};
+            {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"},
+            {SegmentsRole, "segments"}};
 }
 
 QString ChatMessageModel::textAt(int row) const

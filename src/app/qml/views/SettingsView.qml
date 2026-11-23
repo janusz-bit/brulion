@@ -1939,6 +1939,7 @@ Item {
                 objectName: "acpAgentsSettings"
                 visible: AppSettings.acpAvailable
                 heading: qsTr("AI agents")
+                readonly property list<var> toolCallChoices: [{ value: "all", text: qsTr("Show all") }, { value: "hideFinished", text: qsTr("Hide finished") }, { value: "hideAll", text: qsTr("Hide all") }]
 
                 // A brulion://pair link (the QR code of acp pair, opened by the camera): the pairing
                 // dialog filled in, once — the user pairs.
@@ -2022,6 +2023,19 @@ Item {
                     name: "notifications"
                     title: qsTr("Notifications")
                     description: qsTr("While an agent on another computer answers, a notification says so, with Stop; Brulion keeps fetching its answer with the screen off.")
+                }
+                // How an agent's tool calls show in the AI chat (AppSettings.chatToolCalls; ChatActivity).
+                ShellSettingRow {
+                    objectName: "chatToolCallsRow"
+                    title: qsTr("Tool calls in chat")
+                    description: qsTr("What an agent reads, runs and changes, under its answer. Hide finished keeps the failed ones; questions, failures and its plan always show.")
+                    BSegmented {
+                        objectName: "chatToolCallsSetting"
+                        accessibleName: qsTr("Tool calls in chat")
+                        model: agentsGroup.toolCallChoices
+                        currentValue: AppSettings.chatToolCalls
+                        onActivated: (value) => AppSettings.chatToolCalls = "" + value
+                    }
                 }
                 ShellSettingRow {
                     title: qsTr("Add an agent")
