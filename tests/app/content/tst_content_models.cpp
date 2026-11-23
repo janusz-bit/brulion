@@ -23,6 +23,7 @@
 #include "workspace.h"
 #include "workspaceextensions.h"
 
+#include "io/zip.h"
 #include "markdown/inlinerenderer.h"
 #include "text/text.h"
 #include "vault/history.h"
@@ -1111,6 +1112,76 @@ private Q_SLOTS:
         model.setQuery(u"zolw"_s);
         model.refreshNow();
         QCOMPARE(model.rowCount(), 2);
+        ws->close();
+    }
+
+    // Documents in the search (docs/UI.md "Searching attachments"): a DOCX and a PPTX found by their
+    // text — "document" / "presentation" rows with the slide or part, no PDF renderer needed —, the
+    // `in:documents` filter and the scope; `in:pdf` leaves them out.
+    void searchDocuments()
+    {
+        const QString root = m_tmp.filePath(u"vault-%1"_s.arg(++m_n));
+        QVERIFY(writeRaw(root + u"/Notatka o żółwiach.md"_s, "- żółw w notatce\n"));
+        const auto xml = [](const QString &path, const QString &text) { return brulion::io::FileEntry{path, text.toUtf8()}; };
+        const QString w = u"xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'"_s;
+        const QString a = u"xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' "
+                          "xmlns:p='http://schemas.openxmlformats.org/presentationml/2006/main'"_s;
+        QVERIFY(writeRaw(root + u"/assets/Umowa.docx"_s,
+                         brulion::io::writeZip({xml(u"word/document.xml"_s,
+                                                    u"<w:document "_s + w + u"><w:body><w:p><w:r><w:t>Gęsiego przez żółwią łąkę</w:t></w:r></w:p></w:body></w:document>"_s)})));
+        QVERIFY(writeRaw(root + u"/assets/Wykład.pptx"_s,
+                         brulion::io::writeZip(
+                                 {xml(u"ppt/slides/slide1.xml"_s, u"<p:sld "_s + a + u"><a:p><a:r><a:t>Wstęp</a:t></a:r></a:p></p:sld>"_s),
+                                  xml(u"ppt/slides/slide2.xml"_s, u"<p:sld "_s + a + u"><a:p><a:r><a:t>Żółw i zając</a:t></a:r></a:p></p:sld>"_s)})));
+        auto ws = std::make_unique<Workspace>();
+        ws->setClock([this] { return m_now; });
+        ws->setAttachmentCacheDir(root + u"-cache"_s);
+        QVERIFY(ws->open(root, root + u"-state"_s));
+        ws->finishIndexing();
+        SearchResultModel model;
+        model.setWorkspace(ws.get());
+        model.setQuery(u"zolw"_s);
+        model.refreshNow();
+        ws->attachments()->start(0);
+        const bool read = QTest::qWaitFor([&] { return model.rowCount() == 3; }, 60000 * BRULION_TEST_SLOWDOWN);
+        QVERIFY2(read, qPrintable(column(model, "path").join(u"|"_s) + u" state "_s + ws->attachments()->state()));
+        const QVariantMap doc = model.get(column(model, "path").indexOf(u"assets/Umowa.docx"_s));
+        QCOMPARE(doc.value(u"kind"_s).toString(), u"document"_s);
+        QCOMPARE(doc.value(u"page"_s).toInt(), 1);
+        QCOMPARE(doc.value(u"pageCount"_s).toInt(), 1);
+        QCOMPARE(doc.value(u"title"_s).toString(), u"Umowa.docx"_s);
+        QCOMPARE(doc.value(u"folder"_s).toString(), u"assets"_s);
+        QVERIFY(doc.value(u"excerpt"_s).toString().contains(u"żółwią"_s));
+        QVERIFY(!doc.value(u"find"_s).toString().isEmpty());
+        QCOMPARE(doc.value(u"ocr"_s).toBool(), false);
+        const QVariantMap slides = model.get(column(model, "path").indexOf(u"assets/Wykład.pptx"_s));
+        QCOMPARE(slides.value(u"kind"_s).toString(), u"presentation"_s);
+        QCOMPARE(slides.value(u"page"_s).toInt(), 2);
+        QCOMPARE(slides.value(u"pageCount"_s).toInt(), 2);
+        QCOMPARE(model.attachmentCount(), 2);
+        // The filters and the scope.
+        model.setQuery(u"in:documents zolw"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 2);
+        QVERIFY(!column(model, "kind").contains(u"note"_s));
+        model.setQuery(u"w:dokumenty zolw"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 2);
+        model.setQuery(u"in:pdf zolw"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 0);
+        model.setQuery(u"zolw"_s);
+        model.setScope(u"attachments"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 2);
+        model.setScope(u"pages"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "path"), QStringList{u"Notatka o żółwiach.md"_s});
+        // By the name.
+        model.setScope(u"all"_s);
+        model.setQuery(u"umowa"_s);
+        model.refreshNow();
+        QVERIFY(column(model, "path").contains(u"assets/Umowa.docx"_s));
         ws->close();
     }
 

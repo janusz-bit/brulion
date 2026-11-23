@@ -6,7 +6,7 @@
 brulion_add_test(tst_content_util SOURCES tst_content_util.cpp
     LIBS brulion_content brulion_core_markdown brulion_core_dates brulion_core_index)
 brulion_add_test(tst_content_models SOURCES tst_content_models.cpp
-    LIBS brulion_content brulion_shell brulion_core_vault Qt6::Gui brulion_platform brulion_attachments)
+    LIBS brulion_content brulion_shell brulion_core_vault Qt6::Gui brulion_platform brulion_attachments brulion_core_io)
 # Search by meaning as the app does it (Workspace.semantic + SearchResultModel) with a fake
 # embedding model: full text without the plugin, the model or the setting; the notebook embedded in
 # the background and fused with the full-text hits; edits, deletions, the vectors kept and read

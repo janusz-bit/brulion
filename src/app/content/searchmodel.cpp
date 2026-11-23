@@ -1,6 +1,7 @@
 #include "searchmodel.h"
 
 #include "attachmentindexer.h"
+#include "attachments/documenttext.h"
 #include "attachments/searchfilters.h"
 #include "contentutil.h"
 #include "index/vaultindex.h"
@@ -149,15 +150,15 @@ void SearchResultModel::refresh()
         const attachments::Scopes kinds = filters.scopes & attachments::AttachmentScopes;
         if (attachmentText && kinds) {
             for (const attachments::AttachmentSearch::Hit &hit : attachmentText->search(text, want, kinds)) {
-                const bool pdf = hit.kind == attachments::Kind::Pdf;
                 Hit row;
                 row.path = hit.path;
                 row.title = paths::basename(hit.path);
                 row.folder = paths::dirname(hit.path);
                 row.excerpt = oneLine(hit.excerpt, 260);
                 row.score = hit.score;
-                row.kind = pdf ? u"pdf"_s : u"picture"_s;
-                row.page = pdf ? hit.page : 0;
+                row.kind = attachments::kindName(hit.kind);
+                // (A picture has no pages; a document's are slides, files of a book or parts of a text.)
+                row.page = hit.kind == attachments::Kind::Picture ? 0 : hit.page;
                 row.pageCount = hit.pageCount;
                 row.matchedPages = hit.matchedPages;
                 row.ocr = hit.ocr;

@@ -227,7 +227,8 @@ QList<AttachmentSearch::Hit> AttachmentSearch::search(QStringView query, int lim
         return out;
     const bool pdfs = kinds.testFlag(Scope::Pdf);
     const bool pictures = kinds.testFlag(Scope::Pictures);
-    if (!pdfs && !pictures)
+    const bool documents = kinds.testFlag(Scope::Documents);
+    if (!pdfs && !pictures && !documents)
         return out;
     QHash<int, qsizetype> at; // file id → its hit in `out`
     const int ranked = int(std::min<qsizetype>(m_index.size(), MaxRanked));
@@ -253,7 +254,10 @@ QList<AttachmentSearch::Hit> AttachmentSearch::search(QStringView query, int lim
         const auto file = m_files.constFind(path);
         if (path.isEmpty() || file == m_files.constEnd())
             continue;
-        if ((file->kind == Kind::Pdf && !pdfs) || (file->kind == Kind::Picture && !pictures))
+        const bool wanted = file->kind == Kind::Pdf       ? pdfs
+                            : file->kind == Kind::Picture ? pictures
+                                                          : documents;
+        if (!wanted)
             continue;
         Hit hit;
         hit.path = path;

@@ -4,18 +4,19 @@ brulion: document
 ---
 # Szukanie
 
-**Ctrl+Shift+F** (albo **Szukaj** na pasku ikon, na telefonie w dolnej nawigacji) przeszukuje cały notatnik: tytuły i treść notatek, a także **tekst plików PDF i obrazów**, które w nim są. Polskie znaki można pomijać — „zolw” znajdzie „żółw” — a ostatnie słowo może być początkiem wyrazu: „wyzn” znajdzie „wyznacznik”. Drobna literówka też nie przeszkadza, ale to, co wpisano dokładnie, jest zawsze na górze. Z włączonym **szukaniem po znaczeniu** (niżej) dochodzą też notatki bliskie znaczeniem.
+**Ctrl+Shift+F** (albo **Szukaj** na pasku ikon, na telefonie w dolnej nawigacji) przeszukuje cały notatnik: tytuły i treść notatek, a także **tekst plików PDF, dokumentów i obrazów**, które w nim są. Polskie znaki można pomijać — „zolw” znajdzie „żółw” — a ostatnie słowo może być początkiem wyrazu: „wyzn” znajdzie „wyznacznik”. Drobna literówka też nie przeszkadza, ale to, co wpisano dokładnie, jest zawsze na górze. Z włączonym **szukaniem po znaczeniu** (niżej) dochodzą też notatki bliskie znaczeniem.
 
 ## Wyniki
 - Notatka otwiera się w wierszu ze słowami.
 - **PDF** pokazuje swoją stronę — „Strona 3 z 12” — i ile jeszcze stron pasuje. Otwiera się w przeglądarce PDF Brulionu **na tej stronie, ze słowami podświetlonymi**; strzałki wyszukiwania przeglądarki prowadzą do kolejnych miejsc.
+- **Dokument** — Word (DOCX), PowerPoint (PPTX), tekst OpenDocument (ODT) albo e-book (EPUB) — pokazuje, gdzie są słowa: „Slajd 3 z 20” dla prezentacji, „Część 2 z 5” dla pozostałych (część to kilka akapitów; w e-booku plik rozdziału) — i ile jeszcze pasuje. Otwiera plik tylko do odczytu, z przyciskiem **Otwórz w innej aplikacji** na pasku; fragment pod wynikiem pokazuje miejsce.
 - **Obraz** (zdjęcie tablicy, zrzut ekranu) otwiera się z zaznaczonymi miejscami słów. **Rozpoznany tekst** na jego pasku pokazuje wszystko, co w nim odczytano — można to zaznaczyć i skopiować.
 - „Rozpoznany tekst” pod wynikiem znaczy, że słowa odczytano z obrazu albo skanu (rozpoznawanie może się mylić, więc gdy jedno słowo nie wystarcza, szukaj kilku).
-- PDF lub obraz znajdziesz też po nazwie pliku: „wyklad” znajdzie „Wykład 3.pdf”.
+- PDF, dokument lub obraz znajdziesz też po nazwie pliku: „wyklad” znajdzie „Wykład 3.pdf”.
 
 ## Zawężanie
 - **Wszystko / Strony / Dziennik / Załączniki** pod polem.
-- Słowa w samym zapytaniu: `w:pdf`, `w:obrazy`, `w:załączniki`, `w:notatki`, `w:strony`, `w:dziennik` — np. `w:pdf całka`. Działają też angielskie: `in:pdf`, `in:pictures`, `in:attachments`, `in:notes` (i `typ:`, `type:`). Kilka się sumuje: `w:pdf w:obrazy`.
+- Słowa w samym zapytaniu: `w:pdf`, `w:dokumenty`, `w:obrazy`, `w:załączniki`, `w:notatki`, `w:strony`, `w:dziennik` — np. `w:pdf całka`. Działają też angielskie: `in:pdf`, `in:documents`, `in:pictures`, `in:attachments`, `in:notes` (i `typ:`, `type:`). Kilka się sumuje: `w:pdf w:obrazy`.
 - Przycisk **Folder** (albo „Szukaj w folderze” w menu folderu) — tylko jeden folder i jego podfoldery.
 
 ## Szukanie po znaczeniu
@@ -29,10 +30,12 @@ Wyszukiwanie może też znajdować notatki po tym, **co znaczą**, a nie tylko p
 
 Model jest mały, więc dobrze radzi sobie ze słowami pokrewnymi i innymi językami, a słabiej z całymi zdaniami ujętymi inaczej. Zaszyfrowany tekst nigdy nie jest czytany.
 
-## Jak czytane są PDF-y i obrazy
+## Jak czytane są załączniki
 Brulion czyta załączniki **w tle, na tym urządzeniu, bez internetu** — nic nie jest nigdzie wysyłane. Tekst PDF-a jest gotowy chwilę po otwarciu notatnika; długi plik jest czytany strona po stronie, więc nawet 100-megabajtowy skan wykładu nie zapycha pamięci. W trakcie pod filtrami wyszukiwania widać linijkę „Czytanie załączników… 3 z 40” z przyciskiem **Wstrzymaj**. Trwająca synchronizacja i pisanie mają pierwszeństwo: czytanie czeka.
 
 To, co przeczytano, zostaje na tym urządzeniu (nie w notatniku, więc nie idzie przez synchronizację): niezmieniony plik nie jest czytany drugi raz, a przemianowany lub przeniesiony zachowuje swój tekst. Zmieniony plik jest czytany od nowa.
+
+**Dokumenty** (DOCX, PPTX, ODT, EPUB) to pliki ZIP z XML-em, więc ich tekst jest czytany wprost z nich, w kolejności czytania: akapity, ramki tekstowe, przypisy, tekst slajdów (bez notatek prelegenta), rozdziały e-booka po kolei; nic, co jest w środku — makra, obrazy — nie jest uruchamiane ani otwierane. Dokument chroniony hasłem albo uszkodzony — i taki, który jest znacznie większy niż prawdziwy — jest znajdowany tylko po nazwie pliku. Rozpoznawanie tekstu nie jest potrzebne.
 
 ## Rozpoznawanie tekstu (OCR)
 Zeskanowana strona PDF-a albo obraz nie ma własnego tekstu — **rozpoznawanie tekstu** odczytuje go z obrazu. Jest **domyślnie wyłączone**, bo zajmuje około sekundy jednego rdzenia procesora na stronę (z najniższym priorytetem, więc komputer nie zwalnia). Włączysz je w **Ustawienia → Szukaj → Rozpoznawaj tekst na obrazach i skanach (OCR)**. Wtedy:
@@ -42,7 +45,7 @@ Zeskanowana strona PDF-a albo obraz nie ma własnego tekstu — **rozpoznawanie 
 **Języki rozpoznawania** są automatyczne — język Brulionu i angielski — albo wybrane ręcznie. Zmiana języków odczytuje rozpoznane strony od nowa.
 
 ## Ustawienia → Szukaj
-- **Szukaj w załącznikach** — włącza i wyłącza czytanie PDF-ów i obrazów.
+- **Szukaj w załącznikach** — włącza i wyłącza czytanie PDF-ów, dokumentów i obrazów.
 - **Rozpoznawaj tekst na obrazach i skanach (OCR)** i jego **języki**.
 - **W tym notatniku** — ile plików i stron przeczytano, co jest czytane teraz, **Wstrzymaj** / **Wznów**.
 - **Tekst przechowywany na tym urządzeniu** — jego rozmiar; **Wyczyść** czyta wszystkie pliki od nowa.

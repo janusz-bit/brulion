@@ -25,7 +25,8 @@
 // Roles: path, title, folder, line (0-based first matching body line; -1 when only the title or
 // an alias matched), excerpt (plain text around the match), excerptMatches / titleMatches
 // (UTF-16 positions of matched characters), journalDate ("YYYY-MM-DD" for daily notes, else ""),
-// score; kind ("note" | "pdf" | "picture"), page (an attachment's best page, 1-based; 0 for a note),
+// score; kind ("note" | "pdf" | "picture" | "document" | "presentation": DOCX, ODT, EPUB / PPTX), page (an
+// attachment's best page — a document's slide, file or part —, 1-based; 0 for a note and a picture),
 // pageCount, matchedPages (an attachment's pages that match; 0: only its name), ocr (that page's
 // text came from OCR), find (what the PDF viewer or the picture view searches for to show the hit),
 // byMeaning (a note found by meaning alone: none of the query's words in it).

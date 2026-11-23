@@ -1,4 +1,4 @@
-// What one attachment (a PDF, a picture) says, as the device's cache keeps it — one file per content
+// What one attachment (a PDF, a picture, a document) says, as the device's cache keeps it — one file per content
 // hash (manifest.h), so a renamed or copied file is never read again. Part of the attachments
 // module — see attachments/attachments.h.
 //
@@ -43,13 +43,15 @@ inline constexpr qsizetype MaxPageWords = 50'000;
 /// The largest record written: pages beyond it keep no text (Unread).
 inline constexpr qint64 MaxRecordBytes = 1'000'000'000;
 
-enum class Kind : quint8 { Pdf = 1, Picture = 2 };
+/// What a file is: a PDF, a picture, or a document read from its XML (documenttext.h: DOCX and PPTX —
+/// Office Open XML —, ODT, EPUB).
+enum class Kind : quint8 { Pdf = 1, Picture = 2, Docx = 3, Pptx = 4, Odt = 5, Epub = 6 };
 
 /// Where a page's text came from.
 enum class PageSource : quint8 {
     /// Not read: the page could not be opened, or the record is new.
     Unread = 0,
-    /// The PDF's own text (its text layer).
+    /// The file's own text: a PDF's text layer, a document's paragraphs (documenttext.h).
     TextLayer = 1,
     /// Too little text of its own to be anything but a scan or a picture: OCR would read it (OCR
     /// is off, not available, or has not come to it yet). `text` keeps what little there is.
@@ -84,11 +86,12 @@ struct Record {
     Kind kind = Kind::Pdf;
     /// The extracting code's version (the app's AttachmentIndexer: a newer one reads files again).
     quint32 extractor = 0;
-    /// The file's pages (a picture: 1; a locked or unreadable PDF: 0).
+    /// The file's pages (a picture: 1; a document: its slides, files or parts; a locked or unreadable
+    /// PDF or document: 0).
     int pageCount = 0;
-    /// A PDF protected with a password: nothing read.
+    /// A PDF or a document protected with a password: nothing read.
     bool locked = false;
-    /// The file could not be read as a PDF or a picture.
+    /// The file could not be read as what its name says.
     bool unreadable = false;
     /// The pages read (at most MaxPages; page N is pages[N - 1]).
     QList<Page> pages;

@@ -1,4 +1,4 @@
-// AttachmentIndexer — the text of the notebook's PDFs and pictures for the whole-notebook search
+// AttachmentIndexer — the text of the notebook's PDFs, documents and pictures for the whole-notebook search
 // (docs/UI.md "Searching attachments", docs/ARCHITECTURE.md; docs/PERFORMANCE.md "Searching
 // attachments"). Owned by the shell's Workspace (`Workspace.attachments` in QML).
 //
@@ -10,7 +10,9 @@
 //     ready.
 //   * PDFs: their text layer (platform/pdfpages.h PdfReader::pageText — poppler, Qt PDF, Android 15+;
 //     none in the browser); a page with too little text of its own (a scan) waits for OCR.
-//     Pictures (png, jpg, jpeg, webp, bmp): OCR only.
+//     Pictures (png, jpg, jpeg, webp, bmp): OCR only. Documents (DOCX, PPTX, ODT, EPUB): their
+//     paragraphs from the XML inside (core attachments/documenttext.h: bounded, no OCR, on every
+//     platform that has the worker thread); a slide, a file of an EPUB or a part of a text is a "page".
 //   * OCR (platform/ocr.h, Tesseract): off by default — it costs seconds of CPU a page —, turned on
 //     in Settings → Search; languages "auto" (the UI language and English) or chosen; the text
 //     layer of every file comes first, then OCR page by page.
@@ -67,7 +69,8 @@ namespace brulion::attachsearch {
 
 class IndexerWorker;
 
-/// The files read: PDFs and pictures with text worth reading (no SVG, GIF, icons).
+/// The files read: PDFs, documents (DOCX, PPTX, ODT, EPUB) and pictures with text worth reading (no
+/// SVG, GIF, icons).
 bool isSearchableAttachment(const QString &path);
 /// Where an OCR picture's box (fractions of the picture as it was read: its EXIF orientation applied)
 /// lies on the file's own pixels (fractions) — the picture view shows those. `transformation`:
@@ -90,6 +93,9 @@ class AttachmentIndexer : public QObject {
 
     /// This build reads PDFs' text (platform::pdfTextAvailable()).
     Q_PROPERTY(bool pdfTextAvailable READ pdfTextAvailable CONSTANT FINAL)
+    /// This build reads the text of documents (DOCX, PPTX, ODT, EPUB: everywhere with threads, not
+    /// in the browser).
+    Q_PROPERTY(bool documentTextAvailable READ documentTextAvailable CONSTANT FINAL)
     Q_PROPERTY(bool ocrAvailable READ ocrAvailable NOTIFY engineChanged FINAL)
     /// "" | "unsupported" | "noLibrary" | "noLanguages" (platform/ocr.h); "probing" until known.
     Q_PROPERTY(QString ocrUnavailableReason READ ocrUnavailableReason NOTIFY engineChanged FINAL)
@@ -149,6 +155,7 @@ public:
     void setCacheBytes(qint64 bytes) { m_cacheCap = bytes; }
 
     bool pdfTextAvailable() const;
+    static bool documentTextAvailable();
     bool ocrAvailable() const { return m_ocrAvailable; }
     QString ocrUnavailableReason() const { return m_ocrReason; }
     QString ocrEngineName() const { return m_ocrEngine; }

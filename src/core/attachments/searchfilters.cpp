@@ -18,9 +18,9 @@ struct Value {
     Scopes scopes;
 };
 
-const std::array<Value, 30> &values()
+const std::array<Value, 36> &values()
 {
-    static const std::array<Value, 30> table{{
+    static const std::array<Value, 36> table{{
             {u"notes", NoteScopes},
             {u"note", NoteScopes},
             {u"notatki", NoteScopes},
@@ -51,6 +51,12 @@ const std::array<Value, 30> &values()
             {u"obrazy", Scope::Pictures},
             {u"obraz", Scope::Pictures},
             {u"zdjecia", Scope::Pictures},
+            {u"documents", Scope::Documents},
+            {u"document", Scope::Documents},
+            {u"docs", Scope::Documents},
+            {u"doc", Scope::Documents},
+            {u"dokumenty", Scope::Documents},
+            {u"dokument", Scope::Documents},
     }};
     return table;
 }

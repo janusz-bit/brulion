@@ -508,7 +508,14 @@ private Q_SLOTS:
         QTest::newRow("in:pdf") << u"in:pdf całka"_s << u"całka"_s << int(Scope::Pdf) << true;
         QTest::newRow("in:pictures") << u"in:pictures tablica"_s << u"tablica"_s << int(Scope::Pictures) << true;
         QTest::newRow("typ:zdjęcie") << u"typ:zdjęcie tablica"_s << u"tablica"_s << int(Scope::Pictures) << true;
-        QTest::newRow("pdf + pictures") << u"in:pdf in:obrazy x"_s << u"x"_s << att << true;
+        QTest::newRow("in:documents") << u"in:documents umowa"_s << u"umowa"_s << int(Scope::Documents) << true;
+        QTest::newRow("w:dokumenty") << u"W:Dokumenty umowa"_s << u"umowa"_s << int(Scope::Documents) << true;
+        QTest::newRow("type:docs") << u"umowa type:docs"_s << u"umowa"_s << int(Scope::Documents) << true;
+        QTest::newRow("pdf + documents") << u"in:pdf in:dokument x"_s << u"x"_s
+                                         << int((Scope::Pdf | Scope::Documents).toInt()) << true;
+        QTest::newRow("pdf + pictures") << u"in:pdf in:obrazy x"_s << u"x"_s
+                                       << int((Scope::Pdf | Scope::Pictures).toInt()) << true;
+        QTest::newRow("all three") << u"in:pdf in:obrazy in:docs x"_s << u"x"_s << att << true;
         QTest::newRow("in:notes") << u"in:notes x"_s << u"x"_s << int(NoteScopes.toInt()) << true;
         QTest::newRow("in:dziennik") << u"w:dziennik x"_s << u"x"_s << int(Scope::Journals) << true;
         QTest::newRow("in:strony") << u"w:strony x"_s << u"x"_s << int(Scope::Pages) << true;

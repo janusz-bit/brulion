@@ -3097,19 +3097,45 @@ Tests: `tst_text_find`, `tst_notebook_replace`, `tst_markdown_render`, `tst_edit
 
 ## Searching attachments (`src/app/attachments`, core `attachments`)
 
-The whole-notebook search (route `search`, `SearchView`) finds words in the notebook's **PDFs** and
-**pictures** too, page by page, in the background and offline. User guide: the documentation's page
+The whole-notebook search (route `search`, `SearchView`) finds words in the notebook's **PDFs**,
+**documents** (DOCX, PPTX, ODT, EPUB) and **pictures** too, page by page, in the background and
+offline. User guide: the documentation's page
 "Search" ("Szukanie").
 
 * **What is read** (`attachsearch::AttachmentIndexer`, owned by `Workspace`, QML
-  `Workspace.attachments`): every PDF (`paths::isPdfPath`) and picture (png, jpg, jpeg, webp, bmp —
-  not SVG, GIF or icons) the vault lists, ignored paths and conflict copies left out. A PDF's own text
+  `Workspace.attachments`): every PDF (`paths::isPdfPath`), document (`attachments::documentFormatOf`:
+  `.docx`, `.pptx`, `.odt`, `.epub`; not `.docm`, the old `.doc`, spreadsheets) and picture (png, jpg,
+  jpeg, webp, bmp — not SVG, GIF or icons) the vault lists, ignored paths and conflict copies left out. A PDF's own text
   (its text layer: `PdfReader::pageText`, poppler, Qt PDF, Android 15+) page by page; a page with fewer
   than 8 letters of its own (`MinTextLayerLetters`: a scan, a page number, a slide that is one
   picture) waits for **OCR** (text recognition), which reads it and keeps its few own words after
   OCR's. A picture is read only by OCR; without it — or in a format the device cannot decode (WebP
   without Qt's image plugins), or over 64 MB — only its file name is searched (nothing read, nothing
   hashed). A password-protected PDF is found by its name only; a file that is a link is never read.
+* **Documents** (core `attachments/documenttext.h`, `extractDocumentText`) are ZIP files of XML, read
+  on the same worker with no renderer and no OCR — so on every platform that has threads (the desktop,
+  Android; not the browser) —, the whole file never in memory: miniz reads the archive through the
+  file, only the parts needed are unpacked. **DOCX**: `word/document.xml` (the part `_rels/.rels` names
+  as the office document) — `w:p` paragraphs with `w:t`, tabs, line breaks, text boxes —, then the
+  footnotes and endnotes; the deleted text of tracked changes, field codes and the fallback copy of
+  `mc:AlternateContent` are left out; the text is cut into **parts** of about 4000 characters at
+  paragraph ends. **PPTX**: `ppt/slides/slideN.xml` in the order of `ppt/presentation.xml`'s slide
+  list (else by their numbers), one **slide** a page (`a:p` / `a:t`; no speaker notes). **ODT**:
+  `content.xml` — `text:p`, `text:h`, spaces, tabs, line breaks, footnotes and notes in the margin
+  (not tracked changes' deleted text, not comments' authors and dates), parts as DOCX. **EPUB**:
+  `META-INF/container.xml` → the package's spine → the XHTML files in that order, one page a file (one
+  over 30,000 characters is cut at paragraph ends); paragraphs at block elements, no scripts, styles,
+  head or SVG, HTML's named entities (`&nbsp;`) resolved. A hit's "page" is that slide, file or part.
+  **Limits** (`DocumentLimits`): a file over 256 MiB is not read (name only, nothing hashed); at most
+  10,000 entries and a central directory of at most 16 MiB (checked in the end record before miniz
+  reads it); a part at most 32 MiB unpacked and all parts together 256 MiB; the text kept at most
+  16 million characters; a part whose declared size its compressed bytes cannot give (stored: not
+  equal; deflate: over ~1100:1) is refused before any memory is set aside for it (a "zip bomb"); an
+  entry that is encrypted or not deflate is skipped; a password-protected ODT (`encryption-data` in its
+  manifest) is locked; an encrypted DOCX is no ZIP (an OLE2 file). The XML is read by
+  `QXmlStreamReader` — no external entity or DTD is ever read, and a part whose DOCTYPE declares
+  entities is dropped (no "billion laughs", no XXE); a damaged or cut part keeps the paragraphs read
+  before the damage. A file that is none of these is found by its name only, like a locked PDF.
 * **In the background, never in the way:** one worker thread at the lowest priority there is
   (`QThread::IdlePriority`: SCHED_IDLE on Linux), started 3 s after the notebook's index is ready,
   one file at a time: the text of new and changed files first (newest change first), then OCR page
@@ -3137,10 +3163,12 @@ The whole-notebook search (route `search`, `SearchView`) finds words in the note
   query's words typed as such (`SearchIndex::Hit::literal`), then by score. Excerpts come from the
   cache's records for the rows shown (a few pages of text kept in memory, `QCache`).
 * **The search view:** a PDF's row has the file icon, its name, the excerpt and "Page 3 of 12 · 4 more
-  pages match"; a picture's "Picture"; text from OCR "Recognized text" (scan icon); a file found by
+  pages match"; a document's "Slide 3 of 20 · 2 more slides match" (a presentation) or "Part 2 of 5 · 1
+  more part matches" (`kind` "presentation" / "document" in the model, `page` the slide or part); a
+  picture's "Picture"; text from OCR "Recognized text" (scan icon); a file found by
   its name only "Found by its name". The scope has **Attachments** beside All / Pages / Journals; the
   query's own filters narrow further (core `attachments/searchfilters.h`): `in:attachments`,
-  `in:pdf`, `in:pictures`, `in:notes`, `in:pages`, `in:journals` — also `type:`, Polish `w:` / `typ:`
+  `in:pdf`, `in:documents` (also `in:docs`, `w:dokumenty`), `in:pictures`, `in:notes`, `in:pages`, `in:journals` — also `type:`, Polish `w:` / `typ:`
   and Polish values (`w:załączniki`, `w:obrazy`, `w:notatki`, `w:dziennik`; diacritics optional),
   several add up; a word only looking like one (`12:30`, `https://…`, `in:xyz`) is searched. While
   attachments are read, a line under the filters says so ("Reading attachments… 3 of 40",
@@ -3156,7 +3184,9 @@ The whole-notebook search (route `search`, `SearchView`) finds words in the note
   the picture at any size; `Workspace.attachments.matchRects` — OCR's boxes on the file's own pixels:
   a photo turned upright by its EXIF orientation for OCR is framed where the view shows it),
   "2 places" with × in the bar (wide views), and **Recognized text** shows what OCR read, read-only and
-  selectable ("It may hold mistakes").
+  selectable ("It may hold mistakes"). A document opens its file the way any other attachment does
+  (PageView `fileRoute`, "Other attachments": read-only, **Open in another app**); the row's excerpt is
+  what shows the passage.
 * **OCR** (`platform/ocr.h`): Tesseract 4 or 5 loaded at run time through its C API (no build
   dependency): the Nix package and dev shell bring Tesseract 5 with the English and Polish "fast"
   models (`tessdata_fast`, 9 MB); the AppImage and Linux builds use the system's
@@ -3171,11 +3201,11 @@ The whole-notebook search (route `search`, `SearchView`) finds words in the note
   read as taken (EXIF orientation applied), at most 4200 px and 24 MP, a small one (a screenshot)
   twice its size. Where OCR is not available, Settings says why and what to install; the PDF viewer's
   "no text to search" adds "Turn on text recognition in Settings → Search" where OCR could read it.
-* **Platforms:** the desktop (Linux, Windows): text layers and OCR as above. **Android:** PDFs' text
-  on Android 15+ (PdfRenderer's text API; older versions find PDFs by name only); no OCR — Tesseract
+* **Platforms:** the desktop (Linux, Windows): text layers, documents and OCR as above. **Android:**
+  documents everywhere; PDFs' text on Android 15+ (PdfRenderer's text API; older versions find PDFs by name only); no OCR — Tesseract
   through the NDK would add some 25 MB per ABI and its models to the APK (docs/ANDROID.md); Settings
   says so. **The browser:** no PDF renderer and no threads: attachments are not read (Settings:
-  "This version of Brulion reads no PDFs and recognizes no text").
+  "This version of Brulion reads no PDFs and recognizes no text"; `documentTextAvailable` false).
 
 Settings → **Search** (`qml/attachments/AttachmentSettings.qml`): "Search in attachments" (on by
 default; `AppSettings.attachmentSearch`), "Recognize text in pictures and scans (OCR)" (off;
@@ -3185,10 +3215,17 @@ this device" (its size, Clear). Device settings, for every notebook.
 
 Tests: `tst_attachments` (core: records — round trips, a page alone, malformed and random bytes —,
 the manifest, the index — pages, names, OCR pages, renames, kinds, excerpts, the viewer's text —, the
-filters), `tst_ocrdata`, `tst_ocr` (Tesseract on `tests/data/attachments`: a whiteboard, a photo
+filters), `tst_documenttext` (core: DOCX / PPTX / ODT / EPUB built in the test from their XML with
+Polish text — reading order, text boxes, footnotes, what is left out, named entities, pages —, the
+record and the search of it; hostile and damaged files: a "zip bomb", forged sizes, too many
+entries, a file over the limit, the unpacked total and text limits, encrypted and non-deflate
+entries, entities that never expand or read a file, truncated archives and XML, random damage,
+cancelling), `tst_ocrdata`, `tst_ocr` (Tesseract on `tests/data/attachments`: a whiteboard, a photo
 stored sideways, a scanned PDF page; skipped without Tesseract), `tst_attachmentindexer` (the
 indexer on a notebook: text layers, the cache reused, renames, changes, OCR, pause, languages, the
-viewer's lookup; `largePdf` measures — BRULION_ATTACHMENT_BENCH=1), `tst_content_models` (the
+viewer's lookup; `documents`: a notebook of DOCX / PPTX / ODT / EPUB files read with no PDF renderer,
+cache reused, renames, changes, damaged / encrypted / bomb-like / too large files by name only;
+`largePdf` measures — BRULION_ATTACHMENT_BENCH=1), `tst_content_models` (the
 search model's attachment rows and filters), `--selftest-shell` (`checkAttachmentSearch`: a PDF's
 page found and opened highlighted, a picture's recognized words framed).
 

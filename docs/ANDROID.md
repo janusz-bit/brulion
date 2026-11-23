@@ -1119,8 +1119,9 @@ Still to be checked on a real phone: smoothness of pinching and the Back gesture
 search on Android 15+ on a real device, "Open in another app" with real PDF apps, large scans of
 lectures.
 
-**The whole-notebook search** (docs/UI.md "Searching attachments") reads the PDFs' text the same
-way — page by page through `PdfRenderer`'s text API, so from Android 15 on (API 35; older versions
+**The whole-notebook search** (docs/UI.md "Searching attachments") reads the text of DOCX, PPTX,
+ODT and EPUB files on every Android version (their XML, no renderer needed) and the PDFs' text the
+same way — page by page through `PdfRenderer`'s text API, so from Android 15 on (API 35; older versions
 find PDFs by their file names only) — on its worker thread at the lowest priority, its records in
 the app's cache (`cache/attachment-text`, pruned to 512 MiB; Android may clear it when storage runs
 low: the PDFs are then read again). **No OCR on Android** (Settings → Search says "Text recognition

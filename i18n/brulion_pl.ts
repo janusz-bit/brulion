@@ -617,72 +617,77 @@
         <translation>Szukaj</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="101"/>
+        <source>Search also finds words in the notebook&apos;s PDFs, documents and pictures. Their text is read offline and kept on this device.</source>
+        <translation>Wyszukiwanie znajduje też słowa w PDF-ach, dokumentach i obrazach notatnika. Ich tekst jest czytany bez internetu i zostaje na tym urządzeniu.</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="119"/>
         <source>Search in attachments</source>
         <translation>Szukaj w załącznikach</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="121"/>
-        <source>The text of PDFs, page by page; a result opens the PDF at its page with the words highlighted.</source>
-        <translation>Tekst PDF-ów, strona po stronie; wynik otwiera PDF na swojej stronie z podświetlonymi słowami.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="122"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="124"/>
         <source>PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).</source>
         <translation>Ta wersja Brulionu nie czyta PDF-ów; obrazy znajdziesz po nazwach (a z rozpoznawaniem tekstu — po ich słowach).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="131"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="133"/>
         <source>Recognize text in pictures and scans (OCR)</source>
         <translation>Rozpoznawaj tekst na obrazach i skanach (OCR)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="101"/>
-        <source>Search also finds words in the notebook&apos;s PDFs and pictures. Their text is read offline and kept on this device.</source>
-        <translation>Wyszukiwanie znajduje też słowa w PDF-ach i obrazach notatnika. Ich tekst jest czytany bez internetu i zostaje na tym urządzeniu.</translation>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="121"/>
+        <source>The text of PDFs, page by page, and of documents (DOCX, PPTX, ODT, EPUB); a result opens the PDF at its page with the words highlighted.</source>
+        <translation>Tekst PDF-ów, strona po stronie, i dokumentów (DOCX, PPTX, ODT, EPUB); wynik otwiera PDF na jego stronie ze słowami podświetlonymi.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="133"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="123"/>
+        <source>The text of documents (DOCX, PPTX, ODT, EPUB). PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).</source>
+        <translation>Tekst dokumentów (DOCX, PPTX, ODT, EPUB). W tej wersji Brulionu PDF-y nie są czytane; obrazy są znajdowane po nazwach (a z rozpoznawaniem tekstu — po słowach).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="135"/>
         <source>Photos, screenshots and scanned pages become searchable. Read in the background, at low priority.</source>
         <translation>Zdjęcia, zrzuty ekranu i skany dają się wyszukać. Czytane w tle, z niskim priorytetem.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="141"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="143"/>
         <source>Recognition languages</source>
         <translation>Języki rozpoznawania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="143"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="145"/>
         <source>None of the chosen languages is installed.</source>
         <translation>Żaden z wybranych języków nie jest zainstalowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="145"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="147"/>
         <source>Automatic — now %1 (the language of Brulion and English).</source>
         <translation>Automatycznie — teraz %1 (język Brulionu i angielski).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="146"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="148"/>
         <source>Now %1. Changing them reads the recognized pages again.</source>
         <translation>Teraz %1. Zmiana języków odczytuje rozpoznane strony od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="153"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="155"/>
         <source>Automatic</source>
         <translation>Automatycznie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="183"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="185"/>
         <source>In this notebook</source>
         <translation>W tym notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="185"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="187"/>
         <source>No PDFs or pictures read yet.</source>
         <translation>Nie przeczytano jeszcze żadnego PDF-a ani obrazu.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="186"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="188"/>
         <source>%n file(s) read</source>
         <translation>
             <numerusform>%n przeczytany plik</numerusform>
@@ -691,7 +696,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="187"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="189"/>
         <source>%n page(s) with text</source>
         <translation>
             <numerusform>%n strona z tekstem</numerusform>
@@ -700,45 +705,45 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="201"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="203"/>
         <source>Resume</source>
         <translation>Wznów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="201"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="203"/>
         <source>Pause</source>
         <translation>Wstrzymaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="208"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="210"/>
         <source>Text kept on this device</source>
         <translation>Tekst przechowywany na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="209"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="211"/>
         <source>%1 for all notebooks. Clearing it reads the files again.</source>
         <translation>%1 dla wszystkich notatników. Wyczyszczenie sprawi, że pliki zostaną przeczytane od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="216"/>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="230"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="218"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="232"/>
         <source>Clear</source>
         <translation>Wyczyść</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="226"/>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="228"/>
         <source>Clear the text kept for search?</source>
         <translation>Wyczyścić tekst przechowywany do wyszukiwania?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="228"/>
-        <source>The PDFs and pictures of every notebook on this device are read again, and their text recognized again — for many scans that takes long.</source>
-        <translation>PDF-y i obrazy wszystkich notatników na tym urządzeniu zostaną przeczytane od nowa, a ich tekst rozpoznany ponownie — przy wielu skanach to długo potrwa.</translation>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="230"/>
+        <source>The PDFs, documents and pictures of every notebook on this device are read again, and their text recognized again — for many scans that takes long.</source>
+        <translation>PDF-y, dokumenty i obrazy wszystkich notatników na tym urządzeniu zostaną przeczytane od nowa, a ich tekst rozpoznany od nowa — przy wielu skanach to trwa długo.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="229"/>
-        <source>The PDFs and pictures of every notebook on this device are read again.</source>
-        <translation>PDF-y i obrazy wszystkich notatników na tym urządzeniu zostaną przeczytane od nowa.</translation>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="231"/>
+        <source>The PDFs, documents and pictures of every notebook on this device are read again.</source>
+        <translation>PDF-y, dokumenty i obrazy wszystkich notatników na tym urządzeniu zostaną przeczytane od nowa.</translation>
     </message>
 </context>
 <context>
@@ -17020,62 +17025,62 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>SearchView</name>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="206"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="208"/>
         <source>Search in all notes…</source>
         <translation>Szukaj we wszystkich notatkach…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="206"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="208"/>
         <source>Search in %1…</source>
         <translation>Szukaj w folderze %1…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="207"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="209"/>
         <source>Search</source>
         <translation>Szukaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="248"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="250"/>
         <source>All</source>
         <translation>Wszystko</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="249"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="251"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="250"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="252"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="251"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="253"/>
         <source>Attachments</source>
         <translation>Załączniki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="254"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="256"/>
         <source>Search in</source>
         <translation>Szukaj w</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="277"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="279"/>
         <source>Folder</source>
         <translation>Folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="278"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="280"/>
         <source>Folder: %1</source>
         <translation>Folder: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="278"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="280"/>
         <source>all</source>
         <translation>wszystkie</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="284"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="286"/>
         <source>%1 of %n result(s)</source>
         <translation>
             <numerusform>%1 z %n wyniku</numerusform>
@@ -17084,7 +17089,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="285"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="287"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n wynik</numerusform>
@@ -17093,48 +17098,76 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="327"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="329"/>
         <source>Resume</source>
         <translation>Wznów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="327"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="329"/>
         <source>Pause</source>
         <translation>Wstrzymaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="328"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="330"/>
         <source>Resume reading attachments</source>
         <translation>Wznów czytanie załączników</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="328"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="330"/>
         <source>Pause reading attachments</source>
         <translation>Wstrzymaj czytanie załączników</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="379"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="381"/>
         <source>Search results</source>
         <translation>Wyniki wyszukiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="404"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="406"/>
         <source>Found by its name</source>
         <translation>Znaleziony po nazwie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="405"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="409"/>
+        <source>Slide %1 of %2</source>
+        <translation>Slajd %1 z %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SearchView.qml" line="410"/>
+        <source>Part %1 of %2</source>
+        <translation>Część %1 z %2</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SearchView.qml" line="413"/>
+        <source>%n more slide(s) match</source>
+        <translation>
+            <numerusform>pasuje jeszcze %n slajd</numerusform>
+            <numerusform>pasują jeszcze %n slajdy</numerusform>
+            <numerusform>pasuje jeszcze %n slajdów</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SearchView.qml" line="414"/>
+        <source>%n more part(s) match</source>
+        <translation>
+            <numerusform>pasuje jeszcze %n część</numerusform>
+            <numerusform>pasują jeszcze %n części</numerusform>
+            <numerusform>pasuje jeszcze %n części</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SearchView.qml" line="416"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3799"/>
         <source>Page %1 of %2</source>
         <translation>Strona %1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="405"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="416"/>
         <source>Picture</source>
         <translation>Obraz</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="406"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="417"/>
         <source>%n more page(s) match</source>
         <translation>
             <numerusform>pasuje jeszcze %n strona</numerusform>
@@ -17143,23 +17176,23 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="425"/>
-        <location filename="../src/app/qml/views/SearchView.qml" line="495"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="436"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="506"/>
         <source>Close in meaning</source>
         <translation>Bliskie znaczeniem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="525"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="536"/>
         <source>Recognized text</source>
         <translation>Rozpoznany tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="540"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="551"/>
         <source>Nothing found for “%1”</source>
         <translation>Nic nie znaleziono dla „%1”</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="541"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="552"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>Filtry ukrywają %n wynik.</numerusform>
@@ -17168,97 +17201,97 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="542"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="553"/>
         <source>Nothing of that kind holds these words: try without “in:”.</source>
         <translation>Nic tego rodzaju nie zawiera tych słów: spróbuj bez „in:”.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="543"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="554"/>
         <source>Try fewer or shorter words. Polish letters are optional: “zolw” finds “Żółw”.</source>
         <translation>Spróbuj wpisać mniej lub krótsze słowa. Polskie znaki są opcjonalne: „zolw” znajdzie „Żółw”.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="544"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="555"/>
         <source>Show all results</source>
         <translation>Pokaż wszystkie wyniki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="572"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="583"/>
         <source>Recent searches</source>
         <translation>Ostatnie wyszukiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="579"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="590"/>
         <source>Clear</source>
         <translation>Wyczyść</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="602"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="613"/>
         <source>Search your notes</source>
         <translation>Przeszukaj notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="603"/>
-        <source>Words anywhere in titles and text, and in PDFs and pictures. Polish letters are optional: “zolw” finds “Żółw”; the last word may be the start of a word. “in:pdf”, “in:pictures” or “in:notes” narrows the search.</source>
-        <translation>Słowa w tytułach i treści, a także w PDF-ach i obrazach. Polskie znaki można pomijać: „zolw” znajdzie „Żółw”; ostatnie słowo może być początkiem wyrazu. „w:pdf”, „w:obrazy” albo „w:notatki” zawęża wyszukiwanie.</translation>
+        <location filename="../src/app/qml/views/SearchView.qml" line="614"/>
+        <source>Words anywhere in titles and text, and in PDFs, documents and pictures. Polish letters are optional: “zolw” finds “Żółw”; the last word may be the start of a word. “in:pdf”, “in:documents” or “in:notes” narrows the search.</source>
+        <translation>Słowa w tytułach i treści oraz w PDF-ach, dokumentach i obrazach. Polskie litery są opcjonalne: „zolw” znajdzie „Żółw”; ostatnie słowo może być początkiem wyrazu. „in:pdf”, „in:documents” albo „in:notes” zawęża szukanie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="612"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="623"/>
         <source>All folders</source>
         <translation>Wszystkie foldery</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="626"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="637"/>
         <source>Notebook root</source>
         <translation>Główny folder notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="266"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="268"/>
         <source>Replace…</source>
         <translation>Zamień…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="83"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="85"/>
         <source>Reading attachments… %1 of %2</source>
         <translation>Czytanie załączników… %1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="84"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="86"/>
         <source>Reading attachments…</source>
         <translation>Czytanie załączników…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="87"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="89"/>
         <source>Recognizing text: page %1 of %2 in “%3”</source>
         <translation>Rozpoznawanie tekstu: strona %1 z %2 w „%3”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="89"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="91"/>
         <source>Recognizing text in “%1”</source>
         <translation>Rozpoznawanie tekstu w „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="91"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="93"/>
         <source>Reading attachments waits for the sync to end.</source>
         <translation>Czytanie załączników czeka na koniec synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="93"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="95"/>
         <source>Reading attachments is paused: they are found only as far as they were read.</source>
         <translation>Czytanie załączników jest wstrzymane: znajdziesz je tylko w tym, co już przeczytano.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="103"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="105"/>
         <source>Reading notes by meaning: %1 of %2</source>
         <translation>Czytanie notatek po znaczeniu: %1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="105"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="107"/>
         <source>Search by meaning stopped: %1</source>
         <translation>Szukanie po znaczeniu zatrzymane: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SearchView.qml" line="267"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="269"/>
         <source>Replace in notebook</source>
         <translation>Zamień w notatniku</translation>
     </message>
@@ -28975,18 +29008,18 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/cli/commands_index.cpp" line="664"/>
-        <source>Words to find (in:pdf, in:pictures, in:notes, in:journals narrow it)</source>
-        <translation>Słowa do znalezienia (in:pdf, in:pictures, in:notes, in:journals zawężają)</translation>
+        <source>Words to find (in:pdf, in:documents, in:pictures, in:notes, in:journals narrow it)</source>
+        <translation>Słowa do znalezienia (in:pdf, in:documents, in:pictures, in:notes, in:journals zawężają)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_index.cpp" line="669"/>
+        <source>Also the text of PDFs, documents and pictures the app has read on this device</source>
+        <translation>Także tekst PDF-ów, dokumentów i obrazów, które aplikacja przeczytała na tym urządzeniu</translation>
     </message>
     <message>
         <location filename="../src/cli/commands_index.cpp" line="667"/>
         <source>At most this many hits (default 20)</source>
         <translation>Najwyżej tyle trafień (domyślnie 20)</translation>
-    </message>
-    <message>
-        <location filename="../src/cli/commands_index.cpp" line="669"/>
-        <source>Also the text of PDFs and pictures the app has read on this device</source>
-        <translation>Także tekst PDF-ów i obrazów, które aplikacja przeczytała na tym urządzeniu</translation>
     </message>
     <message>
         <location filename="../src/cli/commands_index.cpp" line="672"/>

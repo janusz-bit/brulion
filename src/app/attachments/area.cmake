@@ -1,5 +1,5 @@
 # Attachments area of the app (included by src/app/CMakeLists.txt in its scope, so relative paths
-# are relative to src/app): the text of PDFs and pictures in the whole-notebook search (docs/UI.md
+# are relative to src/app): the text of PDFs, documents and pictures in the whole-notebook search (docs/UI.md
 # "Searching attachments") — the brulion_attachments library (attachments/CMakeLists.txt) and its
 # QML registration (attachments/attachqml.h: the type of Workspace.attachments). Its views live
 # with the search (qml/views/SearchView.qml), the settings (qml/attachments/AttachmentSettings.qml)

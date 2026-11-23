@@ -136,7 +136,7 @@ std::optional<Header> decodeFixed(QByteArrayView bytes)
     r.u16();
     const quint32 pageCount = r.u32();
     const quint32 stored = r.u32();
-    if (!r.ok() || (kind != quint8(Kind::Pdf) && kind != quint8(Kind::Picture)) || stored > quint32(MaxPages)
+    if (!r.ok() || (kind < quint8(Kind::Pdf) || kind > quint8(Kind::Epub)) || stored > quint32(MaxPages)
         || pageCount > 100'000'000u || stored > pageCount)
         return std::nullopt;
     h.info.kind = Kind(kind);
