@@ -919,7 +919,7 @@ void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint6
 
 bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
                              QList<VaultChange> &changes, const DiskRead *read, const vaultutil::ReadMark *expect,
-                             bool *changedMeanwhile)
+                             bool *changedMeanwhile, const StagedContent *staged)
 {
     if (path.isEmpty())
         return fail(Vault::tr("Cannot write: empty path"));
@@ -959,7 +959,7 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
         // known file spelled differently; update that one instead of tracking a duplicate.
         if (!files.contains(path) && disk) {
             if (const std::optional<VaultPath> variant = storedCaseVariant(path, *disk))
-                return writeFile(*variant, bytes, source, asText, changes, nullptr, expect, changedMeanwhile);
+                return writeFile(*variant, bytes, source, asText, changes, nullptr, expect, changedMeanwhile, staged);
         }
         const auto known = files.constFind(path);
         const bool changedBehind = known == files.cend() ? disk.has_value() : (!disk || !sameStat(*disk, *known));
@@ -970,13 +970,13 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
             read = nullptr; // (the scan read it again)
         }
         if (files.contains(path))
-            refreshKnownContent(path, asText, bytes.size(), changes, read);
+            refreshKnownContent(path, asText, staged ? staged->size : bytes.size(), changes, read);
     }
     // Text written to a file that has a byte order mark keeps it (editors such as Notepad add one).
     QByteArray data = bytes;
-    if (asText && !data.startsWith(vaultutil::utf8Bom()) && usesBom(path))
+    if (!staged && asText && !data.startsWith(vaultutil::utf8Bom()) && usesBom(path))
         data.prepend(vaultutil::utf8Bom());
-    const QString dataHash = tracked ? text::fnv1a64Hex(data) : QString();
+    const QString dataHash = !tracked ? QString() : staged ? staged->hash : text::fnv1a64Hex(data);
     if (tracked && files.contains(path)) {
         if (hashes.value(path) == dataHash)
             return true; // unchanged: no write, no change
@@ -990,7 +990,8 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     const std::function<void()> hook =
             beforeRenameHook ? std::function<void()>([this, &path] { beforeRenameHook(path); }) : nullptr;
     const vaultutil::StampedSave save =
-            vaultutil::saveAtomicallyStamped(absPath(path), data, hook, expect, probesFolderClock(dir));
+            staged ? vaultutil::commitStagedStamped(absPath(path), staged->file, hook, expect, probesFolderClock(dir))
+                   : vaultutil::saveAtomicallyStamped(absPath(path), data, hook, expect, probesFolderClock(dir));
     if (save.changed)
         return changedSinceRead();
     if (!save.ok)
@@ -1004,7 +1005,17 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     if (watcher) // (only once the file is tracked: a file gone at once lists its folder)
         noteOwnWrite(dir, save, pendingBefore);
     // Known hash = what we wrote: the watcher's echo of this write is recognised as such.
-    rememberContent(path, data, asText, dataHash);
+    if (staged) {
+        // (Its content is not kept: a staged file is a large one, read in pieces.)
+        hashes.insert(path, dataHash);
+        if (staged->bom)
+            bomPaths.insert(path);
+        else
+            bomPaths.remove(path);
+        contents.remove(path);
+    } else {
+        rememberContent(path, data, asText, dataHash);
+    }
     noteUnsettled(*written, true, save.fineStamps);
     watchFile(path);
     changes.append(VaultChange{existed ? ChangeType::Modified : ChangeType::Created, path, {}, source});
@@ -1012,17 +1023,19 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
 }
 
 bool VaultPrivate::write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
-                         const DiskRead *read, const vaultutil::ReadMark *expect, bool *changedMeanwhile)
+                         const DiskRead *read, const vaultutil::ReadMark *expect, bool *changedMeanwhile,
+                         const StagedContent *staged)
 {
     if (!requireOpen() || !requireStorage())
         return false;
     QList<VaultChange> changes;
-    const bool ok = writeFile(path, bytes, source, asText, changes, read, expect, changedMeanwhile);
+    const bool ok = writeFile(path, bytes, source, asText, changes, read, expect, changedMeanwhile, staged);
     finish(changes);
     return ok;
 }
 
-VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText)
+VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
+                               const StagedContent *staged)
 {
     if (!requireOpen() || !requireStorage())
         return {};
@@ -1036,7 +1049,35 @@ VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, C
     const VaultPath target = vaultutil::uniqueName(base, [this](const VaultPath &candidate) {
         return isTakenCaseInsensitive(candidate) || existsOnDisk(candidate);
     });
-    return write(target, bytes, source, asText) ? target : VaultPath();
+    return write(target, bytes, source, asText, nullptr, nullptr, nullptr, staged) ? target : VaultPath();
+}
+
+std::optional<StagedContent> VaultPrivate::readStaged(const QString &file)
+{
+    QFile in(file);
+    if (QFileInfo(file).isSymLink() || !in.open(QIODevice::ReadOnly)) {
+        fail(Vault::tr("Cannot read %1: %2").arg(file, in.errorString()));
+        return std::nullopt;
+    }
+    StagedContent staged;
+    staged.file = file;
+    text::Fnv1a64 hash;
+    QByteArray piece(Vault::PieceBytes, Qt::Uninitialized);
+    for (;;) {
+        const qint64 got = in.read(piece.data(), piece.size());
+        if (got < 0) {
+            fail(Vault::tr("Cannot read %1: %2").arg(file, in.errorString()));
+            return std::nullopt;
+        }
+        if (got == 0)
+            break;
+        if (staged.size == 0)
+            staged.bom = QByteArrayView(piece).first(got).startsWith(vaultutil::utf8Bom());
+        hash.add(QByteArrayView(piece).first(got));
+        staged.size += got;
+    }
+    staged.hash = hash.hex();
+    return staged;
 }
 
 void VaultPrivate::removeLeftovers(const QStringList &rels)
@@ -1519,6 +1560,126 @@ VaultPath Vault::createBinary(const VaultPath &path, const QByteArray &data, Cha
 {
     d->waitForWrites();
     return d->create(path, data, source, false);
+}
+
+QString Vault::newStagingFile(const VaultPath &rawPath)
+{
+    d->waitForWrites();
+    if (!d->requireOpen() || !d->requireStorage())
+        return {};
+    // The folder as create() would use it ("projekty/Dom.md" goes into "Projekty/").
+    const VaultPath path = d->existingCase(paths::normalize(rawPath), true);
+    if (path.isEmpty()) {
+        d->fail(tr("Cannot write: empty path"));
+        return {};
+    }
+    const VaultPath dir = paths::dirname(path);
+    if (d->behindUnfollowedLink(path)) {
+        //: The reason in "Cannot write %1: %2"
+        d->fail(tr("Cannot write %1: %2").arg(path, tr("it is in a linked folder that is not followed")));
+        return {};
+    }
+    QList<VaultChange> changes;
+    const bool made = d->ensureDirs(dir, changes);
+    d->finish(changes);
+    if (!made)
+        return {};
+    QFile file;
+    QString error;
+    if (!vaultutil::createOwnTemp(d->absPath(dir), file, &error)) {
+        d->fail(tr("Cannot write %1: %2").arg(path, error));
+        return {};
+    }
+    return QFileInfo(file.fileName()).absoluteFilePath();
+}
+
+bool Vault::writeStaged(const VaultPath &path, const QString &stagedFile, ChangeSource source)
+{
+    d->waitForWrites();
+    const std::optional<StagedContent> staged = d->readStaged(stagedFile);
+    const bool ok = staged && d->write(paths::normalize(path), {}, source, false, nullptr, nullptr, nullptr, &*staged);
+    QFile::remove(stagedFile); // (renamed away unless the write failed or changed nothing)
+    return ok;
+}
+
+VaultPath Vault::createStaged(const VaultPath &path, const QString &stagedFile, ChangeSource source)
+{
+    d->waitForWrites();
+    const std::optional<StagedContent> staged = d->readStaged(stagedFile);
+    const VaultPath used = staged ? d->create(path, {}, source, false, &*staged) : VaultPath();
+    QFile::remove(stagedFile);
+    return used;
+}
+
+VaultPath Vault::createBinaryFrom(const VaultPath &path, const QString &sourceFile, ChangeSource source)
+{
+    QFile in(sourceFile);
+    if (!in.open(QIODevice::ReadOnly)) {
+        d->fail(tr("Cannot read %1: %2").arg(sourceFile, in.errorString()));
+        return {};
+    }
+    const QString staging = newStagingFile(path);
+    if (staging.isEmpty())
+        return {};
+    QFile out(staging);
+    const auto failed = [&](const QString &why) {
+        d->fail(tr("Cannot write %1: %2").arg(path, why));
+        out.close();
+        QFile::remove(staging);
+        return VaultPath();
+    };
+    if (!out.open(QIODevice::WriteOnly))
+        return failed(out.errorString());
+    QByteArray piece(PieceBytes, Qt::Uninitialized);
+    for (;;) {
+        const qint64 got = in.read(piece.data(), piece.size());
+        if (got < 0)
+            return failed(in.errorString());
+        if (got == 0)
+            break;
+        if (out.write(piece.constData(), got) != got)
+            return failed(out.errorString());
+    }
+    if (!out.flush())
+        return failed(out.errorString());
+    out.close();
+    return createStaged(path, staging, source);
+}
+
+std::unique_ptr<QFile> Vault::openForReading(const VaultPath &rawPath)
+{
+    d->settleWrites();
+    if (!d->requireOpen())
+        return nullptr;
+    const VaultPath path = paths::normalize(rawPath);
+    if (path.isEmpty()) {
+        d->fail(tr("Cannot read: empty path"));
+        return nullptr;
+    }
+    d->resolveSpelling(path);
+    if (d->behindUnfollowedLink(path)) {
+        d->fail(tr("Cannot read %1: %2").arg(path, tr("it is in a linked folder that is not followed")));
+        return nullptr;
+    }
+    const QString abs = d->absPath(path);
+    // QFile cannot open without following a link (no O_NOFOLLOW): the check comes first.
+    const QFileInfo info(abs);
+    if (info.isSymLink()) {
+        //: The reason in "Cannot read %1: %2"
+        d->fail(tr("Cannot read %1: %2").arg(path, tr("links to files are not followed")));
+        return nullptr;
+    }
+    if (info.isDir()) {
+        //: The reason in "Cannot read %1: %2"
+        d->fail(tr("Cannot read %1: %2").arg(path, tr("it is a folder")));
+        return nullptr;
+    }
+    auto file = std::make_unique<QFile>(abs);
+    if (!file->open(QIODevice::ReadOnly)) {
+        d->fail(tr("Cannot read %1: %2").arg(path, file->errorString()));
+        return nullptr;
+    }
+    return file;
 }
 
 bool Vault::createFolder(const VaultPath &path)

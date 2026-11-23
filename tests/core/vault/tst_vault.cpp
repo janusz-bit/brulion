@@ -19,6 +19,13 @@ qint64 diskMtime(const QString &abs)
     return QFileInfo(abs).fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch();
 }
 
+/// Write a staging file (newStagingFile()) as a download would.
+bool fill(const QString &file, const QByteArray &bytes)
+{
+    QFile out(file);
+    return out.open(QIODevice::WriteOnly) && out.write(bytes) == bytes.size();
+}
+
 /// Makes `dir` read-only for the duration of a scope; `effective()` is false when the process
 /// ignores permissions (root), so tests can skip.
 class ReadOnlyDir {
@@ -819,6 +826,127 @@ private Q_SLOTS:
         QVERIFY(f.vault->writeBinary(u"ćma.md"_s, u"ćma"_s.toUtf8(), ChangeSource::Sync)); // same bytes
         QCOMPARE(diskMtime(f.root() + u"/ćma.md"_s), before);
         QCOMPARE(f.changes(), QStringList{u"modify:Notatka.md@sync"_s});
+    }
+
+    // --- staged writes (a download in pieces) -------------------------------------------------
+    void stagedWriteReplacesTheFileInOneStep()
+    {
+        Fixture f;
+        f.write(u"Wakacje/łódź.mp4"_s, "stara wersja");
+        QVERIFY(f.open());
+        const QString staged = f.vault->newStagingFile(u"Wakacje/łódź.mp4"_s);
+        QVERIFY2(!staged.isEmpty(), qPrintable(f.vault->errorString()));
+        // Next to the file, with a name no listing, sync or backup takes in.
+        QCOMPARE(QFileInfo(staged).absolutePath(), QFileInfo(f.root() + u"/Wakacje/x"_s).absolutePath());
+        QVERIFY(QFileInfo(staged).fileName().startsWith(u".brulion-tmp-"_s));
+        QByteArray film(3 * Vault::PieceBytes + 17, Qt::Uninitialized);
+        for (qsizetype i = 0; i < film.size(); ++i)
+            film[i] = char((i * 31 + 7) & 0xff);
+        QVERIFY(fill(staged, film));
+        QCOMPARE(f.read(u"Wakacje/łódź.mp4"_s), "stara wersja"_ba); // untouched while it is written
+        f.vault->rescan();
+        QCOMPARE(f.files(), QStringList{u"Wakacje/łódź.mp4"_s});
+        QVERIFY(f.vault->writeStaged(u"Wakacje/łódź.mp4"_s, staged, ChangeSource::Sync));
+        QCOMPARE(f.read(u"Wakacje/łódź.mp4"_s), film);
+        QVERIFY(!QFileInfo::exists(staged));
+        QCOMPARE(f.changes(), QStringList{u"modify:Wakacje/łódź.mp4@sync"_s});
+        QCOMPARE(f.vault->stat(u"Wakacje/łódź.mp4"_s)->size, film.size());
+        // The vault knows what it wrote: the same bytes staged again change nothing.
+        const QString again = f.vault->newStagingFile(u"Wakacje/łódź.mp4"_s);
+        QVERIFY(fill(again, film));
+        QVERIFY(f.vault->writeStaged(u"Wakacje/łódź.mp4"_s, again, ChangeSource::Sync));
+        QVERIFY(!QFileInfo::exists(again));
+        QCOMPARE(f.changes().size(), 1);
+        f.vault->rescan();
+        QCOMPARE(f.changes().size(), 1); // its own write is no external change
+        QCOMPARE(diskFiles(f.root()), QStringList{u"Wakacje/łódź.mp4"_s});
+    }
+
+    void stagedWriteMakesItsFolderAndTakesInAChangeBehindItsBack()
+    {
+        Fixture f;
+        f.write(u"skan.pdf"_s, "pierwsza");
+        QVERIFY(f.open());
+        const QString nested = f.vault->newStagingFile(u"Nowy folder/Żółw.pdf"_s);
+        QVERIFY(!nested.isEmpty());
+        QVERIFY(fill(nested, "nowy plik"));
+        QVERIFY(f.vault->writeStaged(u"Nowy folder/Żółw.pdf"_s, nested));
+        QCOMPARE(f.read(u"Nowy folder/Żółw.pdf"_s), "nowy plik"_ba);
+        // Another program wrote the file meanwhile: taken in first (External), then replaced.
+        f.write(u"skan.pdf"_s, "druga, z innego programu");
+        const QString staged = f.vault->newStagingFile(u"skan.pdf"_s);
+        QVERIFY(fill(staged, "trzecia"));
+        QVERIFY(f.vault->writeStaged(u"skan.pdf"_s, staged, ChangeSource::Sync));
+        QCOMPARE(f.read(u"skan.pdf"_s), "trzecia"_ba);
+        QCOMPARE(f.changes(), (QStringList{u"create:Nowy folder/Żółw.pdf@user"_s, u"modify:skan.pdf@external"_s,
+                                           u"modify:skan.pdf@sync"_s}));
+    }
+
+    void stagedCreateFindsAFreeName()
+    {
+        Fixture f;
+        f.write(u"Projekt/plan.pdf"_s, "jest");
+        QVERIFY(f.open());
+        const QString staged = f.vault->newStagingFile(u"Projekt/plan.pdf"_s);
+        QVERIFY(fill(staged, "kopia"));
+        QCOMPARE(f.vault->createStaged(u"Projekt/plan.pdf"_s, staged, ChangeSource::Sync), u"Projekt/plan 2.pdf"_s);
+        QCOMPARE(f.read(u"Projekt/plan 2.pdf"_s), "kopia"_ba);
+        QCOMPARE(f.read(u"Projekt/plan.pdf"_s), "jest"_ba);
+        QVERIFY(!QFileInfo::exists(staged));
+    }
+
+    void stagedWriteFailsWithoutLeavingAnything()
+    {
+        Fixture f;
+        f.write(u"a.png"_s, "obraz");
+        f.write(u"folder/b.md"_s, "b");
+        QVERIFY(f.open());
+        // A staging file that is gone (or never was): nothing written, false.
+        QVERIFY(!f.vault->writeStaged(u"a.png"_s, f.root() + u"/.brulion-tmp-0123456789abcdef"_s));
+        QCOMPARE(f.read(u"a.png"_s), "obraz"_ba);
+        // Onto a folder: refused, the staging file removed.
+        const QString staged = f.vault->newStagingFile(u"folder"_s);
+        QVERIFY(fill(staged, "x"));
+        QVERIFY(!f.vault->writeStaged(u"folder"_s, staged));
+        QVERIFY(!QFileInfo::exists(staged));
+        QCOMPARE(diskFiles(f.root()), (QStringList{u"a.png"_s, u"folder/b.md"_s}));
+        QVERIFY(f.changes().isEmpty());
+    }
+
+    void createBinaryFromCopiesAFileInPieces()
+    {
+        Fixture f;
+        QVERIFY(f.open());
+        const QString source = f.tmp.path() + u"/rozpakowane/zdjęcie.jpg"_s;
+        QVERIFY(QDir().mkpath(QFileInfo(source).absolutePath()));
+        const QByteArray photo(2 * Vault::PieceBytes + 5, 'j');
+        QVERIFY(fill(source, photo));
+        QCOMPARE(f.vault->createBinaryFrom(u"assets/Import/zdjęcie.jpg"_s, source, ChangeSource::Import),
+                 u"assets/Import/zdjęcie.jpg"_s);
+        QCOMPARE(f.read(u"assets/Import/zdjęcie.jpg"_s), photo);
+        QVERIFY(QFileInfo::exists(source)); // the source stays
+        QCOMPARE(f.changes(), QStringList{u"create:assets/Import/zdjęcie.jpg@import"_s});
+        QVERIFY(f.vault->createBinaryFrom(u"brak.jpg"_s, f.tmp.path() + u"/nie-ma.jpg"_s).isEmpty());
+        QCOMPARE(diskFiles(f.root()), QStringList{u"assets/Import/zdjęcie.jpg"_s});
+    }
+
+    void openForReadingRefusesLinksAndFolders()
+    {
+        Fixture f;
+        f.write(u"duży.bin"_s, "zawartość");
+        f.write(u"folder/x.md"_s, "x");
+        if (brulion::test::hasSymlinks())
+            QVERIFY(QFile::link(f.tmp.path() + u"/sekret"_s, f.root() + u"/link.bin"_s));
+        QVERIFY(f.open());
+        const std::unique_ptr<QFile> file = f.vault->openForReading(u"duży.bin"_s);
+        QVERIFY(file);
+        QCOMPARE(file->readAll(), "zawartość"_ba);
+        QVERIFY(!f.vault->openForReading(u"folder"_s));
+        QVERIFY(!f.vault->openForReading(u"brak.bin"_s));
+        if (brulion::test::hasSymlinks()) {
+            QVERIFY(!f.vault->openForReading(u"link.bin"_s));
+            QVERIFY2(f.vault->errorString().contains(u"link"_s), qPrintable(f.vault->errorString()));
+        }
     }
 
     void writeOntoAFolderOrEmptyPathFails()

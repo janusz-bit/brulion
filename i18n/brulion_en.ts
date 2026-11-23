@@ -2384,7 +2384,7 @@
 <context>
     <name>brulion::cli</name>
     <message numerus="yes">
-        <location filename="../src/cli/commands_import.cpp" line="415"/>
+        <location filename="../src/cli/commands_import.cpp" line="455"/>
         <source>%n file(s) could not be written.</source>
         <translation>
             <numerusform>%n file could not be written.</numerusform>
@@ -2437,7 +2437,7 @@
 <context>
     <name>brulion::ioviews::FileGatherer</name>
     <message numerus="yes">
-        <location filename="../src/app/io/fileexchange.cpp" line="608"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="710"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n file</numerusform>
@@ -2445,8 +2445,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/fileexchange.cpp" line="423"/>
-        <location filename="../src/app/io/fileexchange.cpp" line="492"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="484"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="553"/>
         <source>The folder has more than %n file(s); only the first ones were read.</source>
         <translation>
             <numerusform>The folder has more than %n file; only the first ones were read.</numerusform>
@@ -2457,7 +2457,7 @@
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="731"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="808"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import stopped: %n file saved.</numerusform>
@@ -2465,7 +2465,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="732"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="809"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import finished: %n file saved.</numerusform>

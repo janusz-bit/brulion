@@ -438,14 +438,25 @@ int compareNameKeys(const QString &la, const QString &a, const QString &lb, cons
 
 quint64 fnv1a64(QByteArrayView data)
 {
-    constexpr quint64 offsetBasis = 0xcbf29ce484222325ULL;
+    Fnv1a64 hash;
+    hash.add(data);
+    return hash.value();
+}
+
+void Fnv1a64::add(QByteArrayView piece)
+{
     constexpr quint64 prime = 0x100000001b3ULL;
-    quint64 hash = offsetBasis;
-    for (const char byte : data) {
+    quint64 hash = m_hash;
+    for (const char byte : piece) {
         hash ^= quint64(quint8(byte));
         hash *= prime;
     }
-    return hash;
+    m_hash = hash;
+}
+
+QString Fnv1a64::hex() const
+{
+    return QString::number(m_hash, 16).rightJustified(16, u'0');
 }
 
 QString fnv1a64Hex(QByteArrayView data)

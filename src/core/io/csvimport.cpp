@@ -1234,7 +1234,7 @@ void importCsvPlans(const QList<CsvFilePlan> &plans, const CsvImportOptions &opt
         }
         if (!file)
             return {};
-        const QString path = ctx.addAttachment(paths::basename(file->path), file->data);
+        const QString path = ctx.addAttachment(paths::basename(file->path), *file);
         attachmentByUrl.insert(ref.url, path);
         return path;
     };

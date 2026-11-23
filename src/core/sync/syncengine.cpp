@@ -245,6 +245,11 @@ void SyncEngine::setMaxFileSize(qint64 bytes)
     m_maxFileSize = std::max<qint64>(0, bytes);
 }
 
+void SyncEngine::setStreamAbove(qint64 bytes)
+{
+    m_streamAbove = std::max<qint64>(0, bytes);
+}
+
 void SyncEngine::setMaxBaseSize(qint64 bytes)
 {
     m_maxBaseSize = std::max<qint64>(0, bytes);

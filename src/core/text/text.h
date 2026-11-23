@@ -29,7 +29,7 @@
 //
 //   Hashing
 //     fnv1a64(bytes), fnv1a64Hex(bytes) ("cbf29ce484222325" for empty input),
-//     contentHash(text) == fnv1a64Hex(text.toUtf8())
+//     contentHash(text) == fnv1a64Hex(text.toUtf8()), Fnv1a64 (the same, piece by piece)
 //
 //   Decoding files of unknown origin: decode.h — decodeText(bytes) (UTF-8 / UTF-16 BOM /
 //     windows-1250 or -1252)
@@ -168,6 +168,17 @@ int compareNameKeys(const QString &keyA, const QString &a, const QString &keyB, 
 
 /// FNV-1a 64-bit hash of raw bytes (stable, non-cryptographic).
 quint64 fnv1a64(QByteArrayView data);
+/// fnv1a64() of bytes that come piece by piece (a file read or downloaded in pieces): add() each
+/// piece in order; value() / hex() equal fnv1a64() / fnv1a64Hex() of all of them together.
+class Fnv1a64 {
+public:
+    void add(QByteArrayView piece);
+    quint64 value() const { return m_hash; }
+    QString hex() const;
+
+private:
+    quint64 m_hash = 0xcbf29ce484222325ULL;
+};
 /// fnv1a64() as 16 lower-case hex digits.
 QString fnv1a64Hex(QByteArrayView data);
 /// Hash of a text over its UTF-8 bytes: fnv1a64Hex(text.toUtf8()).

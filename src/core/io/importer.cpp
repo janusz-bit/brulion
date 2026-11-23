@@ -10,6 +10,8 @@
 #include "text/text.h"
 #include "util/paths.h"
 
+#include <QDir>
+#include <QFile>
 #include <QHash>
 
 #include <algorithm>
@@ -71,11 +73,23 @@ enum class ArchiveKind { None, Zip, Tar };
 ArchiveKind archiveKind(const InputFile &file)
 {
     const QString ext = paths::extension(file.path);
-    if ((ext == u".zip" || ext == u".bear2bk" || ext == u".textpack") && isZip(file.data))
+    const bool zipName = ext == u".zip" || ext == u".bear2bk" || ext == u".textpack";
+    const bool tarName = ext == u".jex" || ext == u".tar";
+    if (!zipName && !tarName)
+        return ArchiveKind::None;
+    const QByteArray head = file.onDisk() ? fileHead(file.file) : QByteArray();
+    const QByteArrayView start = file.onDisk() ? QByteArrayView(head) : QByteArrayView(file.data);
+    if (zipName && isZip(start))
         return ArchiveKind::Zip;
-    if ((ext == u".jex" || ext == u".tar") && isTar(file.data))
+    if (tarName && isTar(file.onDisk() ? QByteArrayView(bytesOf(file)) : start))
         return ArchiveKind::Tar;
     return ArchiveKind::None;
+}
+
+/// A file of the staging folder (not the user's own picked file).
+bool isStaged(const InputFile &file, const QString &stagingFolder)
+{
+    return file.onDisk() && !stagingFolder.isEmpty() && file.file.startsWith(QDir(stagingFolder).absolutePath() + u'/');
 }
 
 QByteArray toBytes(const QString &text, bool bom)
@@ -114,7 +128,7 @@ QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *
         if (it == seen.constEnd()) {
             seen.insert(key, out.size());
             out.append(std::move(file));
-        } else if (warnings && out.at(*it).data != file.data) {
+        } else if (warnings && !sameContent(out.at(*it), file)) {
             warnings->append(
                     IoMessages::tr("“%1” appears twice in the input; the first copy was used.").arg(file.path));
         }
@@ -145,10 +159,13 @@ QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *
         budget.maxTotalSize = remaining(limits.maxTotalSize, unpackedBytes);
         budget.maxEntries = int(remaining(limits.maxEntries, unpackedEntries));
         budget.expandNested = false; // nesting is decided here, level by level
-        const QList<FileEntry> entries = kind == ArchiveKind::Zip ? readZip(file.data, &archiveWarnings, budget)
-                                                                  : readTar(file.data, &archiveWarnings, budget);
+        // (A tar is read whole, also from disk; a ZIP on disk piece by piece.)
+        const QList<FileEntry> entries = kind == ArchiveKind::Zip
+                                                 ? (file.onDisk() ? readZipFile(file.file, &archiveWarnings, budget)
+                                                                  : readZip(file.data, &archiveWarnings, budget))
+                                                 : readTar(bytesOf(file), &archiveWarnings, budget);
         for (const FileEntry &e : entries)
-            unpackedBytes += e.data.size();
+            unpackedBytes += e.size();
         unpackedEntries += entries.size();
         if (warnings)
             warnings->append(archiveWarnings);
@@ -156,22 +173,26 @@ QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *
             add(std::move(file)); // damaged: kept as a plain file
             continue;
         }
+        if (isStaged(file, limits.stagingFolder))
+            QFile::remove(file.file); // unpacked: its files take its place
+
         // Archives inside an archive are unpacked only when it holds no notes of its own (Notion's
         // multi-part export: a ZIP of ZIPs); in a vault or an export of notes they are attachments.
         const bool unpackNested = std::ranges::none_of(entries, [](const FileEntry &e) { return isNote(e.path); });
         const QString folder = paths::dirname(file.path);
         for (qsizetype k = entries.size() - 1; k >= 0; --k) {
             const FileEntry &e = entries[k];
-            stack.append(Item{InputFile{folder.isEmpty() ? e.path : folder + u'/' + e.path, e.data}, item.depth + 1,
-                              unpackNested});
+            InputFile unpacked = e;
+            unpacked.path = folder.isEmpty() ? e.path : folder + u'/' + e.path;
+            stack.append(Item{std::move(unpacked), item.depth + 1, unpackNested});
         }
     }
     return out;
 }
 
-const Importer *detectImporter(const QList<InputFile> &files)
+const Importer *detectImporter(const QList<InputFile> &files, bool alreadyPrepared)
 {
-    const QList<InputFile> prepared = prepareImportFiles(files);
+    const QList<InputFile> prepared = alreadyPrepared ? files : prepareImportFiles(files);
     const Importer *best = nullptr;
     int bestScore = 0;
     for (const Importer *importer : importers()) {
@@ -187,7 +208,7 @@ const Importer *detectImporter(const QList<InputFile> &files)
 ImportResult runImport(const Importer &importer, const QList<InputFile> &files, const ImportOptions &options)
 {
     QStringList warnings;
-    const QList<InputFile> prepared = prepareImportFiles(files, &warnings);
+    const QList<InputFile> prepared = options.inputPrepared ? files : prepareImportFiles(files, &warnings);
     ImportResult raw = importer.run(prepared, options);
     warnings.append(raw.warnings);
 
@@ -218,7 +239,8 @@ ImportResult runImport(const Importer &importer, const QList<InputFile> &files, 
             }
             index.insert(key, out.files.size());
             claims.reserve(path); // a page with the same path gets another name
-            out.files.append(ImportedFile{path, std::move(file.data), true});
+            file.path = path;
+            out.files.append(std::move(file));
             continue;
         }
         const bool duplicate = index.contains(key);
@@ -230,7 +252,9 @@ ImportResult runImport(const Importer &importer, const QList<InputFile> &files, 
                 renamedPages.append(Rename{path, target});
         }
         index.insert(pathKey(target), out.files.size());
-        out.files.append(ImportedFile{target, std::move(file.data), false});
+        file.path = target;
+        file.append = false;
+        out.files.append(std::move(file));
     }
     if (!renamedPages.isEmpty()) {
         for (ImportedFile &file : out.files) {

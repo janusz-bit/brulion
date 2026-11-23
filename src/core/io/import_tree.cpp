@@ -75,7 +75,7 @@ public:
             const QString prefix = *root + u'/';
             for (const InputFile &f : files) {
                 if (f.path.startsWith(prefix))
-                    vault.append(InputFile{f.path.sliced(prefix.size()), f.data});
+                    vault.append(InputFile{f.path.sliced(prefix.size()), f.data, f.file, f.fileSize});
             }
         } else {
             vault = files;

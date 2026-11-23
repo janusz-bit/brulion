@@ -614,7 +614,7 @@ private:
                 const QString name = file.value(u"file_name"_s).toString().trimmed();
                 const InputFile *f = inputs.value(csvAttachmentInputPath(url, name));
                 if (f) {
-                    lines.append(attachmentLink(st.ctx.addAttachment(paths::basename(f->path), f->data)));
+                    lines.append(attachmentLink(st.ctx.addAttachment(paths::basename(f->path), *f)));
                 } else if (url.startsWith(u"https://"_s)) {
                     ++st.missingFiles;
                     lines.append(u"["_s + escapeMarkdownText(name.isEmpty() ? url : name, false, true) + u"]("_s

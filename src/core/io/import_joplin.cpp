@@ -241,7 +241,7 @@ private:
                 fileName = id + (ext.isEmpty() ? extensionForMime(res->meta.value(u"mime"_s)) : u'.' + ext);
             else if (paths::extension(fileName).isEmpty() && !ext.isEmpty())
                 fileName += u'.' + ext;
-            const VaultPath path = ctx.addAttachment(paths::basename(fileName), file->data);
+            const VaultPath path = ctx.addAttachment(paths::basename(fileName), *file);
             resourcePaths.insert(id, path);
             return path;
         };

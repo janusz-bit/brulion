@@ -125,6 +125,9 @@ struct DeviceOptions {
     QString folder = kFolder;
     int concurrency = 0;
     qint64 maxFileSize = 0;
+    /// SyncEngine::setStreamAbove(); -1: the engine's default — or 0 (every file other than a note
+    /// in pieces) in the "_streamed" runs of the tests (BRULION_TEST_SYNC_STREAM).
+    qint64 streamAbove = -1;
     bool open = true;
 };
 
@@ -156,6 +159,10 @@ public:
             engine->setConcurrency(options.concurrency);
         if (options.maxFileSize > 0)
             engine->setMaxFileSize(options.maxFileSize);
+        if (options.streamAbove >= 0)
+            engine->setStreamAbove(options.streamAbove);
+        else if (qEnvironmentVariableIsSet("BRULION_TEST_SYNC_STREAM"))
+            engine->setStreamAbove(0);
     }
 
     /// Run one sync to completion.

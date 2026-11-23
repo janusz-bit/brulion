@@ -3,6 +3,7 @@
 #include "sync/url.h"
 
 #include <QDateTime>
+#include <QIODevice>
 #include <QLocale>
 #include <QStringList>
 #include <QTimeZone>
@@ -126,8 +127,25 @@ QString FakeWebDavServer::abs(const QString &rel) const
     return rel.isEmpty() ? m_options.root : m_options.root + u'/' + rel;
 }
 
-void FakeWebDavServer::send(const HttpRequest &request, HttpCallback done)
+void FakeWebDavServer::send(const HttpRequest &sent, HttpCallback done)
 {
+    HttpRequest request = sent;
+    if (request.bodyDevice) {
+        if (!m_options.streams)
+            qFatal("A body device for a transport that does not stream");
+        // Read in pieces as a network transport sends it (the server keeps all, as servers do).
+        QByteArray body;
+        for (;;) {
+            const QByteArray piece = request.bodyDevice->read(m_options.streamPiece);
+            if (piece.isEmpty())
+                break;
+            body += piece;
+        }
+        request.body = body;
+        request.bodyDevice.reset();
+    } else {
+        m_largestPayload = std::max(m_largestPayload, request.body.size());
+    }
     const QString path = decodePath(request.url);
     m_log.append(LoggedRequest{request.method, path, request.headers});
     std::optional<HttpResponse> answer;
@@ -143,10 +161,35 @@ void FakeWebDavServer::send(const HttpRequest &request, HttpCallback done)
     const QByteArray method = request.method;
     const int inFlight = ++m_inFlight[method];
     m_peak[method] = qMax(m_peak.value(method), inFlight);
-    QTimer::singleShot(m_latency.value(method), this, [this, method, done = std::move(done), r = *answer] {
-        --m_inFlight[method];
-        done(r);
-    });
+    const bool streamOut = m_options.streams && request.bodySink && answer->status >= 200 && answer->status < 300;
+    const qint64 dropAfter = streamOut && !m_dropSuffix.isNull() && path.endsWith(m_dropSuffix) ? m_dropAfter : -1;
+    if (!streamOut)
+        m_largestPayload = std::max(m_largestPayload, answer->body.size());
+    QTimer::singleShot(m_latency.value(method), this,
+                       [this, method, done = std::move(done), r = *answer, streamOut, dropAfter,
+                        sink = request.bodySink, piece = m_options.streamPiece]() mutable {
+                           --m_inFlight[method];
+                           if (streamOut) {
+                               const QByteArray body = std::exchange(r.body, {});
+                               const qint64 end =
+                                       dropAfter >= 0 ? std::min<qint64>(dropAfter, body.size()) : body.size();
+                               for (qint64 at = 0; at < end; at += piece) {
+                                   if (!sink(QByteArrayView(body).sliced(at, std::min(piece, end - at)))) {
+                                       HttpResponse stopped;
+                                       stopped.networkError = u"Operation canceled"_s;
+                                       done(stopped);
+                                       return;
+                                   }
+                               }
+                               if (end < body.size()) {
+                                   HttpResponse dropped;
+                                   dropped.networkError = u"Connection closed"_s;
+                                   done(dropped);
+                                   return;
+                               }
+                           }
+                           done(r);
+                       });
 }
 
 HttpResponse FakeWebDavServer::handle(const HttpRequest &request, const QString &path)

@@ -14,6 +14,8 @@
 #include <functional>
 #include <optional>
 
+class QFile;
+
 namespace brulion {
 
 /// "brulion.vault" (the log module's category).
@@ -171,6 +173,20 @@ struct StampedSave {
 StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
                                   const std::function<void()> &beforeRename = {}, const ReadMark *expect = nullptr,
                                   bool probeClock = false);
+
+/// A new empty file with an own temporary name (`.brulion-tmp-` and 16 hexadecimal digits,
+/// isLeftoverTempName()) in the folder `absoluteDir`, opened for writing into `file`; false with
+/// `error` when none can be made.
+bool createOwnTemp(const QString &absoluteDir, QFile &file, QString *error);
+
+/// saveAtomicallyStamped() of a temporary file written beforehand, piece by piece (a download):
+/// `stagedFile`, made by createOwnTemp() in the folder of `absolutePath`, is synced and renamed
+/// over the file with the same checks and stamps — `afterTemp` is `before`, as the staged file
+/// was there before the save began. The staged file is gone afterwards, also when the save fails.
+/// Without a file sync of its own (filesync.h) it is renamed unsynced and without stamps.
+StampedSave commitStagedStamped(const QString &absolutePath, const QString &stagedFile,
+                                const std::function<void()> &beforeRename = {}, const ReadMark *expect = nullptr,
+                                bool probeClock = false);
 
 /// The waits between the attempts of a rename refused for a moment (ms): 10 + 20 + … + 160, 0.3 s
 /// in all — a virus scanner looks at a new file for a few to a few hundred milliseconds. Not

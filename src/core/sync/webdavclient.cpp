@@ -292,17 +292,66 @@ void WebDavClient::get(const VaultPath &path, const GetOptions &options, GetCall
 {
     const QString url = urlFor(path);
     const int timeoutMs = options.size ? timeoutFor(*options.size) : unknownSizeTimeout();
-    request("GET", url, {}, {}, timeoutMs, maxDownloadBytes(options.size),
-            [this, url, done = std::move(done)](const HttpResponse &response) {
+    // A sink that refused a piece ends the download as the caller's (Cancelled), not the network's.
+    auto refused = std::make_shared<bool>(false);
+    std::function<bool(QByteArrayView)> sink;
+    if (options.sink && m_transport && m_transport->streams()) {
+        sink = [refused, keep = options.sink](QByteArrayView piece) {
+            if (*refused)
+                return false;
+            *refused = !keep(piece);
+            return !*refused;
+        };
+    }
+    request(
+            "GET", url, {}, {}, timeoutMs, maxDownloadBytes(options.size),
+            [this, url, refused, streamed = bool(sink), keep = options.sink,
+             done = std::move(done)](const HttpResponse &response) {
+                const auto cancelled = [&] {
+                    done(GetResult{
+                            {},
+                            {},
+                            WebDavError{WebDavErrorCode::Cancelled, 0, u"The download could not be kept"_s, url}});
+                };
+                if (*refused) {
+                    cancelled();
+                    return;
+                }
                 if (const WebDavError error = check(response, "GET", url, {200}); error.isError()) {
                     done(GetResult{{}, {}, error});
                     return;
                 }
+                if (keep && !streamed) {
+                    // A transport that does not stream: the whole body, handed over at once.
+                    if (!response.body.isEmpty() && !keep(response.body)) {
+                        cancelled();
+                        return;
+                    }
+                    done(GetResult{{}, etagOf(response, "etag", "oc-etag"), {}});
+                    return;
+                }
                 done(GetResult{response.body, etagOf(response, "etag", "oc-etag"), {}});
-            });
+            },
+            {}, sink);
 }
 
 void WebDavClient::put(const VaultPath &path, const QByteArray &data, const PutOptions &options, PutCallback done)
+{
+    putBody(path, PutBody{data, {}, data.size()}, options, std::move(done));
+}
+
+void WebDavClient::putFrom(const VaultPath &path, qint64 size, UploadSource source, const PutOptions &options,
+                           PutCallback done)
+{
+    if (!source) {
+        fail(WebDavError::make(WebDavErrorCode::Cancelled, u"Nothing to upload"_s, urlFor(path)),
+             [done = std::move(done)](const WebDavError &error) { done(PutResult{{}, error}); });
+        return;
+    }
+    putBody(path, PutBody{{}, std::move(source), std::max<qint64>(0, size)}, options, std::move(done));
+}
+
+void WebDavClient::putBody(const VaultPath &path, const PutBody &body, const PutOptions &options, PutCallback done)
 {
     const VaultPath p = paths::normalize(path);
     if (p.isEmpty()) {
@@ -311,30 +360,34 @@ void WebDavClient::put(const VaultPath &path, const QByteArray &data, const PutO
         return;
     }
     auto callback = std::make_shared<PutCallback>(std::move(done));
-    auto finish = [this, p, callback](const HttpResponse &response) {
+    auto finish = [this, p, callback, refused = body.refused](const HttpResponse &response) {
+        if (!refused->isEmpty()) {
+            (*callback)(PutResult{{}, WebDavError{WebDavErrorCode::Cancelled, 0, *refused, urlFor(p)}});
+            return;
+        }
         if (const WebDavError error = check(response, "PUT", urlFor(p), {200, 201, 204}); error.isError()) {
             (*callback)(PutResult{{}, error});
             return;
         }
         (*callback)(PutResult{etagOf(response, "oc-etag", "etag"), {}});
     };
-    ensureParents(p, false, [this, p, data, options, finish, callback](const WebDavError &error) {
+    ensureParents(p, false, [this, p, body, options, finish, callback](const WebDavError &error) {
         if (error.isError()) {
             (*callback)(PutResult{{}, error});
             return;
         }
-        sendPut(p, data, options, [this, p, data, options, finish, callback](const HttpResponse &response) {
+        sendPutBody(p, body, options, [this, p, body, options, finish, callback](const HttpResponse &response) {
             if (response.status != 409) {
                 finish(response);
                 return;
             }
             // The parent folder is missing after all (deleted by someone else): create, retry once.
-            ensureParents(p, true, [this, p, data, options, finish, callback](const WebDavError &retryError) {
+            ensureParents(p, true, [this, p, body, options, finish, callback](const WebDavError &retryError) {
                 if (retryError.isError()) {
                     (*callback)(PutResult{{}, retryError});
                     return;
                 }
-                sendPut(p, data, options, finish);
+                sendPutBody(p, body, options, finish);
             });
         });
     });
@@ -523,7 +576,8 @@ int WebDavClient::timeoutFor(qint64 bytes) const
 }
 
 void WebDavClient::request(const QByteArray &method, const QString &url, const Headers &headers, const QByteArray &body,
-                           int timeoutMs, qint64 maxBodyBytes, ResponseCallback done)
+                           int timeoutMs, qint64 maxBodyBytes, ResponseCallback done,
+                           std::shared_ptr<QIODevice> bodyDevice, std::function<bool(QByteArrayView)> sink)
 {
     HttpRequest req;
     req.method = method;
@@ -531,6 +585,8 @@ void WebDavClient::request(const QByteArray &method, const QString &url, const H
     req.headers = {{"Authorization", m_authorization}, {"X-Requested-With", "XMLHttpRequest"}};
     req.headers += headers;
     req.body = body;
+    req.bodyDevice = std::move(bodyDevice);
+    req.bodySink = std::move(sink);
     req.timeoutMs = timeoutMs;
     req.maxBodyBytes = maxBodyBytes;
     const quint64 id = ++m_nextRequestId;
@@ -650,6 +706,12 @@ void WebDavClient::propfind(const VaultPath &path, int depth, PropfindCallback d
 void WebDavClient::sendPut(const VaultPath &path, const QByteArray &data, const PutOptions &options,
                            ResponseCallback done)
 {
+    sendPutBody(path, PutBody{data, {}, data.size()}, options, std::move(done));
+}
+
+void WebDavClient::sendPutBody(const VaultPath &path, const PutBody &body, const PutOptions &options,
+                               ResponseCallback done)
+{
     Headers headers = {{"Content-Type", "application/octet-stream"}};
     if (!options.ifMatch.isEmpty())
         headers.emplaceBack("If-Match", quoteEtag(options.ifMatch).toUtf8());
@@ -657,6 +719,41 @@ void WebDavClient::sendPut(const VaultPath &path, const QByteArray &data, const 
         headers.emplaceBack("If-None-Match", "*");
     if (options.mtime)
         headers.emplaceBack("X-OC-MTime", QByteArray::number(static_cast<qint64>(std::floor(*options.mtime / 1000.0))));
+    if (!body.source) {
+        request("PUT", urlFor(path), headers, body.data, timeoutFor(body.data.size()), kMaxStatusBytes,
+                std::move(done));
+        return;
+    }
+    // Opened for this attempt; a file that cannot be read, or is not the size it was, is no upload.
+    const auto refuse = [this, &body, &done](const QString &why) {
+        *body.refused = why;
+        detail::post(this, [done = std::move(done), why] {
+            HttpResponse response;
+            response.networkError = why;
+            done(response);
+        });
+    };
+    QString error;
+    std::unique_ptr<QIODevice> device = body.source(&error);
+    if (!device) {
+        refuse(error.isEmpty() ? u"The file to upload cannot be read"_s : error);
+        return;
+    }
+    if (device->size() != body.size) {
+        refuse(u"The file to upload changed its size (%1 bytes, not %2)"_s.arg(device->size()).arg(body.size));
+        return;
+    }
+    if (m_transport && m_transport->streams()) {
+        request("PUT", urlFor(path), headers, {}, timeoutFor(body.size), kMaxStatusBytes, std::move(done),
+                std::shared_ptr<QIODevice>(std::move(device)));
+        return;
+    }
+    // A transport that does not stream: read whole, as put() would have been given it.
+    const QByteArray data = device->readAll();
+    if (data.size() != body.size) {
+        refuse(u"The file to upload cannot be read: %1"_s.arg(device->errorString()));
+        return;
+    }
     request("PUT", urlFor(path), headers, data, timeoutFor(data.size()), kMaxStatusBytes, std::move(done));
 }
 

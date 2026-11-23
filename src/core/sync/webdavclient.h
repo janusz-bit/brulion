@@ -11,6 +11,7 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QIODevice>
 #include <QList>
 #include <QObject>
 #include <QSet>
@@ -60,6 +61,12 @@ struct GetOptions {
     /// Oversized): twice the size, or a mebibyte more for small files — room for a file that
     /// grew since it was listed, not for a server that never stops sending.
     std::optional<qint64> size;
+    /// The body goes here piece by piece, in order, instead of into GetResult::data (which stays
+    /// empty): a download never held in memory where the transport streams() (otherwise it
+    /// arrives whole and is handed over at once). False ends the download with Cancelled. Pieces
+    /// of an answer that failed later (a dropped connection) may have come: whoever keeps them
+    /// throws them away on an error.
+    std::function<bool(QByteArrayView piece)> sink;
 };
 
 struct GetResult {
@@ -73,6 +80,11 @@ struct PutOptions {
     bool ifNoneMatch = false; ///< create only, never replace ("If-None-Match: *")
     std::optional<qint64> mtime; ///< ms since epoch, stored by Nextcloud (X-OC-MTime)
 };
+
+/// An upload's bytes for putFrom(): a device open for reading at its start, made anew for each
+/// attempt (a retry reads the file again); nullptr with `error` when it cannot be opened — the
+/// upload then fails, it never sends nothing in its place.
+using UploadSource = std::function<std::unique_ptr<QIODevice>(QString *error)>;
 
 struct PutResult {
     QString etag; ///< new ETag when the server reports one, else ""
@@ -166,6 +178,10 @@ public:
     /// Upload a file, creating missing parent folders first (MKCOL; 405 = exists). A parent
     /// deleted behind the client's back (409) is recreated and the upload retried once.
     void put(const VaultPath &path, const QByteArray &data, const PutOptions &options, PutCallback done);
+    /// put() of the bytes `source` gives, read piece by piece as they are sent where the
+    /// transport streams() (otherwise read whole first). `size`: the bytes expected, for the time
+    /// limit; a device of another size fails the upload (Cancelled) rather than sending it.
+    void putFrom(const VaultPath &path, qint64 size, UploadSource source, const PutOptions &options, PutCallback done);
     /// Delete a file or folder; a missing path is not an error. Refuses the base folder.
     /// Deleting a folder deletes everything in it (WebDAV has no other DELETE).
     void remove(const VaultPath &path, const RemoveOptions &options, DoneCallback done);
@@ -204,8 +220,10 @@ private:
     int timeoutFor(qint64 bytes) const;
     int unknownSizeTimeout() const;
     /// `maxBodyBytes`: the largest answer accepted (HttpRequest::maxBodyBytes).
+    /// `bodyDevice`, `sink`: HttpRequest's (only for a transport that streams()).
     void request(const QByteArray &method, const QString &url, const Headers &headers, const QByteArray &body,
-                 int timeoutMs, qint64 maxBodyBytes, ResponseCallback done);
+                 int timeoutMs, qint64 maxBodyBytes, ResponseCallback done, std::shared_ptr<QIODevice> bodyDevice = {},
+                 std::function<bool(QByteArrayView)> sink = {});
     WebDavError check(const HttpResponse &response, const QByteArray &method, const QString &url,
                       std::initializer_list<int> ok) const;
     /// MKCOL: 405 (exists already), 200 and 201 are success.
@@ -213,6 +231,17 @@ private:
     void propfindRaw(const QString &rawPath, int depth, PropfindCallback done);
     void propfind(const VaultPath &path, int depth, PropfindCallback done);
     void sendPut(const VaultPath &path, const QByteArray &data, const PutOptions &options, ResponseCallback done);
+    /// An upload's body: `data`, or (`source` set) a device of `size` bytes opened for this attempt.
+    struct PutBody {
+        QByteArray data;
+        UploadSource source;
+        qint64 size = 0;
+        /// Why the source could not be sent ("" while it could): the upload fails as Cancelled.
+        std::shared_ptr<QString> refused = std::make_shared<QString>();
+    };
+    void sendPutBody(const VaultPath &path, const PutBody &body, const PutOptions &options, ResponseCallback done);
+    /// put() / putFrom() after the checks.
+    void putBody(const VaultPath &path, const PutBody &body, const PutOptions &options, PutCallback done);
     void ensureParents(const VaultPath &path, bool force, DoneCallback done);
     /// After a MOVE: the known folders and the server's spellings follow the moved path.
     void rebaseKnown(const VaultPath &from, const VaultPath &to, const QString &spelledTo);

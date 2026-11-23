@@ -249,7 +249,7 @@ private:
             name = paths::basename(f->path);
         else if (paths::extension(name).isEmpty())
             name += extensionForMime(r.value(u"type"_s).toString());
-        const VaultPath path = run.ctx.addAttachment(name, f->data);
+        const VaultPath path = run.ctx.addAttachment(name, *f);
         run.attachments.insert(url, path);
         return path;
     }

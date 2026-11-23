@@ -7,11 +7,15 @@
 #include "io/zip.h"
 #include "markdown/frontmatter.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStringDecoder>
 #include <QStringEncoder>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace brulion;
@@ -481,6 +485,83 @@ private Q_SLOTS:
         for (const InputFile &f : prepared)
             got.append(f.path);
         QCOMPARE(got, QStringList({u"a.md"_s, u"b.md"_s}));
+    }
+
+    // --- archives on disk, large attachments staged ----------------------------------------------
+
+    void preparedFromDiskStagesLargeAttachments()
+    {
+        // An exported Obsidian vault on disk: notes in memory, a large picture unpacked into the
+        // staging folder and passed on as a file — never read by the importer.
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        QByteArray photo(6LL << 20, Qt::Uninitialized);
+        for (qsizetype i = 0; i < photo.size(); ++i)
+            photo[i] = char((i * 131 + 7) & 0xff);
+        ZipWriteOptions write;
+        write.storeCompressedFormats = false;
+        const QByteArray vault = writeZip({{u"Sejf/.obsidian/app.json"_s, "{}"},
+                                           {u"Sejf/Wakacje nad morzem.md"_s, u"![[plaża w Łebie.jpg]]\n"_s.toUtf8()},
+                                           {u"Sejf/zdjęcia/plaża w Łebie.jpg"_s, photo}},
+                                          write);
+        const QString archive = work.filePath(u"Sejf.zip"_s);
+        {
+            QFile file(archive);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write(vault), vault.size());
+        }
+        ZipReadOptions limits;
+        limits.stagingFolder = staging.path();
+        QStringList warnings;
+        const QList<InputFile> prepared = prepareImportFiles(
+                {InputFile{u"Sejf.zip"_s, {}, archive, QFileInfo(archive).size()}}, &warnings, limits);
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(u'\n')));
+        QVERIFY(QFileInfo::exists(archive)); // the picked file itself is never removed
+        const auto picture = std::ranges::find(prepared, u"Sejf/zdjęcia/plaża w Łebie.jpg"_s, &InputFile::path);
+        QVERIFY(picture != prepared.cend());
+        QVERIFY(picture->onDisk());
+        QCOMPARE(picture->size(), photo.size());
+        QCOMPARE(detectImporter(prepared, true)->id(), u"obsidian"_s);
+        ImportOptions o = iotest::options(u"Import/Obsidian"_s);
+        o.inputPrepared = true;
+        const ImportResult r = importWith(u"obsidian"_s, prepared, o);
+        QCOMPARE(iotest::pathsOf(r), QStringList({u"Import/Obsidian/Wakacje nad morzem.md"_s,
+                                                  u"assets/Obsidian/zdjęcia/plaża w Łebie.jpg"_s}));
+        const ImportedFile *copied = iotest::fileAt(r, u"assets/Obsidian/zdjęcia/plaża w Łebie.jpg"_s);
+        QVERIFY(copied->data.isEmpty());
+        QCOMPARE(copied->file, picture->file);
+        QCOMPARE(copied->size(), photo.size());
+        QVERIFY(iotest::textAt(r, u"Import/Obsidian/Wakacje nad morzem.md"_s).contains(u"plaża w Łebie.jpg"_s));
+        // Run again (the options changed): the prepared input is not unpacked a second time.
+        const qsizetype stagedFiles = QDir(staging.path()).entryList(QDir::Files).size();
+        importWith(u"obsidian"_s, prepared, o);
+        QCOMPARE(QDir(staging.path()).entryList(QDir::Files).size(), stagedFiles);
+    }
+
+    void stagedNestedArchivesAreUnpackedAndRemoved()
+    {
+        // Notion's multi-part export (a ZIP of ZIPs) with large parts: each part is staged,
+        // unpacked from there and removed; a large picture inside goes on as a staged file.
+        QTemporaryDir staging;
+        const QByteArray picture(3LL << 20, 'p');
+        ZipWriteOptions store;
+        store.storeCompressedFormats = false;
+        store.compressionLevel = 0;
+        const QByteArray part1 = writeZip({{u"Strona abc123.md"_s, "# Strona\n"}, {u"obraz.png"_s, picture}}, store);
+        const QByteArray part2 =
+                writeZip({{u"Druga def456.md"_s, "# Druga\n"}, {u"pad.bin"_s, QByteArray(2LL << 20, 'x')}}, store);
+        const QByteArray outer = writeZip({{u"Export-Part-1.zip"_s, part1}, {u"Export-Part-2.zip"_s, part2}}, store);
+        ZipReadOptions limits;
+        limits.stagingFolder = staging.path();
+        QStringList warnings;
+        const QList<InputFile> prepared = prepareImportFiles({bytes(u"Export.zip"_s, outer)}, &warnings, limits);
+        QStringList got;
+        for (const InputFile &f : prepared)
+            got.append(f.path + (f.onDisk() ? u" (disk)"_s : QString()));
+        QCOMPARE(got, QStringList({u"Strona abc123.md"_s, u"obraz.png (disk)"_s, u"Druga def456.md"_s, u"pad.bin"_s}));
+        // Only the picture is left in the staging folder: the parts went once unpacked.
+        QCOMPARE(QDir(staging.path()).entryList(QDir::Files).size(), 1);
+        QCOMPARE(bytesOf(*std::ranges::find(prepared, u"obraz.png"_s, &InputFile::path)), picture);
     }
 
     // --- Bear -------------------------------------------------------------------------------------

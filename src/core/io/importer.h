@@ -28,12 +28,28 @@ namespace brulion::io {
 
 /// A file to write into the vault.
 struct ImportedFile {
+    ImportedFile() = default;
+    ImportedFile(VaultPath filePath, QByteArray bytes, bool appendToExisting = false, QString onDiskFile = {},
+                 qint64 onDiskSize = 0)
+        : path(std::move(filePath))
+        , data(std::move(bytes))
+        , append(appendToExisting)
+        , file(std::move(onDiskFile))
+        , fileSize(onDiskSize)
+    { }
+
     VaultPath path;
     QByteArray data;
     /// A daily note: when the file already exists in the vault, append `data` to it (see
     /// appendImported()) instead of creating a copy. Files without the flag never exist yet
     /// (as far as ImportOptions::exists knows).
     bool append = false;
+    /// The bytes are in this file (an InputFile on disk passed on), not in `data`: written into
+    /// the notebook in pieces (Vault::createBinaryFrom()). Never with `append`.
+    QString file;
+    qint64 fileSize = 0;
+
+    qint64 size() const { return file.isEmpty() ? data.size() : fileSize; }
 
     friend bool operator==(const ImportedFile &, const ImportedFile &) = default;
 };
@@ -62,6 +78,10 @@ struct ImportOptions {
     /// "Now" for relative dates in the source ("tomorrow" in a Todoist template), wall-clock time;
     /// invalid: such dates are left out (the io module never reads the clock).
     QDateTime now;
+    /// The files given to runImport() are prepareImportFiles()'s output already (the app and the
+    /// command line prepare an input once, unpacking its archives to their staging folder, and
+    /// import it as often as the options change): not prepared again.
+    bool inputPrepared = false;
 };
 
 /// One supported source app or format. Implementations are stateless and thread-safe.
@@ -101,15 +121,19 @@ const Importer *importerById(QStringView id);
 /// duplicates. Damaged archives are kept as plain files and reported in `warnings`.
 /// `limits` bound the unpacking (see ZipReadOptions); maxTotalSize and maxEntries hold for all
 /// archives of the input together — archives inside archives included —, so a few small archive
-/// bombs cannot add up. An archive over the remaining budget is kept as a plain file.
+/// bombs cannot add up. An archive over the remaining budget is kept as a plain file. An input
+/// file on disk (InputFile::file: a picked archive not read in) is read from there piece by piece;
+/// with limits.stagingFolder set, large attachments are unpacked into files there (FileEntry on
+/// disk) instead of into memory, and an archive staged there is removed once unpacked.
 QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *warnings = nullptr,
                                     const ZipReadOptions &limits = {});
 
-/// The importer most likely meant for `files` (raw or prepared): highest detect() score, or
-/// nullptr when no importer recognises them.
-const Importer *detectImporter(const QList<InputFile> &files);
+/// The importer most likely meant for `files` (raw, or `prepared` by prepareImportFiles()):
+/// highest detect() score, or nullptr when no importer recognises them.
+const Importer *detectImporter(const QList<InputFile> &files, bool prepared = false);
 
-/// Prepare `files`, run `importer` and enforce the path rules on its output: paths normalised
+/// Prepare `files` (unless ImportOptions::inputPrepared), run `importer` and enforce the path rules
+/// on its output (files on disk passed on as they are): paths normalised
 /// (no absolute paths, no ".."), files in ignored folders dropped, daily notes for the same
 /// date merged, other duplicate or existing paths renamed (" 2") with links to renamed pages
 /// rewritten, and a warning for every such fix.

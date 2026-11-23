@@ -161,6 +161,13 @@ public:
     /// Text files up to this size keep a merge base (default 2 MB).
     void setMaxBaseSize(qint64 bytes);
     qint64 maxBaseSize() const { return m_maxBaseSize; }
+    /// Files other than notes (isSyncTextPath() false) larger than this travel in pieces, never
+    /// held in memory: a download goes into a staging file next to its place (Vault::
+    /// newStagingFile()), hashed as it comes, and is renamed over the file only once complete; an
+    /// upload is read from the file as it is sent; their hashes are read in pieces. Smaller files
+    /// and notes travel whole (default 4 MiB; 0: every such file in pieces).
+    void setStreamAbove(qint64 bytes);
+    qint64 streamAbove() const { return m_streamAbove; }
 
     bool isSyncing() const;
 
@@ -214,6 +221,7 @@ private:
     std::function<QDateTime()> m_clock;
     int m_concurrency = 4;
     qint64 m_maxFileSize = 200LL * 1024 * 1024;
+    qint64 m_streamAbove = 4LL * 1024 * 1024;
     qint64 m_maxBaseSize = 2LL * 1024 * 1024;
     std::shared_ptr<SyncRun> m_run;
     QList<SyncDoneCallback> m_waiters;

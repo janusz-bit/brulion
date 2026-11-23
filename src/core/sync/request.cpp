@@ -3,6 +3,7 @@
 #include "sync/util_p.h"
 
 #include <QElapsedTimer>
+#include <QIODevice>
 #include <QPointer>
 #include <QTimer>
 
@@ -27,6 +28,7 @@ struct PendingRequest {
     QUrl url;
     qint64 bytesSent = 0;
     qint64 maxBodyBytes = 0;
+    qint64 streamed = 0; ///< bytes of the answer handed to the request's bodySink
 
     void finish(const HttpResponse &answer)
     {
@@ -54,7 +56,7 @@ struct PendingRequest {
                                  .networkError = response.networkError,
                                  .elapsedMs = elapsed.elapsed(),
                                  .bytesSent = bytesSent,
-                                 .bytesReceived = response.body.size(),
+                                 .bytesReceived = response.body.size() + streamed,
                                  .contentType = response.header("content-type"),
                                  .protocol = response.protocol});
             if (!context)
@@ -88,8 +90,19 @@ void sendRequest(HttpTransport *transport, QObject *context, const HttpRequest &
     pending->elapsed.start();
     pending->method = request.method;
     pending->url = request.url;
-    pending->bytesSent = request.body.size();
+    pending->bytesSent = request.bodyDevice ? request.bodyDevice->size() : request.body.size();
     pending->maxBodyBytes = request.maxBodyBytes;
+    HttpRequest sent = request;
+    if (request.bodySink) {
+        // Pieces after the answer (a late one, after the time limit) go nowhere: refused, which
+        // stops the transport's request.
+        sent.bodySink = [pending, sink = request.bodySink](QByteArrayView piece) {
+            if (pending->finished)
+                return false;
+            pending->streamed += piece.size();
+            return sink(piece);
+        };
+    }
     if (!transport) {
         post(context, [pending] {
             HttpResponse response;
@@ -106,7 +119,7 @@ void sendRequest(HttpTransport *transport, QObject *context, const HttpRequest &
         pending->timer = timer;
         timer->start(request.timeoutMs);
     }
-    transport->send(request, [pending](const HttpResponse &response) {
+    transport->send(sent, [pending](const HttpResponse &response) {
         if (pending->inSend) {
             // A transport answering synchronously: deliver from the event loop all the same.
             if (pending->context)

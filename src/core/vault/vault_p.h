@@ -82,6 +82,15 @@ struct DiskRead {
     QByteArray bytes;
 };
 
+/// A file's next content written beforehand into a staging file (Vault::newStagingFile()), as
+/// writeFile() takes it instead of bytes: never held in memory.
+struct StagedContent {
+    QString file; ///< absolute path, in the folder of the file it is for
+    qint64 size = 0;
+    QString hash;     ///< text::fnv1a64Hex() of its bytes
+    bool bom = false; ///< it starts with a UTF-8 byte order mark
+};
+
 /// readText(), readBinary(), readDetached() and the writer's reads fail for files larger than
 /// this: they hold the whole file in memory, as writes do. Notes are kilobytes, the app stores
 /// attachments up to 200 MB and backups restore files up to 1 GiB (MaxRestoredEntryBytes) — all
@@ -251,12 +260,17 @@ public:
     /// `expect`: write only over the file the caller read (vaultutil::ReadMark; a compare-and-swap),
     /// checked here and right before the rename — else the file is taken in and false returned
     /// with `changedMeanwhile` set.
+    /// `staged`: the content is that file's (renamed over the file), `bytes` unused.
     bool writeFile(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
                    QList<VaultChange> &changes, const DiskRead *read = nullptr,
-                   const vaultutil::ReadMark *expect = nullptr, bool *changedMeanwhile = nullptr);
+                   const vaultutil::ReadMark *expect = nullptr, bool *changedMeanwhile = nullptr,
+                   const StagedContent *staged = nullptr);
     bool write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
                const DiskRead *read = nullptr, const vaultutil::ReadMark *expect = nullptr,
-               bool *changedMeanwhile = nullptr);
+               bool *changedMeanwhile = nullptr, const StagedContent *staged = nullptr);
+    /// The size and hash of a staging file, read piece by piece; std::nullopt (failed) when it
+    /// cannot be read.
+    std::optional<StagedContent> readStaged(const QString &file);
     /// After an own atomic write into `dir` (`save`: the folder's stamps around its steps; called
     /// once the written file is tracked): when the vault knew the folder's entries at `save.before`
     /// and nothing but the write's own steps changed them (StampedSave; only where the folder's
@@ -298,7 +312,8 @@ public:
     void reportDeferred();
     /// The destructor: wait for the writer, report nothing.
     void abandonWrites();
-    VaultPath create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText);
+    VaultPath create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
+                     const StagedContent *staged = nullptr);
     QDateTime now() const;
     /// open(): removes the leftovers of interrupted own writes (DiskListing::leftovers, History's).
     void removeLeftovers(const QStringList &rels);

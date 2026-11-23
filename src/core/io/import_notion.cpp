@@ -217,7 +217,7 @@ public:
         for (const Entry &d : std::as_const(databases))
             ctx.addPage(d.path, databasePage(d, pages, linkTarget));
         for (const Entry &a : std::as_const(attachments))
-            ctx.addFile(a.path, a.file->data);
+            ctx.addFile(a.path, *a.file);
         return ctx.take();
     }
 

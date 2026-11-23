@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace brulion {
 class LocalStore;
@@ -98,12 +99,33 @@ private:
         std::optional<SyncFileState> state;
     };
 
+    /// A download kept in a staging file of the vault (SyncEngine::streamAbove()), not in memory.
+    /// Removed when the last copy goes, unless take() handed it to the vault.
+    struct StagedDownload {
+        QString file; ///< absolute path; "" once taken
+        qint64 size = 0;
+        QString hash;  ///< text::fnv1a64Hex() of its bytes
+        QString error; ///< why a piece could not be written ("" while it could)
+
+        StagedDownload() = default;
+        Q_DISABLE_COPY_MOVE(StagedDownload)
+        ~StagedDownload();
+        QString take() { return std::exchange(file, {}); }
+    };
+
     /// Content of the remote file as fetched by GET.
     struct RemoteContent {
-        QByteArray data;
+        QByteArray data; ///< empty when `staged`
+        std::shared_ptr<StagedDownload> staged;
         QString version; ///< stored as SyncFileState::remoteEtag
         QString etag;    ///< usable for If-Match ("" when the server has none)
         WebDavError error;
+        /// The download could not be kept locally (a full disk): no remote failure, `error` is empty.
+        QString writeError;
+
+        qint64 size() const { return staged ? staged->size : data.size(); }
+        /// text::fnv1a64Hex() of the bytes.
+        QString hash() const;
     };
 
     /// Decoded text (for text paths that are valid UTF-8) and the content hash of some bytes.
@@ -268,6 +290,18 @@ private:
     static Content classify(const VaultPath &path, const QByteArray &bytes);
     ReadResult readLocal(const VaultPath &path, const FileStat &stat, const std::optional<SyncFileState> &state);
     std::optional<QByteArray> localBytes(const VaultPath &path, const LocalSnap &snap, QString *error);
+    /// Is `path` (of `size` bytes; -1: not known) one that travels in pieces (SyncEngine::streamAbove())?
+    bool streamed(const VaultPath &path, qint64 size) const;
+    /// text::fnv1a64Hex() of a local file, read in pieces; std::nullopt with `error` when it cannot
+    /// be read.
+    std::optional<QString> hashInPieces(const VaultPath &path, QString *error);
+    /// The hash a snapshot of the local file would have (classify(), or hashInPieces() for a file
+    /// that travels in pieces); std::nullopt when it cannot be read.
+    std::optional<QString> localHash(const VaultPath &path, qint64 size);
+    /// Upload the local file of `ctx` (its snapshot's bytes, or the file read as it is sent).
+    void putLocal(const PathCtx &ctx, const PutOptions &options, WebDavClient::PutCallback done);
+    /// Upload the vault's file at `path` of `size` bytes, read as it is sent.
+    void putFromVault(const VaultPath &path, qint64 size, const PutOptions &options, WebDavClient::PutCallback done);
     std::optional<Outcome> checkLocalUnchanged(const VaultPath &path, const std::optional<LocalSnap> &snap);
     void fetchRemote(const VaultPath &path, const std::optional<RemoteEntry> &listed,
                      std::function<void(const RemoteContent &)> done);
@@ -285,15 +319,16 @@ private:
     void publishMerge(const PathCtx &ctx, const RemoteContent &remote, const QString &merged,
                       const QString &remoteText, const Retry &retry, Done done);
     QByteArray mergedBytes(const PathCtx &ctx, const QString &merged);
-    std::optional<VaultPath> keepRemoteCopy(const VaultPath &path, const QByteArray &data, bool *created,
+    std::optional<VaultPath> keepRemoteCopy(const VaultPath &path, const RemoteContent &remote, bool *created,
                                             QString *error);
     void conflict(const PathCtx &ctx, const RemoteContent &remote, const Retry &retry, Done done);
-    void uploadConflictCopy(const VaultPath &copy, const QByteArray &data, Done done);
+    void uploadConflictCopy(const VaultPath &copy, const RemoteContent &remote, Done done);
     void deleteRemote(const PathCtx &ctx, Done done);
     void deleteLocal(const PathCtx &ctx, Done done);
     std::optional<QString> mergeText(const VaultPath &path, const QString &local, const QString &remote,
                                      const std::optional<SyncFileState> &state) const;
-    std::optional<VaultPath> findConflictCopy(const VaultPath &path, const QByteArray &content);
+    /// A conflict copy of `path` already holding content of `size` bytes and `hash`.
+    std::optional<VaultPath> findConflictCopy(const VaultPath &path, qint64 size, const QString &hash);
 
     QPointer<SyncEngine> m_engine;
     SyncRunOptions m_options;

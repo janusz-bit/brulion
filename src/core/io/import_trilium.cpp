@@ -1008,7 +1008,7 @@ private:
                 const QString original = n.label(u"originalFileName");
                 const QString fileName = fileNameOf(original.isEmpty() ? n.title : original, n.mime, u"file"_s);
                 if (const InputFile *f = file(n.dataSource))
-                    n.asset = m_ctx.addAttachment(paths::join(parentFolder, fileName), f->data);
+                    n.asset = m_ctx.addAttachment(paths::join(parentFolder, fileName), *f);
                 else
                     m_missingFiles = true;
             }
@@ -1026,7 +1026,7 @@ private:
                 const QString relative = exportImage ? paths::join(parentFolder, n.name + paths::extension(a.title))
                                                      : paths::join(paths::join(parentFolder, n.name),
                                                                    fileNameOf(a.title, a.mime, u"attachment"_s));
-                a.path = m_ctx.addAttachment(relative, f->data);
+                a.path = m_ctx.addAttachment(relative, *f);
                 a.renderable = !exportImage || isRenderableExport(n.type, a.title, f->data);
             }
         }
@@ -1118,7 +1118,7 @@ private:
             // for brings its picture, the others are the same picture.
             QList<std::pair<int, const InputFile *>> pictures;
             QSet<QString> taken;
-            qsizetype dataUrlBytes = 0;
+            qint64 dataUrlBytes = 0;
             for (int k = 0; k < n.attachments.size(); ++k) {
                 const Attachment &a = n.attachments[k];
                 const InputFile *picture = file(a.source);
@@ -1127,7 +1127,7 @@ private:
                     continue;
                 if (!files.contains(a.title) && !taken.contains(a.title)) {
                     taken.insert(a.title);
-                    dataUrlBytes += 13 + a.mime.size() + (picture->data.size() + 2) / 3 * 4; // data:…;base64,…
+                    dataUrlBytes += 13 + a.mime.size() + (picture->size() + 2) / 3 * 4; // data:…;base64,…
                     if (dataUrlBytes > drawing::MaxSceneBytes) {
                         out.picturesTooLarge = true;
                         pictures.clear();
@@ -1148,7 +1148,7 @@ private:
                              QJsonObject{{u"mimeType"_s, mime},
                                          {u"id"_s, a.title},
                                          {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
-                                                                + QString::fromLatin1(picture->data.toBase64()))},
+                                                                + QString::fromLatin1(bytesOf(*picture).toBase64()))},
                                          {u"created"_s, 0}});
             }
         }

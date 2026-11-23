@@ -12266,45 +12266,52 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>IoMessages</name>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="98"/>
+        <location filename="../src/core/io/zip.cpp" line="201"/>
         <source>A damaged ZIP entry was skipped.</source>
         <translation>Pominięto uszkodzony element archiwum ZIP.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="109"/>
+        <location filename="../src/core/io/zip.cpp" line="212"/>
         <source>“%1” is encrypted and was skipped.</source>
         <translation>Plik „%1” jest zaszyfrowany i został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="113"/>
+        <location filename="../src/core/io/zip.cpp" line="216"/>
         <source>“%1” uses an unsupported compression method and was skipped.</source>
         <translation>Plik „%1” używa nieobsługiwanej metody kompresji i został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="117"/>
+        <location filename="../src/core/io/zip.cpp" line="220"/>
         <location filename="../src/core/io/tar.cpp" line="178"/>
         <source>“%1” is too large and was skipped.</source>
         <translation>Plik „%1” jest za duży i został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="128"/>
+        <location filename="../src/core/io/zip.cpp" line="231"/>
         <location filename="../src/core/io/tar.cpp" line="182"/>
         <source>The archive is too large; only a part of it was read.</source>
         <translation>Archiwum jest za duże; wczytano tylko jego część.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="124"/>
-        <location filename="../src/core/io/zip.cpp" line="136"/>
+        <location filename="../src/core/io/zip.cpp" line="227"/>
+        <location filename="../src/core/io/zip.cpp" line="242"/>
+        <location filename="../src/core/io/zip.cpp" line="249"/>
         <source>“%1” is damaged and was skipped.</source>
         <translation>Plik „%1” jest uszkodzony i został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="146"/>
+        <location filename="../src/core/io/zip.cpp" line="241"/>
+        <source>“%1” could not be unpacked: the disk may be full.</source>
+        <translation>Nie udało się rozpakować pliku „%1”: dysk może być pełny.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/zip.cpp" line="263"/>
         <source>“%1” is not a valid ZIP archive.</source>
         <translation>„%1” nie jest prawidłowym archiwum ZIP.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/zip.cpp" line="178"/>
+        <location filename="../src/core/io/zip.cpp" line="295"/>
+        <location filename="../src/core/io/zip.cpp" line="304"/>
         <source>The file is not a valid ZIP archive.</source>
         <translation>Plik nie jest prawidłowym archiwum ZIP.</translation>
     </message>
@@ -12324,17 +12331,17 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Kalendarz zawiera błędne wiersze; zostały pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/importer.cpp" line="119"/>
+        <location filename="../src/core/io/importer.cpp" line="133"/>
         <source>“%1” appears twice in the input; the first copy was used.</source>
         <translation>„%1” występuje dwukrotnie; użyto pierwszego wystąpienia.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/importer.cpp" line="207"/>
+        <location filename="../src/core/io/importer.cpp" line="228"/>
         <source>“%1” would be saved in a protected folder and was skipped.</source>
         <translation>„%1” trafiłby do chronionego folderu, więc został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/importer.cpp" line="228"/>
+        <location filename="../src/core/io/importer.cpp" line="250"/>
         <source>“%1” already exists; it was saved as “%2”.</source>
         <translation>„%1” już istnieje; zapisano jako „%2”.</translation>
     </message>
@@ -16397,7 +16404,8 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>QSaveFile</name>
     <message>
-        <location filename="../src/core/vault/vaultutil.cpp" line="327"/>
+        <location filename="../src/core/vault/vaultutil.cpp" line="389"/>
+        <location filename="../src/core/vault/vaultutil.cpp" line="429"/>
         <source>Existing file %1 is not writable</source>
         <translation>Istniejącego pliku %1 nie można zapisać</translation>
     </message>
@@ -27309,6 +27317,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/core/vault/vault.cpp" line="729"/>
+        <location filename="../src/core/vault/vault.cpp" line="1669"/>
         <source>links to files are not followed</source>
         <extracomment>The reason in &quot;Cannot read %1: %2&quot;</extracomment>
         <translation>dowiązania do plików są pomijane</translation>
@@ -27328,19 +27337,29 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/core/vault/vault.cpp" line="745"/>
+        <location filename="../src/core/vault/vault.cpp" line="1656"/>
         <source>Cannot read: empty path</source>
         <translation>Nie można odczytać: pusta ścieżka</translation>
     </message>
     <message>
         <location filename="../src/core/vault/vault.cpp" line="752"/>
         <location filename="../src/core/vault/vault.cpp" line="762"/>
-        <location filename="../src/core/vault/vault.cpp" line="1429"/>
+        <location filename="../src/core/vault/vault.cpp" line="1059"/>
+        <location filename="../src/core/vault/vault.cpp" line="1069"/>
+        <location filename="../src/core/vault/vault.cpp" line="1470"/>
+        <location filename="../src/core/vault/vault.cpp" line="1618"/>
+        <location filename="../src/core/vault/vault.cpp" line="1661"/>
+        <location filename="../src/core/vault/vault.cpp" line="1669"/>
+        <location filename="../src/core/vault/vault.cpp" line="1674"/>
+        <location filename="../src/core/vault/vault.cpp" line="1679"/>
         <source>Cannot read %1: %2</source>
         <extracomment>The reason in &quot;Cannot read %1: %2&quot;</extracomment>
         <translation>Nie można odczytać %1: %2</translation>
     </message>
     <message>
         <location filename="../src/core/vault/vault.cpp" line="752"/>
+        <location filename="../src/core/vault/vault.cpp" line="1579"/>
+        <location filename="../src/core/vault/vault.cpp" line="1661"/>
         <source>it is in a linked folder that is not followed</source>
         <translation>leży w podlinkowanym folderze, który jest pomijany</translation>
     </message>
@@ -27351,13 +27370,14 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/core/vault/vault.cpp" line="875"/>
-        <location filename="../src/core/vault/vault.cpp" line="1221"/>
+        <location filename="../src/core/vault/vault.cpp" line="1262"/>
         <source>Cannot create the folder %1</source>
         <translation>Nie można utworzyć folderu %1</translation>
     </message>
     <message>
         <location filename="../src/core/vault/vault.cpp" line="925"/>
-        <location filename="../src/core/vault/vault.cpp" line="1468"/>
+        <location filename="../src/core/vault/vault.cpp" line="1509"/>
+        <location filename="../src/core/vault/vault.cpp" line="1573"/>
         <source>Cannot write: empty path</source>
         <translation>Nie można zapisać: pusta ścieżka</translation>
     </message>
@@ -27373,44 +27393,53 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/core/vault/vault.cpp" line="941"/>
-        <location filename="../src/core/vault/vault.cpp" line="997"/>
+        <location filename="../src/core/vault/vault.cpp" line="998"/>
+        <location filename="../src/core/vault/vault.cpp" line="1579"/>
+        <location filename="../src/core/vault/vault.cpp" line="1590"/>
+        <location filename="../src/core/vault/vault.cpp" line="1626"/>
         <location filename="../src/core/vault/vaultwrite.cpp" line="287"/>
         <source>Cannot write %1: %2</source>
+        <extracomment>The reason in &quot;Cannot write %1: %2&quot;</extracomment>
         <translation>Nie można zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1002"/>
+        <location filename="../src/core/vault/vault.cpp" line="1003"/>
         <location filename="../src/core/vault/vaultwrite.cpp" line="79"/>
         <source>%1 disappeared right after it was written</source>
         <translation>%1 zniknął zaraz po zapisaniu</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1033"/>
+        <location filename="../src/core/vault/vault.cpp" line="1046"/>
         <source>Cannot create a file with an empty name</source>
         <translation>Nie można utworzyć pliku bez nazwy</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1216"/>
+        <location filename="../src/core/vault/vault.cpp" line="1257"/>
         <source>No vault folder given</source>
         <translation>Nie podano folderu notatnika</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1219"/>
+        <location filename="../src/core/vault/vault.cpp" line="1260"/>
         <source>%1 is not a folder</source>
         <translation>%1 nie jest folderem</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1486"/>
+        <location filename="../src/core/vault/vault.cpp" line="1527"/>
         <source>Cannot read %1</source>
         <translation>Nie można odczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1531"/>
+        <location filename="../src/core/vault/vault.cpp" line="1674"/>
+        <source>it is a folder</source>
+        <translation>to jest folder</translation>
+    </message>
+    <message>
+        <location filename="../src/core/vault/vault.cpp" line="1692"/>
         <source>Cannot create a folder with an empty name</source>
         <translation>Nie można utworzyć folderu bez nazwy</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1533"/>
+        <location filename="../src/core/vault/vault.cpp" line="1694"/>
         <source>Cannot create the folder %1: a file with that name exists</source>
         <translation>Nie można utworzyć folderu %1: istnieje już plik o tej nazwie</translation>
     </message>
@@ -32576,87 +32605,87 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Jego pliki znikają (GitHub: w jednym commicie), link Nextclouda też; własne pliki miejsca zostają.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="45"/>
+        <location filename="../src/cli/commands_import.cpp" line="68"/>
         <source>No such file or folder: %1</source>
         <translation>Nie ma takiego pliku ani folderu: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="53"/>
+        <location filename="../src/cli/commands_import.cpp" line="76"/>
         <source>“%1” is larger than 1 GB and was skipped.</source>
         <translation>„%1” jest większy niż 1 GB i został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="58"/>
+        <location filename="../src/cli/commands_import.cpp" line="81"/>
         <source>The input is larger than Brulion imports at once; the rest was left out.</source>
         <translation>Dane wejściowe są większe, niż Brulion importuje naraz; resztę pominięto.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="62"/>
+        <location filename="../src/cli/commands_import.cpp" line="85"/>
         <source>“%1” cannot be read.</source>
         <translation>Nie można odczytać „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="92"/>
+        <location filename="../src/cli/commands_import.cpp" line="119"/>
         <source>“%1” is no column=type[:property]; it was ignored.</source>
         <translation>„%1” to nie kolumna=typ[:właściwość]; pominięto.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="104"/>
+        <location filename="../src/cli/commands_import.cpp" line="131"/>
         <source>“%1” is no column type; types: %2.</source>
         <translation>„%1” to nie typ kolumny; typy: %2.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="175"/>
+        <location filename="../src/cli/commands_import.cpp" line="202"/>
         <source>The token file cannot be read: %1</source>
         <translation>Nie można odczytać pliku z tokenem: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="190"/>
+        <location filename="../src/cli/commands_import.cpp" line="217"/>
         <source>Give the token with --token-file FILE (or - for standard input) or BRULION_IMPORT_TOKEN.</source>
         <translation>Podaj token w --token-file PLIK (albo - dla standardowego wejścia) albo w BRULION_IMPORT_TOKEN.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="228"/>
+        <location filename="../src/cli/commands_import.cpp" line="255"/>
         <source>Choose the base with --base (its name or id): %1</source>
         <translation>Wybierz bazę opcją --base (nazwa albo id): %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="246"/>
+        <location filename="../src/cli/commands_import.cpp" line="273"/>
         <source>No importer “%1” (brulion-cli import formats lists them).</source>
         <translation>Nie ma importera „%1” (brulion-cli import formats je wypisuje).</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="254"/>
+        <location filename="../src/cli/commands_import.cpp" line="281"/>
         <source>A token downloads from Todoist or Airtable: --from todoist or airtable.</source>
         <translation>Token pobiera dane z Todoist albo Airtable: --from todoist albo airtable.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="262"/>
+        <location filename="../src/cli/commands_import.cpp" line="289"/>
         <source>Give the file, folder or ZIP to import.</source>
         <translation>Podaj plik, folder albo ZIP do zaimportowania.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="270"/>
+        <location filename="../src/cli/commands_import.cpp" line="297"/>
         <source>Nothing was read from “%1”.</source>
         <translation>Z „%1” nic nie odczytano.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="274"/>
+        <location filename="../src/cli/commands_import.cpp" line="312"/>
         <source>Brulion does not recognise these files; choose the app with --from (brulion-cli import formats).</source>
         <translation>Brulion nie rozpoznaje tych plików; wybierz aplikację opcją --from (brulion-cli import formats).</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="410"/>
+        <location filename="../src/cli/commands_import.cpp" line="450"/>
         <source>%1: would write %2 page(s), %3 daily note(s), %4 attachment(s) into %5</source>
         <translation>%1: do zapisania – strony: %2, notatki dzienne: %3, załączniki: %4 (w %5)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="411"/>
+        <location filename="../src/cli/commands_import.cpp" line="451"/>
         <source>%1: wrote %2 page(s), %3 daily note(s), %4 attachment(s) into %5</source>
         <translation>%1: zapisano – strony: %2, notatki dzienne: %3, załączniki: %4 (w %5)</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/cli/commands_import.cpp" line="415"/>
+        <location filename="../src/cli/commands_import.cpp" line="455"/>
         <source>%n file(s) could not be written.</source>
         <translation>
             <numerusform>Nie udało się zapisać %n pliku.</numerusform>
@@ -32665,107 +32694,107 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="443"/>
+        <location filename="../src/cli/commands_import.cpp" line="483"/>
         <source>Import notes from another app: a file, a folder or a ZIP (Obsidian, Notion, Evernote, Apple Notes, OneNote downloads, Todoist, Airtable, CSV …)</source>
         <translation>Importuj notatki z innej aplikacji: plik, folder albo ZIP (Obsidian, Notion, Evernote, Apple Notes, pobrania OneNote, Todoist, Airtable, CSV …)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="446"/>
+        <location filename="../src/cli/commands_import.cpp" line="486"/>
         <source>As the app&apos;s import screen (docs/IMPORT.md): the format is recognised or chosen with --from, pages go under --folder (default Import/&lt;app&gt;), daily notes to the journal (appended under &quot;## Import (&lt;app&gt;)&quot; when the day exists), attachments to the attachments folder; nothing is overwritten (a taken name gets &quot; 2&quot;). --dry-run shows the plan. CSV and Airtable: --csv-mode, --title-column, --title-template, --folder-template, --body-column, --columns &quot;Rok=text; Cena=number:Cena brutto; Uwagi=skip&quot;, --encoding, --separator, --header, --list-separator, --no-base, --download-attachments. Todoist and Airtable through their APIs: --from todoist|airtable --token-file FILE (or - for standard input, or BRULION_IMPORT_TOKEN), Airtable also --base and --tables.</source>
         <translation>Jak ekran importu w aplikacji (docs/IMPORT.md): format jest rozpoznawany albo wybierany opcją --from, strony trafiają do --folder (domyślnie Import/&lt;aplikacja&gt;), notatki dzienne do dziennika (dopisane pod &quot;## Import (&lt;aplikacja&gt;)&quot;, gdy dzień już istnieje), załączniki do folderu załączników; nic nie jest nadpisywane (zajęta nazwa dostaje &quot; 2&quot;). --dry-run pokazuje plan. CSV i Airtable: --csv-mode, --title-column, --title-template, --folder-template, --body-column, --columns &quot;Rok=text; Cena=number:Cena brutto; Uwagi=skip&quot;, --encoding, --separator, --header, --list-separator, --no-base, --download-attachments. Todoist i Airtable przez ich API: --from todoist|airtable --token-file PLIK (albo - dla standardowego wejścia, albo BRULION_IMPORT_TOKEN), Airtable także --base i --tables.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="461"/>
+        <location filename="../src/cli/commands_import.cpp" line="501"/>
         <source>The file, folder or ZIP to import</source>
         <translation>Plik, folder albo ZIP do zaimportowania</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="463"/>
+        <location filename="../src/cli/commands_import.cpp" line="503"/>
         <source>The app the files come from (default: recognised)</source>
         <translation>Aplikacja, z której pochodzą pliki (domyślnie rozpoznawana)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="465"/>
+        <location filename="../src/cli/commands_import.cpp" line="505"/>
         <source>Folder for the pages (default: Import/&lt;app&gt;; . = the top)</source>
         <translation>Folder na strony (domyślnie Import/&lt;aplikacja&gt;; . = najwyższy poziom)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="467"/>
+        <location filename="../src/cli/commands_import.cpp" line="507"/>
         <source>CSV: a page per row (default) or one page with the table</source>
         <translation>CSV: strona na wiersz (domyślnie) albo jedna strona z tabelą</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="469"/>
+        <location filename="../src/cli/commands_import.cpp" line="509"/>
         <source>CSV: the column naming the pages</source>
         <translation>CSV: kolumna z tytułami stron</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="471"/>
+        <location filename="../src/cli/commands_import.cpp" line="511"/>
         <source>CSV: the pages&apos; titles, e.g. &quot;{{Name}} – {{Date}}&quot;</source>
         <translation>CSV: tytuły stron, np. &quot;{{Nazwa}} – {{Data}}&quot;</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="473"/>
+        <location filename="../src/cli/commands_import.cpp" line="513"/>
         <source>CSV: subfolders, e.g. &quot;{{Category}}&quot;</source>
         <translation>CSV: podfoldery, np. &quot;{{Kategoria}}&quot;</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="475"/>
+        <location filename="../src/cli/commands_import.cpp" line="515"/>
         <source>CSV: the column that becomes the page&apos;s text (- = none)</source>
         <translation>CSV: kolumna, która staje się treścią strony (- = żadna)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="477"/>
+        <location filename="../src/cli/commands_import.cpp" line="517"/>
         <source>CSV: column=type[:property]; … (types: auto, text, number, date, datetime, checkbox, list, tags, links, attachments, skip)</source>
         <translation>CSV: kolumna=typ[:właściwość]; … (typy: auto, text, number, date, datetime, checkbox, list, tags, links, attachments, skip)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="480"/>
+        <location filename="../src/cli/commands_import.cpp" line="520"/>
         <source>CSV: utf-8, utf-16le, windows-1250, iso-8859-2, windows-1252 (default: detected)</source>
         <translation>CSV: utf-8, utf-16le, windows-1250, iso-8859-2, windows-1252 (domyślnie wykrywane)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="483"/>
+        <location filename="../src/cli/commands_import.cpp" line="523"/>
         <source>CSV: , ; | or tab (default: detected)</source>
         <translation>CSV: , ; | albo tab (domyślnie wykrywany)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="485"/>
+        <location filename="../src/cli/commands_import.cpp" line="525"/>
         <source>CSV: whether the first row names the columns (default: detected)</source>
         <translation>CSV: czy pierwszy wiersz to nazwy kolumn (domyślnie wykrywane)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="488"/>
+        <location filename="../src/cli/commands_import.cpp" line="528"/>
         <source>CSV: what separates list items (default: detected)</source>
         <translation>CSV: co rozdziela elementy listy (domyślnie wykrywane)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="489"/>
+        <location filename="../src/cli/commands_import.cpp" line="529"/>
         <source>CSV: no Obsidian base next to the pages</source>
         <translation>CSV: bez bazy Obsidiana obok stron</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="491"/>
+        <location filename="../src/cli/commands_import.cpp" line="531"/>
         <source>CSV, Airtable: download the files of attachment cells first</source>
         <translation>CSV, Airtable: najpierw pobierz pliki z komórek z załącznikami</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="493"/>
+        <location filename="../src/cli/commands_import.cpp" line="533"/>
         <source>Todoist, Airtable: a file with the personal token (- = standard input)</source>
         <translation>Todoist, Airtable: plik z osobistym tokenem (- = standardowe wejście)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="495"/>
+        <location filename="../src/cli/commands_import.cpp" line="535"/>
         <source>Airtable: the base (name or id)</source>
         <translation>Airtable: baza (nazwa albo id)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="497"/>
+        <location filename="../src/cli/commands_import.cpp" line="537"/>
         <source>Airtable: table ids, separated by commas (default: all)</source>
         <translation>Airtable: id tabel rozdzielone przecinkami (domyślnie wszystkie)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_import.cpp" line="503"/>
+        <location filename="../src/cli/commands_import.cpp" line="543"/>
         <source>The apps and formats `import` reads</source>
         <translation>Aplikacje i formaty, które czyta `import`</translation>
     </message>
@@ -34115,12 +34144,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::ioviews::FileGatherer</name>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="269"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="330"/>
         <source>No file was chosen.</source>
         <translation>Nie wybrano pliku.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/fileexchange.cpp" line="608"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="710"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n plik</numerusform>
@@ -34129,18 +34158,18 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="381"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="442"/>
         <source>“%1” could not be found.</source>
         <translation>Nie znaleziono „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="418"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="479"/>
         <source>“%1” is a link to a file outside the chosen folder and was skipped.</source>
         <translation>„%1” to dowiązanie do pliku spoza wybranego folderu, więc zostało pominięte.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/fileexchange.cpp" line="423"/>
-        <location filename="../src/app/io/fileexchange.cpp" line="492"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="484"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="553"/>
         <source>The folder has more than %n file(s); only the first ones were read.</source>
         <translation>
             <numerusform>Folder ma więcej niż %n plik; wczytano tylko pierwsze.</numerusform>
@@ -34149,44 +34178,44 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="613"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="715"/>
         <source>“%1” (%2) is too large and was skipped.</source>
         <translation>Plik „%1” (%2) jest za duży i został pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="618"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="720"/>
         <source>Only the first %1 were read: the selection is too large to import at once.</source>
         <translation>Wczytano tylko pierwsze %1: wybór jest za duży, by zaimportować go naraz.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="579"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="681"/>
         <source>“%1” could not be read: %2</source>
         <translation>Nie udało się odczytać „%1”: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="98"/>
-        <location filename="../src/app/io/fileexchange.cpp" line="109"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="136"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="147"/>
         <source>not found</source>
         <translation>nie znaleziono</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="437"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="498"/>
         <source>“%1” could not be opened: %2</source>
         <translation>Nie można otworzyć „%1”: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="444"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="505"/>
         <source>Picked folder</source>
         <translation>Wybrany folder</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="447"/>
-        <location filename="../src/app/io/fileexchange.cpp" line="485"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="508"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="546"/>
         <source>“%1” exists only online (like a Google Docs file) and was skipped: export it as a file first.</source>
         <translation>Pominięto „%1”: ten dokument istnieje tylko w sieci (jak plik Dokumentów Google). Najpierw wyeksportuj go jako plik.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/fileexchange.cpp" line="468"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="529"/>
         <source>The folder “%1” could not be read: %2</source>
         <translation>Nie można odczytać folderu „%1”: %2</translation>
     </message>
@@ -34207,72 +34236,72 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="186"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="207"/>
         <source>Reading %1 of %2 files…</source>
         <translation>Wczytywanie pliku %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="357"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="378"/>
         <source>Reading…</source>
         <translation>Wczytywanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="264"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="285"/>
         <source>Exports of notes apps (%1)</source>
         <translation>Eksporty aplikacji do notatek (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="257"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="278"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="316"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="337"/>
         <source>Use a folder inside the notebook: no “..”, no protected folders (.trash, .brulion) and no characters such as : * ? &quot; &lt; &gt; |.</source>
         <translation>Użyj folderu wewnątrz notatnika: bez „..”, bez folderów chronionych (.trash, .brulion) i bez znaków takich jak : * ? &quot; &lt; &gt; |.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="484"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="531"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="488"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="535"/>
         <source>No files were read.</source>
         <translation>Nie wczytano żadnych plików.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="499"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="551"/>
         <source>Checking what will be imported…</source>
         <translation>Sprawdzanie, co zostanie zaimportowane…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="529"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="602"/>
         <source>Brulion does not recognise these files. Choose the app they come from in the list.</source>
         <translation>Brulion nie rozpoznaje tych plików. Wybierz z listy aplikację, z której pochodzą.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="594"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="667"/>
         <source>Nothing to import was found in “%1”.</source>
         <translation>W „%1” nie znaleziono nic do zaimportowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="619"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="692"/>
         <source>Preparing…</source>
         <translation>Przygotowywanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="679"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="756"/>
         <source>“%1” already existed; it was saved as “%2”.</source>
         <translation>„%1” już istniał; zapisano jako „%2”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="694"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="771"/>
         <source>Saving %1 of %2…</source>
         <translation>Zapisywanie: %1 z %2…</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="731"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="808"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import zatrzymany: zapisano %n plik.</numerusform>
@@ -34281,7 +34310,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="732"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="809"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import zakończony: zapisano %n plik.</numerusform>
@@ -34420,7 +34449,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Pliki kalendarza (.ics) z Kalendarza Google, Outlooka, Thunderbirda lub telefonu. Wydarzenia trafią do notatek dziennych z ich dni jako przypomnienia ⏰, a zadania do wykonania staną się zadaniami.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/importcontroller.cpp" line="186"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="207"/>
         <source>Looking for the files…</source>
         <translation>Szukanie plików…</translation>
     </message>

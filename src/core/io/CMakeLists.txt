@@ -14,7 +14,7 @@ endif()
 brulion_add_core_module(io
     SOURCES
         io.h
-        files.h
+        files.h files.cpp
         messages_p.h
         zip.h zip.cpp
         tar.h tar.cpp

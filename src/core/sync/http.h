@@ -19,6 +19,7 @@
 #include <memory>
 #include <utility>
 
+class QIODevice;
 class QNetworkAccessManager;
 class QNetworkReply;
 
@@ -76,6 +77,17 @@ struct HttpRequest {
     std::function<void(QByteArrayView piece)> onData;
     /// Lets the sender stop the request on its way (HttpAbort::abort); none: it cannot be stopped.
     std::shared_ptr<HttpAbort> abort;
+    /// Only for a transport that streams() (never set otherwise): the request's body is read from
+    /// this device (open for reading, at its start; `body` stays empty) piece by piece as it is
+    /// sent — an upload never held in memory. Its size() is the Content-Length.
+    std::shared_ptr<QIODevice> bodyDevice;
+    /// Only for a transport that streams(): a 2xx answer's body goes here piece by piece, in order,
+    /// instead of into HttpResponse::body (which stays empty) — a download never held in memory.
+    /// False stops the request (networkError: the piece could not be kept, a full disk). The
+    /// pieces are at most StreamPieceBytes each, and the transport keeps no more than that unread;
+    /// maxBodyBytes still bounds the whole answer. An error's body (not 2xx) stays in the response.
+    std::function<bool(QByteArrayView piece)> bodySink;
+    static constexpr qint64 StreamPieceBytes = 256 * 1024;
 
     /// maxBodyBytes, or the default.
     qint64 bodyLimit() const { return maxBodyBytes > 0 ? maxBodyBytes : DefaultMaxBodyBytes; }
@@ -130,6 +142,10 @@ class HttpTransport {
 public:
     virtual ~HttpTransport() = default;
     virtual void send(const HttpRequest &request, HttpCallback done) = 0;
+    /// True when the transport sends HttpRequest::bodyDevice and hands an answer to
+    /// HttpRequest::bodySink piece by piece. False (the default): the sender never sets them, and
+    /// bodies travel whole in HttpRequest::body and HttpResponse::body.
+    virtual bool streams() const { return false; }
 };
 
 /// HttpTransport over QNetworkAccessManager. Any verb (PROPFIND, MKCOL, …) via
@@ -138,7 +154,9 @@ public:
 /// request.bodyLimit() is aborted too (tooLarge = true). Redirects are followed only to the same
 /// server (host and port; http's default port may become https's) and never from https to http,
 /// so credentials are not sent to other servers. No caching. request.onData gets the body as it
-/// arrives; request.abort stops the reply (networkError "Stopped").
+/// arrives; request.abort stops the reply (networkError "Stopped"). It streams(): a bodyDevice is
+/// read by Qt as it sends it, and with a bodySink the reply's read buffer is bounded to
+/// HttpRequest::StreamPieceBytes, so a download holds no more than that in memory.
 class NetworkHttpTransport : public QObject, public HttpTransport {
     Q_OBJECT
 public:
@@ -150,14 +168,16 @@ public:
     Q_DISABLE_COPY_MOVE(NetworkHttpTransport)
 
     void send(const HttpRequest &request, HttpCallback done) override;
+    bool streams() const override { return true; }
 
     QNetworkAccessManager *manager() const;
     /// Maximum number of redirects followed per request (default 5).
     void setMaxRedirects(int count);
 
 private:
-    /// `read`: the body's start, read while it came (HttpRequest::onData).
-    void finish(QNetworkReply *reply, bool timedOut, const QByteArray &read, const HttpCallback &done);
+    /// `read`: the body's start, read while it came (HttpRequest::onData). `sinkFailed`: the
+    /// request's bodySink refused a piece.
+    void finish(QNetworkReply *reply, bool timedOut, const QByteArray &read, bool sinkFailed, const HttpCallback &done);
 
     QPointer<QNetworkAccessManager> m_manager;
     int m_maxRedirects = 5;

@@ -25,6 +25,7 @@
 #include <QProcess>
 #include <QScopeGuard>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QThread>
@@ -1057,6 +1058,63 @@ private Q_SLOTS:
         QVERIFY(waitState(c, u"done"_s));
         QVERIFY(ws->exists(u"Import/Logseq/Pomysły.md"_s));
         QVERIFY(QString::fromUtf8(readRaw(root + u"/journals/2026-10-14.md"_s)).contains(u"Łucją"_s));
+    }
+
+    void largeZipIsUnpackedFromTheDisk_data()
+    {
+        QTest::addColumn<bool>("document");
+        QTest::newRow("local file") << false;
+        QTest::newRow("Android document") << true;
+    }
+    void largeZipIsUnpackedFromTheDisk()
+    {
+        // A Logseq graph with a 20 MB recording: the archive stays on disk (a document is copied
+        // there in pieces), the recording is unpacked into the import's staging folder and copied
+        // into the notebook from there; the folder goes with the input.
+        QFETCH(bool, document);
+        const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        const auto stagingFolders = [&cache] {
+            return QDir(cache).entryList({u"import-*"_s}, QDir::Dirs | QDir::NoDotAndDotDot).size();
+        };
+        const qsizetype foldersBefore = stagingFolders();
+        QByteArray recording(20LL << 20, Qt::Uninitialized);
+        for (qsizetype i = 0; i < recording.size(); ++i)
+            recording[i] = char((i * 131 + 17) & 0xff);
+        QList<InputFile> graph = logseqGraph();
+        graph.append(InputFile{u"graf/assets/nagranie.m4a"_s, recording});
+        graph[2] = text(u"graf/pages/Zakupy.md"_s,
+                        u"- mleko ![](../assets/paragon.png)\n- ![](../assets/nagranie.m4a)\n"_s);
+        brulion::io::ZipWriteOptions store;
+        store.storeCompressedFormats = true; // (an .m4a is stored, as in a real export)
+        const QByteArray zip = brulion::io::writeZip(graph, store);
+        QVERIFY(zip.size() > brulion::ioviews::FileGatherer::DiskArchiveBytes);
+        QString root;
+        auto ws = open({}, &root);
+        ImportController c;
+        c.setWorkspace(ws.get());
+        const QString local = m_tmp.filePath(u"Logseq — duży eksport.zip"_s);
+        if (document) {
+            auto docs = std::make_shared<FakeDocuments>();
+            const QString uri = u"content://com.android.providers.downloads.documents/document/msf%3A77"_s;
+            docs->addDocument(uri, u"Logseq — duży eksport.zip"_s, zip);
+            c.gatherer()->setDocumentProvider(docs);
+            c.addUrls({QUrl(uri)});
+        } else {
+            QVERIFY(writeRaw(local, zip));
+            c.addUrls({QUrl::fromLocalFile(local)});
+        }
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(c.effectiveId(), u"logseq"_s);
+        QCOMPARE(c.preview().value(u"attachments"_s).toInt(), 2);
+        QCOMPARE(stagingFolders(), foldersBefore + 1);
+        c.startImport();
+        QVERIFY(waitState(c, u"done"_s));
+        QCOMPARE(readRaw(root + u"/assets/Logseq/nagranie.m4a"_s), recording);
+        QVERIFY(ws->exists(u"Import/Logseq/Zakupy.md"_s));
+        if (!document)
+            QCOMPARE(readRaw(local), zip); // the picked file is the user's: left as it is
+        c.clear();
+        QCOMPARE(stagingFolders(), foldersBefore);
     }
 
     void importSeveralLocalFilesAndPaths()

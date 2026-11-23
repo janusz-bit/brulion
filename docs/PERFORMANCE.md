@@ -215,6 +215,12 @@ pictures — and kept on the device (about 1.3 KB a page), so later starts only 
 the same 1000 pages); a search through them takes half a millisecond. Text recognition (OCR, off by
 default) takes about 2–3 s of one core per scanned A4 page; a phone does not recognize text.
 
+**Large attachments in sync and imports**: syncing with Nextcloud or WebDAV holds a few hundred
+kilobytes of a large file (a picture, a recording, a PDF over 4 MB) at a time, whatever its size —
+it is downloaded into a temporary file next to its place and takes it over only once it is all
+there, so a broken connection or a full disk never leaves half a file. Importing an exported ZIP
+(Obsidian, Logseq, Notion…) unpacks its large attachments to the disk instead of into memory.
+
 ### Known slow spots
 
 * **Indexing large notebooks on a phone** — it was about 15 s for 10,000 notes; now the notes
@@ -3116,6 +3122,37 @@ machine shared with other agents' builds; medians [min–max]; instructions in u
 Typing itself is the same (a letter's handling 0.6–1.7 ms, its frame 12–13 ms; the frames' p95
 followed the machine's load in both builds). What is left of a 0.5 MB page's merge: the links
 resolved again against the names, the old version detached from the lookups and freed.
+
+### Sync and import in bounded memory (2026-11-23)
+
+Before, a download was held whole in memory before it was written (`GetResult::data`), an upload
+was read whole (`LocalSnap::bytes`), and so was a changed attachment to hash it — up to the
+largest file synced (`SyncEngine::maxFileSize`, 200 MB), four transfers at once, and every
+changed attachment's snapshot for the whole run. An import read the picked ZIP whole (up to
+512 MB) and unpacked it into memory (`ZipReadOptions::maxTotalSize`, 1.5 GiB), three times per
+analysis (`detectImporter`, `analyzeCsv`, `runImport` each prepared the input). Now:
+
+| | before | now |
+|---|---|---|
+| a download of an attachment (> `streamAbove()`, 4 MiB) | the whole file, up to 200 MB × 4 transfers | pieces of at most 256 KiB (`HttpRequest::StreamPieceBytes`): Qt's read buffer is bounded to that (`QNetworkReply::setReadBufferSize`), each piece written to the staging file and hashed (`text::Fnv1a64`) |
+| an upload | the whole file, kept in the run's snapshot | read by Qt from the file as it is sent (`HttpRequest::bodyDevice`; the test's counting device saw reads of at most 64 KiB) |
+| hashing a changed attachment | the whole file | `Vault::PieceBytes` (256 KiB) at a time |
+| a conflict of two large versions | both in memory | the server's version renamed from its staging file into the conflict copy, uploaded from there |
+| an imported ZIP of 1.5 GiB with large attachments | the archive + every entry (up to 2 GiB), three unpacks per analysis | the archive read from the disk (a picked document copied there in pieces), pictures / audio / video / PDFs / archives over 1 MiB unpacked into the import's staging folder through miniz's buffers (64 KiB read, 32 KiB window), the notes in memory; prepared once per input |
+
+Notes (`isSyncTextPath()`) stay whole: they are merged line by line and kept as merge bases, and
+notebooks hold no note of hundreds of megabytes. Neither does a transport that does not stream —
+the tests' in-memory server unless `Options::streams`, the device folder's `FolderDavTransport`
+(its `FolderStorage` reads and writes a file whole, on Android through the system's document
+provider): there `WebDavClient` hands a whole body to the sink — the vault's side still goes
+through a staging file — and reads an upload whole, as before. A tar (Joplin's JEX) is still read whole. The bounds are
+asserted, not sampled: `tst_sync_webdav` (a 24 MB download through `NetworkHttpTransport` in
+pieces ≤ 256 KiB, an upload from a counting device), `tst_sync_streamed` (the in-memory server's
+largest whole body under 1 MiB while 20 MB files go both ways; a dropped connection and a full
+disk — `RLIMIT_FSIZE` — leave no partial file and no temporary one), `tst_io_formats` (a 24 MB
+entry staged in pieces ≤ 256 KiB, stored and deflated) and `tst_sync_*_streamed` (the engine,
+device, folder and mass-deletion tests again with every attachment in pieces). Not measured on a
+phone.
 
 ### Budgets
 

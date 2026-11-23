@@ -206,7 +206,7 @@ public:
                 ctx.addPage(s.path, content);
         }
         for (const Source &a : std::as_const(attachments))
-            ctx.addFile(a.path, a.file->data);
+            ctx.addFile(a.path, *a.file);
         return ctx.take();
     }
 

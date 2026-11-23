@@ -112,7 +112,7 @@ public:
                     return pages.destination(target->path);
                 if (const auto it = attachments.constFind(key); it != attachments.constEnd())
                     return *it;
-                const VaultPath stored = ctx.addAttachment(paths::basename(target->path), target->data);
+                const VaultPath stored = ctx.addAttachment(paths::basename(target->path), *target);
                 attachments.insert(key, stored);
                 return stored;
             };
