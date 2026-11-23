@@ -139,6 +139,9 @@
 //   pagelook.h    a page's icon and cover (`icon` / `banner_icon`, `banner`, `banner_y`):
 //                  parsePageIcon (emoji, Iconize's `LiBookOpen`), parsePageCover (`![[file]]`,
 //                  a path, an http(s) URL), pageLook(properties), the values Brulion writes
+//   noteoptions.h  a note's own options (SYNTAX §4 "Note options": `line-numbers`, `picture-frames`,
+//                  `text-width`, `tasks` and their Polish keys): noteOptions(properties), the
+//                  flags and widths read, the keys and values Brulion writes
 //   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
 //                  inlineCalc, inlineQuery, today, locale, palette, taskCheckbox, dateLinks}).render(body) /
 //                  renderBlock(body, kind) ->
@@ -172,6 +175,7 @@
 #include "markdown/macros.h"
 #include "markdown/math.h"
 #include "markdown/notemode.h"
+#include "markdown/noteoptions.h"
 #include "markdown/pagelook.h"
 #include "markdown/pageprops.h"
 #include "markdown/parse.h"

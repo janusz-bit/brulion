@@ -105,6 +105,11 @@ brulion_add_test(tst_editor_pageprops
 brulion_add_test(tst_editor_look
     SOURCES tst_editor_look.cpp
     LIBS brulion_editor brulion_core_markdown)
+# The note's own options (line numbers, picture frames, text width, tasks): PageController.noteOptions,
+# setNoteOption.
+brulion_add_test(tst_editor_noteoptions
+    SOURCES tst_editor_noteoptions.cpp
+    LIBS brulion_editor brulion_core_markdown)
 # The size of embedded pictures read from their headers / an SVG's root (picturesize.h).
 # The block views' helpers (blockviews.h): the roles shaped for compiled QML, ChipFlow's places,
 # KeyListModel's kept rows.

@@ -1345,7 +1345,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="1040"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="1043"/>
         <source>Extension: runs · %n type warning(s), %1</source>
         <translation>
             <numerusform>Extension: runs · %n type warning, %1</numerusform>
@@ -1353,7 +1353,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="1168"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="1171"/>
         <source>%1 · %n line(s) ignored, %2</source>
         <translation>
             <numerusform>%1 · %n line ignored, %2</numerusform>
@@ -1361,7 +1361,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="1169"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="1172"/>
         <source>%1 · %n token(s)</source>
         <translation>
             <numerusform>%1 · %n token</numerusform>
@@ -1383,7 +1383,7 @@
 <context>
     <name>PropertiesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/blockviews.cpp" line="345"/>
+        <location filename="../src/app/editor/blockviews.cpp" line="374"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -1606,7 +1606,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2955"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2969"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1614,7 +1614,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2820"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2834"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1646,7 +1646,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2193"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2207"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1654,7 +1654,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2644"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2658"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1662,7 +1662,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2822"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2836"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>

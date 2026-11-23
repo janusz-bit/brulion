@@ -954,7 +954,10 @@ FocusScope {
                 AppController.toast(text, kind)
             }
         }
-        maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
+        // The note's own text width (`text-width`, docs/SYNTAX.md §4 "Note options"), else the
+        // device's; 0 is the full width.
+        maxTextWidth: page.textWidth >= 0 ? (page.textWidth > 0 ? page.textWidth : 100000)
+                      : AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
         // The properties panel open or folded: a device setting (the panel's header switches it);
         // bound here for the rows made with the editor, then by the Binding below.
         propertiesExpanded: AppSettings.propertiesExpanded
@@ -1560,6 +1563,15 @@ FocusScope {
             unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: root.openCoverDialog()
         }
+        // The note's own options (docs/UI.md "Note options"; also the top bar's More).
+        BMenuItem {
+            objectName: "pageMenuNoteOptions"
+            text: qsTr("Note options…")
+            iconName: "sliders-horizontal"
+            enabled: page.loaded && !root.pictureRoute
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
+            onTriggered: root.openNoteOptionsDialog()
+        }
         BMenuItem {
             objectName: "pageMenuAddProperty"
             text: qsTr("Add property")
@@ -1640,12 +1652,20 @@ FocusScope {
     // Made when first opened.
     property ContentPageIconDialog iconDialog: null
     property ContentPageCoverDialog coverDialog: null
+    property ContentNoteOptionsDialog noteOptionsDialog: null
     function openIconDialog(): void {
         if (!page.loaded || editor.readOnlyRefuses())
             return
         if (!iconDialog)
             iconDialog = iconDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageIconDialog
         iconDialog.open()
+    }
+    function openNoteOptionsDialog(): void {
+        if (!page.loaded || editor.readOnlyRefuses())
+            return
+        if (!noteOptionsDialog)
+            noteOptionsDialog = noteOptionsDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentNoteOptionsDialog
+        noteOptionsDialog.open()
     }
     function openCoverDialog(): void {
         if (!page.loaded || editor.readOnlyRefuses())
@@ -1661,6 +1681,10 @@ FocusScope {
     Component {
         id: coverDialogComponent
         ContentPageCoverDialog { objectName: "pageCoverDialog" }
+    }
+    Component {
+        id: noteOptionsDialogComponent
+        ContentNoteOptionsDialog { objectName: "noteOptionsDialog" }
     }
     ContentRenameDialog {
         id: renameDialog
@@ -1753,6 +1777,8 @@ FocusScope {
                 editor.addProperty()
             else if (action === "toggleTasksIgnored" && editor.visible)
                 root.toggleTasksIgnored()
+            else if (action === "noteOptions" && editor.visible && root.noteRoute)
+                root.openNoteOptionsDialog()
             else if (action === "taskClock" && editor.visible)
                 editor.toggleCurrentTaskClock()
             else if (action === "taskDependency" && editor.visible)

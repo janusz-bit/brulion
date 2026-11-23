@@ -20,6 +20,14 @@ This page is a document; so is [[Tasks|Tasks]]. The journal is an outline by def
 - The choice is saved in the note itself as the property `brulion: document` or `brulion: outline`, so it looks the same on every device.
 - Notes without this key guess the mode from their content: a page made only of bullet points opens as an outline, a page of headings and paragraphs as a document.
 
+## Note options
+The page menu **⋯** → **Note options…** sets how this one note is shown, whatever the device's settings say:
+- **Tasks in Tasks and the calendar** — off: the checkboxes stay on the page, but its tasks are left out of the task lists (a packing list, a checklist to copy).
+- **Line numbers in code blocks**, **Frames around pictures** — As in Settings, On or Off.
+- **Text width** — As in Settings, Narrow, Normal, Wide or Full.
+
+The choices are saved in the note as properties (`line-numbers: true`, `picture-frames: false`, `text-width: wide`, `tasks: ignore`; with the Polish interface `numery-linii`, `ramki`, `szerokosc-tekstu`, `zadania: ignoruj`), so the note looks the same on every device. “As in Settings” removes the property again.
+
 ## Blocks
 A block is every list item and, outside lists, every paragraph, heading, table, quote and code block. Click a block to edit it; when you aren't editing it, you see it formatted.
 

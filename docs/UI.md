@@ -246,7 +246,7 @@ components — no Material/Fusion look, so all targets look identical.
     Ignore tasks on this page / Show this page's tasks in Tasks (a page's
     `zadania: ignoruj` — `tasks: ignore` with an English interface — set or removed,
     `PageView.toggleTasksIgnored`, `Workspace.tasksIgnored`; docs/SYNTAX.md §5 "Ignoring a page's
-    tasks"), Find in note, Show in tree, QR code… (a note: "QR code" below), Open in another app
+    tasks"), Note options… (a page: "Note options" below), Find in note, Show in tree, QR code… (a note: "QR code" below), Open in another app
     (a PDF, an attachment); Move to trash between two separators; on phones Command palette; the **Notebook** submenu (New page, Sync
     center, Import notes, Import and export, Replace in notebook, Clean up, Trash, About
     Brulion) and Settings.
@@ -4099,7 +4099,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`BlockViews.codeLineNumbers`: one line of the column per visual line of the editor's laid-out
   document, followed again when the text, its wrapping or the width change). The numbers are not
   part of the text: the file, a copy and the export have none. Mermaid, chart and view sources are
-  not numbered.
+  not numbered. A note's own `line-numbers` option wins over the setting ("Note options" below).
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in words of the UI language. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete), a date chip the date dialog on that date (with "+": "Date, reminder or
@@ -4243,7 +4243,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`AppSettings.pictureFrames`, device-local, off; `b.app.settings()` key `pictureFrames`) draws
   the hairline `borderSubtle` frame around each. A picture not shown yet (loading, from the
   internet waiting for "Show", a format the device cannot decode) has its frame either way: it
-  marks the picture's place. Opening one (a click on the embed,
+  marks the picture's place. A note's own `picture-frames` option wins over the setting ("Note
+  options"). Opening one (a click on the embed,
   a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
   `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
   raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the
@@ -6491,6 +6492,33 @@ save, only a change of some note's properties).
 * **Tests**: `tst_markdown_pagelook` (reading, writing, property round trips byte for byte, link
   icons), `tst_editor_look` (`PageController.look`, the edits as undo steps), `tst_richtextpills`
   (the icon pill).
+
+## Note options
+
+A note's own options (docs/SYNTAX.md §4 "Note options") — page properties, so they travel with the
+file — win over the device's settings for that note: `PageController.noteOptions` ({ lineNumbers,
+pictureFrames: "" | "on" | "off", textWidth: "" | "narrow" | "normal" | "wide" | "full", tasks: "" |
+"ignore" }; "" — the device's setting) follows the page's text as it is edited (source mode too),
+typed for the views as `codeLineNumbers`, `pictureFrames` (-1 the device's, 0 off, 1 on) and
+`textWidth` (-1, or the pixels Settings stores: 600, 680, 960, 0 for the full width).
+
+* **Where they show**: `CodeBlockView` numbers the lines with the note's `codeLineNumbers`, else
+  `AppSettings.codeLineNumbers`; `EmbedView` frames pictures with the note's `pictureFrames`, else
+  `AppSettings.pictureFrames`; `PageView` keeps the text within the note's `textWidth`, else
+  `AppSettings.editorWidth` (a page's own view and a daily note opened as a page; the Journal's list
+  of days keeps one width for all of them). `tasks` is the property of SYNTAX §5 "Ignoring a page's
+  tasks" (`Workspace.tasksIgnored`).
+* **The dialog** (`qml/content/ContentNoteOptionsDialog.qml`): the page menu ⋯ and the top bar's More
+  → "Note options…" (`requestUiAction("noteOptions")`; pages, not in reading mode or a read-only
+  view). A switch "Tasks in Tasks and the calendar", then "Line numbers in code blocks", "Frames
+  around pictures" — As in Settings | On | Off — and "Text width" — As in Settings | Narrow |
+  Normal | Wide | Full —, each row saying what the device's setting is. A choice is written at once
+  (`PageController.setNoteOption`: one undo step, only the option's line changes; a refusal — a
+  frontmatter Brulion cannot edit safely — in a toast); the properties panel shows the keys as
+  ordinary properties.
+* **Tests**: `tst_markdown_noteoptions` (values, keys, which key decides, written values read back),
+  `tst_editor_noteoptions` (`PageController.noteOptions`, `setNoteOption` with its keys, languages,
+  undo steps, removal and refusals).
 
 ## Note modes: outline and document
 

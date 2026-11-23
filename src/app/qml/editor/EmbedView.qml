@@ -4,7 +4,8 @@ import Brulion
 
 // EmbedView — attachments embedded in a block (`![[photo.png]]`, `![alt](assets/a.png)`):
 // images at their natural size up to the column width, on the page's colour (a hairline frame
-// with AppSettings.pictureFrames, or while the picture is not shown),
+// with AppSettings.pictureFrames — or the note's own `picture-frames` option, PageController.pictureFrames —
+// or while the picture is not shown),
 // other files as chips. URLs come from EditorHost::assetUrl (file:// on desktop/Android,
 // blob/data on WebAssembly). A click on a picture emits clicked(target), a click beside it
 // backgroundClicked() (BlockDelegate: edit the block). SVG pictures are drawn to fit 1024×420
@@ -51,6 +52,10 @@ Column {
     property BlockEditor editor: null
     /// Reading mode (BlockEditor.readOnly): a click beside a picture edits nothing (no text cursor).
     property bool readOnly: false
+    /// Pictures get their hairline frame: the note's own option (`picture-frames`, docs/SYNTAX.md
+    /// §4 "Note options"), else the device's setting.
+    readonly property int notePictureFrames: root.controller !== null ? root.controller.pictureFrames : -1
+    readonly property bool pictureFrames: notePictureFrames >= 0 ? notePictureFrames > 0 : AppSettings.pictureFrames
     signal clicked(string target)
     /// A click on a drawing (`drawing`: an SVG with an embedded scene): the drawing editor.
     signal drawingClicked(string path)
@@ -211,11 +216,11 @@ Column {
                                  embed.webPending ? Math.ceil(placeholder.implicitHeight) + 2 * Theme.space3 : 0)
                 radius: Theme.radius
                 // The page's colour: a picture's transparent parts show the page, as beside it.
-                // The hairline frame only with AppSettings.pictureFrames, or while there is no
+                // The hairline frame only with pictureFrames (the note's or the device's), or while there is no
                 // picture to show (loading, waiting for "Show", a format the device cannot decode):
                 // then the frame marks its place.
                 color: Theme.bg
-                border.width: AppSettings.pictureFrames || !loaded ? 1 : 0
+                border.width: root.pictureFrames || !loaded ? 1 : 0
                 border.color: Theme.borderSubtle
                 clip: true
 

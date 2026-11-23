@@ -73,8 +73,13 @@ bool isIgnoreTasksValue(QStringView value)
 
 bool tasksIgnored(const ParsedNote &note)
 {
+    return tasksIgnored(note.properties);
+}
+
+bool tasksIgnored(const Properties &properties)
+{
     for (const QString &key : {u"tasks"_s, u"zadania"_s}) {
-        const QVariant value = note.properties.value(key);
+        const QVariant value = properties.value(key);
         // (A list's first value: `tasks: [ignore]` in a frontmatter.)
         const QString text =
                 value.metaType().id() == QMetaType::QVariantList || value.metaType().id() == QMetaType::QStringList

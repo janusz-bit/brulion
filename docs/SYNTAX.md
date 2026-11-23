@@ -1070,6 +1070,37 @@ a single value, or plain text between a first `---` and a later one used as hori
 left unchanged — a second `brulion` entry is never added, because other YAML readers refuse
 duplicate keys. Obsidian and Logseq show `brulion` as an ordinary page property.
 
+### Note options
+
+A note can set how it is shown where it should differ from the device's settings (Settings →
+Editor) — on every device it syncs to — with page properties (`markdown/noteoptions.h`; YAML
+frontmatter or the leading `key:: value` lines, keys in any case):
+
+```yaml
+---
+line-numbers: true     # numery-linii — line numbers beside the code blocks
+picture-frames: false  # ramki — a hairline frame around the pictures
+text-width: wide       # szerokosc-tekstu — narrow | normal | wide | full (wąska | normalna | szeroka | pełna)
+tasks: ignore          # zadania: ignoruj — §5 "Ignoring a page's tasks"
+---
+```
+
+* **Flags** (`line-numbers`, `picture-frames`): `true` / `yes` / `tak` / `on` / `1` or `false` /
+  `no` / `nie` / `off` / `0` (any case; a list's first item); **a width**: `narrow`, `normal`,
+  `wide`, `full` or `wąska`, `normalna`, `szeroka`, `pełna` (any case, diacritics optional) — the
+  device setting's choices (600, 680, 960 px, the full width). Any other value is no option.
+* Each option is read from the first of its keys the note has, the English one before the Polish
+  one (`tasks` / `zadania`: either, as §5 reads them); a note without it — or with a value that is
+  none — follows the device's setting. Block properties are no note options.
+* **Writing** (the page menu's "Note options…", docs/UI.md "Note options"): through the page-property
+  edits above, so only the option's line changes and each change is one undo step. A key the note
+  has keeps its place, spelling and language (a width written in it in that language); a new one
+  is the interface's (`numery-linii` with a Polish interface, else `line-numbers`), where new
+  properties go. Flags are written `true` / `false` (a checkbox in the properties panel). "As in
+  Settings" removes every spelling of the option, in both blocks.
+* What the options change is only how the app shows the note: the file, copies, exports and
+  published pages are the same with any of them.
+
 ### Publishing
 
 Publishing (docs/UI.md "Publishing") reads one page property: **`publish`** (also `publikuj`, any
@@ -1139,7 +1170,8 @@ command line's task lists — unless a query names pages or folders (`page:`, `p
 for those pages' tasks, these too. The checkboxes stay checkboxes on the page (checked off,
 completed, recurring as ever), blocks queries still find their lines, and their reminders still
 ring. The page menu's "Ignore tasks on this page" writes the property ("Show this page's tasks in
-Tasks" removes it): `markdown::tasksIgnored`.
+Tasks" removes it), and so does the switch "Tasks in Tasks and the calendar" of "Note options…"
+(§4 "Note options"): `markdown::tasksIgnored`.
 
 ### Habits
 
