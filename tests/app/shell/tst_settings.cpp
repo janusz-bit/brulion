@@ -578,6 +578,11 @@ private Q_SLOTS:
             QVERIFY(!s.typewriterScrolling());
             QVERIFY(!s.readingMode());
             QVERIFY(!s.vimMode()); // (Vim keys: off until asked for)
+            QVERIFY(!s.pictureFrames()); // (pictures sit on the page, no frame: off until asked for)
+            QSignalSpy frames(&s, &AppSettings::pictureFramesChanged);
+            s.setPictureFrames(true);
+            s.setPictureFrames(true);
+            QCOMPARE(frames.size(), 1);
             QSignalSpy vim(&s, &AppSettings::vimModeChanged);
             s.setVimMode(true);
             s.setVimMode(true);
@@ -604,6 +609,7 @@ private Q_SLOTS:
             QVERIFY(s.typewriterScrolling());
             QVERIFY(s.vimMode());
             QVERIFY(!s.wordCountShown());
+            QVERIFY(s.pictureFrames()); // kept after a restart
             const QVariantMap shortcuts = s.shortcutOverrides();
             QCOMPARE(shortcuts.size(), 3);
             QCOMPARE(shortcuts.value(u"journal.today"_s).toString(), u"Ctrl+Alt+J"_s);

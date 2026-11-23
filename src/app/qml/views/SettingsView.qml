@@ -1304,6 +1304,13 @@ Item {
                 checked: AppSettings.webPicturesShown
                 onToggled: AppSettings.webPicturesShown = checked
             }
+            SettingSwitch {
+                objectName: "settingsPictureFrames"
+                text: qsTr("Frame around pictures")
+                description: qsTr("A thin line around each picture in a note. Off: pictures sit right on the page.")
+                checked: AppSettings.pictureFrames
+                onToggled: AppSettings.pictureFrames = checked
+            }
             // Preview.
             Rectangle {
                 Layout.fillWidth: true

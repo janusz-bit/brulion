@@ -3,7 +3,8 @@ import QtQuick
 import Brulion
 
 // EmbedView — attachments embedded in a block (`![[photo.png]]`, `![alt](assets/a.png)`):
-// images at their natural size up to the column width (rounded, with a hairline border),
+// images at their natural size up to the column width, on the page's colour (a hairline frame
+// with AppSettings.pictureFrames, or while the picture is not shown),
 // other files as chips. URLs come from EditorHost::assetUrl (file:// on desktop/Android,
 // blob/data on WebAssembly). A click on a picture emits clicked(target), a click beside it
 // backgroundClicked() (BlockDelegate: edit the block). SVG pictures are drawn to fit 1024×420
@@ -209,8 +210,12 @@ Column {
                 height: Math.max(Math.round(width * naturalHeight / Math.max(1, naturalWidth)),
                                  embed.webPending ? Math.ceil(placeholder.implicitHeight) + 2 * Theme.space3 : 0)
                 radius: Theme.radius
-                color: Theme.bgSunken
-                border.width: 1
+                // The page's colour: a picture's transparent parts show the page, as beside it.
+                // The hairline frame only with AppSettings.pictureFrames, or while there is no
+                // picture to show (loading, waiting for "Show", a format the device cannot decode):
+                // then the frame marks its place.
+                color: Theme.bg
+                border.width: AppSettings.pictureFrames || !loaded ? 1 : 0
                 border.color: Theme.borderSubtle
                 clip: true
 

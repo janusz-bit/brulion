@@ -87,6 +87,7 @@ constexpr auto kEditorWidth = "editor/maxWidth"_L1;
 constexpr auto kEditorSource = "editor/sourceMode"_L1;
 constexpr auto kPropertiesExpanded = "editor/propertiesExpanded"_L1;
 constexpr auto kWebPictures = "editor/webPicturesShown"_L1;
+constexpr auto kPictureFrames = "editor/pictureFrames"_L1;
 constexpr auto kSpellCheck = "spelling/enabled"_L1;
 constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
 constexpr auto kSpellLanguages = "spelling/languages"_L1;
@@ -1368,6 +1369,17 @@ void AppSettings::setWebPicturesShown(bool on)
 {
     if (store(kWebPictures, on, webPicturesShown()))
         Q_EMIT webPicturesShownChanged();
+}
+
+bool AppSettings::pictureFrames() const
+{
+    return m_settings->value(kPictureFrames, false).toBool();
+}
+
+void AppSettings::setPictureFrames(bool on)
+{
+    if (store(kPictureFrames, on, pictureFrames()))
+        Q_EMIT pictureFramesChanged();
 }
 
 bool AppSettings::spellCheck() const
