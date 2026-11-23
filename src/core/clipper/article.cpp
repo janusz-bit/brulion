@@ -135,6 +135,7 @@ ConvertedHtml convertHtml(const QString &rawHtml, const QUrl &base, PictureList 
     const QString html = withoutTokenChars(rawHtml);
     io::HtmlToMarkdownOptions o;
     o.embedsAsLinks = true;
+    o.mathFormulas = true;
     o.image = [&](const io::HtmlImage &image) -> QString {
         if (image.src.startsWith(u"data:image/"_s, Qt::CaseInsensitive))
             return pictures.add(image.src, image.alt);

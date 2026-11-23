@@ -525,6 +525,23 @@ private Q_SLOTS:
         QVERIFY(!c.plainText.contains(u"tracker"_s));
     }
 
+    // Formulas of every source (KaTeX, MathJax 3 and 2, Wikipedia, MathML) among Polish text.
+    void mathFixture()
+    {
+        PictureList pictures;
+        const ConvertedHtml c = convertHtml(fixture(u"wzory.html"_s),
+                                            QUrl(u"https://matematyka.example/artykuly/wzory.html"_s), pictures, true);
+        const QString markdown = withRemotePictures(c.markdown, pictures);
+        if (qEnvironmentVariableIsSet("BRULION_CLIPPER_UPDATE_FIXTURES")) {
+            QFile out(QStringLiteral(BRULION_CLIPPER_FIXTURES "/wzory.md"));
+            QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(markdown.toUtf8());
+        }
+        QCOMPARE(markdown, fixture(u"wzory.md"_s));
+        QVERIFY(pictures.pictures().isEmpty()); // Wikipedia's rendering as a picture is not saved
+        QVERIFY(!markdown.contains(u"2a−b"_s)); // no rendered copy
+    }
+
     void convert_data()
     {
         QTest::addColumn<QString>("html");

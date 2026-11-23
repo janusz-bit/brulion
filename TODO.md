@@ -263,12 +263,12 @@ done in the repository simply disappears from the list.
 
 ## Capture
 
-* **Web Clipper in the stores** — the extension (clipper/, docs/CLIPPER.md) is loaded by hand today:
-  publishing it in the Chrome Web Store, Edge Add-ons and on addons.mozilla.org (Firefox needs it
-  signed; a store's Chromium id joins the host manifest's allowed origins), the release workflow
-  attaching scripts/clipper-pack.sh's ZIP and XPI, a test of the extension in Firefox (Playwright
-  cannot load it there; web-ext lint only), checks on real systems (Brave's system folder, macOS,
-  Windows' registry, Flatpak browsers) and articles' math formulas (MathML, KaTeX) as `$…$`.
+* **Web Clipper in the stores** — the extension (clipper/, docs/CLIPPER.md) is loaded by hand today
+  (a release attaches its Chromium ZIP and its unsigned Firefox XPI): publishing it in the Chrome
+  Web Store, Edge Add-ons and on addons.mozilla.org (Firefox needs it signed; a store's Chromium id
+  joins the host manifest's allowed origins), a test of the extension in Firefox (Playwright cannot
+  load it there; web-ext lint only) and checks on real systems (Brave's system folder, macOS,
+  Windows' registry, Flatpak browsers).
 * **Audio, video and voice notes: what is still missing** — players in notes, the player view, voice
   notes and their transcripts on the device are done (docs/UI.md "Audio and video", "Voice notes").
   Missing: checks on a real phone of Qt's Android backend (playback, a video's picture and poster,

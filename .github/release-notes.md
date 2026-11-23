@@ -35,7 +35,7 @@ From version 0.28.0: a new look, the interface size, agents shared with the phon
 | NixOS | flake `github:{{REPO}}/{{TAG}}`, package `brulion` |
 | Command line (Linux, Windows) | `brulion-cli` — in the AppImage as `./Brulion-{{FILE_VERSION}}-x86_64.AppImage cli …`, with Nix `nix run github:{{REPO}}/{{TAG}}#brulion-cli -- …`, on Windows `brulion-cli.exe` next to `brulion.exe` |
 | Browser | nothing to download: {{PAGES_URL}}app/ — or `brulion-web-{{FILE_VERSION}}.html`, a single file you open from disk, or `brulion-web-{{FILE_VERSION}}.zip` for your own server (any directory, HTTPS) |
-| Web Clipper (Chrome, Chromium, Brave, Edge, Firefox) | `brulion-clipper-{{FILE_VERSION}}-chrome.zip` (unzip, then **Load unpacked** in developer mode) or `brulion-clipper-{{FILE_VERSION}}-firefox.xpi` (a temporary add-on) — it saves through `brulion-cli` on the same computer |
+| Web Clipper (Chrome, Chromium, Brave, Edge, Firefox) | `brulion-clipper-{{FILE_VERSION}}-chrome.zip` (unzip, then **Load unpacked** in developer mode) or `brulion-clipper-{{FILE_VERSION}}-firefox.xpi` (not signed by Mozilla yet: Firefox loads it as a temporary add-on from `about:debugging`; Developer Edition and Nightly can install it for good) — it saves through `brulion-cli` on the same computer |
 | Source code | `brulion-{{FILE_VERSION}}-source.tar.gz` |
 
 **Installation**
@@ -88,7 +88,7 @@ Z wersji 0.28.0: nowy wygląd, rozmiar interfejsu, agenci udostępnieni telefono
 | NixOS | flake `github:{{REPO}}/{{TAG}}`, pakiet `brulion` |
 | Wiersz poleceń (Linux, Windows) | `brulion-cli` — w AppImage jako `./Brulion-{{FILE_VERSION}}-x86_64.AppImage cli …`, w Nix `nix run github:{{REPO}}/{{TAG}}#brulion-cli -- …`, w Windows `brulion-cli.exe` obok `brulion.exe` |
 | Przeglądarka | bez pobierania: {{PAGES_URL}}app/ — albo `brulion-web-{{FILE_VERSION}}.html`, jeden plik, który otwierasz z dysku, albo `brulion-web-{{FILE_VERSION}}.zip` na własny serwer (dowolny katalog, HTTPS) |
-| Web Clipper (Chrome, Chromium, Brave, Edge, Firefox) | `brulion-clipper-{{FILE_VERSION}}-chrome.zip` (rozpakuj i wybierz **Załaduj rozpakowane** w trybie dewelopera) albo `brulion-clipper-{{FILE_VERSION}}-firefox.xpi` (tymczasowy dodatek) — zapisuje przez `brulion-cli` na tym samym komputerze |
+| Web Clipper (Chrome, Chromium, Brave, Edge, Firefox) | `brulion-clipper-{{FILE_VERSION}}-chrome.zip` (rozpakuj i wybierz **Załaduj rozpakowane** w trybie dewelopera) albo `brulion-clipper-{{FILE_VERSION}}-firefox.xpi` (jeszcze niepodpisany przez Mozillę: Firefox wczytuje go jako dodatek tymczasowy z `about:debugging`; Developer Edition i Nightly mogą go zainstalować na stałe) — zapisuje przez `brulion-cli` na tym samym komputerze |
 | Kod źródłowy | `brulion-{{FILE_VERSION}}-source.tar.gz` |
 
 **Instalacja**
