@@ -1,6 +1,7 @@
 #include "workspacecalendars.h"
 
 #include "caldav/caldav.h"
+#include "reminders/scheduler.h"
 #include "dates/format.h"
 #include "dates/recurrence.h"
 #include "index/vaultindex.h"
@@ -377,6 +378,8 @@ void WorkspaceCalendars::invalidate(const QString &id)
 
 void WorkspaceCalendars::scheduleEventsChanged()
 {
+    m_alarmCacheDay = QDate();
+    m_alarmCache.clear();
     m_cacheFrom = QDate();
     m_cache.clear();
     m_eventsTimer.start();
@@ -403,6 +406,45 @@ std::shared_ptr<const caldav::CalendarData> WorkspaceCalendars::dataOf(const QSt
     }
     m_data.insert(id, data);
     return data;
+}
+
+QList<ScheduledNotification> WorkspaceCalendars::eventAlarmsBetween(const QDateTime &from, const QDateTime &to) const
+{
+    if (!m_store || !from.isValid() || !to.isValid() || from > to)
+        return {};
+    // The window the reminder scheduler asks about (a day's look-back, its horizon, a day of
+    // slack) is computed once a day and after every change of the events; other windows directly.
+    const QDateTime now = m_clock ? m_clock() : QDateTime::currentDateTime();
+    const QDate today = now.date();
+    const QDateTime windowFrom(today.addDays(-9), QTime(0, 0));
+    const QDateTime windowTo(today.addDays(ReminderScheduler::DefaultHorizonDays + 2), QTime(23, 59));
+    const auto compute = [this](const QDateTime &a, const QDateTime &b) {
+        QList<ScheduledNotification> out;
+        const dates::UiLocale locale = m_language == u"pl" ? dates::UiLocale::Polish : dates::UiLocale::English;
+        const caldav::CalendarSettings s = m_store->settings();
+        for (const caldav::CalendarEntry &c : s.calendars) {
+            if (!c.showEvents || !c.alarms)
+                continue;
+            if (const auto data = dataOf(c.id); data && !data->events.isEmpty())
+                out += caldav::eventNotifications(*data, c.id, c.name, a, b, m_zone, locale);
+        }
+        std::ranges::stable_sort(out, [](const ScheduledNotification &x, const ScheduledNotification &y) {
+            return x.at != y.at ? x.at < y.at : x.id < y.id;
+        });
+        return out;
+    };
+    if (from < windowFrom || to > windowTo)
+        return compute(from, to);
+    if (m_alarmCacheDay != today) {
+        m_alarmCache = compute(windowFrom, windowTo);
+        m_alarmCacheDay = today;
+    }
+    QList<ScheduledNotification> out;
+    for (const ScheduledNotification &n : std::as_const(m_alarmCache)) {
+        if (n.at >= from && n.at <= to)
+            out.append(n);
+    }
+    return out;
 }
 
 QList<planning::ExternalEvent> WorkspaceCalendars::eventsBetween(QDate from, QDate to) const
@@ -1047,6 +1089,8 @@ bool WorkspaceCalendars::updateCalendar(const QString &id, const QVariantMap &va
         }
         if (values.contains(u"showEvents"_s))
             c.showEvents = values.value(u"showEvents"_s).toBool();
+        if (values.contains(u"alarms"_s))
+            c.alarms = values.value(u"alarms"_s).toBool();
         if (values.contains(u"syncTasks"_s))
             c.syncTasks = values.value(u"syncTasks"_s).toBool();
         if (values.contains(u"visible"_s))
@@ -1239,6 +1283,7 @@ QVariantMap WorkspaceCalendars::row(const QString &id) const
                         {u"visible"_s, c->visible},
                         {u"readOnly"_s, c->readOnly},
                         {u"events"_s, c->showEvents},
+                        {u"alarms"_s, c->alarms},
                         {u"tasks"_s, c->syncTasks},
                         {u"holdsEvents"_s, c->components.isEmpty() || c->components.contains(u"VEVENT"_s)},
                         {u"holdsTasks"_s, c->components.isEmpty() || c->components.contains(u"VTODO"_s)},

@@ -188,7 +188,7 @@ void TestCalDavAlarms::notificationFields()
     QCOMPARE(n.title, u"Spotkanie z Łucją"_s);
     QVERIFY2(n.body.startsWith(u"Praca · "_s), qPrintable(n.body));
     QVERIFY2(n.body.contains(u"09:00"_s) && n.body.endsWith(u" · Sala Żółta"_s), qPrintable(n.body));
-    QCOMPARE(n.path, u"calendar:c-1"_s);
+    QCOMPARE(n.path, u"calendar:2026-11-20"_s);
     QCOMPARE(n.taskLine, -1);
     QVERIFY(!n.alarm);
     QCOMPARE(n.at, local(2026, 11, 20, 8, 45));
@@ -261,7 +261,7 @@ void TestCalDavAlarms::storeAndSwitch()
     }
     const QList<ScheduledNotification> list = eventNotifications(store, local(2026, 11, 1), local(2026, 12, 1), Warsaw);
     QCOMPARE(list.size(), 1);
-    QCOMPARE(list.first().path, u"calendar:c-1"_s);
+    QCOMPARE(list.first().path, u"calendar:2026-11-20"_s);
     QVERIFY(list.first().body.startsWith(u"Kalendarz c-1 · "_s));
     // The switch is stored.
     const CalendarSettings back = CalendarSettings::fromJson(settings.toJson());

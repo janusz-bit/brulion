@@ -386,6 +386,50 @@ private Q_SLOTS:
         QVERIFY(titles(result).contains(u"Pobudka — pociąg do Łodzi"_s));
     }
 
+    void aCheckArmsTheAlarmsOfCalendarEvents()
+    {
+        // The events the app's last sync kept (their VALARMs ring with the notes' reminders, also
+        // while the app is closed); a calendar with the alarms off arms nothing.
+        QTemporaryDir dir;
+        const Target target = notebookIn(dir);
+        caldav::CalendarStore store(target.stateDir + u"/calendars"_s);
+        caldav::CalendarSettings settings;
+        caldav::Account account;
+        account.id = u"a-1"_s;
+        settings.accounts.append(account);
+        for (const QString &id : {u"c-1"_s, u"c-2"_s}) {
+            caldav::CalendarEntry entry;
+            entry.id = id;
+            entry.account = account.id;
+            entry.name = u"Praca "_s + id;
+            entry.alarms = id == u"c-1"_s;
+            settings.calendars.append(entry);
+            caldav::CalendarState state;
+            state.resources.insert(u"/cal/z.ics"_s,
+                                   caldav::Resource{u"\"1\""_s, u"z"_s, u"VEVENT"_s,
+                                                    "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:z\r\n"
+                                                    "DTSTART:20261014T180000\r\nSUMMARY:Zebranie zespo\xC5\x82u\r\n"
+                                                    "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n"
+                                                    "END:VEVENT\r\nEND:VCALENDAR\r\n"});
+            QVERIFY(store.saveState(id, state));
+        }
+        QVERIFY(store.saveSettings(settings));
+        Check check(target, {}, nullptr, [] { return kNow; });
+        const QJsonObject result = run(check);
+        QVERIFY2(result.value(u"ok"_s).toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(titles(result).count(u"Zebranie zespołu"_s), 1);
+        for (const QJsonValue &v : result.value(u"reminders"_s).toArray()) {
+            const QJsonObject item = v.toObject();
+            if (item.value(u"title"_s).toString() != u"Zebranie zespołu"_s)
+                continue;
+            QCOMPARE(item.value(u"local"_s).toString(), u"2026-10-14T17:45"_s);
+            QCOMPARE(item.value(u"path"_s).toString(), u"calendar:2026-10-14"_s);
+            QCOMPARE(item.value(u"vault"_s).toString(), u"notatnik-dom"_s);
+            QCOMPARE(item.value(u"ringMinutes"_s).toInt(), 7);
+            QVERIFY(item.value(u"id"_s).toInt() > 0);
+        }
+    }
+
     void aCheckSyncsCalDavTasks()
     {
         // A task with a reminder set on another device (a CalDAV calendar syncing tasks into the

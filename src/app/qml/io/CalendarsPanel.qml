@@ -132,6 +132,12 @@ ColumnLayout {
                 onToggled: panel.calendars.updateCalendar(source.sourceId, { showEvents: checked })
             }
             BCheckBox {
+                visible: AppController.routeFlag(source.modelData, "holdsEvents") && AppController.routeFlag(source.modelData, "events")
+                text: qsTr("Ring the reminders of events")
+                checked: AppController.routeFlag(source.modelData, "alarms")
+                onToggled: panel.calendars.updateCalendar(source.sourceId, { alarms: checked })
+            }
+            BCheckBox {
                 visible: AppController.routeFlag(source.modelData, "holdsTasks")
                 text: qsTr("Tasks in the notes")
                 checked: AppController.routeFlag(source.modelData, "tasks")

@@ -296,9 +296,7 @@ QList<ScheduledNotification> ReminderScheduler::between(const QDateTime &from, c
     const QList<ScheduledNotification> extra = m_extra(from, to);
     if (extra.isEmpty())
         return list;
-    list += extra;
-    std::ranges::stable_sort(list, byTime);
-    assignNativeIds(list);
+    mergeNotifications(list, extra, -1);
     return list;
 }
 
@@ -330,15 +328,7 @@ void ReminderScheduler::refreshAt(const QDateTime &now)
         const QDateTime today = now.toLocalTime();
         const QDateTime to = QDateTime(today.date().addDays(m_horizonDays), QTime(23, 59, 59));
         const QList<ScheduledNotification> extra = m_extra(today.addSecs(-60), to);
-        if (!extra.isEmpty()) {
-            next += extra;
-            std::ranges::stable_sort(next, byTime);
-            if (next.size() > m_maxScheduled) {
-                dropped += int(next.size()) - m_maxScheduled;
-                next.resize(m_maxScheduled);
-            }
-            assignNativeIds(next);
-        }
+        mergeNotifications(next, extra, m_maxScheduled, &dropped);
     }
     applyRingMinutes(next);
     m_dropped = dropped;

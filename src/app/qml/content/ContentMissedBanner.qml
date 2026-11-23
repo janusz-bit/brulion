@@ -66,6 +66,7 @@ BCard {
                 required property bool alarm
                 required property string path
                 required property bool task
+                required property bool event // a calendar event's reminder: no note, nothing to snooze
                 readonly property string day: path !== "" ? Workspace.journalDate(path) : ""
                 Layout.fillWidth: true
                 spacing: Theme.space1
@@ -107,7 +108,7 @@ BCard {
                         onClicked: banner.reminders.openMissed(item.reminderId)
                     }
                     BIconButton {
-                        visible: !Theme.compact
+                        visible: !Theme.compact && !item.event
                         size: "small"
                         iconName: "clock"
                         label: banner.snoozeLabel
@@ -139,6 +140,7 @@ BCard {
                         onClicked: banner.reminders.openMissed(item.reminderId)
                     }
                     BButton {
+                        visible: !item.event
                         size: "small"
                         variant: "ghost"
                         iconName: "clock"

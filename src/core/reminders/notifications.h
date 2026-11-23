@@ -93,6 +93,13 @@ int nativeIdFor(QStringView id);
 /// order, so equal ids get consecutive values.
 void assignNativeIds(QList<ScheduledNotification> &notifications);
 
+/// `extra` (notifications from outside the notes — the VALARMs of calendar events) joined to
+/// `list`: all sorted by time (equal times keep their order), at most `max` of the soonest kept
+/// (`dropped` gets how many more were left out), nativeIds assigned again. `list` unchanged when
+/// `extra` is empty.
+void mergeNotifications(QList<ScheduledNotification> &list, const QList<ScheduledNotification> &extra, int max,
+                        int *dropped = nullptr);
+
 /// A notification that tells nothing of the note (the app lock's "Hide the note's text in
 /// notifications", docs/UI.md "App lock"): the title "Reminder" ("Alarm" for an alarm; in Polish
 /// "Przypomnienie", "Alarm"), the body "Brulion"; the id, time, place and kind are kept (tapping it

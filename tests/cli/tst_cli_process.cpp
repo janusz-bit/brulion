@@ -423,6 +423,102 @@ private Q_SLOTS:
         QCOMPARE(r.errorCode(), u"month_not_understood"_s);
     }
 
+    void calendars()
+    {
+        // The calendars the app set up on this device (<state>/calendars/): a subscription and a
+        // CalDAV calendar with a weekly series, an exception and a Polish title. Read only: nothing
+        // is fetched, no address is shown.
+        const QString dir = vault({{u"Notatka.md"_s, "- x\n"}});
+        const QString folder = stateDirOf(dir) + u"/calendars"_s;
+        const QJsonObject account{{u"id"_s, u"a-1"_s}, {u"server"_s, u"https://tajny.example.pl"_s}, {u"user"_s, u"jan"_s},
+                                  {u"name"_s, u"jan @ chmura"_s}};
+        const QJsonObject praca{{u"id"_s, u"c-1"_s},
+                                {u"account"_s, u"a-1"_s},
+                                {u"url"_s, u"https://tajny.example.pl/dav/praca/"_s},
+                                {u"name"_s, u"Praca"_s},
+                                {u"showEvents"_s, true},
+                                {u"syncTasks"_s, true},
+                                {u"alarms"_s, false}};
+        const QJsonObject zadania{{u"id"_s, u"c-2"_s},
+                                  {u"account"_s, u"a-1"_s},
+                                  {u"url"_s, u"https://tajny.example.pl/dav/zadania/"_s},
+                                  {u"name"_s, u"Tylko zadania"_s},
+                                  {u"showEvents"_s, false}};
+        const QJsonObject feed{{u"id"_s, u"s-1"_s},
+                               {u"url"_s, u"https://tajny.example.pl/swieta.ics?token=sekret"_s},
+                               {u"name"_s, u"Święta"_s},
+                               {u"visible"_s, true},
+                               {u"refresh"_s, 360}};
+        writeFile(folder + u"/calendars.json"_s,
+                  QJsonDocument(QJsonObject{{u"version"_s, 1},
+                                            {u"accounts"_s, QJsonArray{account}},
+                                            {u"calendars"_s, QJsonArray{praca, zadania}},
+                                            {u"subscriptions"_s, QJsonArray{feed}}})
+                          .toJson(QJsonDocument::Compact));
+        writeFile(folder + u"/s-1.ics"_s,
+                  "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:s1\r\nDTSTART;VALUE=DATE:20261111\r\n"
+                  "SUMMARY:Święto Niepodległości\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        QJsonObject members;
+        const auto resource = [&members](const QString &name, const QString &data) {
+            members.insert(name, QJsonObject{{u"etag"_s, u"\"1\""_s}, {u"uid"_s, name}, {u"kind"_s, u"VEVENT"_s}, {u"data"_s, data}});
+        };
+        resource(u"/dav/praca/stand.ics"_s,
+                 u"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:stand\r\n"
+                 u"DTSTART:20261014T080000Z\r\nDTEND:20261014T081500Z\r\nRRULE:FREQ=WEEKLY;COUNT=3\r\n"
+                 u"SUMMARY:Zażółć gęślą jaźń\r\nLOCATION:Sala B\r\nEND:VEVENT\r\n"
+                 u"BEGIN:VEVENT\r\nUID:stand\r\nRECURRENCE-ID:20261021T080000Z\r\nDTSTART:20261021T090000Z\r\n"
+                 u"SUMMARY:Zażółć gęślą jaźń (później)\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"_s);
+        writeFile(folder + u"/c-1.state.json"_s,
+                  QJsonDocument(QJsonObject{{u"version"_s, 1}, {u"resources"_s, members},
+                                            {u"syncedAt"_s, u"2026-10-14T09:00:00"_s}})
+                          .toJson(QJsonDocument::Compact));
+        Run r = run(dir, {u"calendar"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+        QJsonArray list = r.result().value(u"calendars"_s).toArray();
+        QCOMPARE(list.size(), 3);
+        QCOMPARE(list.at(0).toObject().value(u"kind"_s).toString(), u"subscription"_s);
+        QCOMPARE(list.at(0).toObject().value(u"name"_s).toString(), u"Święta"_s);
+        QCOMPARE(list.at(1).toObject().value(u"account"_s).toString(), u"jan @ chmura"_s);
+        QCOMPARE(list.at(1).toObject().value(u"alarms"_s).toBool(true), false);
+        QCOMPARE(list.at(1).toObject().value(u"tasks"_s).toBool(), true);
+        QVERIFY(!r.out.contains("sekret")); // an address may hold a secret token
+        QVERIFY(!r.out.contains("tajny.example.pl"));
+        r = run(dir, {u"calendar"_s, u"events"_s, u"--from"_s, u"2026-10-14"_s, u"--to"_s, u"2026-11-30"_s});
+        QCOMPARE(r.code, 0);
+        QJsonArray events = r.result().value(u"events"_s).toArray();
+        QStringList titles;
+        for (const QJsonValue &e : events)
+            titles.append(e.toObject().value(u"start"_s).toString().left(10) + u' ' + e.toObject().value(u"title"_s).toString());
+        // Three Wednesdays of the series (the second moved by an exception), then the holiday.
+        QCOMPARE(titles.size(), 4);
+        QVERIFY(titles.at(0).endsWith(u"Zażółć gęślą jaźń"_s));
+        QVERIFY(titles.at(1).endsWith(u"Zażółć gęślą jaźń (później)"_s));
+        QVERIFY(titles.at(3).endsWith(u"Święto Niepodległości"_s));
+        QCOMPARE(events.at(3).toObject().value(u"allDay"_s).toBool(), true);
+        QCOMPARE(events.at(3).toObject().value(u"end"_s).toString(), u"2026-11-11"_s);
+        QCOMPARE(events.at(0).toObject().value(u"location"_s).toString(), u"Sala B"_s);
+        QCOMPARE(events.at(0).toObject().value(u"recurring"_s).toBool(), true);
+        // One calendar, by name (any letter case) or id; a limit; a bad range.
+        r = run(dir, {u"calendar"_s, u"events"_s, u"--from"_s, u"2026-10-14"_s, u"--to"_s, u"2026-11-30"_s, u"--calendar"_s, u"święta"_s});
+        QCOMPARE(r.result().value(u"events"_s).toArray().size(), 1);
+        r = run(dir, {u"calendar"_s, u"events"_s, u"--from"_s, u"2026-10-14"_s, u"--to"_s, u"2026-11-30"_s, u"--limit"_s, u"2"_s});
+        QCOMPARE(r.result().value(u"events"_s).toArray().size(), 2);
+        QCOMPARE(r.result().value(u"truncated"_s).toBool(), true);
+        r = run(dir, {u"calendar"_s, u"events"_s, u"--from"_s, u"2026-11-30"_s, u"--to"_s, u"2026-10-14"_s});
+        QCOMPARE(r.errorCode(), u"bad_range"_s);
+        // Text form; a notebook without calendars says so and fails nothing.
+        r = run(dir, {u"--format"_s, u"text"_s, u"calendar"_s, u"events"_s, u"--from"_s, u"2026-10-14"_s, u"--to"_s, u"2026-10-14"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY2(r.out.contains("Zażółć gęślą jaźń"), r.out.constData());
+        const QString bare = vault({{u"Notatka.md"_s, "- x\n"}});
+        r = run(bare, {u"calendar"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"calendars"_s).toArray().isEmpty());
+        r = run(bare, {u"calendar"_s, u"events"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"events"_s).toArray().isEmpty());
+    }
+
     void habits()
     {
         // kNow is Wednesday 2026-10-14.

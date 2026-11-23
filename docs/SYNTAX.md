@@ -1411,11 +1411,19 @@ works on it — and the line keeps its task by its **block id**:
   | `⏰` / `⏰!` | VALARM DISPLAY / AUDIO, an absolute trigger (a done task's alarms are not sent) |
   | the trailing `#tags` of the text | CATEGORIES (a category with spaces becomes `#Dom-i-ogród`) |
   | the continuation lines (not properties or drawers) | DESCRIPTION (a line that would start a list or a heading gets a `\`) |
-  | nesting under a synced task | RELATED-TO;RELTYPE=PARENT (when a task is created) |
+  | nesting under a synced task | RELATED-TO;RELTYPE=PARENT (sent when a task is created, and again when the line is moved under another synced task or out to the top level) |
 
   Dates without a time are DATE values; times are wall-clock times written with the device's zone
   (TZID and a VTIMEZONE) and read in it. Everything else of the server's VTODO (X- properties,
   attachments, e-mail alarms, SEQUENCE + 1) is kept: Brulion patches the fields that changed.
+* **Moving a subtask.** The nesting is a field like the others: a synced line moved under another
+  synced task (or out to the top level) changes its VTODO's PARENT relation on the next sync —
+  RELATED-TO with another RELTYPE (CHILD, SIBLING) stays as the server has it — and it is one of
+  the fields merged when both sides changed. The parent is the synced task of the same calendar
+  the line is nested under, so a line moved under a line that was written a moment ago (not sent
+  yet) gets it on the sync after. The nesting is decided in the notes: a task the *server* moved
+  under another is not moved in the notes, and where both moved it the line's place wins (the
+  server's RELATED-TO is not changed back for a change made only on the server).
 * **Recurring tasks.** Completing one in Brulion writes its next occurrence above it (§5); the
   sync moves the id to that new line and sends the series on with its next date (as task apps keep
   a series), the done line staying the note's record. A task completed on the server is done here.
@@ -1484,7 +1492,8 @@ Reminders may appear in any block (not only tasks), outside code spans and formu
 may carry several. A `🔁` rule in the same block makes the reminder recur. A reminder on a
 task whose status is `done` or `cancelled` never fires. Times are **local wall-clock time**
 (no time zone stored). The notification title is the block text with all tokens stripped;
-tapping it opens the note at that block.
+tapping it opens the note at that block. The reminders of a CalDAV calendar's events (their
+VALARMs, docs/UI.md "Calendars") ring the same way, but are no part of a note.
 
 ## 7. Recurrence rules
 

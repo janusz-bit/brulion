@@ -54,7 +54,6 @@ QList<ScheduledNotification> eventNotifications(const CalendarData &data, const 
     if (firstDay.daysTo(lastDay) > 800)
         return out;
     const QList<Occurrence> list = occurrences(data, firstDay, lastDay, zone);
-    const QString path = EventNotificationPrefix + calendarId;
     const QString noTitle = locale == dates::UiLocale::Polish ? u"(bez tytułu)"_s : u"(no title)"_s;
     QSet<QString> seen;
     for (const Occurrence &o : list) {
@@ -99,9 +98,10 @@ QList<ScheduledNotification> eventNotifications(const CalendarData &data, const 
             if (!e.location.isEmpty())
                 body += u" · "_s + e.location;
             n.body = body;
+            const QString path = EventNotificationPrefix + o.start.date.toString(Qt::ISODate);
             n.path = path;
             n.line = 0;
-            const QString text = QString(e.uid + u'|' + instanceKeyText(o.instance) + u'|' + o.start.date.toString(Qt::ISODate)
+            const QString text = QString(calendarId + u'|' + e.uid + u'|' + instanceKeyText(o.instance) + u'|' + o.start.date.toString(Qt::ISODate)
                                          + u'T' + o.start.time.toString(u"HH:mm"_s) + u'|' + QString::number(i));
             n.id = notificationId(path, at, text);
             if (seen.contains(n.id))
