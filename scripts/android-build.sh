@@ -46,9 +46,9 @@
 #                                BRULION_ANDROID_AAB (a bundle is for a store)
 #   BRULION_ANDROID_PLAY=1       the app for Google Play (CMake option BRULION_PLAY, docs/GOOGLE_PLAY.md):
 #                                the package io.github.januszbit.brulion.play, without "All files
-#                                access" and USE_EXACT_ALARM, no check for a newer version; implies
-#                                BRULION_ANDROID_AAB=1. Its APK installs beside the release (a
-#                                package of its own): brulion-<version>-<abis>-play.apk / .aab
+#                                access" and USE_EXACT_ALARM, no check for a newer version; an AAB
+#                                too unless BRULION_ANDROID_AAB=0. Its APK installs beside the
+#                                release (a package of its own): brulion-<version>-<abis>-play.apk / .aab
 #   BRULION_UPDATE_CHECK=OFF     no check for a newer version on GitHub, no message or switch about
 #                                it (CMake option BRULION_UPDATE_CHECK, default ON): for builds that a
 #                                store updates (F-Droid, IzzyOnDroid; docs/ANDROID.md)
@@ -167,8 +167,9 @@ if ((PLAY)); then
     die "BRULION_ANDROID_ID_SUFFIX: not with BRULION_ANDROID_PLAY=1 (the app for Google Play has a package of its own, .play)"
   [[ ${BRULION_ANDROID_SELFTEST:-0} != 1 ]] ||
     die "BRULION_ANDROID_SELFTEST: not with BRULION_ANDROID_PLAY=1 (the self-test APK has the release's package)"
-  # Google Play takes bundles only.
-  BRULION_ANDROID_AAB=1
+  # Google Play takes bundles only (BRULION_ANDROID_AAB=0: the APK alone, for a test — a debuggable
+  # one for scripts/android-emulator-test.sh --device-folder).
+  BRULION_ANDROID_AAB=${BRULION_ANDROID_AAB:-1}
 fi
 # Gradle reads it from the environment (android/settings.gradle): what follows the package name.
 ID_SUFFIX=${BRULION_ANDROID_ID_SUFFIX:-}

@@ -164,6 +164,18 @@
 # (ACTION_CREATE_DOCUMENT) with the export's file name filled in (EXTRA_TITLE), "Save" writes the
 # ZIP into Download (DocumentsUI opens in the folder used last: the one picked before). Checked on
 # Android 16 (API 36). Screenshots pk-*.png; the same debuggable APK.
+# With --device-folder instead: the app for Google Play's way to a Syncthing folder (docs/ANDROID.md
+# "A folder picked in the system's dialog"), with its debuggable APK (package
+# io.github.januszbit.brulion.play, no "All files access"): a folder of notes on shared storage
+# (/sdcard/Syncthing/Notatki: a journal page with a reminder, Polish names, the notebook's
+# settings); the start screen (--onboarding) offers "Choose a folder…" ("Wybierz folder…") and no
+# path to type; DocumentsUI's folder picker → the folder → "Use this folder" → "Allow"; the app's
+# copy of the notes in files/Folders/Notatki (the folder's settings kept, the first copy before the
+# notebook opened); a note written into the folder behind the app's back (as Syncthing does) comes
+# in at the next start, and a note changed in the app's copy goes out to the folder; the sync
+# center's Syncthing tab shows the folder. Screenshots df-*.png. Build the APK:
+#   BRULION_ANDROID_PLAY=1 BRULION_ANDROID_AAB=0 BRULION_ANDROID_ABIS=x86_64 \
+#     BRULION_ANDROID_BUILD_TYPE=Debug BRULION_LOCAL_AI=OFF scripts/android-build.sh
 # With --local-ai instead: the model on the device (docs/ANDROID.md "A model on the phone") in the
 # debuggable APK built with the model runner (libbrulion_localai.so and llama.cpp's libraries in
 # lib/x86_64). The default model's files on the host — BRULION_LOCAL_MODEL and
@@ -217,6 +229,7 @@
 #        scripts/android-emulator-test.sh --drawing [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --stylus [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --pickers [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --device-folder [DEBUG_PLAY_APK]   (default dist-android/brulion-<version>-x86_64-play.apk)
 #        scripts/android-emulator-test.sh --pdf [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --relaunch [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --local-ai [DEBUG_APP_APK]
@@ -287,6 +300,7 @@ BACKGROUND=0
 DRAWING=0
 STYLUS=0
 PICKERS=0
+DEVICEFOLDER=0
 PDF=0
 RELAUNCH=0
 LOCALAI=0
@@ -325,6 +339,9 @@ elif [[ ${1:-} == --stylus ]]; then
 elif [[ ${1:-} == --pickers ]]; then
   PICKERS=1
   shift
+elif [[ ${1:-} == --device-folder ]]; then
+  DEVICEFOLDER=1
+  shift
 elif [[ ${1:-} == --pdf ]]; then
   PDF=1
   shift
@@ -350,9 +367,10 @@ if ((WEBKEYBOARD)); then
   SITE_DIR=$(cd -- "$SITE_DIR" && pwd)
 else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
+  ((DEVICEFOLDER)) && APP_APK=${1:-dist-android/brulion-$VERSION-x86_64-play.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH || LOCALAI || LOCK)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || DEVICEFOLDER || PDF || RELAUNCH || LOCALAI || LOCK)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -370,8 +388,10 @@ BOOT_SECONDS=${BRULION_EMULATOR_BOOT_SECONDS:-120}
 SERIAL=emulator-$PORT
 OUT=${BRULION_EMULATOR_OUT:-dist-android/emulator-test}
 PKG=io.github.januszbit.brulion
-ACTIVITY=$PKG/$PKG.android.BrulionActivity
-EXTRA=$PKG.android.extra
+# The app for Google Play has a package of its own; the code's namespace (the activity's class) stays.
+((DEVICEFOLDER)) && PKG=io.github.januszbit.brulion.play
+ACTIVITY=$PKG/io.github.januszbit.brulion.android.BrulionActivity
+EXTRA=io.github.januszbit.brulion.android.extra
 export ANDROID_SDK_ROOT=$SDK ANDROID_HOME=$SDK
 export ANDROID_USER_HOME=${ANDROID_USER_HOME:-$HOME/.cache/brulion-android-user}
 export ANDROID_AVD_HOME=$ANDROID_USER_HOME/avd
@@ -1677,6 +1697,88 @@ if ((PICKERS)); then
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/pickers-logcat.txt'"
   check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/pickers-logcat.txt'"
   check "no file picker failed to open" bash -c "! grep -q 'No file picker could be shown' '$OUT/pickers-logcat.txt'"
+  info "Result"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- a folder picked in the system's dialog: the app for Google Play (--device-folder) -----------
+
+if ((DEVICEFOLDER)); then
+  info "A folder picked in the system's dialog: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb uninstall "$PKG" >/dev/null 2>&1 || true # a fresh start: no notebook, no grant
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  adb shell dumpsys package "$PKG" | grep -q 'MANAGE_EXTERNAL_STORAGE' && die "$APP_APK asks for All files access: not the app for Google Play"
+  documents_front() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -q documentsui; }
+  brulion_front() { adb shell dumpsys window | grep -E 'mCurrentFocus' | grep -q "$PKG/"; }
+  # The app's copy of a note (files/Folders/Notatki/…), and the folder's.
+  app_file() { adb shell run-as "$PKG" cat "'files/Folders/Notatki/$1'" 2>/dev/null | tr -d '\r'; }
+  folder_file() { adb shell cat "'/sdcard/Syncthing/Notatki/$1'" 2>/dev/null | tr -d '\r'; }
+  app_has() { [[ $(app_file "$1") == *"$2"* ]]; }
+  folder_has() { [[ $(folder_file "$1") == *"$2"* ]]; }
+  # DocumentsUI's folder picker at the storage's top (or where it was last), down to the folder.
+  documents_open() { # <ERE of the folder> …: tapped one after another
+    local name
+    wait_for 40 ui_has "$1|Syncthing|Show roots|Pokaż katalogi główne|Pokaż elementy główne" || true
+    for name in "$@"; do
+      wait_for 15 ui_has "$name" || return 1
+      ui_tap "$name" first 3 || return 1
+    done
+  }
+
+  # A Syncthing folder of notes on shared storage, written as another app would.
+  printf -- '- [ ] Odebrać paczkę ⏰ 2026-11-23 18:00\n' >"$OUT/journal.md"
+  printf -- '# Łódź\n- rejs po jeziorze\n' >"$OUT/lodz.md"
+  printf '{"journalsFolder": "Dziennik"}\n' >"$OUT/config.json"
+  adb shell rm -rf /sdcard/Syncthing >/dev/null 2>&1 || true
+  adb shell mkdir -p /sdcard/Syncthing/Notatki/Dziennik /sdcard/Syncthing/Notatki/Projekty /sdcard/Syncthing/Notatki/.brulion
+  adb push "$OUT/journal.md" /sdcard/Syncthing/Notatki/Dziennik/2026-11-23.md >/dev/null
+  adb push "$OUT/lodz.md" "/sdcard/Syncthing/Notatki/Projekty/Łódź.md" >/dev/null
+  adb push "$OUT/config.json" /sdcard/Syncthing/Notatki/.brulion/config.json >/dev/null
+
+  # 1. The start screen: "Choose a folder…", no path to type.
+  start_app '--onboarding --locale pl'
+  check "the app is running" running
+  check "the start screen offers 'Wybierz folder…'" wait_for 90 ui_has 'Wybierz folder…'
+  check "… and no path to type (no 'Otwórz notatnik')" bash -c "! grep -q 'Otwórz notatnik' '$OUT/ui.xml'"
+  app_shot df-1-start
+  # 2. DocumentsUI: the folder, "Use this folder", "Allow".
+  check "'Wybierz folder…' is tapped" ui_tap 'Wybierz folder…' first 4
+  check "the system's folder picker is in front" wait_for 15 documents_front
+  app_shot df-2-picker
+  check "it reaches Syncthing/Notatki" documents_open 'Syncthing' 'Notatki'
+  app_shot df-3-folder
+  check "'Use this folder'" ui_tap 'USE THIS FOLDER|Use this folder|UŻYJ TEGO FOLDERU|Użyj tego folderu' last 3
+  check "'Allow'" ui_tap 'ALLOW|Allow|ZEZWÓL|Zezwól' last 4
+  check "Brulion is back in front" wait_for 20 brulion_front
+  # 3. The first copy, then the notebook opens.
+  check "the folder's notes are in the app's copy" wait_for 60 app_has 'Projekty/Łódź.md' 'rejs po jeziorze'
+  check "… the journal with its reminder" app_has 'Dziennik/2026-11-23.md' 'Odebrać paczkę'
+  check "… and the folder's settings (not a new notebook's)" app_has '.brulion/config.json' 'Dziennik'
+  sleep 5
+  app_shot df-4-notebook
+
+  # 4. Into the app: a note written into the folder (as Syncthing does) comes in at the next start.
+  printf -- '- dopisane na komputerze: żółw\n' >"$OUT/pc.md"
+  adb push "$OUT/pc.md" "/sdcard/Syncthing/Notatki/Z komputera.md" >/dev/null
+  start_app "--locale pl --route $(json_arg '{"view":"sync","tab":"syncthing"}')"
+  check "a note written into the folder came in" wait_for 60 app_has 'Z komputera.md' 'żółw'
+  check "the sync center shows the folder" wait_for 30 ui_has 'Folder „Notatki” na tym telefonie'
+  app_shot df-5-sync-center
+
+  # 5. Out of the app: the app's copy changed (its file watcher sees it) goes to the folder.
+  adb shell run-as "$PKG" sh -c "'printf -- \"- dopisane w telefonie: łódź\\n\" >> \"files/Folders/Notatki/Projekty/Łódź.md\"'"
+  check "the note changed in the app reached the folder" wait_for 90 folder_has 'Projekty/Łódź.md' 'dopisane w telefonie'
+  check "… its first lines kept" folder_has 'Projekty/Łódź.md' 'rejs po jeziorze'
+  app_shot df-6-synced
+
+  adb logcat -d >"$OUT/device-folder-logcat.txt"
+  grep -E 'Folder sync|brulion.sync|BrulionTreeFolder' "$OUT/device-folder-logcat.txt" | tail -n 40 || true
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/device-folder-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/device-folder-logcat.txt'"
   info "Result"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
