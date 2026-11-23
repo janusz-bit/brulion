@@ -6,6 +6,9 @@
 #include "io/tar.h"
 #include "io/zip.h"
 
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace brulion;
@@ -13,6 +16,25 @@ using namespace brulion::io;
 using namespace Qt::StringLiterals;
 
 namespace {
+
+/// `size` bytes of a pattern (`seed` makes another).
+QByteArray pattern(qint64 size, int seed = 0)
+{
+    QByteArray out(size, Qt::Uninitialized);
+    for (qint64 i = 0; i < size; ++i)
+        out[i] = char((i * 7919 + 13 + seed) & 0xff);
+    return out;
+}
+
+/// `bytes` saved as `name` in `dir`: its path ("" when it cannot be written).
+QString saved(const QTemporaryDir &dir, const QString &name, const QByteArray &bytes)
+{
+    const QString path = dir.filePath(name);
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size())
+        return {};
+    return path;
+}
 
 /// Replace every occurrence of `from` by `to` (same length) in `data`.
 QByteArray patched(QByteArray data, const QByteArray &from, const QByteArray &to)
@@ -171,6 +193,117 @@ private Q_SLOTS:
         ZipReadOptions count;
         count.maxEntries = 1;
         QCOMPARE(readZip(zip, nullptr, count).size(), 1);
+    }
+
+    // --- unpacked into files of a staging folder ----------------------------------------------
+    void zipFileStagesLargeEntriesInPieces_data()
+    {
+        QTest::addColumn<bool>("deflated");
+        QTest::newRow("stored") << false;
+        QTest::newRow("deflated") << true;
+    }
+    void zipFileStagesLargeEntriesInPieces()
+    {
+        // A 24 MB film from an archive on disk: unpacked a piece at a time into the staging
+        // folder, the notes and small files in memory as before.
+        QFETCH(bool, deflated);
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        const QByteArray film = pattern(24LL << 20);
+        const QByteArray icon = pattern(4096, 1);
+        ZipWriteOptions write;
+        write.storeCompressedFormats = !deflated;
+        write.compressionLevel = deflated ? 1 : 0;
+        const QString archive = saved(work, u"Eksport.zip"_s,
+                                      writeZip({{u"Notatka ąćę.md"_s, u"Zażółć gęślą jaźń"_s.toUtf8()},
+                                                {u"assets/łódź.mp4"_s, film},
+                                                {u"assets/ikona.png"_s, icon}},
+                                               write));
+        QVERIFY(!archive.isEmpty());
+        ZipReadOptions options;
+        options.stagingFolder = staging.path();
+        qint64 largest = 0;
+        qint64 total = 0;
+        options.onStagedPiece = [&](qint64 bytes) {
+            largest = std::max(largest, bytes);
+            total += bytes;
+        };
+        QStringList warnings;
+        const QList<FileEntry> read = readZipFile(archive, &warnings, options);
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(u'\n')));
+        QCOMPARE(iotest::entryPaths(read),
+                 QStringList({u"Notatka ąćę.md"_s, u"assets/ikona.png"_s, u"assets/łódź.mp4"_s}));
+        const auto entry = [&](const QString &path) { return *std::ranges::find(read, path, &FileEntry::path); };
+        const FileEntry staged = entry(u"assets/łódź.mp4"_s);
+        QVERIFY(staged.onDisk());
+        QVERIFY(staged.data.isEmpty());
+        QCOMPARE(staged.size(), film.size());
+        QVERIFY(staged.file.startsWith(QDir(staging.path()).absolutePath() + u'/'));
+        QCOMPARE(bytesOf(staged), film);
+        QCOMPARE(total, film.size());
+        QVERIFY2(largest <= 256 * 1024, qPrintable(QString::number(largest))); // miniz's buffers
+        QVERIFY(!entry(u"assets/ikona.png"_s).onDisk());                       // small: in memory
+        QCOMPARE(entry(u"assets/ikona.png"_s).data, icon);
+        QVERIFY(!entry(u"Notatka ąćę.md"_s).onDisk()); // a note: always in memory
+        // The same archive from memory unpacks to the same content.
+        QFile in(archive);
+        QVERIFY(in.open(QIODevice::ReadOnly));
+        const QList<FileEntry> fromMemory = readZip(in.readAll());
+        QCOMPARE(iotest::entryData(fromMemory, u"assets/łódź.mp4"_s), film);
+    }
+
+    void zipFileStagingKeepsTheLimitsAndPaths()
+    {
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        const QByteArray big = pattern(3LL << 20, 2);
+        const QString archive =
+                saved(work, u"a.zip"_s,
+                      writeZip({{u"../../poza/ucieczka.pdf"_s, big}, {u"za-duży.mov"_s, pattern(5LL << 20, 3)}}));
+        ZipReadOptions options;
+        options.stagingFolder = staging.path();
+        options.maxEntrySize = 4LL << 20;
+        QStringList warnings;
+        const QList<FileEntry> read = readZipFile(archive, &warnings, options);
+        // ".." resolved inside the archive; the file lands in the staging folder, nowhere else.
+        QCOMPARE(iotest::entryPaths(read), QStringList{u"poza/ucieczka.pdf"_s});
+        QVERIFY(read.first().file.startsWith(QDir(staging.path()).absolutePath() + u'/'));
+        QCOMPARE(bytesOf(read.first()), big);
+        QCOMPARE(warnings.size(), 1); // the one over maxEntrySize, never unpacked
+        QCOMPARE(QDir(staging.path()).entryList(QDir::Files).size(), 1);
+        // The total holds as before: nothing past it is unpacked.
+        ZipReadOptions total = options;
+        total.maxEntrySize = 64LL << 20;
+        total.maxTotalSize = 4LL << 20;
+        warnings.clear();
+        QTemporaryDir staging2;
+        total.stagingFolder = staging2.path();
+        QCOMPARE(readZipFile(archive, &warnings, total).size(), 1);
+        QCOMPARE(QDir(staging2.path()).entryList(QDir::Files).size(), 1);
+    }
+
+    void zipFileDamagedStagedEntryLeavesNothing()
+    {
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        const QByteArray film = pattern(2LL << 20, 4);
+        ZipWriteOptions write;
+        write.storeCompressedFormats = false;
+        QByteArray zip = writeZip({{u"film.mp4"_s, film}, {u"a.md"_s, "a"}}, write);
+        zip[zip.indexOf("film.mp4") + 8 + 1000] ^= 0x5a; // inside the compressed data
+        const QString archive = saved(work, u"uszkodzony.zip"_s, zip);
+        ZipReadOptions options;
+        options.stagingFolder = staging.path();
+        QStringList warnings;
+        const QList<FileEntry> read = readZipFile(archive, &warnings, options);
+        QCOMPARE(iotest::entryPaths(read), QStringList{u"a.md"_s});
+        QCOMPARE(warnings.size(), 1);
+        QVERIFY(QDir(staging.path()).entryList(QDir::Files | QDir::Hidden).isEmpty());
+        // Not a ZIP at all: a warning, nothing read.
+        warnings.clear();
+        QVERIFY(readZipFile(saved(work, u"nie.zip"_s, "to nie jest archiwum"), &warnings, options).isEmpty());
+        QCOMPARE(warnings.size(), 1);
+        QVERIFY(readZipFile(work.filePath(u"brak.zip"_s), &warnings, options).isEmpty());
     }
 
     void zipMalformed_data()

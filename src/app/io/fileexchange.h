@@ -88,6 +88,9 @@ public:
     /// The bytes of a file, at most `maxBytes` + 1 (more than `maxBytes`: too large, the caller
     /// skips it); std::nullopt with `error` when it cannot be read.
     virtual std::optional<QByteArray> read(const Entry &file, qint64 maxBytes, QString *error) const = 0;
+    /// Copy a file into `target` (an open file), at most `maxBytes` + 1, piece by piece where the
+    /// provider can (the default reads it whole with read()); false with `error` when it cannot.
+    virtual bool copy(const Entry &file, QIODevice &target, qint64 maxBytes, QString *error) const;
 };
 
 /// Qt's content file engine: QFileInfo / QDir / QFile on the URI string (Qt 6.11 reads Android
@@ -108,6 +111,11 @@ public:
     void setChunkSize(int files) { m_chunk = std::max(1, files); }
     /// How content:// URLs are read (default platformDocumentProvider(); tests: a fake).
     void setDocumentProvider(std::shared_ptr<const DocumentProvider> provider);
+    /// A folder for picked ZIP archives larger than DiskArchiveBytes (an export of a notebook): such
+    /// a local file is not read in (an InputFile on disk, read in place when it is unpacked), a
+    /// document is copied there in pieces. "" (the default): every file is read into memory.
+    void setStagingFolder(const QString &folder) { m_stagingFolder = folder; }
+    static constexpr qint64 DiskArchiveBytes = 16LL * 1024 * 1024;
 
     /// Start reading `urls` (files, or folders: read recursively). A running gather is cancelled.
     void start(const QList<QUrl> &urls);
@@ -150,6 +158,8 @@ private:
     struct Read {
         std::optional<QByteArray> data;
         QString error;
+        QString onDisk; ///< instead of `data`: the file's bytes are there (setStagingFolder())
+        qint64 diskSize = 0;
     };
     static Listing list(const QList<QUrl> &urls, const GatherLimits &limits,
                         const std::shared_ptr<const DocumentProvider> &documents);
@@ -158,7 +168,8 @@ private:
                                 Listing &out);
     /// The files of `batch`, in its order.
     static QList<Read> readBatch(const QList<Pending> &batch, qint64 maxFileBytes,
-                                 const std::shared_ptr<const DocumentProvider> &documents);
+                                 const std::shared_ptr<const DocumentProvider> &documents,
+                                 const QString &stagingFolder);
     void listed(const Listing &listing);
     void step();
     void merge(const QList<Read> &reads);
@@ -169,6 +180,7 @@ private:
     GatherLimits m_limits;
     int m_chunk = 32;
     std::shared_ptr<const DocumentProvider> m_documents;
+    QString m_stagingFolder;
     bool m_running = false;
     bool m_reading = false; ///< a batch is being read off the GUI thread
     int m_generation = 0;   ///< results of a cancelled / restarted gather are dropped

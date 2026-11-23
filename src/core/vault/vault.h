@@ -21,6 +21,10 @@
 //     readDetached(p, absolutePath(p)) (static, any thread) + adoptRead(read) on the vault's
 //                             thread = readText() split in two (the index loader's workers)
 //     writeText(p, text, source) / writeBinary(p, bytes, source)
+//     newStagingFile(p) -> a temporary file next to p, written by the caller in pieces, then
+//                             writeStaged(p, file, source) / createStaged(p, file, source);
+//                             createBinaryFrom(p, sourceFile, source); openForReading(p) -> QFile
+//                             (large files — downloads, uploads, imported attachments — in pieces)
 //     writeTextIfUnchanged(p, text, expected, source) -> WriteOutcome (compare-and-swap)
 //     writeTextIfUnchangedAsync(AsyncTextWrite) -> ticket: the same, its work on the writer set by
 //                             setWriteExecutor(start) (none: at once, on this thread);
@@ -143,7 +147,8 @@
 //    those are compared by size and mtime like binary files (a touch counts as a
 //    modification) and are not kept in History; the content cache holds at most 64 MB, and a
 //    .brulion/config.json over 1 MB is ignored (defaults + warning). readText(), readBinary()
-//    and readDetached() fail for files over 1 GiB (they hold the whole file in memory). Every
+//    and readDetached() fail for files over 1 GiB (they hold the whole file in memory); the staged
+//    writes and openForReading() hold PieceBytes of a file at a time, whatever its size. Every
 //    read stops one byte past its limit, whatever size the file reports — files of /proc
 //    report none and some never end (a followed folder link can reach them) —, and content
 //    found over the limit counts as a file whose size is over it.
@@ -185,6 +190,8 @@
 #include <functional>
 #include <memory>
 #include <optional>
+
+class QFile;
 
 namespace brulion {
 
@@ -371,6 +378,34 @@ public:
     /// created a second time. Returns the path used, or an empty path on failure.
     VaultPath create(const VaultPath &path, const QString &content = {}, ChangeSource source = ChangeSource::User);
     VaultPath createBinary(const VaultPath &path, const QByteArray &data, ChangeSource source = ChangeSource::User);
+    // --- large files, never held in memory ------------------------------------------------
+    /// The pieces staged and streamed content is read and copied in.
+    static constexpr qsizetype PieceBytes = 256 * 1024;
+    /// A file to write `path`'s next content into piece by piece (a download) before
+    /// writeStaged() or createStaged() puts it in place: a new empty file with an own temporary
+    /// name (`.brulion-tmp-…`: never listed, synced or backed up, and removed as a leftover a day
+    /// after a crash) in the folder of `path`, whose missing folders are created (and reported).
+    /// Its absolute path, or "" (errorString()) when none can be made. The caller writes and closes
+    /// it, then hands it over — or removes it.
+    QString newStagingFile(const VaultPath &path);
+    /// writeBinary() of the content of `stagedFile` (newStagingFile() of `path`, closed): read
+    /// once in pieces for its hash, then synced and renamed over the file — the same checks,
+    /// History and changes as writeBinary(), and a no-op for unchanged content. The staged file is
+    /// gone afterwards in every case.
+    bool writeStaged(const VaultPath &path, const QString &stagedFile, ChangeSource source = ChangeSource::User);
+    /// createBinary() of the content of a staged file (as writeStaged(); "Name 2.ext" lies in the
+    /// same folder). The staged file is gone afterwards in every case.
+    VaultPath createStaged(const VaultPath &path, const QString &stagedFile, ChangeSource source = ChangeSource::User);
+    /// createBinary() of the bytes of the file `sourceFile` (anywhere, left as it is: an import's
+    /// unpacked attachment), copied in pieces into a staging file of `path`.
+    VaultPath createBinaryFrom(const VaultPath &path, const QString &sourceFile,
+                               ChangeSource source = ChangeSource::User);
+    /// The file at `path`, open for reading it piece by piece (an upload, a hash), with
+    /// readBinary()'s refusals — a link, a file in a linked folder that is not followed, a folder —
+    /// but no size limit; the vault takes nothing of it in. nullptr (errorString()) when it cannot
+    /// be opened.
+    std::unique_ptr<QFile> openForReading(const VaultPath &path);
+
     /// Create a folder (and missing parents).
     bool createFolder(const VaultPath &path);
 

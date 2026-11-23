@@ -222,13 +222,17 @@ void ImportController::addInputFiles(const QList<io::InputFile> &files, const QS
     QSet<QString> have;
     for (const io::InputFile &f : std::as_const(m_input))
         have.insert(f.path);
-    for (const io::InputFile &f : files) {
+    // An input prepared already takes the new files prepared too (downloads: in memory).
+    QStringList prepareWarnings;
+    const QList<io::InputFile> added = m_inputPrepared ? io::prepareImportFiles(files, &prepareWarnings) : files;
+    for (const io::InputFile &f : added) {
         if (have.contains(f.path))
             continue;
         m_input.append(f);
-        m_inputBytes += f.data.size();
+        m_inputBytes += f.size();
     }
     m_readWarnings += warnings;
+    m_readWarnings += prepareWarnings;
     m_readWarnings.removeDuplicates();
     Q_EMIT inputChanged();
     analyze();

@@ -1055,6 +1055,23 @@ SyncRun::ReadResult SyncRun::readLocal(const VaultPath &path, const FileStat &st
         result.snap = snap;
         return result;
     }
+    if (streamed(path, stat.size)) {
+        // A large attachment: hashed in pieces, read again as it is uploaded.
+        QString error;
+        const std::optional<QString> hash = hashInPieces(path, &error);
+        if (!hash) {
+            if (!QFileInfo::exists(vault()->absolutePath(path)))
+                result.vanished = true;
+            else
+                result.error = error;
+            return result;
+        }
+        LocalSnap snap;
+        snap.hash = *hash;
+        snap.stat = stat;
+        result.snap = snap;
+        return result;
+    }
     bool ok = false;
     const QByteArray bytes = vault()->readBinary(path, &ok);
     if (!ok) {
@@ -1074,6 +1091,94 @@ SyncRun::ReadResult SyncRun::readLocal(const VaultPath &path, const FileStat &st
     snap.hasBytes = true;
     result.snap = snap;
     return result;
+}
+
+SyncRun::StagedDownload::~StagedDownload()
+{
+    if (!file.isEmpty())
+        QFile::remove(file);
+}
+
+QString SyncRun::RemoteContent::hash() const
+{
+    return staged ? staged->hash : text::fnv1a64Hex(data);
+}
+
+bool SyncRun::streamed(const VaultPath &path, qint64 size) const
+{
+    // (A size not known — a download after a 412, the listing's entry dropped — may be any.)
+    return !isSyncTextPath(path) && (size < 0 || size > m_engine->streamAbove());
+}
+
+std::optional<QString> SyncRun::hashInPieces(const VaultPath &path, QString *error)
+{
+    const std::unique_ptr<QFile> file = vault()->openForReading(path);
+    if (!file) {
+        *error = vault()->errorString();
+        return std::nullopt;
+    }
+    text::Fnv1a64 hash;
+    QByteArray piece(Vault::PieceBytes, Qt::Uninitialized);
+    for (;;) {
+        const qint64 got = file->read(piece.data(), piece.size());
+        if (got < 0) {
+            // Never a hash of what came before the failure: that would stand for the file.
+            *error = u"Cannot read %1: %2"_s.arg(path, file->errorString());
+            return std::nullopt;
+        }
+        if (got == 0)
+            return hash.hex();
+        hash.add(QByteArrayView(piece).first(got));
+    }
+}
+
+std::optional<QString> SyncRun::localHash(const VaultPath &path, qint64 size)
+{
+    if (streamed(path, size)) {
+        QString error;
+        return hashInPieces(path, &error);
+    }
+    bool ok = false;
+    const QByteArray bytes = vault()->readBinary(path, &ok);
+    if (!ok)
+        return std::nullopt;
+    return classify(path, bytes).hash;
+}
+
+void SyncRun::putLocal(const PathCtx &ctx, const PutOptions &options, WebDavClient::PutCallback done)
+{
+    const LocalSnap &snap = *ctx.snap;
+    if (!snap.hasBytes && streamed(ctx.path, snap.stat.size)) {
+        putFromVault(ctx.path, snap.stat.size, options, std::move(done));
+        return;
+    }
+    QString error;
+    const std::optional<QByteArray> bytes = localBytes(ctx.path, snap, &error);
+    if (!bytes) {
+        // (Reported as the read failure it is; never an empty upload.)
+        done(PutResult{{}, WebDavError{WebDavErrorCode::Cancelled, 0, error, {}}});
+        return;
+    }
+    client()->put(ctx.path, *bytes, options, std::move(done));
+}
+
+void SyncRun::putFromVault(const VaultPath &path, qint64 size, const PutOptions &options,
+                           WebDavClient::PutCallback done)
+{
+    const QPointer<Vault> source = vault();
+    client()->putFrom(
+            path, size,
+            [source, path](QString *error) -> std::unique_ptr<QIODevice> {
+                if (!source) {
+                    *error = u"The notebook was closed"_s;
+                    return nullptr;
+                }
+                std::unique_ptr<QFile> file = source->openForReading(path);
+                if (!file)
+                    *error = source->errorString();
+                return file;
+            },
+            options, std::move(done));
 }
 
 std::optional<QByteArray> SyncRun::localBytes(const VaultPath &path, const LocalSnap &snap, QString *error)
@@ -1133,6 +1238,50 @@ void SyncRun::fetchRemote(const VaultPath &path, const std::optional<RemoteEntry
     GetOptions options;
     if (listed)
         options.size = listed->size;
+    std::shared_ptr<StagedDownload> stage;
+    if (streamed(path, listed ? listed->size : -1)) {
+        // Into a staging file next to the file, hashed as it comes: never in memory, and the file
+        // itself is replaced only once the whole download is there.
+        const QString file = vault()->newStagingFile(path);
+        auto out = std::make_shared<QFile>(file);
+        if (file.isEmpty() || !out->open(QIODevice::WriteOnly)) {
+            RemoteContent content;
+            content.writeError = file.isEmpty() ? vault()->errorString() : out->errorString();
+            if (!file.isEmpty())
+                QFile::remove(file);
+            detail::post(m_engine, guarded([done = std::move(done), content] { done(content); }));
+            return;
+        }
+        stage = std::make_shared<StagedDownload>();
+        stage->file = file;
+        auto hash = std::make_shared<text::Fnv1a64>();
+        options.sink = [stage, out, hash](QByteArrayView piece) {
+            if (out->write(piece.data(), piece.size()) != piece.size()) {
+                stage->error = out->errorString();
+                return false;
+            }
+            hash->add(piece);
+            stage->size += piece.size();
+            return true;
+        };
+        // Done with the file once the answer is there (closed before it is renamed).
+        done = [stage, out, hash, path, done = std::move(done)](const RemoteContent &got) {
+            RemoteContent content = got;
+            if (stage->error.isEmpty() && !out->flush())
+                stage->error = out->errorString();
+            out->close();
+            if (!stage->error.isEmpty()) {
+                content = RemoteContent{};
+                content.writeError = u"Cannot write the download of %1: %2"_s.arg(path, stage->error);
+            } else if (!content.error.isError()) {
+                stage->hash = hash->hex();
+                content.staged = stage;
+            }
+            if (!content.staged)
+                QFile::remove(stage->take()); // a part of a download is never kept
+            done(content);
+        };
+    }
     client()->get(path, options, guarded([this, path, listed, done = std::move(done)](const GetResult &result) {
                       RemoteContent content;
                       content.error = result.error;
@@ -1243,11 +1392,14 @@ void SyncRun::refreshState(const PathCtx &ctx, Done done)
 
 void SyncRun::upload(const PathCtx &ctx, Done done)
 {
-    QString error;
-    const std::optional<QByteArray> bytes = localBytes(ctx.path, *ctx.snap, &error);
-    if (!bytes) {
-        done(Outcome::failed(u"read-failed"_s, error));
-        return;
+    std::optional<QByteArray> bytes;
+    if (ctx.snap->hasBytes || !streamed(ctx.path, ctx.snap->stat.size)) {
+        QString error;
+        bytes = localBytes(ctx.path, *ctx.snap, &error);
+        if (!bytes) {
+            done(Outcome::failed(u"read-failed"_s, error));
+            return;
+        }
     }
     PutOptions options;
     options.mtime = ctx.snap->stat.mtime;
@@ -1255,29 +1407,37 @@ void SyncRun::upload(const PathCtx &ctx, Done done)
         options.ifNoneMatch = true;
     else if (!ctx.remote->etag.isEmpty())
         options.ifMatch = ctx.remote->etag;
-    client()->put(ctx.path, *bytes, options, guarded([this, ctx, done = std::move(done)](const PutResult &result) {
-                      if (result.error.is(WebDavErrorCode::Precondition)) {
-                          // Someone changed / created the remote file since we listed it: compare and merge.
-                          notePreconditionRetry(ctx.path, 1);
-                          PathCtx fresh = ctx;
-                          fresh.remote.reset();
-                          reconcile(fresh, 1, done);
-                          return;
-                      }
-                      if (result.error.isError()) {
-                          done(Outcome::fromError(result.error));
-                          return;
-                      }
-                      noteRemoteWritten(ctx.path);
-                      versionAfterPut(ctx.path, result.etag, [this, ctx, done](const QString &version) {
-                          const LocalSnap &snap = *ctx.snap;
-                          saveState(ctx.path, snap.hash, version, snap.textIfText(), snap.stat);
-                          record(ctx.path, SyncAction::Upload);
-                          if (!ctx.state)
-                              ++m_uploadedNew[snap.hash]; // maybe moved here from a path deleted in this run
-                          done(Outcome::done());
-                      });
-                  }));
+    auto finished = guarded([this, ctx, done = std::move(done)](const PutResult &result) {
+        if (result.error.is(WebDavErrorCode::Precondition)) {
+            // Someone changed / created the remote file since we listed it: compare and merge.
+            notePreconditionRetry(ctx.path, 1);
+            PathCtx fresh = ctx;
+            fresh.remote.reset();
+            reconcile(fresh, 1, done);
+            return;
+        }
+        if (result.error.is(WebDavErrorCode::Cancelled)) {
+            done(Outcome::failed(u"read-failed"_s, result.error.message)); // (putFrom's file)
+            return;
+        }
+        if (result.error.isError()) {
+            done(Outcome::fromError(result.error));
+            return;
+        }
+        noteRemoteWritten(ctx.path);
+        versionAfterPut(ctx.path, result.etag, [this, ctx, done](const QString &version) {
+            const LocalSnap &snap = *ctx.snap;
+            saveState(ctx.path, snap.hash, version, snap.textIfText(), snap.stat);
+            record(ctx.path, SyncAction::Upload);
+            if (!ctx.state)
+                ++m_uploadedNew[snap.hash]; // maybe moved here from a path deleted in this run
+            done(Outcome::done());
+        });
+    });
+    if (bytes)
+        client()->put(ctx.path, *bytes, options, std::move(finished));
+    else
+        putFromVault(ctx.path, ctx.snap->stat.size, options, std::move(finished));
 }
 
 void SyncRun::download(const PathCtx &ctx, Done done)
@@ -1287,11 +1447,16 @@ void SyncRun::download(const PathCtx &ctx, Done done)
             done(Outcome::done()); // deleted on the server meanwhile: the next sync sees it
             return;
         }
+        if (!remote.writeError.isEmpty()) {
+            done(Outcome::failed(u"write-failed"_s, remote.writeError));
+            return;
+        }
         if (remote.error.isError()) {
             done(Outcome::fromError(remote.error));
             return;
         }
-        const Content content = classify(ctx.path, remote.data);
+        const Content content =
+                remote.staged ? Content{std::nullopt, remote.staged->hash} : classify(ctx.path, remote.data);
         if (ctx.snap && ctx.snap->hash == content.hash) {
             // Same content (e.g. a new ETag without a content change): just remember it.
             saveState(ctx.path, content.hash, remote.version, content.text, ctx.snap->stat);
@@ -1303,7 +1468,9 @@ void SyncRun::download(const PathCtx &ctx, Done done)
             return;
         }
         // The exact remote bytes (BOM, line endings, legacy encodings stay as they are).
-        if (!vault()->writeBinary(ctx.path, remote.data, ChangeSource::Sync)) {
+        const bool written = remote.staged ? vault()->writeStaged(ctx.path, remote.staged->take(), ChangeSource::Sync)
+                                           : vault()->writeBinary(ctx.path, remote.data, ChangeSource::Sync);
+        if (!written) {
             done(Outcome::failed(u"write-failed"_s, vault()->errorString()));
             return;
         }
@@ -1328,6 +1495,10 @@ void SyncRun::reconcile(const PathCtx &ctx, int attempt, Done done)
             PathCtx fresh = ctx;
             fresh.remote.reset();
             upload(fresh, done);
+            return;
+        }
+        if (!remote.writeError.isEmpty()) {
+            done(Outcome::failed(u"write-failed"_s, remote.writeError));
             return;
         }
         if (remote.error.isError()) {
@@ -1366,10 +1537,11 @@ void SyncRun::reconcileAgain(const PathCtx &ctx, int attempt, Done done)
 void SyncRun::compareAndMerge(const PathCtx &ctx, const RemoteContent &remote, const Retry &retry, Done done)
 {
     const LocalSnap &snap = *ctx.snap;
-    const std::optional<QString> remoteText = snap.isText ? decodeSyncText(remote.data) : std::nullopt;
+    const std::optional<QString> remoteText =
+            snap.isText && !remote.staged ? decodeSyncText(remote.data) : std::nullopt;
     if (!snap.isText || !remoteText) {
         // Binary (or not UTF-8): equal bytes or both versions kept.
-        if (text::fnv1a64Hex(remote.data) == snap.hash) {
+        if (remote.hash() == snap.hash) {
             saveState(ctx.path, snap.hash, remote.version, std::nullopt, snap.stat);
             done(Outcome::done());
             return;
@@ -1446,15 +1618,17 @@ QByteArray SyncRun::mergedBytes(const PathCtx &ctx, const QString &merged)
     return merged.toUtf8();
 }
 
-std::optional<VaultPath> SyncRun::keepRemoteCopy(const VaultPath &path, const QByteArray &data, bool *created,
+std::optional<VaultPath> SyncRun::keepRemoteCopy(const VaultPath &path, const RemoteContent &remote, bool *created,
                                                  QString *error)
 {
     // Once only: an earlier run that failed later may already have saved this very version.
     *created = false;
-    if (const std::optional<VaultPath> existing = findConflictCopy(path, data))
+    if (const std::optional<VaultPath> existing = findConflictCopy(path, remote.size(), remote.hash()))
         return existing;
-    const VaultPath copy = vault()->createBinary(conflictCopyPath(path, m_engine->device(), now()), data,
-                                                 ChangeSource::Sync);
+    const VaultPath target = conflictCopyPath(path, m_engine->device(), now());
+    // (A staged download lies in the folder of `path`, as the copy does.)
+    const VaultPath copy = remote.staged ? vault()->createStaged(target, remote.staged->take(), ChangeSource::Sync)
+                                         : vault()->createBinary(target, remote.data, ChangeSource::Sync);
     if (copy.isEmpty()) {
         *error = u"Cannot save the conflict copy of %1: %2"_s.arg(path, vault()->errorString());
         return std::nullopt;
@@ -1469,70 +1643,86 @@ void SyncRun::conflict(const PathCtx &ctx, const RemoteContent &remote, const Re
     // 1. Keep the remote version safe locally first.
     QString error;
     bool created = false;
-    const std::optional<VaultPath> copy = keepRemoteCopy(ctx.path, remote.data, &created, &error);
+    const std::optional<VaultPath> copy = keepRemoteCopy(ctx.path, remote, &created, &error);
     if (!copy) {
         done(Outcome::failed(u"conflict-copy-failed"_s, error));
         return;
     }
     // 2. The local version wins at the original path.
-    const std::optional<QByteArray> bytes = localBytes(ctx.path, *ctx.snap, &error);
-    if (!bytes) {
-        done(Outcome::failed(u"read-failed"_s, error));
-        return;
+    PathCtx local = ctx;
+    if (!ctx.snap->hasBytes && !streamed(ctx.path, ctx.snap->stat.size)) {
+        const std::optional<QByteArray> bytes = localBytes(ctx.path, *ctx.snap, &error);
+        if (!bytes) {
+            done(Outcome::failed(u"read-failed"_s, error));
+            return;
+        }
+        local.snap->bytes = *bytes;
+        local.snap->hasBytes = true;
     }
     PutOptions options;
     if (!remote.etag.isEmpty())
         options.ifMatch = remote.etag;
-    client()->put(ctx.path, *bytes, options,
-                  guarded([this, ctx, copy = *copy, created, data = remote.data, retry,
-                           done = std::move(done)](const PutResult &result) {
-                      if (result.error.is(WebDavErrorCode::Precondition)) {
-                          retry();
-                          return;
-                      }
-                      if (result.error.isError()) {
-                          done(Outcome::fromError(result.error));
-                          return;
-                      }
-                      noteRemoteWritten(ctx.path);
-                      versionAfterPut(ctx.path, result.etag, [this, ctx, copy, created, data, done](const QString &version) {
-                          const LocalSnap &snap = *ctx.snap;
-                          saveState(ctx.path, snap.hash, version, snap.textIfText(), snap.stat);
-                          record(ctx.path, SyncAction::Conflict);
-                          qCInfo(lcSync).noquote()
-                                  << u"%1 conflict in %2: the server's version kept as %3"_s.arg(tag(), ctx.path, copy);
-                          // 3. Upload a new copy right away so other devices see both versions. An
-                          //    older copy is a normal local file of this run (or the next).
-                          if (created)
-                              uploadConflictCopy(copy, data, done);
-                          else
-                              done(Outcome::done());
-                      });
-                  }));
+    putLocal(
+            local, options,
+            guarded([this, ctx, copy = *copy, created, remote, retry, done = std::move(done)](const PutResult &result) {
+                if (result.error.is(WebDavErrorCode::Precondition)) {
+                    retry();
+                    return;
+                }
+                if (result.error.is(WebDavErrorCode::Cancelled)) {
+                    done(Outcome::failed(u"read-failed"_s, result.error.message));
+                    return;
+                }
+                if (result.error.isError()) {
+                    done(Outcome::fromError(result.error));
+                    return;
+                }
+                noteRemoteWritten(ctx.path);
+                versionAfterPut(
+                        ctx.path, result.etag, [this, ctx, copy, created, remote, done](const QString &version) {
+                            const LocalSnap &snap = *ctx.snap;
+                            saveState(ctx.path, snap.hash, version, snap.textIfText(), snap.stat);
+                            record(ctx.path, SyncAction::Conflict);
+                            qCInfo(lcSync).noquote() << u"%1 conflict in %2: the server's version kept as %3"_s.arg(
+                                    tag(), ctx.path, copy);
+                            // 3. Upload a new copy right away so other devices see both versions. An
+                            //    older copy is a normal local file of this run (or the next).
+                            if (created)
+                                uploadConflictCopy(copy, remote, done);
+                            else
+                                done(Outcome::done());
+                        });
+            }));
 }
 
-void SyncRun::uploadConflictCopy(const VaultPath &copy, const QByteArray &data, Done done)
+void SyncRun::uploadConflictCopy(const VaultPath &copy, const RemoteContent &remote, Done done)
 {
     PutOptions options;
     options.ifNoneMatch = true;
-    client()->put(copy, data, options, guarded([this, copy, data, done = std::move(done)](const PutResult &result) {
-                      if (result.error.isError()) {
-                          if (result.error.isFatal()) {
-                              done(Outcome::fromError(result.error));
-                              return;
-                          }
-                          qCWarning(lcSync).noquote() << tag() << "the conflict copy" << copy
-                                                      << "will be uploaded on the next sync:" << result.error.message;
-                          done(Outcome::done());
-                          return;
-                      }
-                      noteRemoteWritten(copy);
-                      versionAfterPut(copy, result.etag, [this, copy, data, done](const QString &version) {
-                          const Content content = classify(copy, data);
-                          saveState(copy, content.hash, version, content.text, std::nullopt);
-                          done(Outcome::done());
-                      });
-                  }));
+    auto finished = guarded([this, copy, remote, done = std::move(done)](const PutResult &result) {
+        if (result.error.isError()) {
+            if (result.error.isFatal()) {
+                done(Outcome::fromError(result.error));
+                return;
+            }
+            qCWarning(lcSync).noquote() << tag() << "the conflict copy" << copy
+                                        << "will be uploaded on the next sync:" << result.error.message;
+            done(Outcome::done());
+            return;
+        }
+        noteRemoteWritten(copy);
+        versionAfterPut(copy, result.etag, [this, copy, remote, done](const QString &version) {
+            const Content content =
+                    remote.staged ? Content{std::nullopt, remote.staged->hash} : classify(copy, remote.data);
+            saveState(copy, content.hash, version, content.text, std::nullopt);
+            done(Outcome::done());
+        });
+    });
+    // A staged download was renamed into the copy: read from there as it is sent.
+    if (remote.staged)
+        putFromVault(copy, remote.staged->size, options, std::move(finished));
+    else
+        client()->put(copy, remote.data, options, std::move(finished));
 }
 
 void SyncRun::deleteRemote(const PathCtx &ctx, Done done)
@@ -1632,19 +1822,23 @@ std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &
     return result.clean ? std::optional<QString>(result.text) : std::nullopt;
 }
 
-std::optional<VaultPath> SyncRun::findConflictCopy(const VaultPath &path, const QByteArray &content)
+std::optional<VaultPath> SyncRun::findConflictCopy(const VaultPath &path, qint64 size, const QString &hash)
 {
-    const QString hash = text::fnv1a64Hex(content);
     const QList<FileStat> files = vault()->files();
     for (const FileStat &file : files) {
-        if (file.isDir || file.size != content.size())
+        if (file.isDir || file.size != size)
             continue;
         const std::optional<BrulionConflict> parsed = parseBrulionConflict(file.path);
         if (!parsed || parsed->original != path)
             continue;
-        bool ok = false;
-        const QByteArray bytes = vault()->readBinary(file.path, &ok);
-        if (ok && text::fnv1a64Hex(bytes) == hash)
+        // (The bytes' hash, whatever the kind of file: a conflict copy's name is no note's.)
+        QString error;
+        const std::optional<QString> found = streamed(file.path, size) ? hashInPieces(file.path, &error) : [&] {
+            bool ok = false;
+            const QByteArray bytes = vault()->readBinary(file.path, &ok);
+            return ok ? std::optional<QString>(text::fnv1a64Hex(bytes)) : std::nullopt;
+        }();
+        if (found == hash)
             return file.path;
     }
     return std::nullopt;

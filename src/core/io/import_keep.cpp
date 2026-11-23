@@ -168,7 +168,7 @@ private:
                 ctx.warn(IoMessages::tr("Some attachments referenced by notes are missing in the export."));
                 continue;
             }
-            media.append(attachmentLink(ctx.addAttachment(paths::basename(file->path), file->data)));
+            media.append(attachmentLink(ctx.addAttachment(paths::basename(file->path), *file)));
         }
         if (!media.isEmpty())
             parts.append(media.join(u'\n'));

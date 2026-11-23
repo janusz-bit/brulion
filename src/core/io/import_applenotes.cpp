@@ -731,7 +731,7 @@ private:
                 return {};
             }
             QString fileName = name.trimmed().isEmpty() ? paths::basename(f->path) : name.trimmed();
-            const VaultPath path = m_ctx.addAttachment(fileName, f->data);
+            const VaultPath path = m_ctx.addAttachment(fileName, *f);
             return attachmentLink(path);
         }
 

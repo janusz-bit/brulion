@@ -9,6 +9,7 @@
 #include <QLocale>
 #include <QSaveFile>
 #include <QSet>
+#include <QTemporaryFile>
 
 #include <algorithm>
 #include <utility>
@@ -86,6 +87,43 @@ std::optional<QByteArray> readFile(const QString &path, qint64 maxBytes, qint64 
     return std::nullopt;
 }
 
+/// Copy the file at `path` (local, or a document's URI for Qt's engine) into `target` in pieces,
+/// at most `maxBytes` + 1 bytes.
+bool copyFile(const QString &path, QIODevice &target, qint64 maxBytes, QString *error)
+{
+    QFile file(path);
+    if (file.open(QIODevice::ReadOnly)) {
+        constexpr qint64 Piece = 256 * 1024;
+        qint64 copied = 0;
+        while (copied <= maxBytes) {
+            const QByteArray piece = file.read(std::min(Piece, maxBytes + 1 - copied));
+            if (piece.isEmpty())
+                break;
+            if (target.write(piece) != piece.size()) {
+                if (error)
+                    *error = target.errorString();
+                return false;
+            }
+            copied += piece.size();
+        }
+        if (file.error() == QFileDevice::NoError)
+            return true;
+    }
+    if (error)
+        *error = file.errorString();
+    return false;
+}
+
+/// ZIP archives by name: what prepareImportFiles() unpacks from a file on disk.
+bool isZipArchiveName(const QString &name)
+{
+    for (const QLatin1StringView ext : {".zip"_L1, ".bear2bk"_L1, ".textpack"_L1}) {
+        if (name.endsWith(ext, Qt::CaseInsensitive))
+            return true;
+    }
+    return false;
+}
+
 // ---- Qt's content file engine -------------------------------------------------------------------
 
 class QtDocumentProvider final : public DocumentProvider {
@@ -119,6 +157,11 @@ public:
     std::optional<QByteArray> read(const Entry &file, qint64 maxBytes, QString *error) const override
     {
         return readFile(file.uri, maxBytes, file.size, error);
+    }
+
+    bool copy(const Entry &file, QIODevice &target, qint64 maxBytes, QString *error) const override
+    {
+        return copyFile(file.uri, target, maxBytes, error);
     }
 
 private:
@@ -173,6 +216,11 @@ public:
         return m_qt.read(file, maxBytes, error); // QFile opens content URIs (a file descriptor)
     }
 
+    bool copy(const Entry &file, QIODevice &target, qint64 maxBytes, QString *error) const override
+    {
+        return m_qt.copy(file, target, maxBytes, error);
+    }
+
 private:
     static Entry entryOf(const platform::DocumentInfo &d) { return Entry{d.uri, d.name, d.isDir, d.size, d.isVirtual}; }
 
@@ -185,6 +233,19 @@ private:
 // ---- Helpers -------------------------------------------------------------------------------------
 
 DocumentProvider::~DocumentProvider() = default;
+
+bool DocumentProvider::copy(const Entry &file, QIODevice &target, qint64 maxBytes, QString *error) const
+{
+    const std::optional<QByteArray> data = read(file, maxBytes, error);
+    if (!data)
+        return false;
+    if (target.write(*data) != data->size()) {
+        if (error)
+            *error = target.errorString();
+        return false;
+    }
+    return true;
+}
 
 std::shared_ptr<const DocumentProvider> qtDocumentProvider()
 {
@@ -510,12 +571,38 @@ void FileGatherer::listed(const Listing &listing)
 }
 
 QList<FileGatherer::Read> FileGatherer::readBatch(const QList<Pending> &batch, qint64 maxFileBytes,
-                                                  const std::shared_ptr<const DocumentProvider> &documents)
+                                                  const std::shared_ptr<const DocumentProvider> &documents,
+                                                  const QString &stagingFolder)
 {
     QList<Read> reads;
     reads.reserve(batch.size());
     for (const Pending &p : batch) {
         Read r;
+        // A large archive stays on disk: unpacked from there piece by piece, never read in whole.
+        if (!stagingFolder.isEmpty() && p.size > DiskArchiveBytes && p.size <= maxFileBytes
+            && isZipArchiveName(p.relative)) {
+            if (!p.document) {
+                QFile file(p.fsPath);
+                if (file.open(QIODevice::ReadOnly)) {
+                    r.onDisk = QFileInfo(p.fsPath).absoluteFilePath();
+                    r.diskSize = file.size();
+                    reads.append(std::move(r));
+                    continue;
+                }
+            } else {
+                QTemporaryFile copy(QDir(stagingFolder).filePath(u"picked-XXXXXX"_s));
+                const DocumentProvider::Entry entry{
+                        .uri = p.fsPath, .name = p.relative.section(u'/', -1), .size = p.size};
+                if (copy.open() && documents->copy(entry, copy, maxFileBytes, &r.error) && copy.flush()) {
+                    copy.setAutoRemove(false);
+                    r.onDisk = QFileInfo(copy.fileName()).absoluteFilePath();
+                    r.diskSize = copy.size();
+                    reads.append(std::move(r));
+                    continue;
+                }
+                r.error.clear(); // (read as any other file below)
+            }
+        }
         if (p.document) {
             const DocumentProvider::Entry entry{.uri = p.fsPath, .name = p.relative.section(u'/', -1), .size = p.size};
             r.data = documents->read(entry, maxFileBytes, &r.error);
@@ -560,8 +647,10 @@ void FileGatherer::step()
     const QList<Pending> batch = m_batch;
     const qint64 maxFileBytes = m_limits.maxFileBytes;
     const std::shared_ptr<const DocumentProvider> documents = m_documents;
+    const QString staging = m_stagingFolder;
     runInBackground<QList<Read>>(
-            this, [batch, maxFileBytes, documents] { return readBatch(batch, maxFileBytes, documents); },
+            this,
+            [batch, maxFileBytes, documents, staging] { return readBatch(batch, maxFileBytes, documents, staging); },
             [this, generation](const QList<Read> &reads) {
                 if (generation != m_generation || !m_running)
                     return;
@@ -575,6 +664,19 @@ void FileGatherer::merge(const QList<Read> &reads)
     for (qsizetype i = 0; i < reads.size() && i < m_batch.size(); ++i) {
         const Pending &p = m_batch.at(i);
         const Read &r = reads.at(i);
+        if (!r.onDisk.isEmpty()) {
+            if (r.diskSize > m_limits.maxFileBytes) {
+                m_warnings.append(tooLargeWarning(p.relative, r.diskSize));
+                continue;
+            }
+            if (m_bytes + r.diskSize > m_limits.maxTotalBytes) {
+                stopForTotal();
+                break;
+            }
+            m_bytes += r.diskSize;
+            m_files.append(io::InputFile{p.relative, {}, r.onDisk, r.diskSize});
+            continue;
+        }
         if (!r.data) {
             m_warnings.append(tr("“%1” could not be read: %2").arg(p.relative, r.error));
             continue;

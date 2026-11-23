@@ -302,6 +302,68 @@ FolderClock probeFolderClock(const QString &absoluteDir, std::optional<qint64> s
     return FolderClock::Unknown;
 }
 
+namespace {
+
+/// The rest of saveAtomicallyStamped() and commitStagedStamped() once the temporary file `temp`
+/// is there (open for writing; `fill` writes its content): sync, the caller's check, the rename.
+/// The temporary file is gone afterwards unless it was renamed.
+StampedSave replaceWithTemp(StampedSave out, QFile &temp, const QFileInfo &target, const QString &dir,
+                            const FileSync sync, const std::function<bool(QFile &)> &fill,
+                            const std::function<void()> &beforeRename, const ReadMark *expect)
+{
+    const QString absolutePath = target.absoluteFilePath();
+    const auto failed = [&](const QString &why) {
+        out.error = why;
+        temp.close();
+        temp.remove();
+        out.before = out.afterTemp = out.beforeRename = out.fileMtime = std::nullopt;
+        return out;
+    };
+    if (target.exists())
+        temp.setPermissions(target.permissions()); // (QSaveFile keeps them too)
+    if (!fill(temp) || !temp.flush())
+        return failed(temp.errorString());
+    QString syncError;
+    if (sync && !sync(temp, &syncError))
+        return failed(syncError);
+    out.fileMtime = sync ? fineMtime(temp.fileName()) : std::nullopt;
+    out.fileSize = temp.size();
+    temp.close();
+    if (beforeRename)
+        beforeRename();
+    // A rename refused for a moment (Windows: a virus scanner, an indexer or a sync client holding
+    // one of the files) is tried again for 0.3 s (kReplaceWaitsMs); the stamp before it is
+    // taken again each time (what changed while waiting is not ours), and so is the caller's check.
+    const FileReplace replace = fileReplace() ? fileReplace() : &replaceWithStd;
+    Replaced result = Replaced::Failed;
+    QString replaceError;
+    for (std::size_t attempt = 0;; ++attempt) {
+        if (expect && !stillAsRead(absolutePath, *expect, out.fileMtime)) {
+            out.changed = true;
+            return failed(changedMeanwhile());
+        }
+        if (sync)
+            out.beforeRename = fineMtime(dir);
+        replaceError.clear();
+        result = replace(temp.fileName(), absolutePath, &replaceError);
+        if (result != Replaced::Busy || attempt == std::size(kReplaceWaitsMs))
+            break;
+        QThread::msleep(kReplaceWaitsMs[attempt]);
+    }
+    if (result != Replaced::Done)
+        return failed(replaceError);
+    if (sync) {
+        out.after = fineMtime(dir);
+        out.fineStamps = out.fileMtime.has_value();
+    } else {
+        out.fineStamps = fineMtime(absolutePath).has_value();
+    }
+    out.ok = true;
+    return out;
+}
+
+} // namespace
+
 StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
                                   const std::function<void()> &beforeRename, const ReadMark *expect, bool probeClock)
 {
@@ -332,59 +394,55 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
     if (probeClock)
         out.folderClock = out.before ? probeFolderClock(dir, out.before) : FolderClock::Unknown;
     QFile temp;
-    for (int attempt = 0;; ++attempt) {
-        temp.setFileName(QDir(dir).filePath(ownTempName())); // ("E:/" at a drive's root: no "E://")
-        if (temp.open(QIODevice::WriteOnly | QIODevice::NewOnly))
-            break;
-        if (attempt >= 8 || !temp.exists()) {
-            out.error = temp.errorString();
-            return out;
-        }
-    }
-    out.afterTemp = fineMtime(dir);
-    const auto failed = [&](const QString &why) {
-        out.error = why;
-        temp.close();
-        temp.remove();
-        out.before = out.afterTemp = out.beforeRename = out.fileMtime = std::nullopt;
+    if (!createOwnTemp(dir, temp, &out.error))
         return out;
-    };
-    if (target.exists())
-        temp.setPermissions(target.permissions()); // (QSaveFile keeps them too)
-    if (temp.write(bytes.data(), bytes.size()) != bytes.size() || !temp.flush())
-        return failed(temp.errorString());
-    QString syncError;
-    if (!sync(temp, &syncError))
-        return failed(syncError);
-    out.fileMtime = fineMtime(temp.fileName());
-    out.fileSize = temp.size();
-    temp.close();
-    if (beforeRename)
-        beforeRename();
-    // A rename refused for a moment (Windows: a virus scanner, an indexer or a sync client holding
-    // one of the files) is tried again for 0.3 s (kReplaceWaitsMs); the stamp before it is
-    // taken again each time (what changed while waiting is not ours), and so is the caller's check.
-    const FileReplace replace = fileReplace() ? fileReplace() : &replaceWithStd;
-    Replaced result = Replaced::Failed;
-    QString replaceError;
-    for (std::size_t attempt = 0;; ++attempt) {
-        if (expect && !stillAsRead(absolutePath, *expect, out.fileMtime)) {
-            out.changed = true;
-            return failed(changedMeanwhile());
+    out.afterTemp = fineMtime(dir);
+    return replaceWithTemp(
+            out, temp, target, dir, sync,
+            [bytes](QFile &file) { return file.write(bytes.data(), bytes.size()) == bytes.size(); }, beforeRename,
+            expect);
+}
+
+bool createOwnTemp(const QString &absoluteDir, QFile &file, QString *error)
+{
+    for (int attempt = 0;; ++attempt) {
+        file.setFileName(QDir(absoluteDir).filePath(ownTempName())); // ("E:/" at a drive's root: no "E://")
+        if (file.open(QIODevice::WriteOnly | QIODevice::NewOnly))
+            return true;
+        if (attempt >= 8 || !file.exists()) {
+            if (error)
+                *error = file.errorString();
+            return false;
         }
-        out.beforeRename = fineMtime(dir);
-        replaceError.clear();
-        result = replace(temp.fileName(), absolutePath, &replaceError);
-        if (result != Replaced::Busy || attempt == std::size(kReplaceWaitsMs))
-            break;
-        QThread::msleep(kReplaceWaitsMs[attempt]);
     }
-    if (result != Replaced::Done)
-        return failed(replaceError);
-    out.after = fineMtime(dir);
-    out.fineStamps = out.fileMtime.has_value();
-    out.ok = true;
-    return out;
+}
+
+StampedSave commitStagedStamped(const QString &absolutePath, const QString &stagedFile,
+                                const std::function<void()> &beforeRename, const ReadMark *expect, bool probeClock)
+{
+    StampedSave out;
+    const FileSync sync = fileSync();
+    const QFileInfo target(absolutePath);
+    QFile staged(stagedFile);
+    const QString dir = target.absolutePath();
+    if (target.exists() && !target.isWritable()) {
+        out.error = QCoreApplication::translate("QSaveFile", "Existing file %1 is not writable").arg(absolutePath);
+        staged.remove();
+        return out;
+    }
+    if (sync) {
+        out.before = fineMtime(dir);
+        if (probeClock)
+            out.folderClock = out.before ? probeFolderClock(dir, out.before) : FolderClock::Unknown;
+        out.afterTemp = out.before; // (the staged file was there before the save began)
+    }
+    // Opened for writing (never truncated): syncing needs a writable handle on some systems.
+    if (!staged.open(QIODevice::ReadWrite)) {
+        out.error = staged.errorString();
+        staged.remove();
+        return out;
+    }
+    return replaceWithTemp(out, staged, target, dir, sync, [](QFile &) { return true; }, beforeRename, expect);
 }
 
 bool isLeftoverTempName(QStringView name)

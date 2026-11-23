@@ -3,11 +3,14 @@
 #include "io/messages_p.h"
 #include "util/unicode.h"
 
+#include <QDir>
+#include <QFile>
 #include <QMutex>
 #include <QScopeGuard>
 #include <QSet>
 #include <QStringDecoder>
 #include <QStringTokenizer>
+#include <QTemporaryFile>
 
 #include <miniz.h>
 
@@ -82,14 +85,113 @@ void warn(QStringList *warnings, const QString &message)
         warnings->append(message);
 }
 
-/// Read `zip` into `out` (paths prefixed with `prefix`). False when `zip` is not a ZIP archive.
-bool readInto(QByteArrayView zip, const QString &prefix, int depth, const ZipReadOptions &options, ReadState &state,
-              QList<FileEntry> &out, QStringList *warnings)
-{
+/// Where an archive is read from: memory, or a file read piece by piece (never loaded whole).
+struct ZipSource {
+    QByteArrayView bytes;
+    QString file; ///< used when not empty
+};
+
+/// A ZIP archive open for reading from a ZipSource.
+class OpenZip {
+public:
+    explicit OpenZip(const ZipSource &source)
+    {
+        if (source.file.isEmpty()) {
+            m_ok = !source.bytes.isEmpty()
+                   && mz_zip_reader_init_mem(&archive, source.bytes.data(), size_t(source.bytes.size()), 0);
+            return;
+        }
+        m_file.setFileName(source.file);
+        if (!m_file.open(QIODevice::ReadOnly) || m_file.size() <= 0)
+            return;
+        archive.m_pRead = &OpenZip::readAt;
+        archive.m_pIO_opaque = this;
+        m_ok = mz_zip_reader_init(&archive, mz_uint64(m_file.size()), 0);
+    }
+    ~OpenZip()
+    {
+        if (m_ok)
+            mz_zip_reader_end(&archive);
+    }
+    Q_DISABLE_COPY_MOVE(OpenZip)
+    bool ok() const { return m_ok; }
+
     mz_zip_archive archive{};
-    if (zip.isEmpty() || !mz_zip_reader_init_mem(&archive, zip.data(), size_t(zip.size()), 0))
+
+private:
+    static size_t readAt(void *opaque, mz_uint64 offset, void *buffer, size_t n)
+    {
+        auto *self = static_cast<OpenZip *>(opaque);
+        if (qint64(offset) != self->m_file.pos() && !self->m_file.seek(qint64(offset)))
+            return 0;
+        const qint64 got = self->m_file.read(static_cast<char *>(buffer), qint64(n));
+        return got < 0 ? 0 : size_t(got);
+    }
+
+    QFile m_file;
+    bool m_ok = false;
+};
+
+/// Entries unpacked to a file of the staging folder (ZipReadOptions): pictures, audio, video, PDFs
+/// and archives — what importers pass on or unpack (prepareImportFiles()) without reading it.
+bool isStagedKind(const QString &path)
+{
+    static const QSet<QString> extensions = {
+            u"png"_s,  u"jpg"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"heic"_s, u"heif"_s, u"avif"_s, u"bmp"_s,  u"tif"_s,
+            u"tiff"_s, u"ico"_s, u"mp3"_s,  u"m4a"_s, u"aac"_s,  u"ogg"_s,  u"opus"_s, u"wav"_s,  u"flac"_s, u"mp4"_s,
+            u"m4v"_s,  u"mov"_s, u"webm"_s, u"mkv"_s, u"avi"_s,  u"3gp"_s,  u"pdf"_s,  u"zip"_s,
+    };
+    const qsizetype dot = path.lastIndexOf(u'.');
+    return dot >= 0 && extensions.contains(path.sliced(dot + 1).toLower());
+}
+
+/// Unpack entry `index` (`size` bytes) into a new file of the staging folder, piece by piece:
+/// its absolute path, or "" when it is damaged or cannot be written (nothing left behind).
+QString stageEntry(mz_zip_archive *archive, mz_uint index, qint64 size, const ZipReadOptions &options,
+                   bool *writeFailed)
+{
+    QTemporaryFile file(QDir(options.stagingFolder).filePath(u"entry-XXXXXX"_s));
+    file.setAutoRemove(true);
+    if (!file.open()) {
+        *writeFailed = true;
+        return {};
+    }
+    struct Sink {
+        QFile *file;
+        qint64 left;
+        const std::function<void(qint64)> *onPiece;
+        bool failed = false;
+    } sink{&file, size, &options.onStagedPiece};
+    const auto write = [](void *opaque, mz_uint64, const void *data, size_t n) -> size_t {
+        auto *s = static_cast<Sink *>(opaque);
+        if (qint64(n) > s->left)
+            return 0;
+        // (miniz hands over what it inflated or read: a dictionary's or a read buffer's worth.)
+        if (s->file->write(static_cast<const char *>(data), qint64(n)) != qint64(n)) {
+            s->failed = true;
+            return 0;
+        }
+        if (*s->onPiece)
+            (*s->onPiece)(qint64(n));
+        s->left -= qint64(n);
+        return n;
+    };
+    const bool ok = mz_zip_reader_extract_to_callback(archive, index, write, &sink, 0) && sink.left == 0;
+    *writeFailed = sink.failed;
+    if (!ok || !file.flush())
+        return {};
+    file.setAutoRemove(false);
+    return QFileInfo(file.fileName()).absoluteFilePath();
+}
+
+/// Read the archive into `out` (paths prefixed with `prefix`). False when it is not a ZIP archive.
+bool readInto(const ZipSource &source, const QString &prefix, int depth, const ZipReadOptions &options,
+              ReadState &state, QList<FileEntry> &out, QStringList *warnings)
+{
+    OpenZip zip(source);
+    if (!zip.ok())
         return false;
-    const auto cleanup = qScopeGuard([&] { mz_zip_reader_end(&archive); });
+    mz_zip_archive &archive = zip.archive;
 
     const mz_uint count = mz_zip_reader_get_num_files(&archive);
     for (mz_uint i = 0; i < count && !state.stopped; ++i) {
@@ -129,23 +231,38 @@ bool readInto(QByteArrayView zip, const QString &prefix, int depth, const ZipRea
             state.stopped = true;
             break;
         }
-        QByteArray data;
-        if (stat.m_uncomp_size > 0) {
-            data.resize(qsizetype(stat.m_uncomp_size));
-            if (!mz_zip_reader_extract_to_mem(&archive, i, data.data(), size_t(data.size()), 0)) {
+        const qint64 size = qint64(stat.m_uncomp_size);
+        FileEntry entry{path, {}, {}, 0};
+        if (!options.stagingFolder.isEmpty() && size > options.stageAbove && isStagedKind(path)) {
+            bool writeFailed = false;
+            entry.file = stageEntry(&archive, i, size, options, &writeFailed);
+            if (entry.file.isEmpty()) {
+                warn(warnings, writeFailed
+                                       ? IoMessages::tr("“%1” could not be unpacked: the disk may be full.").arg(path)
+                                       : IoMessages::tr("“%1” is damaged and was skipped.").arg(path));
+                continue;
+            }
+            entry.fileSize = size;
+        } else if (size > 0) {
+            entry.data.resize(qsizetype(size));
+            if (!mz_zip_reader_extract_to_mem(&archive, i, entry.data.data(), size_t(entry.data.size()), 0)) {
                 warn(warnings, IoMessages::tr("“%1” is damaged and was skipped.").arg(path));
                 continue;
             }
         }
-        state.total += data.size();
+        state.total += size;
         ++state.count;
         if (options.expandNested && depth < options.maxNestingDepth && path.endsWith(u".zip"_s, Qt::CaseInsensitive)
-            && isZip(data)) {
-            if (readInto(data, parentFolder(path), depth + 1, options, state, out, warnings))
+            && isZip(entry.onDisk() ? fileHead(entry.file) : entry.data)) {
+            if (readInto(ZipSource{entry.data, entry.file}, parentFolder(path), depth + 1, options, state, out,
+                         warnings)) {
+                if (entry.onDisk())
+                    QFile::remove(entry.file); // (its files are what is left of it)
                 continue;
+            }
             warn(warnings, IoMessages::tr("“%1” is not a valid ZIP archive.").arg(path));
         }
-        out.append(FileEntry{path, std::move(data)});
+        out.append(std::move(entry));
     }
     return true;
 }
@@ -174,9 +291,24 @@ QList<FileEntry> readZip(QByteArrayView zip, QStringList *warnings, const ZipRea
 {
     QList<FileEntry> out;
     ReadState state;
-    if (!readInto(zip, QString(), 0, options, state, out, warnings))
+    if (!readInto(ZipSource{zip, {}}, QString(), 0, options, state, out, warnings))
         warn(warnings, IoMessages::tr("The file is not a valid ZIP archive."));
     return out;
+}
+
+QList<FileEntry> readZipFile(const QString &file, QStringList *warnings, const ZipReadOptions &options)
+{
+    QList<FileEntry> out;
+    ReadState state;
+    if (!readInto(ZipSource{{}, file}, QString(), 0, options, state, out, warnings))
+        warn(warnings, IoMessages::tr("The file is not a valid ZIP archive."));
+    return out;
+}
+
+QByteArray fileHead(const QString &file, qint64 bytes)
+{
+    QFile in(file);
+    return in.open(QIODevice::ReadOnly) ? in.read(bytes) : QByteArray();
 }
 
 QByteArray writeZip(const QList<FileEntry> &entries, const ZipWriteOptions &options)

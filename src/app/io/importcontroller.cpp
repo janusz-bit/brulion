@@ -12,9 +12,13 @@
 #include "vault/vault.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
 #include <QEvent>
 #include <QLocale>
 #include <QRegularExpression>
+#include <QStandardPaths>
+#include <QTimeZone>
 
 #include <algorithm>
 
@@ -65,6 +69,18 @@ QSet<QString> vaultPathSet(const Vault *vault)
     return set;
 }
 
+/// Removes the staging folders of imports that ended without removing them (a crash, a kill) once
+/// they are a day old: a running import's folder is younger.
+void removeStaleStaging(const QString &base)
+{
+    const QDateTime dayAgo = QDateTime::currentDateTimeUtc().addDays(-1);
+    const QFileInfoList folders = QDir(base).entryInfoList({u"import-*"_s}, QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo &folder : folders) {
+        if (!folder.isSymLink() && folder.lastModified(QTimeZone(QTimeZone::UTC)) < dayAgo)
+            QDir(folder.absoluteFilePath()).removeRecursively();
+    }
+}
+
 struct Analysis {
     QString detected;
     QString used;
@@ -73,13 +89,18 @@ struct Analysis {
     bool ran = false;
     io::ImportResult result;
     io::CsvAnalysis csv; ///< the spreadsheet mapping (csv / airtable)
+    /// The input, prepared by this analysis (the first one of an input).
+    std::optional<QList<io::InputFile>> prepared;
+    QStringList prepareWarnings;
 };
 
+/// `input`: prepared already (io::prepareImportFiles()).
 Analysis analyzeImport(const QList<io::InputFile> &input, const QString &chosen, const QString &editedFolder,
                        bool folderEdited, io::ImportOptions options)
 {
     Analysis a;
-    if (const io::Importer *detected = io::detectImporter(input))
+    options.inputPrepared = true;
+    if (const io::Importer *detected = io::detectImporter(input, true))
         a.detected = detected->id();
     const io::Importer *importer = io::importerById(chosen.isEmpty() ? a.detected : chosen);
     if (!importer)
@@ -89,7 +110,7 @@ Analysis analyzeImport(const QList<io::InputFile> &input, const QString &chosen,
     a.target = folderEdited ? editedFolder : defaultImportFolder(importer->name());
     options.targetFolder = a.target;
     if (a.used == u"csv" || a.used == u"airtable")
-        a.csv = io::analyzeCsv(io::prepareImportFiles(input), options.csv,
+        a.csv = io::analyzeCsv(input, options.csv,
                                a.used == u"airtable" ? io::CsvFlavor::Airtable : io::CsvFlavor::Generic,
                                options.timeZone);
     a.result = io::runImport(*importer, input, options);
@@ -355,7 +376,24 @@ void ImportController::addUrls(const QList<QUrl> &urls)
     Q_EMIT reportChanged();
     setState(u"reading"_s);
     setProgress(0, tr("Reading…"));
+    renewStaging();
     m_gatherer.start(urls);
+}
+
+void ImportController::renewStaging()
+{
+    m_staging.reset();
+#ifndef Q_OS_WASM
+    // (Not in the browser: its files live in memory anyway.)
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (!base.isEmpty() && QDir().mkpath(base)) {
+        removeStaleStaging(base);
+        auto staging = std::make_shared<QTemporaryDir>(QDir(base).filePath(u"import-XXXXXX"_s));
+        if (staging->isValid())
+            m_staging = std::move(staging);
+    }
+#endif
+    m_gatherer.setStagingFolder(m_staging ? m_staging->path() : QString());
 }
 
 void ImportController::addFolder(const QUrl &url)
@@ -406,6 +444,7 @@ void ImportController::setPickedFiles(const QList<platform::PickedFile> &picked)
     }
     if (overTotal)
         warnings.append(FileGatherer::totalLimitWarning(m_gatherer.limits().maxTotalBytes));
+    renewStaging();
     setInput(files, FileGatherer::sourceNameFor(int(picked.size()), picked.first().name), warnings);
 }
 
@@ -414,13 +453,16 @@ void ImportController::setInput(const QList<io::InputFile> &files, const QString
     if (m_state == u"importing")
         return; // a browser pick finishing during an import: the import goes on
     ++m_generation;
+    ++m_inputGeneration;
     m_input = files;
+    m_inputPrepared = false;
+    m_preparing = false;
     resetCsvState();
     m_sourceName = sourceName;
     m_readWarnings = warnings;
     m_inputBytes = 0;
     for (const io::InputFile &f : files)
-        m_inputBytes += f.data.size();
+        m_inputBytes += f.size();
     m_detectedId.clear();
     m_report.clear();
     Q_EMIT inputChanged();
@@ -435,7 +477,12 @@ void ImportController::clear()
     m_analyzeTimer.stop();
     m_writeTimer.stop();
     ++m_generation;
+    ++m_inputGeneration;
     m_input.clear();
+    m_inputPrepared = false;
+    m_preparing = false;
+    m_staging.reset(); // (a job still running keeps it until it ends)
+    m_gatherer.setStagingFolder({});
     m_inputBytes = 0;
     m_sourceName.clear();
     m_readWarnings.clear();
@@ -494,6 +541,11 @@ void ImportController::analyze()
         setState(u"ready"_s);
         return;
     }
+    if (m_preparing) {
+        // The first analysis unpacks the input (once): the next one follows it.
+        m_analyzeTimer.start();
+        return;
+    }
     const int generation = ++m_generation;
     setState(u"analyzing"_s);
     setProgress(-1, tr("Checking what will be imported…"));
@@ -507,12 +559,33 @@ void ImportController::analyze()
     const QString chosen = m_importerId;
     const QString edited = folder.value_or(QString());
     const bool folderEdited = m_targetFolderEdited;
+    const bool prepared = m_inputPrepared;
+    m_preparing = !prepared;
+    const std::shared_ptr<QTemporaryDir> staging = m_staging; // (kept while the job uses it)
+    const int inputGeneration = m_inputGeneration;
     runInBackground<Analysis>(
             this,
-            [input, chosen, edited, folderEdited, options] {
-                return analyzeImport(input, chosen, edited, folderEdited, options);
+            [input, chosen, edited, folderEdited, options, prepared, staging] {
+                if (prepared)
+                    return analyzeImport(input, chosen, edited, folderEdited, options);
+                // Once per input: archives unpacked, large attachments into the staging folder.
+                io::ZipReadOptions limits;
+                if (staging)
+                    limits.stagingFolder = staging->path();
+                QStringList warnings;
+                QList<io::InputFile> files = io::prepareImportFiles(input, &warnings, limits);
+                Analysis a = analyzeImport(files, chosen, edited, folderEdited, options);
+                a.prepared = std::move(files);
+                a.prepareWarnings = std::move(warnings);
+                return a;
             },
-            [this, generation](const Analysis &a) {
+            [this, generation, inputGeneration](const Analysis &a) {
+                if (a.prepared && inputGeneration == m_inputGeneration) {
+                    m_preparing = false;
+                    m_input = *a.prepared;
+                    m_inputPrepared = true;
+                    m_readWarnings += a.prepareWarnings;
+                }
                 if (generation != m_generation)
                     return;
                 m_detectedId = a.detected;
@@ -569,10 +642,10 @@ void ImportController::applyPlan(int generation, const io::ImportResult &result,
         } else {
             ++attachments;
         }
-        bytes += f.data.size();
+        bytes += f.size();
         if (files.size() < ListedFiles)
-            files.append(QVariantMap{ { u"path"_s, f.path }, { u"kind"_s, kind }, { u"append"_s, appends },
-                                      { u"size"_s, f.data.size() } });
+            files.append(
+                    QVariantMap{{u"path"_s, f.path}, {u"kind"_s, kind}, {u"append"_s, appends}, {u"size"_s, f.size()}});
     }
     const QString target = cleanTargetFolder(m_targetFolder).value_or(QString());
     m_preview = {
@@ -625,9 +698,11 @@ void ImportController::startImport()
     options.targetFolder = *folder;
     options.csv = csvImportOptions(m_csvOptions);
     options.now = m_workspace->now();
+    options.inputPrepared = m_inputPrepared;
     const QList<io::InputFile> input = m_input;
+    const std::shared_ptr<QTemporaryDir> staging = m_staging; // (its files are written from there)
     runInBackground<io::ImportResult>(
-            this, [importer, input, options] { return io::runImport(*importer, input, options); },
+            this, [importer, input, options, staging] { return io::runImport(*importer, input, options); },
             [this, generation](const io::ImportResult &result) {
                 if (generation != m_generation)
                     return;
@@ -668,7 +743,9 @@ void ImportController::writeStep()
             continue;
         }
         // New files never replace anything: a path taken meanwhile gets a unique name.
-        const VaultPath used = vault->createBinary(f.path, f.data, ChangeSource::Import);
+        // (A large attachment unpacked to the staging folder is copied in pieces.)
+        const VaultPath used = f.file.isEmpty() ? vault->createBinary(f.path, f.data, ChangeSource::Import)
+                                                : vault->createBinaryFrom(f.path, f.file, ChangeSource::Import);
         if (used.isEmpty()) {
             fail(f.path);
             continue;

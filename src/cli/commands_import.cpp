@@ -22,7 +22,11 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTimer>
+
+#include <memory>
 
 using namespace Qt::StringLiterals;
 
@@ -36,6 +40,25 @@ constexpr qint64 MaxTotalBytes = 1536LL * 1024 * 1024;
 constexpr int MaxFiles = 200000;
 /// Files listed in the result.
 constexpr int ListedFiles = 200;
+/// ZIP archives larger than this are unpacked from the disk (as the app's file gatherer does).
+constexpr qint64 DiskArchiveBytes = 16LL * 1024 * 1024;
+
+bool isZipArchiveName(const QString &name)
+{
+    return name.endsWith(u".zip"_s, Qt::CaseInsensitive) || name.endsWith(u".bear2bk"_s, Qt::CaseInsensitive)
+           || name.endsWith(u".textpack"_s, Qt::CaseInsensitive);
+}
+
+/// A folder for the large attachments an input's archives hold (removed with it); none (all in
+/// memory) when the cache cannot take one.
+std::unique_ptr<QTemporaryDir> stagingFolder()
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (base.isEmpty() || !QDir().mkpath(base))
+        return nullptr;
+    auto dir = std::make_unique<QTemporaryDir>(QDir(base).filePath(u"import-XXXXXX"_s));
+    return dir->isValid() ? std::move(dir) : nullptr;
+}
 
 /// The files of a path: the file itself, or a folder's files (its name kept as the top folder).
 std::optional<QList<io::InputFile>> readInput(Call &call, const QString &path)
@@ -62,8 +85,12 @@ std::optional<QList<io::InputFile>> readInput(Call &call, const QString &path)
             call.warn(u"unreadable"_s, tr("“%1” cannot be read.").arg(name));
             return true;
         }
-        out.append(io::InputFile{name, f.readAll()});
-        total += out.last().data.size();
+        // A large ZIP (an exported notebook) is unpacked from the disk, never read in whole.
+        if (f.size() > DiskArchiveBytes && isZipArchiveName(name))
+            out.append(io::InputFile{name, {}, QFileInfo(file).absoluteFilePath(), f.size()});
+        else
+            out.append(io::InputFile{name, f.readAll()});
+        total += out.last().size();
         return true;
     };
     if (info.isDir()) {
@@ -268,7 +295,18 @@ Result importCommand(Call &call)
     }
     if (input.isEmpty())
         return call.fail(ExitNotFound, u"nothing_to_import"_s, tr("Nothing was read from “%1”.").arg(path));
-    const io::Importer *importer = format.isEmpty() ? io::detectImporter(input) : io::importerById(format);
+    // Prepared once (archives unpacked, large attachments into the staging folder, written from there).
+    const std::unique_ptr<QTemporaryDir> staging = stagingFolder();
+    {
+        io::ZipReadOptions limits;
+        if (staging)
+            limits.stagingFolder = staging->path();
+        QStringList warnings;
+        input = io::prepareImportFiles(input, &warnings, limits);
+        for (const QString &w : std::as_const(warnings))
+            call.warn(u"import"_s, w);
+    }
+    const io::Importer *importer = format.isEmpty() ? io::detectImporter(input, true) : io::importerById(format);
     if (!importer)
         return call.fail(ExitParse, u"not_recognised"_s,
                          tr("Brulion does not recognise these files; choose the app with --from (brulion-cli import "
@@ -276,10 +314,10 @@ Result importCommand(Call &call)
     io::ImportOptions options;
     options.csv = csvOptions(call);
     options.now = call.ctx.now();
+    options.inputPrepared = true;
     if (call.flag(u"downloadAttachments"_s) && (importer->id() == u"csv" || importer->id() == u"airtable")) {
-        const io::CsvAnalysis a =
-                io::analyzeCsv(io::prepareImportFiles(input), options.csv,
-                               importer->id() == u"airtable" ? io::CsvFlavor::Airtable : io::CsvFlavor::Generic);
+        const io::CsvAnalysis a = io::analyzeCsv(
+                input, options.csv, importer->id() == u"airtable" ? io::CsvFlavor::Airtable : io::CsvFlavor::Generic);
         QList<QPair<QString, QString>> wanted;
         for (const io::CsvFileAnalysis &f : a.files) {
             for (const io::CsvAttachmentRef &r : f.attachments)
@@ -289,7 +327,7 @@ Result importCommand(Call &call)
             sync::NetworkHttpTransport transport;
             cloudimport::UrlFilesDownload d(&transport);
             if (auto files = waitFor(call, d, [&] { d.start(wanted); }))
-                input += *files;
+                input += io::prepareImportFiles(*files);
             else
                 return call.failed();
         }
@@ -317,8 +355,8 @@ Result importCommand(Call &call)
     QJsonObject result{{u"importer"_s, importer->id()}, {u"name"_s, importer->name()}, {u"folder"_s, folder}};
     if (importer->id() == u"csv" || importer->id() == u"airtable") {
         const io::CsvAnalysis a = io::analyzeCsv(
-                io::prepareImportFiles(input), options.csv,
-                importer->id() == u"airtable" ? io::CsvFlavor::Airtable : io::CsvFlavor::Generic, options.timeZone);
+                input, options.csv, importer->id() == u"airtable" ? io::CsvFlavor::Airtable : io::CsvFlavor::Generic,
+                options.timeZone);
         QJsonArray files;
         for (const io::CsvFileAnalysis &f : a.files) {
             QJsonArray columns;
@@ -373,7 +411,8 @@ Result importCommand(Call &call)
                 }
                 ++appended;
             } else {
-                used = vault->createBinary(f.path, f.data, ChangeSource::Import);
+                used = f.file.isEmpty() ? vault->createBinary(f.path, f.data, ChangeSource::Import)
+                                        : vault->createBinaryFrom(f.path, f.file, ChangeSource::Import);
                 if (used.isEmpty()) {
                     failed.append(QJsonObject{{u"path"_s, f.path}, {u"message"_s, vault->errorString()}});
                     continue;
@@ -394,7 +433,7 @@ Result importCommand(Call &call)
                                       {u"kind"_s, journal ? u"journal"_s
                                                   : page  ? u"page"_s
                                                           : u"attachment"_s},
-                                      {u"size"_s, qint64(f.data.size())}});
+                                      {u"size"_s, f.size()}});
     }
     result.insert(u"pages"_s, pages);
     result.insert(u"journals"_s, journals);

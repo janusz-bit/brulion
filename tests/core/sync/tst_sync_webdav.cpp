@@ -6,6 +6,7 @@
 #include "log/redact.h"
 #include "sync/http.h"
 #include "sync/webdavclient.h"
+#include "text/text.h"
 
 #include <QElapsedTimer>
 #include <QLoggingCategory>
@@ -26,6 +27,14 @@
 using namespace synctest;
 
 namespace {
+
+/// A download expected to be `size` bytes.
+GetOptions sized(qint64 size)
+{
+    GetOptions options;
+    options.size = size;
+    return options;
+}
 
 /// Run an asynchronous operation and wait for its result.
 template <typename Result, typename Start>
@@ -158,6 +167,40 @@ QByteArray rawResponse(int status, const QByteArray &reason, const QByteArray &b
     out += "Content-Length: " + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
     return out;
 }
+
+/// A device of `size` bytes of a fixed pattern that counts how it is read: the largest piece asked
+/// for, and the bytes handed out (an upload read as it is sent, never held whole).
+class CountingDevice : public QIODevice {
+public:
+    explicit CountingDevice(qint64 size) : m_size(size) { open(QIODevice::ReadOnly); }
+    static char byteAt(qint64 at) { return char((at * 7919 + 13) & 0xff); }
+    static QByteArray pattern(qint64 size)
+    {
+        QByteArray out(size, Qt::Uninitialized);
+        for (qint64 i = 0; i < size; ++i)
+            out[i] = byteAt(i);
+        return out;
+    }
+    qint64 size() const override { return m_size; }
+    bool isSequential() const override { return false; }
+    qint64 largestRead = 0;
+    qint64 handedOut = 0;
+
+protected:
+    qint64 readData(char *data, qint64 maxSize) override
+    {
+        largestRead = std::max(largestRead, maxSize);
+        const qint64 n = std::min(maxSize, m_size - pos());
+        for (qint64 i = 0; i < n; ++i)
+            data[i] = byteAt(pos() + i);
+        handedOut += std::max<qint64>(n, 0);
+        return std::max<qint64>(n, 0);
+    }
+    qint64 writeData(const char *, qint64) override { return -1; }
+
+private:
+    qint64 m_size;
+};
 
 } // namespace
 
@@ -597,14 +640,14 @@ private Q_SLOTS:
         const qsizetype mebibyte = 1024 * 1024;
         s.server.putFile(u"Notatki/duży.bin"_s, QByteArray(3 * mebibyte, 'x'));
         // Listed with ten bytes, sent with three mebibytes: more than a file grows meanwhile.
-        const GetResult refused = await<GetResult>([&](auto cb) { s.client.get(u"duży.bin"_s, GetOptions{10}, cb); });
+        const GetResult refused = await<GetResult>([&](auto cb) { s.client.get(u"duży.bin"_s, sized(10), cb); });
         QVERIFY(refused.error.is(WebDavErrorCode::Oversized));
         QVERIFY(!refused.error.isFatal());
         QVERIFY(refused.data.isEmpty());
         QVERIFY2(refused.error.message.contains(u"larger than 1048586 bytes"_s), qPrintable(refused.error.message));
         // Twice the expected size is what a file may have grown to.
         const GetResult grown =
-                await<GetResult>([&](auto cb) { s.client.get(u"duży.bin"_s, GetOptions{2 * mebibyte}, cb); });
+                await<GetResult>([&](auto cb) { s.client.get(u"duży.bin"_s, sized(2 * mebibyte), cb); });
         QVERIFY2(!grown.error.isError(), qPrintable(grown.error.message));
         QCOMPARE(grown.data.size(), 3 * mebibyte);
         // Of unknown size: whatever fits the default.
@@ -873,9 +916,9 @@ private Q_SLOTS:
         QVERIFY2(!big.error.isError(), qPrintable(big.error.message));
         const PutResult small = await<PutResult>([&](auto cb) { s.client.put(u"mały.bin"_s, "x", {}, cb); });
         QVERIFY(small.error.is(WebDavErrorCode::Timeout));
-        GetOptions sized;
-        sized.size = 400'000;
-        QVERIFY(!await<GetResult>([&](auto cb) { s.client.get(u"d/duży.bin"_s, sized, cb); }).error.isError());
+        GetOptions expected;
+        expected.size = 400'000;
+        QVERIFY(!await<GetResult>([&](auto cb) { s.client.get(u"d/duży.bin"_s, expected, cb); }).error.isError());
         // Without a size hint a download gets ten times the base timeout (1 s here).
         QVERIFY(!await<GetResult>([&](auto cb) { s.client.get(u"d/duży.bin"_s, {}, cb); }).error.isError());
     }
@@ -1307,7 +1350,7 @@ private Q_SLOTS:
                 return std::nullopt;
             });
             s.client.setTimeout(30);
-            await<GetResult>([&](auto cb) { s.client.get(u"Dziennik/a.md"_s, GetOptions{qint64(4)}, cb); });
+            await<GetResult>([&](auto cb) { s.client.get(u"Dziennik/a.md"_s, sized(4), cb); });
             s.server.hooks = {[](const HttpRequest &, const QString &) -> std::optional<HttpResponse> {
                 HttpResponse r = FakeWebDavServer::status(200);
                 r.headers.insert("content-type", "text/html; charset=UTF-8");
@@ -1367,6 +1410,195 @@ private Q_SLOTS:
         QCOMPARE(r.protocol, QByteArray("http/1.1"));
         QCOMPARE(lastReceived, 5000);
         QCOMPARE(lastSent, 3000);
+    }
+
+    // --- streamed transfers (SyncEngine::streamAbove()) ----------------------------------------
+    void getHandsTheBodyToASinkInPieces_data()
+    {
+        QTest::addColumn<bool>("streams");
+        QTest::newRow("streaming transport") << true;
+        QTest::newRow("transport without streaming") << false;
+    }
+    void getHandsTheBodyToASinkInPieces()
+    {
+        QFETCH(bool, streams);
+        FakeWebDavServer::Options options;
+        options.streams = streams;
+        options.streamPiece = 64 * 1024;
+        Setup s(options);
+        const QByteArray film = CountingDevice::pattern(5 * 1024 * 1024 + 17);
+        s.server.putFile(u"Notatki/załączniki/film.mp4"_s, film);
+        QByteArray kept;
+        qint64 largest = 0;
+        int pieces = 0;
+        GetOptions get = sized(film.size());
+        get.sink = [&](QByteArrayView piece) {
+            kept += piece;
+            largest = std::max<qint64>(largest, piece.size());
+            ++pieces;
+            return true;
+        };
+        const GetResult r = await<GetResult>([&](auto cb) { s.client.get(u"załączniki/film.mp4"_s, get, cb); });
+        QVERIFY2(!r.error.isError(), qPrintable(r.error.message));
+        QVERIFY(r.data.isEmpty()); // (all of it went to the sink)
+        QVERIFY(!r.etag.isEmpty());
+        QCOMPARE(kept, film);
+        if (streams) {
+            QCOMPARE(largest, options.streamPiece);
+            QVERIFY(pieces > 80);
+            QVERIFY(s.server.largestPayload() < 1024 * 1024); // nothing whole crossed the transport
+        } else {
+            QCOMPARE(pieces, 1); // handed over at once
+        }
+    }
+
+    void getStopsWhenTheSinkRefuses()
+    {
+        FakeWebDavServer::Options options;
+        options.streams = true;
+        Setup s(options);
+        s.server.putFile(u"Notatki/skan.pdf"_s, QByteArray(1024 * 1024, 'p'));
+        qint64 kept = 0;
+        GetOptions get = sized(1024 * 1024);
+        get.sink = [&](QByteArrayView piece) {
+            if (kept >= 128 * 1024)
+                return false; // a full disk
+            kept += piece.size();
+            return true;
+        };
+        const GetResult r = await<GetResult>([&](auto cb) { s.client.get(u"skan.pdf"_s, get, cb); });
+        QVERIFY(r.error.is(WebDavErrorCode::Cancelled));
+        QVERIFY(!r.error.isFatal()); // (the network is fine: other files go on)
+        QCOMPARE(kept, 128 * 1024);
+    }
+
+    void putFromReadsTheSourceAsItIsSent_data()
+    {
+        QTest::addColumn<bool>("streams");
+        QTest::newRow("streaming transport") << true;
+        QTest::newRow("transport without streaming") << false;
+    }
+    void putFromReadsTheSourceAsItIsSent()
+    {
+        QFETCH(bool, streams);
+        FakeWebDavServer::Options options;
+        options.streams = streams;
+        Setup s(options);
+        constexpr qint64 Size = 3 * 1024 * 1024 + 5;
+        int opened = 0;
+        const UploadSource source = [&](QString *) -> std::unique_ptr<QIODevice> {
+            ++opened;
+            return std::make_unique<CountingDevice>(Size);
+        };
+        const PutResult r = await<PutResult>(
+                [&](auto cb) { s.client.putFrom(u"Zdjęcia/łąka.jpg"_s, Size, source, PutOptions{}, cb); });
+        QVERIFY2(!r.error.isError(), qPrintable(r.error.message));
+        QCOMPARE(opened, 1);
+        QCOMPARE(s.server.bytes(u"Notatki/Zdjęcia/łąka.jpg"_s),
+                 std::optional<QByteArray>(CountingDevice::pattern(Size)));
+        if (streams)
+            QVERIFY(s.server.largestPayload() < 1024 * 1024);
+    }
+
+    void putFromNeverSendsWhatItCannotRead_data()
+    {
+        QTest::addColumn<bool>("unreadable");
+        QTest::newRow("cannot be opened") << true;
+        QTest::newRow("another size") << false;
+    }
+    void putFromNeverSendsWhatItCannotRead()
+    {
+        // A file that cannot be read is no empty upload: the server's version stays.
+        QFETCH(bool, unreadable);
+        FakeWebDavServer::Options options;
+        options.streams = true;
+        Setup s(options);
+        s.server.putFile(u"Notatki/raport.pdf"_s, "stara wersja");
+        s.server.clearLog();
+        const UploadSource source = [&](QString *error) -> std::unique_ptr<QIODevice> {
+            if (unreadable) {
+                *error = u"Brak dostępu do pliku „raport.pdf”"_s;
+                return nullptr;
+            }
+            return std::make_unique<CountingDevice>(10); // not the 4096 bytes announced
+        };
+        const PutResult r =
+                await<PutResult>([&](auto cb) { s.client.putFrom(u"raport.pdf"_s, 4096, source, PutOptions{}, cb); });
+        QVERIFY(r.error.is(WebDavErrorCode::Cancelled));
+        QVERIFY(!r.error.isFatal());
+        if (unreadable)
+            QVERIFY2(r.error.message.contains(u"Brak dostępu"_s), qPrintable(r.error.message));
+        QVERIFY(s.server.requests("PUT").isEmpty());
+        QCOMPARE(s.server.text(u"Notatki/raport.pdf"_s), std::optional<QString>(u"stara wersja"_s));
+    }
+
+    void networkTransportStreamsBothWays()
+    {
+        // A download handed on in pieces of at most StreamPieceBytes (Qt's read buffer bounded so),
+        // an upload read from its device in small pieces: neither is ever held whole.
+        constexpr qint64 Size = 24LL * 1024 * 1024 + 3;
+        const QByteArray film = CountingDevice::pattern(Size);
+        MiniHttpServer http;
+        http.handler = [&](const MiniHttpServer::Request &request) {
+            if (request.method == "PUT")
+                return rawResponse(request.body == film ? 201 : 400, "Created", {});
+            return rawResponse(200, "OK", film);
+        };
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        NetworkHttpTransport transport(&manager);
+        QVERIFY(transport.streams());
+
+        HttpRequest get;
+        get.method = "GET";
+        get.url = QUrl(http.url(u"/dav/film.mp4"_s));
+        get.maxBodyBytes = 2 * Size;
+        text::Fnv1a64 hash;
+        qint64 received = 0;
+        qint64 largest = 0;
+        get.bodySink = [&](QByteArrayView piece) {
+            hash.add(piece);
+            received += piece.size();
+            largest = std::max<qint64>(largest, piece.size());
+            return true;
+        };
+        const HttpResponse got = await<HttpResponse>([&](auto cb) { transport.send(get, cb); });
+        QCOMPARE(got.status, 200);
+        QVERIFY(got.body.isEmpty());
+        QCOMPARE(received, Size);
+        QCOMPARE(hash.value(), text::fnv1a64(film));
+        QVERIFY(largest <= HttpRequest::StreamPieceBytes);
+
+        HttpRequest put;
+        put.method = "PUT";
+        put.url = QUrl(http.url(u"/dav/film.mp4"_s));
+        auto device = std::make_shared<CountingDevice>(Size);
+        put.bodyDevice = device;
+        const HttpResponse sent = await<HttpResponse>([&](auto cb) { transport.send(put, cb); });
+        QCOMPARE(sent.status, 201);
+        QCOMPARE(device->handedOut, Size);
+        QVERIFY2(device->largestRead <= 1024 * 1024, qPrintable(QString::number(device->largestRead)));
+    }
+
+    void networkTransportStopsWhenTheSinkRefuses()
+    {
+        MiniHttpServer http;
+        http.handler = [](const MiniHttpServer::Request &) { return rawResponse(200, "OK", QByteArray(4 << 20, 'z')); };
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        NetworkHttpTransport transport(&manager);
+        HttpRequest get;
+        get.method = "GET";
+        get.url = QUrl(http.url(u"/dav/duży.bin"_s));
+        qint64 kept = 0;
+        get.bodySink = [&](QByteArrayView piece) {
+            kept += piece.size();
+            return kept < 512 * 1024;
+        };
+        const HttpResponse r = await<HttpResponse>([&](auto cb) { transport.send(get, cb); });
+        QCOMPARE(r.status, 0);
+        QVERIFY2(r.networkError.contains(u"could not be kept"_s), qPrintable(r.networkError));
+        QVERIFY(kept < 4 << 20);
     }
 };
 

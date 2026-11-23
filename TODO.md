@@ -326,9 +326,12 @@ done in the repository simply disappears from the list.
   keeps the file being written in memory), an Android folder chosen through a cloud document,
   splitting the compression of a large file into chunks in the browser (today a file over 4 MB is
   saved uncompressed).
-* **Sync and import in bounded memory** — a download is kept in memory before it is written (up
-  to the largest file synced, 200 MB, several at a time), and an imported ZIP is unpacked into
-  memory (up to 1.5 GiB): streaming to the file, as backups do, would bound both on a phone.
+* **Sync and import in bounded memory: what is left** — a folder of the device
+  (`FolderDavTransport` over `FolderStorage`, the Android document provider's `TreeFolder.kt`)
+  reads and writes a file whole and does not stream (`HttpTransport::streams()`), so a sync with
+  a picked folder still holds a large file in memory; a Joplin JEX (tar) is read whole; the
+  memory of a large sync or import on a real phone is not measured yet (docs/PERFORMANCE.md "Sync
+  and import in bounded memory").
 
 ## Sharing and collaboration
 

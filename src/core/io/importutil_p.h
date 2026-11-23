@@ -86,8 +86,13 @@ public:
     /// Add an attachment under the attachment folder; identical data under the same requested
     /// name is stored once. Returns its vault path.
     VaultPath addAttachment(const QString &relative, const QByteArray &data);
+    /// addAttachment() of an input file as it is: its data, or its file on disk (passed on, never
+    /// read; the same file under the same requested name is stored once).
+    VaultPath addAttachment(const QString &relative, const InputFile &file);
     /// Add a file at a claimed path.
     void addFile(const VaultPath &path, const QByteArray &data);
+    /// addFile() of an input file as it is (on disk: passed on, never read).
+    void addFile(const VaultPath &path, const InputFile &file);
 
     void warn(const QString &message);
     ImportResult take();
@@ -99,6 +104,7 @@ private:
     ImportResult m_result;
     QHash<QString, qsizetype> m_journalIndex;                              ///< path key -> index in files
     QHash<QString, QList<std::pair<QByteArray, VaultPath>>> m_attachments; ///< requested -> stored
+    QHash<QString, QList<std::pair<QString, VaultPath>>> m_fileAttachments; ///< the same, files on disk
     QSet<QString> m_warned;                                                ///< warnings given (each once)
 };
 

@@ -43,6 +43,11 @@ public:
         bool fileIds = false;                 ///< list oc:fileid (Nextcloud, ownCloud)
         bool fileIdsUnknown = false;          ///< !fileIds: answer oc:fileid with 404 (a generic server)
         std::function<qint64()> now;          ///< clock (ms); default 2026-10-14 08:00:00 UTC
+        /// streams(): uploads come as HttpRequest::bodyDevice (read here in pieces; hooks see the
+        /// whole body as usual), a 2xx answer goes to HttpRequest::bodySink in pieces.
+        /// (On by default in the "_streamed" runs of the tests: BRULION_TEST_SYNC_STREAM.)
+        bool streams = qEnvironmentVariableIsSet("BRULION_TEST_SYNC_STREAM");
+        qint64 streamPiece = 64 * 1024; ///< bytes per piece handed to a sink / read from a device
     };
 
     struct Node {
@@ -68,6 +73,18 @@ public:
     ~FakeWebDavServer() override;
 
     void send(const HttpRequest &request, HttpCallback done) override;
+    bool streams() const override { return m_options.streams; }
+
+    /// The largest body that crossed the transport whole, either way (HttpRequest::body,
+    /// HttpResponse::body): with streams(), what a client held in memory at once for a transfer.
+    qsizetype largestPayload() const { return m_largestPayload; }
+    /// Streamed GETs (bodySink) whose path ends with `suffix` break off after `bytes` were handed
+    /// over, as a dropped connection does (networkError); a negative `bytes` stops none.
+    void dropStreamedGets(const QString &suffix, qint64 bytes)
+    {
+        m_dropSuffix = suffix;
+        m_dropAfter = bytes;
+    }
 
     /// A response for hooks meaning "never answer" (a stalled connection).
     static HttpResponse noResponse();
@@ -131,6 +148,9 @@ private:
     QHash<QByteArray, int> m_latency;
     QHash<QByteArray, int> m_inFlight;
     QHash<QByteArray, int> m_peak;
+    qsizetype m_largestPayload = 0;
+    QString m_dropSuffix;
+    qint64 m_dropAfter = -1;
     int m_etagCounter = 0;
     int m_fileIdCounter = 0;
 };

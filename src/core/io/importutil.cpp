@@ -224,7 +224,7 @@ QString ImportContext::journalLinkTarget(QDate date) const
 
 void ImportContext::addPage(const VaultPath &path, const QString &content)
 {
-    m_result.files.append(ImportedFile{path, content.toUtf8(), false});
+    m_result.files.append(ImportedFile{path, content.toUtf8(), false, {}, 0});
 }
 
 VaultPath ImportContext::addJournal(QDate date, const QString &content)
@@ -237,7 +237,7 @@ VaultPath ImportContext::addJournal(QDate date, const QString &content)
         return path;
     }
     m_journalIndex.insert(key, m_result.files.size());
-    m_result.files.append(ImportedFile{path, content.toUtf8(), true});
+    m_result.files.append(ImportedFile{path, content.toUtf8(), true, {}, 0});
     return path;
 }
 
@@ -255,9 +255,34 @@ VaultPath ImportContext::addAttachment(const QString &relative, const QByteArray
     return path;
 }
 
+VaultPath ImportContext::addAttachment(const QString &relative, const InputFile &file)
+{
+    if (!file.onDisk())
+        return addAttachment(relative, file.data);
+    const QString key = pathKey(safeRelativePath(relative, true));
+    QList<std::pair<QString, VaultPath>> &stored = m_fileAttachments[key];
+    for (const auto &[source, path] : std::as_const(stored)) {
+        if (source == file.file)
+            return path;
+    }
+    const VaultPath path = claimAttachment(relative);
+    stored.append({file.file, path});
+    addFile(path, file);
+    return path;
+}
+
 void ImportContext::addFile(const VaultPath &path, const QByteArray &data)
 {
-    m_result.files.append(ImportedFile{path, data, false});
+    m_result.files.append(ImportedFile{path, data, false, {}, 0});
+}
+
+void ImportContext::addFile(const VaultPath &path, const InputFile &file)
+{
+    if (!file.onDisk()) {
+        addFile(path, file.data);
+        return;
+    }
+    m_result.files.append(ImportedFile{path, {}, false, file.file, file.fileSize});
 }
 
 void ImportContext::warn(const QString &message)
@@ -272,6 +297,7 @@ ImportResult ImportContext::take()
 {
     m_journalIndex.clear();
     m_attachments.clear();
+    m_fileAttachments.clear();
     m_warned.clear();
     return std::exchange(m_result, {});
 }
@@ -689,7 +715,7 @@ SourceTree importTree(const QList<InputFile> &files, ImportContext &ctx, const T
         ctx.addPage(p.path, tree.rewrite(content, p.file->path, options.links));
     }
     for (const Page &a : std::as_const(attachments))
-        ctx.addFile(a.path, a.file->data);
+        ctx.addFile(a.path, *a.file);
     return tree;
 }
 

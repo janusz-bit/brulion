@@ -36,7 +36,31 @@ struct ReplyState {
     qint64 received = 0;
     QByteArray body; ///< what was read while it came (HttpRequest::onData): the body's start
     bool aborted = false; ///< stopped by its sender (HttpRequest::abort)
+    qint64 streamed = 0;  ///< bytes handed to HttpRequest::bodySink
+    bool sinkFailed = false;               ///< the sink refused a piece: aborted
+    std::shared_ptr<QIODevice> bodyDevice; ///< HttpRequest::bodyDevice, kept while Qt reads it
 };
+
+bool isSuccess(const QNetworkReply *reply)
+{
+    const QVariant status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    return status.isValid() && status.toInt() >= 200 && status.toInt() < 300;
+}
+
+/// Hands what the reply holds of a 2xx answer to `sink`, a piece at a time; false when the sink
+/// refused one.
+bool drainInto(QNetworkReply *reply, const std::function<bool(QByteArrayView)> &sink, ReplyState &state)
+{
+    while (reply->bytesAvailable() > 0) {
+        const QByteArray piece = reply->read(HttpRequest::StreamPieceBytes);
+        if (piece.isEmpty())
+            break;
+        state.streamed += piece.size();
+        if (!sink(piece))
+            return false;
+    }
+    return true;
+}
 
 /// The port a URL leads to: its own, or the scheme's.
 int effectivePort(const QUrl &url)
@@ -137,8 +161,13 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
     if (request.timeoutMs > 0)
         req.setTransferTimeout(request.timeoutMs);
 
-    QNetworkReply *reply = m_manager->sendCustomRequest(req, request.method, request.body);
+    if (request.bodyDevice)
+        req.setHeader(QNetworkRequest::ContentLengthHeader, request.bodyDevice->size());
+    QNetworkReply *reply = request.bodyDevice
+                                   ? m_manager->sendCustomRequest(req, request.method, request.bodyDevice.get())
+                                   : m_manager->sendCustomRequest(req, request.method, request.body);
     auto state = std::make_shared<ReplyState>();
+    state->bodyDevice = request.bodyDevice;
     const QUrl origin = request.url;
     connect(reply, &QNetworkReply::redirected, reply, [reply, origin, state](const QUrl &target) {
         // Credentials travel in the Authorization header: never follow to another server or
@@ -162,7 +191,25 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
     };
     connect(reply, &QNetworkReply::metaDataChanged, reply,
             [reply, stopAbove] { stopAbove(reply->header(QNetworkRequest::ContentLengthHeader).toLongLong()); });
-    if (request.onData) {
+    if (request.bodySink) {
+        // Handed on as it comes, never kept: Qt buffers no more than a piece unread (it stops
+        // reading from the socket meanwhile).
+        reply->setReadBufferSize(HttpRequest::StreamPieceBytes);
+        connect(reply, &QNetworkReply::readyRead, reply, [reply, state, stopAbove, sink = request.bodySink] {
+            if (!isSuccess(reply)) {
+                stopAbove(reply->bytesAvailable()); // (an error's body: read at the end)
+                return;
+            }
+            if (state->tooLarge || state->sinkFailed)
+                return;
+            const bool kept = drainInto(reply, sink, *state);
+            stopAbove(state->streamed);
+            if (!kept && !state->tooLarge) {
+                state->sinkFailed = true;
+                reply->abort();
+            }
+        });
+    } else if (request.onData) {
         // Read as it comes, kept for the response too (the limit counts all of it).
         connect(reply, &QNetworkReply::readyRead, reply, [reply, state, stopAbove, onData = request.onData] {
             const QVariant status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
@@ -203,7 +250,15 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
     asked.method = request.method;
     asked.url = request.url;
     asked.maxBodyBytes = request.maxBodyBytes;
+    asked.bodySink = request.bodySink;
     connect(reply, &QNetworkReply::finished, this, [this, reply, state, asked, done = std::move(done)] {
+        // The rest of a streamed answer (what came with its end).
+        if (asked.bodySink && !state->tooLarge && !state->sinkFailed && !state->aborted
+            && reply->error() == QNetworkReply::NoError && isSuccess(reply)) {
+            state->sinkFailed = !drainInto(reply, asked.bodySink, *state);
+            if (!state->sinkFailed && state->streamed > asked.bodyLimit())
+                state->tooLarge = true;
+        }
         if (state->tooLarge) {
             reply->deleteLater();
             done(HttpResponse::oversized(asked));
@@ -223,7 +278,7 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
             done(response);
             return;
         }
-        finish(reply, state->timedOut, state->body, done);
+        finish(reply, state->timedOut, state->body, state->sinkFailed, done);
     });
     // Stopped by its sender: it ends from the event loop (never inside send(), even when it was
     // stopped before), as a broken connection.
@@ -239,11 +294,17 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
         });
 }
 
-void NetworkHttpTransport::finish(QNetworkReply *reply, bool timedOut, const QByteArray &read,
+void NetworkHttpTransport::finish(QNetworkReply *reply, bool timedOut, const QByteArray &read, bool sinkFailed,
                                   const HttpCallback &done)
 {
     reply->deleteLater();
     HttpResponse response;
+    if (sinkFailed) {
+        response.networkError =
+                u"The answer to %1 could not be kept"_s.arg(reply->request().url().toString(QUrl::RemoveUserInfo));
+        done(response);
+        return;
+    }
     const QVariant status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     const QNetworkReply::NetworkError error = reply->error();
     // Errors below 200 are network / proxy layer failures (refused, host not found, TLS,
@@ -261,6 +322,7 @@ void NetworkHttpTransport::finish(QNetworkReply *reply, bool timedOut, const QBy
         response.protocol = reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool() ? "h2" : "http/1.1";
         for (const auto &[name, value] : reply->rawHeaderPairs())
             response.headers.insert(name.toLower(), value);
+        // (A streamed answer's body went to the sink: what is left here is an error's.)
         response.body = read + reply->readAll();
     }
     done(response);

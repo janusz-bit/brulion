@@ -57,6 +57,7 @@
 #include <QPointer>
 #include <QSet>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -256,6 +257,8 @@ private:
     void setProgress(qreal value, const QString &text = {});
     void analyze();
     void scheduleAnalyze();
+    /// A new staging folder for the next input (m_staging), handed to the gatherer too.
+    void renewStaging();
     std::function<bool(const VaultPath &)> existsSnapshot() const;
     void applyPlan(int generation, const io::ImportResult &result, bool forImport);
     void writeStep();
@@ -273,7 +276,15 @@ private:
     QString m_importerId;
     QString m_detectedId;
     QString m_sourceName;
+    /// What was picked; once the first analysis prepared it (io::prepareImportFiles(): archives
+    /// unpacked, large attachments into m_staging), the prepared files (m_inputPrepared).
     QList<io::InputFile> m_input;
+    bool m_inputPrepared = false;
+    bool m_preparing = false;  ///< the first analysis of m_input runs (and prepares it)
+    int m_inputGeneration = 0; ///< a new input (or none) since an analysis started
+    /// Large picked archives and their unpacked attachments (io::FileEntry on disk), removed with
+    /// the input; none in the browser.
+    std::shared_ptr<QTemporaryDir> m_staging;
     qint64 m_inputBytes = 0;
     QStringList m_readWarnings;
     QString m_targetFolder;

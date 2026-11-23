@@ -562,6 +562,27 @@ private Q_SLOTS:
         QCOMPARE(text::fnv1a64Hex(input.toUtf8()), referenceFnv(input.toUtf8()));
         QCOMPARE(text::contentHash(input).size(), 16);
     }
+    void fnvInPieces_data()
+    {
+        QTest::addColumn<QByteArray>("input");
+        QTest::addColumn<int>("piece");
+        QTest::newRow("empty") << QByteArray() << 1;
+        QTest::newRow("bytes") << u"Zażółć gęślą jaźń"_s.toUtf8() << 1;
+        QTest::newRow("split in a letter") << u"Łódź, ul. Żółta 5"_s.toUtf8() << 3;
+        QTest::newRow("one piece") << u"ąćęłńóśźż"_s.toUtf8() << 1000;
+        QTest::newRow("long") << QByteArray(100'000, 'x') << 4096;
+    }
+    void fnvInPieces()
+    {
+        QFETCH(QByteArray, input);
+        QFETCH(int, piece);
+        text::Fnv1a64 hash;
+        for (qsizetype at = 0; at < input.size(); at += piece)
+            hash.add(QByteArrayView(input).sliced(at, std::min<qsizetype>(piece, input.size() - at)));
+        hash.add({}); // an empty piece changes nothing
+        QCOMPARE(hash.value(), text::fnv1a64(input));
+        QCOMPARE(hash.hex(), text::fnv1a64Hex(input));
+    }
     void fnvBytes()
     {
         QByteArray random(4096, Qt::Uninitialized);
