@@ -323,7 +323,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="64"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9702"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9704"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -5577,7 +5577,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="117"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8904"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8906"/>
         <source>Attachments (%1)</source>
         <translation>Załączniki (%1)</translation>
     </message>
@@ -5598,7 +5598,7 @@
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="144"/>
         <location filename="../src/app/qml/views/CleanupView.qml" line="234"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8917"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8919"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -18782,7 +18782,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="540"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="955"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10844"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10846"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -20204,7 +20204,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1309"/>
         <source>Frame around pictures</source>
-        <translation>Ramka wokół obrazów</translation>
+        <translation>Ramka wokół obrazków</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1310"/>
@@ -21146,7 +21146,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="374"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9187"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9189"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -21157,7 +21157,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="385"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9238"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9240"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -22033,7 +22033,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="127"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10992"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10994"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -22686,7 +22686,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="19"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10016"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10018"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -23077,7 +23077,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="35"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9330"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9332"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -23096,7 +23096,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="39"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9267"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9269"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -24146,13 +24146,13 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="109"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="12387"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="12394"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="110"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="12377"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="12384"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -24512,7 +24512,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="649"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9025"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9027"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
@@ -25384,7 +25384,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/views/SyncView.qml" line="358"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9000"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9002"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
@@ -34246,7 +34246,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="80"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="11632"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="11634"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
