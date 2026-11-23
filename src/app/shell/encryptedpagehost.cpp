@@ -457,6 +457,12 @@ QVariantMap EncryptedPageHost::runDataview(const QString &source, const QString 
     return q ? q->runDataview(source, currentPath) : QVariantMap();
 }
 
+QVariantMap EncryptedPageHost::evaluateDataview(const QString &expression, const QString &currentPath)
+{
+    QueryHost *q = innerQueries();
+    return q ? q->evaluateDataview(expression, currentPath) : QVariantMap();
+}
+
 QVariantMap EncryptedPageHost::runView(const QString &language, const QString &source, const QString &currentPath,
                                        const QVariantMap &state)
 {

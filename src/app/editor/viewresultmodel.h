@@ -1,6 +1,6 @@
 // ViewResultModel — a database view (docs/SYNTAX.md §10 "Views", "Obsidian Bases") for the editor's
-// DatabaseView: a ```query block with `view:`, a ```base block, or a .base file shown as its own
-// page. Runs the view through the page's host (QueryHost::runView), renders its cells' Markdown with
+// DatabaseView: a ```query block with `view:`, a ```base block, a .base file shown as its own
+// page, or a ```dataview CALENDAR block (language "dataview": read-only, no columns to change). Runs the view through the page's host (QueryHost::runView), renders its cells' Markdown with
 // the page's renderer, and gives QML what it draws: the rows (this list model), the columns and the
 // groups (columnModel, groupModel), a calendar's days. Edits — a cell, a card dragged to another
 // column or day, a new row, a column or sort changed in the header — go through views/edits.h:

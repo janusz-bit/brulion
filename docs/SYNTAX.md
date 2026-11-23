@@ -1594,6 +1594,15 @@ table cells included (spaces or a line break may come before the `=`). Variables
 blocks earlier on the same page are in scope, as are numeric page properties (frontmatter and
 `key:: value`; `due-date` becomes `due_date`); the result follows them when they change.
 
+The same code span is also Dataview's inline query (§10 "Inline queries"). **The calculator comes
+first**: an expression it has a value for shows that value, as it always did (`` `= 2 + 2` ``,
+`` `= cena * 2` ``, `` `= 5 km to mi` ``); only one it cannot evaluate is read as a Dataview
+expression (`` `= this.file.name` ``, `` `= date(today) + dur(1 week)` ``). One that neither reads
+(or whose Dataview value is empty, `null` — a typo like `` `= cnea * 2` ``) shows the calculator's
+`#ERR`. The HTML, PDF, DOCX and Pandoc exports (and published pages) write the values of both in
+place of the code span (an inline expression on one line; one without a value stays code); the
+file keeps the code byte for byte.
+
 ### Table formulas
 Any GFM table body cell whose content starts with `=` is a formula, rendered as its result:
 
@@ -2058,8 +2067,10 @@ A fenced block with language `dataview` — a query of Obsidian's Dataview plugi
 with Obsidian have them — renders its live results in the editor like a `query` block
 (`dataview/dataview.h`). Brulion reads the Dataview Query Language with its own parser and
 evaluates it against its index: the results are read-only (tasks can be checked off), nothing
-from a note runs as a script — ```` ```dataviewjs ```` blocks and inline `` `= …` `` / `` `$= …` ``
-queries stay code. Without `LIMIT` at most 500 rows are shown (the total is still reported).
+from a note runs as a script — ```` ```dataviewjs ```` blocks and inline `` `$= …` `` queries stay
+code (they are JavaScript: Brulion has no script engine for notes, and will not run a note's code).
+Inline `` `= …` `` queries show their value (below, "Inline queries"). Without `LIMIT` at most 500
+rows are shown (the total is still reported; a `CALENDAR` shows every page with a date).
 
 ````
 ```dataview
@@ -2081,7 +2092,20 @@ LIST rows.file.link FROM #spotkanie GROUP BY dateformat(file.day, "yyyy-MM") AS 
 a table whose first column is the page (`File`) unless `WITHOUT ID`; a header is the expression
 as written or its `AS` name (`"…"` for one with spaces); `TASK` — the tasks of the pages,
 grouped by page, checked off and given a status (right-click / long press) in their own file.
-`CALENDAR` is not supported (an error says so).
+`CALENDAR expression` — a month's calendar with a dot for each page on the day of its date
+(`CALENDAR file.day`, `CALENDAR termin`, `CALENDAR file.mtime`; a time keeps its local day,
+never shifted through UTC); pages whose expression is no date are left out, and so are the rows of
+a `GROUP BY` (groups are no pages). Arrows move to the previous and next month, the month's name
+back to this one; a tap on a day opens its page, or a menu of its pages when it has several. It
+takes `FROM`, `WHERE`, `SORT`, `FLATTEN` and `LIMIT` like the other types, has no `WITHOUT ID`
+(an error says so) and is read-only.
+
+````
+```dataview
+CALENDAR termin
+FROM #projekt WHERE status != "zrobione"
+```
+````
 
 **Data commands**, written after the type in any order and as often as needed, are applied one
 after another: `FROM` (once, right after the type), `WHERE expr` (keeps rows where it is true),
@@ -2153,6 +2177,33 @@ object's children go as deep as the note's outline.
 **Results** show values as the editor renders text: links as links, lists joined with `, `,
 dates as `2026-10-15` (`2026-10-15 09:30` with a time), durations in words, a missing value as
 `–`. The HTML export, the clipboard and the other exports keep the block's source.
+
+### Inline queries
+
+Dataview's inline query — a code span starting with `=` (Dataview's default prefix) — shows the
+value of one expression of the language above, evaluated for the page it is on: `this` is the
+page, and its fields and `file` can also be named bare (`file.name` = `this.file.name`). Links,
+fields of other pages, dates, durations and every function above work; the source stays in the
+file byte for byte.
+
+```markdown
+Strona: `= this.file.name`, termin za tydzień: `= date(today) + dur(1 week)`.
+Telefon: `= [[Jan Kowalski]].telefon`, otwarte zadania: `= length(filter(this.file.tasks, (t) => !t.completed))`.
+```
+
+* **Precedence** — the same span is Brulion's inline calculation (§9 "Inline calculations"); the
+  calculator comes first and Dataview reads only what the calculator cannot evaluate. An empty
+  Dataview value (a missing field, `null`) or an expression neither reads shows the calculator's
+  `#ERR`; a Dataview expression that cannot be evaluated (too costly, a value too large) shows a
+  muted error chip with its message. A plain value (text, a number, a date) is a chip like a
+  calculation's result; a value with links or tags is rendered as the editor renders text.
+* **Where** — the editor's rendered blocks (also in table cells, embeds and transclusions); it
+  follows the index (a field changed on another page shows on the next save). The HTML, PDF, DOCX
+  and Pandoc exports and published pages put the value's Markdown in place of the span (over the
+  exported notes); the Markdown exports, the clipboard and query results keep the span as written.
+* **Limits** — those of queries (above), with a smaller budget of steps: an inline query is
+  evaluated while its text is drawn, so one too costly stops with its message at once. No network,
+  no script engine; `` `$= …` `` (DataviewJS) stays code.
 
 ## 11. Other rendering extensions (Obsidian compatible)
 

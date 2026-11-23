@@ -742,6 +742,8 @@ void PublishController::buildAndRun()
             siteInputFor(m_target, std::exchange(m_readFiles, {}), m_workspace->vault()->config(), notebook, now());
     if (input.protect)
         input.protection.password = readSecret(secretFile(appDataDir(), m_target.id, u"pages"_s));
+    input.calcLocale = m_settings && m_settings->language() == u"en" ? calc::CalcLocale::English
+                                                                      : calc::CalcLocale::Polish;
     m_readQueue.clear();
     setProgress(-1, tr("Making the pages…"));
     const int generation = m_generation;

@@ -2,10 +2,13 @@
 // Polish words), and the shapes brulion-cli prints — the keys of the app's maps (the app's own
 // parity check: tests/app/shell tst_shell_workspace queryJsonMatchesTheApp).
 #include "notebook/json.h"
+#include "notebook/views.h"
 
+#include "dataview/dataview.h"
 #include "index/vaultindex.h"
 #include "markdown/parse.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QTest>
 
@@ -164,6 +167,68 @@ private Q_SLOTS:
         item.kind = CalendarItem::Due;
         QCOMPARE(calendarItemJson(item).value(u"time"_s).toString(), QString());
         QCOMPARE(calendarItemJson(item).value(u"kind"_s).toString(), u"due"_s);
+    }
+
+    // A ```dataview CALENDAR block as a calendar view (runView "dataview"): the pages of the
+    // month's grid on the days of their date, read-only.
+    void dataviewCalendarView_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<QString>("month");
+        QTest::addColumn<QStringList>("rows"); // "title@date"
+        QTest::newRow("this month") << u"CALENDAR termin"_s << QString()
+                                    << QStringList{u"Łąka@2026-10-20"_s, u"Żurawie@2026-11-01"_s};
+        QTest::newRow("next month") << u"CALENDAR termin"_s << u"2026-11-15"_s
+                                    << QStringList{u"Żurawie@2026-11-01"_s, u"Grudzień@2026-12-05"_s};
+        QTest::newRow("where") << u"CALENDAR termin WHERE status = \"pilne\""_s << QString()
+                               << QStringList{u"Łąka@2026-10-20"_s};
+        QTest::newRow("from") << u"CALENDAR termin FROM \"Projekty\""_s << u"2026-12-01"_s
+                              << QStringList{u"Grudzień@2026-12-05"_s};
+    }
+    void dataviewCalendarView()
+    {
+        QFETCH(QString, source);
+        QFETCH(QString, month);
+        QFETCH(QStringList, rows);
+        VaultIndex index;
+        index.update(u"Łąka.md"_s, u"---\ntermin: 2026-10-20\nstatus: pilne\n---\n"_s);
+        index.update(u"Żurawie.md"_s, u"termin:: 2026-11-01\n"_s);
+        index.update(u"Projekty/Grudzień.md"_s, u"termin:: 2026-12-05\n"_s);
+        index.update(u"Bez daty.md"_s, u"termin:: kiedyś\n"_s);
+        ViewRequest request;
+        request.now = QDateTime(QDate(2026, 10, 14), QTime(10, 0));
+        request.month = QDate::fromString(month, Qt::ISODate);
+        const QJsonObject view = runView(index, u"dataview"_s, source, request);
+        QVERIFY2(view.value(u"ok"_s).toBool(), qPrintable(view.value(u"error"_s).toString()));
+        QCOMPARE(view.value(u"kind"_s).toString(), u"calendar"_s);
+        QCOMPARE(view.value(u"language"_s).toString(), u"dataview"_s);
+        QStringList got;
+        for (const QJsonValue &row : view.value(u"rows"_s).toArray())
+            got.append(row[u"title"_s].toString() + u'@' + row[u"date"_s].toString());
+        QCOMPARE(got, rows);
+        QCOMPARE(view.value(u"newRow"_s)[u"possible"_s].toBool(), false);
+        QCOMPARE(view.value(u"groupKind"_s).toString(), QString()); // nothing to drag
+    }
+    void dataviewViewErrors()
+    {
+        VaultIndex index;
+        ViewRequest request;
+        request.now = QDateTime(QDate(2026, 10, 14), QTime(10, 0));
+        const QJsonObject list = runView(index, u"dataview"_s, u"LIST FROM #projekt"_s, request);
+        QCOMPARE(list.value(u"ok"_s).toBool(), false);
+        QVERIFY(list.value(u"error"_s).toString().contains(u"CALENDAR"_s));
+        const QJsonObject bad = runView(index, u"dataview"_s, u"CALENDAR"_s, request);
+        QCOMPARE(bad.value(u"ok"_s).toBool(), false);
+        QVERIFY(bad.value(u"error"_s).toString().contains(u"needs the date"_s));
+    }
+    void dataviewInlineShape()
+    {
+        QCOMPARE(dataviewInlineJson(std::nullopt).value(u"kind"_s).toString(), QString());
+        const dataview::InlineValue v{dataview::InlineValue::Kind::Value, u"[[Łąka]]"_s, u"Łąka"_s};
+        QCOMPARE(dataviewInlineJson(v),
+                 QJsonObject({{u"kind"_s, u"value"_s}, {u"markdown"_s, u"[[Łąka]]"_s}, {u"text"_s, u"Łąka"_s}}));
+        const dataview::InlineValue e{dataview::InlineValue::Kind::Error, QString(), u"Błąd"_s};
+        QCOMPARE(dataviewInlineJson(e).value(u"kind"_s).toString(), u"error"_s);
     }
 };
 

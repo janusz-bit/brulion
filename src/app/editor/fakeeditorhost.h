@@ -150,6 +150,7 @@ public:
     // QueryHost (also invokable, like the shell's Workspace)
     Q_INVOKABLE QVariantMap runQuery(const QString &source, const QString &currentPath) override;
     Q_INVOKABLE QVariantMap runDataview(const QString &source, const QString &currentPath) override;
+    Q_INVOKABLE QVariantMap evaluateDataview(const QString &expression, const QString &currentPath) override;
     Q_INVOKABLE QVariantMap runView(const QString &language, const QString &source, const QString &currentPath,
                                     const QVariantMap &state = {}) override;
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;
@@ -204,6 +205,8 @@ public:
     int taskEdits() const { return m_taskEdits; }
     /// Number of runQuery() calls (tests).
     int queryRuns() const { return m_queryRuns; }
+    /// How many inline Dataview queries were evaluated (evaluateDataview()).
+    int inlineQueries() const { return m_inlineQueries; }
 
     /// Put a file without any signal (setting up a test or the playground).
     Q_INVOKABLE void setFile(const QString &path, const QString &content);
@@ -281,6 +284,7 @@ private:
     QString m_journalMode = QStringLiteral("outline");
     int m_taskEdits = 0;
     int m_queryRuns = 0;
+    int m_inlineQueries = 0;
     bool m_queriesFail = false;
     QStringList m_undecodable;
     bool m_pdfViewable = false;

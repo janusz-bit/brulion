@@ -10,7 +10,8 @@ namespace brulion::dataview::messages {
 QString atLine(int line, const QString &message);
 QString emptyQuery();
 QString expectedQueryType(const QString &found);
-QString calendarNotSupported();
+QString calendarNeedsDate();
+QString calendarWithoutId();
 QString unknownCommand(const QString &found);
 QString fromNotFirst();
 QString badSource(const QString &found);

@@ -92,6 +92,10 @@ struct Fixture {
     /// the block's line used directly.
     bool matchesFreshModel(QString *why)
     {
+        // Inline Dataview queries read the host's index, which follows the saves of the page: let
+        // the saves and the index changes they announce (once per event-loop turn) arrive first.
+        for (int i = 0; i < 4; ++i)
+            QCoreApplication::processEvents();
         BlockListModel fresh;
         fresh.setHost(&host);
         fresh.setPath(Page);
@@ -576,6 +580,38 @@ private Q_SLOTS:
         QCOMPARE(f.role(0, BlockListModel::TableDataRole).toMap(), QVariantMap());
         QString why;
         QVERIFY2(f.matchesFreshModel(&why), qPrintable(why));
+    }
+
+    // Inline Dataview queries (docs/SYNTAX.md §10 "Inline queries"): code spans the calculator has
+    // no value for show Dataview's value over the host's index, and follow it when another page
+    // changes; the calculator keeps its own.
+    void inlineDataviewQueries()
+    {
+        Fixture f(u"---\nbudżet: 1500\n---\n"
+                  u"Strona `= this.file.name`, budżet `= budżet * 2`\n\n"
+                  u"Miasto: `= [[Żaneta Kowalska]].miasto`\n\n"
+                  u"Za tydzień: `= date(today) + dur(1 week)`\n\n"
+                  u"Literówka `= cnea * 2` i `= żółw(1)`\n"_s);
+        f.host.setNow(u"2026-10-15 10:00"_s);
+        f.host.setFile(u"Ludzie/Żaneta Kowalska.md"_s, u"miasto:: Kraków\n"_s);
+        const auto shown = [&f](int row) {
+            return f.html(row).remove(QRegularExpression(u"<[^>]*>"_s)).replace(u"&nbsp;"_s, u" "_s);
+        };
+        const int name = f.rowOf(u"Strona"_s);
+        QVERIFY2(shown(name).contains(u"Strona  Obliczenia , budżet  3000 "_s), qPrintable(f.html(name)));
+        const int city = f.rowOf(u"Miasto"_s);
+        QVERIFY2(shown(city).contains(u"Miasto:  Kraków "_s), qPrintable(f.html(city)));
+        const int week = f.rowOf(u"Za tydzień"_s);
+        QVERIFY2(shown(week).contains(u"Za tydzień:  2026-10-22 "_s), qPrintable(f.html(week))); // now: 2026-10-15
+        const int typo = f.rowOf(u"Literówka"_s);
+        QVERIFY2(shown(typo).count(u"#ERR"_s) == 2, qPrintable(f.html(typo)));
+        // The source stays as written.
+        QCOMPARE(f.edit(city), u"Miasto: `= [[Żaneta Kowalska]].miasto`"_s);
+
+        // Another page changes: the value follows the index.
+        f.host.externalWrite(u"Ludzie/Żaneta Kowalska.md"_s, u"miasto:: Gdańsk\n"_s);
+        QTRY_VERIFY2(shown(city).contains(u"Miasto:  Gdańsk "_s), qPrintable(f.html(city)));
+        VERIFY_FRESH(f);
     }
 
     void randomEditsMatchAFreshModel_data()

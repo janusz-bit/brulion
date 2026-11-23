@@ -39,7 +39,7 @@ suma
 ```
 
 ## Rachunki w tekście
-Kod w linii zaczynający się od `=` pokazuje wynik. Rok ma `= 52 * 7` dni w pełnych tygodniach. Zmienne z wcześniejszych bloków `calc` na tej samej stronie są dostępne, podobnie jak liczbowe właściwości strony.
+Kod w linii zaczynający się od `=` pokazuje wynik. Rok ma `= 52 * 7` dni w pełnych tygodniach. Zmienne z wcześniejszych bloków `calc` na tej samej stronie są dostępne, podobnie jak liczbowe właściwości strony. To, czego kalkulator nie umie policzyć, jest czytane jako [[Zapytania#Zapytania Dataview z Obsidiana|zapytanie Dataview w tekście]] (`= this.file.name`).
 
 ## Tabele z formułami
 Komórka tabeli zaczynająca się od `=` jest formułą:

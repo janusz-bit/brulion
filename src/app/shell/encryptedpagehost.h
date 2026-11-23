@@ -105,6 +105,7 @@ public:
     // --- QueryHost (the inner host's, also for QML's `typeof host.runQuery`) -----------------------
     Q_INVOKABLE QVariantMap runQuery(const QString &source, const QString &currentPath) override;
     Q_INVOKABLE QVariantMap runDataview(const QString &source, const QString &currentPath) override;
+    Q_INVOKABLE QVariantMap evaluateDataview(const QString &expression, const QString &currentPath) override;
     Q_INVOKABLE QVariantMap runView(const QString &language, const QString &source, const QString &currentPath,
                                     const QVariantMap &state) override;
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;

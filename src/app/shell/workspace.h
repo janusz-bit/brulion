@@ -281,6 +281,8 @@ public:
     /// UI language for templates ({{weekday}}, {{date:dddd}}), quick capture dates, reminder
     /// texts and sync messages: "pl" (default) or "en".
     void setUiLanguage(const QString &language);
+    /// "pl" or "en" (setUiLanguage()).
+    QString uiLanguage() const { return m_language; }
     /// Serve assets as data: URLs (WebAssembly, where file:// URLs do not reach the vault).
     /// Default: true on WebAssembly, else false.
     void setDataUrlAssets(bool on);
@@ -685,6 +687,8 @@ public:
     /// A ```dataview block's results (QueryHost; the last few are kept until the index changes or
     /// the minute turns: Dataview's `date(now)`).
     Q_INVOKABLE QVariantMap runDataview(const QString &source, const QString &currentPath = QString()) override;
+    /// An inline Dataview query's value (QueryHost; the last ones are kept like runDataview()'s).
+    Q_INVOKABLE QVariantMap evaluateDataview(const QString &expression, const QString &currentPath = QString()) override;
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;
     /// A database view (QueryHost::runView: a ```query block with `view:`, a ```base block, a
     /// .base file); query views keep a QueryCache like query blocks, bases their last result per

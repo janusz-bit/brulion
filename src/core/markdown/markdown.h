@@ -133,11 +133,14 @@
 //                  MacroSpan{from, to, extension, name, arguments} (`{{ext:silownia/rekord
 //                  Przysiad}}`), macroArguments (split at commas), MacroView (what one shows:
 //                  pieces of text, links, code; placeholders) for RenderContext::macro
+//   inlineexpr.h   inline expressions `` `= …` `` (SYNTAX §9 "Inline calculations", §10 "Inline
+//                  queries"): findInlineExpressions(content), replaceInlineExpressions (the
+//                  exports' values), escapedMarkdownText
 //   pagelook.h    a page's icon and cover (`icon` / `banner_icon`, `banner`, `banner_y`):
 //                  parsePageIcon (emoji, Iconize's `LiBookOpen`), parsePageCover (`![[file]]`,
 //                  a path, an http(s) URL), pageLook(properties), the values Brulion writes
 //   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
-//                  inlineCalc, today, locale, palette, taskCheckbox, dateLinks}).render(body) /
+//                  inlineCalc, inlineQuery, today, locale, palette, taskCheckbox, dateLinks}).render(body) /
 //                  renderBlock(body, kind) ->
 //                  escaped Qt rich text with page:/tag:/block:/ext:/task:/reminder:/date: links and
 //                  coloured chips for dates, reminders and recurrence (reminder:FROM-TO and
@@ -161,6 +164,7 @@
 #include "markdown/frontmatter.h"
 #include "markdown/highlight.h"
 #include "markdown/inline.h"
+#include "markdown/inlineexpr.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"

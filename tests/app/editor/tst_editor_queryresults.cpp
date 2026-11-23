@@ -4,6 +4,7 @@
 // ```dataview blocks (language "dataview": LIST, TABLE cells, TASK groups); macros of extensions
 // in result rows and in a database view's cells (ViewResultModel): what the host computed, the
 // rows that show one rendered again when that changes, placeholders, escaping, code spans.
+#include "blocklistmodel.h"
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
 #include "queryresultmodel.h"
@@ -681,6 +682,67 @@ private Q_SLOTS:
         query.results.refresh();
         QVERIFY(query.results.ok());
         QCOMPARE(query.results.type(), u"tasks"_s);
+    }
+
+    // A ```dataview CALENDAR block: a database view of the month (language "dataview"),
+    // read-only, the pages on the days of their date, months moved, a page opened.
+    void dataviewCalendar()
+    {
+        const QString query = u"CALENDAR termin FROM \"Projekty\""_s;
+        Fixture f(u"type:tasks"_s, u"---\ntermin: 2026-10-20\n---\n```dataview\n"_s + query + u"\n```\n"_s);
+        f.host.setFile(u"Projekty/Łąka.md"_s, u"termin:: 2026-10-20\n"_s);
+        f.host.setFile(u"Projekty/Żurawie.md"_s, u"termin:: 2026-11-18\n"_s);
+        f.host.setFile(u"Inne.md"_s, u"termin:: 2026-10-21\n"_s);
+        ViewResultModel view;
+        QAbstractItemModelTester tester(&view, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        view.setRefreshDelay(0);
+        view.setController(&f.page);
+        view.setLanguage(u"dataview"_s);
+        view.setBlockRow(1);
+        view.setSource(query);
+        view.refresh();
+        QVERIFY2(view.ok(), qPrintable(view.error()));
+        QCOMPARE(view.language(), u"dataview"_s);
+        QCOMPARE(view.kind(), u"calendar"_s);
+        QVERIFY(!view.canChangeView());
+        QVERIFY(!view.canAddRow());
+        QVERIFY(!view.movable());
+        QCOMPARE(view.month(), u"2026-10-01"_s);
+        // October 2026's grid starts on Monday 28 September: the 20th is its day 22.
+        QCOMPARE(view.dayDate(22), u"2026-10-20"_s);
+        const QList<int> day = view.dayRows(22);
+        QCOMPARE(day.size(), 2);
+        QStringList titles;
+        for (const int r : day)
+            titles.append(view.rowText(r));
+        titles.sort();
+        QCOMPARE(titles, (QStringList{u"Dom"_s, u"Łąka"_s}));
+        QVERIFY(view.dayRows(23).isEmpty()); // Inne.md is not in "Projekty"
+        view.moveMonth(1);
+        view.refresh();
+        QCOMPARE(view.month(), u"2026-11-01"_s);
+        QCOMPARE(view.rowCount(), 1);
+        QCOMPARE(view.rowText(0), u"Żurawie"_s);
+        QVERIFY(view.open(0).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Projekty/Żurawie.md"_s);
+        // The editor shows the block as such a view; another Dataview query keeps its results.
+        const auto viewOf = [&f](const QString &text) {
+            BlockListModel *blocks = f.page.blocks();
+            for (int r = 0; r < blocks->rowCount(); ++r) {
+                if (blocks->data(blocks->index(r), BlockListModel::EditTextRole).toString() == text)
+                    return blocks->data(blocks->index(r), BlockListModel::QueryRole).toMap().value(u"view"_s).toString();
+            }
+            return u"<none>"_s;
+        };
+        QCOMPARE(viewOf(query), u"dataview"_s);
+        BlockListModel *blocks = f.page.blocks();
+        int row = -1;
+        for (int r = 0; r < blocks->rowCount(); ++r) {
+            if (blocks->data(blocks->index(r), BlockListModel::EditTextRole).toString() == query)
+                row = r;
+        }
+        f.page.setEditText(row, u"LIST FROM \"Projekty\""_s, -1);
+        QCOMPARE(viewOf(u"LIST FROM \"Projekty\""_s), QString());
     }
 
     // A result's macro shows what the host computed for the item's note ("…" until then), as the

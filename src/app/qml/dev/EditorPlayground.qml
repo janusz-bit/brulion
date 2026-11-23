@@ -1364,6 +1364,7 @@ ApplicationWindow {
         selfTestQueriesPart2()
         selfTestQueriesPart3()
         selfTestQueriesPart4()
+        selfTestQueriesPart5()
     }
     function selfTestQueriesPart1(): void {
         // ---- Live query results: tasks from the vault, checkable in their own files ----------
@@ -1479,6 +1480,66 @@ ApplicationWindow {
                     && editor.activeEditor.plain() === "Pierwszy akapit źdźbła",
                     "real Ctrl+Shift+Z brings the empty paragraph back, the caret in the paragraph after it: rows "
                     + page.blocks.count + ", editing " + page.editingRow)
+    }
+    /// The clock of the host before the Dataview steps (they need a fixed "today").
+    property string nowBefore: ""
+    /// The DatabaseView of the block in `row` (a ```dataview CALENDAR), null when not laid out.
+    function databaseViewAt(row: int): DatabaseView {
+        const item = editor.listView.itemAtIndex(row) as Item
+        return item ? window.findItem(item, "databaseView") as DatabaseView : null
+    }
+    function calendarDay(row: int, day: int): Item {
+        const view = window.databaseViewAt(row)
+        return view ? window.findItem(view, "viewDay" + day) : null
+    }
+    function selfTestQueriesPart5(): void {
+        // ---- Dataview's inline queries and CALENDAR (docs/SYNTAX.md §10) with real input -------
+        if (window.at()) {
+            page.save()
+            window.nowBefore = host.now
+            host.now = "2026-10-15 10:00"
+            host.setFile("Kalendarz/Łąka.md", "termin:: 2026-10-20\n")
+            host.setFile("Kalendarz/Żurawie.md", "termin:: 2026-10-22\n")
+            host.setFile("Kalendarz/Źródło.md", "termin:: 2026-10-22\n")
+            host.setFile("Dataview.md", "- Termin łąki: `= [[Kalendarz/Łąka]].termin`, za tydzień `= date(today) + dur(1 week)`\n"
+                         + "- ```dataview\n  CALENDAR termin\n  FROM \"Kalendarz\"\n  ```\n")
+            page.path = "Dataview.md"
+        }
+        if (window.at()) window.waitStep(Js.indexOf(rowHtml(0), "Termin łąki: ") >= 0 && Js.indexOf(rowHtml(0), "2026-10-20") > 0
+                                         && Js.indexOf(rowHtml(0), "2026-10-22") > 0 && Js.indexOf(rowHtml(0), "= [[") < 0,
+                                         "inline Dataview queries show their values: " + rowHtml(0))
+        if (window.at()) editor.listView.positionViewAtIndex(1, ListView.Beginning)
+        // October 2026's grid starts on Monday 28 September: the 20th is day 22, the 22nd day 24.
+        if (window.at()) window.waitStep(window.calendarDay(1, 24) !== null
+                                         && window.countNamed(window.calendarDay(1, 24), "viewDayDot") === 2,
+                                         "a CALENDAR block is a month with a dot per page on its day")
+        if (window.at()) check(window.countNamed(window.calendarDay(1, 22), "viewDayDot") === 1
+                               && window.countNamed(window.calendarDay(1, 23), "viewDayDot") === 0,
+                               "one dot on the 20th, none on the 21st")
+        if (window.at()) window.tapItem(window.calendarDay(1, 22))
+        if (window.at()) window.waitStep(host.lastRoute.path === "Kalendarz/Łąka.md",
+                                         "a tap on a day with one page opens it: " + window.routeText())
+        if (window.at()) window.tapItem(window.calendarDay(1, 24))
+        if (window.at()) window.waitStep(window.databaseViewAt(1) !== null && window.databaseViewAt(1).dayMenuOpen,
+                                         "a tap on a day with two pages opens the menu of its pages")
+        if (window.at()) realKey(Qt.Key_Escape, 0, "")
+        if (window.at()) window.waitStep(window.databaseViewAt(1) !== null && !window.databaseViewAt(1).dayMenuOpen,
+                                         "Escape closes the day's menu")
+        if (window.at()) {
+            const view = window.databaseViewAt(1)
+            const next = view ? window.findItem(view, "viewNextMonth") : null
+            check(next !== null, "the calendar has a next month button")
+            window.tapItem(next)
+        }
+        if (window.at()) window.waitStep(window.calendarDay(1, 24) !== null
+                                         && window.countNamed(window.calendarDay(1, 24), "viewDayDot") === 0
+                                         && window.databaseViewAt(1).shownMonth === "2026-11-01",
+                                         "the next month shows none of October's pages")
+        if (window.at()) {
+            check(page.sourceText === host.file("Dataview.md") && Js.indexOf(page.sourceText, "`= [[Kalendarz/Łąka]].termin`") > 0,
+                  "the queries stay in the file as written")
+            host.now = window.nowBefore
+        }
     }
     /// The visible children of a delegate `d` named `name` (indent guides): how many, the
     /// `index`-th, their x joined by ", ".
@@ -4495,10 +4556,14 @@ ApplicationWindow {
             editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning)
             break
         case "dataview": {
-            // ```dataview blocks (docs/SYNTAX.md §10 "Dataview queries"): a TABLE and a TASK query.
+            // ```dataview blocks (docs/SYNTAX.md §10 "Dataview queries"): a TABLE, a TASK and a
+            // CALENDAR query, and inline queries.
             const row = page.insertBlockAfter(viewRow("query"), "```dataview\nTABLE status, budżet AS \"Budżet\", "
                                               + "length(file.tasks) AS Zadania, file.etags AS Tagi\nFROM #projekt\n```")
-            page.insertBlockAfter(row, "```dataview\nTASK WHERE !completed AND contains(tags, \"#zakupy\")\n```")
+            const tasks = page.insertBlockAfter(row, "```dataview\nTASK WHERE !completed AND contains(tags, \"#zakupy\")\n```")
+            // A month of the pages by their date, and inline queries.
+            const calendar = page.insertBlockAfter(tasks, "```dataview\nCALENDAR file.day\n```")
+            page.insertBlockAfter(calendar, "Ta strona: `= this.file.name`, za tydzień: `= date(today) + dur(1 week)`")
             page.stopEditing()
             editor.listView.positionViewAtIndex(row, ListView.Beginning)
             break

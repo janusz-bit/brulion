@@ -118,10 +118,14 @@ A vault shared with Obsidian often has queries of the Dataview plugin. Brulion s
 TABLE status, budget AS "Budget" FROM #project WHERE status != "done" SORT budget DESC
 ```
 
-- `LIST`, `TABLE` (columns with `AS "name"`, `WITHOUT ID` hides the page column) and `TASK`,
+- `LIST`, `TABLE` (columns with `AS "name"`, `WITHOUT ID` hides the page column), `TASK` and `CALENDAR` (below),
 - `FROM #tag`, `FROM "Folder"`, `FROM [[Page]]` (pages linking to it), combined with `AND`, `OR` and `-`,
 - `WHERE`, `SORT … DESC`, `GROUP BY`, `FLATTEN`, `LIMIT`,
 - fields from the frontmatter and from `key:: value` lines, and `file.name`, `file.mtime`, `file.tags`, `file.tasks`…,
 - dates such as `date(today) + dur(7 days)` and Dataview's functions (`contains`, `length`, `round`, `dateformat`…).
 
-Brulion reads these queries itself and never runs scripts: `dataviewjs` blocks stay code, and functions with regular expressions and `CALENDAR` views say they are not supported.
+`CALENDAR termin` shows a month with a dot for each page on the day of its date (here the `termin` field; `file.day` is a daily note's date). The arrows change the month; tap a day to open its page, or to choose one of its pages.
+
+An **inline query** is inline code that starts with `=`, as in Dataview: this page is called `= this.file.name`, and a week from today is `= date(today) + dur(1 week)`. It shows the value and keeps the query in the file. The same code is also an [[Calculations#Inline calculations|inline calculation]]: when the calculator has a result (`= 52 * 7`), that result is shown; Dataview reads only what the calculator cannot.
+
+Brulion reads these queries itself and never runs scripts: `dataviewjs` blocks and `$= …` queries stay code (they are JavaScript), and functions with regular expressions say they are not supported.

@@ -209,7 +209,7 @@ void ViewResultModel::setSource(const QString &source)
 
 void ViewResultModel::setLanguage(const QString &language)
 {
-    const QString l = language == u"base" ? language : u"query"_s;
+    const QString l = language == u"base" || language == u"dataview" ? language : u"query"_s;
     if (m_language == l)
         return;
     m_language = l;
@@ -357,7 +357,8 @@ bool ViewResultModel::canAddRow() const
 
 bool ViewResultModel::canChangeView() const
 {
-    if (!m_controller || m_controller->readOnly())
+    // (A Dataview calendar is read-only: its query says what it shows.)
+    if (!m_controller || m_controller->readOnly() || m_language == u"dataview")
         return false;
     return !m_basePath.isEmpty() || m_blockRow >= 0;
 }

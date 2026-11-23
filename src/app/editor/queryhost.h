@@ -26,10 +26,15 @@
 // item { path ("" for a group of a grouped TABLE), title, folder, line 0, cells: [Markdown] }
 // (notebook::dataviewResultJson). Grouped LIST and TASK results come in groups (TASK without
 // GROUP BY: one group per page, keyed by its path).
+// evaluateDataview(expression, currentPath) evaluates an inline Dataview query — the code of
+// `` `= this.file.name` `` without its `=` (docs/SYNTAX.md §10 "Inline queries") — for the page:
+// { kind: "value" | "null" | "error" | "" (no Dataview expression), markdown, text }
+// (notebook::dataviewInlineJson).
 // runView(language, source, currentPath, state) runs a database view (docs/SYNTAX.md §10 "Views",
 // "Obsidian Bases"): a ```query block with `view:` ("query"), a ```base block or a .base file's text
-// ("base"); state: { view (a base's view, 0-based), viewName, month ("YYYY-MM-DD": a calendar's
-// month) } — the result is notebook::runView()'s JSON as a map (notebook/views.h) with `complete`.
+// ("base"), a ```dataview CALENDAR block ("dataview": a month of the pages on the days of their
+// date, read-only); state: { view (a base's view, 0-based), viewName, month ("YYYY-MM-DD": a
+// calendar's month) } — the result is notebook::runView()'s JSON as a map (notebook/views.h) with `complete`.
 // setTaskStatus(path, line, status) writes the task's new status ("todo", "doing", "done",
 // "cancelled", "deferred"; completing a recurring task writes its next instance; "" = no status:
 // markdown::removeTaskMarker) into the file and returns whether it changed.
@@ -50,6 +55,8 @@ public:
     virtual QVariantMap runQuery(const QString &source, const QString &currentPath) = 0;
     /// Run the Dataview query `source` (the body of a ```dataview block) written in `currentPath`.
     virtual QVariantMap runDataview(const QString &source, const QString &currentPath) = 0;
+    /// Evaluate the inline Dataview query `expression` written in `currentPath`; see the file comment.
+    virtual QVariantMap evaluateDataview(const QString &expression, const QString &currentPath) = 0;
     /// Run the database view `source` (`language` "query" or "base") shown on `currentPath`; see the
     /// file comment.
     virtual QVariantMap runView(const QString &language, const QString &source, const QString &currentPath,

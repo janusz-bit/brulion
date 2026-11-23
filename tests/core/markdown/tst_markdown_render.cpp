@@ -300,6 +300,74 @@ private Q_SLOTS:
                  link(u"page:2026-10-13"_s, u"L"_s, u"13"_s + nb + u"paź"_s + nb + u"2026"_s));
     }
 
+    // Inline expressions: the calculator first, then an inline Dataview query (docs/SYNTAX.md §9
+    // "Inline calculations", §10 "Inline queries").
+    void inlineQueries_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        const QString code = u"<code style=\"background-color:C\">"_s;
+        QTest::newRow("the calculator's value wins") << u"`= 2 + 2`"_s << chip(u"NF"_s, u"NB"_s, u"4"_s);
+        QTest::newRow("a value as a chip") << u"Nazwa: `= this.file.name`"_s
+                                           << u"Nazwa: "_s + chip(u"NF"_s, u"NB"_s, u"Łąka zielona"_s);
+        QTest::newRow("a link rendered") << u"`= this.właściciel`"_s
+                                         << link(u"page:%C5%BBaneta%20Kowalska"_s, u"L"_s, u"Żaneta Kowalska"_s);
+        QTest::newRow("markup is escaped") << u"`= this.html`"_s
+                                           << chip(u"NF"_s, u"NB"_s, u"&lt;b&gt;gruby&lt;/b&gt;"_s);
+        QTest::newRow("an error chip") << u"`= żółw.x`"_s << chip(u"OF"_s, u"NB"_s, u"⚠ Nie można"_s);
+        QTest::newRow("no Dataview value: the calculator's error") << u"`= brak * 2`"_s << chip(u"NF"_s, u"NB"_s, u"#ERR"_s);
+        QTest::newRow("no expression: code") << u"`=`"_s << code + u"=</code>"_s;
+        QTest::newRow("no = : code") << u"`this.file.name`"_s << code + u"this.file.name</code>"_s;
+    }
+    void inlineQueries()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        RenderContext c = context();
+        c.inlineCalc = [](const QString &expr) { return expr == u"2 + 2" ? u"4"_s : InlineCalcError.toString(); };
+        c.inlineQuery = [](const QString &expr) -> std::optional<InlineQueryView> {
+            if (expr == u"2 + 2")
+                return InlineQueryView{u"nie to"_s, u"nie to"_s, QString()}; // never asked: the calculator has it
+            if (expr == u"this.file.name")
+                return InlineQueryView{u"Łąka zielona"_s, u"Łąka zielona"_s, QString()};
+            if (expr == u"this.właściciel")
+                return InlineQueryView{u"[[Żaneta Kowalska]]"_s, u"Żaneta Kowalska"_s, QString()};
+            if (expr == u"this.html")
+                return InlineQueryView{u"<b>gruby</b>"_s, u"<b>gruby</b>"_s, QString()};
+            if (expr == u"żółw.x")
+                return InlineQueryView{QString(), QString(), u"Nie można"_s};
+            return std::nullopt;
+        };
+        QCOMPARE(InlineRenderer(c).render(input), expected);
+    }
+    void inlineQueryWithoutTheCalculator()
+    {
+        RenderContext c = context();
+        c.inlineCalc = nullptr;
+        c.inlineQuery = [](const QString &) -> std::optional<InlineQueryView> {
+            return InlineQueryView{u"2026-10-21"_s, u"2026-10-21"_s, QString()};
+        };
+        QCOMPARE(InlineRenderer(c).render(u"`= date(today) + dur(1 week)`"_s), chip(u"NF"_s, u"NB"_s, u"2026-10-21"_s));
+        // The value's own code spans stay code: no query inside a query.
+        int nested = 0;
+        c.inlineQuery = [&nested](const QString &expr) -> std::optional<InlineQueryView> {
+            if (expr == u"x")
+                ++nested;
+            return InlineQueryView{u"a `= x` b"_s, u"a `= x` b"_s, QString()};
+        };
+        const QString html = InlineRenderer(c).render(u"`= this.kod`"_s);
+        QCOMPARE(nested, 0);
+        QVERIFY2(html.contains(u"<code"_s), qPrintable(html));
+        // A reminder in a value is a chip, never a link naming a range of the block's text.
+        c.inlineQuery = [](const QString &) -> std::optional<InlineQueryView> {
+            return InlineQueryView{u"Spotkanie ⏰ 2026-10-15 09:00 i [[Dom]]"_s, u"Spotkanie"_s, QString()};
+        };
+        const QString reminder = InlineRenderer(c).render(u"Zobacz `= this.plan`"_s);
+        QVERIFY2(!reminder.contains(u"reminder:"_s), qPrintable(reminder));
+        QVERIFY2(reminder.contains(u"href=\"page:Dom\""_s), qPrintable(reminder));
+        QVERIFY2(reminder.contains(u"RB"_s), qPrintable(reminder)); // the reminder's chip
+    }
+
     // `⛔ a,b` with RenderContext::taskDependency: one taskdep: link chip per id, the text of the
     // task it waits for (open: overdue colours), "⛔ id?" for a missing id; unset: muted text.
     void taskDependencies()

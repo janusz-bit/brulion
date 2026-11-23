@@ -102,6 +102,8 @@ struct Workspace::ListCaches {
     RecentCaches<DataviewEntry> dataview{MaxCachedQueries}; ///< the ```dataview blocks of the open pages
     RecentCaches<QueryCache> viewQueries{MaxCachedQueries}; ///< the ```query views of the open pages
     RecentCaches<DataviewEntry> bases{MaxCachedQueries};    ///< the bases shown (blocks and .base pages)
+    /// Inline Dataview queries of the open pages (each block's rendering asks again).
+    RecentCaches<DataviewEntry> inlineQueries{4 * MaxCachedQueries};
 };
 
 Workspace::ListCaches &Workspace::listCaches() const
@@ -364,6 +366,28 @@ QVariantMap Workspace::runDataview(const QString &source, const QString &current
     return out;
 }
 
+QVariantMap Workspace::evaluateDataview(const QString &expression, const QString &currentPath)
+{
+    if (!m_index || !m_vault)
+        return notebook::dataviewInlineJson(std::nullopt).toVariantMap();
+    const VaultPath path = paths::normalize(currentPath);
+    QDateTime minute = now();
+    minute.setTime(QTime(minute.time().hour(), minute.time().minute()));
+    DataviewEntry &cached = listCaches().inlineQueries.get(expression + u'\x1f' + path);
+    if (cached.version == m_index->version() && cached.minute == minute && !cached.result.isEmpty())
+        return cached.result;
+    dataview::Options options;
+    options.currentPath = path;
+    options.now = now();
+    options.weekStart = m_vault->config().weekStartsOn;
+    const Vault *vault = m_vault.get();
+    options.stat = [vault](const VaultPath &p) { return vault->stat(p); };
+    cached.version = m_index->version();
+    cached.minute = minute;
+    cached.result = notebook::dataviewInlineJson(dataview::evaluateInline(expression, *m_index, options)).toVariantMap();
+    return cached.result;
+}
+
 QVariantMap Workspace::runView(const QString &language, const QString &source, const QString &currentPath,
                                const QVariantMap &state)
 {
@@ -388,8 +412,9 @@ QVariantMap Workspace::runView(const QString &language, const QString &source, c
     const QString key = language + u'\x1f' + source + u'\x1f' + path + u'\x1f' + QString::number(request.view) + u'\x1f'
                         + request.viewName + u'\x1f' + request.month.toString(Qt::ISODate);
     QVariantMap out;
-    if (language == u"base") {
-        // A base reads every file: its result is kept for the index version and the minute.
+    if (language == u"base" || language == u"dataview") {
+        // A base reads every file (a Dataview calendar every page): its result is kept for the
+        // index version and the minute.
         QDateTime minute = request.now;
         minute.setTime(QTime(minute.time().hour(), minute.time().minute()));
         DataviewEntry &cached = listCaches().bases.get(key);

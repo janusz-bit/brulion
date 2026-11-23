@@ -39,7 +39,7 @@ total
 ```
 
 ## Inline calculations
-Inline code that starts with `=` shows a result. A year has `= 52 * 7` days in full weeks. Variables from earlier `calc` blocks on the same page are available, and so are the page's numeric properties.
+Inline code that starts with `=` shows a result. A year has `= 52 * 7` days in full weeks. Variables from earlier `calc` blocks on the same page are available, and so are the page's numeric properties. What the calculator cannot work out is read as a [[Queries#Dataview queries from Obsidian|Dataview inline query]] (`= this.file.name`).
 
 ## Tables with formulas
 A table cell that starts with `=` is a formula:

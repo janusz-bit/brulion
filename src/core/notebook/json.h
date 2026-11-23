@@ -24,6 +24,7 @@ class VaultIndex;
 namespace brulion::dataview {
 enum class QueryType;
 struct Result;
+struct InlineValue;
 }
 
 namespace brulion::notebook {
@@ -44,7 +45,7 @@ std::optional<Priority> priorityFromName(QStringView name);
 QString blockKindName(BlockKind kind);
 QString linkKindName(LinkKind kind);
 QString queryTypeName(QueryType type);
-/// "list" | "table" | "tasks".
+/// "list" | "table" | "tasks" | "calendar".
 QString dataviewTypeName(dataview::QueryType type);
 QString calendarKindName(CalendarItem::Kind kind);
 
@@ -69,8 +70,12 @@ QJsonObject queryResultJson(const VaultIndex &index, const QueryResult &result);
 /// columns (TABLE headers), items (all of them, also those of the groups), groups: [{key, label,
 /// items}]}; a TASK item is queryItemJson()'s,
 /// a LIST / TABLE item {path ("" for a group of a grouped TABLE), title, folder, line 0, cells:
-/// [Markdown]} (dataview::Row).
+/// [Markdown]} (dataview::Row), a CALENDAR item also its date ("YYYY-MM-DD").
 QJsonObject dataviewResultJson(const VaultIndex &index, const dataview::Result &result);
+/// An inline query's value (dataview::evaluateInline(), QueryHost::evaluateDataview): {kind:
+/// "value" | "null" | "error" | "" (no Dataview expression), markdown, text (the value as plain
+/// text, or the message)}.
+QJsonObject dataviewInlineJson(const std::optional<dataview::InlineValue> &value);
 /// {path, title, folder, line, excerpt, score, journal} (journal: the daily note's date or "").
 QJsonObject searchHitJson(const SearchHit &hit, const VaultConfig &config);
 /// {date, time, kind, title, path, line, status, recurring, alarm} (Workspace::calendarItems).

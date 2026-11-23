@@ -9,7 +9,7 @@ brulion_add_core_module(dataview
         dataview.h value.h value.cpp
         ast_p.h parse.cpp
         eval_p.h eval.cpp functions.cpp objects.cpp
-        run.cpp
+        run.cpp inline.cpp
         expression.h expression_p.h expression.cpp bases.cpp
         messages_p.h messages.cpp
     DEPS util text dates markdown index)

@@ -1,7 +1,8 @@
 // Obsidian Dataview queries — the body of a ```dataview block (docs/SYNTAX.md §10 "Dataview
 // queries"), read by our own parser and evaluated against the VaultIndex. Read-only: the
 // results show pages, values and tasks; nothing is written, nothing from a note runs as a
-// script (```dataviewjs blocks and `$= …` stay code).
+// script (```dataviewjs blocks and `$= …` stay code). Inline queries (`` `= this.file.name` ``):
+// evaluateInline().
 //
 //   TABLE file.mtime AS "Changed", status, length(file.tasks) AS Tasks
 //   FROM #projekt AND "Projekty" AND -"Projekty/Archiwum"
@@ -9,8 +10,8 @@
 //   SORT due ASC, file.name
 //   LIMIT 20
 //
-// Query types: LIST [WITHOUT ID] [expr], TABLE [WITHOUT ID] expr [AS name], …, TASK (CALENDAR is
-// not supported). Data commands, in any order and repeatable, applied one after another: FROM
+// Query types: LIST [WITHOUT ID] [expr], TABLE [WITHOUT ID] expr [AS name], …, TASK, CALENDAR expr
+// (the pages on the day of their date: Row::date). Data commands, in any order and repeatable, applied one after another: FROM
 // (once, right after the type: #tag, "folder" or "path/file", [[page]] = pages linking to it,
 // [[]] = this page, outgoing([[page]]), combined with AND, OR, - / ! and parentheses), WHERE expr,
 // SORT expr [ASC|DESC], …, GROUP BY expr [AS name], FLATTEN expr [AS name], LIMIT n. Keywords
@@ -73,7 +74,7 @@ inline constexpr int MaxExpressionDepth = 256;
 /// through about ten functions, some 2 KB of stack, per level).
 inline constexpr int MaxExpressionNesting = 64;
 
-enum class QueryType { List, Table, Task };
+enum class QueryType { List, Table, Task, Calendar };
 
 struct Expr;    // ast_p.h
 struct Source;  // ast_p.h
@@ -84,7 +85,8 @@ struct Query {
     QString source;
     QueryType type = QueryType::List;
     bool withoutId = false;
-    /// TABLE columns (expression, header); LIST: at most one (the value after the link).
+    /// TABLE columns (expression, header); LIST: at most one (the value after the link); CALENDAR:
+    /// one (the date).
     QList<std::pair<std::shared_ptr<const Expr>, QString>> columns;
     std::shared_ptr<const Source> from; ///< null: every page
     QList<std::shared_ptr<const Command>> commands;
@@ -105,7 +107,8 @@ struct Options {
     /// A file's size and modification time (`file.size`, `file.mtime`, `file.ctime`); without it
     /// (or for a file it does not know) the size of the indexed text and no times.
     std::function<std::optional<FileStat>(const VaultPath &path)> stat;
-    /// Rows returned without LIMIT (the only ones whose columns are evaluated).
+    /// Rows returned without LIMIT (the only ones whose columns are evaluated; a CALENDAR returns
+    /// every row with a date, for any month).
     int defaultLimit = DefaultRowLimit;
     /// Steps an evaluation may take before the query stops with an error (a guard against
     /// queries that would freeze the app): one per expression evaluated, value of a list built or
@@ -119,8 +122,10 @@ struct Row {
     int blockIndex = -1; ///< the task's block (TASK), else -1
     std::optional<Task> task;
     /// TABLE: the cells as Markdown (the first the page link unless WITHOUT ID); LIST: one text
-    /// ("[[Page]]: value", the value alone WITHOUT ID); TASK: empty.
+    /// ("[[Page]]: value", the value alone WITHOUT ID); CALENDAR: the page link; TASK: empty.
     QStringList cells;
+    /// CALENDAR: the day of the row's date (local wall-clock time; rows without a date are left out).
+    QDate date;
 };
 
 /// Rows under one key (LIST and TASK with GROUP BY; TASK without it: one group per page).
@@ -132,6 +137,8 @@ struct Group {
 
 struct Result {
     QueryType type = QueryType::List;
+    /// CALENDAR: the date expression as written (`file.day`).
+    QString dateField;
     QStringList headers; ///< TABLE: one per cell (translated "File" / the group's name for the first)
     QList<Row> rows;     ///< ungrouped results (and the rows of a grouped TABLE: one per group)
     QList<Group> groups; ///< grouped results (LIST / TASK)
@@ -148,5 +155,28 @@ std::variant<Result, QString> runQuery(const Query &query, const VaultIndex &ind
 QString toMarkdown(const Value &value, const VaultIndex &index);
 /// A value as plain text (group labels, `display()`): a link as its display text or page title.
 QString toPlainText(const Value &value);
+
+/// Is `source` a CALENDAR query (its first word, after blank and `//` comment lines)? Cheap: the
+/// editor shows such a block as a month (a database view) without parsing it.
+bool isCalendarQuery(QStringView source);
+
+/// What an inline query shows (docs/SYNTAX.md §10 "Inline queries").
+struct InlineValue {
+    enum class Kind {
+        Value, ///< a value: `markdown`, `text`
+        Null,  ///< no value (a missing field, `null`)
+        Error, ///< it could not be evaluated: `text` says why (translated)
+    };
+    Kind kind = Kind::Null;
+    QString markdown; ///< the value as Markdown, as result cells show it (toMarkdown())
+    QString text;     ///< the value as plain text (toPlainText()), or the message
+};
+
+/// An inline query — the code of `` `= this.file.name` `` without its `=` — evaluated as one
+/// Dataview expression for the page `options.currentPath` (`this`; its fields and `file` are also
+/// in scope by their bare names), with the limits of queries. nullopt when it is no Dataview
+/// expression (it does not parse: the calculator's text, a typo).
+std::optional<InlineValue> evaluateInline(const QString &expression, const VaultIndex &index,
+                                          const Options &options);
 
 } // namespace brulion::dataview

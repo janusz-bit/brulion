@@ -4,6 +4,7 @@
 // its hashes for the incremental publish. Part of the publish module — see publish/publish.h.
 #pragma once
 
+#include "calc/calclocale.h"
 #include "io/files.h"
 #include "publish/protect.h"
 #include "publish/selection.h"
@@ -50,6 +51,8 @@ struct SiteInput {
     /// and file encrypted. `protection.password` is the caller's to fill (the secret "pages").
     bool protect = false;
     SiteProtection protection;
+    /// The language of inline calculations' results (io::ExportInput::calcLocale): the UI's.
+    calc::CalcLocale calcLocale = calc::CalcLocale::Polish;
 };
 
 struct SiteBuild {

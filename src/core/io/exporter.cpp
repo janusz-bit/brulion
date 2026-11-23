@@ -1,5 +1,9 @@
 #include "io/exporter.h"
 
+#include "calc/calc.h"
+#include "dataview/dataview.h"
+#include "index/vaultindex.h"
+#include "markdown/inlineexpr.h"
 #include "markdown/macros.h"
 
 #include "io/exporters_p.h"
@@ -99,6 +103,65 @@ QStringList webPictureTargets(const ExportInput &input)
     return out;
 }
 
+namespace {
+
+/// The files of a document export with each inline calculation and inline query in a note replaced
+/// by its value (docs/SYNTAX.md §9 "Inline calculations", §10 "Inline queries"): the calculator
+/// first (the variables above it on its page), then Dataview over the exported notes; one with no
+/// value or an error stays as written.
+void putInlineValues(ExportInput &input)
+{
+    QList<qsizetype> withExpressions;
+    for (qsizetype i = 0; i < input.files.size(); ++i) {
+        const FileEntry &f = input.files.at(i);
+        if (paths::isMarkdown(f.path) && f.data.contains("`") && f.data.contains("="))
+            withExpressions.append(i);
+    }
+    if (withExpressions.isEmpty())
+        return;
+    // (Built once, only for notes that have some: the notes and the other files, as the export reads them.)
+    std::optional<VaultIndex> index;
+    const auto vaultIndex = [&]() -> const VaultIndex & {
+        if (!index) {
+            index.emplace(input.config);
+            VaultIndex::Batch batch(*index);
+            for (const FileEntry &f : std::as_const(input.files)) {
+                if (paths::isIgnored(f.path) || paths::isConflictCopy(f.path))
+                    continue;
+                const bool text = paths::isMarkdown(f.path) || VaultIndex::readsText(f.path);
+                index->update(f.path, text ? QString::fromUtf8(f.data) : QString());
+            }
+        }
+        return *index;
+    };
+    const calc::CalcLocale locale = input.calcLocale;
+    for (const qsizetype i : std::as_const(withExpressions)) {
+        FileEntry &f = input.files[i];
+        const QString content = QString::fromUtf8(f.data);
+        if (markdown::findInlineExpressions(content).isEmpty())
+            continue;
+        f.data = markdown::replaceInlineExpressions(content, [&](const markdown::InlineExpression &e)
+                                                                     -> std::optional<QString> {
+                     const calc::CalcLineResult r =
+                             calc::evaluateInline(e.expression, calc::pageScope(content, e.line, locale), locale);
+                     if (r.hasValue())
+                         return markdown::escapedMarkdownText(r.value);
+                     if (!input.now.isValid()) // (exporters never read the clock: no `date(today)`)
+                         return std::nullopt;
+                     dataview::Options options;
+                     options.currentPath = f.path;
+                     options.now = input.now;
+                     options.weekStart = input.config.weekStartsOn;
+                     const auto value = dataview::evaluateInline(e.expression, vaultIndex(), options);
+                     if (!value || value->kind != dataview::InlineValue::Kind::Value)
+                         return std::nullopt;
+                     return value->markdown;
+                 }).toUtf8();
+    }
+}
+
+} // namespace
+
 ExportInput detail::prepareExportInput(const QString &exporterId, const ExportInput &input)
 {
     ExportInput clean = cleanExportInput(input);
@@ -117,6 +180,8 @@ ExportInput detail::prepareExportInput(const QString &exporterId, const ExportIn
                      }).toUtf8();
         }
     }
+    if (documents.contains(exporterId))
+        putInlineValues(clean);
     return clean;
 }
 

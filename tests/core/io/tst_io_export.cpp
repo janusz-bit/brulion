@@ -166,6 +166,42 @@ private Q_SLOTS:
         QCOMPARE(textOf(md, u"Mój skarbiec/Trening.md"_s), note);
     }
 
+    void inlineValuesPerFormat()
+    {
+        // Inline calculations and inline Dataview queries (docs/SYNTAX.md §9, §10 "Inline queries"):
+        // the documents show their values, the calculator first; the Markdown exports keep the code.
+        ExportInput in = fixture();
+        in.now = QDateTime(QDate(2026, 10, 14), QTime(10, 0));
+        const QString note = u"---\nbudżet: 1500\n---\n# Łąka\n\n"
+                             u"Nazwa `= this.file.name`, budżet `= budżet * 2`, za tydzień `= date(today) + dur(1 week)`.\n"
+                             u"Miasto: `= [[Żaneta]].miasto`, osoba `= [[Żaneta]]`, brak `= this.nic`, błąd `= 2 +`.\n\n"
+                             u"```\n`= 1 + 1` w bloku kodu\n```\n"_s;
+        in.files.append(iotest::text(u"Łąka.md"_s, note));
+        in.files.append(iotest::text(u"Żaneta.md"_s, u"miasto:: Kraków <b>\n"_s));
+        const QString html = QString::fromUtf8(exportWith(u"html-single"_s, in).data);
+        const auto has = [&html](const QString &text) {
+            if (!html.contains(text))
+                qWarning("missing: %s", qPrintable(text));
+            return html.contains(text);
+        };
+        QVERIFY(has(u"Nazwa Łąka,"_s));
+        QVERIFY(has(u"budżet 3000,"_s)); // the calculator's value (Polish locale)
+        QVERIFY(has(u"za tydzień 2026-10-21."_s));
+        QVERIFY(has(u"Miasto: Kraków &lt;b&gt;,"_s));
+        QVERIFY(has(u"brak <code>= this.nic</code>"_s)); // no value: code
+        QVERIFY(has(u"błąd <code>= 2 +</code>"_s));
+        QVERIFY(has(u"<code>= 1 + 1</code> w bloku kodu"_s) || html.contains(u"`= 1 + 1` w bloku kodu"_s));
+        QVERIFY(!html.contains(u"<b>"_s));
+        QVERIFY(!html.contains(u"`= [[Żaneta]]`"_s));
+        // English numbers in an English UI.
+        in.calcLocale = calc::CalcLocale::English;
+        in.files.append(iotest::text(u"Liczby.md"_s, u"Połowa: `= 7 / 2`\n"_s));
+        QVERIFY(QString::fromUtf8(exportWith(u"html-single"_s, in).data).contains(u"Połowa: 3.5"_s));
+        // The Markdown exports keep the note as written.
+        const QList<FileEntry> md = readZip(exportWith(u"markdown-zip"_s, in).data);
+        QCOMPARE(textOf(md, u"Mój skarbiec/Łąka.md"_s), note);
+    }
+
     void markdownZip()
     {
         const ExportedFile f = exportWith(u"markdown-zip"_s);

@@ -3,3 +3,5 @@
 brulion_add_test(tst_dataview SOURCES tst_dataview.cpp LIBS brulion_core_dataview)
 # Standalone expressions: view formulas (Dataview syntax) and Obsidian Bases' expressions.
 brulion_add_test(tst_dataview_expression SOURCES tst_dataview_expression.cpp LIBS brulion_core_dataview)
+# Inline queries (`= this.file.name`): one expression for the page it is on.
+brulion_add_test(tst_dataview_inline SOURCES tst_dataview_inline.cpp LIBS brulion_core_dataview)

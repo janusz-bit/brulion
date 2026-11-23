@@ -325,11 +325,12 @@ private:
     /// renders the row again only when the answer differs. (How links resolve — resolvePage,
     /// resolveLinkPart, journal titles — changes only with names: everything renders again then.)
     struct RenderRead {
-        enum Kind : quint8 { Icon, LinkedBlock, BlockText, TaskDependency, Macro };
+        enum Kind : quint8 { Icon, LinkedBlock, BlockText, TaskDependency, Macro, InlineQuery };
         Kind kind = Icon;
         bool own = true;  ///< read through renderContext() (this page), else renderContextFor(fromPath)
         QString fromPath; ///< the note the text is written in
-        QString target;   ///< the link target as written; BlockText, TaskDependency: the id; Macro: ext/name
+        QString target;   ///< the link target as written; BlockText, TaskDependency: the id; Macro: ext/name;
+                          ///< InlineQuery: the expression
         QString id;       ///< LinkedBlock: the block id; Macro: its arguments
         QString note;     ///< Icon: the note the link leads to (asked again only when it changed)
         QString value;    ///< what was read, comparable (readValue())

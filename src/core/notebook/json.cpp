@@ -295,6 +295,7 @@ QString dataviewTypeName(dataview::QueryType type)
     case dataview::QueryType::List: return u"list"_s;
     case dataview::QueryType::Table: return u"table"_s;
     case dataview::QueryType::Task: return u"tasks"_s;
+    case dataview::QueryType::Calendar: return u"calendar"_s;
     }
     return u"list"_s;
 }
@@ -306,13 +307,16 @@ QJsonObject dataviewRowJson(const VaultIndex &index, const dataview::Row &row)
     if (row.blockIndex >= 0)
         return queryItemJson(index, QueryItem{row.path, row.blockIndex, row.task, std::nullopt});
     const ParsedNote *note = row.path.isEmpty() ? nullptr : index.note(row.path);
-    return {{u"path"_s, row.path},
-            {u"title"_s, note                 ? note->title
-                         : row.path.isEmpty() ? QString()
-                                              : paths::pageTitle(row.path)},
-            {u"folder"_s, paths::dirname(row.path)},
-            {u"line"_s, 0},
-            {u"cells"_s, QJsonArray::fromStringList(row.cells)}};
+    QJsonObject out{{u"path"_s, row.path},
+                    {u"title"_s, note                 ? note->title
+                                 : row.path.isEmpty() ? QString()
+                                                      : paths::pageTitle(row.path)},
+                    {u"folder"_s, paths::dirname(row.path)},
+                    {u"line"_s, 0},
+                    {u"cells"_s, QJsonArray::fromStringList(row.cells)}};
+    if (row.date.isValid()) // (CALENDAR)
+        out.insert(u"date"_s, row.date.toString(Qt::ISODate));
+    return out;
 }
 
 } // namespace
@@ -336,6 +340,19 @@ QJsonObject dataviewResultJson(const VaultIndex &index, const dataview::Result &
             {u"columns"_s, QJsonArray::fromStringList(result.headers)},
             {u"items"_s, items},
             {u"groups"_s, groups}};
+}
+
+QJsonObject dataviewInlineJson(const std::optional<dataview::InlineValue> &value)
+{
+    if (!value)
+        return {{u"kind"_s, QString()}, {u"markdown"_s, QString()}, {u"text"_s, QString()}};
+    QString kind;
+    switch (value->kind) {
+    case dataview::InlineValue::Kind::Value: kind = u"value"_s; break;
+    case dataview::InlineValue::Kind::Null: kind = u"null"_s; break;
+    case dataview::InlineValue::Kind::Error: kind = u"error"_s; break;
+    }
+    return {{u"kind"_s, kind}, {u"markdown"_s, value->markdown}, {u"text"_s, value->text}};
 }
 
 QJsonObject searchHitJson(const SearchHit &hit, const VaultConfig &config)
