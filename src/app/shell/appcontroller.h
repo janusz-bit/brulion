@@ -94,6 +94,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <tuple>
 
 namespace brulion::platform {
 class Autostart;
@@ -718,6 +719,11 @@ public:
     /// (Workspace::renamePage), also once the view that renamed it is gone: its id.
     Q_INVOKABLE int toastUndoRename(const QString &text, const QString &actionText, const QString &path,
                                     const QString &oldTitle);
+    /// A "success" toast whose button sets the AI chat's conversation `path` back — unpinned or
+    /// pinned again (`mark` "pinned"), unarchived or archived again ("archived") as it was before
+    /// `on` (WorkspaceChats::setPinned / setArchived), also once the chat view is gone: its id.
+    Q_INVOKABLE int toastUndoChatMark(const QString &text, const QString &actionText, const QString &path,
+                                      const QString &mark, bool on);
     /// Main.qml: toast `id` of toastWithAction() is shown by the window's toast host as `hostId`.
     Q_INVOKABLE void setToastHostId(int id, int hostId);
     /// Main.qml: the button of the toast host's toast `hostId` was pressed (toastAction()'s
@@ -969,6 +975,7 @@ private:
     QHash<int, int> m_toastIdsByHostId;      ///< the toast host's id → toastWithAction()'s
     QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
     QHash<int, std::pair<QString, QString>> m_renameToasts; ///< toastUndoRename()'s ids → {path, old title}
+    QHash<int, std::tuple<QString, QString, bool>> m_chatMarkToasts; ///< toastUndoChatMark()'s → {path, mark, on}
     QHash<int, QString> m_chatToasts; ///< an AI agent's question off screen: the toast's id → its conversation
     QHash<int, QString> m_rewindToasts; ///< "Edit from here": the toast's id → its conversation (Undo)
     /// What platform::setAgentWork() was given last: title, text, "waiting" or "".

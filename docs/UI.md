@@ -761,9 +761,10 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | Ctrl+E | Markdown source mode of the page / journal |
 | Ctrl+F / Ctrl+H | find in the note — in the journal stream over its days (the PDF viewer and the graph keep their own Ctrl+F) / with its replace row ("Find and replace") |
 | Ctrl+; | add a page property (the properties panel's add row; "Page properties") |
+| Alt+1 … Alt+9 | (in the AI chat) its list's first nine conversations; ↑ / ↓, Enter and F2 in the list ("AI chat") |
 | Ctrl+Enter | (in dialogs) accept |
 
-Every key of this table but Delete and Ctrl+Enter is a command's shortcut and can be changed
+Every key of this table but Delete, Alt+1 … Alt+9 and Ctrl+Enter is a command's shortcut and can be changed
 ("Custom shortcuts" below); the block editor's keys below cannot. With Vim keys on, the editor's keys are Vim's
 first ("Vim mode" below).
 
@@ -1289,12 +1290,61 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   chat".
 * **Layout**: from 720 px (not in the side panel) the list (300 px) beside the conversation; under
   that one of them — a conversation opened from the list is a step of the history, Back returns.
-  The list (`chatConversations`, `ChatListModel`: newest change first): an item per conversation
+  The list (`chatConversations`, `ChatListModel`): an item per conversation
   (`chatConversation_<name>`) — its name, its last message as one line (🤖 before the AI's), when
   it last changed, or while its turn runs a small spinner (an hourglass while it waits for the model
   on the device: the rows' `running` / `queued`) — and "New" (`chatNew`); empty: "No conversations
   yet" with the folder named.
-* **The list's menu** (`chatRowMenu`: a right-click, a long press): **Rename…** (`chatRename` →
+* **Its sections** (`section`: ListView sections, `chatSection_<name>` headers): **Pinned** on
+  top (the rows' `pinned`: the page's `przypięta: tak` / `pinned: true`, docs/SYNTAX.md §14; a pin
+  icon), then the others — "Recent", named only under pinned ones —, newest change first; the
+  **archived** (`zarchiwizowana: tak` / `archived: true`) out of it, folded at the bottom as
+  "Archived 12" (`chatArchived`, the list's footer, `archivedCount`): a click unfolds them
+  (`showArchived`) under their own header, which folds them again. Archived wins over pinned.
+* **What needs the user** (T3 Code's "came back to you"): a row whose turn asks something
+  (`asking`: a change to allow, an agent's permission or sign-in — `chatAsking`, a question mark in
+  the accent, the row's line what it asks, `question`), whose turn failed (`failure`: `chatFailed`,
+  the alert icon and the reason as its line in the danger tint) or with an **unread** answer
+  (`unread`: an answer written while no chat view showed it — `chatUnread`, an accent dot, its
+  name semibold, its time in the accent; a view that shows the conversation reads it) comes to the
+  top of its section, the newest that came back first (`WorkspaceChats.cameBack`); a turn that
+  runs leaves the row where it is. Unread is kept in the notebook's device state (LocalStore
+  `chat/unread`: {path in lower case → when}), never in the page, so it syncs no change; it follows
+  a rename and goes with the page.
+* **Search** (`chatSearch`, a `BSearchField` above the list, shown when there are conversations):
+  `ChatListModel.query` keeps the conversations whose name or one of whose messages has all of
+  its words (case and diacritics aside: folded, `searchTerms`) — the archived ones too, under their
+  header (unfolded, not foldable meanwhile). A name's match marks its words in the title
+  (`titleMatches`); a message's, the newest such one, shows its line with the most of the words
+  as the row's line (`matchText`: plain words, from a little before the first one when it is far
+  in — `ChatListModel::matchExcerpt` —, the words marked: `matchMatches`, `TextHelper.markMatches`)
+  and opens the conversation at that message (the route's `line`, `matchLine`: the message is
+  scrolled to the middle and its bubble has the accent's border for 2.5 s). The model keeps the
+  messages' text (and its folded form) it read at its last refresh, so a keystroke reads no page;
+  nothing found: "No conversation found" (`chatNoMatch`).
+* **Keyboard** (desktop): the find command's key (Ctrl+F, `page.find`) while the chat has the focus
+  goes to the search field, ↓ there to the first row; ↑ / ↓ move in the list without opening
+  (`keyNavigationEnabled`), Enter opens the row (a match at its message), **Alt+1 … Alt+9** open the
+  list's first nine conversations (reserved in ShortcutMap, area "chat": no command takes them), F2
+  renames the row with the keyboard (else the conversation shown).
+* **Notifications** (`WorkspaceChats::notificationWanted` → `workspaceintegration.cpp`): a turn
+  answered (the answer's first line), failed (why) or asking (its question's first line) shows a
+  system notification titled with the conversation's name — the platform's notifier as a message
+  of the app (`notify::isMessage()`, its id `brulion-message:<path>`: one per conversation, a newer
+  one replaces it; the desktop's has **Open** and OK, no Snooze; Android shows it as a timer's
+  end, "OK" alone; the browser's while the page is open); a click opens the conversation
+  (`AppController::openNotification`: a conversation goes to the chat, not the editor). **Settings →
+  Extensions → AI → Notify when the AI answers** (`aiChatNotifySetting`, `AppSettings.aiChatNotify`,
+  key `ai/chatNotify`): **Always** (also while the app is in front, when no chat view shows the
+  conversation), **In the background** (only while the app is not active, the default) or
+  **Never**; never for a conversation shown in an active window. The app lock's "Hide the note's
+  text in notifications" makes it "AI chat" — "Something new in a conversation". The toast for a
+  question nobody sees stays as it was.
+* **The list's menu** (`chatRowMenu`: a right-click, a long press): **Pin** / **Unpin**
+  (`chatPin`, not on an archived one) and **Archive** / **Unarchive** (`chatArchive`):
+  `WorkspaceChats.setPinned()` / `setArchived()` write the page's frontmatter (`chat::setMark`, the
+  notebook's language), a toast says so with **Undo** (`AppController.toastUndoChatMark`, also once
+  the view is gone); **Rename…** (`chatRename` →
   `chatRenameDialog` with the name without its date, `chatRenameField`; `WorkspaceChats.rename()`
   keeps the date in front and goes through `Workspace::renamePage`, so the day's link follows; the
   toast's **Undo** renames it back — `AppController.toastUndoRename`, also once the view is gone),
@@ -1474,7 +1524,9 @@ page deleted meanwhile ends the turn), `chatFailed` keeps the reason in the conv
 `ChatTurn`; `turn(path)` (a `ChatTurn`: `running`, `queued`, `place`, `status`, `failure`,
 `omitted`, `partial`, `partialSettled`, `partialTail`, `thoughts`, `allThoughts`, `speed`),
 `retry(path)`, `stop(path)`, `stopAll()`, `dismissFailure(path)`, `isConversation(path)`,
-`showing()` / `isShown()`, `rename()`, `remove()`, `nameOf()`, `partnerOf()` / `setPartner()`, the
+`showing()` / `isShown()`, `rename()`, `remove()`, `setPinned()` / `setArchived()`, what needs the
+user (`isUnread()`, `cameBack()`, `failureOf()`, `attentionChanged`) and its notifications
+(`setNotifyMode()`, `notificationWanted`), `nameOf()`, `partnerOf()` / `setPartner()`, the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
 `picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
 `stopDictation` / `cancelDictation` → `dictated`; `dictationReady`, `recognizing`, `dictationElapsed`,

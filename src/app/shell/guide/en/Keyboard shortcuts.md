@@ -50,7 +50,7 @@ You change the shortcuts of the palette's commands (Ctrl+K) in *Settings → Key
 
 - **Change** waits for the new shortcut: press a key with Ctrl or Alt (or a function key F1–F12). Esc cancels.
 - When the shortcut already belongs to another command, Brulion tells you which; **Assign here** moves it, and that other command is left without a shortcut.
-- You can't choose keys you type with (letters without Ctrl or Alt, Enter, Tab, arrows), the editor's keys (Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+A, Ctrl+Enter, Alt+↑…), those of drawings, the PDF viewer and tab switching (Ctrl+1…9, Ctrl+PgUp, Ctrl+PgDown), or Ctrl+Alt with a letter that AltGr produces on Windows (on a Polish keyboard Ctrl+Alt+A types “ą”).
+- You can't choose keys you type with (letters without Ctrl or Alt, Enter, Tab, arrows), the editor's keys (Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+A, Ctrl+Enter, Alt+↑…), those of drawings, the PDF viewer, tab switching (Ctrl+1…9, Ctrl+PgUp, Ctrl+PgDown) and the AI chat's list (Alt+1…9), or Ctrl+Alt with a letter that AltGr produces on Windows (on a Polish keyboard Ctrl+Alt+A types “ą”).
 - **✕** leaves the command without a shortcut, **↺** restores its default, and **Restore all** — all the defaults.
 
 A new shortcut works right away across the whole app: the palette and the button tooltips show it instead of the default. Custom shortcuts are a setting of this device (every computer has its own); the block editing keys from the tables below stay as they are.
@@ -210,3 +210,15 @@ When a PDF is open. More: [[Document and outline#PDFs|PDFs]].
 | Home / End | first / last page |
 | Esc | clear the selection, close the search, then the viewer |
 | Alt+← | back (closes the viewer) |
+
+## AI chat
+In the AI chat's list of conversations ([[AI#The AI assistant]]).
+
+| Shortcut | Action |
+|---|---|
+| Ctrl+F | search the conversations (their names and messages) |
+| ↓ (in the search field) | to the first conversation found |
+| ↑ / ↓ | the previous / next conversation |
+| Enter | open it (a match: at its message) |
+| Alt+1 … Alt+9 | open the first nine conversations |
+| F2 | rename the conversation |

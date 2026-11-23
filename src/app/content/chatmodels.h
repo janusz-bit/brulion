@@ -15,11 +15,22 @@
 //   // omitted: the messages the model does not get
 //   // render(markdown): an answer being written as a message shows it
 //
-//   ChatListModel { workspace: Workspace; locale: DatesHelper.locale }
+//   ChatListModel { workspace: Workspace; locale: DatesHelper.locale; query: field.text;
+//                   showArchived: false }
 //   // roles: path, title (the name without its date), date ("2026-11-15", "" without one),
 //   // dateLabel ("today 09:12": the page's last change), preview (its last message as one line),
 //   // fromAi (the last message is the AI's), messages (how many), running / queued (its turn runs,
-//   // waits for the model on the device). Newest change first.
+//   // waits for the model on the device), pinned / archived (its frontmatter's marks), section
+//   // ("pinned" | "recent" | "archived"), asking / question (its turn asks: the question's first
+//   // line), failure (why its turn failed, "" none), unread (an answer no chat view showed yet),
+//   // titleMatches / matchText / matchMatches / matchLine (a query: the positions of its words in
+//   // the title, the matching message's line around them, their positions there, that message's
+//   // first line in the page, -1 none).
+//   // The pinned first, then the others, then — unfolded (showArchived) or matching a query — the
+//   // archived; in each the ones that need the user (a question, a failure, an unread answer) on
+//   // top, by when they came back, then the newest change first. A query keeps the conversations
+//   // whose name or one of whose messages has all its words (case and diacritics aside) — the
+//   // messages' text kept from the last refresh: no page is read for it.
 #pragma once
 
 #include "workspacemodel.h"
@@ -27,6 +38,7 @@
 #include "markdown/inlinerenderer.h"
 
 #include <QString>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
 
@@ -83,6 +95,11 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     /// The Markdown of the message at `row` ("" for a bad row).
     Q_INVOKABLE QString textAt(int row) const;
+    /// The row of the message at the page's line `line` (its first line, or one under it), -1
+    /// none: a search's match opens the conversation there.
+    Q_INVOKABLE int rowOfLine(int line) const;
+    /// The first line in the page of the message at `row` (-1 for a bad row).
+    Q_INVOKABLE int lineOf(int row) const;
     /// `markdown` as a message of this conversation shows it (renderMessage): the answer being
     /// written, before it is one of the rows.
     Q_INVOKABLE QString render(const QString &markdown) const;
@@ -131,6 +148,13 @@ private:
 class ChatListModel : public WorkspaceListModel {
     Q_OBJECT
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
+    /// Words the conversations are filtered by ("" all of them).
+    Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY queryChanged FINAL)
+    /// The archived conversations are listed (their section unfolded).
+    Q_PROPERTY(bool showArchived READ showArchived WRITE setShowArchived NOTIFY showArchivedChanged FINAL)
+    /// How many are archived (with a query: of those that match it), listed or not / pinned.
+    Q_PROPERTY(int archivedCount READ archivedCount NOTIFY sectionsChanged FINAL)
+    Q_PROPERTY(int pinnedCount READ pinnedCount NOTIFY sectionsChanged FINAL)
 
 public:
     enum Role {
@@ -142,29 +166,77 @@ public:
         FromAiRole,
         MessagesRole,
         RunningRole,
-        QueuedRole
+        QueuedRole,
+        PinnedRole,
+        ArchivedRole,
+        SectionRole,
+        AskingRole,
+        QuestionRole,
+        FailureRole,
+        UnreadRole,
+        TitleMatchesRole,
+        MatchTextRole,
+        MatchMatchesRole,
+        MatchLineRole
     };
     explicit ChatListModel(QObject *parent = nullptr);
 
     QString locale() const { return m_locale; }
     void setLocale(const QString &locale);
+    QString query() const { return m_query; }
+    void setQuery(const QString &query);
+    bool showArchived() const { return m_showArchived; }
+    void setShowArchived(bool show);
+    int archivedCount() const { return m_archivedCount; }
+    int pinnedCount() const { return m_pinnedCount; }
 
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
     /// The row of the conversation `path`, -1 when it is not listed.
     Q_INVOKABLE int rowOf(const QString &path) const;
+    /// The conversation of row `row` ("" for a bad row) / the first line of its message that
+    /// matches the query (-1 none).
+    Q_INVOKABLE QString pathAt(int row) const;
+    Q_INVOKABLE int matchLineAt(int row) const;
 
     /// "2026-11-15 Co mam jutro" → {"2026-11-15", "Co mam jutro"}; a name without a date: {"", name}.
     static std::pair<QString, QString> splitTitle(const QString &title);
+    /// The part of `line` (one line of a message's Markdown) the list shows for a match of
+    /// `terms` (contentutil searchTerms()): its plain words (chat::preview), from a little before
+    /// the first match on when it is far in ("…" before it).
+    static QString matchExcerpt(const QString &line, const QStringList &terms);
 
 Q_SIGNALS:
     void localeChanged();
+    void queryChanged();
+    void showArchivedChanged();
+    void sectionsChanged();
 
 protected:
     void refresh() override;
     int rows() const override { return int(m_rows.size()); }
 
 private:
+    /// A conversation as the last refresh read it.
+    struct Entry {
+        QString path;
+        QString title;
+        QString date;
+        qint64 modified = 0;
+        QString preview;
+        bool fromAi = false;
+        int messages = 0;
+        bool pinned = false;
+        bool archived = false;
+        /// Its messages for a query: {first line in the page, text, the text folded}.
+        struct Text {
+            int line = 0;
+            QString text;
+            QString folded;
+        };
+        QList<Text> texts;
+        QString foldedTitle;
+    };
     struct Row {
         QString path;
         QString title;
@@ -173,12 +245,33 @@ private:
         QString preview;
         bool fromAi = false;
         int messages = 0;
+        bool pinned = false;
+        bool archived = false;
+        QString section;
+        bool asking = false;
+        QString question;
+        QString failure;
+        bool unread = false;
+        qint64 cameBack = 0;
+        QList<int> titleMatches;
+        QString matchText;
+        QList<int> matchMatches;
+        int matchLine = -1;
+        bool operator==(const Row &) const = default;
     };
+    QList<Entry> m_all;
     QList<Row> m_rows;
     QString m_locale = QStringLiteral("pl");
-    QMetaObject::Connection m_turnsChanged;
+    QString m_query;
+    bool m_showArchived = false;
+    int m_archivedCount = 0;
+    int m_pinnedCount = 0;
+    QList<QMetaObject::Connection> m_turnsChanged;
+    QTimer m_stateTimer;
     /// The turns' state changed: the rows' running / queued again.
     void turnsChanged();
+    /// The rows of m_all as they are listed now: the query, the sections, what needs the user.
+    void rebuild();
 };
 
 } // namespace brulion::content

@@ -1241,7 +1241,10 @@ void AppController::applyPendingNotification()
         return; // applied once that notebook is ready
     const QString path = std::exchange(m_pendingNotePath, {});
     const int line = std::exchange(m_pendingNoteLine, -1);
-    if (!docs && m_workspace->exists(path))
+    // An AI chat's notification: its conversation in the chat.
+    if (!docs && m_workspace->chats()->isConversation(path))
+        navigate(QVariantMap{{u"view"_s, u"chat"_s}, {u"path"_s, path}});
+    else if (!docs && m_workspace->exists(path))
         openPage(path, line);
     else if (back.isEmpty()) // else openRecentVault() said that its folder is gone
         toast(tr("The note of this reminder no longer exists."), u"warning"_s);
@@ -2316,6 +2319,15 @@ int AppController::toastUndoRename(const QString &text, const QString &actionTex
     return id;
 }
 
+int AppController::toastUndoChatMark(const QString &text, const QString &actionText, const QString &path,
+                                     const QString &mark, bool on)
+{
+    const int id = ++m_lastToastId;
+    m_chatMarkToasts.insert(id, {path, mark, on});
+    Q_EMIT toastWithActionRequested(id, text, u"success"_s, actionText);
+    return id;
+}
+
 void AppController::setToastHostId(int id, int hostId)
 {
     if (id > 0 && hostId > 0)
@@ -2357,6 +2369,14 @@ void AppController::hostToastActionTriggered(int hostId)
             toast(tr("The conversation changed since: nothing was put back."), u"info"_s);
         return;
     }
+    if (m_chatMarkToasts.contains(id)) {
+        const auto [path, mark, on] = m_chatMarkToasts.take(id);
+        if (mark == u"pinned")
+            m_workspace->chats()->setPinned(path, !on);
+        else
+            m_workspace->chats()->setArchived(path, !on);
+        return;
+    }
     Q_EMIT toastActionTriggered(id);
 }
 
@@ -2368,6 +2388,7 @@ void AppController::hostToastRemoved(int hostId)
     m_functionToasts.remove(id);
     m_chatToasts.remove(id);
     m_rewindToasts.remove(id);
+    m_chatMarkToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));
 }

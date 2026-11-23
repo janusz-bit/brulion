@@ -41,7 +41,11 @@ done in the repository simply disappears from the list.
   (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's summarised thinking with a real
   key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
   real microphone on Windows; the browser picks no picture files for the chat yet (its file picker is
-  the editor's own, `platform/wasm/wasmfiles.h`).
+  the editor's own, `platform/wasm/wasmfiles.h`); the chat's notifications (an answer, a failure, a
+  question while the app is behind another: docs/UI.md "AI chat") on a real phone — Android shows
+  them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser;
+  conversations untouched for a while archived by themselves (a setting, off by default: T3 Code's
+  auto-settle) are not there.
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",

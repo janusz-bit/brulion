@@ -35,7 +35,15 @@ DesktopNotification buildDesktopNotification(const ScheduledNotification &notifi
     // markup there ("<b>" in a note is text, "&" must not start an entity).
     d.body = capabilities.contains(u"body-markup"_s) ? notification.body.toHtmlEscaped() : notification.body;
 
-    if (capabilities.contains(u"actions"_s)) {
+    if (capabilities.contains(u"actions"_s) && isMessage(notification)) {
+        // A message of the app (an AI chat's answer): nothing to snooze or mark done.
+        d.actions = {
+                u"default"_s,
+                QCoreApplication::translate("brulion::notify::DesktopNotifier", "Open"),
+                u"ok"_s,
+                QCoreApplication::translate("brulion::notify::DesktopNotifier", "OK"),
+        };
+    } else if (capabilities.contains(u"actions"_s)) {
         d.actions = {
                 u"default"_s,
                 QCoreApplication::translate("brulion::notify::DesktopNotifier", "Open note"),

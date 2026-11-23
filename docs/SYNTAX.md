@@ -2603,7 +2603,7 @@ zadania: ignoruj
   chosen and takes it out for the assistant.
 * **A fork**: the frontmatter's `fork: "[[AI/2026-11-15 Co mam jutro do zrobienia]]"` — the
   conversation it was forked from ("Fork from here" on a message: docs/UI.md "AI chat"). The fork
-  is a copy of that page up to the message chosen (its frontmatter but `parent:`, `partner:`, times and pictures
+  is a copy of that page up to the message chosen (its frontmatter but `parent:` and the list's marks, `partner:`, times and pictures
   as they were) and goes on by itself; its view links back to the source.
 * **Where it came from**: a conversation an AI agent started from another one — a task for another
   partner, docs/UI.md "Agents delegate" — names it in its frontmatter as a link,
@@ -2611,6 +2611,16 @@ zadania: ignoruj
   quoted, as YAML needs a link to be; an alias, heading or block part is left out when read). A
   rename of that conversation rewrites the link, as any; the chat lists the sub-conversations under
   it. A conversation deeper than three such levels starts no more.
+* **Pinned, archived**: the frontmatter's `przypięta: tak` (`pinned: true`) puts the conversation
+  among the pinned on top of the chat's list, `zarchiwizowana: tak` (`archived: true`) out of it
+  into its folded "Archived" (docs/UI.md "AI chat"). Either language's key is read, in any letter
+  case, at a line's start (not indented), with `true` / `yes` / `tak` / `1` / `on` (quoted or not)
+  — anything else is no mark, the last line of a key says it; a page that says so by itself is
+  harmless: they only sort. The list's menu writes them (`chat::setMark`): in the page's language
+  (its times' key, else its frontmatter's word for the tasks), else the notebook's, in place of
+  the mark's line where there is one (another one goes), else at the frontmatter's end (with its
+  first line's line ending), else in a frontmatter made for it; taken out, every line of it goes.
+  The rest byte for byte.
 * **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
   notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),
   messages appended at the end of the page with their time (its line ending kept, everything
@@ -2625,7 +2635,7 @@ zadania: ignoruj
   the oldest left out, the latest always sent; the chat says so above the first message the model
   gets.
 * Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `formatMessage`,
-  `newConversation`, `setPartner`, `setFrontmatterValue`, `picturesIn`, `withPictures`,
+  `newConversation`, `setPartner`, `setFrontmatterValue`, `setMark`, `picturesIn`, `withPictures`,
   `withoutPictures`, `pageTitle`, `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`,
   `truncated` — "Edit from here" —, `forked`, `prompts`, `quoted`), tested in `tests/core/chat`.
 

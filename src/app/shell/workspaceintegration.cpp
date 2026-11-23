@@ -1,9 +1,11 @@
 #include "workspaceintegration.h"
 
 #include "appcontroller.h"
+#include "applockcontroller.h"
 #include "appsettings.h"
 #include "workspace.h"
 #include "workspacebackups.h"
+#include "workspacechats.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
@@ -105,6 +107,32 @@ void wireReminders(AppController *app)
     sounds->setStorage([settings](const QString &key) { return settings->value(key, QString()); },
                        [settings](const QString &key, const QVariant &value) { settings->setValue(key, value); });
     sounds->setNotifier(notifier);
+    // The AI chat's answers, failures and questions the user is to hear of (docs/UI.md "AI chat";
+    // WorkspaceChats::setNotifyMode() from the device's setting): a message of
+    // the app, one per conversation (a newer one replaces it); its click opens the conversation
+    // (AppController::openNotification). The app lock may hide the note's text in notifications.
+    WorkspaceChats *chats = ws->chats();
+    const auto chatNotify = [settings, chats] { chats->setNotifyMode(settings->aiChatNotify()); };
+    chatNotify();
+    QObject::connect(settings, &AppSettings::aiChatNotifyChanged, chats, chatNotify);
+    QObject::connect(chats, &WorkspaceChats::notificationWanted, notifier,
+                     [app, ws, guard](const QString &path, const QString &title, const QString &text) {
+                         if (!guard || !guard->canShow())
+                             return;
+                         const bool hide = app->appLock() && app->appLock()->hidesNotificationText();
+                         ScheduledNotification n;
+                         n.id = notify::MessageIdPrefix.toString() + path;
+                         n.nativeId = nativeIdFor(n.id);
+                         n.title = hide ? QCoreApplication::translate("brulion::shell::WorkspaceIntegration", "AI chat")
+                                        : title.left(ScheduledNotification::MaxTitleLength);
+                         n.body = hide ? QCoreApplication::translate("brulion::shell::WorkspaceIntegration",
+                                                                     "Something new in a conversation")
+                                       : text;
+                         n.at = ws->now();
+                         n.path = path;
+                         n.vault = ws->vault() ? ws->vault()->id() : QString();
+                         guard->showMessage(n);
+                     });
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_WASM)
     // Android taps reach AppController through main.cpp (AndroidBridge::activated), browser
     // clicks through its own WasmNotifier: only the desktop notifier opens notes from here.

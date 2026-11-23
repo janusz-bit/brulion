@@ -19,16 +19,37 @@
 
 #include <QBuffer>
 #include <QClipboard>
+#include <QDateTime>
 #include <QGuiApplication>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLocale>
 #include <QMimeData>
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
+
+namespace {
+
+/// The notebook's device state of the conversations with an unread answer: {path, lower case: ms}.
+const QString UnreadKey = u"chat/unread"_s;
+
+/// The first line of `text` with words as the list shows them (chat::preview), for a
+/// notification.
+QString firstLineOf(const QString &text)
+{
+    for (const QString &line : text.split(u'\n')) {
+        const QString words = chat::preview(line, 200);
+        if (!words.isEmpty())
+            return words;
+    }
+    return chat::preview(text, 200);
+}
+
+} // namespace
 
 // ---- ChatTurn -------------------------------------------------------------------------------------
 
@@ -195,12 +216,21 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
             setDraft(to, text);
         }
     });
+    // An unread answer follows its conversation (a rename, a move) and goes with it.
+    connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
+        if (!isUnread(from))
+            return;
+        setUnread(from, false);
+        if (!isShown(to))
+            setUnread(to, true);
+    });
     connect(m_workspace, &Workspace::pathRemoved, this, [this](const QString &path) {
         if (ChatTurn *t = find(path); t && t->m_running)
             stop(path);
         moveQueue(path, QString());
         m_rewound.remove(path.toLower());
         setDraft(path, QString());
+        setUnread(path, false);
     });
     connect(this, &WorkspaceChats::stateChanged, this, &WorkspaceChats::updateRunningShown);
     connect(this, &WorkspaceChats::shownChanged, this, &WorkspaceChats::updateRunningShown);
@@ -239,7 +269,25 @@ void WorkspaceChats::setWriting(const QString &key, const QString &text, const Q
 void WorkspaceChats::questionsMoved()
 {
     ++m_questionSerial;
+    // A turn that asks now came back to the user (the list puts it first; a notification says
+    // what it asks); one whose question went, no longer.
+    bool moved = false;
+    for (ChatTurn *t : std::as_const(m_turns)) {
+        const bool asks = t->m_running && asking(t->m_path);
+        if (asks == t->m_asking)
+            continue;
+        t->m_asking = asks;
+        moved = true;
+        if (asks) {
+            t->m_cameBack = stamp();
+            notifyUser(t->m_path, questionText(t->m_path).section(u'\n', 0, 0).trimmed());
+        } else if (t->m_failure.isEmpty()) {
+            t->m_cameBack = 0;
+        }
+    }
     Q_EMIT questionsChanged();
+    if (moved)
+        Q_EMIT attentionChanged();
 }
 
 QVariantList WorkspaceChats::partners() const
@@ -555,6 +603,8 @@ void WorkspaceChats::showing(const QString &path, bool shown)
     else
         m_shown.insert(key, n);
     Q_EMIT shownChanged();
+    if (shown && isUnread(path))
+        setUnread(path, false); // (read)
 }
 
 bool WorkspaceChats::isShown(const QString &path) const { return !path.isEmpty() && m_shown.contains(path.toLower()); }
@@ -771,7 +821,10 @@ void WorkspaceChats::answered(const QString &key, const QString &text)
     // Written before the turn ends: a view shows the message in place of the answer being
     // written, never neither of them.
     Q_EMIT written(path);
+    if (!isShown(path))
+        setUnread(path, true);
     endTurn(t);
+    notifyUser(path, firstLineOf(text));
     sendNextQueued(path);
 }
 
@@ -782,6 +835,7 @@ void WorkspaceChats::failed(const QString &key, const QString &error)
         return;
     endTurn(t);
     setFailure(t, error);
+    notifyUser(t->m_path, error.section(u'\n', 0, 0).trimmed());
     // (The messages waiting for it wait for the user: Resume, or Send now.)
     loadQueue();
     if (!m_queued.value(t->m_path.toLower()).isEmpty() && !m_held.contains(t->m_path.toLower())) {
@@ -846,6 +900,8 @@ void WorkspaceChats::reset()
         t->m_status.clear();
         t->m_failure.clear();
         t->m_omitted = 0;
+        t->m_asking = false;
+        t->m_cameBack = 0;
         t->clearPartial();
         Q_EMIT t->stateChanged();
     }
@@ -871,6 +927,9 @@ void WorkspaceChats::endTurn(ChatTurn *t)
     t->m_queued = false;
     t->m_place = 0;
     t->m_status.clear();
+    t->m_asking = false; // (its question went with it)
+    if (t->m_failure.isEmpty())
+        t->m_cameBack = 0;
     t->clearPartial();
     t->setActivity({}, {});
     Q_EMIT t->stateChanged();
@@ -889,8 +948,79 @@ void WorkspaceChats::setFailure(ChatTurn *t, const QString &failure)
     if (!t || t->m_failure == failure)
         return;
     t->m_failure = failure;
+    if (!failure.isEmpty())
+        t->m_cameBack = stamp();
+    else if (!t->m_asking)
+        t->m_cameBack = 0;
     Q_EMIT t->stateChanged();
     Q_EMIT stateChanged();
+    Q_EMIT attentionChanged();
+}
+
+// ---- what needs the user --------------------------------------------------------------------------
+
+bool WorkspaceChats::isUnread(const QString &path) const
+{
+    const LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    return store && !path.isEmpty() && store->get(UnreadKey).toObject().contains(path.toLower());
+}
+
+void WorkspaceChats::setUnread(const QString &path, bool unread)
+{
+    LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store || path.isEmpty())
+        return;
+    QJsonObject all = store->get(UnreadKey).toObject();
+    const QString key = path.toLower();
+    if (all.contains(key) == unread && !unread)
+        return;
+    if (unread)
+        all.insert(key, double(stamp()));
+    else
+        all.remove(key);
+    store->set(UnreadKey, all.isEmpty() ? QJsonValue(QJsonValue::Undefined) : QJsonValue(all));
+    Q_EMIT attentionChanged();
+}
+
+qint64 WorkspaceChats::stamp()
+{
+    // (Two in one millisecond keep their order.)
+    m_lastStamp = std::max(QDateTime::currentMSecsSinceEpoch(), m_lastStamp + 1);
+    return m_lastStamp;
+}
+
+qint64 WorkspaceChats::cameBack(const QString &path) const
+{
+    qint64 at = 0;
+    if (const LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+        store && !path.isEmpty())
+        at = qint64(store->get(UnreadKey).toObject().value(path.toLower()).toDouble());
+    if (const ChatTurn *t = find(path); t && (!t->m_failure.isEmpty() || t->m_asking))
+        at = std::max(at, t->m_cameBack);
+    return at;
+}
+
+QString WorkspaceChats::failureOf(const QString &path) const
+{
+    const ChatTurn *t = path.isEmpty() ? nullptr : find(path);
+    return t ? t->m_failure : QString();
+}
+
+void WorkspaceChats::setNotifyMode(const QString &mode)
+{
+    m_notifyMode = mode == u"always" || mode == u"never" ? mode : u"background"_s;
+}
+
+void WorkspaceChats::notifyUser(const QString &path, const QString &text)
+{
+    if (path.isEmpty() || m_notifyMode == u"never")
+        return;
+    const bool active =
+            m_appActive ? m_appActive() : qGuiApp && QGuiApplication::applicationState() == Qt::ApplicationActive;
+    // On screen in an active window: seen there.
+    if (active && (isShown(path) || m_notifyMode != u"always"))
+        return;
+    Q_EMIT notificationWanted(path, nameOf(path), text);
 }
 
 // ---- the list's menu ------------------------------------------------------------------------------
@@ -918,6 +1048,28 @@ QString WorkspaceChats::remove(const QString &path)
         return {};
     stop(path);
     return m_workspace->deletePage(path);
+}
+
+bool WorkspaceChats::setPinned(const QString &path, bool on)
+{
+    return setMark(path, int(chat::Mark::Pinned), on);
+}
+
+bool WorkspaceChats::setArchived(const QString &path, bool on)
+{
+    return setMark(path, int(chat::Mark::Archived), on);
+}
+
+bool WorkspaceChats::setMark(const QString &path, int mark, bool on)
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return false;
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    if (!ok)
+        return false;
+    const QString changed = chat::setMark(content, chat::Mark(mark), on, m_extensions->language());
+    return changed == content || m_workspace->write(path, changed);
 }
 
 // ---- who answers ----------------------------------------------------------------------------------

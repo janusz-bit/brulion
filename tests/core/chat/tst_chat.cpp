@@ -7,7 +7,9 @@
 // the previews of the list; the time of each message (its `czas::` / `time::` line, old pages
 // without one), pictures sent with a message (embeds, the newest of them as the model's images),
 // who answers (the frontmatter's `partner:`), the conversation a sub-conversation was started from
-// (`parent:`) and a conversation too long for the model cut by whole turns.
+// (`parent:`), the list's marks (pinned, archived: read in either language, set and taken out byte
+// for byte), a conversation too long for the model cut by whole turns, and going back and forking
+// (a page cut before a message, a copy up to one), the questions brought back, quotes.
 #include "chat/chat.h"
 
 #include <QTest>
@@ -426,6 +428,92 @@ private Q_SLOTS:
                  u"AI/ab"_s);
     }
 
+    void marks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("mark"); // 0 pinned, 1 archived
+        QTest::addColumn<bool>("on");
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("expected");
+
+        QTest::newRow("pinned in Polish") << u"---\nzadania: ignoruj\n---\n- 🧑 Żółw\n"_s << 0 << true << u"en"_s
+                                          << u"---\nzadania: ignoruj\nprzypięta: tak\n---\n- 🧑 Żółw\n"_s;
+        QTest::newRow("archived in English")
+                << u"---\ntasks: ignore\npartner: acp:claude\n---\n- 🧑 Ą\n"_s << 1 << true << u"pl"_s
+                << u"---\ntasks: ignore\npartner: acp:claude\narchived: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("by its times' key") << u"---\n---\n- 🧑 Ą\n  time:: 2026-11-15 09:12\n"_s << 0 << true << u"pl"_s
+                                           << u"---\npinned: true\n---\n- 🧑 Ą\n  time:: 2026-11-15 09:12\n"_s;
+        QTest::newRow("no frontmatter: the notebook's language")
+                << u"- 🧑 Ą\n"_s << 1 << true << u"pl"_s << u"---\nzarchiwizowana: tak\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("said already") << u"---\nPinned:  \"yes\"\n---\n- 🧑 Ą\n"_s << 0 << true << u"pl"_s
+                                      << u"---\nPinned:  \"yes\"\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("false replaced in place")
+                << u"---\nzarchiwizowana: nie\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << 1 << true << u"en"_s
+                << u"---\nzarchiwizowana: tak\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("taken out, both languages")
+                << u"---\nprzypięta: tak\nzadania: ignoruj\npinned: true\n---\n- 🧑 Ą\n"_s << 0 << false << u"pl"_s
+                << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("a second one goes") << u"---\narchived: true\nzarchiwizowana: tak\n---\n- 🧑 Ą\n"_s << 1 << true
+                                           << u"pl"_s << u"---\narchived: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("taken out, none there") << u"- 🧑 Ą\n"_s << 0 << false << u"pl"_s << u"- 🧑 Ą\n"_s;
+        QTest::newRow("the other mark stays") << u"---\nprzypięta: tak\n---\n- 🧑 Ą\n"_s << 1 << false << u"pl"_s
+                                              << u"---\nprzypięta: tak\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("CRLF") << u"---\r\nzadania: ignoruj\r\n---\r\n- 🧑 Ą\r\n- 🤖 Ę\r\n"_s << 0 << true << u"pl"_s
+                              << u"---\r\nzadania: ignoruj\r\nprzypięta: tak\r\n---\r\n- 🧑 Ą\r\n- 🤖 Ę\r\n"_s;
+        QTest::newRow("CRLF, taken out") << u"---\r\npinned: on\r\n---\r\n- 🧑 Ą"_s << 0 << false << u"pl"_s
+                                         << u"---\r\n---\r\n- 🧑 Ą"_s;
+        QTest::newRow("a key that only begins so") << u"---\npinnedAt: 1\n---\n- 🧑 Ą\n"_s << 0 << true << u"en"_s
+                                                   << u"---\npinnedAt: 1\npinned: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("an indented one is no mark")
+                << u"---\nlista:\n  pinned: true\n---\n- 🧑 Ą\n"_s << 0 << true << u"en"_s
+                << u"---\nlista:\n  pinned: true\npinned: true\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("an unclosed frontmatter")
+                << u"---\n- 🧑 Ą\n"_s << 1 << true << u"en"_s << u"---\narchived: true\n---\n---\n- 🧑 Ą\n"_s;
+    }
+    void marks()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, mark);
+        QFETCH(bool, on);
+        QFETCH(QString, language);
+        QFETCH(QString, expected);
+        const Mark which = mark == 0 ? Mark::Pinned : Mark::Archived;
+        const QString changed = setMark(content, which, on, language);
+        QCOMPARE(changed, expected);
+        const Conversation c = parse(changed);
+        QCOMPARE(which == Mark::Pinned ? c.pinned : c.archived, on);
+        QCOMPARE(setMark(changed, which, on, language), changed); // (again: nothing more)
+        QCOMPARE(c.messages.size(), parse(content).messages.size());
+    }
+
+    void marksOfAPage_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<bool>("pinned");
+        QTest::addColumn<bool>("archived");
+
+        QTest::newRow("none") << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("Polish") << u"---\nprzypięta: tak\nzarchiwizowana: TAK\n---\n- 🧑 Ą\n"_s << true << true;
+        QTest::newRow("English") << u"---\npinned: yes\narchived: 1\n---\n- 🧑 Ą\n"_s << true << true;
+        QTest::newRow("capitals in the key") << u"---\nPRZYPIĘTA: tak\n---\n- 🧑 Ą\n"_s << true << false;
+        QTest::newRow("quoted") << u"---\narchived: 'true'\n---\n- 🧑 Ą\n"_s << false << true;
+        QTest::newRow("said no") << u"---\npinned: false\nzarchiwizowana: nie\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("something else") << u"---\npinned: maybe\narchived:\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("the last one says") << u"---\npinned: true\npinned: false\n---\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("in a message, not the frontmatter") << u"- 🧑 Ą\n  pinned: true\n"_s << false << false;
+        QTest::newRow("an unclosed frontmatter") << u"---\npinned: true\n- 🧑 Ą\n"_s << false << false;
+        QTest::newRow("CRLF") << u"---\r\narchived: on\r\n---\r\n- 🧑 Ą\r\n"_s << false << true;
+    }
+    void marksOfAPage()
+    {
+        QFETCH(QString, content);
+        QFETCH(bool, pinned);
+        QFETCH(bool, archived);
+        const Conversation c = parse(content);
+        QCOMPARE(c.pinned, pinned);
+        QCOMPARE(c.archived, archived);
+    }
+
     void pictures_data()
     {
         QTest::addColumn<QString>("markdown");
@@ -626,6 +714,9 @@ private Q_SLOTS:
         QTest::newRow("a sub-conversation's parent left out")
                 << u"---\nparent: \"[[AI/rodzic]]\"\npartner: acp:codex\n---\n- 🧑 Zadanie\n"_s << 0 << u"AI/dziecko"_s
                 << u"---\npartner: acp:codex\nfork: \"[[AI/dziecko]]\"\n---\n- 🧑 Zadanie\n"_s;
+        QTest::newRow("pinned and archived left out")
+                << u"---\nprzypięta: tak\npinned: true\nzarchiwizowana: tak\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << 0
+                << u"AI/a"_s << u"---\nzadania: ignoruj\nfork: \"[[AI/a]]\"\n---\n- 🧑 Ą\n"_s;
     }
     void forks()
     {

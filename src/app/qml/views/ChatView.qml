@@ -20,6 +20,7 @@ import Brulion
 //
 //   {view: "chat"}                          the conversations (a wide window: beside a new one)
 //   {view: "chat", path: "AI/….md"}         one conversation
+//   {view: "chat", path, line}              … at its message at the page's line (a search's match)
 //   {view: "chat", new: true, page, prompt} a new one about `page`; `prompt` is sent at once
 //   {view: "chat", new: true, fromLink, draft, partner, page, hidden, capped, pageMissing,
 //    partnerMissing}                        a prompt link's (brulion://chat): `draft` in the field,
@@ -28,9 +29,13 @@ import Brulion
 // Wide windows (≥ 720 px, not in the side panel) show the list beside the conversation; narrow
 // ones one of them (the list → a conversation is a step of the history, Back returns). The first
 // message of a new conversation replaces the route with the conversation's (in the side panel:
-// pins it there again). The list's rows have a menu (right-click, a long press): Rename…, Delete
-// (to the trash, with Undo). Several conversations answer at once: each its own turn. Contract
-// with the shell (qml/shell/ShellRouteView.qml): `route`, `title`.
+// pins it there again). The list's rows have a menu (right-click, a long press): Rename…, Pin,
+// Archive, Delete (to the trash; each with Undo); the pinned on top, the archived folded at the
+// bottom, those that need the user (a question, a failure, an unread answer) first, a search
+// field over the names and the messages (a match opens at its message: the route's `line`);
+// with a keyboard ↑/↓ move in the list, Enter opens, Alt+1…9 the first nine, F2 renames.
+// Several conversations answer at once: each its own turn. Contract with the shell
+// (qml/shell/ShellRouteView.qml): `route`, `title`.
 FocusScope {
     id: root
 
@@ -93,6 +98,10 @@ FocusScope {
 
     /// The list follows the answer being written while it is at its end (scrolled up: it stays).
     property bool following: true
+    /// The message to show once the conversation is read (the route's `line`: a search's match;
+    /// -1 none) and the one shown so, tinted for a moment.
+    property int seekLine: -1
+    property int foundLine: -1
     /// The answer as it is written: what the model thinks first, then its words.
     readonly property bool liveShown: root.busyHere && !root.queuedHere && !root.asking
                                       && (root.turn.partial !== "" || root.turn.thoughts !== "")
@@ -111,6 +120,9 @@ FocusScope {
     /// had hidden characters.
     property string linkNote
     property bool linkWarning: false
+
+    /// The words a search found, in the list's rows (TextHelper.markMatches).
+    readonly property string matchColor: Theme.accentText.toString()
 
     /// The conversation this view tells Workspace.chats it shows ("" none).
     property string registered
@@ -145,6 +157,8 @@ FocusScope {
         root.starting = root.path === "" && AppController.routeFlag(root.route, "new")
         root.thoughtsOpen = false
         root.linkNote = ""
+        root.seekLine = root.path !== "" ? AppController.routeInt(root.route, "line", -1) : -1
+        root.foundLine = -1
         const prompt = AppController.routeText(root.route, "prompt")
         if (root.starting && AppController.routeFlag(root.route, "fromLink")) {
             // A prompt link: its prompt in the field, never sent — the user reads it first.
@@ -217,6 +231,24 @@ FocusScope {
             AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path }, true)
         else
             AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path })
+    }
+    /// Opens the conversation `path` at its message at the page's line `line` (a search's match;
+    /// -1: as open()).
+    function openAt(path: string, line: int): void {
+        if (line < 0) {
+            root.open(path, false)
+            return
+        }
+        if (root.inSidePanel)
+            AppController.navigate({ view: "chat", path: path, line: line }, true)
+        else
+            AppController.navigate({ view: "chat", path: path, line: line })
+    }
+    /// The list's row `row` opened (Enter, a click, Alt+1…9).
+    function openRow(row: int): void {
+        const path = conversations.pathAt(row)
+        if (path !== "")
+            root.openAt(path, conversations.query !== "" ? conversations.matchLineAt(row) : -1)
     }
     function send(): void {
         // Dictating: Enter and Send finish it (what was heard goes into the field).
@@ -498,12 +530,35 @@ FocusScope {
         onAccepted: root.attachFiles(selectedFiles)
     }
 
-    // ---- The list's menu: rename, delete ----------------------------------------------------------
-    /// The conversation the list's menu is about.
+    // ---- The list's menu: rename, pin, archive, delete --------------------------------------------
+    /// The conversation the list's menu is about, and its marks.
     property string menuPath
-    function openRowMenu(path: string, item: Item): void {
+    property bool menuPinned
+    property bool menuArchived
+    function openRowMenu(path: string, item: Item, pinned: bool, archived: bool): void {
         root.menuPath = path
+        root.menuPinned = pinned
+        root.menuArchived = archived
         rowMenu.popup(item, Theme.space4, item.height)
+    }
+    function startRename(path: string): void {
+        if (path === "")
+            return
+        renameField.text = root.chats.nameOf(path)
+        renameDialog.path = path
+        renameDialog.open()
+    }
+    /// Pins / unpins (`on`) the conversation, or archives / unarchives it (`archive`), with Undo.
+    function mark(path: string, archive: bool, on: bool): void {
+        const name = "" + root.chats.nameOf(path)
+        const done = archive ? root.chats.setArchived(path, on) : root.chats.setPinned(path, on)
+        if (!done) {
+            AppController.toast(qsTr("The conversation could not be changed"), "error")
+            return
+        }
+        const text = archive ? (on ? qsTr("“%1” archived").arg(name) : qsTr("“%1” back in the list").arg(name))
+                             : (on ? qsTr("“%1” pinned").arg(name) : qsTr("“%1” unpinned").arg(name))
+        AppController.toastUndoChatMark(text, qsTr("Undo"), path, archive ? "archived" : "pinned", on)
     }
     function rename(path: string, name: string): void {
         // (Copies, read before the rename: compiled calls take no arguments a call before may change.)
@@ -539,11 +594,20 @@ FocusScope {
             objectName: "chatRename"
             text: qsTr("Rename…")
             iconName: "pencil"
-            onTriggered: {
-                renameField.text = root.chats.nameOf(root.menuPath)
-                renameDialog.path = root.menuPath
-                renameDialog.open()
-            }
+            onTriggered: root.startRename(root.menuPath)
+        }
+        BMenuItem {
+            objectName: "chatPin"
+            visible: !root.menuArchived
+            text: root.menuPinned ? qsTr("Unpin") : qsTr("Pin")
+            iconName: "pin"
+            onTriggered: root.mark(root.menuPath, false, !root.menuPinned)
+        }
+        BMenuItem {
+            objectName: "chatArchive"
+            text: root.menuArchived ? qsTr("Unarchive") : qsTr("Archive")
+            iconName: root.menuArchived ? "inbox" : "folder-input"
+            onTriggered: root.mark(root.menuPath, true, !root.menuArchived)
         }
         BMenuItem {
             objectName: "chatOpenAsPage"
@@ -669,7 +733,43 @@ FocusScope {
     }
     Later {
         id: toEnd
-        onTriggered: list.positionViewAtEnd()
+        onTriggered: {
+            // A search's match: its message once it is a row, tinted a moment; else the end.
+            if (root.seekLine >= 0 && messages.count === 0)
+                return // (not read yet)
+            const row = root.seekLine >= 0 ? messages.rowOfLine(root.seekLine) : -1
+            root.seekLine = -1
+            if (row >= 0) {
+                list.positionViewAtIndex(row, ListView.Center)
+                root.foundLine = messages.lineOf(row)
+                root.following = false
+                foundTimer.restart()
+                return
+            }
+            list.positionViewAtEnd()
+        }
+    }
+    Timer {
+        id: foundTimer
+        interval: 2500
+        onTriggered: root.foundLine = -1
+    }
+
+    // Alt+1…9: the list's first nine conversations; the find command's key (Ctrl+F): the search
+    // field (docs/UI.md "AI chat").
+    Keys.onPressed: (event) => {
+        if (event.modifiers === Qt.AltModifier && event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+            root.openRow(event.key - Qt.Key_1)
+            event.accepted = true
+        }
+    }
+    Shortcut {
+        sequence: ShortcutMap.sequences["page.find"] || ""
+        enabled: root.visible && root.listShown && root.activeFocus
+        onActivated: {
+            searchField.forceActiveFocus()
+            searchField.selectAll()
+        }
     }
     Connections {
         target: root.chats
@@ -769,6 +869,29 @@ FocusScope {
                 }
             }
 
+            // Search: the names and the messages (ChatListModel.query).
+            BSearchField {
+                id: searchField
+                objectName: "chatSearch"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space3
+                Layout.bottomMargin: Theme.space2
+                visible: conversations.count > 0 || conversations.archivedCount > 0 || conversations.query !== ""
+                placeholderText: qsTr("Search conversations")
+                shortcut: ShortcutMap.sequences["page.find"] || ""
+                onSearch: (query) => conversations.query = query
+                // ↓ to the list's first row; Enter opens it.
+                Keys.onDownPressed: (event) => {
+                    if (conversationList.count === 0)
+                        return
+                    conversationList.currentIndex = 0
+                    conversationList.forceActiveFocus()
+                    event.accepted = true
+                }
+                onAccepted: if (conversations.count > 0 && conversations.query !== "") root.openRow(0)
+            }
+
             ListView {
                 id: conversationList
                 objectName: "chatConversations"
@@ -776,13 +899,66 @@ FocusScope {
                 Layout.fillHeight: true
                 clip: true
                 model: conversations
+                currentIndex: -1
+                keyNavigationEnabled: true
                 TouchFlick.enabled: true
                 boundsBehavior: Flickable.StopAtBounds
                 BRowScrollBar { list: conversationList }
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Conversations")
+                // F2 renames the row with the keyboard (else the conversation shown).
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_F2 && event.modifiers === Qt.NoModifier) {
+                        root.startRename(conversationList.currentIndex >= 0 ? conversations.pathAt(conversationList.currentIndex) : root.path)
+                        event.accepted = true
+                    }
+                }
+
+                // The pinned, the others (named only under pinned ones), the archived.
+                section.property: "section"
+                section.criteria: ViewSection.FullString
+                section.delegate: Item {
+                    id: sectionItem
+                    required property string section
+                    readonly property bool shown: sectionItem.section !== "recent" || conversations.pinnedCount > 0
+                    width: conversationList.width
+                    height: sectionItem.shown ? sectionHeader.implicitHeight : 0
+                    // (The list shows its section items itself: the header is what hides.)
+                    BSectionHeader {
+                        id: sectionHeader
+                        objectName: "chatSection_" + sectionItem.section
+                        visible: sectionItem.shown
+                        width: parent.width
+                        text: sectionItem.section === "pinned" ? qsTr("Pinned")
+                            : sectionItem.section === "archived" ? qsTr("Archived") : qsTr("Recent")
+                        count: sectionItem.section === "archived" ? conversations.archivedCount : -1
+                        // (Found by a query: no folding.)
+                        collapsible: sectionItem.section === "archived" && conversations.query === ""
+                        expanded: true
+                        onExpandedToggled: (open) => conversations.showArchived = open
+                    }
+                }
+                // The archived, folded: "Archived 12" at the end opens them.
+                footer: Item {
+                    width: conversationList.width
+                    height: archivedToggle.visible ? archivedToggle.implicitHeight + Theme.space2 : 0
+                    BSectionHeader {
+                        id: archivedToggle
+                        objectName: "chatArchived"
+                        y: Theme.space2
+                        width: parent.width
+                        visible: !conversations.showArchived && conversations.archivedCount > 0 && conversations.query === ""
+                        text: qsTr("Archived")
+                        count: conversations.archivedCount
+                        collapsible: true
+                        expanded: false
+                        onExpandedToggled: (open) => conversations.showArchived = open
+                    }
+                }
+
                 delegate: BListItem {
                     id: conversation
+                    required property int index
                     required property string path
                     required property string title
                     required property string preview
@@ -790,30 +966,84 @@ FocusScope {
                     required property bool fromAi
                     required property bool running
                     required property bool queued
+                    required property bool pinned
+                    required property bool archived
+                    required property bool asking
+                    required property string question
+                    required property string failure
+                    required property bool unread
+                    required property list<var> titleMatches
+                    required property string matchText
+                    required property list<var> matchMatches
+                    required property int matchLine
+                    /// What its second line says: a search's match, what it asks, why it failed,
+                    /// else its last message.
+                    readonly property string line: conversation.matchText !== "" ? conversation.matchText
+                                                   : conversation.asking && conversation.question !== "" ? conversation.question
+                                                   : conversation.failure !== "" ? conversation.failure
+                                                   : (conversation.fromAi ? "🤖 " : "") + conversation.preview
                     objectName: "chatConversation_" + conversation.title
                     width: ListView.view.width
-                    iconName: "message-square"
+                    iconName: conversation.pinned && !conversation.archived ? "pin" : "message-square"
                     text: conversation.title
-                    subtitle: (conversation.fromAi ? "🤖 " : "") + conversation.preview
+                    titleMarkup: conversation.titleMatches.length > 0
+                                 ? TextHelper.markMatches(conversation.title, conversation.titleMatches, root.matchColor) : ""
+                    subtitle: conversation.line
+                    subtitleMarkup: conversation.matchText !== "" && conversation.matchMatches.length > 0
+                                    ? TextHelper.markMatches(conversation.matchText, conversation.matchMatches, root.matchColor) : ""
+                    subtitleColor: conversation.matchText === "" && !conversation.asking && conversation.failure !== ""
+                                   ? Theme.dangerText : Theme.fgMuted
+                    strong: conversation.unread
                     selected: conversation.path === root.path
                     selectionBar: true
                     trailing: Item {
-                        implicitWidth: conversation.running ? runningMark.implicitWidth : dateText.implicitWidth
-                        implicitHeight: Math.max(runningMark.implicitHeight, dateText.implicitHeight)
+                        implicitWidth: conversation.running && !conversation.asking ? runningMark.implicitWidth
+                                       : Math.max(dateText.implicitWidth, badge.implicitWidth)
+                        implicitHeight: Math.max(runningMark.implicitHeight, dateText.implicitHeight + badge.implicitHeight)
                         BText {
                             id: dateText
-                            anchors.verticalCenter: parent.verticalCenter
                             anchors.right: parent.right
-                            visible: !conversation.running
+                            anchors.top: parent.top
+                            anchors.topMargin: badge.visible ? 0 : (parent.height - dateText.implicitHeight) / 2
+                            visible: !conversation.running || conversation.asking
                             text: conversation.dateLabel
                             variant: "caption"
-                            color: Theme.fgFaint
+                            color: conversation.unread ? Theme.accent : Theme.fgFaint
+                        }
+                        // What needs the user: a question (accent), a failure (danger), an
+                        // unread answer (a dot).
+                        Item {
+                            id: badge
+                            readonly property bool marked: conversation.asking || conversation.failure !== ""
+                            objectName: conversation.asking ? "chatAsking" : conversation.failure !== "" ? "chatFailed" : "chatUnread"
+                            anchors.right: parent.right
+                            anchors.top: dateText.bottom
+                            anchors.topMargin: 2
+                            visible: dateText.visible && (badge.marked || conversation.unread)
+                            implicitWidth: Theme.iconSizeSm
+                            implicitHeight: Theme.iconSizeSm
+                            BIcon {
+                                anchors.right: parent.right
+                                visible: badge.marked
+                                name: conversation.asking ? "circle-help" : "circle-alert"
+                                size: Theme.iconSizeSm
+                                color: conversation.asking ? Theme.accent : Theme.dangerText
+                            }
+                            Rectangle {
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: !badge.marked
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: Theme.accent
+                            }
                         }
                         RowLayout {
                             id: runningMark
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.right: parent.right
-                            visible: conversation.running
+                            visible: conversation.running && !conversation.asking
                             spacing: Theme.space1
                             BIcon {
                                 visible: conversation.queued
@@ -829,14 +1059,22 @@ FocusScope {
                             }
                         }
                     }
-                    Accessible.name: conversation.title + (conversation.running ? ", " + (conversation.queued ? qsTr("waiting for the model") : qsTr("the AI is answering")) : "")
-                    onClicked: root.open(conversation.path, false)
-                    onPressAndHold: root.openRowMenu(conversation.path, conversation)
+                    Accessible.name: conversation.title
+                                     + (conversation.asking ? ", " + qsTr("needs your answer")
+                                        : conversation.failure !== "" ? ", " + qsTr("failed")
+                                        : conversation.running ? ", " + (conversation.queued ? qsTr("waiting for the model") : qsTr("the AI is answering"))
+                                        : conversation.unread ? ", " + qsTr("unread") : "")
+                                     + (conversation.line !== "" ? ", " + conversation.line : "")
+                    onClicked: {
+                        conversationList.currentIndex = conversation.index
+                        root.openAt(conversation.path, conversation.matchLine)
+                    }
+                    onPressAndHold: root.openRowMenu(conversation.path, conversation, conversation.pinned, conversation.archived)
                     TapHandler {
                         // Right-click only (a finger's tap opens the conversation).
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                         acceptedButtons: Qt.RightButton
-                        onTapped: root.openRowMenu(conversation.path, conversation)
+                        onTapped: root.openRowMenu(conversation.path, conversation, conversation.pinned, conversation.archived)
                     }
                 }
             }
@@ -844,13 +1082,23 @@ FocusScope {
             BEmptyState {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: Theme.space8
-                visible: conversations.count === 0
+                visible: conversations.count === 0 && conversations.archivedCount === 0 && conversations.query === ""
                 compact: root.wide
                 iconName: "message-square"
                 title: qsTr("No conversations yet")
                 description: qsTr("Ask the AI about your notes, or ask it to do something in them. Each conversation is a page in the folder %1.").arg(root.chats.folder())
                 actionText: root.wide ? "" : qsTr("New conversation")
                 onActionTriggered: root.open("", true)
+            }
+            BEmptyState {
+                objectName: "chatNoMatch"
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: Theme.space8
+                visible: conversations.count === 0 && conversations.query !== ""
+                compact: true
+                iconName: "search"
+                title: qsTr("No conversation found")
+                description: qsTr("None of the names or messages has “%1”.").arg(conversations.query)
             }
         }
 
@@ -1121,7 +1369,10 @@ FocusScope {
                                     height: bubbleColumn.height + 2 * Theme.space2 + 2
                                     radius: Theme.radiusXl
                                     color: message.mine ? Theme.accentBg : Theme.bgElevated
-                                    border.color: message.mine ? "transparent" : Theme.borderSubtle
+                                    // (A search's match, a moment: the accent's border.)
+                                    border.color: message.line === root.foundLine ? Theme.accent
+                                                  : message.mine ? "transparent" : Theme.borderSubtle
+                                    border.width: message.line === root.foundLine ? 2 : 1
                                     opacity: message.sent ? 1 : 0.6
                                     Accessible.role: Accessible.StaticText
                                     Accessible.name: (message.mine ? qsTr("You") : qsTr("AI")) + (message.time !== "" ? " " + message.time : "") + ": " + message.markdown
