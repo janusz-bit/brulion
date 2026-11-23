@@ -109,8 +109,8 @@ done in the repository simply disappears from the list.
   the tint of `b.app.tagStyle` in rows drawn by `PageItem` / `JournalDayItem` (behind their
   switches) and in exports; in `brulion-cli extension run`, the notebook's own settings for
   `b.app.get` (they are there without the app: `.brulion/config.json`).
-* **Gym: next steps** — Polish instructions for the common exercises (free-exercise-db's are
-  English); the exercises' pictures checked on a real phone; the rest timer's notification with the
+* **Gym: next steps** — Polish instructions for the rest of the exercises (the 144 common ones
+  have them; the other free-exercise-db's stay English); the exercises' pictures checked on a real phone; the rest timer's notification with the
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).
 * **A small language for the interface layout (in the style of Typst)** — a text file describing
   what the icon bar, the pages panel, the "More" menu, tabs and the bottom navigation show and in

@@ -1293,7 +1293,10 @@ are **exercise lines**. A tagged line without children is a workout of one exerc
 * **The catalog**: Brulion's 51 exercises (their ids stay) and free-exercise-db's (the Unlicense,
   `scripts/gym-catalog.py`), with Polish names for the common ones — 879 exercises, about 220
   translated. Its data are resources of the app: `exercises.json` (239 KB, 33 KB compressed) and
-  `exercise-instructions.json` (607 KB, 130 KB compressed; read one exercise at a time), so the app,
+  `exercise-instructions.json` (607 KB, 130 KB compressed; read one exercise at a time; the
+  English instructions) and `exercise-instructions-pl.json` (the Polish translation of 144 common
+  exercises, written by hand — `scripts/gym-catalog.py` does not touch it: the same ids, the same
+  number of steps, which `tst_extensions_gym` checks), so the app,
   the APK and the browser's download grow by about 165 KB (rcc's zlib; measured 2026-11-20). The
   exercises' pictures (two of 873 exercises each — where the movement starts and where it ends —,
   about 70 MB) are not bundled: an exercise says how many it has (`pictures`) and the catalog's
@@ -1316,7 +1319,10 @@ are **exercise lines**. A tagged line without children is a workout of one exerc
   ```
 
   (In English `catalog::`, `muscles::`, `secondary-muscles::`, `equipment::`, `category::`,
-  `level::`, `## Instructions`; the instructions are free-exercise-db's English.)
+  `level::`, `## Instructions`; the instructions are free-exercise-db's English. In Polish — the
+  notebook's language for the page, the app's language for the exercise view — the 144 common
+  exercises have Polish instructions and the others show the English ones with a note that they
+  are in English.)
 * **Weigh-ins** (the body weight log): a block tagged `#waga` (`#weight`) in a daily note — its
   weight with `kg`, `lb` or `lbs` (a number alone: the setting's unit), optionally the body fat
   `18 %`, any other words and tags as notes, in any order:
