@@ -1347,17 +1347,17 @@
     <message numerus="yes">
         <location filename="../src/app/qml/views/PageView.qml" line="1168"/>
         <source>%1 · %n line(s) ignored, %2</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%1 · %n line ignored, %2</numerusform>
+            <numerusform>%1 · %n lines ignored, %2</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/views/PageView.qml" line="1169"/>
         <source>%1 · %n token(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%1 · %n token</numerusform>
+            <numerusform>%1 · %n tokens</numerusform>
         </translation>
     </message>
 </context>
@@ -1914,17 +1914,17 @@
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellThemePages.qml" line="88"/>
         <source>%n line(s) ignored: open the page to see why</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n line ignored: open the page to see why</numerusform>
+            <numerusform>%n lines ignored: open the page to see why</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellThemePages.qml" line="90"/>
         <source>%n token(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n token</numerusform>
+            <numerusform>%n tokens</numerusform>
         </translation>
     </message>
 </context>
