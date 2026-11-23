@@ -279,7 +279,8 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool deviceFolderLinked READ deviceFolderLinked NOTIFY deviceFolderChanged FINAL)
     /// That folder's name ("Notatki"; "" without one).
     Q_PROPERTY(QString deviceFolderName READ deviceFolderName NOTIFY deviceFolderChanged FINAL)
-    /// Where it is, as Android names it ("primary:Syncthing/Notatki"; a path elsewhere; "" unknown).
+    /// Where it is ("Phone storage › Syncthing/Notatki", deviceFolderPlace(); a path elsewhere; ""
+    /// unknown).
     Q_PROPERTY(QString deviceFolderWhere READ deviceFolderWhere NOTIFY deviceFolderChanged FINAL)
 
 public:
@@ -590,7 +591,11 @@ public:
     QString deviceFolderNotebook(const QString &address) const;
     bool deviceFolderLinked() const { return !deviceFolderLink(currentVault()).isEmpty(); }
     QString deviceFolderName() const { return deviceFolderLink(currentVault()).name; }
-    QString deviceFolderWhere() const { return deviceFolderLink(currentVault()).where; }
+    QString deviceFolderWhere() const { return deviceFolderPlace(deviceFolderLink(currentVault()).where); }
+    /// Where a folder is, as people say it: Android's "primary:Documents/Notatki" is "Phone
+    /// storage › Documents/Notatki", "1A2B-3C4D:Notatki" "Memory card › Notatki"; anything else as
+    /// it is (a path).
+    static QString deviceFolderPlace(const QString &where);
 
     /// Generic preference for other app areas (key with an area prefix, e.g. "views/tasks/x").
     /// The value comes back with the type of `defaultValue` (bool, int, double, …) — the INI

@@ -18,6 +18,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QRegularExpression>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -1574,6 +1575,17 @@ void AppSettings::setDeviceFolderLink(const QString &notebook, const DeviceFolde
     }
     m_settings->sync();
     Q_EMIT deviceFolderChanged();
+}
+
+QString AppSettings::deviceFolderPlace(const QString &where)
+{
+    // The phone's storage and memory cards name a folder "<volume>:<path>" (TreeFolder.kt).
+    static const QRegularExpression card(u"^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}:(.*)$"_s);
+    if (where.startsWith(u"primary:"_s))
+        return tr("Phone storage › %1").arg(where.mid(8));
+    if (const QRegularExpressionMatch m = card.match(where); m.hasMatch())
+        return tr("Memory card › %1").arg(m.captured(1));
+    return where;
 }
 
 QString AppSettings::deviceFolderNotebook(const QString &address) const

@@ -167,7 +167,7 @@
 # With --device-folder instead: the app for Google Play's way to a Syncthing folder (docs/ANDROID.md
 # "A folder picked in the system's dialog"), with its debuggable APK (package
 # io.github.januszbit.brulion.play, no "All files access"): a folder of notes on shared storage
-# (/sdcard/Syncthing/Notatki: a journal page with a reminder, Polish names, the notebook's
+# (/sdcard/Documents/Notatki, as a Syncthing folder: a journal page with a reminder, Polish names, the notebook's
 # settings); the start screen (--onboarding) offers "Choose a folder…" ("Wybierz folder…") and no
 # path to type; DocumentsUI's folder picker → the folder → "Use this folder" → "Allow"; the app's
 # copy of the notes in files/Folders/Notatki (the folder's settings kept, the first copy before the
@@ -1716,16 +1716,22 @@ if ((DEVICEFOLDER)); then
   brulion_front() { adb shell dumpsys window | grep -E 'mCurrentFocus' | grep -q "$PKG/"; }
   # The app's copy of a note (files/Folders/Notatki/…), and the folder's.
   app_file() { adb shell run-as "$PKG" cat "'files/Folders/Notatki/$1'" 2>/dev/null | tr -d '\r'; }
-  folder_file() { adb shell cat "'/sdcard/Syncthing/Notatki/$1'" 2>/dev/null | tr -d '\r'; }
+  folder_file() { adb shell cat "'/sdcard/Documents/Notatki/$1'" 2>/dev/null | tr -d '\r'; }
   app_has() { [[ $(app_file "$1") == *"$2"* ]]; }
   folder_has() { [[ $(folder_file "$1") == *"$2"* ]]; }
-  # DocumentsUI's folder picker at the storage's top (or where it was last), down to the folder.
-  documents_open() { # <ERE of the folder> …: tapped one after another
-    local name
-    wait_for 40 ui_has "$1|Syncthing|Show roots|Pokaż katalogi główne|Pokaż elementy główne" || true
-    for name in "$@"; do
-      wait_for 15 ui_has "$name" || return 1
-      ui_tap "$name" first 3 || return 1
+  # DocumentsUI's folder picker at the storage's top, down a path: each folder tapped until the next
+  # name shows (a tap while DocumentsUI still lays the storage's folders out goes nowhere: the first
+  # run, 2026-11-23). The last name is only looked for: something inside the last folder.
+  documents_open() { # <ERE> <ERE> … <ERE inside the last folder>
+    local i _
+    local -a names=("$@")
+    wait_for 40 ui_has "${names[0]}" || return 1
+    for ((i = 0; i + 1 < ${#names[@]}; i++)); do
+      for _ in 1 2 3; do
+        ui_tap "${names[i]}" first 3 || true
+        wait_for 10 ui_has "${names[i + 1]}" && break
+      done
+      ui_has "${names[i + 1]}" || return 1
     done
   }
 
@@ -1733,11 +1739,11 @@ if ((DEVICEFOLDER)); then
   printf -- '- [ ] Odebrać paczkę ⏰ 2026-11-23 18:00\n' >"$OUT/journal.md"
   printf -- '# Łódź\n- rejs po jeziorze\n' >"$OUT/lodz.md"
   printf '{"journalsFolder": "Dziennik"}\n' >"$OUT/config.json"
-  adb shell rm -rf /sdcard/Syncthing >/dev/null 2>&1 || true
-  adb shell mkdir -p /sdcard/Syncthing/Notatki/Dziennik /sdcard/Syncthing/Notatki/Projekty /sdcard/Syncthing/Notatki/.brulion
-  adb push "$OUT/journal.md" /sdcard/Syncthing/Notatki/Dziennik/2026-11-23.md >/dev/null
-  adb push "$OUT/lodz.md" "/sdcard/Syncthing/Notatki/Projekty/Łódź.md" >/dev/null
-  adb push "$OUT/config.json" /sdcard/Syncthing/Notatki/.brulion/config.json >/dev/null
+  adb shell rm -rf /sdcard/Documents/Notatki >/dev/null 2>&1 || true
+  adb shell mkdir -p /sdcard/Documents/Notatki/Dziennik /sdcard/Documents/Notatki/Projekty /sdcard/Documents/Notatki/.brulion
+  adb push "$OUT/journal.md" /sdcard/Documents/Notatki/Dziennik/2026-11-23.md >/dev/null
+  adb push "$OUT/lodz.md" "/sdcard/Documents/Notatki/Projekty/Łódź.md" >/dev/null
+  adb push "$OUT/config.json" /sdcard/Documents/Notatki/.brulion/config.json >/dev/null
 
   # 1. The start screen: "Choose a folder…", no path to type.
   start_app '--onboarding --locale pl'
@@ -1749,7 +1755,9 @@ if ((DEVICEFOLDER)); then
   check "'Wybierz folder…' is tapped" ui_tap 'Wybierz folder…' first 4
   check "the system's folder picker is in front" wait_for 15 documents_front
   app_shot df-2-picker
-  check "it reaches Syncthing/Notatki" documents_open 'Syncthing' 'Notatki'
+  # (Documents: near the top of the storage's folders. A folder lower in DocumentsUI's grid can be
+  # missing from UiAutomator's dump of a picker just opened, though on screen: the first runs.)
+  check "it reaches Documents/Notatki" documents_open 'Documents' 'Notatki' 'Dziennik|Projekty'
   app_shot df-3-folder
   check "'Use this folder'" ui_tap 'USE THIS FOLDER|Use this folder|UŻYJ TEGO FOLDERU|Użyj tego folderu' last 3
   check "'Allow'" ui_tap 'ALLOW|Allow|ZEZWÓL|Zezwól' last 4
@@ -1763,15 +1771,16 @@ if ((DEVICEFOLDER)); then
 
   # 4. Into the app: a note written into the folder (as Syncthing does) comes in at the next start.
   printf -- '- dopisane na komputerze: żółw\n' >"$OUT/pc.md"
-  adb push "$OUT/pc.md" "/sdcard/Syncthing/Notatki/Z komputera.md" >/dev/null
+  adb push "$OUT/pc.md" "/sdcard/Documents/Notatki/Z komputera.md" >/dev/null
   start_app "--locale pl --route $(json_arg '{"view":"sync","tab":"syncthing"}')"
   check "a note written into the folder came in" wait_for 60 app_has 'Z komputera.md' 'żółw'
   check "the sync center shows the folder" wait_for 30 ui_has 'Folder „Notatki” na tym telefonie'
   app_shot df-5-sync-center
 
-  # 5. Out of the app: the app's copy changed (its file watcher sees it) goes to the folder.
+  # 5. Out of the app: the app's copy changed behind its back (the vault's rescan finds it within 2
+  # minutes; an edit in the app is seen at once) goes to the folder.
   adb shell run-as "$PKG" sh -c "'printf -- \"- dopisane w telefonie: łódź\\n\" >> \"files/Folders/Notatki/Projekty/Łódź.md\"'"
-  check "the note changed in the app reached the folder" wait_for 90 folder_has 'Projekty/Łódź.md' 'dopisane w telefonie'
+  check "the note changed in the app reached the folder" wait_for 200 folder_has 'Projekty/Łódź.md' 'dopisane w telefonie'
   check "… its first lines kept" folder_has 'Projekty/Łódź.md' 'rejs po jeziorze'
   app_shot df-6-synced
 

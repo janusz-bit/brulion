@@ -723,7 +723,10 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 1);
         QVERIFY(s.deviceFolderLinked());
         QCOMPARE(s.deviceFolderName(), u"Notatki"_s);
-        QCOMPARE(s.deviceFolderWhere(), u"primary:Syncthing/Notatki"_s);
+        QCOMPARE(s.deviceFolderWhere(), u"Phone storage › Syncthing/Notatki"_s);
+        QCOMPARE(AppSettings::deviceFolderPlace(u"1A2B-3C4D:Notatki/Łódź"_s), u"Memory card › Notatki/Łódź"_s);
+        QCOMPARE(AppSettings::deviceFolderPlace(u"/home/jan/Notatki"_s), u"/home/jan/Notatki"_s);
+        QCOMPARE(AppSettings::deviceFolderPlace(QString()), QString());
         QCOMPARE(s.deviceFolderNotebook(uri), u"/data/Brulion/Folders/Notatki"_s);
         QVERIFY(s.deviceFolderNotebook(uri + u"2"_s).isEmpty());
         // The same link again changes nothing.

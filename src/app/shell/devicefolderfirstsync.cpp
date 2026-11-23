@@ -6,6 +6,7 @@
 #include "sync/webdavclient.h"
 #include "vault/vault.h"
 
+#include <QDir>
 #include <QMetaObject>
 
 using namespace Qt::StringLiterals;
@@ -18,6 +19,9 @@ DeviceFolderFirstSync::DeviceFolderFirstSync(const QString &notebook, const QStr
     : QObject(parent)
     , m_notebook(notebook)
 {
+    // The state folder first: the engine's lock across processes lives there (the background
+    // check may sync this notebook once it is linked).
+    QDir().mkpath(stateDir);
     m_vault = std::make_unique<Vault>(notebook, stateDir);
     const QString base = sync::deviceFolderUrl(sync::deviceFolderId(address));
     m_transport = std::make_unique<sync::FolderDavTransport>(std::move(storage), base);
