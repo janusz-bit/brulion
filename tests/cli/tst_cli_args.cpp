@@ -489,7 +489,7 @@ private Q_SLOTS:
         const qsizetype end = docs.indexOf(u"<!-- /commands -->"_s);
         QVERIFY(start >= 0 && end > start);
         QSet<QString> documented;
-        static const QRegularExpression row(u"^\\| `([a-z]+(?: [a-z-]+)?)"_s, QRegularExpression::MultilineOption);
+        static const QRegularExpression row(u"^\\| `([a-z]+(?: [a-z-]+)*)"_s, QRegularExpression::MultilineOption);
         for (const auto &m : row.globalMatch(docs.mid(start, end - start)))
             documented.insert(m.captured(1));
         QSet<QString> registered;

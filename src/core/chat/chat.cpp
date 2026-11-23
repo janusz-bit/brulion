@@ -23,6 +23,23 @@ constexpr QStringView kTimeFormat = u"yyyy-MM-dd HH:mm";
 
 QStringView markerOf(Role role) { return role == Role::User ? kUser : kAssistant; }
 
+/// The page a frontmatter's link value names: `[[AI/x|y]]` → "AI/x" (an alias, a heading or a
+/// block part left out; a value that is no link as written).
+QString linkTarget(const QString &value)
+{
+    QString target = value.trimmed();
+    if (target.startsWith(u"[["_s) && target.endsWith(u"]]"_s))
+        target = target.mid(2, target.size() - 4);
+    for (const QChar cut : {u'|', u'#', u'^'}) {
+        if (const qsizetype at = target.indexOf(cut); at >= 0)
+            target.truncate(at);
+    }
+    target = target.trimmed();
+    if (target.endsWith(u".md"_s, Qt::CaseInsensitive))
+        target.chop(3);
+    return target;
+}
+
 /// The page's lines without their line breaks ("\r\n" or "\n").
 QList<QStringView> splitLines(QStringView content)
 {
@@ -401,22 +418,30 @@ Conversation parse(QStringView content)
         static const QRegularExpression partner(u"^partner:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression fork(u"^fork:[ \\t]*[\"']?\\[\\[([^\\[\\]|#]+)(?:[|#][^\\[\\]]*)?\\]\\][\"']?[ \\t]*$"_s,
                                              QRegularExpression::CaseInsensitiveOption);
-        QString named, forkedFrom;
+        static const QRegularExpression parent(u"^parent:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
+        const auto unquoted = [](QString value) {
+            value = value.trimmed();
+            if (value.size() >= 2 && (value.front() == u'"' || value.front() == u'\'') && value.back() == value.front())
+                value = value.mid(1, value.size() - 2).trimmed();
+            return value;
+        };
+        QString named;
+        QString from;
+        QString forkedFrom;
         for (qsizetype j = 1; j < lines.size(); ++j) {
             if (lines.at(j).trimmed() == u"---" || lines.at(j).trimmed() == u"...") {
                 i = j + 1;
                 conversation.partner = named;
+                conversation.parent = from;
                 conversation.fork = forkedFrom;
                 break;
             }
             if (const auto m = fork.matchView(lines.at(j)); m.hasMatch())
                 forkedFrom = m.captured(1).trimmed();
-            if (const auto m = partner.matchView(lines.at(j)); m.hasMatch()) {
-                named = m.captured(1).trimmed();
-                if (named.size() >= 2 && (named.front() == u'"' || named.front() == u'\'')
-                    && named.back() == named.front())
-                    named = named.mid(1, named.size() - 2).trimmed();
-            }
+            if (const auto m = partner.matchView(lines.at(j)); m.hasMatch())
+                named = unquoted(m.captured(1));
+            if (const auto m = parent.matchView(lines.at(j)); m.hasMatch())
+                from = linkTarget(unquoted(m.captured(1)));
         }
     }
     struct Open {
@@ -549,7 +574,7 @@ QString appendMessage(const QString &content, Role role, QStringView markdown, c
 }
 
 QString newConversation(QStringView question, QStringView page, QStringView language, const QDateTime &time,
-                        QStringView partner)
+                        QStringView partner, QStringView parent)
 {
     QString text = question.trimmed().toString();
     if (!page.trimmed().isEmpty()) {
@@ -565,7 +590,13 @@ QString newConversation(QStringView question, QStringView page, QStringView lang
     }
     const QString property = language == u"pl" ? u"zadania: ignoruj"_s : u"tasks: ignore"_s;
     const QString who = partner.trimmed().isEmpty() ? QString() : u"partner: "_s + partner.trimmed() + u'\n';
-    return u"---\n"_s + property + u'\n' + who + u"---\n"_s
+    // (A link, so a rename of the parent rewrites it; quoted: YAML reads "[[" as a list.)
+    QString from = parent.trimmed().toString();
+    if (from.endsWith(u".md"_s, Qt::CaseInsensitive))
+        from.chop(3);
+    from.remove(u'"');
+    const QString origin = from.isEmpty() ? QString() : u"parent: \"[["_s + from + u"]]\"\n"_s;
+    return u"---\n"_s + property + u'\n' + who + origin + u"---\n"_s
            + formatMessage(Role::User, text, u"\n", time, language == u"pl" ? u"pl" : u"en");
 }
 
@@ -868,6 +899,8 @@ QString forked(const QString &content, int upTo, QStringView source)
     QString out = content.left(lineStart(content, conversation.messages.at(upTo).endLine + 1));
     if (!out.isEmpty() && !out.endsWith(u'\n'))
         out += content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
+    // (A fork is the user's own: no sub-conversation of the source's parent.)
+    out = setFrontmatterValue(out, u"parent", {});
     return source.trimmed().isEmpty() ? out : setFrontmatterValue(out, u"fork", forkLink(source));
 }
 

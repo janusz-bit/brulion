@@ -18,7 +18,11 @@
 //   the running app live (docs/CLI.md "Live changes"), reaching it with a grant the app makes for
 //   the agent's process (setAppGrants(): RemoteControl in the desktop app) — its token only in the
 //   tools' environment (BRULION_APP_TOKEN, with BRULION_APP_CLIENT the agent's name), revoked when
-//   the process stops.
+//   the process stops. Every session with Brulion's tools also gets `--app-chat` and a grant of
+//   the app's chat alone for its conversation (setChatGrants(): BRULION_APP_CHAT_TOKEN): the agent
+//   may give another partner of the chat a task — a sub-conversation of its own, whose answer it
+//   waits for (ChatControl, docs/UI.md "Agents delegate"). A sub-conversation's agent gets no tools
+//   that change the app, and one MaxDepth levels down no chat tools (setLineage()).
 // * The notebook's files (`fs/read_text_file`, `fs/write_text_file`): through the Workspace, so a
 //   page the agent changes is seen at once by the editor and kept in its history — only files of
 //   the notebook's folder, never an encrypted page.
@@ -156,7 +160,7 @@ public:
     /// the conversation's page, the page it is about, whether Brulion's tools are there and (`app`)
     /// whether they may change the running app.
     static QString context(const QString &root, const QString &conversation, const QString &page, bool tools,
-                           bool app = false);
+                           bool app = false, bool chat = false);
     /// The conversation so far as one text for a new session ("" when there is none before the
     /// newest message): `history` as WorkspaceChats builds it ({role, content}).
     static QString transcript(const QVariantList &history);
@@ -174,6 +178,16 @@ public:
     using GrantFunction = std::function<QString(const QString &client)>;
     using RevokeFunction = std::function<void(const QString &token)>;
     void setAppGrants(GrantFunction grant, RevokeFunction revoke);
+    /// Grants of the running app's chat alone (RemoteControl::chatGrant: hello and the chat's
+    /// methods), one per conversation of an agent with Brulion's tools — so its tools may hand
+    /// another partner a task as a sub-conversation of that conversation. Unset: no chat tools.
+    void setChatGrants(GrantFunction grant, RevokeFunction revoke);
+    /// The conversation whose chat grant `token` is ("" none: no such grant, or a full one).
+    QString grantConversation(const QString &token) const;
+    /// How deep a conversation is among sub-conversations (ChatLineage::depth) and whether it is
+    /// one: a sub-conversation's agent gets no live tools, and one at ChatLineage::MaxDepth no chat
+    /// grant. Unset: every conversation is the user's own.
+    void setLineage(std::function<int(const QString &path)> depth, std::function<bool(const QString &path)> isChild);
 
     void setAgents(const QList<AgentConfig> &agents);
     QList<AgentConfig> agents() const { return m_agents; }
@@ -364,10 +378,14 @@ private:
     void finish(const QString &path);
     const AgentConfig *config(const QString &id) const;
     /// What every turn of the agent's process `p` sends: the folder, Brulion's tools (with its
-    /// grant's live tools), the options.
-    acp::TurnInput baseInput(const AgentConfig &config, const Process *p) const;
-    /// The grant of `p`'s process ends (it stopped).
+    /// grant's live tools unless `child`, and with `chatToken` the chat's), the options.
+    acp::TurnInput baseInput(const AgentConfig &config, const Process *p, const QString &chatToken = QString(),
+                             bool child = false) const;
+    /// The grants of `p`'s process end (it stopped): its own and its conversations' chat grants.
     void releaseGrant(Process *p);
+    /// The chat grant of the conversation `path` answered by `config`'s process (made when first
+    /// asked); "" none (no grant provider, no tools, too deep).
+    QString chatGrantFor(const AgentConfig &config, const QString &path);
     void handle(Process *p, const QString &key, const QJsonValue &id, const QString &method, const QJsonObject &params);
     void readFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params);
     void writeFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params);
@@ -455,6 +473,17 @@ private:
     std::unique_ptr<sync::HttpTransport> m_ownTransport;
     GrantFunction m_grant;
     RevokeFunction m_revoke;
+    GrantFunction m_chatGrant;
+    RevokeFunction m_chatRevoke;
+    std::function<int(const QString &)> m_depth;
+    std::function<bool(const QString &)> m_isChild;
+    /// The chat grants: token → the agent whose process has it and its conversation (a rename
+    /// follows it).
+    struct ChatGrant {
+        QString agent;
+        QString conversation;
+    };
+    QHash<QString, ChatGrant> m_chatGrants;
 };
 
 } // namespace brulion::shell

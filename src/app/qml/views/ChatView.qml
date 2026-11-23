@@ -950,6 +950,16 @@ FocusScope {
                 path: root.path
                 partner: root.partnerHere
             }
+            // Where it came from, and its sub-conversations: AI agents' tasks for other partners.
+            ChatLineageRow {
+                objectName: "chatLineage"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space2
+                Layout.topMargin: Theme.space1
+                path: root.path
+                onOpened: (path) => root.open(path, false)
+            }
             BMenu {
                 id: approvalsMenu
                 objectName: "chatApprovalsMenu"

@@ -123,6 +123,16 @@ Everything above works the same — its plan and steps, the diffs, its questions
 > [!tip] A server without a screen
 > On a home server without the app, `brulion-cli acp serve --agent claude --tailscale` does the same (on NixOS the service `services.brulion-acp` with `tailscale = true`): [[Command line and AI agents#Your agent for the phone]].
 
+### Agents ask other agents
+An agent answering in the AI chat on the computer can hand a task to another partner of the chat and get the answer back: Claude Code asks Codex for a second opinion, gives another agent a research subtask, has the assistant write a note. The task becomes a **sub-conversation** — an ordinary conversation in `AI/` that names the one it came from (`parent:`) — shown under its conversation as a chip with who answers and how far it got (tap it to open it; in the sub-conversation **From: …** leads back). Its questions (may it change a file?) show in it as any conversation's, with a message and **Open** when you are elsewhere.
+
+There is nothing to set up: every agent with **Brulion's tools** gets the chat's tools for its own conversation. It can start sub-conversations of that conversation only, three levels deep at most and four running at once, and a sub-conversation never gets the tools that change the app. Scripts do the same with `brulion-cli app chat …` ([[Command line and AI agents#Conversations in the running app]]).
+
+## Scheduled conversations
+**Settings → Extensions → Scheduled conversations** sends a message to the assistant or an agent when you say — "Plan my day" every weekday at 7:30, "What changed in my notes this week?" on Fridays. **Add…**, write the message and **when** in words — `every day at 7:30`, `on mondays at 9:00`, `every 3 hours`, `tomorrow at 8` (or in Polish: `codziennie o 7:30`, `w poniedziałki o 9:00`, `co 3 godziny`, `jutro o 8`) —, choose who answers and whether each time is **a new conversation** or **the same conversation** going on. The rule is shown back in words with its first run while you type; each row says when it runs next, with **Run now**, **Edit…** and **Delete**.
+
+They are kept **on this device**, for this notebook — never in the notebook, so a synced file can never start an agent. They run while Brulion runs (the tray keeps it running on the computer; on the phone while the app is open); one missed while Brulion was closed runs once when it starts again, not once for every time it missed. Agents and scripts manage them too: `brulion-cli app chat schedule add "Plan my day" --when "weekdays at 7:30"`.
+
 ### The other way: the assistant in your editor
 Zed and the JetBrains IDEs talk to agents the same way — and Brulion's AI assistant can be one of them, with your notes and the model chosen above: `brulion-cli acp agent` ([[Command line and AI agents#Brulion's assistant in your editor]]).
 

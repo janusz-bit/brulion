@@ -118,6 +118,8 @@ struct Command {
     /// Drives the running app through its remote control (commands_app.cpp): an MCP tool only with
     /// `mcp --app-control`.
     bool appControl = false;
+    /// The running app's AI chat (app chat …): an MCP tool also with `mcp --app-chat`.
+    bool appChat = false;
     QString aliasOf; ///< "task.set" for `task done`
     Handler run;
 
@@ -340,7 +342,7 @@ int exitCode(const Result &result);
 
 /// The MCP server on standard input / output (`brulion-cli mcp`); `appControl`: also the tools
 /// that drive the running app.
-int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl = false);
+int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl = false, bool appChat = false);
 /// The newest MCP protocol version these servers speak.
 QString mcpProtocolVersion();
 /// Every MCP protocol version they speak, newest first.

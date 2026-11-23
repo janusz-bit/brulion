@@ -1,5 +1,6 @@
 #include "workspaceagents.h"
 
+#include "chatlineage.h"
 #include "workspace.h"
 
 #include "chat/chat.h"
@@ -201,6 +202,16 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
     // its turn finishes under the path it started with).
     // A conversation deleted: its sessions closed, its record dropped.
     connect(m_workspace, &Workspace::pathRemoved, this, [this](const QString &path) {
+        // Its chat grants end (its sessions close).
+        for (auto it = m_chatGrants.begin(); it != m_chatGrants.end();) {
+            if (it->conversation != path) {
+                ++it;
+                continue;
+            }
+            if (m_chatRevoke)
+                m_chatRevoke(it.key());
+            it = m_chatGrants.erase(it);
+        }
         if (m_turns.contains(path))
             stop(path);
         for (Process *p : std::as_const(m_processes))
@@ -228,6 +239,11 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
         if (m_changes.contains(from)) {
             m_changes.insert(to, m_changes.take(from));
             Q_EMIT changesChanged(to);
+        }
+        // A chat grant goes with its conversation (its sub-conversations name the new page).
+        for (ChatGrant &g : m_chatGrants) {
+            if (g.conversation == from)
+                g.conversation = to;
         }
         if (m_turns.contains(from))
             return;
@@ -385,7 +401,7 @@ QStringList WorkspaceAgents::commandLine(const QString &command, bool onWindows,
 }
 
 QString WorkspaceAgents::context(const QString &root, const QString &conversation, const QString &page, bool tools,
-                                 bool app)
+                                 bool app, bool chat)
 {
     QStringList lines;
     lines << u"You are answering in the AI chat of Brulion, the user's notes app. Their notebook is the folder "_s
@@ -400,6 +416,10 @@ QString WorkspaceAgents::context(const QString &root, const QString &conversatio
                  u"tokens (brulion_app_theme) and settings (brulion_app_set), read and change the window's items "
                  u"(brulion_app_inspect, brulion_app_set_property) — the app shows the user each change and they "
                  u"can undo all of them."_s;
+    if (tools && chat)
+        lines << u"Its brulion_app_chat_* tools reach the app's other AI partners (brulion_app_chat_partners: other "
+                 u"agents, the assistant): brulion_app_chat_start gives one a task as a sub-conversation of this one "
+                 u"and brulion_app_chat_wait returns its answer — for a second opinion or a subtask."_s;
     lines << u"This conversation is kept in the note \"%1\" and the app writes your answers into it: never change "
              u"that note yourself."_s.arg(conversation);
     if (!page.isEmpty())
@@ -482,8 +502,53 @@ void WorkspaceAgents::setAppGrants(GrantFunction grant, RevokeFunction revoke)
     m_revoke = std::move(revoke);
 }
 
+void WorkspaceAgents::setChatGrants(GrantFunction grant, RevokeFunction revoke)
+{
+    m_chatGrant = std::move(grant);
+    m_chatRevoke = std::move(revoke);
+}
+
+void WorkspaceAgents::setLineage(std::function<int(const QString &)> depth, std::function<bool(const QString &)> isChild)
+{
+    m_depth = std::move(depth);
+    m_isChild = std::move(isChild);
+}
+
+QString WorkspaceAgents::grantConversation(const QString &token) const
+{
+    const auto it = m_chatGrants.constFind(token);
+    return it == m_chatGrants.cend() ? QString() : it->conversation;
+}
+
+QString WorkspaceAgents::chatGrantFor(const AgentConfig &config, const QString &path)
+{
+    if (!m_chatGrant || config.isRemote() || !config.tools || toolsProgram().isEmpty())
+        return {};
+    // (A conversation that deep starts no sub-conversations of its own.)
+    if (m_depth && m_depth(path) >= ChatLineage::MaxDepth)
+        return {};
+    for (auto it = m_chatGrants.cbegin(); it != m_chatGrants.cend(); ++it) {
+        if (it->agent == config.id && it->conversation == path)
+            return it.key();
+    }
+    const QString token = m_chatGrant(config.name);
+    if (!token.isEmpty())
+        m_chatGrants.insert(token, ChatGrant{config.id, path});
+    return token;
+}
+
 void WorkspaceAgents::releaseGrant(Process *p)
 {
+    // Its conversations' chat grants (their sessions end with it).
+    for (auto it = m_chatGrants.begin(); it != m_chatGrants.end();) {
+        if (it->agent != p->config.id) {
+            ++it;
+            continue;
+        }
+        if (m_chatRevoke)
+            m_chatRevoke(it.key());
+        it = m_chatGrants.erase(it);
+    }
     if (p->grant.isEmpty())
         return;
     if (m_revoke)
@@ -881,7 +946,8 @@ void WorkspaceAgents::stopProcess(const QString &id)
     delete p;
 }
 
-acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Process *p) const
+acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Process *p, const QString &chatToken,
+                                          bool child) const
 {
     acp::TurnInput input;
     if (config.isRemote()) {
@@ -896,10 +962,20 @@ acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Proce
     if (!program.isEmpty()) {
         acp::McpServer server{u"brulion"_s, program, {u"mcp"_s, u"--vault"_s, input.cwd}};
         // The tools that change the running app: they reach it with the process's grant (the
-        // token only in their environment, never in the arguments others can list).
-        if (p && !p->grant.isEmpty()) {
+        // token only in their environment, never in the arguments others can list). Not for a
+        // sub-conversation: an agent's task for another never gets more than the chat.
+        const bool live = p && !p->grant.isEmpty() && !child;
+        if (live) {
             server.args << u"--app-control"_s;
             server.env = {{u"BRULION_APP_TOKEN"_s, p->grant}, {u"BRULION_APP_CLIENT"_s, config.name}};
+        }
+        // The app's chat (other partners, sub-conversations of this conversation).
+        if (!chatToken.isEmpty()) {
+            if (!live) {
+                server.args << u"--app-chat"_s;
+                server.env << std::pair{u"BRULION_APP_CLIENT"_s, config.name};
+            }
+            server.env << std::pair{u"BRULION_APP_CHAT_TOKEN"_s, chatToken};
         }
         input.mcpServers << server;
     }
@@ -947,7 +1023,11 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         Q_EMIT failed(path, tr("AI agents run only in the desktop app: choose another partner for this conversation."));
         return;
     }
-    acp::TurnInput input = baseInput(*agent, p);
+    // A sub-conversation (an agent's task for this one) gets no live tools; the chat's grant goes
+    // with the conversation (none from ChatLineage::MaxDepth levels down).
+    const bool child = m_isChild && m_isChild(path);
+    const QString chatToken = chatGrantFor(*agent, path);
+    acp::TurnInput input = baseInput(*agent, p, chatToken, child);
 
     // The user's newest message, its pictures as pictures (a link to the file where the agent
     // takes none — or where a picture cannot be read).
@@ -989,8 +1069,8 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // (That computer's server gives each session Brulion's tools there, unless it was started
     // without them: its info said so at pairing.)
     const bool tools = agent->isRemote() ? agent->tools : !input.mcpServers.isEmpty();
-    input.firstPrompt << acp::Block::textBlock(
-            context(root, conversation, pagePath.isEmpty() ? QString() : page, tools, !p->grant.isEmpty()));
+    input.firstPrompt << acp::Block::textBlock(context(root, conversation, pagePath.isEmpty() ? QString() : page,
+                                                       tools, !p->grant.isEmpty() && !child, !chatToken.isEmpty()));
     if (!pagePath.isEmpty()) {
         bool ok = false;
         const QString text = markdown::isEncryptedNotePath(pagePath) ? QString() : m_workspace->read(pagePath, &ok);

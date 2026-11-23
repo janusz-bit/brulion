@@ -2343,6 +2343,9 @@ Item {
                 }
             }
 
+            // Scheduled conversations (shell/chatschedules.h): kept on this device per notebook.
+            ShellChatSchedules {}
+
             // The remote MCP server for claude.ai and ChatGPT (desktop: AppController.mcpServer,
             // shell/mcpserversupervisor.h; docs/CLI.md "Remote MCP server"): `brulion-cli mcp
             // serve` in the background while Brulion runs, for the notebook open now; its password

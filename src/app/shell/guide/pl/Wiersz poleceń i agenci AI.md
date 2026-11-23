@@ -146,6 +146,19 @@ Agent przez MCP dostaje te narzędzia po uruchomieniu `brulion-cli mcp --app-con
 
 Na Androidzie i w przeglądarce sterowania nie ma — tam aplikację testuje się narzędziami programisty (adb, Playwright).
 
+## Rozmowy w działającej aplikacji
+Skrypty i agenci mogą też rozmawiać z czatem AI aplikacji: zacząć rozmowę z dowolnym rozmówcą (agentem AI, asystentem), poczekać na odpowiedź, przeczytać ją, wysłać następną wiadomość, zatrzymać — i zarządzać [[AI#Rozmowy według harmonogramu|rozmowami według harmonogramu]].
+
+```sh
+brulion-cli app chat partners                                     # kto może odpowiadać
+brulion-cli app chat start "Czy ten plan ma sens?" --partner acp:codex --wait
+brulion-cli app chat list                                         # rozmowy i ich stan
+brulion-cli app chat read "Czy ten plan ma sens"                  # jej wiadomości
+brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7:30"
+```
+
+`wait` kończy się kodem 0 i odpowiedzią, 1 gdy tura się nie udała, 5 gdy czeka na Twoją odpowiedź w aplikacji (pozwolenie), 3 gdy wciąż trwa. Przy włączonym sterowaniu (wyżej) może to każdy skrypt; agent AI uruchomiony przez aplikację dostaje te narzędzia dla własnej rozmowy sam (`brulion-cli mcp --app-chat`) — to, co zacznie, to podrozmowy tej rozmowy ([[AI#Agenci pytają innych agentów]]).
+
 ## Dla dociekliwych
 - Wynik każdego polecenia to JSON (`--format text` — czytelnie dla ludzi), a kod wyjścia mówi, co się stało: 0 dobrze, 3 nie znaleziono, 4 konflikt (np. linia zmieniła się od odczytu), 7 odmowa.
 - Zadania i linie wskazujesz odnośnikiem z wyniku, np. `Dom.md#L12@3f9a01bc` — jeśli linia zmieniła się w międzyczasie, polecenie odmówi zamiast zmienić coś innego.

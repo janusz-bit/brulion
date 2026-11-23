@@ -111,14 +111,14 @@ void ControlServer::setOpen(bool open)
     }
 }
 
-QString ControlServer::addGrant(const QString &client)
+QString ControlServer::addGrant(const QString &client, GrantScope scope)
 {
     quint32 words[8];
     QRandomGenerator::system()->fillRange(words);
     QString token;
     for (const quint32 w : words)
         token += u"%1"_s.arg(w, 8, 16, u'0');
-    m_grants.insert(token, cleanClientName(client));
+    m_grants.insert(token, Grant{cleanClientName(client), scope});
     return token;
 }
 
@@ -136,10 +136,10 @@ bool ControlServer::revokeGrant(const QString &token)
     return true;
 }
 
-std::optional<QString> ControlServer::grantFor(const QString &token) const
+std::optional<ControlServer::Grant> ControlServer::grantFor(const QString &token) const
 {
     // Every grant compared in full: the time taken tells nothing of how much of a token matched.
-    std::optional<QString> found;
+    std::optional<Grant> found;
     const QByteArray given = token.toLatin1();
     for (auto it = m_grants.cbegin(); it != m_grants.cend(); ++it) {
         const QByteArray known = it.key().toLatin1();
@@ -156,8 +156,8 @@ bool ControlServer::introduce(Peer &peer, const ControlRequest &request, QLocalS
 {
     const QJsonValue token = request.params.value(u"token"_s);
     if (token.isString()) {
-        const std::optional<QString> client = grantFor(token.toString());
-        if (!client) {
+        const std::optional<Grant> grant = grantFor(token.toString());
+        if (!grant) {
             writeLine(socket, encodeError(request.id, QString::fromLatin1(ControlError::Unauthorized),
                                           u"The token is no grant of this app (its agent stopped, or it was "
                                           u"never one)"_s));
@@ -165,7 +165,8 @@ bool ControlServer::introduce(Peer &peer, const ControlRequest &request, QLocalS
         }
         peer.granted = true;
         peer.token = token.toString();
-        peer.client = *client;
+        peer.client = grant->client;
+        peer.scope = grant->scope;
         return true;
     }
     // A name for a connection without a grant (a grant's name stays).
@@ -239,8 +240,21 @@ void ControlServer::readLines(QLocalSocket *socket)
         }
         if (hello && !introduce(peer, *request, socket))
             continue;
+        // A grant of the chat alone: nothing but its methods.
+        const bool chatOnly = peer.granted && peer.scope == GrantScope::Chat;
+        if (chatOnly && !hello) {
+            const MethodSpec *spec = findControlMethod(request->method);
+            if (!spec || !spec->chat) {
+                writeLine(socket, encodeError(request->id, QString::fromLatin1(ControlError::Unauthorized),
+                                              u"This grant covers the AI chat's methods only (chats, chatStart, "
+                                              u"chatWait …), not %1"_s.arg(request->method)));
+                continue;
+            }
+        }
         request->client = peer.client;
         request->granted = peer.granted;
+        request->grant = peer.granted ? peer.token : QString();
+        request->chatOnly = chatOnly;
         const ControlReply reply(socket, request->id);
         if (m_handler)
             m_handler(*request, reply);

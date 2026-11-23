@@ -15,6 +15,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/views/ChatChanges.qml
     qml/views/ChatAgentOptions.qml
     qml/views/ChatAgentLimits.qml
+    qml/views/ChatLineageRow.qml
     qml/views/ConsoleView.qml
     qml/views/ExtensionRouteView.qml
     qml/views/GraphView.qml

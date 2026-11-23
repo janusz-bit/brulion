@@ -6,8 +6,8 @@
 // closed), the first lines of a new page, its name, the journal's line, the history b.ai gets and
 // the previews of the list; the time of each message (its `czas::` / `time::` line, old pages
 // without one), pictures sent with a message (embeds, the newest of them as the model's images),
-// who answers (the frontmatter's `partner:`) and a conversation too long for the model cut by
-// whole turns.
+// who answers (the frontmatter's `partner:`), the conversation a sub-conversation was started from
+// (`parent:`) and a conversation too long for the model cut by whole turns.
 #include "chat/chat.h"
 
 #include <QTest>
@@ -400,6 +400,32 @@ private Q_SLOTS:
                  u"---\nzadania: ignoruj\npartner: pirat\n---\n- 🧑 Ahoj\n"_s);
     }
 
+    void parentOfAPage()
+    {
+        // A sub-conversation: the link to the one it was started from, quoted for YAML.
+        const QString child = newConversation(u"Sprawdź plan"_s, u"Dom"_s, u"en"_s, QDateTime(), u"acp:codex"_s,
+                                              u"AI/2026-11-22 Plan wyjazdu.md"_s);
+        QCOMPARE(child, u"---\ntasks: ignore\npartner: acp:codex\nparent: \"[[AI/2026-11-22 Plan wyjazdu]]\"\n---\n"
+                        "- 🧑 Sprawdź plan ([[Dom]])\n"_s);
+        const Conversation c = parse(child);
+        QCOMPARE(c.parent, u"AI/2026-11-22 Plan wyjazdu"_s);
+        QCOMPARE(c.partner, u"acp:codex"_s);
+        QCOMPARE(c.page, u"Dom"_s);
+        // As others write it: unquoted, an alias, a heading, any letter case of the key; none.
+        QCOMPARE(parse(u"---\nParent: [[AI/Rozmowa|tamta]]\n---\n- 🧑 Ą\n"_s).parent, u"AI/Rozmowa"_s);
+        QCOMPARE(parse(u"---\nparent: '[[AI/Żółw#Koniec]]'\n---\n- 🧑 Ą\n"_s).parent, u"AI/Żółw"_s);
+        QCOMPARE(parse(u"---\r\nparent: \"[[AI/a.md]]\"\r\n---\r\n- 🧑 Ą\r\n"_s).parent, u"AI/a"_s);
+        QCOMPARE(parse(u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s).parent, QString());
+        QCOMPARE(parse(u"- 🧑 Ą\n  parent:: [[AI/x]]\n"_s).parent, QString()); // (no frontmatter's)
+        QCOMPARE(parse(u"---\nparent: \"[[]]\"\n---\n- 🧑 Ą\n"_s).parent, QString());
+        // Its partner set later keeps the link.
+        QCOMPARE(parse(setPartner(child, u"acp:claude"_s)).parent, u"AI/2026-11-22 Plan wyjazdu"_s);
+        // No parent: nothing written for it; a quote in a name cannot break the YAML.
+        QVERIFY(!newConversation(u"Ahoj"_s, QString(), u"pl"_s).contains(u"parent"_s));
+        QCOMPARE(parse(newConversation(u"Ahoj"_s, QString(), u"pl"_s, QDateTime(), QString(), u"AI/a\"b"_s)).parent,
+                 u"AI/ab"_s);
+    }
+
     void pictures_data()
     {
         QTest::addColumn<QString>("markdown");
@@ -597,6 +623,9 @@ private Q_SLOTS:
                 << u"---\nfork: \"[[AI/a]]\"\n---\n- 🧑 X\n"_s << 0 << u"AI/b"_s
                 << u"---\nfork: \"[[AI/b]]\"\n---\n- 🧑 X\n"_s;
         QTest::newRow("no such message") << page << 3 << u"AI/x"_s << QString();
+        QTest::newRow("a sub-conversation's parent left out")
+                << u"---\nparent: \"[[AI/rodzic]]\"\npartner: acp:codex\n---\n- 🧑 Zadanie\n"_s << 0 << u"AI/dziecko"_s
+                << u"---\npartner: acp:codex\nfork: \"[[AI/dziecko]]\"\n---\n- 🧑 Zadanie\n"_s;
     }
     void forks()
     {

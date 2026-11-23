@@ -23,7 +23,22 @@
 // --app-control and a grant's token in their environment only (BRULION_APP_TOKEN, the agent's name
 // as BRULION_APP_CLIENT), one grant per process, the context says so; the grant ends when the
 // process stops (its settings changed, it died), and without a grant provider the tools are plain.
+// Delegation (chatcontrol.h, chatlineage.h): every agent's session gets --app-chat and its
+// conversation's chat grant (BRULION_APP_CHAT_TOKEN), the context names the chat tools; an agent's
+// chatStart makes a sub-conversation of its own (`parent:` in its page, listed under it), whose
+// agent gets no live tools even when let change the app, and whose answer chatWait brings back; it
+// sends to and stops only its own sub-conversations, is refused another parent, a turn that runs
+// (busy), a fifth sub-conversation running at once and one deeper than three levels (whose agent
+// gets no chat tools either); a grant follows a renamed conversation and ends with the agent.
+// The chat's methods for a script (any parent, a timeout of chatWait, a question it waits on,
+// chatRead's pages of long texts, partners). Scheduled conversations (chatschedules.h): a rule due
+// runs once (also one missed while the app was closed), a new conversation each run or the same
+// one going on (skipped while it answers), one of a partner that does not answer here skipped with
+// why, Run now, an agent's schedule a sub-conversation of its conversation, kept as JSON.
 #include "appsettings.h"
+#include "chatcontrol.h"
+#include "chatlineage.h"
+#include "chatschedules.h"
 #include "workspace.h"
 #include "workspaceagents.h"
 #include "workspacechats.h"
@@ -44,9 +59,15 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+#include <memory>
+
 using namespace Qt::StringLiterals;
 using namespace brulion;
 using brulion::shell::AgentConfig;
+using brulion::shell::ChatControl;
+using brulion::shell::ChatLineage;
+using brulion::shell::ChatSchedules;
 using brulion::shell::Workspace;
 using brulion::shell::WorkspaceAgents;
 using brulion::shell::WorkspaceChats;
@@ -121,6 +142,53 @@ class TestAgents : public QObject {
     static AgentConfig fake(bool tools = false, const QString &args = QString())
     {
         return AgentConfig{u"fake"_s, u"Fałszywy"_s, command(args), tools};
+    }
+
+    /// The answer of a chat method (ChatControl::handle()): ok and its result, or its error.
+    struct Answer {
+        bool done = false;
+        bool ok = false;
+        QJsonObject result;
+        QString code;
+        QString message;
+        QJsonObject details;
+    };
+    static std::shared_ptr<Answer> ask(ChatControl &control, const QString &method, const QJsonObject &params,
+                                       const ChatControl::Caller &caller = {})
+    {
+        auto a = std::make_shared<Answer>();
+        ChatControl::Reply reply;
+        reply.ok = [a](const QJsonObject &result) {
+            a->done = a->ok = true;
+            a->result = result;
+        };
+        reply.fail = [a](const QString &code, const QString &message, const QJsonObject &details) {
+            a->done = true;
+            a->code = code;
+            a->message = message;
+            a->details = details;
+        };
+        control.handle(method, params, caller, reply);
+        return a;
+    }
+    /// The env of the MCP server of the session/new `n` as {name → value}.
+    QHash<QString, QString> serverEnv(qsizetype n) const
+    {
+        QHash<QString, QString> out;
+        const QJsonArray servers =
+                logged(u"session/new"_s).at(n).value(u"params"_s).toObject().value(u"mcpServers"_s).toArray();
+        for (const QJsonValue &e : servers.at(0).toObject().value(u"env"_s).toArray())
+            out.insert(e.toObject().value(u"name"_s).toString(), e.toObject().value(u"value"_s).toString());
+        return out;
+    }
+    QStringList serverArgs(qsizetype n) const
+    {
+        QStringList out;
+        const QJsonArray servers =
+                logged(u"session/new"_s).at(n).value(u"params"_s).toObject().value(u"mcpServers"_s).toArray();
+        for (const QJsonValue &a : servers.at(0).toObject().value(u"args"_s).toArray())
+            out << a.toString();
+        return out;
     }
 
 private Q_SLOTS:
@@ -337,6 +405,343 @@ private Q_SLOTS:
         chats->agents()->setAppGrants({}, {});
         ws.reset();
         QCOMPARE(revoked.size(), 2);
+    }
+
+    void delegation()
+    {
+        if (!toolsThere())
+            QSKIP("no brulion-cli to name");
+        auto ws = open({});
+        WorkspaceChats *chats = ws->chats();
+        QStringList chatGranted, chatRevoked, fullGranted;
+        chats->agents()->setChatGrants(
+                [&chatGranted](const QString &client) {
+                    chatGranted << client;
+                    return u"chat-%1"_s.arg(chatGranted.size());
+                },
+                [&chatRevoked](const QString &token) { chatRevoked << token; });
+        chats->agents()->setAppGrants(
+                [&fullGranted](const QString &client) {
+                    fullGranted << client;
+                    return u"full-%1"_s.arg(fullGranted.size());
+                },
+                [](const QString &) {});
+        auto unset = qScopeGuard([chats] {
+            chats->agents()->setChatGrants({}, {});
+            chats->agents()->setAppGrants({}, {});
+        });
+        AgentConfig codex{u"codex"_s, u"Kodeks"_s, command(), true};
+        codex.appAccess = true; // (let change the app — never in a sub-conversation)
+        chats->setAgents({fake(true), codex});
+
+        // The user's conversation with an agent: its tools get the chat's grant for it.
+        const QString path = chats->send(QString(), u"Zaplanuj wyjazd do Zakopanego"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 20000);
+        QCOMPARE(chatGranted, QStringList{u"Fałszywy"_s});
+        QCOMPARE(serverArgs(0).last(), u"--app-chat"_s);
+        QCOMPARE(serverEnv(0).value(u"BRULION_APP_CHAT_TOKEN"_s), u"chat-1"_s);
+        QCOMPARE(serverEnv(0).value(u"BRULION_APP_CLIENT"_s), u"Fałszywy"_s);
+        QVERIFY(!serverEnv(0).contains(u"BRULION_APP_TOKEN"_s));
+        const QString context =
+                promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString();
+        QVERIFY2(context.contains(u"brulion_app_chat_start"_s), qPrintable(context));
+        QVERIFY(!context.contains(u"brulion_app_eval"_s));
+        QCOMPARE(chats->agents()->grantConversation(u"chat-1"_s), path);
+        QCOMPARE(chats->agents()->grantConversation(u"nic"_s), QString());
+
+        // The agent asks Codex for a second opinion: a sub-conversation of its own.
+        ChatControl control(ws.get());
+        const ChatControl::Caller agent{true, chats->agents()->grantConversation(u"chat-1"_s), u"Fałszywy"_s};
+        auto a = ask(control, u"chatStart"_s,
+                     {{u"text"_s, u"Druga opinia: czy ten wyjazd ma sens?"_s}, {u"partner"_s, u"acp:codex"_s}},
+                     agent);
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString child = a->result.value(u"path"_s).toString();
+        QVERIFY(child.startsWith(u"AI/2026-11-20 Druga opinia"_s));
+        QCOMPARE(a->result.value(u"parent"_s).toString(), path);
+        QCOMPARE(a->result.value(u"partnerName"_s).toString(), u"Kodeks"_s);
+        QVERIFY2(ws->read(child).contains(u"parent: \"[[%1]]\""_s.arg(path.chopped(3))), qPrintable(ws->read(child)));
+        QCOMPARE(chats->lineage()->parentOf(child), path);
+        QCOMPARE(chats->lineage()->childrenOf(path), QStringList{child});
+        QCOMPARE(chats->lineage()->depthOf(child), 1);
+        // Its answer comes back.
+        a = ask(control, u"chatWait"_s, {{u"path"_s, child}, {u"ms"_s, 20000}}, agent);
+        QTRY_VERIFY_WITH_TIMEOUT(a->done, 25000);
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QCOMPARE(a->result.value(u"state"_s).toString(), u"idle"_s);
+        QVERIFY2(a->result.value(u"answer"_s).toObject().value(u"text"_s).toString().startsWith(u"Odpowiedź na:"_s),
+                 QJsonDocument(a->result).toJson().constData());
+        // Codex's session: the chat's grant for the sub-conversation, never the live tools.
+        QCOMPARE(logged(u"session/new"_s).size(), 2);
+        QVERIFY(!serverArgs(1).contains(u"--app-control"_s));
+        QCOMPARE(serverArgs(1).last(), u"--app-chat"_s);
+        QCOMPARE(serverEnv(1).value(u"BRULION_APP_CHAT_TOKEN"_s), u"chat-2"_s);
+        QVERIFY(!serverEnv(1).contains(u"BRULION_APP_TOKEN"_s));
+        QCOMPARE(chats->agents()->grantConversation(u"chat-2"_s), child);
+        // The parent's view lists it.
+        const QVariantList rows = chats->lineage()->children(path);
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toMap().value(u"partner"_s).toString(), u"Kodeks"_s);
+        QCOMPARE(rows.first().toMap().value(u"state"_s).toString(), u"idle"_s);
+        a = ask(control, u"chats"_s, {{u"parent"_s, path}});
+        QCOMPARE(a->result.value(u"total"_s).toInt(), 1);
+        QCOMPARE(a->result.value(u"conversations"_s).toArray().at(0).toObject().value(u"path"_s).toString(), child);
+
+        // Its own sub-conversation only: another parent, the user's other conversations are refused.
+        const QString other = chats->send(QString(), u"Inna rozmowa"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(other)->running(), 20000);
+        a = ask(control, u"chatStart"_s, {{u"text"_s, u"Ą"_s}, {u"parent"_s, other}}, agent);
+        QCOMPARE(a->code, u"refused"_s);
+        a = ask(control, u"chatSend"_s, {{u"path"_s, other}, {u"text"_s, u"Zmień to"_s}}, agent);
+        QCOMPARE(a->code, u"refused"_s);
+        a = ask(control, u"chatStop"_s, {{u"path"_s, other}}, agent);
+        QCOMPARE(a->code, u"refused"_s);
+        a = ask(control, u"chatStart"_s, {{u"text"_s, u"Ą"_s}, {u"partner"_s, u"acp:nieznany"_s}}, agent);
+        QCOMPARE(a->code, u"not_found"_s);
+        // A follow-up: while its turn runs, busy; a wait runs out; Stop.
+        a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"czekaj na mnie"_s}}, agent);
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QCOMPARE(a->result.value(u"state"_s).toString(), u"running"_s);
+        a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"I jeszcze"_s}}, agent);
+        QCOMPARE(a->code, u"busy"_s);
+        a = ask(control, u"chatWait"_s, {{u"path"_s, child}, {u"ms"_s, 300}}, agent);
+        QTRY_VERIFY_WITH_TIMEOUT(a->done, 5000);
+        QCOMPARE(a->code, u"timeout"_s);
+        QCOMPARE(a->details.value(u"state"_s).toString(), u"running"_s);
+        a = ask(control, u"chatStop"_s, {{u"path"_s, child}}, agent);
+        QVERIFY(a->ok);
+        QVERIFY(a->result.value(u"stopped"_s).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(child), 10000);
+
+        // At most four sub-conversations run at once.
+        QStringList waiting;
+        for (int i = 0; i < ChatLineage::MaxRunningChildren; ++i) {
+            a = ask(control, u"chatStart"_s, {{u"text"_s, u"czekaj %1"_s.arg(i)}, {u"partner"_s, u"acp:codex"_s}}, agent);
+            QVERIFY2(a->ok, qPrintable(a->message));
+            waiting << a->result.value(u"path"_s).toString();
+        }
+        a = ask(control, u"chatStart"_s, {{u"text"_s, u"Piąta"_s}, {u"partner"_s, u"acp:codex"_s}}, agent);
+        QCOMPARE(a->code, u"refused"_s);
+        QCOMPARE(a->details.value(u"reason"_s).toString(), u"children"_s);
+        a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Szósta"_s}}, agent);
+        QCOMPARE(a->code, u"refused"_s);
+        for (const QString &w : std::as_const(waiting))
+            QVERIFY(ask(control, u"chatStop"_s, {{u"path"_s, w}}, agent)->ok);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->lineage()->runningChildren(path) == 0, 10000);
+
+        // Three levels deep at most: such a conversation's agent gets no chat tools. (Every session so
+        // far: the conversation, Codex's answer, the other conversation, the four that waited.)
+        QTRY_COMPARE_WITH_TIMEOUT(logged(u"session/new"_s).size(), 7, 10000);
+        ws->write(u"AI/b.md"_s, u"---\nparent: \"[[%1]]\"\n---\n- 🧑 b\n"_s.arg(child.chopped(3)));
+        ws->write(u"AI/c.md"_s, u"---\npartner: acp:fake\nparent: \"[[AI/b]]\"\n---\n- 🧑 c\n"_s);
+        QCOMPARE(chats->lineage()->depthOf(u"AI/c.md"_s), 3);
+        a = ask(control, u"chatStart"_s, {{u"text"_s, u"Jeszcze głębiej"_s}}, ChatControl::Caller{true, u"AI/c.md"_s, u"x"_s});
+        QCOMPARE(a->code, u"refused"_s);
+        QCOMPARE(a->details.value(u"reason"_s).toString(), u"depth"_s);
+        const qsizetype before = logged(u"session/new"_s).size();
+        QVERIFY(chats->retry(u"AI/c.md"_s));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(u"AI/c.md"_s)->running(), 20000);
+        QCOMPARE(logged(u"session/new"_s).size(), before + 1);
+        QVERIFY(!serverArgs(before).contains(u"--app-chat"_s));
+        QVERIFY(!serverEnv(before).contains(u"BRULION_APP_CHAT_TOKEN"_s));
+
+        // A renamed conversation takes its grant along; the agent's end ends its grants.
+        const QString renamed = chats->rename(path, u"Wyjazd w góry"_s);
+        QVERIFY(!renamed.isEmpty());
+        QCOMPARE(chats->agents()->grantConversation(u"chat-1"_s), renamed);
+        QTRY_COMPARE(chats->lineage()->parentOf(child), renamed); // (the child's link follows the rename)
+        QVERIFY(chatRevoked.isEmpty());
+        QCOMPARE(chats->send(renamed, u"koniec"_s), renamed);
+        QTRY_VERIFY_WITH_TIMEOUT(chatRevoked.contains(u"chat-1"_s), 20000);
+        QCOMPARE(chats->agents()->grantConversation(u"chat-1"_s), QString());
+        QVERIFY(fullGranted.size() <= 1); // (Codex's process has its own; its sub-conversations never use it)
+        unset.dismiss();
+        chats->agents()->setChatGrants({}, {});
+        chats->agents()->setAppGrants({}, {});
+    }
+
+    void chatMethods()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        ChatControl control(ws.get());
+        // Partners: the assistant and the agent.
+        auto a = ask(control, u"chatPartners"_s, {});
+        QVERIFY(a->ok);
+        const QJsonArray partners = a->result.value(u"partners"_s).toArray();
+        QCOMPARE(partners.first().toObject().value(u"kind"_s).toString(), u"assistant"_s);
+        QVERIFY(std::ranges::any_of(partners, [](const QJsonValue &p) {
+            return p.toObject().value(u"id"_s).toString() == u"acp:fake"
+                   && p.toObject().value(u"kind"_s).toString() == u"agent";
+        }));
+        // A script starts a conversation (no parent needed) and waits for it.
+        a = ask(control, u"chatStart"_s, {{u"text"_s, u"Co słychać?"_s}, {u"partner"_s, u"acp:fake"_s}, {u"page"_s, u"Dom"_s}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString path = a->result.value(u"path"_s).toString();
+        QVERIFY(!a->result.contains(u"parent"_s));
+        QCOMPARE(a->result.value(u"page"_s).toString(), u"Dom"_s);
+        a = ask(control, u"chatWait"_s, {{u"path"_s, path.chopped(3)}}); // (".md" optional)
+        QTRY_VERIFY_WITH_TIMEOUT(a->done, 20000);
+        QVERIFY(a->ok);
+        QCOMPARE(a->result.value(u"answer"_s).toObject().value(u"position"_s).toInt(), 1);
+        // Waiting on a turn that does not run answers at once.
+        a = ask(control, u"chatWait"_s, {{u"path"_s, path}});
+        QVERIFY(a->done && a->ok);
+        // Its name is enough; one not there is not found.
+        QCOMPARE(control.resolve(u"Co słychać"_s), path);
+        QCOMPARE(control.resolve(path.mid(3)), path);
+        QCOMPARE(ask(control, u"chatRead"_s, {{u"path"_s, u"Nie ma takiej"_s}})->code, u"not_found"_s);
+        // A question it waits on ends a wait.
+        QCOMPARE(chats->send(path, u"Daj pozwolenie"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->asking(path), 20000);
+        a = ask(control, u"chatWait"_s, {{u"path"_s, path}});
+        QVERIFY(a->done && a->ok);
+        QCOMPARE(a->result.value(u"state"_s).toString(), u"asking"_s);
+        QVERIFY(a->result.value(u"question"_s).toObject().value(u"text"_s).toString().contains(u"Zgoda.md"_s));
+        QVERIFY(!a->result.value(u"question"_s).toObject().value(u"options"_s).toArray().isEmpty());
+        a = ask(control, u"chats"_s, {});
+        QCOMPARE(a->result.value(u"conversations"_s).toArray().at(0).toObject().value(u"state"_s).toString(), u"asking"_s);
+        chats->stop(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 10000);
+        // A long message comes in pages: cut, with where to go on.
+        const QString longText = QString(u"żółw "_s).repeated(8000).trimmed(); // (39 999 characters)
+        ws->write(u"AI/długa.md"_s, u"- 🧑 Krótko\n- 🤖 "_s + longText + u"\n- 🧑 Koniec\n"_s);
+        a = ask(control, u"chatRead"_s, {{u"path"_s, u"AI/długa.md"_s}});
+        QVERIFY(a->ok);
+        QCOMPARE(a->result.value(u"total"_s).toInt(), 3);
+        QJsonArray messages = a->result.value(u"messages"_s).toArray();
+        QCOMPARE(messages.size(), 2);
+        QVERIFY(messages.at(1).toObject().value(u"cut"_s).toBool());
+        const int offset = a->result.value(u"next"_s).toObject().value(u"offset"_s).toInt();
+        QCOMPARE(offset, ChatControl::MaxReadChars - 6);
+        a = ask(control, u"chatRead"_s, {{u"path"_s, u"AI/długa.md"_s}, {u"from"_s, 1}, {u"offset"_s, offset}});
+        messages = a->result.value(u"messages"_s).toArray();
+        QCOMPARE(messages.size(), 2);
+        QCOMPARE(messages.at(0).toObject().value(u"offset"_s).toInt(), offset);
+        QCOMPARE(messages.at(0).toObject().value(u"text"_s).toString(), longText.mid(offset));
+        QCOMPARE(messages.at(1).toObject().value(u"text"_s).toString(), u"Koniec"_s);
+        QVERIFY(!a->result.contains(u"next"_s));
+        // A script may name any parent; a missing one is not found.
+        a = ask(control, u"chatStart"_s, {{u"text"_s, u"Podrzędna"_s}, {u"partner"_s, u"acp:fake"_s}, {u"parent"_s, path}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QCOMPARE(a->result.value(u"parent"_s).toString(), path);
+        QCOMPARE(ask(control, u"chatStart"_s, {{u"text"_s, u"Ą"_s}, {u"parent"_s, u"AI/brak"_s}})->code, u"not_found"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(a->result.value(u"path"_s).toString()), 20000);
+        // No notebook: not ready.
+        ws->close();
+        QCOMPARE(ask(control, u"chats"_s, {})->code, u"not_ready"_s);
+    }
+
+    void schedules()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        ChatSchedules *schedules = chats->schedules();
+        QDateTime now(QDate(2026, 11, 20), QTime(9, 15));
+        schedules->setClock([&now] { return now; });
+        QByteArray kept;
+        QVERIFY(!schedules->available());
+        QString error;
+        QVERIFY(schedules->add({}, QString(), QString(), &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        schedules->setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
+        QVERIFY(schedules->available());
+        // Checked in words; refused with why.
+        QVariantMap checked = schedules->check(u"codziennie o 7:30"_s);
+        QVERIFY(checked.value(u"ok"_s).toBool());
+        QCOMPARE(checked.value(u"text"_s).toString(), u"codziennie o 7:30"_s);
+        QCOMPARE(checked.value(u"next"_s).toString(), u"jutro 07:30"_s);
+        checked = schedules->check(u"co 5 minut"_s);
+        QVERIFY(!checked.value(u"ok"_s).toBool());
+        QVERIFY(checked.value(u"error"_s).toString().contains(u"15"_s));
+        QVERIFY(schedules->add(u"x"_s, u""_s, u"acp:fake"_s, u"codziennie"_s, false, true).isEmpty());
+        QVERIFY(!schedules->lastError().isEmpty());
+
+        // A new conversation each morning.
+        const QString id = schedules->add(u"Plan dnia"_s, u"Co mam dziś do zrobienia?"_s, u"acp:fake"_s,
+                                          u"codziennie o 7:30"_s, false, true);
+        QVERIFY2(!id.isEmpty(), qPrintable(schedules->lastError()));
+        QVERIFY(kept.contains("Plan dnia"));
+        QCOMPARE(schedule::parseSchedules(kept).size(), 1);
+        schedules->runDue();
+        QCOMPARE(chats->runningCount(), 0); // (not yet)
+        QSignalSpy ran(schedules, &ChatSchedules::ran);
+        now = QDateTime(QDate(2026, 11, 21), QTime(7, 30, 20));
+        schedules->runDue();
+        QCOMPARE(ran.size(), 1);
+        const QString first = ran.first().at(2).toString();
+        QVERIFY(first.startsWith(u"AI/"_s));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(first), 20000);
+        schedules->runDue();
+        QCOMPARE(ran.size(), 1); // (once)
+        // The app closed for three days: one run at the next start, not three.
+        now = QDateTime(QDate(2026, 11, 24), QTime(12, 0));
+        schedules->setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
+        QCOMPARE(ran.size(), 2);
+        QVERIFY(ran.last().at(2).toString() != first);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->runningCount() == 0, 20000);
+        schedules->runDue();
+        QCOMPARE(ran.size(), 2);
+        QCOMPARE(schedules->find(id)->next()->toString(), u"2026-11-25 07:30"_s);
+
+        // One conversation going on: the next run is its next message; skipped while it answers.
+        QVERIFY(schedules->update(id, u"Plan dnia"_s, u"czekaj na plan"_s, u"acp:fake"_s, u"co godzinę"_s, true, true));
+        const QString one = schedules->runNow(id);
+        QVERIFY(!one.isEmpty());
+        QVERIFY(chats->isRunning(one));
+        QCOMPARE(schedules->find(id)->conversation, one);
+        QVERIFY(schedules->runNow(id).isEmpty());
+        QVERIFY(schedules->find(id)->lastError.contains(u"still answering"_s));
+        chats->stop(one);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(one), 10000);
+        QCOMPARE(schedules->runNow(id), one);
+        chats->stop(one);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(one), 10000);
+        // A partner that does not answer here: skipped, with why.
+        const QString away = schedules->add(u"Na telefonie"_s, u"Ą"_s, u"acp:nieznany"_s, u"co godzinę"_s, false, true);
+        QVERIFY(!away.isEmpty());
+        QVERIFY(schedules->runNow(away).isEmpty());
+        QVERIFY(schedules->find(away)->lastError.contains(u"does not answer"_s));
+        // Off: never due.
+        QVERIFY(schedules->setEnabled(away, false));
+        now = now.addDays(1);
+        const qsizetype before = ran.size();
+        schedules->runDue();
+        QCOMPARE(ran.size(), before + 1); // (only the other one: its conversation goes on)
+        QCOMPARE(ran.last().at(2).toString(), one);
+        chats->stopAll();
+        QTRY_VERIFY_WITH_TIMEOUT(chats->runningCount() == 0, 20000);
+
+        // Through the remote control: an agent's schedule runs as a sub-conversation of its own.
+        ChatControl control(ws.get());
+        const ChatControl::Caller agent{true, first, u"Fałszywy"_s};
+        auto a = ask(control, u"chatScheduleAdd"_s,
+                     {{u"prompt"_s, u"Sprawdź pogodę"_s}, {u"when"_s, u"jutro o 8"_s}, {u"partner"_s, u"acp:fake"_s}},
+                     agent);
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString agentId = a->result.value(u"id"_s).toString();
+        QCOMPARE(a->result.value(u"by"_s).toString(), u"Fałszywy"_s);
+        QCOMPARE(a->result.value(u"parent"_s).toString(), first);
+        QCOMPARE(a->result.value(u"destination"_s).toString(), u"new"_s);
+        a = ask(control, u"chatScheduleRun"_s, {{u"id"_s, agentId}}, agent);
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString sub = a->result.value(u"path"_s).toString();
+        QCOMPARE(chats->lineage()->parentOf(sub), first);
+        // It changes only its own; the user's are not its to change or delete.
+        QCOMPARE(ask(control, u"chatScheduleRemove"_s, {{u"id"_s, id}}, agent)->code, u"refused"_s);
+        QCOMPARE(ask(control, u"chatScheduleSet"_s, {{u"id"_s, id}, {u"enabled"_s, false}}, agent)->code, u"refused"_s);
+        QCOMPARE(ask(control, u"chatScheduleAdd"_s, {{u"prompt"_s, u"Ą"_s}, {u"when"_s, u"kiedyś"_s}}, agent)->code,
+                 u"bad_params"_s);
+        a = ask(control, u"chatSchedules"_s, {});
+        QCOMPARE(a->result.value(u"schedules"_s).toArray().size(), 3);
+        QVERIFY(ask(control, u"chatScheduleRemove"_s, {{u"id"_s, agentId}}, agent)->ok);
+        QVERIFY(ask(control, u"chatScheduleRemove"_s, {{u"id"_s, away}})->ok); // (a script: any)
+        QCOMPARE(schedule::parseSchedules(kept).size(), 1);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->runningCount() == 0, 20000);
+        // No notebook of the user's: none kept, none run.
+        schedules->setStorage({}, {});
+        QVERIFY(schedules->rows().isEmpty());
+        QCOMPARE(ask(control, u"chatScheduleAdd"_s, {{u"prompt"_s, u"Ą"_s}, {u"when"_s, u"jutro"_s}})->code, u"not_ready"_s);
     }
 
     void tools()
