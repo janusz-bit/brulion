@@ -1,6 +1,9 @@
 #include "publish/target.h"
 
+#include "crypto/base64.h"
+#include "crypto/random.h"
 #include "github/address.h"
+#include "publish/protect.h"
 #include "sync/url.h"
 #include "util/paths.h"
 
@@ -170,6 +173,9 @@ QJsonObject toJson(const PublishTarget &t)
     putString(o, u"siteUrl"_s, t.siteUrl);
     putString(o, u"title"_s, t.title);
     o.insert(u"content"_s, contentName(t.content));
+    if (t.protect)
+        o.insert(u"protect"_s, true);
+    putString(o, u"protectSalt"_s, t.protectSalt);
     o.insert(u"scope"_s, scopeToJson(t.scope));
     if (t.last.isValid())
         o.insert(u"last"_s, toJson(t.last));
@@ -195,6 +201,8 @@ PublishTarget targetFromJson(const QJsonObject &o)
     t.siteUrl = o.value(u"siteUrl"_s).toString();
     t.title = o.value(u"title"_s).toString();
     t.content = contentFromName(o.value(u"content"_s).toString());
+    t.protect = o.value(u"protect"_s).toBool();
+    t.protectSalt = o.value(u"protectSalt"_s).toString();
     t.scope = scopeFromJson(o.value(u"scope"_s).toObject());
     if (o.value(u"last"_s).isObject())
         t.last = statusFromJson(o.value(u"last"_s).toObject());
@@ -207,6 +215,14 @@ QString newTargetId()
     for (int i = 0; i < 12; ++i)
         id += QString::number(QRandomGenerator::global()->bounded(16), 16);
     return id;
+}
+
+bool ensureProtectSalt(PublishTarget &target)
+{
+    if (!target.protect || crypto::decodeBase64(target.protectSalt).value_or(QByteArray()).size() >= ProtectSaltSize)
+        return false;
+    target.protectSalt = crypto::encodeBase64(crypto::randomBytes(ProtectSaltSize));
+    return true;
 }
 
 QString checkTarget(const PublishTarget &t)

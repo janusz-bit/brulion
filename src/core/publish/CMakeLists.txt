@@ -20,9 +20,10 @@ brulion_add_core_module(publish
         store.h store.cpp
         ocs.h ocs.cpp
         publisher.h publisher.cpp
+        protect.h protect.cpp
         backends_p.h
         backend_folder.cpp
         backend_github.cpp
         backend_webdav.cpp
-    DEPS util text markdown index io github sync log chat
+    DEPS util text markdown index io github sync log chat crypto
     QT Network)

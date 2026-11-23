@@ -154,7 +154,9 @@ Jeśli ktoś w międzyczasie zmienił opublikowany plik w miejscu docelowym, nic
 
 Miejsca publikacji i ich hasła zostają na tym urządzeniu (nigdy w notatniku): na innym urządzeniu ustaw miejsce jeszcze raz; na GitHubie pierwsza publikacja stamtąd i tak wyśle tylko to, co nowe. W terminalu to samo robi `brulion-cli publish …` (zobacz [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]]).
 
-Nextcloud pokazuje udostępniony folder jako listę plików: odbiorcy otwierają tam stronę albo pobierają folder; jeśli ma to być jeden plik do czytania w przeglądarce, wybierz **Jeden dokument**. Strony chronione hasłem na GitHub Pages lub własnym serwerze nie są jeszcze możliwe.
+Nextcloud pokazuje udostępniony folder jako listę plików: odbiorcy otwierają tam stronę albo pobierają folder; jeśli ma to być jeden plik do czytania w przeglądarce, wybierz **Jeden dokument**.
+
+**Strony chronione hasłem** (przełącznik w ustawieniach miejsca, razem z hasłem stron) wystawiają każdą stronę i obrazek zaszyfrowane — także na GitHub Pages i własnym serwerze, które nie mają własnych haseł. Kto otworzy witrynę, widzi tylko „Strona chroniona” z prośbą o hasło; przeglądarka otwiera nim stronę, a z **Zapamiętaj do zamknięcia przeglądarki** linki do innych stron otwierają się bez ponownego pytania. Bez hasła nie widać niczego ze stron — ani tytułów, ani nazw stron, folderów, tagów czy obrazków; witryna nie ma wtedy wyszukiwarki. Hasło zostaje na tym urządzeniu, jak inne hasła. Wybierz długie (kilka słów): każdy może pobrać zaszyfrowane pliki i próbować haseł. Przeglądarka potrzebuje bezpiecznego adresu (https), żeby je otworzyć, a witryna otwarta z folderu na dysku pokazuje strony bez obrazków (**Jeden dokument** ma je w środku). Włączenie ochrony dla witryny opublikowanej wcześniej usuwa jawne pliki przy następnej publikacji, ale na GitHubie zostają one w historii gałęzi.
 
 Ponieważ notatki to zwykłe pliki, najprostszą kopią zapasową jest skopiowanie folderu notatnika.
 

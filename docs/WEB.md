@@ -294,7 +294,15 @@ scripts/web-test.sh --install                     # npm ci + Playwright's Chromi
 scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # arguments for `playwright test`
 scripts/web-test.sh --single-file file.html -- singlefile.spec.mjs   # another single HTML file
 (cd tests/web && npx playwright show-report)     # HTML report (playwright-report/)
+scripts/web-test.sh --publish                     # password-protected published pages (no web build)
 ```
+
+`--publish` (`publish.config.mjs`, `publish.e2e.mjs`; not in CI yet, like `--clipper`) needs only
+brulion-cli: it publishes a Polish notebook with password-protected pages into a folder
+(docs/UI.md "Publishing" → "Password-protected pages"), serves it on `http://127.0.0.1` and opens
+it in headless Chromium and Firefox — a wrong password, the right one, a link to another page
+opened without asking again, the decrypted picture, "Remember" off, and (Chromium) the https
+message on a name that is no secure context.
 
 * **Servers** (`tests/web/lib/servers.mjs`, in the test process, ports chosen by the system): the site at
   `https://brulion.test:<p>/brulion/` and `http://brulion.test:<p>/brulion/` (insecure

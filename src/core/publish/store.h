@@ -4,7 +4,8 @@
 //   <state>/publish/targets.json        [targets with their last status] (publish/target.h)
 //   <state>/publish/<target id>.json    the target's manifest (publish/manifest.h)
 // Read from disk on every call, written with QSaveFile (the app and the command line may both
-// write). Secrets — the GitHub token, a WebDAV or Nextcloud password, a Nextcloud link's password —
+// write). Secrets — the GitHub token, a WebDAV or Nextcloud password, a Nextcloud link's password,
+// the password of protected pages —
 // are owner-only files in the app's data folder (secretFile()), never in these files.
 // Part of the publish module — see publish/publish.h.
 #pragma once
@@ -30,7 +31,8 @@ public:
     /// The targets, in the order they were added.
     QList<PublishTarget> targets() const;
     std::optional<PublishTarget> target(const QString &id) const;
-    /// Add `target`, or replace the one with its id. False when it cannot be written.
+    /// Add `target`, or replace the one with its id (a protected one gets its salt:
+    /// ensureProtectSalt()). False when it cannot be written.
     bool saveTarget(const PublishTarget &target);
     /// Remove a target and its manifest.
     bool removeTarget(const QString &id);
@@ -53,8 +55,9 @@ private:
 };
 
 /// The owner-only file of a target's secret in the app's data folder:
-/// `<appData>/secrets/publish-<id>` (`which` "password": WebDAV / Nextcloud) or
-/// `<appData>/secrets/publish-<id>-share` ("share": the Nextcloud link's password).
+/// `<appData>/secrets/publish-<id>` (`which` "password": WebDAV / Nextcloud),
+/// `<appData>/secrets/publish-<id>-share` ("share": the Nextcloud link's password) or
+/// `<appData>/secrets/publish-<id>-pages` ("pages": the password of protected pages).
 QString secretFile(const QString &appDataDir, const QString &targetId, const QString &which);
 /// The GitHub token's file, shared with the notebooks from GitHub: `<appData>/secrets/github-token`.
 QString githubTokenFile(const QString &appDataDir);

@@ -1,5 +1,6 @@
 #include "publish/site.h"
 
+#include "crypto/base64.h"
 #include "github/gitobjects.h"
 #include "index/vaultindex.h"
 #include "io/exporter.h"
@@ -79,11 +80,20 @@ SiteBuild buildSite(const SiteInput &input)
                 files.append(io::FileEntry{u"index.html"_s, f.data});
     } else {
         io::HtmlSiteOptions options;
-        options.search = true;
+        options.search = !input.protect; // its index would hold every page's text
         files = io::htmlSiteFiles(exportInput, options);
     }
     if (input.nojekyll)
         files.append(io::FileEntry{u".nojekyll"_s, QByteArray()});
+    if (input.protect) {
+        ProtectedSite protectedSite = protectSite(files, input.protection, lockTexts());
+        if (!protectedSite.errorCode.isEmpty()) {
+            out.errorCode = protectedSite.errorCode;
+            return out;
+        }
+        files = std::move(protectedSite.files);
+        out.protectedPages = true;
+    }
     QSet<QString> seen;
     for (io::FileEntry &f : files) {
         if (f.path.isEmpty() || seen.contains(f.path))
@@ -114,6 +124,9 @@ SiteInput siteInputFor(const PublishTarget &target, QList<io::FileEntry> files, 
     input.now = now;
     input.content = target.content;
     input.nojekyll = target.kind == TargetKind::GitHubPages && target.content == SiteContent::Site;
+    input.protect = target.protect;
+    if (target.protect)
+        input.protection.salt = crypto::decodeBase64(target.protectSalt).value_or(QByteArray());
     return input;
 }
 

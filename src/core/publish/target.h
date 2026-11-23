@@ -78,6 +78,11 @@ struct PublishTarget {
     /// The site's title ("" = the notebook's name).
     QString title;
     SiteContent content = SiteContent::Site;
+    /// Password-protected pages (publish/protect.h): every page and file encrypted, opened with the
+    /// password (the secret "pages") in the browser. `protectSalt`: the site's PBKDF2 salt (Base64,
+    /// not secret; made by ensureProtectSalt() when protection is turned on).
+    bool protect = false;
+    QString protectSalt;
     PublishScope scope;
     PublishStatus last;
 };
@@ -89,6 +94,10 @@ PublishStatus statusFromJson(const QJsonObject &object);
 
 /// A new target id: "t" and 12 random hex digits.
 QString newTargetId();
+
+/// Give a protected target its salt when it has none (16 random bytes, Base64): true when it
+/// changed.
+bool ensureProtectSalt(PublishTarget &target);
 
 /// What keeps the target from being used, as a code ("" = none): "no-name", "bad-repository",
 /// "bad-branch", "bad-folder", "bad-url", "bad-server", "no-username", "no-folder", "no-path".

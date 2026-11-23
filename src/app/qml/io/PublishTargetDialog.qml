@@ -7,7 +7,8 @@ import Brulion
 // PublishTargetDialog — a new publishing target or one to change (PublishController.saveTarget;
 // docs/UI.md "Publishing"): where it goes — GitHub Pages (a repository, its branch, a folder), a
 // WebDAV folder, Nextcloud (the server, the account, a folder, its public link with a password and
-// an expiry date), a folder on this computer (desktop) — its name, the site's title and address.
+// an expiry date), a folder on this computer (desktop) — its name, the site's title and address,
+// password-protected pages (every page encrypted, opened with the password in the browser).
 // Passwords are kept on this device in owner-only files, never in the notebook; a password left
 // empty keeps the one kept.
 //
@@ -22,6 +23,7 @@ BDialog {
     property string kind: "github"
     property bool hasPassword: false
     property bool hasSharePassword: false
+    property bool hasPagesPassword: false
     property bool showPasswords: false
     readonly property string problem: publisher.checkFields({
         id: dialog.targetId,
@@ -39,7 +41,9 @@ BDialog {
         content: "site",
         share: shareSwitch.checked,
         sharePassword: sharePasswordSwitch.checked,
-        shareExpires: expiresField.text
+        shareExpires: expiresField.text,
+        protect: protectSwitch.checked,
+        pagesPasswordGiven: pagesPasswordField.text !== ""
     })
     /// The problem is shown once something was typed (or Save was asked for).
     property bool touched: false
@@ -64,10 +68,13 @@ BDialog {
         shareSwitch.checked = id === "" || AppController.routeFlag(fields.map, "share")
         sharePasswordSwitch.checked = AppController.routeFlag(fields.map, "sharePassword")
         expiresField.text = AppController.routeText(fields.map, "shareExpires")
+        protectSwitch.checked = AppController.routeFlag(fields.map, "protect")
         dialog.hasPassword = AppController.routeFlag(fields.map, "hasPassword")
         dialog.hasSharePassword = AppController.routeFlag(fields.map, "hasSharePassword")
+        dialog.hasPagesPassword = AppController.routeFlag(fields.map, "hasPagesPassword")
         passwordField.text = ""
         sharePasswordField.text = ""
+        pagesPasswordField.text = ""
         dialog.showPasswords = false
         dialog.touched = id !== ""
         dialog.open()
@@ -102,8 +109,9 @@ BDialog {
             content: "site",
             share: shareSwitch.checked,
             sharePassword: sharePasswordSwitch.checked,
-            shareExpires: expiresField.text
-        }, passwordField.text, sharePasswordField.text)
+            shareExpires: expiresField.text,
+            protect: protectSwitch.checked
+        }, passwordField.text, sharePasswordField.text, pagesPasswordField.text)
         if (id !== "")
             dialog.saved(id)
     }
@@ -449,6 +457,37 @@ BDialog {
             placeholderText: dialog.kind === "github" ? qsTr("A custom domain") : "https://example.com/notes/"
             inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
             onTextEdited: dialog.touched = true
+        }
+    }
+
+    // ---- Password-protected pages ------------------------------------------------------------------
+    ColumnLayout {
+        Layout.fillWidth: true
+        spacing: Theme.space1
+        BSwitch {
+            id: protectSwitch
+            objectName: "publishProtect"
+            Layout.fillWidth: true
+            text: qsTr("Password-protected pages")
+            iconName: "lock"
+            description: qsTr("Every page and picture is encrypted; the browser asks for the password and opens them.")
+            onToggled: dialog.touched = true
+        }
+        BTextField {
+            id: pagesPasswordField
+            objectName: "publishPagesPassword"
+            Layout.fillWidth: true
+            visible: protectSwitch.checked
+            leadingIcon: "key-round"
+            echoMode: dialog.showPasswords ? TextInput.Normal : TextInput.Password
+            accessibleName: qsTr("The pages' password")
+            placeholderText: dialog.hasPagesPassword ? qsTr("Kept on this device") : qsTr("The pages' password")
+            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhHiddenText
+            onTextEdited: dialog.touched = true
+        }
+        Hint {
+            visible: protectSwitch.checked
+            text: qsTr("Anyone may download the encrypted files and try passwords: choose a long one, several words. Visible without it: that the site exists, its number of files and their sizes. Pages published here before stay in a GitHub branch's history.")
         }
     }
 

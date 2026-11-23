@@ -69,7 +69,9 @@ std::optional<PublishTarget> findTarget(Call &call, const PublishStore &store, c
 
 QString secretOf(Call &call, const PublishTarget &t, const QString &which)
 {
-    const char *variable = which == u"share" ? "BRULION_PUBLISH_SHARE_PASSWORD" : "BRULION_PUBLISH_PASSWORD";
+    const char *variable = which == u"share"   ? "BRULION_PUBLISH_SHARE_PASSWORD"
+                           : which == u"pages" ? "BRULION_PUBLISH_PAGES_PASSWORD"
+                                               : "BRULION_PUBLISH_PASSWORD";
     if (const QString fromEnv = qEnvironmentVariable(variable); !fromEnv.isEmpty())
         return fromEnv;
     return readSecret(secretFile(call.ctx.appDataDir(), t.id, which));
@@ -103,6 +105,8 @@ QJsonObject targetJson(Call &call, const PublishTarget &t)
         o.insert(u"hasPassword"_s, !secretOf(call, t, u"password"_s).isEmpty());
     if (t.kind == TargetKind::Nextcloud && t.sharePassword)
         o.insert(u"hasSharePassword"_s, !secretOf(call, t, u"share"_s).isEmpty());
+    if (t.protect)
+        o.insert(u"hasPagesPassword"_s, !secretOf(call, t, u"pages"_s).isEmpty());
     if (t.last.isValid())
         o.insert(u"last"_s, statusJson(t.last));
     o.remove(u"scope"_s);
@@ -179,6 +183,8 @@ void applyFields(Call &call, PublishTarget &t)
         t.share = call.str(u"share"_s) != u"off"_s;
     if (call.args.contains(u"sharePassword"_s))
         t.sharePassword = call.str(u"sharePassword"_s) == u"on"_s;
+    if (call.args.contains(u"protect"_s))
+        t.protect = call.str(u"protect"_s) == u"on"_s;
     if (call.args.contains(u"shareExpires"_s)) {
         const QString when = call.str(u"shareExpires"_s).trimmed();
         if (when.isEmpty() || when == u"never"_s || when == u"nigdy"_s) {
@@ -252,6 +258,7 @@ Result publishRemove(Call &call)
         store->removeTarget(t->id);
         writeSecret(secretFile(call.ctx.appDataDir(), t->id, u"password"_s), {});
         writeSecret(secretFile(call.ctx.appDataDir(), t->id, u"share"_s), {});
+        writeSecret(secretFile(call.ctx.appDataDir(), t->id, u"pages"_s), {});
     }
     return call.ok(QJsonObject{{u"removed"_s, t->id}, {u"name"_s, t->name}},
                    tr("Removed %1: what it published stays where it is (publish unpublish removes it)").arg(t->name)
@@ -266,7 +273,9 @@ Result publishSecret(Call &call)
     auto t = findTarget(call, *store, call.str(u"target"_s));
     if (!t)
         return call.failed();
-    const QString which = call.flag(u"share"_s) ? u"share"_s : u"password"_s;
+    if (call.flag(u"share"_s) && call.flag(u"pages"_s))
+        return call.fail(ExitUsage, u"bad_argument"_s, tr("--share and --pages name different passwords: give one"));
+    const QString which = call.flag(u"share"_s) ? u"share"_s : call.flag(u"pages"_s) ? u"pages"_s : u"password"_s;
     QString value = call.text(u"password"_s);
     while (value.endsWith(u'\n') || value.endsWith(u'\r'))
         value.chop(1);
@@ -382,6 +391,7 @@ QJsonObject planJson(const PublishReport &r, const PublishSelection &selection, 
                        {u"leftOut"_s, leftOut},
                        {u"missingItems"_s, missing},
                        {u"encryptedFragmentsRemoved"_s, site.fragmentsRemoved},
+                       {u"protected"_s, site.protectedPages},
                        {u"pagesWithFragmentsRemoved"_s, fragments}};
 }
 
@@ -439,7 +449,7 @@ int exitFor(const QString &code)
     if (code == u"not-found" || code == u"nothing")
         return ExitNotFound;
     if (code == u"network" || code == u"timeout" || code == u"auth" || code == u"no-token" || code == u"no-password"
-        || code == u"rate-limited" || code == u"server")
+        || code == u"no-page-password" || code == u"rate-limited" || code == u"server")
         return ExitUnavailable;
     if (code == u"no-push" || code == u"forbidden" || code == u"archived")
         return ExitRefused;
@@ -467,7 +477,9 @@ Result operate(Call &call, Operation operation)
     if (!index || !vault)
         return call.failed();
     const QDateTime now = call.ctx.now();
-    const PreparedSite prepared = prepareSite(
+    if (operation != Operation::Unpublish && t->protect && secretOf(call, *t, u"pages"_s).isEmpty())
+        return call.fail(ExitUnavailable, u"no_page_password"_s, errorText(u"no-page-password"_s));
+    PreparedSite prepared = prepareSite(
             *index, *t,
             [vault](const VaultPath &path) -> std::optional<QByteArray> {
                 bool ok = false;
@@ -480,7 +492,11 @@ Result operate(Call &call, Operation operation)
     if (operation != Operation::Unpublish && prepared.selection.pages.isEmpty())
         return call.fail(ExitNotFound, u"nothing_to_publish"_s, errorText(u"nothing"_s),
                          {{u"leftOut"_s, int(prepared.selection.leftOut.size())}});
+    if (prepared.input.protect)
+        prepared.input.protection.password = secretOf(call, *t, u"pages"_s);
     const SiteBuild site = operation == Operation::Unpublish ? SiteBuild{} : buildSite(prepared.input);
+    if (!site.errorCode.isEmpty())
+        return call.fail(exitFor(site.errorCode), u"publish_failed"_s, errorText(site.errorCode));
     const PublishManifest manifest = store->manifest(t->id);
     Publisher publisher(transport());
     publisher.setClock([now] { return now; });
@@ -601,6 +617,9 @@ void addPublishCommands(QList<Command> &out)
                                      "Nextcloud: the link asks for a password (kept with publish secret --share)")),
             option(u"shareExpires"_s, ArgType::String,
                    QT_TRANSLATE_NOOP("brulion::cli", "Nextcloud: the link's expiry date (never: none)")),
+            choice(u"protect"_s, {u"on"_s, u"off"_s},
+                   QT_TRANSLATE_NOOP("brulion::cli", "Password-protected pages: every page encrypted, opened with the "
+                                                     "password in the browser (kept with publish secret --pages)")),
     };
     const QList<Arg> items{
             option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "A page")),
@@ -678,11 +697,12 @@ void addPublishCommands(QList<Command> &out)
              {target,
               stdinable(option(u"password"_s, ArgType::Text,
                                QT_TRANSLATE_NOOP("brulion::cli", "The password (better: --stdin); empty forgets it"))),
-              flag(u"share"_s, QT_TRANSLATE_NOOP("brulion::cli", "Nextcloud: the public link's password"))},
+              flag(u"share"_s, QT_TRANSLATE_NOOP("brulion::cli", "Nextcloud: the public link's password")),
+              flag(u"pages"_s, QT_TRANSLATE_NOOP("brulion::cli", "The password of protected pages (--protect on)"))},
              QT_TRANSLATE_NOOP("brulion::cli",
                                "Kept like the app's Nextcloud password, in an owner-only file of the app's data "
-                               "folder, never in the notebook. BRULION_PUBLISH_PASSWORD and "
-                               "BRULION_PUBLISH_SHARE_PASSWORD override them."));
+                               "folder, never in the notebook. BRULION_PUBLISH_PASSWORD, "
+                               "BRULION_PUBLISH_SHARE_PASSWORD and BRULION_PUBLISH_PAGES_PASSWORD override them."));
     c.writes = true;
     c.mcp = false;
     out.append(c);

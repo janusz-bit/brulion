@@ -231,6 +231,7 @@ ColumnLayout {
             Layout.fillWidth: true
             visible: AppController.routeFlag(publisherObject.currentTarget, "needsPassword")
                      || AppController.routeFlag(publisherObject.currentTarget, "needsSharePassword")
+                     || AppController.routeFlag(publisherObject.currentTarget, "needsPagesPassword")
             spacing: Theme.space2
             BIcon { Layout.alignment: Qt.AlignTop; name: "lock"; size: Theme.iconSize; color: Theme.warningText }
             Hint {
@@ -423,6 +424,10 @@ ColumnLayout {
         Hint {
             visible: publisherObject.state !== "unpublished"
             text: publisherObject.plan.pagesText !== undefined ? "" + publisherObject.plan.pagesText : ""
+        }
+        Hint {
+            visible: AppController.routeFlag(publisherObject.plan, "protectedPages") && publisherObject.state !== "unpublished"
+            text: qsTr("Encrypted with the pages' password: the files have random names, and the browser asks for the password.")
         }
         Hint {
             visible: text !== ""

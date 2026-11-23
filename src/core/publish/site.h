@@ -5,6 +5,7 @@
 #pragma once
 
 #include "io/files.h"
+#include "publish/protect.h"
 #include "publish/selection.h"
 #include "publish/target.h"
 
@@ -45,6 +46,10 @@ struct SiteInput {
     bool nojekyll = false;
     /// The pages' footer ("" = "Published with Brulion").
     QString footer;
+    /// Password-protected pages (publish/protect.h): the site without its search, then every page
+    /// and file encrypted. `protection.password` is the caller's to fill (the secret "pages").
+    bool protect = false;
+    SiteProtection protection;
 };
 
 struct SiteBuild {
@@ -57,13 +62,18 @@ struct SiteBuild {
     QList<VaultPath> pagesWithFragmentsRemoved;
     /// Pages left out while building: encrypted as a whole (their text, read now, said so).
     QList<VaultPath> encryptedPages;
+    /// The pages are password-protected (their files hold only ciphertext).
+    bool protectedPages = false;
+    /// "" — built; "no-page-password": protection without a password (no files then).
+    QString errorCode;
 
     const SiteFile *file(const QString &path) const;
 };
 
 /// Build the site of `input` (pure; any thread): encrypted fragments removed from every page, a
 /// page encrypted as a whole left out, macros of extensions kept as written (they are computed
-/// over the whole notebook, private pages too), pictures from the internet as their addresses.
+/// over the whole notebook, private pages too), pictures from the internet as their addresses;
+/// with `protect` encrypted with the password (protectSite()).
 SiteBuild buildSite(const SiteInput &input);
 
 /// Reads a notebook file's bytes (nullopt when it cannot be read).
@@ -79,7 +89,8 @@ struct PreparedSite {
 PreparedSite prepareSite(const VaultIndex &index, const PublishTarget &target, const ReadFile &read,
                          const QString &notebookName, const QDateTime &now);
 
-/// The SiteInput of `target` for the read `files` (no reading).
+/// The SiteInput of `target` for the read `files` (no reading); a protected target's salt, not its
+/// password.
 SiteInput siteInputFor(const PublishTarget &target, QList<io::FileEntry> files, const VaultConfig &config,
                        const QString &notebookName, const QDateTime &now);
 

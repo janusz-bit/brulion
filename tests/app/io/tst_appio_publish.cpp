@@ -3,7 +3,8 @@
 // and removed, the options, the dry run read in chunks with its rows (files, left out, counts), a
 // publish to GitHub Pages against the in-memory GitHub (tests/core/github/fakegithub.h) with the
 // manifest and the last status kept, a conflict and "Replace them", unpublishing, a route's item
-// waiting for a new target, and a folder target.
+// waiting for a new target, a folder target, and password-protected pages (their password kept
+// like the others, a publish without it stopped).
 #include "publishcontroller.h"
 #include "workspace.h"
 
@@ -265,6 +266,66 @@ private Q_SLOTS:
         // Tags for the picker.
         const QVariantList tags = c.tagRows(u"prz"_s);
         QCOMPARE(column(tags, u"path"_s), QStringList{u"przepisy"_s});
+    }
+
+    void protectedPages()
+    {
+        auto ws = open(blog());
+        PublishController c;
+        c.setAppDataDir(m_tmp.filePath(u"appdata4"_s));
+        c.setWorkspace(ws.get());
+        const QString www = m_tmp.filePath(u"www chroniona"_s);
+        QVariantMap fields{{u"name"_s, u"Rodzina"_s},
+                           {u"kind"_s, u"folder"_s},
+                           {u"path"_s, www},
+                           {u"protect"_s, true},
+                           {u"pagesPasswordGiven"_s, false}};
+        QVERIFY(!c.checkFields(fields).isEmpty()); // the pages' password first
+        fields.insert(u"pagesPasswordGiven"_s, true);
+        QVERIFY(c.checkFields(fields).isEmpty());
+        const QString id = c.saveTarget(fields, {}, {}, u"Źdźbło łąki"_s);
+        QVERIFY(!id.isEmpty());
+        QVERIFY(c.targetFields(id).value(u"protect"_s).toBool());
+        QVERIFY(c.targetFields(id).value(u"hasPagesPassword"_s).toBool());
+        QVERIFY(!c.currentTarget().value(u"needsPagesPassword"_s).toBool());
+        fields.insert(u"id"_s, id);
+        fields.insert(u"pagesPasswordGiven"_s, false);
+        QVERIFY(c.checkFields(fields).isEmpty()); // one is kept
+        QFile store(ws->vault()->deviceStatePath() + u"/publish/targets.json"_s);
+        QVERIFY(store.open(QIODevice::ReadOnly));
+        const QByteArray json = store.readAll();
+        store.close();
+        QVERIFY(json.contains("protectSalt"));
+        QVERIFY(!json.contains("Źdźbło"));
+        // Preview and publish: only ciphertext in the folder.
+        c.addItem(u"folder"_s, u"Blog"_s);
+        QVERIFY(waitState(c, u"previewed"_s));
+        QVERIFY(c.plan().value(u"protectedPages"_s).toBool());
+        c.publish(false);
+        QVERIFY(waitState(c, u"published"_s));
+        QFile index(www + u"/index.html"_s);
+        QVERIFY(index.open(QIODevice::ReadOnly));
+        const QByteArray lock = index.readAll();
+        QVERIFY(lock.contains("brulion-sealed"));
+        QVERIFY(!lock.contains("Zażółć"));
+        QVERIFY(!lock.contains("Pierwszy"));
+        QVERIFY(!QFileInfo::exists(www + u"/Blog"_s));
+        // The password forgotten: the card says so, a publish stops.
+        c.dismiss();
+        fields.insert(u"forgetPagesPassword"_s, true);
+        QCOMPARE(c.saveTarget(fields), id);
+        QVERIFY(c.currentTarget().value(u"needsPagesPassword"_s).toBool());
+        c.publish(false);
+        QVERIFY(waitState(c, u"error"_s));
+        QCOMPARE(c.errorText(), brulion::publish::errorText(u"no-page-password"_s));
+        // Protection off: no password needed, none kept.
+        fields.remove(u"forgetPagesPassword"_s);
+        QVERIFY(brulion::publish::writeSecret(brulion::publish::secretFile(c.appDataDir(), id, u"pages"_s),
+                                              u"jeszcze jedno"_s));
+        fields.insert(u"protect"_s, false);
+        QCOMPARE(c.saveTarget(fields), id);
+        QVERIFY(!c.currentTarget().value(u"needsPagesPassword"_s).toBool());
+        QVERIFY(brulion::publish::readSecret(brulion::publish::secretFile(c.appDataDir(), id, u"pages"_s)).isEmpty());
     }
 };
 

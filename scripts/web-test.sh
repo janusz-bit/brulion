@@ -6,6 +6,7 @@
 #
 #   scripts/web-test.sh [--dist DIR] [--single-file FILE] [--install] [-- <playwright test arguments>]
 #   scripts/web-test.sh --clipper [--cli FILE] [--install] [-- …]
+#   scripts/web-test.sh --publish [--cli FILE] [--install] [-- …]
 #
 #   --dist DIR   the built site (default dist-wasm/, scripts/wasm-build.sh)
 #   --single-file FILE
@@ -15,7 +16,9 @@
 #                their system libraries)
 #   --clipper    the Web Clipper extension (clipper/) in Chromium with brulion-cli as its native
 #                messaging host (tests/web/clipper.e2e.mjs, docs/CLIPPER.md "Tests"): no web build
-#   --cli FILE   brulion-cli for --clipper (default build-clang/, else build/)
+#   --publish    password-protected published pages (tests/web/publish.e2e.mjs, docs/UI.md
+#                "Publishing"): a site brulion-cli publishes, in Chromium and Firefox; no web build
+#   --cli FILE   brulion-cli for --clipper and --publish (default build-clang/, else build/)
 #   -- …         passed to `playwright test` (e.g. -- --project=firefox stylus.spec.mjs)
 #
 # Firefox draws WebGL 2 only with an X display: without $DISPLAY the run goes under xvfb-run.
@@ -32,6 +35,7 @@ dist="$root/dist-wasm"
 single_file="$root/dist-wasm-single/brulion.html"
 install=0
 clipper=0
+publish=0
 cli=""
 pw_args=()
 while [[ $# -gt 0 ]]; do
@@ -40,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     --single-file) single_file="$2"; shift 2 ;;
     --install) install=1; shift ;;
     --clipper) clipper=1; shift ;;
+    --publish) publish=1; shift ;;
     --cli) cli="$2"; shift 2 ;;
     --) shift; pw_args=("$@"); break ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$script"; exit 0 ;;
@@ -77,13 +82,14 @@ if [[ -e /etc/NIXOS && -z ${BRULION_WEB_IN_NIX_SHELL:-} ]]; then
   again=(--dist "$dist" --single-file "$single_file")
   if ((install)); then again+=(--install); fi
   if ((clipper)); then again+=(--clipper); fi
+  if ((publish)); then again+=(--publish); fi
   if [[ -n $cli ]]; then again+=(--cli "$cli"); fi
   exec nix shell nixpkgs#nodejs_22 nixpkgs#openssl nixpkgs#xvfb-run --command bash "$script" "${again[@]}" \
     -- ${pw_args[@]+"${pw_args[@]}"}
 fi
 
-if ((clipper)); then
-  # The Web Clipper needs brulion-cli, not the web build.
+if ((clipper || publish)); then
+  # The Web Clipper and the published pages need brulion-cli, not the web build.
   if [[ -z $cli ]]; then
     for candidate in "$root/build-clang/src/cli/brulion-cli" "$root/build/src/cli/brulion-cli"; do
       [[ -x $candidate ]] && { cli=$candidate; break; }
@@ -128,6 +134,12 @@ if ((clipper)); then
   # Chromium only (Firefox cannot load an unpacked extension in Playwright), headless: no X display.
   npx playwright test -c clipper.config.mjs ${pw_args[@]+"${pw_args[@]}"} || status=$?
   log "report: $root/tests/web/playwright-report-clipper/index.html (exit code $status)"
+  exit "$status"
+fi
+if ((publish)); then
+  # Headless Chromium and Firefox (no WebGL needed: no X display).
+  npx playwright test -c publish.config.mjs ${pw_args[@]+"${pw_args[@]}"} || status=$?
+  log "report: $root/tests/web/playwright-report-publish/index.html (exit code $status)"
   exit "$status"
 fi
 ${run[@]+"${run[@]}"} npx playwright test ${pw_args[@]+"${pw_args[@]}"} || status=$?
