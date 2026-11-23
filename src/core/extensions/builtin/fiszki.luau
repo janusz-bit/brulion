@@ -18,15 +18,21 @@
 -- of a review log page per month ("Fiszki/Powtórki 2026-11"), read back for the statistics and the
 -- new-card limit.
 --
+-- Notes: the plugin's whole-note reviews — a note with a review tag (#review) is read whole and graded
+-- Hard, Good or Easy; its state is `sr-due`, `sr-interval` and `sr-ease` in its frontmatter (the
+-- plugin's SM-2 variant with load balancing, ported).
+--
 -- Views: decks (params group "tag" | "page" | "folder"), review (params deck, ahead, more), stats
--- (params deck). Actions: reveal, grade, undo, reset. Commands (palette = false: the app, `brulion-cli
--- card …` and tests run them with ctx.args): count, list, show, grade, stats, schedule (FSRS alone).
+-- (params deck), notes (the review of notes). Actions: reveal, grade, undo, reset; notes: grade, skip,
+-- unskip, undo. Commands (palette = false: the app, `brulion-cli card …` and tests run them with
+-- ctx.args): count, list, show, grade, stats, schedule (FSRS alone), notes, review-note,
+-- schedule-note (the notes' scheduling alone).
 -- Settings come with params / ctx.args: tags ("flashcards, fiszki"), newPerDay (20), retention
 -- (0.9), maxInterval (36500) and the plugin's card settings the notebook keeps in
 -- `.brulion/config.json` (the host passes them): singleLineSeparator ("::"),
 -- singleLineReversedSeparator (":::"), multilineSeparator ("?"), multilineReversedSeparator ("??"),
 -- multilineEndMarker (""), clozeHighlights (true), clozeBold (false), clozeCurly (false),
--- foldersAsDecks (false).
+-- foldersAsDecks (false), reviewTags ("review"; the notes reviewed as a whole).
 --
 -- Time is local wall-clock time counted in minutes since 1970-01-01 00:00 (a day is 1440 minutes,
 -- no time zones, no DST); only the formats other apps read are UTC (b.toUtc / b.fromUtc).
@@ -61,6 +67,13 @@ type Settings = {
     clozeCurly: boolean,
     foldersAsDecks: boolean,
     parseKey: string, -- what a note's cards depend on: cached cards are valid for the same key
+    -- Whole-note reviews (the plugin's note settings, docs/SYNTAX.md §15 "Notes to review"):
+    reviewTags: { string },
+    baseEase: number, -- 250
+    easyBonus: number, -- 1.3
+    lapsesIntervalChange: number, -- 0.5: a Hard's factor
+    maxNoteInterval: number, -- 36525 days
+    loadBalance: boolean,
 }
 type Card = {
     id: string,
@@ -186,6 +199,20 @@ local INTERFACE = {
         badGrade = "Ocena to 1–4 albo again, hard, good, easy (znowu, trudne, dobrze, łatwe)",
         noSuchCard = "Nie ma fiszki %s",
         notDue = "dziś nie do powtórki",
+        notesTitle = "Notatki do powtórki",
+        noNotes = "Nie ma notatek do powtórki",
+        noNotesText = "Oznacz notatkę tagiem #%s: pojawi się tu cała, a po przeczytaniu ocenisz ją — trudne, dobrze albo łatwe. Stan powtórek trafia do nagłówka notatki (sr-due, sr-interval, sr-ease), jak w wtyczce Spaced Repetition.",
+        notesDoneTitle = "Notatki na dziś przejrzane",
+        noteSession = "%d ocenione · zostało: %d do powtórki, %d nowych",
+        skip = "Pomiń",
+        openNote = "Otwórz notatkę",
+        noteNew = "nowa notatka",
+        noteChanged = "Nagłówek notatki zmienił się w międzyczasie — notatka pokazana od nowa",
+        noteCut = "Dalsza część notatki jest w edytorze.",
+        badNoteGrade = "Ocena notatki to 2–4 albo hard, good, easy (trudne, dobrze, łatwe)",
+        noSuchNote = "Nie ma notatki %s",
+        notReviewNote = "Notatka %s nie ma tagu do powtórki (#%s)",
+        showSkipped = "Pokaż pominięte",
     },
     en = {
         title = "Flashcards",
@@ -253,6 +280,20 @@ local INTERFACE = {
         badGrade = "A grade is 1–4 or again, hard, good, easy (znowu, trudne, dobrze, łatwe)",
         noSuchCard = "No card %s",
         notDue = "not due today",
+        notesTitle = "Notes to review",
+        noNotes = "No notes to review",
+        noNotesText = "Tag a note #%s: it shows up here whole, and after reading it you grade it — hard, good or easy. The state of the reviews goes into the note's header (sr-due, sr-interval, sr-ease), as in the Spaced Repetition plugin.",
+        notesDoneTitle = "All notes reviewed for today",
+        noteSession = "%d reviewed · left: %d due, %d new",
+        skip = "Skip",
+        openNote = "Open the note",
+        noteNew = "new note",
+        noteChanged = "The note's header changed in the meantime — the note is shown again",
+        noteCut = "The rest of the note is in the editor.",
+        badNoteGrade = "A note's grade is 2–4 or hard, good, easy (trudne, dobrze, łatwe)",
+        noSuchNote = "No note %s",
+        notReviewNote = "The note %s does not have a review tag (#%s)",
+        showSkipped = "Show the skipped notes",
     },
 }
 
@@ -1865,6 +1906,30 @@ local function settingsOf(args: { [string]: any }?): Settings
     local endMarker = trim(text("multilineEndMarker", ""))
     local highlights, bold, curly = flag("clozeHighlights", true), flag("clozeBold", false), flag("clozeCurly", false)
     local folders = flag("foldersAsDecks", false)
+    -- The tags of the notes reviewed as a whole (the plugin's "Note review tags", default #review).
+    local reviewTags = {}
+    local reviewListed = a.reviewTags
+    local reviewWords: { string } = {}
+    if type(reviewListed) == "table" then
+        for _, t in reviewListed do
+            if type(t) == "string" then
+                table.insert(reviewWords, t)
+            end
+        end
+    elseif type(reviewListed) == "string" then
+        for t in string.gmatch(reviewListed, "[^,%s]+") do
+            table.insert(reviewWords, t)
+        end
+    end
+    for _, t in reviewWords do
+        local tag = b.lower(trim((t:gsub("^#", ""))))
+        if tag ~= "" and not table.find(reviewTags, tag) then
+            table.insert(reviewTags, tag)
+        end
+    end
+    if #reviewTags == 0 then
+        reviewTags = { "review" }
+    end
     local key = table.concat({
         table.concat(clean, ","), single, singleRev, multi, multiRev, endMarker,
         if highlights then "h" else "-", if bold then "b" else "-", if curly then "c" else "-",
@@ -1881,6 +1946,12 @@ local function settingsOf(args: { [string]: any }?): Settings
         clozeCurly = curly,
         foldersAsDecks = folders,
         parseKey = key,
+        reviewTags = reviewTags,
+        baseEase = math.floor(num("baseEase", 250, 130, 1000)),
+        easyBonus = num("easyBonus", 1.3, 1, 5),
+        lapsesIntervalChange = num("lapsesIntervalChange", 0.5, 0.1, 1),
+        maxNoteInterval = math.floor(num("maxNoteInterval", 36525, 1, 36525)),
+        loadBalance = flag("loadBalance", true),
         newPerDay = math.floor(num("newPerDay", 20, 0, 9999)),
         retention = retention,
         maxInterval = math.floor(num("maxInterval", 36500, 1, 36500)),
@@ -2115,6 +2186,8 @@ local function undoSteps(steps: { Step })
             b.removeLine(s.ref)
         elseif s.op == "props" then
             b.setProperties(s.ref, s.props :: { { string } })
+        elseif s.op == "write" then
+            b.write(s.ref, s.text :: string)
         end
     end
 end
@@ -2394,6 +2467,555 @@ local reviewActions = {
     end,
 }
 
+-- ---- whole-note reviews -------------------------------------------------------------------------
+
+-- The Spaced Repetition plugin's note reviews (docs/SYNTAX.md §15 "Notes to review"): a note with
+-- a review tag (#review) is reviewed as a whole; its state is three keys of its frontmatter,
+--   sr-due: 2026-11-23      the day it is due
+--   sr-interval: 3          the days of the last interval
+--   sr-ease: 250            the ease × 100
+-- and a review is Hard, Good or Easy (the plugin's SM-2 variant, `osrSchedule`, ported with its
+-- load balancing). Only these lines of the note are written — one line each, so that a sync merges
+-- reviews on two devices line by line — and the rest stays byte for byte.
+local NOTE_KEYS = { "sr-due", "sr-interval", "sr-ease" }
+local NOTE_MAX_SHOWN = 100000 -- characters of a note drawn in a review
+local NOTE_CHUNK = 3000
+
+type NoteState = { due: number, interval: number, ease: number } -- due: a day number
+type NoteRow = { name: string, path: string, state: NoteState?, sig: string }
+-- A frontmatter line `key: value # comment` in its parts, to write another value in its place.
+type Part = { head: string, quote: string, value: string, tail: string }
+
+local function jsRound(x: number): number
+    return math.floor(x + 0.5)
+end
+
+-- The first and the last line (1-based) of the frontmatter among `texts` (---, up to --- or ...).
+local function frontOf(texts: { string }): (number?, number?)
+    if texts[1] == nil or not texts[1]:match("^%-%-%-%s*$") then
+        return nil, nil
+    end
+    for i = 2, #texts do
+        if texts[i]:match("^%-%-%-%s*$") or texts[i]:match("^%.%.%.%s*$") then
+            return 1, i
+        end
+    end
+    return nil, nil
+end
+
+local function partsOf(text: string, key: string): Part?
+    if text:sub(1, #key) ~= key then
+        return nil
+    end
+    local gap, after = string.match(text:sub(#key + 1), "^([ \t]*):(.*)$")
+    if gap == nil then
+        return nil
+    end
+    local lead, body = string.match(after :: string, "^([ \t]*)(.*)$")
+    local head = key .. (gap :: string) .. ":" .. (lead :: string)
+    local text2 = body :: string
+    local q = text2:sub(1, 1)
+    if q == '"' or q == "'" then
+        local close = text2:find(q, 2, true)
+        if close then
+            return { head = head, quote = q, value = text2:sub(2, close - 1), tail = text2:sub(close + 1) }
+        end
+    end
+    local value, tail = string.match(text2, "^(.-)(%s+#.*)$")
+    if value == nil then
+        value, tail = string.match(text2, "^(.-)(%s*)$")
+    end
+    return { head = head, quote = "", value = value :: string, tail = tail :: string }
+end
+
+local MONTH_NAMES: { [string]: number } = {
+    jan = 1, feb = 2, mar = 3, apr = 4, may = 5, jun = 6, jul = 7, aug = 8, sep = 9, oct = 10, nov = 11, dec = 12,
+}
+
+local function validDay(y: number?, m: number?, d: number?): number?
+    if y == nil or m == nil or d == nil or y < 1 or m < 1 or m > 12 or d < 1 or d > daysInMonth(y, m) then
+        return nil
+    end
+    return fromCivil(y, m, d)
+end
+
+-- The plugin's date formats (moment's, in this order): YYYY-MM-DD, DD-MM-YYYY, "ddd MMM DD YYYY".
+local function noteDay(text: string): number?
+    local iso = dayOf(text)
+    if iso then
+        return iso
+    end
+    local d, m, y = string.match(text, "^(%d%d?)%-(%d%d?)%-(%d%d%d%d)")
+    if d then
+        return validDay(tonumber(y), tonumber(m), tonumber(d))
+    end
+    local mon, d2, y2 = string.match(text, "^%a+ (%a%a%a) (%d%d?) (%d%d%d%d)")
+    if mon then
+        return validDay(tonumber(y2), MONTH_NAMES[b.lower(mon :: string)], tonumber(d2))
+    end
+    return nil
+end
+
+-- JavaScript's parseFloat: the number a text starts with.
+local function floatOf(text: string): number?
+    local n = string.match(text, "^%s*([%+%-]?%d+%.?%d*)") or string.match(text, "^%s*([%+%-]?%.%d+)")
+    return if n then tonumber(n) else nil
+end
+
+-- A note's state from its lines (as b.lines gives them), and the text of the lines it stands on
+-- (what a write checks again). A state needs all three keys: the due day, an interval and an ease
+-- that are numbers and not 0 (the plugin's truthiness test); else the note is new.
+local function stateOf(texts: { string }): (NoteState?, string)
+    local first, last = frontOf(texts)
+    if first == nil or last == nil then
+        return nil, ""
+    end
+    local found: { [string]: Part } = {}
+    local signature: { string } = {}
+    for i = first + 1, last - 1 do
+        for _, key in NOTE_KEYS do
+            if found[key] == nil then
+                local p = partsOf(texts[i], key)
+                if p then
+                    found[key] = p
+                    table.insert(signature, texts[i])
+                end
+            end
+        end
+    end
+    local sig = table.concat(signature, "\n")
+    local due, interval, ease = found["sr-due"], found["sr-interval"], found["sr-ease"]
+    if due == nil or interval == nil or ease == nil then
+        return nil, sig
+    end
+    local day = noteDay(due.value)
+    local ivl, ez = floatOf(interval.value), floatOf(ease.value)
+    if day == nil or not finite(ivl) or not finite(ez) or ivl == 0 or ez == 0 then
+        return nil, sig
+    end
+    return { due = day, interval = ivl :: number, ease = ez :: number }, sig
+end
+
+-- The plugin's `osrSchedule` (st3v3nmw/obsidian-spaced-repetition 1.15.4, note-scheduling.ts):
+-- the interval and ease after `response` (2 Hard, 3 Good, 4 Easy), the last interval and ease,
+-- the days the review is late and the notes' due days (a histogram of the days from today: load
+-- balancing, which moves a long interval to the least used day within a few days of it).
+local function osrSchedule(st: Settings, response: number, interval0: number, ease0: number, late: number,
+    histogram: { [number]: number }?): (number, number)
+    local lateDays = math.max(0, math.floor(late))
+    local interval = math.max(1, interval0)
+    local ease = ease0
+    if response == 4 then
+        ease += 20
+        interval = ((interval + lateDays) * ease) / 100
+        interval *= st.easyBonus
+    elseif response == 3 then
+        interval = ((interval + lateDays / 2) * ease) / 100
+    elseif response == 2 then
+        ease = math.max(130, ease - 20)
+        interval = math.max(1, (interval + lateDays / 4) * st.lapsesIntervalChange)
+    end
+    if st.loadBalance and histogram ~= nil then
+        interval = jsRound(interval)
+        if interval > 7 then
+            local fuzz: number
+            if interval <= 21 then
+                fuzz = 1
+            elseif interval <= 180 then
+                fuzz = math.min(3, math.floor(interval * 0.05))
+            else
+                fuzz = math.min(7, math.floor(interval * 0.025))
+            end
+            local h = histogram :: { [number]: number }
+            if h[interval] ~= nil then
+                local best = interval
+                local original = interval
+                for i = 1, fuzz do
+                    local stop = false
+                    for _, candidate in { original - i, original + i } do
+                        if h[candidate] == nil then
+                            best = candidate
+                            stop = true
+                            break
+                        end
+                        if h[candidate] < h[best] then
+                            best = candidate
+                        end
+                    end
+                    if stop then
+                        break
+                    end
+                end
+                interval = best
+            end
+        end
+    end
+    interval = math.min(interval, st.maxNoteInterval)
+    interval = jsRound(interval * 10) / 10
+    return interval, ease
+end
+
+local notesCache = { revision = -1, key = "", rows = {} :: { NoteRow } }
+
+-- The notes with a review tag (their own, a block's, a sub-tag's), by path, each with its state.
+local function collectNotes(st: Settings): { NoteRow }
+    local key = table.concat(st.reviewTags, ",")
+    if notesCache.revision == b.revision() and notesCache.key == key then
+        return notesCache.rows
+    end
+    local names: { [string]: boolean } = {}
+    local list: { string } = {}
+    for _, tag in st.reviewTags do
+        local offset = 0
+        repeat
+            local result = b.query(`type:pages tag:"{tag}"`, 1000, offset)
+            for _, item in result.items do
+                if not names[item.page] and #list < MAX_PAGES then
+                    names[item.page] = true
+                    table.insert(list, item.page)
+                end
+            end
+            offset += #result.items
+        until #result.items == 0 or offset >= result.total or #list >= MAX_PAGES
+    end
+    local rows: { NoteRow } = {}
+    for _, name in list do
+        local info = b.page(name)
+        if info and not isLogPage(info.path) then
+            local texts: { string } = {}
+            for _, line in b.lines(info.path) or {} do
+                table.insert(texts, line.text)
+                if #texts >= 1000 then
+                    break -- a frontmatter is never this long
+                end
+            end
+            local state, sig = stateOf(texts)
+            table.insert(rows, { name = name, path = info.path, state = state, sig = sig })
+        end
+    end
+    table.sort(rows, function(x, y)
+        return x.path < y.path
+    end)
+    notesCache = { revision = b.revision(), key = key, rows = rows }
+    return rows
+end
+
+type NoteQueue = {
+    due: { NoteRow }, new: { NoteRow }, scheduled: number, histogram: { [number]: number },
+}
+
+-- What is to review today: due notes (the earliest due day first), then new ones, in their paths'
+-- order — the plugin's, which orders notes of one day by their PageRank. `skipped` are left out.
+local function noteQueue(rows: { NoteRow }, today: number, skipped: { [string]: boolean }?): NoteQueue
+    local q: NoteQueue = { due = {}, new = {}, scheduled = 0, histogram = {} }
+    for _, r in rows do
+        if r.state then
+            q.scheduled += 1
+            local days = (r.state :: NoteState).due - today
+            q.histogram[days] = (q.histogram[days] or 0) + 1
+        end
+        if skipped and skipped[r.path] then
+            continue
+        end
+        if r.state == nil then
+            table.insert(q.new, r)
+        elseif (r.state :: NoteState).due <= today then
+            table.insert(q.due, r)
+        end
+    end
+    table.sort(q.due, function(x, y)
+        local dx, dy = (x.state :: NoteState).due, (y.state :: NoteState).due
+        if dx ~= dy then
+            return dx < dy
+        end
+        return x.path < y.path
+    end)
+    return q
+end
+
+local function noteCounts(rows: { NoteRow }, today: number)
+    local q = noteQueue(rows, today, nil)
+    return { due = #q.due, new = #q.new, scheduled = q.scheduled, total = #rows }
+end
+
+-- The state after `response` on `today`: a new note starts from interval 1 and the base ease (the
+-- plugin's links to other notes' eases are not used), an old one from its own and the days late.
+local function noteReview(st: Settings, row: NoteRow, response: number, today: number,
+    histogram: { [number]: number }): NoteState
+    local s = row.state
+    local interval, ease, late = 1, st.baseEase, 0
+    if s then
+        interval, ease, late = s.interval, s.ease, today - s.due
+    end
+    local ivl, ez = osrSchedule(st, response, interval, ease, late, histogram)
+    return { due = today + jsRound(ivl), interval = ivl, ease = ez }
+end
+
+local function numberText(x: number): string
+    return tostring(jsRound(x * 10) / 10)
+end
+
+-- Writes `state` into the note's frontmatter (made when there is none): the three lines changed in
+-- place, missing ones added after the others or before the closing line; the steps that undo it.
+local function writeNoteState(path: string, state: NoteState): { Step }
+    local values: { [string]: string } = {
+        ["sr-due"] = dateOf(state.due), ["sr-interval"] = numberText(state.interval), ["sr-ease"] = numberText(state.ease),
+    }
+    local steps: { Step } = {}
+    local function read(): ({ any }, { string })
+        local lines = b.lines(path) or {}
+        local texts: { string } = {}
+        for _, l in lines do
+            table.insert(texts, l.text)
+        end
+        return lines, texts
+    end
+    local lines, texts = read()
+    local first, last = frontOf(texts)
+    if first == nil then
+        local header = { "---", "sr-due: " .. values["sr-due"], "sr-interval: " .. values["sr-interval"],
+            "sr-ease: " .. values["sr-ease"], "---" }
+        if #lines == 0 then
+            b.write(path, table.concat(header, "\n") .. "\n")
+            return { { op = "write", ref = path, text = "" } }
+        end
+        local ref = b.insertLine(lines[1].ref, header[1], "before")
+        table.insert(steps, { op = "remove", ref = ref })
+        for k = 2, #header do
+            ref = b.insertLine(ref, header[k], "after")
+            table.insert(steps, { op = "remove", ref = ref })
+        end
+        return steps
+    end
+    for _, key in NOTE_KEYS do
+        lines, texts = read()
+        first, last = frontOf(texts)
+        local at: number? = nil
+        local lastKey = 0
+        for i = (first :: number) + 1, (last :: number) - 1 do
+            for _, k in NOTE_KEYS do
+                if partsOf(texts[i], k) then
+                    lastKey = i
+                    if k == key and at == nil then
+                        at = i
+                    end
+                end
+            end
+        end
+        if at then
+            local old = texts[at :: number]
+            local p = partsOf(old, key) :: Part
+            local new = p.head .. p.quote .. values[key] .. p.quote .. p.tail
+            if new ~= old then
+                local ref = b.replaceLine(lines[at :: number].ref, new)
+                table.insert(steps, { op = "line", ref = ref, text = old })
+            end
+        else
+            local before = if lastKey > 0 then lastKey + 1 else last :: number
+            local ref = b.insertLine(lines[before].ref, key .. ": " .. values[key], "before")
+            table.insert(steps, { op = "remove", ref = ref })
+        end
+    end
+    return steps
+end
+
+-- The note's lines after its frontmatter as Markdown chunks of about NOTE_CHUNK characters, cut at
+-- blank lines outside code fences; the last flag says that the rest of a long note was left out.
+local function noteBody(path: string): ({ string }, boolean)
+    local texts: { string } = {}
+    for _, l in b.lines(path) or {} do
+        table.insert(texts, l.text)
+    end
+    local _, last = frontOf(texts)
+    local chunks: { string } = {}
+    local current: { string } = {}
+    local size, total = 0, 0
+    local fence: string? = nil
+    local function flush()
+        local text = table.concat(current, "\n")
+        if trim(text) ~= "" then
+            table.insert(chunks, text)
+        end
+        current = {}
+        size = 0
+    end
+    for i = (last or 0) + 1, #texts do
+        local line = texts[i]
+        local mark = isFence(line)
+        if mark then
+            if fence == nil then
+                fence = mark
+            elseif mark == fence then
+                fence = nil
+            end
+        end
+        table.insert(current, line)
+        size += #line + 1
+        total += #line + 1
+        if total > NOTE_MAX_SHOWN and fence == nil then
+            flush()
+            return chunks, i < #texts
+        end
+        if fence == nil and trim(line) == "" and size >= NOTE_CHUNK then
+            flush()
+        end
+    end
+    flush()
+    return chunks, false
+end
+
+type NoteSession = {
+    day: number, done: number, total: number, skipped: { [string]: boolean }, skips: number,
+    undo: { { steps: { Step }, path: string } },
+}
+local noteSession: NoteSession = { day = -1, done = 0, total = 0, skipped = {}, skips = 0, undo = {} }
+
+local function noteSessionFor(today: number): NoteSession
+    if noteSession.day ~= today then
+        noteSession = { day = today, done = 0, total = 0, skipped = {}, skips = 0, undo = {} }
+    end
+    return noteSession
+end
+
+local NOTE_GRADE_TONES = { [2] = "warning", [3] = "success", [4] = "info" }
+
+-- What a button of the note's review shows: the days till its due.
+local function daysText(today: number, due: number): string
+    return intervalText(math.max(1, due - today) * 1440)
+end
+
+local function notesView(params: { [string]: any }): Node
+    local st = settingsOf(params)
+    local now = nowMinutes()
+    local today = now // 1440
+    local rows = collectNotes(st)
+    local s = noteSessionFor(today)
+    local q = noteQueue(rows, today, s.skipped)
+    local i = ui()
+    local nodes: { Node } = {}
+    local group = params.group
+    local row: NoteRow? = q.due[1] or q.new[1]
+    s.total = math.max(s.total, s.done + #q.due + #q.new)
+    if row == nil then
+        if #rows == 0 then
+            table.insert(nodes, b.ui.empty(i.noNotes, string.format(i.noNotesText, st.reviewTags[1]), "file-text"))
+        else
+            table.insert(nodes, b.ui.empty(i.notesDoneTitle,
+                if s.done > 0 then string.format(i.doneText, s.done, i.noNext) else i.noNext, "circle-check"))
+        end
+        local tools: { Node } = {}
+        if #s.undo > 0 then
+            table.insert(tools, b.ui.button(i.undo, "undo", {}, { key = "u", icon = "undo-2" }))
+        end
+        if s.skips > 0 then
+            table.insert(tools, b.ui.button(i.showSkipped, "unskip", {}, { icon = "rotate-ccw" }))
+        end
+        if #tools > 0 then
+            table.insert(nodes, b.ui.row(tools))
+        end
+        table.insert(nodes, b.ui.open(i.backToDecks, "decks", { group = group }))
+        return b.ui.column(nodes)
+    end
+    local r = row :: NoteRow
+    table.insert(nodes, b.ui.progress(s.done, math.max(1, s.total), string.format(i.noteSession, s.done, #q.due, #q.new)))
+    local face: { Node } = { b.ui.text(r.name, { muted = true, icon = "file-text" }) }
+    local chunks, cut = noteBody(r.path)
+    for _, chunk in chunks do
+        table.insert(face, b.ui.markdown(chunk))
+    end
+    if cut then
+        table.insert(face, b.ui.text(i.noteCut, true))
+    end
+    table.insert(nodes, b.ui.card(face))
+    local args = { path = r.path, sig = r.sig }
+    local buttons: { Node } = {}
+    for g = 2, 4 do
+        local after = noteReview(st, r, g, today, q.histogram)
+        local a = table.clone(args)
+        a.grade = g
+        table.insert(buttons, b.ui.button(i.grades[g], "grade", a, {
+            key = tostring(g - 1), tone = NOTE_GRADE_TONES[g], hint = daysText(today, after.due),
+        }))
+    end
+    table.insert(nodes, b.ui.row(buttons))
+    local tools: { Node } = {}
+    table.insert(tools, b.ui.button(i.skip, "skip", args, { key = "s", icon = "skip-forward" }))
+    if #s.undo > 0 then
+        table.insert(tools, b.ui.button(i.undo, "undo", {}, { key = "u", icon = "undo-2" }))
+    end
+    table.insert(tools, b.ui.link(r.name, i.edit, 1))
+    local label = if r.state then i.stateNames[2] .. " · " .. dueText({ state = 2, due = (r.state :: NoteState).due * 1440 } :: any, now)
+        else i.noteNew
+    table.insert(tools, b.ui.text(label, true))
+    table.insert(tools, b.ui.menu({
+        { label = i.openNote, page = r.name },
+        { label = i.backToDecks, view = "decks", params = { group = group } },
+    }, i.more))
+    table.insert(nodes, b.ui.row(tools))
+    return b.ui.column(nodes)
+end
+
+local noteActions = {
+    grade = function(args)
+        local st = settingsOf(args)
+        local g = math.floor(tonumber(args.grade) or 0)
+        if g < 2 or g > 4 then
+            return nil
+        end
+        local now = nowMinutes()
+        local today = now // 1440
+        local found: NoteRow? = nil
+        for _, r in collectNotes(st) do
+            if r.path == args.path then
+                found = r
+            end
+        end
+        if found == nil or (found :: NoteRow).sig ~= args.sig then
+            return { message = ui().noteChanged, tone = "warning" }
+        end
+        local r = found :: NoteRow
+        local q = noteQueue(collectNotes(st), today, nil)
+        local ok, steps = pcall(writeNoteState, r.path, noteReview(st, r, g, today, q.histogram))
+        if not ok then
+            b.log(tostring(steps))
+            return { message = string.format(ui().notSaved, tostring(steps)), tone = "error" }
+        end
+        local s = noteSessionFor(today)
+        table.insert(s.undo, { steps = steps :: { Step }, path = r.path })
+        while #s.undo > 50 do
+            table.remove(s.undo, 1)
+        end
+        s.done += 1
+        return nil
+    end,
+    skip = function(args)
+        local s = noteSessionFor(nowMinutes() // 1440)
+        s.skipped[args.path] = true
+        s.skips += 1
+        return nil
+    end,
+    unskip = function(args)
+        local s = noteSessionFor(nowMinutes() // 1440)
+        s.skipped = {}
+        s.skips = 0
+        return nil
+    end,
+    undo = function(args)
+        local s = noteSessionFor(nowMinutes() // 1440)
+        local last = table.remove(s.undo)
+        if last == nil then
+            return { message = ui().nothingToUndo }
+        end
+        local ok, err = pcall(undoSteps, last.steps)
+        if not ok then
+            b.log(tostring(err))
+            return { message = string.format(ui().notSaved, tostring(err)), tone = "error" }
+        end
+        s.done = math.max(0, s.done - 1)
+        return { message = ui().undone }
+    end,
+}
+
 -- ---- the decks ----------------------------------------------------------------------------------
 
 local function decksOf(cards: { Card }, group: string): { { deck: string, title: string, depth: number } }
@@ -2523,8 +3145,22 @@ local function decksView(params: { [string]: any }): Node
     local now = nowMinutes()
     local cards = collect(st)
     local i = ui()
-    if #cards == 0 then
+    local noteRows = collectNotes(st)
+    if #cards == 0 and #noteRows == 0 then
         return b.ui.empty(i.noCards, i.noCardsText, "layers")
+    end
+    if #cards == 0 then
+        -- Only notes to review: their entry alone.
+        local n = noteCounts(noteRows, now // 1440)
+        return b.ui.column({
+            b.ui.card({
+                b.ui.row({ b.ui.open(i.notesTitle, "notes", { group = group }, { primary = true, icon = "file-text", key = "enter" }) }),
+                b.ui.text(string.format(i.deckCounts, n.due, n.new, n.total), {
+                    muted = n.due == 0, tone = if n.due > 0 then "accent" else nil, icon = "file-text",
+                }),
+            }),
+            b.ui.text(i.noCardsText, true),
+        })
     end
     local all = countsOf(st, cards, "", now)
     local today = now // 1440
@@ -2546,6 +3182,16 @@ local function decksView(params: { [string]: any }): Node
             b.ui.open(i.statistics, "stats", { deck = "", group = group }, { icon = "chart-column" }),
         }),
     }
+    if #noteRows > 0 then
+        -- Notes to review as a whole (the plugin's #review): one entry with its counts.
+        local n = noteCounts(noteRows, now // 1440)
+        table.insert(nodes, b.ui.card({
+            b.ui.row({ b.ui.open(i.notesTitle, "notes", { group = group }, { icon = "file-text" }) }),
+            b.ui.text(string.format(i.deckCounts, n.due, n.new, n.total), {
+                muted = n.due == 0, tone = if n.due > 0 then "accent" else nil, icon = "file-text",
+            }),
+        }))
+    end
     table.insert(nodes, b.ui.heading(if group == "page" then i.byPage elseif group == "folder" then i.byFolder else i.byTag))
     local counts = deckCounts(st, cards, group, now)
     for _, d in decksOf(cards, group) do
@@ -2701,6 +3347,7 @@ end
 b.view("decks", decksView, nil, { icon = "layers" })
 b.view("review", reviewView, reviewActions, { icon = "layers" })
 b.view("stats", statsView, nil, { icon = "chart-column" })
+b.view("notes", notesView, noteActions, { icon = "file-text" })
 
 -- ---- commands (the app's badge, brulion-cli card …, tests) ------------------------------------
 
@@ -2758,7 +3405,11 @@ b.command("count", function(ctx)
     local now = atOf(args)
     local cards = collect(st)
     local n = countsOf(st, cards, if type(args.deck) == "string" then args.deck else "", now)
-    return { due = n.due, new = n.new, learning = n.learning, total = n.total, review = n.review }
+    local notes = noteCounts(collectNotes(st), now // 1440)
+    return {
+        due = n.due, new = n.new, learning = n.learning, total = n.total, review = n.review,
+        notesDue = notes.due, notesNew = notes.new, notesTotal = notes.total,
+    }
 end, { palette = false })
 
 -- `brulion-cli card list`: { deck?, due? (only what is to study now), limit? } → cards and counts.
@@ -2830,6 +3481,120 @@ b.command("grade", function(ctx)
         after = memoryJson(after, now), interval = intervalText(after.due - now), question = (c :: Card).question,
         page = (c :: Card).page, path = (c :: Card).path, line = (c :: Card).line,
     }
+end, { palette = false })
+
+local function noteJson(st: Settings, r: NoteRow, today: number, histogram: { [number]: number })
+    local o: { [string]: any } = { page = r.name, path = r.path }
+    local s = r.state
+    if s == nil then
+        o.status = "new"
+    else
+        o.status = if s.due <= today then "due" else "scheduled"
+        o.due = dateOf(s.due)
+        o.interval = s.interval
+        o.ease = s.ease
+    end
+    local nextOf = {}
+    for g = 2, 4 do
+        local after = noteReview(st, r, g, today, histogram)
+        nextOf[WRITTEN.en.grades[g]] = {
+            due = dateOf(after.due), interval = after.interval, ease = after.ease, text = daysText(today, after.due),
+        }
+    end
+    o.next = nextOf
+    return o
+end
+
+-- `brulion-cli card notes`: { due? (only what is to review now), limit? } → the notes with a review
+-- tag, what each grade would schedule, and the counts.
+b.command("notes", function(ctx)
+    local args = argsOf(ctx)
+    local st = settingsOf(args)
+    local today = atOf(args) // 1440
+    local rows = collectNotes(st)
+    local q = noteQueue(rows, today, nil)
+    local limit = math.clamp(math.floor(tonumber(args.limit) or 1000), 1, 10000)
+    local list: { NoteRow } = {}
+    if args.due == true or args.due == "true" then
+        for _, r in q.due do
+            table.insert(list, r)
+        end
+        for _, r in q.new do
+            table.insert(list, r)
+        end
+    else
+        list = rows
+    end
+    local out = {}
+    for _, r in list do
+        if #out < limit then
+            table.insert(out, noteJson(st, r, today, q.histogram))
+        end
+    end
+    return {
+        notes = out, counts = { due = #q.due, new = #q.new, scheduled = q.scheduled, total = #rows },
+        today = dateOf(today), tags = st.reviewTags,
+    }
+end, { palette = false })
+
+-- `brulion-cli card review-note <page> <grade>`: { page (a name or a path), grade (hard, good, easy,
+-- 2–4), at? } → the state before and after; the note's frontmatter written.
+b.command("review-note", function(ctx)
+    local args = argsOf(ctx)
+    local st = settingsOf(args)
+    local g = gradeOf(args.grade)
+    if g == nil or (g :: number) < 2 then
+        return { error = "bad_argument", message = ui().badNoteGrade }
+    end
+    local word = tostring(args.page or "")
+    local today = atOf(args) // 1440
+    local rows = collectNotes(st)
+    local found: NoteRow? = nil
+    for _, r in rows do
+        if r.path == word or r.path == word .. ".md" or b.fold(r.name) == b.fold(word) then
+            found = r
+            break
+        end
+    end
+    if found == nil then
+        local info = b.page(word)
+        if info then
+            return { error = "not_review_note", message = string.format(ui().notReviewNote, word, st.reviewTags[1]) }
+        end
+        return { error = "note_not_found", message = string.format(ui().noSuchNote, word) }
+    end
+    local r = found :: NoteRow
+    local q = noteQueue(rows, today, nil)
+    local before = noteJson(st, r, today, q.histogram)
+    local after = noteReview(st, r, g :: number, today, q.histogram)
+    writeNoteState(r.path, after)
+    return {
+        page = r.name, path = r.path, grade = WRITTEN.en.grades[g :: number], before = before,
+        after = { due = dateOf(after.due), interval = after.interval, ease = after.ease },
+        interval = daysText(today, after.due),
+    }
+end, { palette = false })
+
+-- The plugin's scheduling alone (tests, the documentation): { grade, interval?, ease?, late?
+-- (days), histogram? ({ ["5"] = 2 }: notes due in that many days from today), loadBalance? } →
+-- { interval, ease }.
+b.command("schedule-note", function(ctx)
+    local args = argsOf(ctx)
+    local st = settingsOf(args)
+    local g = gradeOf(args.grade)
+    if g == nil or (g :: number) < 2 then
+        return { error = "bad_argument", message = ui().badNoteGrade }
+    end
+    local histogram: { [number]: number }? = nil
+    if type(args.histogram) == "table" then
+        histogram = {}
+        for k, v in args.histogram do
+            (histogram :: { [number]: number })[tonumber(k) :: number] = tonumber(v) :: number
+        end
+    end
+    local interval, ease = osrSchedule(st, g :: number, tonumber(args.interval) or 1, tonumber(args.ease) or st.baseEase,
+        tonumber(args.late) or 0, histogram)
+    return { interval = interval, ease = ease, text = daysText(0, jsRound(interval)) }
 end, { palette = false })
 
 b.command("stats", function(ctx)

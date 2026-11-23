@@ -205,6 +205,7 @@ QList<SettingSpec> makeNotebookSpecs()
     specs << spec("flashcards.clozeBold", "toggle", "**bold text** is a cloze");
     specs << spec("flashcards.clozeCurly", "toggle", "{{curly brackets}} are clozes");
     specs << spec("flashcards.foldersAsDecks", "toggle", "a card's deck is its note's folder");
+    specs << spec("flashcards.reviewTags", "text", "the tags of notes reviewed as a whole, \"review\" (\"\": that)");
     specs << spec("themePage", "path", "the notebook's theme page (\"\": none; Settings → Appearance)");
     return specs;
 }

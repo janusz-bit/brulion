@@ -970,12 +970,14 @@ private Q_SLOTS:
         QVERIFY(!ws->readFile(u".brulion/config.json"_s).contains(u"flashcards"_s));
         QVERIFY(ws->setConfig({{u"flashcards"_s, QVariantMap{{u"singleLineSeparator"_s, u" => "_s},
                                                                {u"clozeBold"_s, true},
-                                                               {u"tags"_s, u"#Fiszki, żółwie"_s}}}}));
+                                                               {u"tags"_s, u"#Fiszki, żółwie"_s},
+                                                               {u"reviewTags"_s, u"#Powtórka"_s}}}}));
         QCOMPARE(changed.size(), 3);
         const QVariantMap fc = ws->vaultConfig().value(u"flashcards"_s).toMap();
         QCOMPARE(fc.value(u"singleLineSeparator"_s).toString(), u" => "_s);
         QCOMPARE(fc.value(u"clozeBold"_s).toBool(), true);
         QCOMPARE(fc.value(u"tags"_s).toString(), u"fiszki, żółwie"_s);
+        QCOMPARE(fc.value(u"reviewTags"_s).toString(), u"powtórka"_s);
         QCOMPARE(fc.value(u"multilineSeparator"_s).toString(), u"?"_s);
         const QString json = ws->readFile(u".brulion/config.json"_s);
         QVERIFY(json.contains(u"\"clozeBold\": true"_s));
@@ -991,7 +993,8 @@ private Q_SLOTS:
         // Back to the defaults: the object is gone from the file.
         QVERIFY(ws->setConfig({{u"flashcards"_s, QVariantMap{{u"singleLineSeparator"_s, u"::"_s},
                                                                {u"clozeBold"_s, false},
-                                                               {u"tags"_s, QString()}}}}));
+                                                               {u"tags"_s, QString()},
+                                                               {u"reviewTags"_s, QString()}}}}));
         QVERIFY(!ws->readFile(u".brulion/config.json"_s).contains(u"flashcards"_s));
     }
 

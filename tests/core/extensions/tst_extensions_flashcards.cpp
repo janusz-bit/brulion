@@ -16,6 +16,9 @@
 //   * the queue: learning steps due, reviews due, the day's new-card limit counted from the log,
 //     studying ahead and more new cards; the decks, review and statistics views' nodes, the
 //     review session (reveal, grade, undo) through the view's actions;
+//   * whole-note reviews (the plugin's #review notes): its `osrSchedule` ported with its own tests,
+//     the state read and written in the frontmatter (other keys, quoted values, CRLF, a BOM, a
+//     malformed date, no frontmatter), the queue, the review view's session with undo;
 //   * 5000 cards counted and drawn within the time limit, and again after another note changed.
 
 #include "extensions/builtin.h"
@@ -185,6 +188,11 @@ class TestExtensionsFlashcards : public QObject
     Result act(const QString &action, const QVariantMap &args)
     {
         return m_engine->act(kCards, u"review"_s, action, args);
+    }
+
+    Result act2(const QString &action, const QVariantMap &args)
+    {
+        return m_engine->act(kCards, u"notes"_s, action, args);
     }
 
     /// Every node of a view, depth first.
@@ -902,6 +910,353 @@ private Q_SLOTS:
         // English.
         QVERIFY(open({{u"Words.md"_s, u"#flashcards\n\ndog::pies\n"_s}}, u"en"_s));
         QCOMPARE(firstOfType(render(u"review"_s), u"button"_s, u"reveal"_s).value(u"label"_s).toString(), u"Show answer"_s);
+    }
+
+    // ---- whole-note reviews (the plugin's #review notes, docs/SYNTAX.md §15 "Notes to review") ----
+
+    // The plugin's `osrSchedule` (its tests/unit/scheduling/scheduling.test.ts, ported): the three
+    // grades from a new note, with a two-day delay, load balancing over each range of intervals;
+    // then what is ours — the one decimal without load balancing, the ease's floor, the interval's
+    // cap.
+    void noteSchedule_data()
+    {
+        QTest::addColumn<QString>("grade");
+        QTest::addColumn<double>("interval");
+        QTest::addColumn<double>("ease");
+        QTest::addColumn<double>("late");
+        QTest::addColumn<QVariantMap>("histogram"); // days from today → notes; none: no load balancing's data
+        QTest::addColumn<QVariantMap>("more");
+        QTest::addColumn<double>("wantInterval");
+        QTest::addColumn<double>("wantEase");
+        const QVariantMap none{};
+        const QVariantMap empty{{u"histogram"_s, QVariantMap{}}};
+        QTest::newRow("new, easy") << u"easy"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << empty << 4.0 << 270.0;
+        QTest::newRow("new, good") << u"good"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << empty << 3.0 << 250.0;
+        QTest::newRow("new, hard") << u"hard"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << empty << 1.0 << 230.0;
+        QTest::newRow("late, easy") << u"easy"_s << 10.0 << 250.0 << 2.0 << QVariantMap{} << empty << 42.0 << 270.0;
+        QTest::newRow("late, good") << u"good"_s << 10.0 << 250.0 << 2.0 << QVariantMap{} << empty << 28.0 << 250.0;
+        QTest::newRow("late, hard") << u"hard"_s << 10.0 << 250.0 << 2.0 << QVariantMap{} << empty << 5.0 << 230.0;
+        QTest::newRow("no fuzz up to a week") << u"good"_s << 2.0 << 250.0 << 0.0 << QVariantMap{{u"5"_s, 2}} << none << 5.0
+                                              << 250.0;
+        QTest::newRow("a day each side up to three weeks")
+                << u"good"_s << 7.0 << 250.0 << 0.0 << QVariantMap{{u"17"_s, 4}, {u"18"_s, 5}, {u"19"_s, 3}} << none << 19.0 << 250.0;
+        QTest::newRow("an unused day wins at once") << u"good"_s << 10.0 << 250.0 << 0.0
+                                                    << QVariantMap{{u"23"_s, 5}, {u"26"_s, 1}} << none << 25.0 << 250.0;
+        QTest::newRow("three days each side up to half a year")
+                << u"good"_s << 25.0 << 250.0 << 0.0
+                << QVariantMap{{u"2"_s, 5}, {u"59"_s, 8}, {u"60"_s, 9}, {u"61"_s, 3}, {u"62"_s, 5}, {u"63"_s, 4}, {u"64"_s, 4},
+                               {u"65"_s, 8}, {u"66"_s, 2}, {u"67"_s, 10}}
+                << none << 66.0 << 250.0;
+        QTest::newRow("a week each side beyond")
+                << u"good"_s << 500.0 << 250.0 << 0.0
+                << QVariantMap{{u"1245"_s, 7}, {u"1246"_s, 4}, {u"1247"_s, 2}, {u"1248"_s, 9}, {u"1249"_s, 5}, {u"1250"_s, 4},
+                               {u"1251"_s, 1}, {u"1252"_s, 1}, {u"1254"_s, 1}}
+                << none << 1253.0 << 250.0;
+        // Ours: no load balancing keeps one decimal (a Good is 2.5, an Easy 3.51 → 3.5) ...
+        const QVariantMap off{{u"loadBalance"_s, false}};
+        QTest::newRow("off, good") << u"good"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << off << 2.5 << 250.0;
+        QTest::newRow("off, easy") << u"easy"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << off << 3.5 << 270.0;
+        QTest::newRow("off, hard keeps one day") << u"hard"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << off << 1.0 << 230.0;
+        // ... the ease never goes below 130, an interval below a day counts as one, the cap holds,
+        // the hard factor is a setting.
+        QTest::newRow("ease floor") << u"hard"_s << 5.0 << 140.0 << 0.0 << QVariantMap{} << empty << 3.0 << 130.0;
+        QTest::newRow("interval below a day") << u"good"_s << 0.0 << 250.0 << 0.0 << QVariantMap{} << empty << 3.0 << 250.0;
+        QTest::newRow("cap") << u"easy"_s << 30000.0 << 250.0 << 0.0 << QVariantMap{} << empty << 36525.0 << 270.0;
+        QTest::newRow("a hard factor") << u"hard"_s << 10.0 << 250.0 << 0.0 << QVariantMap{} << QVariantMap{{u"lapsesIntervalChange"_s, 0.8}, {u"histogram"_s, QVariantMap{}}}
+                                       << 8.0 << 230.0;
+        QTest::newRow("grades by number") << u"3"_s << 10.0 << 250.0 << 0.0 << QVariantMap{} << empty << 25.0 << 250.0;
+        QTest::newRow("grades in Polish") << u"łatwe"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << empty << 4.0 << 270.0;
+    }
+    void noteSchedule()
+    {
+        QFETCH(QString, grade);
+        QFETCH(double, interval);
+        QFETCH(double, ease);
+        QFETCH(double, late);
+        QFETCH(QVariantMap, histogram);
+        QFETCH(QVariantMap, more);
+        QFETCH(double, wantInterval);
+        QFETCH(double, wantEase);
+        QVERIFY(open({}));
+        QVariantMap args = more;
+        args.insert(u"grade"_s, grade);
+        args.insert(u"interval"_s, interval);
+        args.insert(u"ease"_s, ease);
+        args.insert(u"late"_s, late);
+        if (!histogram.isEmpty())
+            args.insert(u"histogram"_s, histogram);
+        const QVariantMap r = command(u"schedule-note"_s, args);
+        QVERIFY2(r.value(u"error"_s).toString().isEmpty(), qPrintable(r.value(u"message"_s).toString()));
+        QCOMPARE(r.value(u"interval"_s).toDouble(), wantInterval);
+        QCOMPARE(r.value(u"ease"_s).toDouble(), wantEase);
+    }
+
+    void noteBadGrade()
+    {
+        QVERIFY(open({{u"Notatka.md"_s, u"#review\n"_s}}));
+        for (const QString &grade : {u"again"_s, u"1"_s, u"5"_s, u"wcale"_s, QString()}) {
+            QCOMPARE(command(u"schedule-note"_s, {{u"grade"_s, grade}}).value(u"error"_s).toString(), u"bad_argument"_s);
+            QCOMPARE(command(u"review-note"_s, {{u"page"_s, u"Notatka"_s}, {u"grade"_s, grade}}).value(u"error"_s).toString(),
+                     u"bad_argument"_s);
+        }
+        QCOMPARE(onDisk(u"Notatka.md"_s), u"#review\n"_s);
+        QCOMPARE(command(u"review-note"_s, {{u"page"_s, u"Nie ma"_s}, {u"grade"_s, u"good"_s}}).value(u"error"_s).toString(),
+                 u"note_not_found"_s);
+        QVERIFY(open({{u"Zwykła.md"_s, u"Bez tagu.\n"_s}}));
+        QCOMPARE(command(u"review-note"_s, {{u"page"_s, u"Zwykła"_s}, {u"grade"_s, u"good"_s}}).value(u"error"_s).toString(),
+                 u"not_review_note"_s);
+        QCOMPARE(onDisk(u"Zwykła.md"_s), u"Bez tagu.\n"_s);
+    }
+
+    // A note reviewed on 2026-11-20: its frontmatter written in the plugin's keys with every other
+    // byte kept — other keys, quoted values, comments, the order of the three, line endings, a BOM,
+    // no final line break — made when missing, malformed state a new note's.
+    void noteState_data()
+    {
+        QTest::addColumn<QString>("before");
+        QTest::addColumn<QString>("grade");
+        QTest::addColumn<QString>("after");
+        QTest::newRow("no frontmatter: made")
+                << u"#review\n\nZażółć gęślą jaźń\n"_s << u"good"_s
+                << u"---\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n---\n#review\n\nZażółć gęślą jaźń\n"_s;
+        QTest::newRow("CRLF") << u"#review\r\n\r\nŁąka\r\n"_s << u"good"_s
+                              << u"---\r\nsr-due: 2026-11-23\r\nsr-interval: 3\r\nsr-ease: 250\r\n---\r\n#review\r\n\r\nŁąka\r\n"_s;
+        QTest::newRow("a BOM stays first") << u"﻿#review\nTreść\n"_s << u"good"_s
+                                           << u"﻿---\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n---\n#review\nTreść\n"_s;
+        QTest::newRow("a rule is no frontmatter") << u"#review\n---\nTreść\n"_s << u"easy"_s
+                                                  << u"---\nsr-due: 2026-11-24\nsr-interval: 4\nsr-ease: 270\n---\n#review\n---\nTreść\n"_s;
+        QTest::newRow("other keys stay; the state goes last")
+                << u"---\ntags: [review, nauka]\nautor: Żółć\n---\nTreść\n"_s << u"good"_s
+                << u"---\ntags: [review, nauka]\nautor: Żółć\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n---\nTreść\n"_s;
+        QTest::newRow("an empty frontmatter") << u"---\n---\n#review\n"_s << u"hard"_s
+                                              << u"---\nsr-due: 2026-11-21\nsr-interval: 1\nsr-ease: 230\n---\n#review\n"_s;
+        QTest::newRow("closed by dots") << u"---\ntags: [review]\n...\nTreść\n"_s << u"good"_s
+                                        << u"---\ntags: [review]\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n...\nTreść\n"_s;
+        QTest::newRow("no final line break") << u"---\ntags: [review]\n---\nTreść"_s << u"good"_s
+                                             << u"---\ntags: [review]\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n---\nTreść"_s;
+        QTest::newRow("a partial state is new; the keys go after the first")
+                << u"---\nsr-due: 2026-11-01\ntags: [review]\n---\nTreść\n"_s << u"good"_s
+                << u"---\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\ntags: [review]\n---\nTreść\n"_s;
+        QTest::newRow("quoted values and a comment keep their style")
+                << u"---\ntags: [review]\nsr-due: \"2026-11-20\"\nsr-interval: 3\nsr-ease: 250 # moja\n---\nTreść\n"_s << u"easy"_s
+                << u"---\ntags: [review]\nsr-due: \"2026-12-01\"\nsr-interval: 11\nsr-ease: 270 # moja\n---\nTreść\n"_s;
+        QTest::newRow("the plugin's other date format is read, the preferred one written")
+                << u"---\ntags: [review]\nsr-due: 20-11-2026\nsr-interval: 3\nsr-ease: 250\n---\n"_s << u"good"_s
+                << u"---\ntags: [review]\nsr-due: 2026-11-28\nsr-interval: 8\nsr-ease: 250\n---\n"_s;
+        QTest::newRow("JavaScript's date format") << u"---\ntags: [review]\nsr-due: Fri Nov 20 2026\nsr-interval: 3\nsr-ease: 250\n---\n"_s
+                                                  << u"good"_s
+                                                  << u"---\ntags: [review]\nsr-due: 2026-11-28\nsr-interval: 8\nsr-ease: 250\n---\n"_s;
+        QTest::newRow("a malformed date: a new note")
+                << u"---\ntags: [review]\nsr-due: jutro\nsr-interval: 30\nsr-ease: 300\n---\n"_s << u"good"_s
+                << u"---\ntags: [review]\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n---\n"_s;
+        QTest::newRow("an impossible day: a new note")
+                << u"---\ntags: [review]\nsr-due: 2026-02-30\nsr-interval: 30\nsr-ease: 300\n---\n"_s << u"good"_s
+                << u"---\ntags: [review]\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n---\n"_s;
+        QTest::newRow("an interval of 0: a new note")
+                << u"---\ntags: [review]\nsr-due: 2026-11-10\nsr-interval: 0\nsr-ease: 300\n---\n"_s << u"good"_s
+                << u"---\ntags: [review]\nsr-due: 2026-11-23\nsr-interval: 3\nsr-ease: 250\n---\n"_s;
+        QTest::newRow("overdue and hard: the keys keep their order and place")
+                << u"---\nsr-ease: 250\nsr-interval: 10\nsr-due: 2026-11-10\ntags: [review]\n---\n"_s << u"hard"_s
+                << u"---\nsr-ease: 230\nsr-interval: 6\nsr-due: 2026-11-26\ntags: [review]\n---\n"_s;
+        QTest::newRow("the interval as the plugin read it: a number with a unit")
+                << u"---\ntags: [review]\nsr-due: 2026-11-18\nsr-interval: 4 dni\nsr-ease: 260\n---\n"_s << u"good"_s
+                << u"---\ntags: [review]\nsr-due: 2026-12-03\nsr-interval: 13\nsr-ease: 260\n---\n"_s;
+    }
+    void noteState()
+    {
+        QFETCH(QString, before);
+        QFETCH(QString, grade);
+        QFETCH(QString, after);
+        QVERIFY(open({{u"Notatka.md"_s, before}}));
+        QCOMPARE(command(u"notes"_s).value(u"counts"_s).toMap().value(u"total"_s).toInt(), 1);
+        const QVariantMap r = command(u"review-note"_s, {{u"page"_s, u"Notatka"_s}, {u"grade"_s, grade}});
+        QVERIFY2(r.value(u"error"_s).toString().isEmpty(), qPrintable(r.value(u"message"_s).toString()));
+        QCOMPARE(onDisk(u"Notatka.md"_s), after);
+        // Read back: the state as written, due on its day.
+        const QVariantMap note = command(u"notes"_s).value(u"notes"_s).toList().value(0).toMap();
+        QCOMPARE(note.value(u"due"_s).toString(), r.value(u"after"_s).toMap().value(u"due"_s).toString());
+        QCOMPARE(note.value(u"interval"_s).toDouble(), r.value(u"after"_s).toMap().value(u"interval"_s).toDouble());
+    }
+
+    // Which notes, in which order: a tag (also a sub-tag, a block's, any letter case, a tag of one's
+    // own), due notes by their day — the earliest first —, then new ones by path; counts; the
+    // next grades' intervals (load balanced over the notes' due days); the due and new counts
+    // next to the cards'.
+    void noteQueue()
+    {
+        const auto note = [](const QString &tag, const QString &state) {
+            return u"---\ntags: [%1]\n%2---\nTreść\n"_s.arg(tag, state);
+        };
+        const auto state = [](const QString &due) { return u"sr-due: %1\nsr-interval: 3\nsr-ease: 250\n"_s.arg(due); };
+        QVERIFY(open({{u"A.md"_s, note(u"review"_s, state(u"2026-11-18"_s))},
+                      {u"B.md"_s, note(u"Review"_s, state(u"2026-11-20"_s))},
+                      {u"C.md"_s, note(u"review"_s, state(u"2026-11-21"_s))},
+                      {u"D.md"_s, u"Nowa notatka #review\n"_s},
+                      {u"Nauka/E.md"_s, u"#review/anatomia\n\nŚledziona\n"_s},
+                      {u"F.md"_s, note(u"nauka"_s, state(u"2026-11-01"_s))},
+                      {u"Inna/G.md"_s, note(u"review"_s, state(u"2026-11-10"_s))},
+                      {u"Fiszki.md"_s, u"#fiszki\n\nA::B\n"_s}}));
+        const QVariantMap r = command(u"notes"_s);
+        QStringList order;
+        for (const QVariant &n : r.value(u"notes"_s).toList())
+            order << n.toMap().value(u"path"_s).toString() + u' ' + n.toMap().value(u"status"_s).toString();
+        QCOMPARE(order, (QStringList{u"A.md due"_s, u"B.md due"_s, u"C.md scheduled"_s, u"D.md new"_s, u"Inna/G.md due"_s,
+                                     u"Nauka/E.md new"_s}));
+        const QVariantMap counts = r.value(u"counts"_s).toMap();
+        QCOMPARE(counts.value(u"due"_s).toInt(), 3);
+        QCOMPARE(counts.value(u"new"_s).toInt(), 2);
+        QCOMPARE(counts.value(u"scheduled"_s).toInt(), 4);
+        QCOMPARE(counts.value(u"total"_s).toInt(), 6);
+        QCOMPARE(r.value(u"tags"_s).toStringList(), QStringList{u"review"_s});
+        // To review now: due ones by day (G, A, B), then the new.
+        QStringList now;
+        for (const QVariant &n : command(u"notes"_s, {{u"due"_s, true}}).value(u"notes"_s).toList())
+            now << n.toMap().value(u"path"_s).toString();
+        QCOMPARE(now, (QStringList{u"Inna/G.md"_s, u"A.md"_s, u"B.md"_s, u"D.md"_s, u"Nauka/E.md"_s}));
+        // What each grade would schedule: A is two days late.
+        const QVariantMap a = r.value(u"notes"_s).toList().value(0).toMap().value(u"next"_s).toMap();
+        QCOMPARE(a.value(u"good"_s).toMap().value(u"interval"_s).toDouble(), 10.0);
+        QCOMPARE(a.value(u"good"_s).toMap().value(u"due"_s).toString(), u"2026-11-30"_s);
+        QCOMPARE(a.value(u"hard"_s).toMap().value(u"interval"_s).toDouble(), 2.0);
+        QCOMPARE(a.value(u"easy"_s).toMap().value(u"interval"_s).toDouble(), 18.0);
+        // The counts beside the cards'.
+        const QVariantMap n = command(u"count"_s);
+        QCOMPARE(n.value(u"notesDue"_s).toInt(), 3);
+        QCOMPARE(n.value(u"notesNew"_s).toInt(), 2);
+        QCOMPARE(n.value(u"notesTotal"_s).toInt(), 6);
+        QCOMPARE(n.value(u"total"_s).toInt(), 1); // the one card
+        // The decks' entry: the note's counts, once.
+        QList<QVariantMap> entries;
+        for (const QVariantMap &node : nodes(render(u"decks"_s)))
+            if (node.value(u"type"_s) == u"open"_s && node.value(u"view"_s) == u"notes"_s)
+                entries << node;
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries[0].value(u"label"_s).toString(), u"Notatki do powtórki"_s);
+        bool counted = false;
+        for (const QVariantMap &node : nodes(render(u"decks"_s)))
+            counted = counted || node.value(u"text"_s).toString() == u"3 do powtórki · 2 nowych · 6 wszystkich"_s;
+        QVERIFY(counted);
+        // A tag of one's own (the setting): only those notes.
+        QVERIFY(open({{u"X.md"_s, u"#powtórka\n"_s}, {u"Y.md"_s, u"#review\n"_s}}));
+        QCOMPARE(command(u"notes"_s, {{u"reviewTags"_s, u"#Powtórka, nauka"_s}}).value(u"counts"_s).toMap().value(u"total"_s).toInt(), 1);
+        QCOMPARE(command(u"notes"_s, {{u"reviewTags"_s, QStringList{u"powtórka"_s, u"review"_s}}}).value(u"counts"_s).toMap().value(u"total"_s).toInt(), 2);
+        QCOMPARE(command(u"notes"_s).value(u"counts"_s).toMap().value(u"total"_s).toInt(), 1);
+        // Notes without cards: the decks show the entry alone; without either, the empty state.
+        QCOMPARE(firstOfType(render(u"decks"_s), u"open"_s, QString()).value(u"view"_s).toString(), u"notes"_s);
+        QVERIFY(open({}));
+        QCOMPARE(firstOfType(render(u"decks"_s), u"empty"_s).value(u"icon"_s).toString(), u"layers"_s);
+        QCOMPARE(firstOfType(render(u"notes"_s), u"empty"_s).value(u"title"_s).toString(), u"Nie ma notatek do powtórki"_s);
+    }
+
+    // The review view: the note as Markdown (without its frontmatter), the plugin's three grades
+    // with the days they schedule, Skip, Undo (the note as it was, byte for byte), a note changed
+    // meanwhile refused, a long note in chunks.
+    void noteSession()
+    {
+        const QString first = u"---\ntags: [review]\nsr-due: 2026-11-19\nsr-interval: 4\nsr-ease: 260\n---\n# Notatka\n\nTreść ąę\n"_s;
+        const QString second = u"#review\n\nDruga\n"_s;
+        QVERIFY(open({{u"Notatka.md"_s, first}, {u"Nowa.md"_s, second}}));
+        const auto gradeButtons = [](const QList<QVariantMap> &all) {
+            QList<QVariantMap> out;
+            for (const QVariantMap &n : all)
+                if (n.value(u"action"_s) == u"grade"_s)
+                    out << n;
+            return out;
+        };
+        QVariantMap view = render(u"notes"_s);
+        QStringList texts;
+        for (const QVariantMap &n : nodes(view))
+            if (n.value(u"type"_s) == u"markdown"_s)
+                texts << n.value(u"text"_s).toString();
+        QCOMPARE(texts, QStringList{u"# Notatka\n\nTreść ąę"_s});
+        QList<QVariantMap> grades = gradeButtons(nodes(view));
+        QCOMPARE(grades.size(), 3);
+        QCOMPARE(grades[0].value(u"hint"_s).toString(), u"2 dni"_s);
+        QCOMPARE(grades[1].value(u"hint"_s).toString(), u"12 dni"_s);
+        QCOMPARE(grades[2].value(u"hint"_s).toString(), u"18 dni"_s);
+        QCOMPARE(grades[1].value(u"key"_s).toString(), u"2"_s);
+        QCOMPARE(firstOfType(view, u"button"_s, u"skip"_s).value(u"key"_s).toString(), u"s"_s);
+        // Good: written, the next note shown (a new one: 1, 3 and 4 days).
+        QVERIFY(act2(u"grade"_s, grades[1].value(u"args"_s).toMap()).ok());
+        QCOMPARE(onDisk(u"Notatka.md"_s), QString(first).replace(u"2026-11-19"_s, u"2026-12-02"_s).replace(u"sr-interval: 4"_s, u"sr-interval: 12"_s));
+        view = render(u"notes"_s);
+        QCOMPARE(firstOfType(view, u"markdown"_s).value(u"text"_s).toString(), u"#review\n\nDruga"_s);
+        grades = gradeButtons(nodes(view));
+        QCOMPARE(grades[0].value(u"hint"_s).toString(), u"1 dzień"_s);
+        QCOMPARE(grades[1].value(u"hint"_s).toString(), u"3 dni"_s);
+        QCOMPARE(grades[2].value(u"hint"_s).toString(), u"4 dni"_s);
+        // Skip it: nothing left today; the skipped can be shown again.
+        QVERIFY(act2(u"skip"_s, firstOfType(view, u"button"_s, u"skip"_s).value(u"args"_s).toMap()).ok());
+        view = render(u"notes"_s);
+        QCOMPARE(firstOfType(view, u"empty"_s).value(u"title"_s).toString(), u"Notatki na dziś przejrzane"_s);
+        QVERIFY(act2(u"unskip"_s, {}).ok());
+        view = render(u"notes"_s);
+        QCOMPARE(firstOfType(view, u"markdown"_s).value(u"text"_s).toString(), u"#review\n\nDruga"_s);
+        // Undo the first grade (a button of the done view too): the note as it was.
+        QVERIFY(act2(u"undo"_s, {}).ok());
+        QCOMPARE(onDisk(u"Notatka.md"_s), first);
+        view = render(u"notes"_s);
+        QCOMPARE(firstOfType(view, u"markdown"_s).value(u"text"_s).toString(), u"# Notatka\n\nTreść ąę"_s);
+        // Grade a new note: its frontmatter is made; undone, the note is as it was again.
+        QVERIFY(act2(u"skip"_s, firstOfType(view, u"button"_s, u"skip"_s).value(u"args"_s).toMap()).ok());
+        view = render(u"notes"_s);
+        QVERIFY(act2(u"grade"_s, gradeButtons(nodes(view))[2].value(u"args"_s).toMap()).ok());
+        QVERIFY(onDisk(u"Nowa.md"_s).startsWith(u"---\nsr-due: 2026-11-24\nsr-interval: 4\nsr-ease: 270\n---\n#review\n"_s));
+        QVERIFY(act2(u"undo"_s, {}).ok());
+        QCOMPARE(onDisk(u"Nowa.md"_s), second);
+        // The header changed meanwhile (another device): the grade is refused, nothing written.
+        QVERIFY(act2(u"unskip"_s, {}).ok());
+        view = render(u"notes"_s);
+        const QVariantMap stale = gradeButtons(nodes(view))[0].value(u"args"_s).toMap();
+        const QString edited = QString(first).replace(u"sr-ease: 260"_s, u"sr-ease: 300"_s);
+        QVERIFY(writeFile(u"Notatka.md"_s, edited));
+        m_index->update(u"Notatka.md"_s, edited);
+        const Result r = act2(u"grade"_s, stale);
+        QVERIFY(r.ok());
+        QCOMPARE(r.value.toMap().value(u"tone"_s).toString(), u"warning"_s);
+        QCOMPARE(onDisk(u"Notatka.md"_s), edited);
+    }
+
+    // A long note is drawn in chunks cut at blank lines (never inside a code fence), the rest of a
+    // very long one is left to the editor.
+    void noteChunks()
+    {
+        QString body;
+        for (int i = 0; i < 400; ++i)
+            body += u"Akapit numer %1 ma trochę tekstu, żeby zająć miejsce w notatce.\n\n"_s.arg(i);
+        QVERIFY(open({{u"Długa.md"_s, u"#review\n\n"_s + body}}));
+        int chunks = 0;
+        int size = 0;
+        for (const QVariantMap &n : nodes(render(u"notes"_s)))
+            if (n.value(u"type"_s) == u"markdown"_s) {
+                ++chunks;
+                size += n.value(u"text"_s).toString().size();
+                QVERIFY(n.value(u"text"_s).toString().size() < 3300);
+            }
+        QVERIFY2(chunks > 7, qPrintable(QString::number(chunks)));
+        QVERIFY(size > body.size() * 9 / 10);
+        // A fence with blank lines inside stays whole.
+        QString fenced = u"#review\n\n```\n"_s;
+        for (int i = 0; i < 400; ++i)
+            fenced += u"kod %1\n\n"_s.arg(i);
+        fenced += u"```\n\nKoniec\n"_s;
+        QVERIFY(open({{u"Kod.md"_s, fenced}}));
+        QStringList texts;
+        for (const QVariantMap &n : nodes(render(u"notes"_s)))
+            if (n.value(u"type"_s) == u"markdown"_s)
+                texts << n.value(u"text"_s).toString();
+        QCOMPARE(texts.size(), 2);
+        QVERIFY(texts[0].startsWith(u"#review\n\n```\nkod 0"_s) && texts[0].trimmed().endsWith(u"```"_s));
+        QCOMPARE(texts[1], u"Koniec"_s);
+        // Very long: cut, with a line saying so.
+        QString huge = u"#review\n\n"_s;
+        for (int i = 0; i < 2500; ++i)
+            huge += u"Akapit %1 — %2\n\n"_s.arg(i).arg(QString(60, u'x'));
+        QVERIFY(open({{u"Ogromna.md"_s, huge}}));
+        bool cut = false;
+        for (const QVariantMap &n : nodes(render(u"notes"_s)))
+            cut = cut || n.value(u"text"_s).toString() == u"Dalsza część notatki jest w edytorze."_s;
+        QVERIFY(cut);
     }
 
     // Many cards: counted and drawn within the time limit (the decks of 5000 cards on 100 pages),

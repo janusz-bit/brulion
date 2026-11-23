@@ -1716,6 +1716,17 @@ Item {
                     enabled: Workspace.isOpen
                     onToggled: Workspace.setConfig({ flashcards: { foldersAsDecks: checked } })
                 }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Tags of notes to review")
+                    description: qsTr("A note with one of these tags (or a tag under one) is reviewed as a whole: its state goes into its header (sr-due, sr-interval, sr-ease), as in the Spaced Repetition plugin. Kept in this notebook; empty: #review.")
+                    FlashcardsField {
+                        objectName: "flashcardsReviewTagsSetting"
+                        key: "reviewTags"
+                        placeholderText: "review"
+                        accessibleName: qsTr("Tags of notes to review")
+                    }
+                }
                 BuiltinSourceRow {
                     objectName: "flashcardsSourceSetting"
                     visible: AppSettings.flashcardsEnabled

@@ -98,12 +98,13 @@ plugin's card settings and the tags of decks, kept in the notebook so that every
 cards alike — `{"tags": ["flashcards", "fiszki"], "singleLineSeparator": "::",
 "singleLineReversedSeparator": ":::", "multilineSeparator": "?", "multilineReversedSeparator": "??",
 "multilineEndMarker": "", "clozeHighlights": true, "clozeBold": false, "clozeCurly": false,
-"foldersAsDecks": false}`. Only the values that differ from these (the plugin's defaults) are
+"foldersAsDecks": false, "reviewTags": ["review"]}`. Only the values that differ from these (the plugin's defaults) are
 written, the object is missing from a notebook that never changed one, and keys this version does
 not know stay. A separator is a text of at most 40 characters without a line break (the two
 multi-line ones and the end marker are trimmed; an empty one is switched off, for the end marker
 "none"); `tags` is a list (or a text "a, b") that without any falls back to the tags set on the
-device (Settings of the device, "flashcards/tags"). An invalid value is a warning and its default.
+device (Settings of the device, "flashcards/tags"); `reviewTags`, the tags of the notes reviewed as
+a whole (§15 "Notes to review"), is a list or a text the same way and without any is `review`. An invalid value is a warning and its default.
 
 `themePage` (Settings → Appearance → Themes; §13 "Theme pages"): the notebook's theme page, its path
 from the notebook's root (`"Motywy/Sepia.md"`) — written only while one is picked; a page renamed or
@@ -2796,7 +2797,8 @@ Cards for spaced repetition, written in notes as the Obsidian **Spaced Repetitio
 the built-in extension `src/core/extensions/builtin/fiszki.luau` (docs/EXTENSIONS.md, docs/UI.md
 "Flashcards"; on by default). The text of a card is never changed by a review: its state goes into
 a comment or properties next to it, in those apps' own formats, so the plugin and Logseq go on
-from where Brulion left — and the other way round.
+from where Brulion left — and the other way round. The plugin's **whole-note reviews** (notes
+tagged `#review`, their state in the frontmatter) are read the same way ("Notes to review").
 
 ### Which notes, which decks
 
@@ -2859,6 +2861,7 @@ property of the notes).
 | End of a multi-line card (`multilineEndMarker`) | none | a line that is only this text ends a multi-line or a cloze card, which then **goes on through blank lines** (a blank line ends a card without one): `Pytanie` / `?` / `Odpowiedź` / (blank) / `ciąg dalszy` / `---`. The marker is no part of the card, nor are the blank lines before it; the card's state goes to its last line of text. A card still open at the end of the note ends there; a blank line outside a card, as ever, only separates paragraphs |
 | Cloze kinds (`clozeHighlights`, `clozeBold`, `clozeCurly`) | on · off · off | which text makes a line a cloze: `==answer==`, `**answer**` and `{{answer}}`, each also numbered with a hint, `==1;;answer;;hint==` (the same for the other two). Anki's `{{c1::answer::hint}}` always do. Code spans, an unclosed or empty one are text; `{{cloze …}}` (Logseq's) and Anki's are no curly cloze. Numbered and not numbered ones follow one rule (a paragraph that numbers some asks only those) |
 | Folders as decks (`foldersAsDecks`) | off | as the plugin's "Convert folders to decks and subdecks": **every** note in a folder (not the notebook's root) is read for cards — tagged or not — and each of its cards is in the deck of the note's folder, `Nauka/Hiszpański` → `#nauka/hiszpański` (lower case, as tags; its sub-folders are sub-decks), **whatever its tags say** (the plugin's rule: the folder replaces the tags, a tag at the start of a card is only left out of its text). A note outside any folder keeps its tags' decks (unlike the plugin, which would give it none). The decks "by tag" are then the folders, drawn without a `#`; the review log's pages (`Fiszki/Powtórki …`, `Flashcards/Reviews …`) are no cards |
+| Tags of notes to review (`reviewTags`) | `review` | the notes with one of them are reviewed as a whole (below, "Notes to review"); the plugin's "Note review tags" |
 
 A property line (`key:: value`) is no card whatever the separators are. The editor draws only
 Anki's `{{c1::…}}` clozes as highlights (a bold or curly cloze is plain bold text or braces there).
@@ -2871,6 +2874,64 @@ children the answer (a lone child without its bullet). `{{cloze answer}}` in the
 the question's side — every cloze of the block at once (one card), `{{cloze answer \\ cue}}` showing
 `(cue)` — and highlighted on the answer's. Its `key:: value` properties are no part of either side.
 The lines of a `#card` block are never also read as cards of a deck note.
+
+### Notes to review
+
+The plugin's note reviews (its `note-scheduling.ts`, `srs-algorithm-osr.ts`, `note-file.ts`; read at
+1.15.4): a note tagged with a **review tag** — `#review`, the notebook's setting `reviewTags`
+(Settings → Extensions → Flashcards: "Tags of notes to review"; a tag under one counts, in any letter
+case) — anywhere in the note (the frontmatter's `tags`, a `tags::` line, a block) is reviewed as a
+whole: read, then graded **Hard**, **Good** or **Easy**. Its state is three frontmatter keys, the
+plugin's own:
+
+```markdown
+---
+tags: [review]
+sr-due: 2026-11-23
+sr-interval: 3
+sr-ease: 250
+---
+```
+
+* **Read**: a state needs all three keys: `sr-due` a day — `YYYY-MM-DD`, also the plugin's other formats
+  `DD-MM-YYYY` and `Mon Nov 23 2026`, a quote or a comment after it ignored —, `sr-interval` and
+  `sr-ease` numbers that are not 0 (a unit after a number is ignored, as JavaScript's `parseFloat`
+  does). Anything else — a key missing, a date that is none (`jutro`, `2026-02-30`), `0` — makes the
+  note **new**, as the plugin's own test (`!(srInterval && srEase && srDue)`) does; the next review writes a
+  state over it.
+* **The queue**: the notes due today or earlier, the earliest day first (a day's notes by path: the
+  plugin orders them by PageRank), then the new notes by path; a note graded is due later and leaves it.
+  There is no daily limit for notes. The review log (`Fiszki/Powtórki …`) is not written for them.
+* **Scheduling** (`osrSchedule`, ported with its tests; defaults of the plugin: base ease 250, easy
+  bonus 1.3, hard factor 0.5, at most 36525 days, load balancing on; the extension takes them as the
+  options `baseEase`, `easyBonus`, `lapsesIntervalChange`, `maxNoteInterval` and `loadBalance`, which the
+  notebook's settings do not set). The last interval and ease are
+  the note's own — a new note starts from interval 1 and ease 250 —, *late* is the whole days since
+  its due day (0 when not yet due):
+
+  | Grade | Ease | Interval |
+  |---|---|---|
+  | Easy | + 20 | (interval + late) × ease / 100 × 1.3 |
+  | Good | unchanged | (interval + late / 2) × ease / 100 |
+  | Hard | − 20, at least 130 | at least 1: (interval + late / 4) × 0.5 |
+
+  An interval below a day counts as one. **Load balancing**: the interval is rounded; an interval
+  of more than 7 days is moved to the least used day within 1 day of it (up to 21 days), 3 days (up
+  to 180, at most 5 %) or 7 days (beyond, at most 2.5 %) — counted by the notes' due days, the note's
+  own included — and an unused day is taken at once. Then the cap, then the interval is rounded to one
+  decimal; the due day is today plus the interval rounded to whole days. Not ported: the plugin's
+  link weighting of a new note's ease (a note linked to well-known notes starts with their eases) and
+  the average ease of the note's cards.
+* **Written**: `sr-due: 2026-11-23`, `sr-interval: 3`, `sr-ease: 250` — one line each, the others of
+  the note untouched byte for byte. A key that is there changes only its value (the key's spelling,
+  the spaces, the quotes and a `# comment` after the value stay, the three keep their order and
+  places); a missing one is added after the last of the three, else before the closing `---` (or `...`)
+  of the frontmatter; a note without a frontmatter gets one at its top: `---`, the three lines, `---`.
+  The line endings are the note's (CRLF stays), so is a BOM and a missing final line break. One line
+  a key, so that two devices' reviews merge as line changes. A frontmatter that is never closed is
+  none (`---` at the top is a rule).
+* The state is for **the whole note**: a note can also be a deck (§15 "Which notes, which decks"), its
+  cards and its review being independent.
 
 ### The state, next to each card
 

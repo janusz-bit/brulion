@@ -32,6 +32,7 @@ Wtyczka Spaced Repetition pozwala zmienić sposób zapisu fiszek i Brulion ma te
 - **Koniec fiszki z kilku wierszy** — ustaw na przykład `---`, a fiszka trwa do wiersza, w którym jest tylko to, więc może mieć puste wiersze.
 - **Luki** — oprócz zakreśleń, jak w `a ==b==`, lukami mogą być tekst `**pogrubiony**` albo w `{{klamrach}}`; luki Anki, `{{c1::…}}`, są zawsze.
 - **Foldery jako talie** — każda notatka w folderze jest czytana, z tagiem czy bez, a jej fiszki są w talii tego folderu: `Języki/Hiszpański` staje się `#języki/hiszpański`.
+- **Tagi notatek do powtórki** — który tag sprawia, że cała notatka jest do powtórki (domyślnie `#review`; zob. „Notatki do powtórki” niżej).
 
 ## Talie
 **Fiszki** na pasku bocznym (i na dolnym pasku telefonu, gdy je tam wybierzesz) pokazują, ile fiszek czeka dziś — ta sama liczba jest na ich ikonie. Karta **Talie** pokazuje talie **według tagów** — `#fiszki/hiszpański` z podtaliami pod nim —, **według stron** albo **według folderów**, każdą z liczbą fiszek do powtórki i nowych, których możesz się dziś nauczyć. Stuknięcie talii zaczyna jej sesję; jej menu **⋯** daje też naukę z wyprzedzeniem i statystyki talii. **Ucz się wszystkich** (albo Enter) to nauka wszystkich talii naraz.
@@ -48,6 +49,24 @@ Fiszka pokazuje pytanie, duże, a nad nim stronę i nagłówki, z których pocho
 
 Nowe fiszki przychodzą po powtórkach, najwyżej 20 dziennie (Ustawienia zmieniają tę liczbę). Gdy wszystko zrobione, Brulion mówi, kiedy następna powtórka; **Ucz się z wyprzedzeniem** daje jutrzejsze powtórki, a możesz też nauczyć się dziesięciu kolejnych nowych fiszek. Karta **Statystyki** pokazuje, ile fiszek oceniłeś każdego dnia, ile powtórek zapamiętałeś (celem jest około 90 %), ile fiszek jest nowych, w nauce, młodych i dojrzałych i ile wróci w kolejnych dniach.
 
+## Notatki do powtórki
+Nie wszystko jest pytaniem. Żeby od czasu do czasu wrócić do całej notatki — artykułu, planu, strony z notatek — oznacz ją tagiem **`#review`** (własny tag ustawisz w ustawieniach). Na karcie **Talie** pojawia się wpis **Notatki do powtórki** z liczbą notatek na dziś i nowych; dotknięcie otwiera je po kolei: notatka wygląda tak, jak się czyta, można ją przewijać, a **Edytuj** otwiera ją w edytorze.
+
+Przeczytaj, potem oceń, jak dobrze ją znasz: **Trudne** (1), **Dobrze** (2) albo **Łatwe** (3) — każdy przycisk pokazuje, za ile dni notatka wróci. **Pomiń** (S) zostawia notatkę na później, **Cofnij** (U) cofa ostatnią ocenę. Notatka, której jeszcze nie powtarzałeś, jest nowa; ta, której termin minął, idzie pierwsza — najdłużej czekająca najwcześniej.
+
+Stan trafia do właściwości notatki, tak jak zapisuje go wtyczka Spaced Repetition, a nic innego w notatce się nie zmienia:
+
+```markdown
+---
+tags: [review]
+sr-due: 2026-11-23
+sr-interval: 3
+sr-ease: 250
+---
+```
+
+`sr-due` to dzień, w którym notatka wraca, `sr-interval` — dni między dwiema ostatnimi powtórkami, `sr-ease` — jak łatwa jest dla Ciebie notatka (250 = 2,5×; Łatwe podnosi, Trudne obniża). Wtyczka lekko rozkłada notatki na kolejne dni, żeby sto notatek powtórzonych jednego dnia nie wróciło wszystkie naraz.
+
 ## Gdzie zapisują się powtórki
 Po powtórce wiersz fiszki dostaje na końcu komentarz — niewidoczny w Brulionie, w trybie czytania Obsidiana i w Logsequ:
 
@@ -62,7 +81,7 @@ Każda ocena to też wiersz dziennika powtórek, jednej strony na miesiąc: `Fis
 Powtórka zmienia jeden wiersz, więc dwa urządzenia, które powtarzają różne fiszki jednej notatki, scalają się czysto przez Nextcloud, a gdy powtórzysz tę samą fiszkę na obu, zostaje późniejsza powtórka. Z Syncthingiem dzieje się to samo, gdy scalisz kopię konfliktu w centrum synchronizacji.
 
 > [!tip] Z wiersza poleceń
-> `brulion-cli card due` wypisuje fiszki do nauki, a `brulion-cli card review <id> dobrze` ocenia jedną — tak może Cię przepytać agent AI; zobacz [[Wiersz poleceń i agenci AI]].
+> `brulion-cli card due` wypisuje fiszki do nauki, a `brulion-cli card review <id> dobrze` ocenia jedną — tak może Cię przepytać agent AI; podobnie `brulion-cli card notes --due` i `brulion-cli card review-note <strona> dobrze` dla notatek do powtórki; zobacz [[Wiersz poleceń i agenci AI]].
 
 ## Spróbuj
 Ta strona też jest talią: fiszki poniżej czekają w **Fiszkach**.

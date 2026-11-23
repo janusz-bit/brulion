@@ -959,7 +959,7 @@ phone they keep their labels, their icons go first), the rest timer's banner.
 
 ## Flashcards
 
-`qml/views/FlashcardsView.qml` (route `flashcards` {tab?: "decks" | "review" | "stats", deck?,
+`qml/views/FlashcardsView.qml` (route `flashcards` {tab?: "decks" | "review" | "stats" | "notes", deck?,
 group?: "tag" | "page" | "folder", ahead?, more?}; the sidebar's **Flashcards** under Gym and a
 bottom-bar tab to choose — both with the number of cards to study now on the icon's corner
 (`WorkspaceExtensions.flashcardsDue`, an accent `BBadge`) —, the palette's "Flashcards"
@@ -977,7 +977,8 @@ page; the icon `layers`): cards written in notes and scheduled with FSRS (docs/S
   device's value stays what a notebook without tags shows and uses), the card separators (single-line
   and both ways, multi-line and both ways — an empty field switches one off), the end of a
   multi-line card, switches for clozes from `==highlights==`, `**bold**` and `{{curly}}` text and
-  for **Folders as decks**, and the code as a page ("Edit the code"). A field follows the config (a
+  for **Folders as decks**, the **tags of notes to review** ("review"; `flashcards.reviewTags`), and the
+  code as a page ("Edit the code"). A field follows the config (a
   sync's change shows) and saves when editing finishes. `AppController` gives the extension both
   with every view, action and command: `WorkspaceExtensions::setFlashcardSettings` (`withSettings`)
   gets the device's map with the notebook's keys over it, again on `Workspace::configChanged`.
@@ -990,7 +991,23 @@ page; the icon `layers`): cards written in notes and scheduled with FSRS (docs/S
   (Enter) and **Statistics** (`b.ui.open` drawn as buttons), then a row per deck — sub-decks of a tag
   indented under it — with its counts (accent while something is due) and a "⋯" menu (Study, Study
   ahead, Statistics, Open the page); a tap on a deck's name starts its review. No cards: an empty
-  state explaining the syntax.
+  state explaining the syntax. Above the decks, while any note has a review tag, a card **Notes to
+  review** with its counts ("3 due · 2 new · 6 in all") opens the notes' view; with notes but no cards
+  that card is all the view shows.
+* **Notes to review** (tab `notes`, the extension's view `notes`; Escape goes back to the decks, whose
+  tab stays marked): the Spaced Repetition plugin's whole-note reviews (docs/SYNTAX.md §15 "Notes to
+  review"). A progress bar ("1 reviewed · left: 3 due, 2 new"), the note as a card — its page name
+  muted, the note after its frontmatter as `b.ui.markdown` lines of about 3000 characters cut at blank
+  lines outside code fences (a very long note stops at 100 000 characters with "The rest of the note
+  is in the editor.": the view scrolls like any other, no inner scroll area) —, then the three
+  grades, Hard (warning) · Good (success) · Easy (info), each with the days it would schedule under
+  its label ("12 dni") and its key 1–3, under them **Skip** (S: the note is left out of this session; "Show the skipped notes" brings them back), **Undo** (U: the note's lines written back,
+  also after skips), **Edit** (the note), the state ("review · today", "new note") and a menu (Open
+  the note, Decks). Done: "All notes reviewed for today". A grade writes the note's frontmatter
+  through the extension; a header that changed meanwhile (the three lines compared) is not
+  overwritten ("The note's header changed in the meantime", the note shown again). No review log
+  line, no daily limit, and the sidebar's badge keeps counting cards only (`count` also returns
+  `notesDue`, `notesNew`, `notesTotal`).
 * **Review**: a progress bar ("3 reviewed · left: 12 due, 5 new, 1 learning"), the card as a card —
   its page and headings muted, the question as Markdown in a large size (`b.ui.markdown`: rich text
   through `InlineRenderer`, links open their pages), after **Show answer** (Space; a primary button

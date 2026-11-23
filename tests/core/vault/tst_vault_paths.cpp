@@ -466,6 +466,7 @@ private Q_SLOTS:
         QVERIFY(!fc.clozeBold);
         QVERIFY(!fc.clozeCurly);
         QVERIFY(!fc.foldersAsDecks);
+        QVERIFY(fc.reviewTags.isEmpty()); // #review
         // Nothing of it in a file that never set it.
         QVERIFY(!serializeVaultConfig(parsed.config, parsed.raw).contains("flashcards"));
         QVERIFY(!vaultConfigToJson(parsed.config).contains(u"flashcards"_s));
@@ -504,6 +505,12 @@ private Q_SLOTS:
         QTest::newRow("clozes") << R"({"flashcards":{"clozeBold":true,"clozeCurly":true,"clozeHighlights":false}})"_ba
                                 << 0 << u"clozes"_s << u"false,true,true"_s;
         QTest::newRow("folders") << R"({"flashcards":{"foldersAsDecks":true}})"_ba << 0 << u"folders"_s << u"true"_s;
+        QTest::newRow("review tags as a list") << R"({"flashcards":{"reviewTags":["#Powtórka","review","review"]}})"_ba << 0
+                                               << u"reviewTags"_s << u"powtórka,review"_s;
+        QTest::newRow("review tags as a text") << R"({"flashcards":{"reviewTags":"#Nauka, żółw"}})"_ba << 0
+                                               << u"reviewTags"_s << u"nauka,żółw"_s;
+        QTest::newRow("review tags that are none") << R"({"flashcards":{"reviewTags":5}})"_ba << 1 << u"reviewTags"_s
+                                                   << QString();
     }
     void flashcardsParse()
     {
@@ -532,6 +539,8 @@ private Q_SLOTS:
             got = flag(fc.clozeHighlights) + u',' + flag(fc.clozeBold) + u',' + flag(fc.clozeCurly);
         else if (field == u"folders"_s)
             got = flag(fc.foldersAsDecks);
+        else if (field == u"reviewTags"_s)
+            got = fc.reviewTags.join(u',');
         QCOMPARE(got, expected);
     }
 
@@ -546,6 +555,7 @@ private Q_SLOTS:
         fc.clozeHighlights = false;
         fc.clozeBold = true;
         fc.foldersAsDecks = true;
+        fc.reviewTags = {u"powtórka"_s};
         // A key of a newer version stays, and so does everything else of the file.
         const ParsedVaultConfig old =
                 parseVaultConfig(R"({"flashcards":{"przyszłość":[1,2],"clozeCurly":true},"inne":"żółw"})"_ba);
@@ -560,6 +570,8 @@ private Q_SLOTS:
         QCOMPARE(parsed.raw.value(u"inne"_s).toString(), u"żółw"_s);
         QVERIFY(!o.contains(u"singleLineReversedSeparator"_s)); // the default is not written
         QVERIFY(!o.contains(u"clozeCurly"_s));
+        QCOMPARE(parsed.config.flashcards.reviewTags, QStringList{u"powtórka"_s});
+        QCOMPARE(o.value(u"reviewTags"_s).toArray(), QJsonArray{u"powtórka"_s});
         QCOMPARE(o.value(u"multilineSeparator"_s).toString(), QString()); // "off" is written
         QVERIFY(o.contains(u"multilineSeparator"_s));
         // Back to the defaults: the object goes, with nothing else of its own left in it.
@@ -589,6 +601,9 @@ private Q_SLOTS:
         VaultConfig tagged;
         tagged.flashcards.tags = {u"x"_s};
         QVERIFY(!sameVaultConfig(tagged, VaultConfig{}));
+        VaultConfig reviewed;
+        reviewed.flashcards.reviewTags = {u"x"_s};
+        QVERIFY(!sameVaultConfig(reviewed, VaultConfig{}));
     }
 
     void flashcardsApplyAndSettings()
@@ -615,6 +630,14 @@ private Q_SLOTS:
         QCOMPARE(m.value(u"multilineEndMarker"_s).toString(), u"---"_s);
         QCOMPARE(m.value(u"clozeBold"_s).toBool(), true);
         QVERIFY(!flashcardsSettings(FlashcardsConfig{}).contains(u"tags"_s));
+        QVERIFY(!flashcardsSettings(FlashcardsConfig{}).contains(u"reviewTags"_s));
+        // The tags of notes to review the same way.
+        QVERIFY(applyFlashcardsConfig(c, {{u"reviewTags"_s, u"#Powtórka, nauka"_s}}));
+        QCOMPARE(c.reviewTags, (QStringList{u"powtórka"_s, u"nauka"_s}));
+        QCOMPARE(flashcardsSettings(c).value(u"reviewTags"_s).toString(), u"powtórka, nauka"_s);
+        QVERIFY(applyFlashcardsConfig(c, {{u"reviewTags"_s, QString()}}));
+        QVERIFY(c.reviewTags.isEmpty());
+        QVERIFY(!applyFlashcardsConfig(c, {{u"reviewTags"_s, 5}}));
         QCOMPARE(normalizeFlashcardTags({u"#Żółw"_s, u"  "_s, u"#"_s, u"a b"_s, u"żółw"_s}), (QStringList{u"żółw"_s}));
     }
 

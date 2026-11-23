@@ -234,6 +234,53 @@ private Q_SLOTS:
         QVERIFY(m_messages.contains(u"info: Cofnięto ocenę"_s));
     }
 
+    // A note reviewed as a whole by the keyboard (the plugin's #review notes): the decks' entry with
+    // its counts opens the view, the note is drawn as rich text without its frontmatter, 1–3 grade
+    // it (Hard, Good, Easy with the days they schedule), S skips, U undoes, the notebook's tag.
+    void notesByKeys()
+    {
+        const QString note = u"---\ntags: [review]\nsr-due: 2026-11-19\nsr-interval: 4\nsr-ease: 260\n---\n# Notatka\n\nTreść **ąę**\n"_s;
+        open({{kDeck, kDeckText}, {u"Notatka.md"_s, note}, {u"Nowa.md"_s, u"#review\n\nDruga\n"_s}});
+        ExtensionViewModel model;
+        draw(model, u"decks"_s);
+        // The entry: "Notatki do powtórki" with its counts, a tap opens the notes' view.
+        QSignalSpy views(&model, &ExtensionViewModel::viewRequested);
+        bool found = false;
+        for (int i = 0; i < model.rowCount() && !found; ++i) {
+            const ExtensionControlsModel *c = controlsOf(model, i);
+            for (int k = 0; c && k < c->rowCount(); ++k)
+                if (c->data(c->index(k), ExtensionControlsModel::TextRole).toString() == u"Notatki do powtórki"_s)
+                    found = true;
+        }
+        QVERIFY(found);
+        QCOMPARE(m_ext->flashcardsDue(), m_ext->flashcardsDue()); // the badge counts cards only
+        draw(model, u"notes"_s);
+        const int body = rowOf(model, u"markdown"_s);
+        QVERIFY(body > 0);
+        QVERIFY2(role(model, body, ExtensionViewModel::HtmlRole).toString().contains(u"<b>ąę</b>"_s),
+                 qPrintable(role(model, body, ExtensionViewModel::HtmlRole).toString()));
+        QVERIFY(!role(model, body, ExtensionViewModel::TitleRole).toString().contains(u"sr-due"_s));
+        QCOMPARE(buttons(model).mid(0, 3), (QStringList{u"Trudne [1]"_s, u"Dobrze [2]"_s, u"Łatwe [3]"_s}));
+        QVERIFY(buttons(model).contains(u"Pomiń [s]"_s));
+        const ExtensionControlsModel *grades = controlsOf(model, rowOf(model, u"row"_s, 1));
+        QVERIFY(grades);
+        QCOMPARE(grades->data(grades->index(1), ExtensionControlsModel::HintRole).toString(), u"12 dni"_s);
+        QVERIFY(model.activateKey(u"2"_s));
+        QVERIFY(disk(u"Notatka.md"_s).contains(u"sr-due: 2026-12-02\nsr-interval: 12\nsr-ease: 260\n"_s));
+        QTRY_VERIFY(role(model, rowOf(model, u"markdown"_s), ExtensionViewModel::TitleRole).toString().contains(u"Druga"_s));
+        // Skipped: nothing left; undo brings the first note back.
+        QVERIFY(model.activateKey(u"s"_s));
+        QTRY_VERIFY(buttons(model).contains(u"Pokaż pominięte []"_s));
+        QVERIFY(model.activateKey(u"u"_s));
+        QCOMPARE(disk(u"Notatka.md"_s), note);
+        QTRY_VERIFY(role(model, rowOf(model, u"markdown"_s), ExtensionViewModel::TitleRole).toString().contains(u"Notatka"_s));
+        // The notebook's own tag (config.json): only those notes.
+        m_ext->setFlashcardSettings({{u"newPerDay"_s, 20}, {u"reviewTags"_s, u"powtórka"_s}});
+        model.refresh();
+        QCOMPARE(rowOf(model, u"markdown"_s), -1);
+        QVERIFY(rowOf(model, u"empty"_s) >= 0);
+    }
+
     // The settings the app gives (new cards a day) and the due count of the sidebar.
     void settingsAndDueCount()
     {
