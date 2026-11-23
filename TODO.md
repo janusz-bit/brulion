@@ -410,6 +410,11 @@ done in the repository simply disappears from the list.
 * **Signed files** — the installer and programs signed with a certificate, without the SmartScreen
   warning; then remove the "(test version)" label (docs/WINDOWS.md).
 * **Feedback on the desktop version** — collect it from the tester (who will look at it later).
+* **A mass move on the server missed by a sync** — on the Windows runners the sync right after
+  1 500 pages were moved into one folder on the server now and then changes nothing at all (not
+  even a download), in `tst_sync_folders` and `tst_sync_folders_streamed`
+  (`manyPagesMovedAtOnce`, which syncs once more there and skips on a second miss, printing what
+  the run saw); never seen on Linux or Android. Find out why on a Windows machine.
 
 ## Performance
 

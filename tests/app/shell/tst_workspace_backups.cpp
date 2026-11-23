@@ -111,7 +111,17 @@ class TestWorkspaceBackups : public QObject {
     }
 
 private Q_SLOTS:
-    void initTestCase() { QVERIFY(m_tmp.isValid()); }
+    void initTestCase()
+    {
+        QVERIFY(m_tmp.isValid());
+        // The copies of picked files go to the temporary folder ("brulion-restore"): this run's own,
+        // since the test and its _inline twin run at once and each checks that nothing is left there.
+        const QString tmp = m_tmp.filePath(u"tmp"_s);
+        QVERIFY(QDir().mkpath(tmp));
+        for (const char *name : {"TMPDIR", "TMP", "TEMP"})
+            qputenv(name, QDir::toNativeSeparators(tmp).toLocal8Bit());
+        QCOMPARE(QDir::cleanPath(QDir::tempPath()), QDir::cleanPath(tmp));
+    }
     void init() { m_now = QDateTime(QDate(2026, 10, 14), QTime(10, 30)); }
 
     void scheduleOverDays()
