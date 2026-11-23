@@ -38,6 +38,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLockFile>
 #include <QThread>
 
 #include <cstdio>
@@ -139,6 +140,11 @@ int main(int argc, char **argv)
     while (std::getline(std::cin, raw)) {
         const QByteArray line = QByteArray::fromStdString(raw);
         if (log.isOpen()) {
+            // Several agents write to one log: each line at the end as it is now, one writer at a
+            // time (Windows' append mode only starts at the end, so two agents overwrote each other).
+            QLockFile lock(log.fileName() + u".lock"_s);
+            (void)lock.lock();
+            (void)log.seek(log.size());
             log.write(line + '\n');
             log.flush();
         }

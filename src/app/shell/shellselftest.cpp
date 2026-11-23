@@ -12079,6 +12079,11 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         return failures;
     }
     activateWindow(window);
+    // The pages' words stay as they are written: with dictionaries installed, an English interface
+    // over the Polish sample checks every word as English, and the whole page's underlines put the
+    // words of a block in spans of a TextEdit, which the steps below do not look into. (The marks
+    // have their own self-test: qml/dev/SpellingSelfTest.qml.)
+    app->settings()->setSpellWholePage(false);
     const auto find = [window](const char *name) { return window->findChild<QObject *>(QString::fromLatin1(name)); };
     QObject *drawer = find("shellDrawer");
     if (!drawer) {
