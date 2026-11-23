@@ -162,9 +162,22 @@ markdown::Palette paletteOf(const QVariantMap &map)
     return p;
 }
 
+/// A fenced code block's lines without its fences (its body keeps them: "```text" … "```").
+QString codeOf(const QString &body)
+{
+    QStringList lines = body.split(u'\n');
+    static const QRegularExpression fence(u"^\\s*(```|~~~)"_s);
+    if (!lines.isEmpty() && fence.match(lines.first()).hasMatch())
+        lines.removeFirst();
+    if (!lines.isEmpty() && fence.match(lines.last()).hasMatch())
+        lines.removeLast();
+    return lines.join(u'\n');
+}
+
 /// Markdown as b.ui.markdown shows it: its blocks as rich text, one paragraph each — indented by
-/// their depth, a list item after its bullet or number, a heading in bold, code and tables as
-/// preformatted text (escaped: InlineRenderer's HTML, never the text's own).
+/// their depth, a list item after its bullet or number, a heading in bold, code (without its
+/// fences) and tables as preformatted text wrapped at the line's width, never wider than the view
+/// (escaped: InlineRenderer's HTML, never the text's own).
 QString markdownHtml(const QString &markdown, const markdown::RenderContext &context)
 {
     const markdown::BlockDocument doc(markdown);
@@ -180,8 +193,10 @@ QString markdownHtml(const QString &markdown, const markdown::RenderContext &con
         case BlockKind::Table:
         case BlockKind::Html:
         case BlockKind::Frontmatter:
-            parts.append(u"<pre style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</pre>"_s.arg(below).arg(indent).arg(
-                    b.body.toHtmlEscaped()));
+            parts.append(u"<pre style=\"white-space:pre-wrap; margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</pre>"_s
+                                 .arg(below)
+                                 .arg(indent)
+                                 .arg((b.kind == BlockKind::Code ? codeOf(b.body) : b.body).toHtmlEscaped()));
             continue;
         case BlockKind::Rule:
             parts.append(u"<hr/>"_s);

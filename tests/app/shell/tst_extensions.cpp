@@ -32,6 +32,8 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTextBlock>
+#include <QTextDocument>
 #include <QTimer>
 
 #include <algorithm>
@@ -1211,6 +1213,40 @@ private Q_SLOTS:
         QCOMPARE(line(0, ExtensionViewModel::IconRole).toString(), u"flame"_s);
         QCOMPARE(line(0, ExtensionViewModel::TitleRole).toString(), u"Pusto"_s);
         QCOMPARE(line(0, ExtensionViewModel::CardRole).toString(), QString());
+    }
+
+    void codeInMarkdown()
+    {
+        // b.ui.markdown's code blocks: their lines without the fences (a longer fence keeps the
+        // ``` inside), escaped, wrapped at the view's width like a prompt's long line — not one
+        // line running out of its card.
+        addExtension(u"Kod"_s,
+                     u"b.view(\"kod\", function(params)\n"
+                     "    return b.ui.markdown(\"Prompt:\\n\\n```text\\nChciałbym, żebyś przejrzał kod — <b>bez</b> "
+                     "skrótów.\\n```\\n\\n````\\n```luau\\n````\\n\\n~~~\\nfalą\\n~~~\\n\")\n"
+                     "end)"_s);
+        ExtensionViewModel model;
+        model.setExtensions(m_ext.get());
+        model.setExtension(u"kod"_s);
+        model.setView(u"kod"_s);
+        model.refresh();
+        QVERIFY2(model.error().isEmpty(), qPrintable(model.error()));
+        QCOMPARE(lineKinds(model), QStringList{u"markdown"_s});
+        const QString html = model.data(model.index(0), ExtensionViewModel::HtmlRole).toString();
+        QVERIFY2(html.contains(u"Chciałbym, żebyś przejrzał kod — &lt;b&gt;bez&lt;/b&gt; skrótów."_s), qPrintable(html));
+        QTextDocument doc;
+        doc.setHtml(html);
+        QStringList blocks;
+        for (QTextBlock b = doc.begin(); b.isValid(); b = b.next()) {
+            blocks << b.text();
+            if (b.text().startsWith(u"Chciałbym"_s) || b.text() == u"falą"_s)
+                QVERIFY2(!b.blockFormat().nonBreakableLines(), qPrintable(b.text())); // wraps
+        }
+        const QStringList expected{u"Prompt:"_s, u"Chciałbym, żebyś przejrzał kod — <b>bez</b> skrótów."_s, u"```luau"_s,
+                                   u"falą"_s};
+        QVERIFY2(blocks == expected, qPrintable(blocks.join(u" | "_s)));
+        QCOMPARE(model.data(model.index(0), ExtensionViewModel::TitleRole).toString(),
+                 u"Prompt: Chciałbym, żebyś przejrzał kod — <b>bez</b> skrótów. ```luau falą"_s);
     }
 
     void picturesInTheViewModel()
