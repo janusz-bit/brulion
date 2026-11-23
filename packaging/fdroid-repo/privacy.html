@@ -1,0 +1,67 @@
+<!doctype html>
+<!--
+  Brulion's privacy policy on GitHub Pages (https://<owner>.github.io/brulion/privacy.html, the
+  address Google Play and the app link): scripts/fdroid-repo.sh fills in the title and the content
+  (the two placeholders below) from docs/PRIVACY.md with scripts/markdown-page.py whenever it builds
+  the site. The look of the download page next to it (index.html). docs/GOOGLE_PLAY.md, "Privacy
+  policy".
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@TITLE@</title>
+    <meta name="description" content="What Brulion does with your data: nothing reaches its developer; notes stay on your device or go only to the servers you set up. Polityka prywatności Brulionu po polsku.">
+    <meta name="color-scheme" content="light dark">
+    <link rel="icon" href="logo.svg" type="image/svg+xml">
+    <style>
+      :root {
+        --paper: #fbf7ee;
+        --card: #fffdf8;
+        --ink: #1f2430;
+        --muted: #5b6375;
+        --line: rgba(31, 36, 48, 0.14);
+        --accent: #e2574c;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #1f2430;
+          --card: #272d3b;
+          --ink: #ece6d8;
+          --muted: #a7aebf;
+          --line: rgba(236, 230, 216, 0.16);
+        }
+      }
+      body {
+        margin: 0;
+        padding: 40px 16px 56px;
+        background: var(--paper);
+        color: var(--ink);
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+      }
+      main { max-width: 42rem; margin: 0 auto; }
+      nav { margin-bottom: 24px; }
+      nav a { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
+      nav img { width: 32px; height: 32px; }
+      h1 { font-size: 1.7rem; line-height: 1.2; margin: 0 0 8px; }
+      h2 { font-size: 1.15rem; margin: 32px 0 8px; }
+      p, ul, ol { margin: 0 0 12px; }
+      ul, ol { padding-left: 1.3rem; }
+      li + li { margin-top: 6px; }
+      a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+      code { font-size: 0.9em; overflow-wrap: anywhere; }
+      hr { border: 0; border-top: 1px solid var(--line); margin: 40px 0; }
+      .table { overflow-x: auto; margin: 0 0 12px; }
+      table { border-collapse: collapse; width: 100%; background: var(--card); }
+      th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+      th { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav><a href="./"><img src="logo.svg" alt="">Brulion</a></nav>
+@CONTENT@
+    </main>
+  </body>
+</html>

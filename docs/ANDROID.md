@@ -1501,6 +1501,7 @@ build directory is reused.
 scripts/android-build.sh            # result: dist-android/brulion-<version>-arm64-v8a.apk
 adb install -r dist-android/brulion-*.apk
 scripts/android-build.sh --help     # all environment variables
+BRULION_ANDROID_PLAY=1 scripts/android-build.sh   # the app for Google Play: …-play.aab and …-play.apk
 ```
 
 It needs a **Linux x86_64** host (the NDK and the Qt tools exist only for x86_64) — not the
@@ -1527,7 +1528,10 @@ Variables (all optional): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_
 with several architectures), `BRULION_ANDROID_BUILD_DIR` (by default `build-android`),
 `BRULION_ANDROID_BUILD_TYPE` (`Release`), `BRULION_ANDROID_AAB=1` (also an `.aab`),
 `BRULION_ANDROID_UNIT_TESTS=1` (Kotlin tests), `BRULION_ANDROID_LINT=1` (Android lint),
-`BRULION_ANDROID_SELFTEST=1` (also the bridge's test APK), `BRULION_ANDROID_VERSION_CODE`,
+`BRULION_ANDROID_SELFTEST=1` (also the bridge's test APK), `BRULION_ANDROID_PLAY=1` (the app for
+Google Play, the package `io.github.januszbit.brulion.play`, an APK and an AAB —
+[A note on distribution](#a-note-on-distribution), docs/GOOGLE_PLAY.md),
+`BRULION_ANDROID_VERSION_CODE`,
 `BRULION_ANDROID_CMAKE=system`, `BRULION_ANDROID_OPENSSL_DIR` (OpenSSL from a
 KDAB/android_openssl checkout instead of downloading), `BRULION_ANDROID_QT=source` and
 `BRULION_ANDROID_OPENSSL=source` (Qt and OpenSSL from source), `BRULION_ANDROID_SIGN=0` (an
@@ -1549,7 +1553,10 @@ from the same variables `androiddeployqt` reads:
 
 The release key is created (outside the repository) by `scripts/android-new-keystore.sh` — it
 also prints the `gh secret set` commands for GitHub Actions. **Back up the key and the
-password**: every update must be signed with the same key.
+password**: every update must be signed with the same key. The app for Google Play is signed with
+an upload key of its own instead, `scripts/android-new-keystore.sh --play` (the
+`PLAY_UPLOAD_KEYSTORE_*` secrets; Google signs what it delivers: docs/GOOGLE_PLAY.md "Play App
+Signing and the upload key").
 
 **Without a key** the script warns loudly and signs the APK with a **throwaway key**
 (`~/.cache/brulion-android/throwaway.jks`, created once per machine). Such an APK can be installed
@@ -1728,6 +1735,7 @@ exist only for x86_64; NixOS does not need nix-ld for this):
 nix build .#brulion-android           # arm64-v8a: result/brulion-<version>-arm64-v8a-unsigned.apk
 nix build .#brulion-android-x86_64    # for the emulator
 nix build .#brulion-android-aab       # arm64-v8a: APK + AAB (bundleRelease, about 10 s more)
+nix build .#brulion-android-play      # the app for Google Play: …-arm64-v8a-play-unsigned.{apk,aab} (docs/GOOGLE_PLAY.md)
 nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulion-<version>-arm64-v8a.apk
 ```
 
@@ -2641,5 +2649,21 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
 ### A note on distribution
 
 Google Play restricts the `MANAGE_EXTERNAL_STORAGE` (all files access) and `USE_EXACT_ALARM`
-permissions to selected app categories. Brulion is meant to be installed from an APK file (e.g.
-from the GitHub releases) or from F-Droid.
+permissions to selected app categories, so Brulion for Android is two apps built from the same
+source:
+
+* **`io.github.januszbit.brulion`** — the APK of the GitHub releases and of Brulion's F-Droid
+  repository, signed with the release key: "All files access" for a notebook folder anywhere on the
+  shared storage, `USE_EXACT_ALARM`, the check for a new version on GitHub;
+* **`io.github.januszbit.brulion.play`** — the app for Google Play (CMake option `BRULION_PLAY`,
+  `BRULION_ANDROID_PLAY=1 scripts/android-build.sh`, `nix build .#brulion-android-play`, the
+  Android workflow's input `play`): `android/play/AndroidManifest.xml` removes "All files access",
+  the older storage permissions and `USE_EXACT_ALARM` (`SCHEDULE_EXACT_ALARM` on every version
+  instead), the notebook folder is one picked in the system's dialog and kept in sync with the
+  app's own copy, there is no update check, and Google signs it (Play App Signing; uploads with an
+  upload key of its own).
+
+They install side by side with their own data, and neither updates the other. Publishing the Play
+app — the Play Console checklist, the Data safety answers, the declarations, the upload from
+`release.yml` — is in [docs/GOOGLE_PLAY.md](GOOGLE_PLAY.md); the privacy policy of both is
+[docs/PRIVACY.md](PRIVACY.md) (<https://janusz-bit.github.io/brulion/privacy.html>).

@@ -3,7 +3,9 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ShellAboutDialog — name, version, licence (AGPL-3.0-or-later), source code, credits.
+// ShellAboutDialog — name, version, licence (AGPL-3.0-or-later), source code, credits, the privacy
+// policy (docs/PRIVACY.md, published on the project's GitHub Pages: Google Play wants it reachable
+// from inside the app, docs/GOOGLE_PLAY.md "Privacy policy").
 BDialog {
     title: qsTr("About Brulion")
     showReject: false
@@ -47,11 +49,22 @@ BDialog {
             font.pixelSize: Theme.textSm
             wrapMode: Text.Wrap
         }
-        BButton {
-            text: qsTr("Source code on GitHub")
-            iconName: "external-link"
-            variant: "secondary"
-            onClicked: Workspace.openUrl("https://github.com/janusz-bit/brulion")
+        Flow {
+            Layout.fillWidth: true
+            spacing: Theme.space2
+            BButton {
+                text: qsTr("Source code on GitHub")
+                iconName: "external-link"
+                variant: "secondary"
+                onClicked: Workspace.openUrl("https://github.com/janusz-bit/brulion")
+            }
+            BButton {
+                objectName: "aboutPrivacyPolicy"
+                text: qsTr("Privacy policy")
+                iconName: "shield-check"
+                variant: "secondary"
+                onClicked: Workspace.openUrl("https://janusz-bit.github.io/brulion/privacy.html")
+            }
         }
     }
 }
