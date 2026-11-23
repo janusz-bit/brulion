@@ -2,9 +2,15 @@
 // backends (spell::WordListBackend): verdicts that come from the worker thread, languages from the
 // setting and the UI language, the personal dictionary and ignored words, suggestions, a slow
 // backend that never blocks the UI thread; the highlighter's underlines on prose only, the word at
-// the caret, misspelledAt(), source and code modes.
+// the caret, misspelledAt(), source and code modes — source mode's exclusions and a large file
+// checked in slices; the rendered blocks (wholePage): wrongWords() and its cache, the underlines
+// put on InlineRenderer's HTML, the word under a click, a correction and its undo.
+#include "fakeeditorhost.h"
+#include "markdown/inlinerenderer.h"
 #include "markdownhighlighter.h"
+#include "pagecontroller.h"
 #include "spellcheck.h"
+#include "spellmarks.h"
 
 #include "testtiming.h"
 
@@ -23,6 +29,7 @@ using namespace Qt::StringLiterals;
 using namespace brulion;
 using brulion::editor::MarkdownHighlighter;
 using brulion::editor::SpellCheck;
+using namespace brulion::editor;
 
 namespace {
 
@@ -122,6 +129,56 @@ void settle(SpellCheck &spell)
     QVERIFY(spell.waitUntilIdle());
     QCoreApplication::processEvents();
     QCoreApplication::processEvents();
+}
+
+/// Every underlined word of the document, in order.
+QStringList allUnderlined(const QTextDocument &doc)
+{
+    QStringList out;
+    for (int n = 0; n < doc.blockCount(); ++n)
+        out += underlined(doc, n);
+    return out;
+}
+
+/// Let the checker answer and the highlighter finish every slice; the longest turn of the event
+/// loop (the GUI thread's CPU time) on the way, through `longestMs`.
+bool settleSlices(SpellCheck &spell, const MarkdownHighlighter &h, qint64 *longestMs = nullptr)
+{
+    QElapsedTimer timer;
+    timer.start();
+    test::CpuTimer turn;
+    while (!(spell.idle() && h.spellingSettled())) {
+        if (timer.elapsed() > test::kRoomyMs)
+            return false;
+        turn.start();
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        if (longestMs)
+            *longestMs = std::max(*longestMs, turn.elapsed());
+        QThread::usleep(200);
+    }
+    return true;
+}
+
+/// The words a span of `html` underlines (spellmarks.h's style) shows, read back by Qt's rich text.
+QStringList markedInHtml(const QString &html)
+{
+    QTextDocument doc;
+    doc.setHtml(html);
+    QStringList out;
+    QString current;
+    for (QTextBlock b = doc.begin(); b.isValid(); b = b.next()) {
+        for (auto it = b.begin(); !it.atEnd(); ++it) {
+            const QTextFragment f = it.fragment();
+            if (f.charFormat().fontUnderline() && f.charFormat().underlineColor() == QColor(u"#c0392b"_s)) {
+                current += f.text();
+            } else if (!current.isEmpty()) {
+                out.append(std::exchange(current, {}));
+            }
+        }
+        if (!current.isEmpty())
+            out.append(std::exchange(current, {}));
+    }
+    return out;
 }
 
 } // namespace
@@ -528,6 +585,309 @@ private Q_SLOTS:
         spell->setEnabled(true);
         settle(*spell);
         QCOMPARE(underlined(doc), QStringList{u"kott"_s});
+    }
+
+    // ---- Source mode ----------------------------------------------------------------------------
+
+    void sourceModeExclusions_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QStringList>("marked");
+        const auto row = [](const char *name, const QString &text, const QStringList &marked) {
+            QTest::newRow(name) << text << marked;
+        };
+        row("prose", u"Zażółć gęśla jaźń, zażułć!"_s, {u"gęśla"_s, u"zażułć"_s});
+        row("code span", u"Zażółć `zażułć` gęśla"_s, {u"gęśla"_s});
+        row("fenced code", u"```\nzażułć gęśla\n```\njaźni"_s, {u"jaźni"_s});
+        row("tilde fence, language", u"~~~python\nzażułć\n~~~\nkot"_s, {});
+        row("link target", u"[jaźń](zażułć.md) [gęśla](https://x.pl/kott)"_s, {u"gęśla"_s});
+        row("wiki link and embed", u"[[zażułć]] ![[gęśla.png]] jaźni"_s, {u"jaźni"_s});
+        row("url and e-mail", u"https://zażułć.pl/kott zażułć@poczta.pl gęśla"_s, {u"gęśla"_s});
+        row("tags", u"#zażułć #gęśla/kott pies"_s, {});
+        row("inline math", u"$zażułć$ i $$gęśla$$ jaźni"_s, {u"jaźni"_s});
+        row("display math", u"$$\n\\text{zażułć}\n$$\ngęśla"_s, {u"gęśla"_s});
+        row("display math in a list", u"- $$\n  zażułć\n  $$\n- gęśla"_s, {u"gęśla"_s});
+        row("frontmatter", u"---\ntytuł: zażułć\ntags: [gęśla]\n---\nkott"_s, {u"kott"_s});
+        row("property name", u"statuss:: gęśla"_s, {u"gęśla"_s});
+        row("comment over lines", u"kott %%zażułć\ngęśla%% jaźni"_s, {u"kott"_s, u"jaźni"_s});
+        row("comment in a line", u"%%zażułć%% gęśla <!--jaźni-->"_s, {u"gęśla"_s});
+        row("task and date", u"- [ ] zażułć 📅 2026-11-23 #praca"_s, {u"zażułć"_s});
+        row("heading and quote", u"# Gęśla\n> zażułć"_s, {u"Gęśla"_s, u"zażułć"_s});
+        row("unknown fence stays code", u"````\n```\nzażułć\n````\ngęśla"_s, {u"gęśla"_s});
+    }
+    void sourceModeExclusions()
+    {
+        QFETCH(QString, text);
+        QFETCH(QStringList, marked);
+        auto spell = makeSpell(u"pl"_s);
+        QTextDocument doc;
+        MarkdownHighlighter h;
+        h.setMode(u"source"_s);
+        h.attach(&doc);
+        h.setSpellCheck(spell.get());
+        doc.setPlainText(text);
+        QVERIFY(settleSlices(*spell, h));
+        QCOMPARE(allUnderlined(doc), marked);
+        // misspelledAt() finds exactly what is marked: nothing inside the syntax.
+        int found = 0;
+        for (int pos = 0; pos < doc.characterCount(); ++pos) {
+            const QVariantMap at = h.misspelledAt(pos);
+            if (!at.isEmpty() && at.value(u"from"_s).toInt() == pos)
+                ++found;
+        }
+        QCOMPARE(found, marked.size());
+    }
+
+    void largeSourceInSlices()
+    {
+        auto spell = makeSpell(u"pl"_s);
+        // ~80 KB (BRULION_SPELL_SOURCE_KB: another size; docs/PERFORMANCE.md measured 500): every
+        // 50th line has a word of its own, every line a misspelled one.
+        const int kb = qEnvironmentVariableIsSet("BRULION_SPELL_SOURCE_KB")
+                               ? qEnvironmentVariableIntValue("BRULION_SPELL_SOURCE_KB")
+                               : 80;
+        QStringList lines;
+        qsizetype size = 0;
+        for (int i = 0; size < kb * 1000; ++i) {
+            lines.append(u"- Ala ma kot i pies, zażółć gęślą jaźń — zażułć "_s
+                         + (i % 50 == 0 ? u"słowo%1"_s.arg(QChar(u'a' + (i / 50) % 26)) : u"pies"_s));
+            size += lines.last().size() + 1;
+        }
+        const QString text = lines.join(u'\n');
+        QTextDocument doc;
+        MarkdownHighlighter h;
+        h.setMode(u"source"_s);
+        h.attach(&doc);
+        h.setSpellCheck(spell.get());
+        test::CpuTimer setting;
+        setting.start();
+        doc.setTextWidth(800);
+        doc.setPlainText(text);
+        (void)doc.size(); // laid out whole, as a TextEdit's document is
+        const qint64 setMs = setting.elapsed();
+        // The text is highlighted at once, its spelling comes after it in slices.
+        QVERIFY(!h.spellingSettled());
+        QCOMPARE(underlined(doc, 0), QStringList{});
+        qint64 longest = 0;
+        test::CpuTimer all;
+        all.start();
+        QVERIFY(settleSlices(*spell, h, &longest));
+        qInfo("%d KB, %lld lines in source mode: text set %lld ms, spelling %lld ms of the GUI thread, longest turn "
+              "%lld ms",
+              kb, qlonglong(lines.size()), setMs, all.elapsed(), longest);
+        // No turn of the event loop near a frame's worth of stall (a line or a few past the slice).
+        QVERIFY2(longest < 100 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(longest)));
+        const int last = doc.blockCount() - 1;
+        QCOMPARE(underlined(doc, 0), (QStringList{u"zażułć"_s, u"słowoa"_s}));
+        QCOMPARE(underlined(doc, last), QStringList{u"zażułć"_s});
+        // Typing: only the edited line asks and is marked again.
+        QTextCursor cursor(doc.findBlockByNumber(last / 2));
+        cursor.movePosition(QTextCursor::EndOfBlock);
+        cursor.insertText(u" pieseł"_s);
+        QVERIFY(spell->pendingCount() + int(!spell->idle()) <= 2);
+        QVERIFY(settleSlices(*spell, h));
+        QVERIFY(underlined(doc, last / 2).contains(u"pieseł"_s));
+        // Switched off: the marks go (in slices); on again: back.
+        spell->setEnabled(false);
+        QVERIFY(settleSlices(*spell, h));
+        QCOMPARE(underlined(doc, last), QStringList{});
+        spell->setEnabled(true);
+        QVERIFY(settleSlices(*spell, h));
+        QCOMPARE(underlined(doc, last), QStringList{u"zażułć"_s});
+    }
+
+    void sourceViewOnly()
+    {
+        auto spell = makeSpell(u"pl"_s);
+        // ~0.5 MB (BRULION_SPELL_SOURCE_KB: another size), a misspelled word on every line.
+        const int kb = qEnvironmentVariableIsSet("BRULION_SPELL_SOURCE_KB")
+                               ? qEnvironmentVariableIntValue("BRULION_SPELL_SOURCE_KB")
+                               : 500;
+        QStringList lines;
+        qsizetype size = 0;
+        for (int i = 0; size < kb * 1000; ++i) {
+            lines.append(u"- Ala ma kot i pies, zażółć gęślą jaźń — zażułć pies %1"_s.arg(i));
+            size += lines.last().size() + 1;
+        }
+        QTextDocument doc;
+        doc.setTextWidth(800);
+        MarkdownHighlighter h;
+        h.setMode(u"source"_s);
+        h.attach(&doc);
+        h.setSpellCheck(spell.get());
+        // The view: the first 30 lines (as SourceEditor gives it before the text is set).
+        h.setSpellView(0, 0);
+        test::CpuTimer cpu;
+        cpu.start();
+        doc.setPlainText(lines.join(u'\n'));
+        (void)doc.size();
+        const qint64 setMs = cpu.restart();
+        const int end30 = doc.findBlockByNumber(30).position();
+        h.setSpellView(0, end30);
+        qint64 longest = 0;
+        QVERIFY(settleSlices(*spell, h, &longest));
+        qInfo("%d KB, %lld lines, the view at the top: text set %lld ms, spelling %lld ms of the GUI thread, "
+              "longest turn %lld ms",
+              kb, qlonglong(lines.size()), setMs, cpu.elapsed(), longest);
+        QVERIFY2(longest < 100 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(longest)));
+        const int margin = MarkdownHighlighter::SpellViewMargin;
+        QCOMPARE(underlined(doc, 0), QStringList{u"zażułć"_s});
+        QCOMPARE(underlined(doc, 30 + margin), QStringList{u"zażułć"_s});
+        QCOMPARE(underlined(doc, 31 + margin), QStringList{}); // past the margin: not checked
+        QCOMPARE(underlined(doc, doc.blockCount() - 1), QStringList{});
+        QVERIFY(h.misspelledAt(doc.findBlockByNumber(doc.blockCount() - 1).position() + 50).isEmpty());
+        // Scrolled to the end: its lines are checked.
+        const int last = doc.blockCount() - 1;
+        h.setSpellView(doc.findBlockByNumber(last - 30).position(), doc.characterCount() - 1);
+        QVERIFY(settleSlices(*spell, h));
+        QCOMPARE(underlined(doc, last), QStringList{u"zażułć"_s});
+        QCOMPARE(underlined(doc, last - 30 - margin), QStringList{u"zażułć"_s});
+        QCOMPARE(underlined(doc, last - 31 - margin), QStringList{});
+        // (No view: every line — largeSourceInSlices.)
+    }
+
+    // ---- Rendered blocks ------------------------------------------------------------------------
+
+    void wrongWordsCache()
+    {
+        auto spell = makeSpell(u"pl"_s);
+        QSignalSpy revisions(spell.get(), &SpellCheck::revisionChanged);
+        const QString text = u"Ala ma kotta\n`zażułć` i gęśla"_s;
+        bool pending = false;
+        QCOMPARE(spell->wrongWords(text, &pending), QList<spell::WordSpan>{});
+        QVERIFY(pending);
+        settle(*spell);
+        QVERIFY(!revisions.isEmpty());
+        const QList<spell::WordSpan> wrong = spell->wrongWords(text, &pending);
+        QVERIFY(!pending);
+        // (Code is no prose, single letters are not checked.)
+        QCOMPARE(wrong.size(), 2);
+        QCOMPARE(text.mid(wrong[0].from, wrong[0].length()), u"kotta"_s);
+        QCOMPARE(text.mid(wrong[1].from, wrong[1].length()), u"gęśla"_s);
+        // The same text again: the answer kept.
+        QCOMPARE(spell->wrongWords(text), wrong);
+        // A word added to the dictionary: still marked while it is asked again, then the cached
+        // answer is stale.
+        spell->addToDictionary(u"gęśla"_s);
+        QCOMPARE(spell->wrongWords(text).size(), 2);
+        settle(*spell);
+        QCOMPARE(spell->wrongWords(text).size(), 1);
+        // Another language: every verdict is asked again.
+        spell->setLanguageSetting(u"en"_s);
+        QCOMPARE(spell->wrongWords(text, &pending), QList<spell::WordSpan>{});
+        QVERIFY(pending);
+        settle(*spell);
+        QCOMPARE(spell->wrongWords(text).size(), 3); // "Ala", "ma", "kotta": Polish in English
+        // Off: nothing.
+        spell->setEnabled(false);
+        QCOMPARE(spell->wrongWords(text), QList<spell::WordSpan>{});
+    }
+
+    void marksOnRenderedHtml_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<QStringList>("marked");
+        const int paragraph = int(BlockKind::Paragraph);
+        QTest::newRow("plain") << u"Ala ma kotta i psa"_s << paragraph << QStringList{u"kotta"_s};
+        QTest::newRow("emphasis") << u"**Zażułć** i *gęśla*, ~~jaźni~~"_s << paragraph
+                                  << QStringList{u"Zażułć"_s, u"gęśla"_s, u"jaźni"_s};
+        QTest::newRow("escapes before") << u"A & B < \"kotta\""_s << paragraph << QStringList{u"kotta"_s};
+        QTest::newRow("no-break space") << u"w kotta z psa"_s << paragraph << QStringList{u"kotta"_s};
+        QTest::newRow("link text is a whole")
+                << u"[kotta](https://x.pl) kotta"_s << paragraph << QStringList{u"kotta"_s};
+        QTest::newRow("code and tag") << u"`kotta` #kotta [[kotta]]"_s << paragraph << QStringList{};
+        QTest::newRow("lines") << u"pierwsza kotta\ndruga gęśla"_s << paragraph << QStringList{u"kotta"_s, u"gęśla"_s};
+        QTest::newRow("heading") << u"## Nagłówek kotta"_s << int(BlockKind::Heading) << QStringList{u"kotta"_s};
+        QTest::newRow("quote") << u"> cytat kotta"_s << int(BlockKind::Quote) << QStringList{u"kotta"_s};
+        QTest::newRow("callout") << u"> [!note] Uwaga kotta\n> treść gęśla"_s << int(BlockKind::Callout)
+                                 << QStringList{u"kotta"_s, u"gęśla"_s};
+    }
+    void marksOnRenderedHtml()
+    {
+        QFETCH(QString, body);
+        QFETCH(int, kind);
+        QFETCH(QStringList, marked);
+        auto spell = makeSpell(u"pl"_s);
+        spell->addToDictionary(u"pierwsza"_s);
+        for (const QString &w : {u"druga"_s, u"nagłówek"_s, u"cytat"_s, u"uwaga"_s, u"treść"_s, u"psa"_s, u"i"_s,
+                                 u"w"_s, u"z"_s, u"a"_s, u"b"_s})
+            spell->addToDictionary(w);
+        (void)spell->wrongWords(body);
+        settle(*spell);
+        const QList<spell::WordSpan> wrong = spell->wrongWords(body);
+        const markdown::InlineRenderer renderer;
+        const markdown::TracedHtml traced = renderer.renderBlockTraced(body, BlockKind(kind));
+        const QString html = markMisspelledHtml(traced.html, traced.anchors, body, wrong, QColor(u"#c0392b"_s));
+        QCOMPARE(markedInHtml(html), marked);
+        // The text Qt shows is the same with the marks.
+        QTextDocument plain;
+        plain.setHtml(traced.html);
+        QTextDocument withMarks;
+        withMarks.setHtml(html);
+        QCOMPARE(withMarks.toPlainText(), plain.toPlainText());
+        // Nothing to mark: the HTML itself.
+        QCOMPARE(markMisspelledHtml(traced.html, traced.anchors, body, {}, QColor(u"#c0392b"_s)), traced.html);
+    }
+
+    void renderedBlockMenuAndCorrection()
+    {
+        auto spell = makeSpell(u"pl"_s);
+        spell->addToDictionary(u"zapisz"_s);
+        spell->addToDictionary(u"psa"_s);
+        FakeEditorHost host;
+        host.setFile(u"Pisownia.md"_s, u"- Ala ma kotta i psa\n- **Zapisz** gęśla `kotta`\n"_s);
+        PageController page;
+        page.setSpellCheck(spell.get());
+        page.setNow(u"2026-10-15 10:00"_s);
+        page.setHost(&host);
+        page.setPath(u"Pisownia.md"_s);
+        BlockListModel *model = page.blocks();
+        QCOMPARE(model->rowCount(), 2);
+        const auto html = [&](int row) { return model->data(model->index(row), BlockListModel::HtmlRole).toString(); };
+        const QColor red(u"#c0392b"_s);
+        (void)page.spellMarkedHtml(0, html(0), 0, red);
+        (void)page.spellMarkedHtml(1, html(1), 0, red);
+        settle(*spell);
+        QCOMPARE(markedInHtml(page.spellMarkedHtml(0, html(0), spell->revision(), red)), QStringList{u"kotta"_s});
+        QCOMPARE(markedInHtml(page.spellMarkedHtml(1, html(1), spell->revision(), red)), QStringList{u"gęśla"_s});
+        // Kept: the same text again.
+        const QString kept = page.spellMarkedHtml(1, html(1), spell->revision(), red);
+        QVERIFY(kept.isSharedWith(page.spellMarkedHtml(1, html(1), spell->revision(), red)));
+        // A stale html (the binding's old text): as it is.
+        QCOMPARE(page.spellMarkedHtml(1, u"<b>stary</b>"_s, spell->revision(), red), u"<b>stary</b>"_s);
+
+        // The word under a click: positions in Qt's rich text of the rendering.
+        QTextDocument shown;
+        shown.setHtml(html(1));
+        const int at = int(shown.toPlainText().indexOf(u"gęśla"_s));
+        QVERIFY(at > 0);
+        const QVariantMap word = page.misspelledInRendered(1, at + 2);
+        QCOMPARE(word.value(u"text"_s).toString(), u"gęśla"_s);
+        QCOMPARE(word.value(u"word"_s).toString(), u"gęśla"_s);
+        const QString body = model->document().at(1).body;
+        QCOMPARE(body.mid(word.value(u"from"_s).toInt(), word.value(u"to"_s).toInt() - word.value(u"from"_s).toInt()),
+                 u"gęśla"_s);
+        QCOMPARE(page.misspelledInRendered(1, at + 5).value(u"text"_s).toString(), u"gęśla"_s);            // its end
+        QVERIFY(page.misspelledInRendered(1, 1).isEmpty());                                                // "Zapisz"
+        QVERIFY(page.misspelledInRendered(1, int(shown.toPlainText().indexOf(u"kotta"_s)) + 1).isEmpty()); // code
+
+        // A correction: the block's text, one undo step.
+        QVERIFY(!page.replaceInBody(1, word.value(u"from"_s).toInt(), word.value(u"to"_s).toInt(), u"inne"_s,
+                                    u"gęślą"_s)); // no longer the word there: nothing
+        QVERIFY(page.replaceInBody(1, word.value(u"from"_s).toInt(), word.value(u"to"_s).toInt(), u"gęśla"_s,
+                                   u"gęślą"_s));
+        QCOMPARE(page.text(), u"- Ala ma kotta i psa\n- **Zapisz** gęślą `kotta`\n"_s);
+        settle(*spell);
+        QCOMPARE(markedInHtml(page.spellMarkedHtml(1, html(1), spell->revision(), red)), QStringList{});
+        page.undo();
+        QCOMPARE(page.text(), u"- Ala ma kotta i psa\n- **Zapisz** gęśla `kotta`\n"_s);
+        // Other views are never marked: code.
+        host.setFile(u"Kod.md"_s, u"```\nkotta\n```\n"_s);
+        page.setPath(u"Kod.md"_s);
+        (void)page.spellMarkedHtml(0, html(0), 0, red);
+        settle(*spell);
+        QCOMPARE(page.spellMarkedHtml(0, html(0), spell->revision(), red), html(0));
     }
 };
 

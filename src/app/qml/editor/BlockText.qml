@@ -28,6 +28,12 @@ import Brulion
 // shown text only), so each path part of [[A/B/C]] shows what a click opens; with a screen reader
 // on every link is an accessible item of its own (BLinkTargets). The mouse pointer resting on a
 // [[page]] or ((block)) link (or a day's link) shows its preview (LinkPreviews).
+// Spell checking in the whole page (SpellCheck.wholePage, docs/UI.md "Spell checking"): the
+// rendered text's misspelled words are underlined (PageController.spellMarkedHtml: the words of
+// the block's Markdown put on its rendering; such a text is shown by the tinted TextEdit), and a
+// right-click on one opens its corrections, Add to dictionary and Ignore
+// (BlockEditor.openRenderedSpellingMenu; a correction edits the block, one undo step). Not in the
+// RenderedTextItem.
 Item {
     id: root
 
@@ -95,17 +101,28 @@ Item {
     }
     readonly property renderedText runs: root.editing ? root.keptRuns : root.liveRuns
     readonly property bool textItem: root.textItemWanted && root.runs.drawable
+    /// Misspelled words are underlined in the rendered text too (not by the RenderedTextItem).
+    readonly property bool spellMarks: SpellCheck.active && SpellCheck.wholePage && root.live && !root.editing
+                                       && !root.textItem && root.controller !== null
+    /// The rendered text with them (SpellCheck.revision: new verdicts).
+    readonly property string spelledHtml: root.spellMarks
+                                          ? root.controller.spellMarkedHtml(root.block.index, root.html, SpellCheck.revision,
+                                                                            Theme.danger)
+                                          : root.html
+    /// The text has a misspelled word underlined.
+    readonly property bool spellMarked: root.spellMarks && root.spelledHtml.length !== root.html.length
     /// The rendered text with the find bar's matches tinted (docs/UI.md "Find and replace").
     readonly property string findHtml: {
         const find = root.find
         return find !== null && find.appliedQuery !== "" && root.live
-                ? TextHelper.findHighlightedHtml(root.html, find.appliedQuery, find.matchCase, find.matchDiacritics,
+                ? TextHelper.findHighlightedHtml(root.spelledHtml, find.appliedQuery, find.matchCase, find.matchDiacritics,
                                                  find.wholeWord, root.editor.findHitColor.toString())
-                : root.html
+                : root.spelledHtml
     }
     /// The text has a span with a background colour (InlineRenderer's chips and tags, inline code,
-    /// highlights): the TextEdit with rounded shapes shows it.
-    readonly property bool tinted: !root.textItem && Js.indexOf(findHtml, "background-color:") >= 0
+    /// highlights) or a misspelled word: the TextEdit (rounded shapes, positions for the spelling's
+    /// menu) shows it.
+    readonly property bool tinted: !root.textItem && (root.spellMarked || Js.indexOf(findHtml, "background-color:") >= 0)
     /// The item showing the rendered text: linkAt(), the anchor of the token and link menus.
     readonly property Item renderedItem: root.textItem && runsItem !== null ? runsItem
                                          : tinted && tintedEdit !== null ? tintedEdit : rendered
@@ -135,6 +152,21 @@ Item {
     function setMenuPoints(at: point, scene: point): void {
         menuAt = at
         menuScene = scene
+    }
+    /// The misspelled word at a point of the rendered text (PageController.misspelledInRendered),
+    /// kept for the menu.
+    MapHolder { id: misspelling }
+    property int spellPosition: -1
+    /// The spelling's menu for a misspelled word at (x, y) of the rendered text; false when there
+    /// is none.
+    function openSpellingAt(x: real, y: real): bool {
+        if (!root.spellMarked || root.tintedEdit === null || root.controller === null)
+            return false
+        root.spellPosition = root.tintedEdit.positionAt(x, y)
+        misspelling.map = root.controller.misspelledInRendered(root.block.index, root.spellPosition)
+        if (misspelling.map.word === undefined)
+            return false
+        return root.editor.openRenderedSpellingMenu(root.block.index, root.tintedEdit, misspelling.map, x, y)
     }
     /// The shown rich text: the rendered HTML with hoveredLink underlined.
     /// (With the RenderedTextItem: its text while a link is hovered — the item underlines it itself;
@@ -361,8 +393,8 @@ Item {
                 root.editor.openLinkInTab(root.block.index, link)
             }
         }
-        // A right-click: a token's menu, a link's menu, else the block menu (as the list's handler
-        // opens it; WithinBounds takes the press, so that one does not open it too).
+        // A right-click: a token's menu, a link's menu, a misspelled word's, else the block menu (as
+        // the list's handler opens it; WithinBounds takes the press, so that one does not open it too).
         TapHandler {
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
             acceptedButtons: Qt.RightButton
@@ -372,7 +404,8 @@ Item {
                 const link = root.linkAt(root.menuAt.x, root.menuAt.y)
                 if (!root.editor.openDateMenu(root.block.index, link, root.renderedItem, root.menuAt.x, root.menuAt.y)
                         && !root.editor.openBlockLinkMenu(root.block.index, link, root.renderedItem, root.menuAt.x,
-                                                          root.menuAt.y))
+                                                          root.menuAt.y)
+                        && !root.openSpellingAt(root.menuAt.x, root.menuAt.y))
                     root.editor.openBlockMenuAt(root.block.index, root.menuScene)
             }
         }

@@ -234,6 +234,8 @@ FocusScope {
     property string sourceModeShortcut: "Ctrl+E"
     /// The source's text editor in source mode (the toolbar inserts into it), else null.
     readonly property TextEdit sourceTextEdit: sourceLoader.item ? (sourceLoader.item as SourceEditor).textEdit : null
+    /// Source mode's view (null outside it).
+    final readonly property SourceEditor sourceView: sourceLoader.item as SourceEditor
 
     /// The bottom of what is seen of the editor, in its own coordinates: the toolbar's top while it
     /// shows, else the bottom of the dock host (on the keyboard). Computed when asked: the days of
@@ -4551,9 +4553,16 @@ FocusScope {
     /// in it with a mouse, touchpad or stylus (a bare TextEdit has no menu of its own; touch UIs have
     /// the system's selection handles and popup). On a word marked as misspelled (SpellCheck,
     /// docs/UI.md "Spell checking") its corrections come first, then Add to dictionary and Ignore;
-    /// on touch UIs a tap on such a word opens only those (openSpellingMenu). Made when first opened.
+    /// on touch UIs a tap on such a word opens only those (openSpellingMenu). The same menu with only
+    /// the spelling's items opens on a misspelled word of source mode's text or of a rendered block
+    /// (openSourceSpellingMenu, openRenderedSpellingMenu). Made when first opened.
     property BMenu textMenu: null
     property InlineEditor textMenuEdit: null
+    /// Where the menu's misspelled word is: "edit" (textMenuEdit), "source" (textMenuSource: source
+    /// mode's text) or "rendered" (textMenuRow: a block not edited; positions in its body).
+    property string textMenuTarget: "edit"
+    property TextEdit textMenuSource: null
+    property int textMenuRow: -1
     /// The misspelled word the menu is about ({from, to, word, text}; {}: none).
     MapHolder {
         id: textMenuSpelling
@@ -4587,6 +4596,57 @@ FocusScope {
         if (chipFound.map.word !== undefined)
             showTextMenu(edit, chipFound.map, true, x, y)
     }
+    /// The spelling's items for the misspelled word at `pos` of source mode's text (`source`, with its
+    /// highlighter's `spelling`: MarkdownHighlighter.misspelledAt); false when there is none there.
+    function openSourceSpellingMenu(source: TextEdit, spelling: var, x: real, y: real): bool {
+        return showSpellingMenu("source", source, source, -1, spelling, x, y)
+    }
+    /// The spelling's items for a misspelled word of block `row`'s rendered text (`spelling`:
+    /// PageController.misspelledInRendered), at (x, y) of `item`; false when there is none.
+    function openRenderedSpellingMenu(row: int, item: Item, spelling: var, x: real, y: real): bool {
+        return showSpellingMenu("rendered", item, null, row, spelling, x, y)
+    }
+    function showSpellingMenu(target: string, item: Item, source: TextEdit, row: int, spelling: var, x: real,
+                              y: real): bool {
+        if (!controller || !item)
+            return false
+        if (!textMenu)
+            textMenu = textMenuComponent.createObject(editor) as BMenu
+        textMenuEdit = null
+        textMenuTarget = target
+        textMenuSource = source
+        textMenuRow = row
+        textMenuSpelling.map = spelling
+        const word = textMenuSpelling.word()
+        if (word === "")
+            return false
+        textMenuSpellingOnly = true
+        if (suggestionsOf(word).length === 0)
+            SpellCheck.requestSuggestions(word)
+        textMenu.bottomMargin = menuBottomMargin()
+        textMenu.popup(item, x, y)
+        return true
+    }
+    /// A correction chosen in the text menu: the misspelled word replaced where it is — the edited
+    /// block (one undo step, the caret after it), source mode's text (one step of its own undo, the
+    /// caret after it) or a rendered block's body (one undo step).
+    function replaceMisspelled(text: string): void {
+        replaceMisspelledRange(textMenuSpelling.map.from, textMenuSpelling.map.to, text)
+    }
+    function replaceMisspelledRange(from: int, to: int, text: string): void {
+        if (textMenuTarget === "edit") {
+            if (textMenuEdit)
+                textMenuEdit.replaceWord(from, to, text)
+        } else if (textMenuTarget === "source") {
+            const source = textMenuSource
+            if (!source)
+                return
+            EditorInput.replaceRange(source.textDocument, from, to, text)
+            source.cursorPosition = from + text.length
+        } else if (textMenuTarget === "rendered" && controller && !readOnlyRefuses()) {
+            controller.replaceInBody(textMenuRow, from, to, textMenuSpelling.text(), text)
+        }
+    }
     /// SpellCheck's corrections of `word` (none until asked).
     function suggestionsOf(word: string): list<string> {
         return SpellCheck.suggestionsFor(word)
@@ -4596,6 +4656,9 @@ FocusScope {
         if (!textMenu)
             textMenu = textMenuComponent.createObject(editor) as BMenu
         textMenuEdit = edit
+        textMenuTarget = "edit"
+        textMenuSource = null
+        textMenuRow = -1
         textMenuSpelling.map = spelling
         const word = textMenuSpelling.word()
         textMenuSpellingOnly = spellingOnly && word !== ""
@@ -4644,8 +4707,8 @@ FocusScope {
                 }
             }
             function replaceWith(text: string): void {
-                if (edit && menu.misspelled)
-                    edit.replaceWord(textMenuSpelling.map.from, textMenuSpelling.map.to, text)
+                if (menu.misspelled)
+                    editor.replaceMisspelled(text)
             }
 
             // The spelling: corrections, then the dictionary.

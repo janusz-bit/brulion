@@ -2782,6 +2782,33 @@ int PageController::replaceRange(int row, int from, int to, const QString &repla
     return cursor;
 }
 
+QString PageController::spellMarkedHtml(int row, const QString &html, int revision, const QColor &color) const
+{
+    Q_UNUSED(revision)
+    SpellCheck *spell = m_spell ? m_spell.data() : SpellCheck::instance();
+    if (!validRow(row) || !spell->active()
+        || m_model->data(m_model->index(row), BlockListModel::HtmlRole).toString() != html)
+        return html;
+    return m_model->spellMarkedHtml(row, spell, color);
+}
+
+QVariantMap PageController::misspelledInRendered(int row, int position) const
+{
+    SpellCheck *spell = m_spell ? m_spell.data() : SpellCheck::instance();
+    return validRow(row) ? m_model->misspelledInRendered(row, position, spell) : QVariantMap();
+}
+
+bool PageController::replaceInBody(int row, int from, int to, const QString &text, const QString &replacement)
+{
+    if (refusesEdit() || !validRow(row))
+        return false;
+    const QString body = m_model->document().at(row).body;
+    if (from < 0 || to < from || to > body.size() || QStringView(body).sliced(from, to - from) != text)
+        return false;
+    editBody(row, body.left(from) + replacement + body.mid(to));
+    return true;
+}
+
 QVariantMap PageController::setHighlight(int row, int from, int to, const QString &color)
 {
     if (refusesEdit())

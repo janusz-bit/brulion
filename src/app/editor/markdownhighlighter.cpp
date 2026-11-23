@@ -12,6 +12,7 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QFontMetricsF>
 #include <QQuickTextDocument>
@@ -37,6 +38,22 @@ constexpr int StateMask = 0x7;
 /// A fence of Luau code (source mode): its lines are coloured as Luau, the lexer's state above it.
 constexpr int LuauFence = 1 << 12;
 constexpr int LuauShift = 13;
+/// A line of a display formula between `$$` lines (source mode; in a Normal state, whose fence
+/// bits are free): no prose.
+constexpr int MathFlag = 1 << 4;
+/// A text this long (characters) gets its spelling in slices (a large edit, a pass over every
+/// line); a smaller one at once.
+constexpr int LargeText = 20000;
+/// The time a slice of spelling takes at most before the event loop runs again.
+constexpr int SpellSliceMs = 6;
+
+/// A line that is only `$$` (in a list item or a quote too; not after a task box): it opens or
+/// closes a display formula (docs/SYNTAX.md "Formulas").
+bool isMathFence(const QString &line)
+{
+    static const QRegularExpression re(u"^\\s*(?:>\\s?)*\\s*(?:(?:[-*+]|\\d{1,9}[.)])\\s+)?\\$\\$\\s*$"_s);
+    return line.contains(u"$$"_s) && re.matchView(line).hasMatch();
+}
 
 int encodeFence(QChar ch, int length)
 {
@@ -57,10 +74,12 @@ QStringView fenceLanguage(QStringView line, qsizetype markerEnd)
     return info.first(end);
 }
 
-/// A line's reminder tokens (MarkdownHighlighter::reminderChips), kept on its QTextBlock: they
-/// follow the line when lines before it are added or removed.
-struct ChipData : QTextBlockUserData {
+/// What the highlighting found on a line, kept on its QTextBlock (it follows the line when lines
+/// before it are added or removed): its reminder tokens (MarkdownHighlighter::reminderChips) and
+/// the part of it that is prose for spell checking.
+struct LineData : QTextBlockUserData {
     QList<MarkdownHighlighter::LineChip> chips;
+    MarkdownHighlighter::SpellRange spell;
 };
 
 QColor toColor(const QVariant &v)
@@ -80,7 +99,7 @@ MarkdownHighlighter::MarkdownHighlighter(QObject *parent) : QSyntaxHighlighter(p
     // Verdicts arrive in batches: the lines waiting for them are highlighted once per pass.
     m_spellTimer.setSingleShot(true);
     m_spellTimer.setInterval(0);
-    connect(&m_spellTimer, &QTimer::timeout, this, &MarkdownHighlighter::rehighlightPendingSpelling);
+    connect(&m_spellTimer, &QTimer::timeout, this, [this] { rehighlightReadySpelling(true); });
 }
 
 MarkdownHighlighter::~MarkdownHighlighter()
@@ -89,6 +108,8 @@ MarkdownHighlighter::~MarkdownHighlighter()
     // this object is only a QSyntaxHighlighter, so the line-height and the chips' handlers must be
     // gone first.
     disconnect(m_contentsConnection);
+    disconnect(m_bulkConnection);
+    disconnect(m_bulkDoneConnection);
     for (const QMetaObject::Connection &c : std::as_const(m_layoutConnections))
         disconnect(c);
 }
@@ -106,6 +127,12 @@ void MarkdownHighlighter::attach(QTextDocument *document)
 {
     if (m_contentsConnection)
         disconnect(m_contentsConnection);
+    disconnect(m_bulkConnection);
+    disconnect(m_bulkDoneConnection);
+    m_spellReady.clear();
+    m_spellPending.clear();
+    m_spellMarked.clear();
+    m_spellSweep = m_spellSweepEnd = -1;
     for (const QMetaObject::Connection &c : std::as_const(m_layoutConnections))
         disconnect(c);
     m_layoutConnections.clear();
@@ -113,8 +140,20 @@ void MarkdownHighlighter::attach(QTextDocument *document)
     // document always has one, a bare one (tests, C++ users) gets it here.
     if (document)
         (void)document->documentLayout();
+    // A large edit (the text of a page set, a long paste) is highlighted at once, its spelling in
+    // slices afterwards (around QSyntaxHighlighter's own handler, connected in setDocument()).
+    if (document)
+        m_bulkConnection = connect(document, &QTextDocument::contentsChange, this,
+                                   [this](int, int, int added) { m_spellDeferred = added > LargeText; });
     setDocument(document);
     if (document) {
+        m_bulkDoneConnection =
+                connect(document, &QTextDocument::contentsChange, this, [this](int from, int, int added) {
+                    if (!std::exchange(m_spellDeferred, false))
+                        return;
+                    if (spellActive())
+                        sweepSpelling(from, from + added);
+                });
         m_contentsConnection = connect(document, &QTextDocument::contentsChange, this,
                                        [this](int from, int, int added) { applyLineHeight(from, added); });
         // The chips' shapes follow the layout (a new width, font or text), as RichTextPills' do.
@@ -181,7 +220,7 @@ std::optional<std::pair<int, int>> MarkdownHighlighter::chipWhere(int position,
     if (!doc || !m_reminderChips || position < 0)
         return std::nullopt;
     const QTextBlock block = doc->findBlock(position);
-    const auto *data = block.isValid() ? static_cast<const ChipData *>(block.userData()) : nullptr;
+    const auto *data = block.isValid() ? static_cast<const LineData *>(block.userData()) : nullptr;
     if (!data)
         return std::nullopt;
     for (const LineChip &chip : data->chips) {
@@ -252,21 +291,24 @@ void MarkdownHighlighter::collapseLineChips()
     }
 }
 
-void MarkdownHighlighter::storeLineChips()
+void MarkdownHighlighter::storeLineData()
 {
     const QList<LineChip> chips = std::exchange(m_lineChips, {});
-    const auto *data = static_cast<const ChipData *>(currentBlockUserData());
-    if ((data ? data->chips : QList<LineChip>()) == chips)
+    const auto *data = static_cast<const LineData *>(currentBlockUserData());
+    const bool chipsChanged = (data ? data->chips : QList<LineChip>()) != chips;
+    if (!chipsChanged && (data ? data->spell : SpellRange()) == m_lineSpell)
         return;
-    if (chips.isEmpty()) {
+    if (chips.isEmpty() && m_lineSpell == SpellRange()) {
         setCurrentBlockUserData(nullptr);
     } else {
-        auto *stored = new ChipData;
+        auto *stored = new LineData;
         stored->chips = chips;
+        stored->spell = m_lineSpell;
         setCurrentBlockUserData(stored);
     }
     // (The layout reports the new formats too; a token whose text did not move needs this.)
-    QMetaObject::invokeMethod(this, &MarkdownHighlighter::refreshChips, Qt::QueuedConnection);
+    if (chipsChanged)
+        QMetaObject::invokeMethod(this, &MarkdownHighlighter::refreshChips, Qt::QueuedConnection);
 }
 
 void MarkdownHighlighter::refreshChips()
@@ -289,7 +331,7 @@ void MarkdownHighlighter::refreshChips()
             QMetaObject::invokeMethod(this, &QSyntaxHighlighter::rehighlight, Qt::QueuedConnection);
         }
         for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
-            const auto *data = static_cast<const ChipData *>(block.userData());
+            const auto *data = static_cast<const LineData *>(block.userData());
             if (!data)
                 continue;
             for (const LineChip &chip : data->chips) {
@@ -549,24 +591,120 @@ void MarkdownHighlighter::setSpellCheck(SpellCheck *spell)
     const bool was = spellActive();
     m_spell = spell;
     m_spellPending.clear();
-    m_spellMarked.clear();
     if (spell) {
         m_spellConnections = {
                 connect(spell, &SpellCheck::checked, this,
                         [this](bool changed) {
                             // A word marked before may be right now (added to the dictionary).
                             if (changed)
-                                m_spellPending.unite(m_spellMarked);
-                            if (!m_spellPending.isEmpty() && !m_spellTimer.isActive())
+                                m_spellReady.unite(m_spellMarked);
+                            // The lines waiting for verdicts, once every word asked for has its
+                            // answer (one pass, not one per batch of a large text).
+                            if (m_spell && m_spell->idle())
+                                m_spellReady.unite(std::exchange(m_spellPending, {}));
+                            if (!m_spellReady.isEmpty() && !m_spellTimer.isActive())
                                 m_spellTimer.start();
                         }),
-                connect(spell, &SpellCheck::invalidated, this, [this] { rehighlight(); }),
-                connect(spell, &SpellCheck::activeChanged, this, [this] { rehighlight(); }),
+                connect(spell, &SpellCheck::invalidated, this, [this] { respell(); }),
+                connect(spell, &SpellCheck::activeChanged, this, [this] { respell(); }),
         };
     }
     Q_EMIT spellCheckChanged();
     if (was || spellActive())
+        respell();
+}
+
+void MarkdownHighlighter::respell()
+{
+    QTextDocument *doc = document();
+    if (!doc)
+        return;
+    if (!spellActive()) {
+        // Only the marks go.
+        m_spellPending.clear();
+        m_spellReady.unite(std::exchange(m_spellMarked, {}));
+        if (doc->characterCount() <= LargeText)
+            rehighlightReadySpelling(false);
+        else if (!m_spellReady.isEmpty())
+            m_spellTimer.start();
+        return;
+    }
+    if (doc->characterCount() <= LargeText) {
+        m_spellReady.clear();
+        m_spellPending.clear();
+        m_spellSweep = m_spellSweepEnd = -1;
         rehighlight();
+        return;
+    }
+    sweepSpelling(0, doc->characterCount());
+}
+
+void MarkdownHighlighter::sweepSpelling(int from, int to)
+{
+    QTextDocument *doc = document();
+    if (!doc)
+        return;
+    const int first = doc->findBlock(std::max(0, from)).blockNumber();
+    QTextBlock lastBlock = doc->findBlock(std::max(0, to));
+    const int last = lastBlock.isValid() ? lastBlock.blockNumber() : doc->blockCount() - 1;
+    if (m_spellViewFirst < 0)
+        sweepLines(first, last);
+    else
+        sweepLines(std::max(first, m_spellViewFirst), std::min(last, m_spellViewLast));
+}
+
+void MarkdownHighlighter::setSpellView(int from, int to)
+{
+    if (m_spellViewFrom == from && m_spellViewTo == to)
+        return;
+    m_spellViewFrom = from;
+    m_spellViewTo = to;
+    Q_EMIT spellViewChanged();
+    QTextDocument *doc = document();
+    const int oldFirst = m_spellViewFirst;
+    const int oldLast = m_spellViewLast;
+    if (!doc || from < 0 || to < 0) {
+        m_spellViewFirst = m_spellViewLast = -1;
+    } else {
+        const QTextBlock a = doc->findBlock(std::min(from, to));
+        const QTextBlock b = doc->findBlock(std::max(from, to));
+        m_spellViewFirst = std::max(0, (a.isValid() ? a.blockNumber() : 0) - SpellViewMargin);
+        m_spellViewLast = (b.isValid() ? b.blockNumber() : doc->blockCount() - 1) + SpellViewMargin;
+    }
+    if (!doc || !spellActive() || (oldFirst == m_spellViewFirst && oldLast == m_spellViewLast))
+        return;
+    // The lines that came into the view's range are checked (those that left keep their marks
+    // until they are highlighted again: nobody sees them).
+    if (m_spellViewFirst < 0) {
+        sweepLines(0, doc->blockCount() - 1);
+    } else if (oldFirst < 0 || m_spellViewLast < oldFirst || m_spellViewFirst > oldLast) {
+        sweepLines(m_spellViewFirst, m_spellViewLast);
+    } else {
+        if (m_spellViewFirst < oldFirst)
+            sweepLines(m_spellViewFirst, oldFirst - 1);
+        if (m_spellViewLast > oldLast)
+            sweepLines(oldLast + 1, m_spellViewLast);
+    }
+}
+
+void MarkdownHighlighter::sweepLines(int first, int last)
+{
+    QTextDocument *doc = document();
+    if (!doc)
+        return;
+    first = std::max(0, first);
+    last = std::min(last, doc->blockCount() - 1);
+    if (last < first)
+        return;
+    if (m_spellSweep < 0) {
+        m_spellSweep = std::max(0, first);
+        m_spellSweepEnd = last;
+    } else {
+        m_spellSweep = std::min(m_spellSweep, std::max(0, first));
+        m_spellSweepEnd = std::max(m_spellSweepEnd, last);
+    }
+    if (!m_spellTimer.isActive())
+        m_spellTimer.start();
 }
 
 void MarkdownHighlighter::setSpellCaret(int position)
@@ -594,12 +732,31 @@ void MarkdownHighlighter::setSpellColor(const QColor &color)
     rebuildFormats();
     Q_EMIT spellColorChanged();
     if (spellActive())
-        rehighlight();
+        respell();
 }
 
 bool MarkdownHighlighter::spellActive() const
 {
     return m_spell && m_spell->active() && m_mode != u"code";
+}
+
+std::optional<spell::WordSpan> MarkdownHighlighter::spellWordAt(const QTextBlock &block, int position) const
+{
+    if (!block.isValid())
+        return std::nullopt;
+    const auto *data = static_cast<const LineData *>(block.userData());
+    const SpellRange range = data ? data->spell : SpellRange();
+    const QString text = block.text();
+    if (range.from < 0 || range.from > text.size())
+        return std::nullopt;
+    const qsizetype to = range.to < 0 ? text.size() : std::min<qsizetype>(range.to, text.size());
+    const QStringView part = QStringView(text).sliced(range.from, to - range.from);
+    auto word = spell::wordAt(part, position - range.from, range.lineStart);
+    if (!word)
+        return std::nullopt;
+    word->from += range.from;
+    word->to += range.from;
+    return word;
 }
 
 int MarkdownHighlighter::wrongWordBlockAt(int position) const
@@ -608,13 +765,10 @@ int MarkdownHighlighter::wrongWordBlockAt(int position) const
     if (!doc || position < 0 || !m_spell)
         return -1;
     const QTextBlock block = doc->findBlock(position);
-    if (!block.isValid())
-        return -1;
-    const QString text = block.text();
-    const auto word = spell::wordAt(text, position - block.position());
+    const auto word = spellWordAt(block, position - block.position());
     if (!word || word->to != position - block.position() || word->dot)
         return -1;
-    const auto verdict = m_spell->verdict(spell::checkedText(text, *word));
+    const auto verdict = m_spell->verdict(spell::checkedText(block.text(), *word));
     return verdict == SpellCheck::Verdict::Wrong ? block.blockNumber() : -1;
 }
 
@@ -625,13 +779,46 @@ void MarkdownHighlighter::rehighlightLine(int number)
         rehighlightBlock(block);
 }
 
-void MarkdownHighlighter::rehighlightPendingSpelling()
+void MarkdownHighlighter::rehighlightReadySpelling(bool sliced)
 {
-    const QSet<int> pending = std::exchange(m_spellPending, {});
-    if (!spellActive())
+    QTextDocument *doc = document();
+    if (!doc) {
+        m_spellReady.clear();
+        m_spellSweep = m_spellSweepEnd = -1;
         return;
-    for (const int number : pending)
+    }
+    QElapsedTimer clock;
+    clock.start();
+    const auto timeLeft = [&] { return !sliced || clock.elapsed() < SpellSliceMs; };
+    // The lines whose verdicts came (or changed) first, in order, then a pass over every line.
+    QList<int> ready(m_spellReady.cbegin(), m_spellReady.cend());
+    std::ranges::sort(ready);
+    for (const int number : std::as_const(ready)) {
+        if (!timeLeft())
+            break;
+        m_spellReady.remove(number);
         rehighlightLine(number);
+    }
+    QTextBlock block = m_spellSweep >= 0 ? doc->findBlockByNumber(m_spellSweep) : QTextBlock();
+    while (m_spellSweep >= 0 && timeLeft()) {
+        if (!block.isValid() || m_spellSweep > m_spellSweepEnd) {
+            m_spellSweep = m_spellSweepEnd = -1;
+            break;
+        }
+        rehighlightBlock(block);
+        block = block.next();
+        m_spellSweep = block.isValid() ? block.blockNumber() : -1;
+    }
+    if (m_spellSweep > m_spellSweepEnd)
+        m_spellSweep = m_spellSweepEnd = -1;
+    if (!m_spellReady.isEmpty() || m_spellSweep >= 0) {
+        // A large text: the event loop gets as long as a slice between slices. Every line whose
+        // marks change costs the document's layout a walk over all its lines (QTextDocumentLayout
+        // lays out each change on its own outside an edit's signal), so such a pass is spread out
+        // rather than hurried.
+        m_spellTimer.setInterval(doc->characterCount() > LargeText ? SpellSliceMs : 0);
+        m_spellTimer.start();
+    }
 }
 
 void MarkdownHighlighter::highlightSpelling(const QString &line)
@@ -640,14 +827,25 @@ void MarkdownHighlighter::highlightSpelling(const QString &line)
     if (m_spellSuppressedBlock == number)
         m_spellSuppressedBlock = -1;
     m_spellMarked.remove(number);
-    if (!spellActive())
+    // A large edit: its lines are spell-checked in slices after it (sweepSpelling()); lines far
+    // from the view are not checked.
+    if (!spellActive() || m_spellDeferred || !inSpellView(number))
         return;
-    // Not inside fenced code, frontmatter or a comment running over lines (source mode).
-    if (m_mode == u"source" && (currentBlockState() & StateMask) != Normal)
+    // Not inside fenced code, frontmatter, a formula or a comment running over lines (source
+    // mode: highlightLine() says which part of the line is prose).
+    const SpellRange range = m_lineSpell;
+    if (range.from < 0 || range.from > line.size())
         return;
+    const int to = range.to < 0 ? int(line.size()) : std::min(range.to, int(line.size()));
     const int caret = m_spellCaret - currentBlock().position();
     bool pending = false;
-    for (const spell::WordSpan &word : spell::findWords(line)) {
+    QList<spell::WordSpan> words =
+            spell::findWords(QStringView(line).sliced(range.from, to - range.from), range.lineStart);
+    for (spell::WordSpan &word : words) {
+        word.from += range.from;
+        word.to += range.from;
+    }
+    for (const spell::WordSpan &word : std::as_const(words)) {
         switch (m_spell->verdict(spell::checkedText(line, word))) {
         case SpellCheck::Verdict::Correct: break;
         case SpellCheck::Verdict::Pending: pending = true; break;
@@ -675,12 +873,10 @@ QVariantMap MarkdownHighlighter::misspelledAt(int position) const
     if (!doc || position < 0 || !spellActive())
         return {};
     const QTextBlock block = doc->findBlock(position);
-    if (!block.isValid())
-        return {};
-    const QString text = block.text();
-    const auto word = spell::wordAt(text, position - block.position());
+    const auto word = spellWordAt(block, position - block.position());
     if (!word)
         return {};
+    const QString text = block.text();
     const QString checked = spell::checkedText(text, *word);
     if (m_spell->verdict(checked) != SpellCheck::Verdict::Wrong)
         return {};
@@ -702,7 +898,7 @@ void MarkdownHighlighter::highlightBlock(const QString &line)
             mergeRange(int(range.start), int(range.length), hit);
     }
     collapseLineChips();
-    storeLineChips();
+    storeLineData();
 }
 
 void MarkdownHighlighter::highlightLine(const QString &line)
@@ -710,8 +906,11 @@ void MarkdownHighlighter::highlightLine(const QString &line)
     const int prev = previousBlockState() < 0 ? Normal : previousBlockState();
     setCurrentBlockState(Normal);
     const int size = int(line.size());
+    // The whole line is prose unless said otherwise below.
+    m_lineSpell = SpellRange();
 
     if (m_mode == u"code") {
+        m_lineSpell.from = -1;
         if (syntax::isLuauLanguage(m_language)) {
             setCurrentBlockState(highlightLuau(line, prev));
             return;
@@ -728,6 +927,8 @@ void MarkdownHighlighter::highlightLine(const QString &line)
         const QStringView trimmed = QStringView(line).trimmed();
         static const QRegularExpression fenceRe(u"^\\s{0,3}(`{3,}|~{3,})"_s);
         const auto fm = fenceRe.match(line);
+        // Fences, code, the frontmatter, a comment over lines: no prose (set again below).
+        m_lineSpell.from = -1;
         if (kind == Fence) {
             const QChar ch = (prev & 0x8) ? u'~' : u'`';
             const int len = (prev >> 4) & 0xff;
@@ -777,7 +978,19 @@ void MarkdownHighlighter::highlightLine(const QString &line)
             }
             setRange(0, int(close + 2), m_formats[u"comment"_s]);
             highlightInline(line, int(close + 2), size - int(close + 2));
+            m_lineSpell = {int(close + 2), -1, false};
             return;
+        }
+        m_lineSpell = SpellRange();
+        // A display formula between lines that are only `$$`: its lines are no prose.
+        const bool inMath = (prev & MathFlag) != 0;
+        if (isMathFence(line)) {
+            m_lineSpell.from = -1;
+            if (!inMath)
+                setCurrentBlockState(Normal | MathFlag);
+        } else if (inMath) {
+            m_lineSpell.from = -1;
+            setCurrentBlockState(Normal | MathFlag);
         }
     }
 
@@ -790,6 +1003,8 @@ void MarkdownHighlighter::highlightLine(const QString &line)
             const qsizetype open = line.lastIndexOf(u"%%"_s);
             setRange(int(open), size - int(open), m_formats[u"comment"_s]);
             setCurrentBlockState(Comment);
+            if (m_lineSpell.from >= 0)
+                m_lineSpell.to = int(open);
         }
     }
 }

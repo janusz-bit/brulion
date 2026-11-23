@@ -27,10 +27,15 @@
 // its own); leave it 0 for editors that rely on TextEdit's undo (source mode).
 // spellCheck (SpellCheck, docs/UI.md "Spell checking"): words it says are wrong get a red
 // underline (format "spelling", `spellColor`) — prose only (spell/spellwords.h skips the syntax),
-// never in "code" mode, fences, frontmatter or comments; the word ending at `spellCaret` is not
-// marked while it is being typed. Verdicts come from the checker's thread: lines with words still
-// pending are highlighted again when they arrive (only those lines). misspelledAt(pos): the
-// marked word there, for the editor's menu.
+// never in "code" mode, fences, frontmatter, display formulas between `$$` lines or comments; the
+// word ending at `spellCaret` is not marked while it is being typed. Verdicts come from the
+// checker's thread: lines with words still pending are highlighted again once every word asked
+// for has its answer (only those lines). misspelledAt(pos): the marked word there, for the
+// editor's menu. Never a long stall in a large text (source mode, docs/UI.md "Spell checking"): a
+// large edit (setting a page's text, a long paste) is highlighted without spelling, which a pass
+// over its lines adds in slices of a few milliseconds; those lines, a pass over every line
+// (spell checking switched on, languages or the dictionary changed) and the lines whose answers
+// came are highlighted again in such slices too — a small text (an edited block) at once.
 // reminderChips (the block editor's edited text, "inline" mode): every ⏰ / ⏰! reminder token stays
 // a chip while its block is edited — `chipShapes` gives one rounded shape per line segment of each
 // token ({x, y, width, height, color, kind "pill", from, to}: document positions of the token), in
@@ -58,6 +63,7 @@
 #include <QQuickTextDocument>
 #include <QSet>
 #include <QSyntaxHighlighter>
+#include <QTextBlock>
 #include <QTextCharFormat>
 #include <QTimer>
 #include <QVariantMap>
@@ -89,6 +95,10 @@ class MarkdownHighlighter : public QSyntaxHighlighter {
     /// The caret (a position in the document; -1: none): the word ending right at it is not marked.
     Q_PROPERTY(int spellCaret READ spellCaret WRITE setSpellCaret NOTIFY spellCaretChanged FINAL)
     Q_PROPERTY(QColor spellColor READ spellColor WRITE setSpellColor NOTIFY spellColorChanged FINAL)
+    /// The part of the document on screen (document positions; −1: the whole document is checked):
+    /// only its lines and SpellViewMargin lines around it are spell-checked (source mode's view).
+    Q_PROPERTY(int spellViewFrom READ spellViewFrom WRITE setSpellViewFrom NOTIFY spellViewChanged FINAL)
+    Q_PROPERTY(int spellViewTo READ spellViewTo WRITE setSpellViewTo NOTIFY spellViewChanged FINAL)
     /// Reminder tokens are chips (`chipShapes`); off: none.
     Q_PROPERTY(bool reminderChips READ reminderChips WRITE setReminderChips NOTIFY reminderChipsChanged FINAL)
     Q_PROPERTY(qreal chipInset READ chipInset WRITE setChipInset NOTIFY chipInsetChanged FINAL)
@@ -106,6 +116,15 @@ public:
         bool alarm = false;
         QString label;
         bool operator==(const LineChip &other) const = default;
+    };
+    /// The part of a line that is prose for spell checking ([from, to) of the line, `to` −1: its
+    /// end; `from` −1: none — fences, code, the frontmatter, formulas and comments over lines in
+    /// "source" mode, everything in "code" mode); `lineStart`: it starts the line (spell::findWords).
+    struct SpellRange {
+        int from = 0;
+        int to = -1;
+        bool lineStart = true;
+        bool operator==(const SpellRange &other) const = default;
     };
 
     explicit MarkdownHighlighter(QObject *parent = nullptr);
@@ -139,6 +158,14 @@ public:
     void setSpellCaret(int position);
     QColor spellColor() const { return m_spellColor; }
     void setSpellColor(const QColor &color);
+    int spellViewFrom() const { return m_spellViewFrom; }
+    void setSpellViewFrom(int position) { setSpellView(position, m_spellViewTo); }
+    int spellViewTo() const { return m_spellViewTo; }
+    void setSpellViewTo(int position) { setSpellView(m_spellViewFrom, position); }
+    /// Both ends of `spellView` at once.
+    void setSpellView(int from, int to);
+    /// Lines checked around the view, before and after it.
+    static constexpr int SpellViewMargin = 100;
     bool reminderChips() const { return m_reminderChips; }
     void setReminderChips(bool on);
     qreal chipInset() const { return m_chipInset; }
@@ -162,6 +189,9 @@ public:
     /// it): {from, to (document positions), word (as checked: "np." with its dot), text (as
     /// written)}; an empty map when none is marked there.
     Q_INVOKABLE QVariantMap misspelledAt(int position) const;
+    /// No spelling left to apply: no line waiting for verdicts or to be highlighted again, no pass
+    /// over the lines running (tests).
+    bool spellingSettled() const { return m_spellPending.isEmpty() && m_spellReady.isEmpty() && m_spellSweep < 0; }
 
     /// Attach to a plain QTextDocument (C++/tests); same as QSyntaxHighlighter::setDocument plus
     /// the line-height handling.
@@ -178,6 +208,7 @@ Q_SIGNALS:
     void spellCheckChanged();
     void spellCaretChanged();
     void spellColorChanged();
+    void spellViewChanged();
     void reminderChipsChanged();
     void chipInsetChanged();
     void chipShapesChanged();
@@ -207,14 +238,32 @@ private:
     void mergeRange(int from, int length, const QTextCharFormat &format, const QColor &plainColor = {});
     bool spellActive() const;
     void highlightSpelling(const QString &line);
-    void rehighlightPendingSpelling();
+    /// Highlights again the lines of m_spellReady, then those of the running pass (m_spellSweep);
+    /// `sliced`: for SpellSliceMs at most, the rest on the next turn of the event loop.
+    void rehighlightReadySpelling(bool sliced);
+    /// Spell checking changed (switched on or off, every verdict forgotten, a new colour): every
+    /// line again — at once in a small text, in slices in a large one —, or (switched off) only
+    /// the lines with marks.
+    void respell();
+    /// A pass over the lines of document positions [from, to] (within the view's lines), in slices.
+    void sweepSpelling(int from, int to);
+    /// A pass over the lines [first, last] (block numbers), in slices.
+    void sweepLines(int first, int last);
+    /// Line `number` is spell-checked (inside the view's lines, or no view).
+    bool inSpellView(int number) const
+    {
+        return m_spellViewFirst < 0 || (number >= m_spellViewFirst && number <= m_spellViewLast);
+    }
+    /// The word of the prose of `block` at `position` (in the block: spell::wordAt() over its
+    /// SpellRange), in the block's positions.
+    std::optional<spell::WordSpan> spellWordAt(const QTextBlock &block, int position) const;
     /// Highlights block `number` again (none: -1 or past the end).
     void rehighlightLine(int number);
     /// Block number of the wrong word ending at `position`, -1 when none ends there.
     int wrongWordBlockAt(int position) const;
-    /// The current line's reminder tokens (m_lineChips) kept on its block (ChipData); the shapes
-    /// recomputed when they changed.
-    void storeLineChips();
+    /// The current line's reminder tokens (m_lineChips) and its prose (m_lineSpell) kept on its
+    /// block (LineData); the chips' shapes recomputed when they changed.
+    void storeLineData();
     /// The current line's chips laid out as their labels (m_lineChips: invisible characters, the
     /// first one as wide as the label, the others with no width).
     void collapseLineChips();
@@ -240,9 +289,25 @@ private:
     QList<QMetaObject::Connection> m_spellConnections;
     int m_spellCaret = -1;
     QColor m_spellColor = QColor(u"#c0392b");
-    /// Lines with words whose verdicts are pending, and lines with words marked (block numbers).
+    /// Lines with words whose verdicts are pending, lines with words marked, and lines to highlight
+    /// again now (block numbers).
     QSet<int> m_spellPending;
     QSet<int> m_spellMarked;
+    QSet<int> m_spellReady;
+    /// A pass over the lines [m_spellSweep, m_spellSweepEnd] (block numbers; −1: none).
+    int m_spellSweep = -1;
+    int m_spellSweepEnd = -1;
+    /// A large edit is being highlighted: its spelling comes from a pass after it.
+    bool m_spellDeferred = false;
+    QMetaObject::Connection m_bulkConnection;
+    QMetaObject::Connection m_bulkDoneConnection;
+    /// The prose of the line being highlighted (highlightLine()).
+    SpellRange m_lineSpell;
+    int m_spellViewFrom = -1;
+    int m_spellViewTo = -1;
+    /// The lines spell-checked (block numbers, the view's with its margins; −1: all).
+    int m_spellViewFirst = -1;
+    int m_spellViewLast = -1;
     /// The line where the word at the caret was left unmarked (-1: none).
     int m_spellSuppressedBlock = -1;
     QTimer m_spellTimer;

@@ -87,7 +87,28 @@ SpellCheck::SpellCheck(const QStringList &availableLanguages, BackendFactory fac
     m_flushTimer.setSingleShot(true);
     m_flushTimer.setInterval(0);
     connect(&m_flushTimer, &QTimer::timeout, this, &SpellCheck::flush);
+    // Every verdict gone, or spell checking switched on or off: what wrongWords() found is stale.
+    connect(this, &SpellCheck::invalidated, this, [this] { verdictsChanged(true); });
+    connect(this, &SpellCheck::activeChanged, this, [this] { verdictsChanged(true); });
     updateLanguages();
+}
+
+void SpellCheck::verdictsChanged(bool differ)
+{
+    if (differ) {
+        ++m_epoch;
+        m_textWords.clear();
+    }
+    ++m_revision;
+    Q_EMIT revisionChanged();
+}
+
+void SpellCheck::setWholePage(bool on)
+{
+    if (m_wholePage == on)
+        return;
+    m_wholePage = on;
+    Q_EMIT wholePageChanged();
 }
 
 SpellCheck::~SpellCheck()
@@ -285,6 +306,51 @@ SpellCheck::Verdict SpellCheck::verdict(const QString &word)
     return Verdict::Pending;
 }
 
+SpellCheck::Verdict SpellCheck::knownVerdict(const QString &word) const
+{
+    if (!active() || word.isEmpty())
+        return Verdict::Correct;
+    if (const auto it = m_verdicts.constFind(word); it != m_verdicts.constEnd())
+        return it.value() ? Verdict::Correct : Verdict::Wrong;
+    return Verdict::Pending;
+}
+
+QList<spell::WordSpan> SpellCheck::wrongWords(const QString &text, bool *pending)
+{
+    if (pending)
+        *pending = false;
+    if (!active() || text.isEmpty())
+        return {};
+    if (const auto it = m_textWords.constFind(text);
+        it != m_textWords.constEnd() && it->epoch == m_epoch && !it->pending)
+        return it->wrong;
+    TextWords found;
+    found.epoch = m_epoch;
+    const QStringView all(text);
+    for (qsizetype start = 0; start <= all.size();) {
+        qsizetype end = all.indexOf(u'\n', start);
+        if (end < 0)
+            end = all.size();
+        QStringView line = all.sliced(start, end - start);
+        if (line.endsWith(u'\r'))
+            line.chop(1);
+        for (const spell::WordSpan &word : spell::findWords(line)) {
+            switch (verdict(spell::checkedText(line, word))) {
+            case Verdict::Correct: break;
+            case Verdict::Pending: found.pending = true; break;
+            case Verdict::Wrong: found.wrong.append({word.from + start, word.to + start, word.dot}); break;
+            }
+        }
+        start = end + 1;
+    }
+    if (m_textWords.size() >= MaxCachedTexts)
+        m_textWords.clear();
+    m_textWords.insert(text, found);
+    if (pending)
+        *pending = found.pending;
+    return found.wrong;
+}
+
 void SpellCheck::ensureWorker()
 {
     if (m_thread)
@@ -366,6 +432,7 @@ void SpellCheck::onChecked(int generation, const QStringList &words, const QList
             changed = true;
         m_verdicts.insert(words[i], r);
     }
+    verdictsChanged(changed);
     Q_EMIT checked(changed);
 }
 

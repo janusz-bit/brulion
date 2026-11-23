@@ -90,6 +90,7 @@ constexpr auto kWebPictures = "editor/webPicturesShown"_L1;
 constexpr auto kSpellCheck = "spelling/enabled"_L1;
 constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
 constexpr auto kSpellLanguages = "spelling/languages"_L1;
+constexpr auto kSpellWholePage = "spelling/wholePage"_L1;
 constexpr auto kSpellingWords = "spelling/words"_L1;
 constexpr auto kAttachmentSearch = "search/attachments"_L1;
 constexpr auto kAttachmentOcr = "search/ocr"_L1;
@@ -1435,6 +1436,22 @@ void AppSettings::setSpellLanguages(const QString &languages)
 {
     if (store(kSpellLanguages, oneOf(languages, kSpellLanguageChoices), spellLanguages()))
         Q_EMIT spellLanguagesChanged();
+}
+
+bool AppSettings::spellWholePage() const
+{
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    constexpr bool byDefault = false;
+#else
+    constexpr bool byDefault = true;
+#endif
+    return m_settings->value(kSpellWholePage, byDefault).toBool();
+}
+
+void AppSettings::setSpellWholePage(bool on)
+{
+    if (store(kSpellWholePage, on, spellWholePage()))
+        Q_EMIT spellWholePageChanged();
 }
 
 QStringList AppSettings::spellingWords() const

@@ -488,6 +488,7 @@ int main(int argc, char *argv[])
         spell->setLanguageSetting(settings->spellLanguages());
         spell->setPersonalWords(settings->spellingWords());
         spell->setEnabled(settings->spellCheck());
+        spell->setWholePage(settings->spellWholePage());
         QObject::connect(&devTools, &brulion::ui::DevTools::languageChanged, settings,
                          [spell, &devTools] { spell->setUiLanguage(devTools.language()); });
         // OCR's "auto" languages too (docs/UI.md "Searching attachments").
@@ -496,6 +497,8 @@ int main(int argc, char *argv[])
                          [workspace, &devTools] { workspace->attachments()->setUiLanguage(devTools.language()); });
         QObject::connect(settings, &brulion::shell::AppSettings::spellCheckChanged, spell,
                          [spell, settings] { spell->setEnabled(settings->spellCheck()); });
+        QObject::connect(settings, &brulion::shell::AppSettings::spellWholePageChanged, spell,
+                         [spell, settings] { spell->setWholePage(settings->spellWholePage()); });
         QObject::connect(settings, &brulion::shell::AppSettings::spellLanguagesChanged, spell,
                          [spell, settings] { spell->setLanguageSetting(settings->spellLanguages()); });
         QObject::connect(settings, &brulion::shell::AppSettings::spellingWordsChanged, spell,

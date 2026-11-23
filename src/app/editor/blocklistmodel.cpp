@@ -9,6 +9,8 @@
 #include "editorhost.h"
 #include "queryhost.h"
 #include "renderedtextitem.h"
+#include "spellcheck.h"
+#include "spellmarks.h"
 
 #include "calc/calc.h"
 #include "chart/chart.h"
@@ -592,6 +594,64 @@ BlockShape BlockListModel::shapeAt(int row) const
 QString BlockListModel::editTextAt(int row) const
 {
     return cachedShape(row).editText;
+}
+
+namespace {
+
+/// The views whose prose spell checking covers (InlineEditor.spellChecked: not code, calculations,
+/// queries, formulas, tables or the html view).
+bool spellChecked(BlockView view)
+{
+    return view == BlockView::Text || view == BlockView::Heading || view == BlockView::Quote
+           || view == BlockView::Callout;
+}
+
+} // namespace
+
+QString BlockListModel::spellMarkedHtml(int row, SpellCheck *spell, const QColor &color) const
+{
+    const int i = docIndexOfRow(row);
+    if (i < 0)
+        return {};
+    const QString html = renderHtml(i);
+    if (!spell || !spellChecked(cachedShape(row).view))
+        return html;
+    const markdown::BlockEntry &e = m_doc.at(i);
+    const QList<spell::WordSpan> wrong = spell->wrongWords(e.body);
+    if (wrong.isEmpty())
+        return html;
+    RowState &st = stateFor(e.uid);
+    if (st.spellHtmlOf.isSharedWith(html) && st.spellWrong == wrong && st.spellColor == color)
+        return st.spellHtml;
+    const QList<markdown::HtmlSourceAnchor> &anchors = anchorsAt(i); // (st.html: the same text again)
+    st.spellHtml = markMisspelledHtml(st.html, anchors, e.body, wrong, color);
+    st.spellHtmlOf = st.html;
+    st.spellWrong = wrong;
+    st.spellColor = color;
+    return st.spellHtml;
+}
+
+QVariantMap BlockListModel::misspelledInRendered(int row, int position, SpellCheck *spell) const
+{
+    const int i = docIndexOfRow(row);
+    if (i < 0 || !spell || position < 0 || !spellChecked(cachedShape(row).view))
+        return {};
+    const markdown::BlockEntry &e = m_doc.at(i);
+    const QList<spell::WordSpan> wrong = spell->wrongWords(e.body);
+    if (wrong.isEmpty())
+        return {};
+    const std::shared_ptr<const markdown::RenderedText> shown = renderedTextAt(i);
+    for (const spell::WordSpan &w : wrong) {
+        // Only a word shown as it is written (what spellMarkedHtml() underlines).
+        const auto [from, to] = shown->displayRange(w.from, w.to);
+        if (from < 0 || to - from != w.length() || position < from || position > to)
+            continue;
+        return {{u"from"_s, int(w.from)},
+                {u"to"_s, int(w.to)},
+                {u"word"_s, spell::checkedText(e.body, w)},
+                {u"text"_s, e.body.mid(w.from, w.length())}};
+    }
+    return {};
 }
 
 int BlockListModel::renderOffsetAt(int row) const
@@ -1766,16 +1826,27 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     return ctx;
 }
 
+const QList<markdown::HtmlSourceAnchor> &BlockListModel::anchorsAt(int i) const
+{
+    RowState &st = stateFor(m_doc.at(i).uid);
+    if (st.htmlValid && st.anchorsHtml.isSharedWith(st.html))
+        return st.anchors;
+    // Rendered again with the source anchors (the HTML is the same).
+    st.htmlValid = false;
+    markdown::TracedHtml traced;
+    renderHtml(i, &traced);
+    st.anchors = std::move(traced.anchors);
+    st.anchorsHtml = st.html;
+    return st.anchors;
+}
+
 std::shared_ptr<const markdown::RenderedText> BlockListModel::renderedTextAt(int i) const
 {
     RowState &st = stateFor(m_doc.at(i).uid);
     if (st.htmlValid && st.runs && st.runsHtml.isSharedWith(st.html))
         return st.runs;
-    // Rendered again with the source anchors (the HTML is the same).
-    st.htmlValid = false;
-    markdown::TracedHtml traced;
-    renderHtml(i, &traced);
-    markdown::RenderedText runs = markdown::renderedTextFromHtml(traced.html, traced.anchors);
+    const QList<markdown::HtmlSourceAnchor> &anchors = anchorsAt(i);
+    markdown::RenderedText runs = markdown::renderedTextFromHtml(st.html, anchors);
     // The same text again keeps its object: a view sees no change.
     if (!st.runs || *st.runs != runs)
         st.runs = std::make_shared<const markdown::RenderedText>(std::move(runs));

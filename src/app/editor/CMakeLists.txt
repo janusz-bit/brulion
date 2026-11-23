@@ -52,6 +52,7 @@ qt_add_library(brulion_editor STATIC
     dayclock.h dayclock.cpp
     markdownhighlighter.h markdownhighlighter.cpp
     spellcheck.h spellcheck.cpp
+    spellmarks.h spellmarks.cpp
     richtext_p.h
     richtextpills.h richtextpills.cpp
     richtextlinks.h richtextlinks.cpp
