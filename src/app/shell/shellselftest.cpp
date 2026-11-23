@@ -8336,10 +8336,12 @@ void checkHiddenViewFocus(QQuickWindow *window, AppController *app, const Check 
     QQuickItem *topBar = window->findChild<QQuickItem *>(u"shellTopBar"_s);
     check(topBar != nullptr, "the top bar is there");
     if (topBar) {
-        QQmlComponent component(qmlEngine(window->contentItem()));
-        component.setData(QByteArrayLiteral("import QtQuick.Controls\nToolTip { text: \"Podpowiedź samotestu\" }\n"),
-                          QUrl());
-        QObject *tip = component.create();
+        // (The app's own tooltip, from its compiled module: a packaged app may carry no plain
+        // QtQuick.Controls for QML given as text — the Windows ZIP has none.)
+        QQmlComponent component(qmlEngine(window->contentItem()), u"Brulion"_s, u"BToolTip"_s);
+        QObject *tip = component.createWithInitialProperties({{u"text"_s, u"Podpowiedź samotestu"_s}});
+        if (!tip)
+            std::fprintf(stderr, "selftest: the tooltip: %s\n", qPrintable(component.errorString()));
         check(tip != nullptr, "a tooltip for the top bar is made");
         if (tip) {
             tip->setProperty("parent", QVariant::fromValue(topBar));
