@@ -9165,6 +9165,9 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return backups->backups().size() == before + 1 && !backups->running(); }),
           "“Create a backup now” adds a backup to the list");
     check(backups->status() == u"ok", "the status says it worked");
+    const QString original = backups->backups().isEmpty()
+            ? QString()
+            : backups->backups().first().toMap().value(u"name"_s).toString();
 
     QQuickItem *row = nullptr;
     check(waitFor([&] {
@@ -9194,6 +9197,34 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
     check(!ws->exists(u"Kopia nowa.md"_s), "what the backup does not hold goes to the trash");
     check(waitFor([&] { return backups->backups().size() >= before + 2; }), "a safety backup was made first");
     closeMenus(window);
+
+    // "Restore from a file…": the section offers it (its picker is the system's own dialog, left
+    // alone here); a backup handed over by file — as the picker would — goes through the same
+    // confirmation and brings the note back.
+    settle(300);
+    QQuickItem *fromFile = shownNamed(window->contentItem(), u"backupsRestoreFromFile"_s);
+    check(fromFile != nullptr && fromFile->isEnabled(), "the section has “Restore from a file…”");
+    if (fromFile && !original.isEmpty()) {
+        QTemporaryDir picked;
+        const QString copy = picked.filePath(u"Moja kopia — żółw.zip"_s);
+        check(picked.isValid() && QFile::copy(QDir(backups->folder()).filePath(original), copy),
+              "a backup copied out of the list");
+        ws->writeFile(note, u"- znów zmieniona\n"_s);
+        ws->writeFile(u"Kopia druga.md"_s, u"- po kopii\n"_s);
+        check(backups->prepareRestoreFromFile(QUrl::fromLocalFile(copy)), "a picked backup starts its check");
+        QQuickItem *fileAccept = nullptr;
+        check(waitFor([&] { return (fileAccept = findButton(window->contentItem(), accept)) != nullptr; }),
+              "a picked backup asks first, with its counts");
+        check(ws->readFile(note) == u"- znów zmieniona\n", "nothing is restored before the confirmation");
+        settle(250);
+        if (fileAccept)
+            tapOrClick(window, pointIn(fileAccept), touch);
+        check(waitFor([&] { return ws->readFile(note) == u"- z kopii\n" && !backups->running(); }),
+              "the confirmed restore from a file brings the note back");
+        check(!ws->exists(u"Kopia druga.md"_s), "what the picked backup does not hold goes to the trash");
+        check(QFileInfo::exists(copy), "the picked file is left where it was");
+        closeMenus(window);
+    }
 
     // Delete asks first too.
     settle(300);

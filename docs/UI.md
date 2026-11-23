@@ -3097,9 +3097,20 @@ guide: the page "Backups" of the documentation notebook.
   backup and applies the plan; the outcome is a toast. A restore interrupted by closing the notebook or a kill: a
   toast, and on the next open the status names the safety backup, with "I have dealt with it"
   (`backupsDismissInterrupted`).
+* **Restore from a file…** (`backupsRestoreFromFile`, under the list): a Brulion backup that is not on the
+  list — another device's, a download, one from a folder the app does not watch. The browser opens its own
+  picker (`pickRestoreFile`), elsewhere `backupsFileDialog` (`FilePicker.OpenFile`, ZIP archives) →
+  `prepareRestoreFromFile(url)`: a local file is read in place, an Android document that is no file on the
+  phone's storage is first copied into the cache (phase "Checking the backup…", Stop drops it). The file must
+  carry Brulion's manifest: any other ZIP, a text file, a file cut short are refused with a message of their
+  own and nothing changes. The same `restorePlanReady` follows (`source: "file"`, `fileName`, `files`,
+  `sizeText`), and `backupsRestoreConfirm` is titled by the file's name, says what the file holds and — when its
+  manifest names another notebook (`foreign`) — warns that it may replace this notebook's notes with another's.
+  Then the same path as a listed backup: safety backup, plan, History, trash. Files of any size are restored
+  (above 4 MiB streamed through a staging file). The picked file is never changed or deleted.
 * The documentation notebook has none (`available` false, a note instead; the palette's commands off).
 
-Tests: `tst_backup*`, `tst_shell_workspace_backups` (+ `_inline`), `--selftest-shell` (`checkBackups`: real
+Tests: `tst_backup*`, `tst_shell_workspace_backups` (+ `_inline`: restore from a picked file, from the browser's bytes, a ZIP that is no backup), `--selftest-shell` (`checkBackups`: real
 taps through a backup, a restore's confirmation, a delete), `tst_content_qml` (the route).
 
 ## Encrypted notes (`qml/editor/EncryptedTextDialog.qml`, `qml/content/ContentEncryptedPage.qml`, `qml/content/ContentEncryptionDialog.qml`)

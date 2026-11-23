@@ -59,8 +59,9 @@ struct RestorePlan {
     }
 };
 
-/// The largest entry restored: Vault writes hold a file in memory.
-constexpr qint64 MaxRestoredEntryBytes = qint64(1) << 30;
+/// The largest entry restored (the archive limit): a file above 4 MiB is inflated into a staging
+/// file next to its place, never into memory.
+constexpr qint64 MaxRestoredEntryBytes = qint64(64) << 30;
 
 /// The plan (pure). `crcOf`: the CRC-32 of the notebook's files whose size equals their entry's
 /// (a file without one counts as different). .brulion/config.json is compared and written like a
@@ -80,12 +81,19 @@ struct RestoreCheckOptions {
     QString notebookRoot;                ///< its storage is probed (isCaseInsensitiveFolder())
     std::optional<bool> caseInsensitive; ///< tests: instead of the probe
     ArchiveLimits limits;
+    /// Refuse (ArchiveProblem::NotABackup) an archive without Brulion's manifest: a file the user
+    /// picked may be any ZIP. The listed backups of the notebook's folder are Brulion's by their names.
+    bool requireManifest = false;
 };
 struct RestoreCheck {
     ArchiveProblem problem = ArchiveProblem::None;
     bool cancelled = false;
     QString detail; ///< English, for the log
     RestorePlan plan;
+    /// What the archive says about itself and holds (set once its entries were read).
+    BackupManifest manifest;
+    int files = 0;        ///< files in it (folders not counted)
+    qint64 bytes = 0;     ///< their size, uncompressed
 
     bool ok() const { return problem == ArchiveProblem::None && !cancelled; }
 };
@@ -153,7 +161,11 @@ private:
     void writeSlice();
     void trashSlice();
     void createFolders();
+    /// The file at the write's target may be replaced (History first, a file that cannot be read never).
+    bool mayReplace(const PlannedWrite &write, const QByteArray *bytes);
     bool writeOne(const PlannedWrite &write, const QByteArray &bytes);
+    bool writeStaged(const PlannedWrite &write, const QString &staging);
+    void dropStaging();
     void finish();
 
     Vault &m_vault;

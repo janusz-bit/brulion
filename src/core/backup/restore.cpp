@@ -24,9 +24,13 @@ using namespace std::chrono_literals;
 namespace {
 
 constexpr int OwnerSliceMs = 8;
-/// Bytes read ahead at once (a single larger file is read alone).
+constexpr int VerifySliceMs = 4;
+/// Bytes read ahead at once.
 constexpr qint64 BatchBytes = 32 << 20;
 constexpr qsizetype BatchFiles = 64;
+/// A file above this is never held in memory: it is inflated into a staging file next to its place
+/// (Vault::newStagingFile()) and put in place by Vault::writeStaged(), alone in its batch.
+constexpr qint64 StreamAboveBytes = 4 << 20;
 /// History keeps text; anything larger is compared by size elsewhere in the vault as well.
 constexpr qint64 MaxHistoryBytes = 16 << 20;
 
@@ -216,6 +220,7 @@ public:
             if (clock.elapsed() >= budgetMs)
                 return false;
         }
+        m_verifying.reset();
         m_reader.reset(); // the archive is closed as soon as the check is over
         return true;
     }
@@ -248,7 +253,16 @@ private:
         case Phase::Verify:
             if (m_next >= m_toVerify.size())
                 return true;
-            if (m_reader->verify(m_toVerify.at(m_next).entry, &m_cancel) || m_cancel.load()) {
+            // An entry is inflated a few milliseconds at a time: without threads a large one must not
+            // hold the event loop.
+            if (!m_verifying)
+                m_verifying = m_reader->beginExtract(m_toVerify.at(m_next).entry);
+            const Extraction::Step step = m_verifying ? m_verifying->step(nullptr, VerifySliceMs, &m_cancel)
+                                                      : Extraction::Step::Failed;
+            if (step == Extraction::Step::More)
+                return false;
+            if (step == Extraction::Step::Done || m_cancel.load()) {
+                m_verifying.reset();
                 ++m_next;
                 return false;
             }
@@ -269,6 +283,15 @@ private:
             return;
         }
         m_entries = info.entries;
+        m_result.manifest = readBackupManifest(m_archive);
+        m_result.files = int(std::ranges::count_if(m_entries, [](const ArchiveEntry &entry) { return !entry.folder; }));
+        m_result.bytes = info.totalBytes;
+        if (m_options.requireManifest && !m_result.manifest.valid) {
+            // A ZIP of someone else's: restoring it would replace the notebook with whatever it holds.
+            m_result.problem = ArchiveProblem::NotABackup;
+            m_result.detail = u"no Brulion manifest in the archive"_s;
+            return;
+        }
         // Restoring an archive without a single file of a notebook would only empty this one.
         const bool hasFiles = std::ranges::any_of(std::as_const(m_entries), [](const ArchiveEntry &entry) {
             return !entry.folder && entry.path != vaultConfigPath();
@@ -302,8 +325,7 @@ private:
     /// hold: of the trash only what stands in the way of its files stays in the plan.
     void applyManifest()
     {
-        const BackupManifest manifest = readBackupManifest(m_archive);
-        if (manifest.valid && manifest.complete)
+        if (m_result.manifest.valid && m_result.manifest.complete)
             return;
         RestorePlan &plan = m_result.plan;
         plan.incomplete = true;
@@ -325,6 +347,7 @@ private:
     std::atomic_bool m_cancel{false};
     Phase m_phase = Phase::Entries;
     std::unique_ptr<ArchiveReader> m_reader;
+    std::unique_ptr<Extraction> m_verifying; ///< (after the reader: freed before it)
     QList<ArchiveEntry> m_entries;
     QList<NotebookFile> m_toHash; ///< the notebook's files of an entry's size
     QHash<VaultPath, quint32> m_crcs;
@@ -372,13 +395,19 @@ bool RestoreChecker::isRunning() const
 
 // ---- Applying ---------------------------------------------------------------------------------
 
-/// One read-ahead: the next files' bytes, read off the owner's thread.
+/// One read-ahead: the next files' bytes, read off the owner's thread — or, for one large file
+/// (`streamed`), that file inflated into its staging file.
 struct RestoreApplier::ReadBatch : detail::Task {
     std::shared_ptr<ArchiveReader> reader;
     std::shared_ptr<std::atomic_bool> cancel;
     QList<PlannedWrite> checkFirst; ///< the first batch: every write of the plan
     QList<PlannedWrite> writes;
     QList<std::optional<QByteArray>> bytes;
+    bool streamed = false;
+    QString staging; ///< streamed: made by the owner (Vault::newStagingFile()), "" when it could not be
+    bool streamOk = false;
+    std::unique_ptr<QFile> streamFile;
+    std::unique_ptr<Extraction> extraction; ///< (the reader outlives it: a shared_ptr of the batch)
     QString problem;
 
     bool step(int budgetMs) override
@@ -400,6 +429,26 @@ struct RestoreApplier::ReadBatch : detail::Task {
                 problem = u"the backup changed since it was checked"_s;
                 return true;
             }
+        }
+        if (streamed) {
+            // In steps: without threads the event loop runs between them.
+            if (staging.isEmpty() || cancel->load())
+                return true;
+            if (!extraction) {
+                streamFile = std::make_unique<QFile>(staging);
+                extraction = streamFile->open(QIODevice::WriteOnly | QIODevice::Truncate)
+                        ? reader->beginExtract(writes.first().entry)
+                        : nullptr;
+                if (!extraction)
+                    return true;
+            }
+            const Extraction::Step step = extraction->step(streamFile.get(), std::max(budgetMs, 1), cancel.get());
+            if (step == Extraction::Step::More)
+                return false;
+            streamOk = step == Extraction::Step::Done && streamFile->flush();
+            streamFile->close();
+            extraction.reset();
+            return true;
         }
         while (bytes.size() < writes.size()) {
             if (cancel->load())
@@ -424,6 +473,13 @@ RestoreApplier::RestoreApplier(Vault &vault, const notebook::WorkerPool &pool, Q
 RestoreApplier::~RestoreApplier()
 {
     m_cancel->store(true);
+    dropStaging();
+}
+
+void RestoreApplier::dropStaging()
+{
+    if (m_batch && !m_batch->staging.isEmpty())
+        QFile::remove(m_batch->staging);
 }
 
 void RestoreApplier::start(const RestorePlan &plan, const QString &archivePath)
@@ -486,11 +542,17 @@ void RestoreApplier::readNextBatch()
     qint64 bytes = 0;
     while (m_nextRead < m_writes.size() && m_batch->writes.size() < BatchFiles) {
         const PlannedWrite &write = m_writes.at(m_nextRead);
-        if (!m_batch->writes.isEmpty() && bytes + write.entry.size > BatchBytes)
+        const bool large = write.entry.size > StreamAboveBytes;
+        if (!m_batch->writes.isEmpty() && (large || bytes + write.entry.size > BatchBytes))
             break;
         bytes += write.entry.size;
         m_batch->writes.append(write);
         ++m_nextRead;
+        if (large) { // alone: inflated into a staging file, never into memory
+            m_batch->streamed = true;
+            m_batch->staging = m_vault.newStagingFile(write.target);
+            break;
+        }
     }
     m_runner->start(m_batch, [this] {
         if (!m_batch->problem.isEmpty()) {
@@ -525,7 +587,9 @@ void RestoreApplier::writeSlice()
         }
         const PlannedWrite &write = m_batch->writes.at(i);
         std::optional<QByteArray> &bytes = m_batch->bytes[i];
-        if (!bytes || !writeOne(write, *bytes))
+        const bool written = m_batch->streamed ? writeStaged(write, m_batch->streamOk ? m_batch->staging : QString())
+                                               : bytes && writeOne(write, *bytes);
+        if (!written)
             m_result.failed.append(write.target);
         else if (m_nextWrite < m_plan.toChange.size())
             ++m_result.changed;
@@ -536,33 +600,61 @@ void RestoreApplier::writeSlice()
     }
 }
 
-bool RestoreApplier::writeOne(const PlannedWrite &write, const QByteArray &bytes)
+bool RestoreApplier::mayReplace(const PlannedWrite &write, const QByteArray *bytes)
 {
     // A file that exists but cannot be read is never replaced: neither History nor a safety
     // backup could have its bytes. The vault snapshots what it holds in memory; what a restore
     // replaces is recorded from the disk. Binary files have no History: the safety backup holds them.
-    if (const std::optional<FileStat> stat = m_vault.stat(write.target); stat && !stat->isDir) {
-        bool read = false;
-        QByteArray current;
-        if (stat->size <= MaxHistoryBytes) {
-            current = m_vault.readBinary(write.target, &read);
-        } else {
-            QFile file(m_vault.absolutePath(write.target));
-            read = file.open(QIODevice::ReadOnly);
-        }
-        if (!read) {
-            qCWarning(logging::lcVault).noquote() << u"Restore: %1 cannot be read: not replaced"_s.arg(write.target);
-            return false;
-        }
-        History *history = m_vault.history();
-        if (history && stat->size <= MaxHistoryBytes && current != bytes && !current.contains('\0')
-            && !history->snapshotBytes(write.target, current, changeSourceName(ChangeSource::Import))) {
-            qCWarning(logging::lcVault).noquote()
-                    << u"Restore: no history of %1: %2"_s.arg(write.target, history->errorString());
-            return false;
-        }
+    // `bytes`: the new content, or nullptr when it is too large to be held (streamed): the file
+    // differs, the plan saw to that.
+    const std::optional<FileStat> stat = m_vault.stat(write.target);
+    if (!stat || stat->isDir)
+        return true;
+    bool read = false;
+    QByteArray current;
+    if (stat->size <= MaxHistoryBytes) {
+        current = m_vault.readBinary(write.target, &read);
+    } else {
+        QFile file(m_vault.absolutePath(write.target));
+        read = file.open(QIODevice::ReadOnly);
     }
+    if (!read) {
+        qCWarning(logging::lcVault).noquote() << u"Restore: %1 cannot be read: not replaced"_s.arg(write.target);
+        return false;
+    }
+    History *history = m_vault.history();
+    if (history && stat->size <= MaxHistoryBytes && (!bytes || current != *bytes) && !current.contains('\0')
+        && !history->snapshotBytes(write.target, current, changeSourceName(ChangeSource::Import))) {
+        qCWarning(logging::lcVault).noquote()
+                << u"Restore: no history of %1: %2"_s.arg(write.target, history->errorString());
+        return false;
+    }
+    return true;
+}
+
+bool RestoreApplier::writeOne(const PlannedWrite &write, const QByteArray &bytes)
+{
+    if (!mayReplace(write, &bytes))
+        return false;
     if (!m_vault.writeBinary(write.target, bytes, ChangeSource::Import)) {
+        qCWarning(logging::lcVault).noquote() << u"Restore: %1"_s.arg(m_vault.errorString());
+        return false;
+    }
+    return true;
+}
+
+bool RestoreApplier::writeStaged(const PlannedWrite &write, const QString &staging)
+{
+    if (staging.isEmpty()) {
+        qCWarning(logging::lcVault).noquote() << u"Restore: %1: %2"_s.arg(write.target, m_vault.errorString());
+        return false;
+    }
+    if (!mayReplace(write, nullptr)) {
+        QFile::remove(staging);
+        return false;
+    }
+    // (The staged file is gone afterwards in every case.)
+    if (!m_vault.writeStaged(write.target, staging, ChangeSource::Import)) {
         qCWarning(logging::lcVault).noquote() << u"Restore: %1"_s.arg(m_vault.errorString());
         return false;
     }
@@ -618,6 +710,7 @@ void RestoreApplier::trashSlice()
 
 void RestoreApplier::finish()
 {
+    dropStaging();
     m_timer->stop();
     m_timer->disconnect(this);
     m_batch.reset();

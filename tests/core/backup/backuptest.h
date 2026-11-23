@@ -91,8 +91,12 @@ inline RestoreCheck runChecker(const notebook::WorkerPool &pool, const QString &
     RestoreChecker checker(pool);
     QSignalSpy spy(&checker, &RestoreChecker::finished);
     checker.start(archive, current, folders, options);
-    if (!spy.wait(60000))
-        return RestoreCheck{ArchiveProblem::Unreadable, false, u"timed out"_s, {}};
+    if (!spy.wait(60000)) {
+        RestoreCheck timedOut;
+        timedOut.problem = ArchiveProblem::Unreadable;
+        timedOut.detail = u"timed out"_s;
+        return timedOut;
+    }
     return spy.first().first().value<RestoreCheck>();
 }
 

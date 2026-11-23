@@ -22,9 +22,11 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QUrl>
+#include <QUuid>
 
 #include <algorithm>
 #include <utility>
@@ -147,7 +149,9 @@ void WorkspaceBackups::detach()
     m_op = Op::None;
     m_plan = {};
     m_planReady = false;
-    m_restoreName.clear();
+    ++m_copyGeneration;
+    m_copying = false;
+    clearRestoreSource();
     m_safetyName.clear();
     m_waitingForStored = false;
     m_unconfirmed.clear();
@@ -364,7 +368,16 @@ void WorkspaceBackups::cancel()
         m_waitingForStored = false;
         m_storedTimeout.stop();
         break;
-    case Op::Check: m_checker->cancel(); return;
+    case Op::Check:
+        if (m_copying) { // a picked document is still being copied
+            ++m_copyGeneration;
+            m_copying = false;
+            setOp(Op::None);
+            clearRestoreSource();
+            return;
+        }
+        m_checker->cancel();
+        return;
     case Op::WaitForSync: ++m_holdGeneration; break;
     case Op::Restore: m_applier->cancel(); return;
     case Op::None: return;
@@ -546,7 +559,7 @@ void WorkspaceBackups::pruneThenRefresh(bool pruneComplete)
     QSet<QString> protect;
     if (const QString name = QFileInfo(lastFile()).fileName(); !name.isEmpty())
         protect.insert(name);
-    if (!m_restoreName.isEmpty())
+    if (!m_restoreName.isEmpty() && !m_restoreFromFile)
         protect.insert(m_restoreName);
     // A half-done restore's way back, until the user has dealt with it.
     if (const QString safety = m_vault->store()->get(kRestoring).toObject().value(u"safety"_s).toString();
@@ -617,33 +630,182 @@ bool WorkspaceBackups::remove(const QString &name, bool allowForeign)
     return true;
 }
 
-bool WorkspaceBackups::prepareRestore(const QString &name, bool allowForeign)
+bool WorkspaceBackups::restoreRefused()
 {
-    if (!mayUse(name, allowForeign))
-        return false;
     if (!m_storageUnavailable.isEmpty()) {
         Q_EMIT messageRequested(statusText(), u"error"_s);
-        return false;
+        return true;
     }
     if (!notebookStorageOk()) {
         Q_EMIT messageRequested(tr("The notebook's folder is not available, so nothing can be restored."), u"error"_s);
-        return false;
+        return true;
     }
-    m_restoreName = name;
+    return false;
+}
+
+void WorkspaceBackups::startRestoreCheck(const QString &path, const QString &displayName)
+{
+    m_restoreName = displayName;
+    m_restorePath = path;
     m_planReady = false;
     setOp(Op::Check);
     backup::RestoreCheckOptions options;
     options.notebookRoot = m_vault->rootPath();
-    m_checker->start(QDir(folder()).filePath(name), backup::notebookFiles(*m_vault), backup::notebookFolders(*m_vault),
-                     options);
+    // A listed backup is Brulion's by its name; a file the user picked may be any ZIP.
+    options.requireManifest = m_restoreFromFile;
+    m_checker->start(path, backup::notebookFiles(*m_vault), backup::notebookFolders(*m_vault), options);
+}
+
+void WorkspaceBackups::clearRestoreSource()
+{
+    if (!m_restoreCopy.isEmpty()) {
+        QFile::remove(m_restoreCopy);
+        m_restoreCopy.clear();
+    }
+    m_restoreName.clear();
+    m_restorePath.clear();
+    m_restoreFromFile = false;
+}
+
+bool WorkspaceBackups::prepareRestore(const QString &name, bool allowForeign)
+{
+    if (!mayUse(name, allowForeign) || restoreRefused())
+        return false;
+    m_restoreFromFile = false;
+    startRestoreCheck(QDir(folder()).filePath(name), name);
     return true;
+}
+
+bool WorkspaceBackups::prepareRestoreFromFile(const QUrl &url)
+{
+    if (!available() || running() || restoreRefused())
+        return false;
+    if (url.isLocalFile()) {
+        const QString path = url.toLocalFile();
+        if (!QFileInfo(path).isFile()) {
+            Q_EMIT messageRequested(tr("This file cannot be read."), u"error"_s);
+            return false;
+        }
+        m_restoreFromFile = true;
+        startRestoreCheck(path, QFileInfo(path).fileName());
+        return true;
+    }
+    if (url.scheme() != u"content") {
+        Q_EMIT messageRequested(tr("This file cannot be read."), u"error"_s);
+        return false;
+    }
+    // An Android document: on the phone's storage a path Brulion reads in place; any other (a cloud
+    // drive's) is copied into the app's cache first — in pieces, off the GUI thread — and read there.
+    QString primary = platform::primaryStorageOf(QFileInfo(m_vault->rootPath()).canonicalFilePath());
+    if (primary.isEmpty())
+        primary = platform::primaryStorageOf(
+                QFileInfo(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).canonicalFilePath());
+    const QString local = platform::localPathOfDocument(url, primary);
+    if (!local.isEmpty() && QFileInfo(local).isFile()) {
+        m_restoreFromFile = true;
+        startRestoreCheck(local, QFileInfo(local).fileName());
+        return true;
+    }
+    const QString uri = url.toString(QUrl::FullyEncoded);
+    QString display = QFileInfo(QUrl::fromPercentEncoding(uri.toUtf8())).fileName();
+    if (display.isEmpty())
+        display = u"backup.zip"_s;
+    const QString copy = QDir(QDir::tempPath()).filePath(u"brulion-restore/%1.zip"_s.arg(QUuid::createUuid().toString(QUuid::Id128)));
+    m_restoreFromFile = true;
+    m_restoreName = display;
+    m_restoreCopy = copy;
+    m_copying = true;
+    setOp(Op::Check);
+    const int generation = ++m_copyGeneration;
+    auto copied = std::make_shared<bool>(false);
+    inBackground(
+            [uri, copy, copied] {
+                QDir().mkpath(QFileInfo(copy).absolutePath());
+                QFile in(uri);
+                QFile out(copy);
+                if (!in.open(QIODevice::ReadOnly) || !out.open(QIODevice::WriteOnly))
+                    return;
+                QByteArray piece(1 << 20, Qt::Uninitialized);
+                for (;;) {
+                    const qint64 got = in.read(piece.data(), piece.size());
+                    if (got < 0 || (got > 0 && out.write(piece.constData(), got) != got)) {
+                        out.close();
+                        QFile::remove(copy);
+                        return;
+                    }
+                    if (got == 0)
+                        break;
+                }
+                *copied = out.flush();
+                out.close();
+                if (!*copied)
+                    QFile::remove(copy);
+            },
+            [this, generation, copy, copied] {
+                if (generation != m_copyGeneration || !m_copying) {
+                    QFile::remove(copy); // cancelled, or the notebook closed
+                    return;
+                }
+                m_copying = false;
+                if (!*copied) {
+                    setOp(Op::None);
+                    clearRestoreSource();
+                    Q_EMIT messageRequested(tr("This file cannot be read."), u"error"_s);
+                    return;
+                }
+                startRestoreCheck(copy, m_restoreName);
+            });
+    return true;
+}
+
+bool WorkspaceBackups::prepareRestoreFromBytes(const QString &fileName, const QByteArray &bytes)
+{
+    if (!available() || running() || restoreRefused())
+        return false;
+    const QString folder = QDir(m_attachment.workFolder.isEmpty() ? QDir::tempPath() : m_attachment.workFolder)
+                                   .filePath(u"brulion-restore"_s);
+    QDir().mkpath(folder);
+    const QString path = QDir(folder).filePath(u"%1.zip"_s.arg(QUuid::createUuid().toString(QUuid::Id128)));
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.flush()) {
+        QFile::remove(path);
+        Q_EMIT messageRequested(tr("This file cannot be read."), u"error"_s);
+        return false;
+    }
+    file.close();
+    m_restoreFromFile = true;
+    m_restoreCopy = path;
+    startRestoreCheck(path, fileName);
+    return true;
+}
+
+void WorkspaceBackups::pickRestoreFile()
+{
+#ifdef Q_OS_WASM
+    if (!available() || running())
+        return;
+    const qint64 limit = m_attachment.maxBytes > 0 ? m_attachment.maxBytes : (qint64(512) << 20);
+    const QPointer<WorkspaceBackups> self(this);
+    platform::wasm::openFiles({tr("Brulion backups (*.zip)")}, false, limit, limit,
+                              [self](const QList<platform::PickedFile> &picked) {
+                                  if (!self || picked.isEmpty())
+                                      return; // cancelled
+                                  const platform::PickedFile &file = picked.first();
+                                  if (!file.isRead()) {
+                                      Q_EMIT self->messageRequested(
+                                              tr("This file is too large for this browser to restore."), u"error"_s);
+                                      return;
+                                  }
+                                  self->prepareRestoreFromBytes(file.name, file.data);
+                              });
+#endif
 }
 
 void WorkspaceBackups::onChecked(const backup::RestoreCheck &check)
 {
     setOp(Op::None);
     if (check.cancelled) {
-        m_restoreName.clear();
+        clearRestoreSource();
         return;
     }
     if (!check.ok()) {
@@ -652,6 +814,12 @@ void WorkspaceBackups::onChecked(const backup::RestoreCheck &check)
                                         ? tr("This backup is damaged and cannot be restored. Nothing was changed.")
                                 : check.problem == backup::ArchiveProblem::Unreadable
                                         ? tr("This backup cannot be read. Is its folder still available?")
+                                : check.problem == backup::ArchiveProblem::Truncated
+                                        ? tr("This backup is cut short, as after an interrupted download or copy, and "
+                                             "cannot be restored. Nothing was changed.")
+                                : check.problem == backup::ArchiveProblem::NotABackup
+                                        ? tr("This ZIP archive is not a Brulion backup: it has no mark of one. Nothing "
+                                             "was changed; unpack it by hand or import it instead.")
                                 : check.problem == backup::ArchiveProblem::NoFiles
                                         ? tr("This backup holds no files of a notebook, so restoring it would only "
                                              "empty this one. Nothing was changed.")
@@ -659,30 +827,42 @@ void WorkspaceBackups::onChecked(const backup::RestoreCheck &check)
                                         ? tr("This backup holds names that differ only in letter case, which this "
                                              "storage cannot keep apart. Nothing was changed; unpack the ZIP by hand.")
                                         : tr("This file is not a backup Brulion can restore. Nothing was changed.");
-        m_restoreName.clear();
+        clearRestoreSource();
         Q_EMIT messageRequested(message, u"error"_s);
         return;
     }
     m_plan = check.plan;
     m_planReady = true;
-    const QDateTime time = backup::backupFileTime(m_restoreName, m_attachment.notebookName).value_or(QDateTime());
-    Q_EMIT restorePlanReady(QVariantMap{{u"name"_s, m_restoreName},
-                                        {u"when"_s, whenText(time, m_language, m_clock().date())},
-                                        {u"changed"_s, int(m_plan.toChange.size())},
-                                        {u"recreated"_s, int(m_plan.toRecreate.size())},
-                                        {u"trashed"_s, int(m_plan.toTrash.size())},
-                                        {u"identical"_s, m_plan.identical},
-                                        {u"tooLarge"_s, int(m_plan.tooLarge.size())},
-                                        {u"hasChanges"_s, m_plan.hasChanges()},
-                                        {u"incomplete"_s, m_plan.incomplete},
-                                        {u"foreign"_s, listedBackup(m_restoreName).value(u"foreign"_s, true)}});
+    const bool own = check.manifest.valid && check.manifest.notebookId == m_vault->id();
+    QVariantMap plan{{u"name"_s, m_restoreName},
+                     {u"source"_s, m_restoreFromFile ? u"file"_s : u"list"_s},
+                     {u"changed"_s, int(m_plan.toChange.size())},
+                     {u"recreated"_s, int(m_plan.toRecreate.size())},
+                     {u"trashed"_s, int(m_plan.toTrash.size())},
+                     {u"identical"_s, m_plan.identical},
+                     {u"tooLarge"_s, int(m_plan.tooLarge.size())},
+                     {u"hasChanges"_s, m_plan.hasChanges()},
+                     {u"incomplete"_s, m_plan.incomplete},
+                     {u"files"_s, check.files},
+                     {u"sizeText"_s, sizeText(check.bytes)}};
+    if (m_restoreFromFile) {
+        plan.insert(u"fileName"_s, m_restoreName);
+        plan.insert(u"when"_s, QString());
+        plan.insert(u"foreign"_s, !own);
+    } else {
+        const QDateTime time = backup::backupFileTime(m_restoreName, m_attachment.notebookName).value_or(QDateTime());
+        plan.insert(u"fileName"_s, QString());
+        plan.insert(u"when"_s, whenText(time, m_language, m_clock().date()));
+        plan.insert(u"foreign"_s, listedBackup(m_restoreName).value(u"foreign"_s, true));
+    }
+    Q_EMIT restorePlanReady(plan);
 }
 
 void WorkspaceBackups::dismissRestore()
 {
     m_plan = {};
     m_planReady = false;
-    m_restoreName.clear();
+    clearRestoreSource();
 }
 
 void WorkspaceBackups::confirmRestore()
@@ -747,7 +927,7 @@ void WorkspaceBackups::startApply()
     qCInfo(logging::lcIo).noquote() << u"Backup: restoring %1 (%2 changed, %3 back, %4 to the trash)"_s.arg(
             m_restoreName, QString::number(m_plan.toChange.size()), QString::number(m_plan.toRecreate.size()),
             QString::number(m_plan.toTrash.size()));
-    m_applier->start(m_plan, QDir(folder()).filePath(m_restoreName));
+    m_applier->start(m_plan, m_restorePath);
 }
 
 void WorkspaceBackups::onApplied(const backup::RestoreResult &result)
@@ -787,7 +967,7 @@ void WorkspaceBackups::onApplied(const backup::RestoreResult &result)
     m_vault->store()->remove(kRestoring);
     m_vault->store()->flush();
     m_plan = {};
-    m_restoreName.clear();
+    clearRestoreSource();
     m_safetyName.clear();
     releaseSync(); // one sync now: every deletion in one run, before the mass-deletion guard
     Q_EMIT messageRequested(message, kind);
@@ -799,7 +979,7 @@ void WorkspaceBackups::abortRestore(const QString &message)
 {
     m_plan = {};
     m_planReady = false;
-    m_restoreName.clear();
+    clearRestoreSource();
     m_safetyName.clear();
     releaseSync();
     Q_EMIT messageRequested(message, u"error"_s);

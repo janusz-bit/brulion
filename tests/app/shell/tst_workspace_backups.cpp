@@ -23,6 +23,7 @@
 #include <QUrl>
 
 #include <atomic>
+#include <functional>
 
 using namespace Qt::StringLiterals;
 using brulion::shell::AppController;
@@ -371,6 +372,229 @@ private Q_SLOTS:
         // The restored state is what a further backup holds; restoring again changes nothing.
         const QVariantMap again = plannedRestore(b, source);
         QVERIFY(!again.value(u"hasChanges"_s).toBool());
+        b->dismissRestore();
+    }
+
+    /// The newest backup of `b` copied to `where` under `name`.
+    QString copyOfNewest(WorkspaceBackups *b, const QString &where, const QString &name)
+    {
+        const QString source = b->backups().first().toMap().value(u"name"_s).toString();
+        QDir().mkpath(where);
+        const QString target = where + u'/' + name;
+        QFile::remove(target);
+        if (!QFile::copy(QDir(b->folder()).filePath(source), target))
+            qWarning() << "cannot copy" << source;
+        return target;
+    }
+
+    /// A message of `b` after `act`, "" when none came; the plan is dropped when one came instead.
+    QString messageAfter(WorkspaceBackups *b, const std::function<void()> &act)
+    {
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        QSignalSpy planned(b, &WorkspaceBackups::restorePlanReady);
+        act();
+        if (!QTest::qWaitFor([&] { return !messages.isEmpty() || !planned.isEmpty(); }, 30000))
+            return u"(nothing came)"_s;
+        if (!planned.isEmpty()) {
+            b->dismissRestore();
+            return u"(a plan)"_s;
+        }
+        (void)QTest::qWaitFor([&] { return !b->running(); }, 30000);
+        return messages.first().first().toString();
+    }
+
+    void restoreFromAPickedFile()
+    {
+        const QString root = newRoot();
+        const QByteArray crlf = "- zażółć\r\n- gęślą\r\n";
+        writeRaw(root + u"/Żółw.md"_s, crlf);
+        writeRaw(root + u"/Podfolder ąę/Łódź.md"_s, "- w głębi\n");
+        writeRaw(root + u"/Bez zmian.md"_s, "- ta sama\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        // The copy lives elsewhere, under a name the list does not know: another device's, a download.
+        const QString picked = copyOfNewest(b, m_tmp.filePath(u"Pobrane ąę-%1"_s.arg(m_n)), u"Moja kopia — zażółć.zip"_s);
+        QVERIFY(QFileInfo::exists(picked));
+        // (Not on the list of this folder any more: only the file is left.)
+        for (const QString &zip : zipsIn(b->folder()))
+            QFile::remove(QDir(b->folder()).filePath(zip));
+        b->refresh();
+        QTRY_VERIFY(b->backups().isEmpty());
+
+        QVERIFY(ws->writeFile(u"Żółw.md"_s, u"- po kopii\n"_s));
+        ws->deletePage(u"Podfolder ąę/Łódź.md"_s);
+        QVERIFY(ws->writeFile(u"Późniejsza.md"_s, u"- nowa\n"_s));
+        m_now = m_now.addSecs(120);
+
+        QSignalSpy planned(b, &WorkspaceBackups::restorePlanReady);
+        QVERIFY(b->prepareRestoreFromFile(QUrl::fromLocalFile(picked)));
+        QVERIFY(b->running()); // checking
+        QVERIFY(planned.wait(30000));
+        const QVariantMap plan = planned.first().first().toMap();
+        QCOMPARE(plan.value(u"source"_s).toString(), u"file"_s);
+        QCOMPARE(plan.value(u"fileName"_s).toString(), u"Moja kopia — zażółć.zip"_s);
+        QVERIFY(!plan.value(u"foreign"_s).toBool()); // its manifest names this notebook
+        QCOMPARE(plan.value(u"files"_s).toInt(), 3);
+        QVERIFY(!plan.value(u"sizeText"_s).toString().isEmpty());
+        QCOMPARE(plan.value(u"changed"_s).toInt(), 1);
+        QCOMPARE(plan.value(u"recreated"_s).toInt(), 1);
+        QCOMPARE(plan.value(u"trashed"_s).toInt(), 1);
+        QCOMPARE(plan.value(u"identical"_s).toInt(), 1);
+        QVERIFY(QFileInfo::exists(root + u"/Późniejsza.md"_s)); // only a plan so far
+
+        QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
+        b->confirmRestore();
+        QTRY_VERIFY_WITH_TIMEOUT(!b->running(), 30000);
+        QCOMPARE(messages.last().at(1).toString(), u"success"_s);
+        QCOMPARE(readRaw(root + u"/Żółw.md"_s), crlf);
+        QCOMPARE(readRaw(root + u"/Podfolder ąę/Łódź.md"_s), QByteArray("- w głębi\n"));
+        QVERIFY(!QFileInfo::exists(root + u"/Późniejsza.md"_s));
+        // The file the user picked is left where it is; no copy of it stays behind; the safety backup
+        // of the notebook as it was is on the list.
+        QVERIFY(QFileInfo::exists(picked));
+        QVERIFY(!QDir(QDir::temp().filePath(u"brulion-restore"_s)).exists()
+                || QDir(QDir::temp().filePath(u"brulion-restore"_s)).entryList(QDir::Files).isEmpty());
+        QTRY_COMPARE(b->backups().size(), 1);
+        const QVariantList versions = ws->history(u"Żółw.md"_s);
+        QVERIFY(!versions.isEmpty());
+        QCOMPARE(ws->historyText(versions.first().toMap().value(u"id"_s).toString()), u"- po kopii\n"_s);
+    }
+
+    void aPickedFileOfAnotherNotebookNeedsItsOwnWarning()
+    {
+        const QString rootA = m_tmp.filePath(u"obcy-%1/Notatki"_s.arg(++m_n));
+        const QString rootB = m_tmp.filePath(u"swój-%1/Notatki"_s.arg(m_n));
+        writeRaw(rootA + u"/a.md"_s, "- cudzy\n");
+        writeRaw(rootB + u"/b.md"_s, "- własny\n");
+        auto a = openAt(rootA);
+        QVERIFY(createNow(a->backups()));
+        const QString picked = copyOfNewest(a->backups(), m_tmp.filePath(u"obce-%1"_s.arg(m_n)), u"kopia.zip"_s);
+        a.reset();
+
+        auto b = openAt(rootB);
+        QSignalSpy planned(b->backups(), &WorkspaceBackups::restorePlanReady);
+        QVERIFY(b->backups()->prepareRestoreFromFile(QUrl::fromLocalFile(picked)));
+        QVERIFY(planned.wait(30000));
+        const QVariantMap plan = planned.first().first().toMap();
+        QVERIFY(plan.value(u"foreign"_s).toBool());
+        QCOMPARE(plan.value(u"trashed"_s).toInt(), 1); // b.md would go to the trash: the dialog says so
+        b->backups()->dismissRestore();
+        QVERIFY(QFileInfo::exists(rootB + u"/b.md"_s));
+        QVERIFY(!QFileInfo::exists(rootB + u"/a.md"_s));
+    }
+
+    void aPickedFileThatIsNoBackupIsRefused_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("message");
+        QTest::newRow("a ZIP's beginning only")
+                << u"Eksport żółwia.zip"_s
+                << QByteArray("PK\x03\x04\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+                << u"cut short"_s;
+        QTest::newRow("a text file") << u"notatki.zip"_s << QByteArray("to nie jest archiwum\n") << u"not a backup Brulion can restore"_s;
+        QTest::newRow("empty") << u"pusty.zip"_s << QByteArray() << u"not a backup Brulion can restore"_s;
+    }
+    void aPickedFileThatIsNoBackupIsRefused()
+    {
+        QFETCH(QString, name);
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, message);
+        const QString root = newRoot();
+        writeRaw(root + u"/Żółw.md"_s, "- bez zmian\n");
+        auto ws = openAt(root);
+        const QString picked = m_tmp.filePath(u"plik-%1/"_s.arg(++m_n)) + name;
+        QVERIFY(writeRaw(picked, bytes));
+        WorkspaceBackups *b = ws->backups();
+        const QString said = messageAfter(b, [&] { QVERIFY(b->prepareRestoreFromFile(QUrl::fromLocalFile(picked))); });
+        QVERIFY2(said.contains(message), qPrintable(said));
+        QCOMPARE(readRaw(root + u"/Żółw.md"_s), QByteArray("- bez zmian\n"));
+        QVERIFY(!b->running());
+        // And the next one is not blocked by it.
+        QVERIFY(!b->prepareRestoreFromFile(QUrl::fromLocalFile(m_tmp.filePath(u"nie ma takiego.zip"_s))));
+    }
+
+    void aZipWithoutOurManifestAndATruncatedBackupAreTold()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/Żółw.md"_s, "- tekst\n");
+        writeRaw(root + u"/Druga.md"_s, QByteArray(200'000, 'x') + "\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        const QString good = copyOfNewest(b, m_tmp.filePath(u"kopie-%1"_s.arg(++m_n)), u"dobra.zip"_s);
+
+        QByteArray bytes = readRaw(good);
+        // Truncated: the end of the file missing, as after an interrupted download.
+        const QString cut = m_tmp.filePath(u"kopie-%1/ucięta.zip"_s.arg(m_n));
+        QVERIFY(writeRaw(cut, bytes.left(bytes.size() / 2)));
+        QString said = messageAfter(b, [&] { QVERIFY(b->prepareRestoreFromFile(QUrl::fromLocalFile(cut))); });
+        QVERIFY2(said.contains(u"cut short"_s), qPrintable(said));
+
+        // A ZIP that is nothing of Brulion's: its comment (the manifest) is gone.
+        const qsizetype end = bytes.lastIndexOf(QByteArray("PK\x05\x06", 4));
+        QVERIFY(end > 0);
+        QByteArray foreign = bytes.left(end + 20);
+        foreign.append(char(0)).append(char(0)); // a comment of no length
+        const QString plain = m_tmp.filePath(u"kopie-%1/zwykły eksport.zip"_s.arg(m_n));
+        QVERIFY(writeRaw(plain, foreign));
+        said = messageAfter(b, [&] { QVERIFY(b->prepareRestoreFromFile(QUrl::fromLocalFile(plain))); });
+        QVERIFY2(said.contains(u"not a Brulion backup"_s), qPrintable(said));
+        QCOMPARE(readRaw(root + u"/Żółw.md"_s), QByteArray("- tekst\n"));
+    }
+
+    void aFileFromTheBrowsersPickerIsRestoredFromItsBytes()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/Żółw.md"_s, "- zażółć\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        const QByteArray bytes = readRaw(QDir(b->folder()).filePath(b->backups().first().toMap().value(u"name"_s).toString()));
+        QVERIFY(ws->writeFile(u"Żółw.md"_s, u"- zmienione\n"_s));
+        QSignalSpy planned(b, &WorkspaceBackups::restorePlanReady);
+        QVERIFY(b->prepareRestoreFromBytes(u"Kopia z przeglądarki.zip"_s, bytes));
+        QVERIFY(planned.wait(30000));
+        QCOMPARE(planned.first().first().toMap().value(u"fileName"_s).toString(), u"Kopia z przeglądarki.zip"_s);
+        b->confirmRestore();
+        QTRY_VERIFY_WITH_TIMEOUT(!b->running(), 30000);
+        QCOMPARE(readRaw(root + u"/Żółw.md"_s), QByteArray("- zażółć\n"));
+        QDir work(QDir::temp().filePath(u"brulion-restore"_s));
+        QVERIFY(!work.exists() || work.entryList(QDir::Files).isEmpty()); // the copy of the bytes is gone
+    }
+
+    void aDocumentThatCannotBeReadIsToldAndNothingIsLeftRunning()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/Żółw.md"_s, "- tekst\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        const QString said = messageAfter(b, [&] {
+            QVERIFY(b->prepareRestoreFromFile(QUrl(u"content://com.example.chmura/document/kopia%20zapasowa.zip"_s)));
+            QVERIFY(b->running()); // copying it
+        });
+        QVERIFY2(said.contains(u"cannot be read"_s), qPrintable(said));
+        QTRY_VERIFY(!b->running());
+        // Stopping the copy of a document drops it.
+        QVERIFY(b->prepareRestoreFromFile(QUrl(u"content://com.example.chmura/document/inna.zip"_s)));
+        b->cancel();
+        QVERIFY(!b->running());
+    }
+
+    void aPickedFileOpensNothingWhileAnotherRestoreRuns()
+    {
+        const QString root = newRoot();
+        writeRaw(root + u"/Żółw.md"_s, "- tekst\n");
+        auto ws = openAt(root);
+        WorkspaceBackups *b = ws->backups();
+        QVERIFY(createNow(b));
+        const QString picked = copyOfNewest(b, m_tmp.filePath(u"kopie-%1"_s.arg(++m_n)), u"a.zip"_s);
+        QVERIFY(ws->writeFile(u"Żółw.md"_s, u"- inne\n"_s));
+        QVERIFY(b->prepareRestoreFromFile(QUrl::fromLocalFile(picked)));
+        QVERIFY(!b->prepareRestoreFromFile(QUrl::fromLocalFile(picked))); // one at a time
+        QSignalSpy planned(b, &WorkspaceBackups::restorePlanReady);
+        QVERIFY(planned.wait(30000));
         b->dismissRestore();
     }
 

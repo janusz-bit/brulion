@@ -657,9 +657,13 @@ history or settings — with three differences, because these files belong to th
 
 The temporary file is created in `/tmp` (MEMFS outside the mounts): change tracking would save a growing file
 over and over. At the end it is copied into the mount, so for a moment the archive is in memory twice.
-The largest archive: half of the free space from `estimate()`, at most 512 MB. Writing proceeds piece by piece
-on the GUI thread: the smallest piece is a file, and a file over 4 MB is stored without compression so that
-a piece does not take long.
+The largest archive: half of the free space from `estimate()`, at most 512 MB. Writing proceeds in slices
+of about 8 ms on the GUI thread, and a slice may end in the middle of a file: the ZIP writer (`backup/zipwriter_p.h`)
+reads a file 64 KiB at a time, deflates it with miniz's compressor (`tdefl`) piece by piece and goes back to the
+event loop between the pieces, so a large file is compressed like any other and the page stays responsive
+(`tst_backup_archive`: `aLargeFileIsDeflatedInSlicesThePageStaysResponsive`). A picked backup (Settings → Backups →
+"Restore from a file…", `WorkspaceBackups::pickRestoreFile()` over `openFiles()`) is written to a file in the same work
+folder in `/tmp` and read from there; the archive is in the tab's memory for as long as the restore checks it.
 
 All IDBFS files are loaded into the tab's memory at startup, backups too — which is why automatic
 backups are **off by default** here, the default limit is 2, and 1–3 can be chosen. Here backups protect

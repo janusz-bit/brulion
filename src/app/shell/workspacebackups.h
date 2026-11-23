@@ -164,6 +164,16 @@ public:
     /// Check a listed backup against the notebook; restorePlanReady() (or a message) follows. A
     /// foreign one only with `allowForeign`, after the user confirmed exactly that.
     Q_INVOKABLE bool prepareRestore(const QString &name, bool allowForeign = false);
+    /// Check a backup the user picked from anywhere, not on the list: a local file, or an Android
+    /// document (copied into the app's cache first, in pieces — a cloud document is no file to read
+    /// in place). It must be a Brulion backup (its manifest); restorePlanReady() (or a message)
+    /// follows, and confirmRestore() restores it like a listed one. False when nothing could start.
+    Q_INVOKABLE bool prepareRestoreFromFile(const QUrl &file);
+    /// The browser: its file picker, then as prepareRestoreFromBytes().
+    Q_INVOKABLE void pickRestoreFile();
+    /// prepareRestoreFromFile() for a file the browser picked: its bytes go to a file in the work
+    /// folder (outside the storage's mounts), which is read in place from there.
+    bool prepareRestoreFromBytes(const QString &fileName, const QByteArray &bytes);
     /// Apply the plan restorePlanReady() described: the safety backup first.
     Q_INVOKABLE void confirmRestore();
     Q_INVOKABLE void dismissRestore();
@@ -183,8 +193,9 @@ Q_SIGNALS:
     void stateChanged();
     void progressChanged();
     void backupsChanged();
-    /// { name, when, changed, recreated, trashed, identical, tooLarge, hasChanges, incomplete,
-    /// foreign }
+    /// { name, source ("list" | "file"), fileName (a picked file's), when, changed, recreated,
+    /// trashed, identical, tooLarge, hasChanges, incomplete, foreign (another notebook's, or not
+    /// known to be this one's), files + sizeText (what the backup holds) }
     void restorePlanReady(const QVariantMap &plan);
     /// A message for a toast (translated); kind "info" | "success" | "warning" | "error".
     void messageRequested(const QString &text, const QString &kind);
@@ -217,6 +228,13 @@ private:
     void afterWrite(const backup::WriteResult &result);
     void onChecked(const backup::RestoreCheck &check);
     void startApply();
+    /// Check the archive at `path` against the notebook (`displayName`: what the messages call it).
+    void startRestoreCheck(const QString &path, const QString &displayName);
+    /// Nothing may start: another run, a browser storage that could not be read, a notebook folder
+    /// that is gone — said in a message.
+    bool restoreRefused();
+    /// Forget the backup a restore started from; a copy made of a picked file goes.
+    void clearRestoreSource();
     void holdSyncThenSafetyBackup();
     void releaseSync();
     /// False (with a message and a status) when nothing may be written now.
@@ -264,7 +282,12 @@ private:
     QString m_runFingerprint;
     bool m_runAutomatic = false;
     // A restore in progress.
-    QString m_restoreName;
+    QString m_restoreName;       ///< a listed backup's file name, or what a picked file is called
+    QString m_restorePath;       ///< where the archive is read
+    bool m_restoreFromFile = false; ///< picked by the user, not listed
+    QString m_restoreCopy;       ///< a copy of the picked file made for the restore ("": read in place)
+    bool m_copying = false;      ///< a picked document is being copied
+    int m_copyGeneration = 0;
     backup::RestorePlan m_plan;
     bool m_planReady = false;
     bool m_waitingForStored = false; ///< its safety backup must reach the browser's storage first

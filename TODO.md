@@ -351,10 +351,13 @@ done in the repository simply disappears from the list.
   recent apps' preview and the widgets' placeholder in a real launcher, the sensitive copy in
   Gboard's clipboard, an encrypted page edited on two devices over Syncthing and Nextcloud, and the
   same notes opened in Obsidian with Meld Encrypt itself.
-* **Backups: next steps** — restoring a ZIP that is not on the list and files over 1 GB (Vault
-  keeps the file being written in memory), an Android folder chosen through a cloud document,
-  splitting the compression of a large file into chunks in the browser (today a file over 4 MB is
-  saved uncompressed).
+* **Backups: what is left** — an Android folder chosen through a cloud document (a backup is
+  written file by file into its folder, which a cloud provider's document tree does not take: it
+  needs a real phone to try), and a check on real devices of "Restore from a file…": an Android
+  document that is no file on the phone's storage is copied into the app's cache first, the
+  browser's pick is written into its work folder — both are only exercised on the desktop (the
+  browser's pick through `prepareRestoreFromBytes`, the document's copy as far as a `content://`
+  URI that cannot be read).
 * **Sync and import in bounded memory: what is left** — a folder of the device
   (`FolderDavTransport` over `FolderStorage`, the Android document provider's `TreeFolder.kt`)
   reads and writes a file whole and does not stream (`HttpTransport::streams()`), so a sync with
