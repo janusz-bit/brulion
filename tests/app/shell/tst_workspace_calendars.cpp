@@ -6,6 +6,7 @@
 #include "workspace.h"
 
 #include "caldav/caldav.h"
+#include "reminders/notifications.h"
 #include "fakecaldav.h"
 
 #include <QDir>
@@ -229,6 +230,27 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
                             {u"reminderMinutes"_s, 15}}));
     QList<planning::ExternalEvent> saturday = cal->eventsBetween(QDate(2026, 11, 21), QDate(2026, 11, 21));
     QCOMPARE(saturday.size(), 2);
+    // Its reminder rings (the reminder scheduler's extra source) — and not once the calendar's
+    // alarms are off.
+    const QDateTime dayStart(QDate(2026, 11, 21), QTime(0, 0));
+    const QDateTime dayEnd(QDate(2026, 11, 21), QTime(23, 59));
+    QList<ScheduledNotification> ring = cal->eventAlarmsBetween(dayStart, dayEnd);
+    QCOMPARE(ring.size(), 1);
+    QCOMPARE(ring.first().title, u"Obiad z Zosią"_s);
+    QCOMPARE(ring.first().at, QDateTime(QDate(2026, 11, 21), QTime(12, 45)));
+    QVERIFY(ring.first().body.startsWith(u"Praca"_s));
+    QVERIFY(ring.first().body.endsWith(u"Kraków"_s));
+    QCOMPARE(ring.first().path, u"calendar:2026-11-21"_s);
+    QVERIFY(cal->eventAlarmsBetween(dayStart, QDateTime(QDate(2026, 11, 21), QTime(12, 44))).isEmpty());
+    const QVariantMap row = cal->calendars().first().toMap();
+    QVERIFY(row.value(u"alarms"_s).toBool());
+    QSignalSpy alarmSignals(cal, &WorkspaceCalendars::eventsChanged);
+    QVERIFY(cal->updateCalendar(calendarId, {{u"alarms"_s, false}}));
+    QTRY_VERIFY(!alarmSignals.isEmpty());
+    QVERIFY(cal->eventAlarmsBetween(dayStart, dayEnd).isEmpty());
+    QVERIFY(!cal->calendars().first().toMap().value(u"alarms"_s).toBool());
+    QVERIFY(cal->updateCalendar(calendarId, {{u"alarms"_s, true}}));
+    QCOMPARE(cal->eventAlarmsBetween(dayStart, dayEnd).size(), 1);
     waitIdle();
     bool onServer = false;
     for (const QString &name : m_server.memberNames(u"praca"_s)) {

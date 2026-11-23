@@ -628,7 +628,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="161"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="163"/>
         <source>and %n more</source>
         <translation>
             <numerusform>and %n more</numerusform>
@@ -2682,7 +2682,7 @@
 <context>
     <name>brulion::shell::WorkspaceCalendars</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1337"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1382"/>
         <source>Updated: %n event(s)</source>
         <translation>
             <numerusform>Updated: %n event</numerusform>
@@ -2690,7 +2690,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1354"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1399"/>
         <source>%n deletion(s) wait for a confirmation: %1</source>
         <translation>
             <numerusform>%n deletion waits for a confirmation: %1</numerusform>

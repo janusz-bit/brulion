@@ -2,6 +2,7 @@
 
 #include "androidpayload.h"
 #include "caldav/calendarsync.h"
+#include "caldav/eventalarms.h"
 
 #include "index/vaultindex.h"
 #include "log/redact.h"
@@ -15,6 +16,7 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QMetaObject>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <cstdlib>
@@ -92,7 +94,8 @@ std::optional<Target> Target::fromJson(const QJsonObject &json)
     return t;
 }
 
-QList<ScheduledNotification> upcomingFor(const VaultIndex &index, const QDateTime &now, const Target &target)
+QList<ScheduledNotification> upcomingFor(const VaultIndex &index, const QDateTime &now, const Target &target,
+                                         const QString &calendarsFolder)
 {
     // ReminderScheduler::refreshAt(): its defaults (WorkspaceReminders changes neither), the ring
     // time for every item, the notebook's id (WorkspaceReminders' proxy) — the same set the app
@@ -101,6 +104,14 @@ QList<ScheduledNotification> upcomingFor(const VaultIndex &index, const QDateTim
             index, now, ReminderScheduler::DefaultHorizonDays, ReminderScheduler::DefaultMaxScheduled, nullptr,
             target.language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish);
     const dates::UiLocale locale = target.language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+    if (!calendarsFolder.isEmpty() && QFileInfo::exists(calendarsFolder + u"/calendars.json"_s)) {
+        // The same window and merge as ReminderScheduler::refreshAt().
+        const caldav::CalendarStore store(calendarsFolder);
+        const QDateTime today = now.toLocalTime();
+        const QDateTime to(today.date().addDays(ReminderScheduler::DefaultHorizonDays), QTime(23, 59, 59));
+        mergeNotifications(list, caldav::eventNotifications(store, today.addSecs(-60), to, QTimeZone::systemTimeZone(), locale),
+                           ReminderScheduler::DefaultMaxScheduled);
+    }
     for (ScheduledNotification &n : list) {
         if (target.hideText)
             n = withoutNoteText(n, locale);
@@ -290,7 +301,8 @@ void Check::syncCalendars()
 void Check::readReminders()
 {
     VaultIndex &index = m_notebook->index();
-    const QList<ScheduledNotification> upcoming = upcomingFor(index, now(), m_target);
+    const QList<ScheduledNotification> upcoming =
+            upcomingFor(index, now(), m_target, m_target.stateDir + u"/calendars"_s);
     m_result.insert(u"ok"_s, true);
     m_result.insert(u"notes"_s, int(index.paths().size()));
     m_result.insert(u"reminders"_s, notify::androidReminderPayload(upcoming));

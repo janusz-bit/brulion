@@ -104,6 +104,14 @@ public:
     /// Language of notification bodies (default Polish).
     void setLocale(dates::UiLocale locale);
     dates::UiLocale locale() const;
+    /// Notifications from somewhere else than the notes (the VALARMs of calendar events): the
+    /// reminders within [from, to] (local wall-clock time, inclusive), sorted by time. They are
+    /// scheduled, fired, caught up and recorded as missed like the notes' own; a missed one (its
+    /// path starts with "calendar:") is kept while the source still returns it, at most
+    /// HistoryDays. Call
+    /// extraChanged() when what the source returns changes.
+    using ExtraSource = std::function<QList<ScheduledNotification>(const QDateTime &from, const QDateTime &to)>;
+    void setExtraSource(ExtraSource source);
     /// Debounce of refreshes after index changes, in ms (default DefaultDebounceMs).
     void setDebounceInterval(int msec);
     /// Heartbeat period in ms (default DefaultHeartbeatMs); tests use short ones.
@@ -145,6 +153,8 @@ public Q_SLOTS:
     /// sink's set was replaced behind the scheduler's back (Android's background check armed
     /// what it read from the notes while the app was in the background). No-op while stopped.
     void resendSoon();
+    /// The extra source's notifications changed: refresh (debounced). No-op while stopped.
+    void extraChanged();
 
 Q_SIGNALS:
     /// A reminder was shown in-app with NotificationSink::showNow() (e.g. for a toast).
@@ -167,6 +177,8 @@ private:
     bool hasNotes() const;
     bool isTooLate(const ScheduledNotification &n, const QDateTime &now) const;
     void applyRingMinutes(QList<ScheduledNotification> &list) const;
+    /// The notes' occurrences within [from, to] and the extra source's, in time order.
+    QList<ScheduledNotification> between(const QDateTime &from, const QDateTime &to);
 
     void loadState(const QDateTime &now);
     void pruneHandled(const QDateTime &now);
@@ -205,6 +217,7 @@ private:
     QDateTime m_lastSeenSaved;
     QHash<QString, QDateTime> m_handled; ///< id -> when it was fired or marked missed
     QList<ScheduledNotification> m_missed;
+    ExtraSource m_extra;
 };
 
 } // namespace brulion

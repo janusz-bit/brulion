@@ -6668,10 +6668,40 @@ Nextcloud app password (`<app data>/secrets/caldav-<account>`). A second device 
   on every day they cover, the agenda's and the day panel's rows with a dot of the colour, the time
   they end ("until 15:30"), the calendar and the place; on narrow month cells one `calendar-clock`
   mark. Times are converted to the device's zone (time zones of the server, the feed's own
-  `VTIMEZONE`). The header's calendars button (`calendar-range`) lists the calendars with their
+  `VTIMEZONE`). A series' exceptions are shown as the server keeps them: an override with its
+  `RECURRENCE-ID` replaces that occurrence, one with `RECURRENCE-ID;RANGE=THISANDFUTURE` (RFC 5545
+  §3.8.4.4) that occurrence and every later one — their properties come from the override, their
+  start and end are moved by as much as it moved the instance it names, on the series' own wall
+  clock (an hour later stays an hour later across a daylight-saving change; a UTC series shifts in
+  UTC); a plain override of one later instance beats the range, `EXDATE` still removes an
+  instance, a cancelled range ends the series there, and a range naming an instance the series does
+  not have shows at its own start and gives its properties to the later ones. `RANGE=THISANDPRIOR`
+  (deprecated) is one instance, and an `RRULE` inside a range override is ignored (the series' goes
+  on). The header's calendars button (`calendar-range`) lists the calendars with their
   colours, each ticked when shown (a click hides or shows it: `setCalendarVisible`), "New event…"
   (when a writable CalDAV calendar shows events), "Refresh calendars" and "Manage calendars…" (the
   sync center's tab; "Add a calendar…" while there are none).
+* **Reminders of events** — the `VALARM`s of an event of a CalDAV calendar ring in Brulion like a
+  note's `⏰`: `caldav/eventalarms.h` turns them into notifications
+  (`eventNotifications()`; `WorkspaceCalendars::eventAlarmsBetween()` keeps the scheduler's window
+  until the events change) that `ReminderScheduler` takes as its extra source
+  (`setExtraSource()`), so they are handed to the platform's sink with the notes' reminders
+  (desktop notifications, Android's `AlarmManager`, the browser), fired in-app, caught up after the
+  app was closed and recorded as missed ("Missed" lists them like the others), refreshed after
+  every sync that changes the events (`extraChanged()`). Every occurrence of a series has them
+  (an override's own `VALARM`s replace the series'); the first five of an event count. A `TRIGGER`
+  relative to the start (or, `RELATED=END`, the end) rings that long before or after it — exact
+  time, so eight hours before 06:00 on the morning the clocks go back is 23:00 the evening before —,
+  a trigger in days on the wall clock, one further than 31 days is ignored; an absolute `TRIGGER`
+  rings once and only for an event that does not recur; `ACTION:DISPLAY` (or none) is a
+  reminder, `AUDIO` a loud alarm (`⏰!`), `EMAIL` and the like ring nothing. The notification's
+  title is the event's, its body "Calendar · today 17:00 · place"; tapping it opens the calendar
+  at the event's day (its path is `calendar:<day>`, not a note: nothing to snooze or mark done,
+  the app lock's "Hide the note's text" says "Reminder" as for notes). Android's background check
+  arms them too, from what the last sync kept (`<device state>/calendars`; it does not sync
+  calendars that only show events). Each CalDAV calendar has "Ring the reminders of events" (the
+  Calendars tab, on while the calendar shows events; `alarms` in its settings, on by default);
+  subscriptions ring nothing. The event dialog's "reminder" choice writes the `VALARM` they use.
 * **An event** (`qml/planning/CalendarEventDialog.qml`, a click or right-click on an event): its
   title, when ("Fri, Nov 20, 14:00–15:30"), its calendar with the colour, "Read-only" for
   subscriptions and calendars without the write privilege, the series ("every week", or the rule as

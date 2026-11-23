@@ -116,8 +116,11 @@ struct Target {
 };
 
 /// The reminders the app's ReminderScheduler would hand Android for `index` at `now`: its horizon
-/// and limit, the target's ring time and language, the notebook's id on each.
-QList<ScheduledNotification> upcomingFor(const VaultIndex &index, const QDateTime &now, const Target &target);
+/// and limit, the target's ring time and language, the notebook's id on each. `calendarsFolder`:
+/// the device's calendars (`<state>/calendars`) — the alarms of their events ring with the notes'
+/// reminders, as in the app (ReminderScheduler's extra source); "" none.
+QList<ScheduledNotification> upcomingFor(const VaultIndex &index, const QDateTime &now, const Target &target,
+                                         const QString &calendarsFolder = {});
 
 /// One check (see the file comment). start() once; finished() is emitted once, from the event loop.
 ///

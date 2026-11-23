@@ -17,10 +17,12 @@
 //
 // Notification maps (missed, upcoming, next, fired): { id, title, body, at ("YYYY-MM-DD HH:mm"),
 // when (human: "today 09:00", "Tue, Oct 13 18:00"), alarm, path, line, task (the reminder is on an
-// open task: "Done" can complete it) }.
+// open task: "Done" can complete it), event (the VALARM of a calendar event: no `path`, nothing to
+// snooze; setExtraSource() feeds them in) }.
 #pragma once
 
 #include "reminders/notifications.h"
+#include "reminders/scheduler.h"
 
 #include <QDate>
 #include <QDateTime>
@@ -98,6 +100,11 @@ public:
     /// unchanged, since the background check may have armed another one meanwhile
     /// (ReminderScheduler::resendSoon()). No-op elsewhere and while not running.
     void resendSoon();
+    /// Reminders from outside the notes (the VALARMs of calendar events: WorkspaceCalendars::
+    /// eventAlarmsBetween()), taken by the scheduler with the notes' own — also by one started
+    /// later. Call extraChanged() when they change.
+    void setExtraSource(ReminderScheduler::ExtraSource source);
+    void extraChanged();
     /// The scheduler (nullptr when not running); tests.
     ReminderScheduler *scheduler() const { return m_scheduler.get(); }
 
@@ -224,6 +231,7 @@ private:
     Clock m_clock;
     std::unique_ptr<Proxy> m_proxy;
     std::unique_ptr<ReminderScheduler> m_scheduler;
+    ReminderScheduler::ExtraSource m_extra;
     QPointer<Vault> m_vault;
     QPointer<VaultIndex> m_index;
     std::function<QString()> m_backend;

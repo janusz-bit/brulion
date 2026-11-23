@@ -20,6 +20,7 @@
 //   subscriptions    the subscriptions: the same rows plus refreshMinutes
 //   accounts         [{ id, name, server, user, conflicts ("newer" | "both"), intervalMinutes,
 //                     hasPassword, calendars: [rows as above] }]
+//                     (a CalDAV row also has `alarms`: the events' reminders ring)
 //   writableCalendars the calendars an event can be created in: [{ id, name, color }]
 //   log              the newest first: [{ when, whenText, kind, tone, name, text }]
 //   state, statusText, running, needsConfirmation, pendingDeletions (titles)
@@ -42,6 +43,7 @@
 #include <memory>
 
 namespace brulion {
+struct ScheduledNotification;
 class Vault;
 class VaultIndex;
 } // namespace brulion
@@ -119,6 +121,11 @@ public:
 
     // ---- EventSource --------------------------------------------------------------------
     QList<planning::ExternalEvent> eventsBetween(QDate from, QDate to) const override;
+    /// The reminders of the events' VALARMs ringing within [from, to] (local wall-clock time,
+    /// inclusive) of the CalDAV calendars that show events and have their alarms on — what the
+    /// reminder scheduler takes as its extra source (ReminderScheduler::setExtraSource()). The
+    /// window the scheduler normally asks about is kept until the events change.
+    QList<ScheduledNotification> eventAlarmsBetween(const QDateTime &from, const QDateTime &to) const;
 
     // ---- state --------------------------------------------------------------------------
     bool available() const { return m_store != nullptr; }
@@ -158,7 +165,7 @@ public:
     /// The account, its calendars, their states and its password go (the notes stay: synced task
     /// lines are left as they are).
     Q_INVOKABLE bool removeAccount(const QString &id);
-    /// { name, color, showEvents, syncTasks, taskPage, visible }.
+    /// { name, color, showEvents, alarms, syncTasks, taskPage, visible }.
     Q_INVOKABLE bool updateCalendar(const QString &id, const QVariantMap &values);
     /// What the account dialog ticks at first among discovered() calendars: the urls of those with
     /// events (`tasks` false), or of those holding tasks only (`tasks` true).
@@ -251,6 +258,8 @@ private:
     mutable QDate m_cacheFrom;
     mutable QDate m_cacheTo;
     mutable QList<planning::ExternalEvent> m_cache;
+    mutable QDate m_alarmCacheDay; ///< the day m_alarmCache was computed for (invalid: none)
+    mutable QList<ScheduledNotification> m_alarmCache;
     QSet<QString> m_trackedBlocks; ///< block ids of synced tasks (an edit of their notes syncs)
     QSet<QString> m_taskPages;
     QVariantMap m_lastDiscovery; ///< { server, user, principal, home }

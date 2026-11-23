@@ -186,6 +186,11 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_calendars = new WorkspaceCalendars(this);
     m_calendars->setClock([this] { return now(); });
     connect(m_calendars, &WorkspaceCalendars::errorOccurred, this, &Workspace::errorOccurred);
+    // The VALARMs of calendar events ring with the notes' reminders.
+    m_reminders->setExtraSource([this](const QDateTime &from, const QDateTime &to) {
+        return m_calendars->eventAlarmsBetween(from, to);
+    });
+    connect(m_calendars, &WorkspaceCalendars::eventsChanged, m_reminders, &WorkspaceReminders::extraChanged);
     m_backups->setSyncControl([this](std::function<void()> ready) { m_sync->holdSync(std::move(ready)); },
                               [this] { m_sync->releaseSync(); });
     connect(m_backups, &WorkspaceBackups::saveOpenEditors, this, &EditorHost::saveOpenEditorsRequested);

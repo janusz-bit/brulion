@@ -7,6 +7,7 @@
 #include "mediaengine.h"
 #include "voicerecorder.h"
 
+#include "caldav/eventalarms.h"
 #include "media/transcript.h"
 
 #include "folderchoices.h"
@@ -1255,8 +1256,11 @@ void AppController::applyPendingNotification()
         return; // applied once that notebook is ready
     const QString path = std::exchange(m_pendingNotePath, {});
     const int line = std::exchange(m_pendingNoteLine, -1);
+    // An event's reminder (a VALARM of a calendar): its day in the calendar.
+    if (!docs && path.startsWith(caldav::EventNotificationPrefix))
+        navigate(QVariantMap{{u"view"_s, u"calendar"_s}, {u"date"_s, path.mid(caldav::EventNotificationPrefix.size())}});
     // An AI chat's notification: its conversation in the chat.
-    if (!docs && m_workspace->chats()->isConversation(path))
+    else if (!docs && m_workspace->chats()->isConversation(path))
         navigate(QVariantMap{{u"view"_s, u"chat"_s}, {u"path"_s, path}});
     else if (!docs && m_workspace->exists(path))
         openPage(path, line);

@@ -162,6 +162,7 @@ private Q_SLOTS:
     void recurringTaskCompletedHere();
     void secondDevicePairsLines();
     void movedLineKeepsSyncing();
+    void movedSubtaskUpdatesRelatedTo();
     void eventsChangedHere();
     void brokenMembersAndOffline();
 };
@@ -549,6 +550,81 @@ void TestCalDavTasks::movedLineKeepsSyncing()
     QVERIFY(dev.vault->readText(u"journals/2026-11-20.md"_s).contains(u"  - [ ] Pierwsze, z serwera ^"_s));
     QVERIFY(dev.page().isEmpty());
     QCOMPARE(dev.state().tasks.value(u"a"_s).note, u"journals/2026-11-20.md"_s);
+}
+
+void TestCalDavTasks::movedSubtaskUpdatesRelatedTo()
+{
+    FakeCalDav server;
+    server.addCalendar(u"praca"_s, praca());
+    server.putMember(u"praca"_s, u"a.ics"_s, vtodo(u"a"_s, u"SUMMARY:Ścieżka żółwia\r\n"_s));
+    server.putMember(u"praca"_s, u"b.ics"_s, vtodo(u"b"_s, u"SUMMARY:Zażółć gęślą\r\n"_s));
+    server.putMember(u"praca"_s, u"c.ics"_s,
+                     vtodo(u"c"_s, u"SUMMARY:Jaźń\r\nRELATED-TO;RELTYPE=PARENT:a\r\nRELATED-TO;RELTYPE=SIBLING:x\r\n"_s));
+    Device dev(&server);
+    QVERIFY(!dev.run().error.isError());
+    const QString ia = blockIdForUid(u"a"_s), ib = blockIdForUid(u"b"_s), ic = blockIdForUid(u"c"_s);
+    QVERIFY(dev.page().contains(u"\t- [ ] Jaźń ^"_s + ic));
+    QCOMPARE(dev.state().tasks.value(u"c"_s).local.parentUid, u"a"_s);
+
+    // Nothing changed: nothing sent.
+    server.clearLog();
+    dev.run();
+    QCOMPARE(server.count("PUT"), 0);
+
+    // The subtask moved under another task.
+    dev.write(u"- [ ] Ścieżka żółwia ^"_s + ia + u"\n- [ ] Zażółć gęślą ^"_s + ib + u"\n\t- [ ] Jaźń ^"_s + ic + u"\n"_s);
+    server.clearLog();
+    CalendarRunReport report = dev.run();
+    QVERIFY2(!report.error.isError(), qPrintable(report.error.message));
+    QCOMPARE(server.count("PUT"), 1);
+    QCOMPARE(report.uploaded, 1);
+    QString c = memberText(server, u"c.ics"_s);
+    QVERIFY(c.contains(u"RELATED-TO;RELTYPE=PARENT:b"_s));
+    QVERIFY(!c.contains(u"RELTYPE=PARENT:a"_s));
+    QVERIFY(c.contains(u"RELATED-TO;RELTYPE=SIBLING:x"_s)); // other relations stay
+    QVERIFY(c.contains(u"SUMMARY:Jaźń"_s));
+    QCOMPARE(dev.state().tasks.value(u"c"_s).local.parentUid, u"b"_s);
+    QCOMPARE(dev.state().tasks.value(u"c"_s).remote.parentUid, u"b"_s);
+    server.clearLog();
+    dev.run();
+    QCOMPARE(server.count("PUT"), 0);
+
+    // Out to the top level: the parent relation goes, the line stays where it is.
+    dev.write(u"- [ ] Ścieżka żółwia ^"_s + ia + u"\n- [ ] Zażółć gęślą ^"_s + ib + u"\n- [ ] Jaźń ^"_s + ic + u"\n"_s);
+    report = dev.run();
+    QCOMPARE(report.uploaded, 1);
+    c = memberText(server, u"c.ics"_s);
+    QVERIFY(!c.contains(u"RELTYPE=PARENT"_s));
+    QVERIFY(c.contains(u"RELTYPE=SIBLING:x"_s));
+    server.clearLog();
+    dev.run();
+    QCOMPARE(server.count("PUT"), 0);
+
+    // A top-level task under another one.
+    dev.write(u"- [ ] Ścieżka żółwia ^"_s + ia + u"\n\t- [ ] Zażółć gęślą ^"_s + ib + u"\n- [ ] Jaźń ^"_s + ic + u"\n"_s);
+    dev.run();
+    QVERIFY(memberText(server, u"b.ics"_s).contains(u"RELATED-TO;RELTYPE=PARENT:a"_s));
+
+    // Moved here and its text edited on the server in the same round: both are kept.
+    dev.write(u"- [ ] Ścieżka żółwia ^"_s + ia + u"\n\t- [ ] Jaźń ^"_s + ic + u"\n- [ ] Zażółć gęślą ^"_s + ib + u"\n"_s);
+    server.putMember(u"praca"_s, u"c.ics"_s, vtodo(u"c"_s, u"SUMMARY:Jaźń 2\r\nRELATED-TO;RELTYPE=SIBLING:x\r\n"_s));
+    report = dev.run();
+    QVERIFY2(report.conflicts.isEmpty(), "a move and an edit of different fields are no conflict");
+    c = memberText(server, u"c.ics"_s);
+    QVERIFY(c.contains(u"SUMMARY:Jaźń 2"_s));
+    QVERIFY(c.contains(u"RELATED-TO;RELTYPE=PARENT:a"_s));
+    QVERIFY(dev.page().contains(u"Jaźń 2 ^"_s + ic));
+    QVERIFY(!memberText(server, u"b.ics"_s).contains(u"RELTYPE=PARENT"_s));
+
+    // The server moved a task: its line stays (nesting is decided in the notes), and the move is
+    // not undone there.
+    server.putMember(u"praca"_s, u"c.ics"_s,
+                     vtodo(u"c"_s, u"SUMMARY:Jaźń 2\r\nRELATED-TO;RELTYPE=PARENT:b\r\n"_s));
+    server.clearLog();
+    dev.run();
+    QCOMPARE(server.count("PUT"), 0);
+    QVERIFY(memberText(server, u"c.ics"_s).contains(u"RELTYPE=PARENT:b"_s));
+    QVERIFY(dev.page().contains(u"\t- [ ] Jaźń 2 ^"_s + ic));
 }
 
 void TestCalDavTasks::eventsChangedHere()

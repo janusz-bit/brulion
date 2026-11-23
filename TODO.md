@@ -250,16 +250,17 @@ done in the repository simply disappears from the list.
 ## Tasks and calendar
 
 * **CalDAV calendars: what is still missing** — ICS subscriptions and CalDAV accounts (events shown,
-  created and edited in the calendar, tasks synced both ways with task lines: docs/UI.md
-  "Calendars", docs/SYNTAX.md §5 "Tasks synced with CalDAV") are tested against an in-memory server
-  and a real Radicale (`scripts/caldav-radicale-test.sh`). Missing: checks against real Nextcloud,
-  Fastmail, iCloud and Baïkal (Digest), with Thunderbird and DAVx⁵ / Tasks.org on the other side and
-  on a real phone (Android's background check); reminders of events (their VALARMs) ringing in
-  Brulion; invitations (attendees, iTIP) and free/busy; `RANGE=THISANDFUTURE` exceptions of a
-  series (taken as one occurrence); a subtask moved under another task after it was synced
-  (RELATED-TO is sent only when a task is created); calendar commands of `brulion-cli` and the MCP
-  server; Google's own CalDAV (it needs an OAuth sign-in — its secret iCal address works as a
-  subscription).
+  created and edited in the calendar, their VALARMs ringing, tasks synced both ways with task lines:
+  docs/UI.md "Calendars", docs/SYNTAX.md §5 "Tasks synced with CalDAV") are tested against an
+  in-memory server and a real Radicale (`scripts/caldav-radicale-test.sh`). Missing: checks against
+  real Nextcloud, Fastmail, iCloud and Baïkal (Digest), with Thunderbird and DAVx⁵ / Tasks.org on the
+  other side and on a real phone (Android's background check, which also arms the events' alarms);
+  invitations (attendees, iTIP) and free/busy; the alarms of an ICS subscription's events (they
+  ring nothing); a task the server moved under another one (the notes keep the line's place), an
+  `RRULE` inside a `RANGE=THISANDFUTURE` exception (ignored; clients normally split the series
+  instead); creating and editing events from `brulion-cli` and the MCP server (`calendar list` and
+  `calendar events` only read); Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
+  address works as a subscription).
 * **Reminder chips in Markdown source mode and table cells** — in an edited block a ⏰ is a chip
   with its words, its menu and the caret over it as one unit (docs/UI.md); the source mode's
   TextEdit and a table cell's TextField still show the token's raw text (`⏰ 2026-11-20 18:00`).

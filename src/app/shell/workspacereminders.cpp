@@ -1,5 +1,6 @@
 #include "workspacereminders.h"
 
+#include "caldav/eventalarms.h"
 #include "dates/dates.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
@@ -207,6 +208,8 @@ void WorkspaceReminders::startScheduler()
                                                       [this] { return now(); });
     m_scheduler->setAlarmRingMinutes(m_ringMinutes);
     m_scheduler->setLocale(uiLocale(m_language));
+    if (m_extra)
+        m_scheduler->setExtraSource(m_extra);
     if (m_testHeartbeatMs > 0)
         m_scheduler->setHeartbeatInterval(m_testHeartbeatMs);
     if (m_testDebounceMs > 0)
@@ -269,6 +272,19 @@ void WorkspaceReminders::resendSoon()
 {
     if (m_scheduler && m_scheduler->isRunning() && m_proxy->firesWhenClosed())
         m_scheduler->resendSoon();
+}
+
+void WorkspaceReminders::setExtraSource(ReminderScheduler::ExtraSource source)
+{
+    m_extra = std::move(source);
+    if (m_scheduler)
+        m_scheduler->setExtraSource(m_extra);
+}
+
+void WorkspaceReminders::extraChanged()
+{
+    if (m_scheduler)
+        m_scheduler->extraChanged();
 }
 
 // ---- settings ---------------------------------------------------------------------------------
@@ -353,6 +369,7 @@ QVariantMap WorkspaceReminders::toMap(const ScheduledNotification &n) const
 {
     const QDateTime at = n.at.toLocalTime();
     DateSpec spec{ at.date(), at.time() };
+    const bool event = n.path.startsWith(caldav::EventNotificationPrefix); // not a place in a note
     return {
             {u"id"_s, n.id},
             {u"title"_s, n.title},
@@ -360,9 +377,10 @@ QVariantMap WorkspaceReminders::toMap(const ScheduledNotification &n) const
             {u"at"_s, at.toString(u"yyyy-MM-dd HH:mm"_s)},
             {u"when"_s, at.isValid() ? dates::formatHuman(spec, uiLocale(m_language), now().date()) : QString()},
             {u"alarm"_s, n.alarm},
-            {u"path"_s, n.path},
+            {u"path"_s, event ? QString() : n.path},
             {u"line"_s, n.line},
             {u"task"_s, n.taskLine >= 0},
+            {u"event"_s, event},
     };
 }
 
@@ -439,6 +457,11 @@ void WorkspaceReminders::openMissed(const QString &id)
     if (!n)
         return;
     dismissMissed(id);
+    if (n->path.startsWith(caldav::EventNotificationPrefix)) { // an event: its day in the calendar
+        Q_EMIT navigationRequested({ { u"view"_s, u"calendar"_s },
+                                     { u"date"_s, n->path.mid(caldav::EventNotificationPrefix.size()) } });
+        return;
+    }
     Q_EMIT navigationRequested({ { u"view"_s, u"page"_s }, { u"path"_s, n->path }, { u"line"_s, n->line } });
 }
 
@@ -459,8 +482,8 @@ bool WorkspaceReminders::snooze(const QString &id, int minutes)
 
 bool WorkspaceReminders::snoozeNotification(const ScheduledNotification &notification, int minutes)
 {
-    if (!m_vault || !m_index || notification.path.isEmpty())
-        return false;
+    if (!m_vault || !m_index || notification.path.isEmpty() || notification.path.startsWith(caldav::EventNotificationPrefix))
+        return false; // (an event's reminder is no line of a note: nothing to move)
     if (foreign(notification)) {
         Q_EMIT errorOccurred(tr("“%1” is in another notebook and was not snoozed.").arg(notification.title));
         return false;

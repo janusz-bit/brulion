@@ -131,15 +131,17 @@ std::optional<TaskReconciler::Located> TaskReconciler::locate(const TrackedTask 
 
 TaskFields TaskReconciler::fieldsOf(const NoteInfo &info, int block) const
 {
-    return fieldsFromBlock(info.parsed.blocks.at(block), m_in.vault->config().defaultReminderTime);
+    TaskFields f = fieldsFromBlock(info.parsed.blocks.at(block), m_in.vault->config().defaultReminderTime);
+    f.parentUid = parentUidOf(info.parsed, block);
+    return f;
 }
 
-QString TaskReconciler::parentUidOf(const NoteInfo &info, int block) const
+QString TaskReconciler::parentUidOf(const ParsedNote &parsed, int block) const
 {
-    const int parent = info.parsed.blocks.at(block).parent;
+    const int parent = parsed.blocks.at(block).parent;
     if (parent < 0)
         return {};
-    const Block &p = info.parsed.blocks.at(parent);
+    const Block &p = parsed.blocks.at(parent);
     if (!p.task || p.id.isEmpty())
         return {};
     return m_uidOfBlock.value(p.id);
@@ -338,8 +340,12 @@ void TaskReconciler::run()
                 continue;
             }
             const unsigned differ = changedFields(L, r.fields);
-            const unsigned conflict = lc & rc & differ;
+            // The nesting is decided here only: a line moved under another task (or out) is sent,
+            // the server's own change of RELATED-TO is not applied to the notes, and where both
+            // moved it the line's place wins.
+            const unsigned conflict = lc & rc & differ & ~FieldParent;
             TaskFields target = withFields(L, r.fields, rc & ~lc);
+            target.parentUid = L.parentUid;
             bool keepBoth = false;
             if (conflict) {
                 const QString summary = L.summary.isEmpty() ? r.fields.summary : L.summary;
@@ -355,12 +361,12 @@ void TaskReconciler::run()
             } else if (lc && rc) {
                 ++m_report.merged;
             }
-            const unsigned pull = changedFields(L, target);
+            const unsigned pull = changedFields(L, target) & ~FieldParent;
             if (pull) {
                 setFields(l.info, base.blockId, pull, target);
                 ++m_report.downloaded;
             }
-            const unsigned push = changedFields(r.fields, target);
+            const unsigned push = changedFields(r.fields, target) & ~(lc & FieldParent ? 0u : FieldParent);
             if (push) {
                 RemoteOp op;
                 op.kind = RemoteOp::Kind::Put;
@@ -456,7 +462,7 @@ void TaskReconciler::run()
         const Located l = *it;
         const TaskFields L = fieldsOf(*l.info, l.block);
         const QString id = l.info->parsed.blocks.at(l.block).id;
-        const unsigned differ = changedFields(L, r.fields);
+        const unsigned differ = changedFields(L, r.fields) & ~FieldParent;
         bool remoteWins = true;
         if (differ) {
             const QDateTime rt = remoteTime(r.data);
@@ -570,7 +576,7 @@ void TaskReconciler::run()
             }
             const QString uid = uidForBlockId(id);
             TaskFields fields = fieldsOf(*page, i);
-            fields.parentUid = parentUidOf(*page, i);
+            fields.parentUid = parentUidOf(page->parsed, i);
             if (fields.parentUid.isEmpty() && b.parent >= 0)
                 fields.parentUid = newUidOfBlock.value(b.parent);
             newUidOfBlock.insert(i, uid);
@@ -600,7 +606,8 @@ void TaskReconciler::run()
         const int b = findBlock(info->after, p.blockId);
         if (b < 0 || !info->after.blocks.at(b).task)
             continue;
-        const TaskFields now = fieldsFromBlock(info->after.blocks.at(b), defaultTime);
+        TaskFields now = fieldsFromBlock(info->after.blocks.at(b), defaultTime);
+        now.parentUid = parentUidOf(info->after, b);
         TrackedTask t = m_state.tasks.value(p.uid);
         t.blockId = p.blockId;
         t.note = p.note;

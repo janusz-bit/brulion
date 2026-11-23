@@ -21,6 +21,7 @@ brulion_add_core_module(caldav
         eventedit.h
         store.h store.cpp
         tasksync_p.h tasksync.cpp
+        eventalarms.h eventalarms.cpp
         calendarsync.h calendarsync.cpp
-    DEPS util text dates markdown index vault notebook log sync io
+    DEPS util text dates markdown index vault notebook log sync io reminders
     QT Network)

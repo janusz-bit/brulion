@@ -218,6 +218,21 @@ void assignNativeIds(QList<ScheduledNotification> &notifications)
     }
 }
 
+void mergeNotifications(QList<ScheduledNotification> &list, const QList<ScheduledNotification> &extra, int max,
+                        int *dropped)
+{
+    if (extra.isEmpty())
+        return;
+    list += extra;
+    std::ranges::stable_sort(list, [](const ScheduledNotification &a, const ScheduledNotification &b) { return a.at < b.at; });
+    if (max >= 0 && list.size() > max) {
+        if (dropped)
+            *dropped += int(list.size()) - max;
+        list.resize(max);
+    }
+    assignNativeIds(list);
+}
+
 // The free functions are a NotificationCache without days: every note computed for the request
 // (collectNote(), as for the cache's days) — one code path.
 QList<ScheduledNotification> notificationsBetween(const VaultIndex &index, const QDateTime &from, const QDateTime &to,
