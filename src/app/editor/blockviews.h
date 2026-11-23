@@ -1,5 +1,5 @@
 // Helpers of the editor's block views (TableBlockView, CalcBlockView, QueryBlockView,
-// TransclusionView, EmbedView, the properties panel, EditorDialogs) that let their QML be
+// TransclusionView, EmbedView, CodeBlockView, the properties panel, EditorDialogs) that let their QML be
 // compiled to C++ by qmlcachegen (docs/UI.md "Compiled QML"): the shaping of the model's
 // QVariantMap / QVariantList roles that the QML could only do with JavaScript objects and arrays.
 //
@@ -18,7 +18,9 @@
 #include <QObject>
 #include <QPointer>
 #include <QQuickItem>
+#include <QQuickTextDocument>
 #include <QStringList>
+#include <QTextDocument>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -28,6 +30,13 @@ namespace brulion::editor {
 /// break of GFM tables, which Obsidian draws and Brulion's CSV import writes (docs/SYNTAX.md §9).
 /// A cell without one is its one line.
 QStringList tableCellLines(const QString &cell);
+
+/// The line numbers beside a code block (CodeBlockView with AppSettings.codeLineNumbers): one
+/// line per visual line of `document` — the number of each of its paragraphs (a line of the
+/// block's text, counted from 1) on the paragraph's first visual line, empty lines for the rest of
+/// a wrapped one —, so a Text in the same font and fixed line height beside the code puts each
+/// number next to its line. Lays the document out first; an empty or missing document: "1".
+QString codeLineNumberColumn(const QTextDocument *document);
 
 /// Pure helpers of the block views (singleton `BlockViews`): the roles' maps and lists shaped
 /// for typed QML. Every function takes what the view has and returns plain values.
@@ -73,6 +82,10 @@ public:
     Q_INVOKABLE QStringList calcResultTexts(const QVariantList &results) const;
     /// The offset of line `line` (0-based) of `text`; 0 past the last line.
     Q_INVOKABLE int lineStart(const QString &text, int line) const;
+
+    // --- Code blocks (CodeBlockView) -------------------------------------------------------------
+    /// codeLineNumberColumn() of a TextEdit's `textDocument`.
+    Q_INVOKABLE QString codeLineNumbers(QQuickTextDocument *document) const;
 
     // --- Page properties (FrontmatterView, PropertiesPanel, PropertyRow, PropertyListValue) ------
     /// The entry of `key` in a `properties` role; empty when there is none.

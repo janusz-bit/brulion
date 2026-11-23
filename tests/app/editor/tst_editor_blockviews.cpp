@@ -11,6 +11,9 @@
 #include <QQuickItem>
 #include <QSignalSpy>
 #include <QTest>
+#include <QTextBlock>
+#include <QTextDocument>
+#include <QTextLayout>
 
 #include <cmath>
 
@@ -234,6 +237,56 @@ private Q_SLOTS:
         QFETCH(int, line);
         QFETCH(int, expected);
         QCOMPARE(BlockViews().lineStart(text, line), expected);
+    }
+
+    void codeLineNumbers_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("one line") << u"let x = 1"_s << u"1"_s;
+        QTest::newRow("three lines") << u"a\nżółw\nc"_s << u"1\n2\n3"_s;
+        QTest::newRow("empty lines numbered") << u"\n\nźdźbło"_s << u"1\n2\n3"_s;
+        QTest::newRow("after a trailing break") << u"x\n"_s << u"1\n2"_s;
+        QTest::newRow("empty") << QString() << u"1"_s;
+        QTest::newRow("ten lines") << u"0\n1\n2\n3\n4\n5\n6\n7\n8\n9"_s << u"1\n2\n3\n4\n5\n6\n7\n8\n9\n10"_s;
+        // A line separator (U+2028) breaks a line of the document, not of the file: no number.
+        QTest::newRow("line separator") << u"a\u2028b\nc"_s << u"1\n\n2"_s;
+    }
+    void codeLineNumbers()
+    {
+        QFETCH(QString, text);
+        QFETCH(QString, expected);
+        QTextDocument doc;
+        doc.setPlainText(text);
+        QCOMPARE(brulion::editor::codeLineNumberColumn(&doc), expected);
+    }
+    void codeLineNumbersOfWrappedLines()
+    {
+        // A wrapped line has its number on its first visual line, empty lines for the others:
+        // the column has as many lines as the code shows.
+        QTextDocument doc;
+        QFont font;
+        font.setPixelSize(14);
+        doc.setDefaultFont(font);
+        const QString longLine = QStringList(12, u"źdźbło"_s).join(u' ');
+        doc.setPlainText(u"krótka\n"_s + longLine + u"\nkoniec"_s);
+        doc.setTextWidth(QFontMetricsF(font).horizontalAdvance(u"źdźbło źdźbło"_s) + 4);
+        const QString column = brulion::editor::codeLineNumberColumn(&doc);
+        const QStringList lines = column.split(u'\n');
+        const int wrapped = doc.findBlockByNumber(1).layout()->lineCount();
+        QVERIFY(wrapped > 1);
+        QCOMPARE(lines.size(), 2 + wrapped);
+        QCOMPARE(lines.at(0), u"1"_s);
+        QCOMPARE(lines.at(1), u"2"_s);
+        for (int i = 2; i < 1 + wrapped; ++i)
+            QCOMPARE(lines.at(i), QString());
+        QCOMPARE(lines.last(), u"3"_s);
+        // Wider: no wrapping, one line each.
+        doc.setTextWidth(10000);
+        QCOMPARE(brulion::editor::codeLineNumberColumn(&doc), u"1\n2\n3"_s);
+        // No document (a TextEdit not there yet): one number.
+        QCOMPARE(brulion::editor::codeLineNumberColumn(nullptr), u"1"_s);
+        QCOMPARE(BlockViews().codeLineNumbers(nullptr), u"1"_s);
     }
 
     void properties()

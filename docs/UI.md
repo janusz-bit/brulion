@@ -4091,6 +4091,15 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   string or comment carried across lines in the block's state); the source mode colours such a
   fence's lines the same way. The colours are the editor palette's `keyword`, `constant`,
   `builtin`, `function`, `number`, `string` (`BlockEditor.highlighterPalette`), light and dark.
+* **Line numbers in code blocks:** Settings → Editor → "Line numbers in code blocks"
+  (`AppSettings.codeLineNumbers`, device-local, off; `b.app.settings()` key `codeLineNumbers`)
+  numbers each line of a code block's text from 1 in a column on its left (`CodeBlockView`: the
+  code font and line height, `fgFaint`, right-aligned, as wide as the longest number), read and
+  edited alike. A wrapped line has its number once, on its first visual line
+  (`BlockViews.codeLineNumbers`: one line of the column per visual line of the editor's laid-out
+  document, followed again when the text, its wrapping or the width change). The numbers are not
+  part of the text: the file, a copy and the export have none. Mermaid, chart and view sources are
+  not numbered.
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in words of the UI language. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete), a date chip the date dialog on that date (with "+": "Date, reminder or

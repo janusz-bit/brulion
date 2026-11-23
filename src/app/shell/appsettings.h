@@ -179,6 +179,11 @@ class AppSettings : public QObject {
     /// yet — loading, from the internet waiting for "Show", a format the device cannot decode —
     /// has its frame either way.
     Q_PROPERTY(bool pictureFrames READ pictureFrames WRITE setPictureFrames NOTIFY pictureFramesChanged FINAL)
+    /// Line numbers beside the code blocks of notes (CodeBlockView; default off): each line of
+    /// the block's text numbered from 1, a wrapped line once. They are not part of the text (a
+    /// copy, the file and the export have none).
+    Q_PROPERTY(bool codeLineNumbers READ codeLineNumbers WRITE setCodeLineNumbers NOTIFY codeLineNumbersChanged
+                       FINAL)
     /// Task status history (docs/SYNTAX.md §5 "Time tracking and status history"; default off):
     /// a status change adds a `State "DONE" from "TODO" [time]` line to the task's `:LOGBOOK:`, and
     /// "In progress" starts its clock (leaving it stops the clock), as Logseq does. Pushed into the
@@ -464,6 +469,8 @@ public:
     void setWebPicturesShown(bool on);
     bool pictureFrames() const;
     void setPictureFrames(bool on);
+    bool codeLineNumbers() const;
+    void setCodeLineNumbers(bool on);
     QString exportWebPictures() const;
     void setExportWebPictures(const QString &mode);
     bool spellCheck() const;
@@ -677,6 +684,7 @@ Q_SIGNALS:
     void propertiesExpandedChanged();
     void webPicturesShownChanged();
     void pictureFramesChanged();
+    void codeLineNumbersChanged();
     void exportWebPicturesChanged();
     void spellCheckChanged();
     void taskStatusHistoryChanged();

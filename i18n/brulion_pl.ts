@@ -20097,6 +20097,16 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Cienka linia wokół każdego obrazu w notatce. Wyłączone: obrazy leżą wprost na stronie.</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1316"/>
+        <source>Line numbers in code blocks</source>
+        <translation>Numery linii w blokach kodu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1317"/>
+        <source>Each line of a code block numbered on its left. The numbers are not part of the text: copying the code leaves them out.</source>
+        <translation>Każda linia bloku kodu z numerem po lewej. Numery nie są częścią tekstu: kopiowany kod ich nie zawiera.</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="85"/>
         <source>Keyboard shortcuts</source>
         <translation>Skróty klawiszowe</translation>
