@@ -4228,7 +4228,13 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   the PDF viewer, otherwise read-only as text.
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
   stored in the attachments folder and embedded, "/Image…" and the toolbar pick files (the
-  pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
+  pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). In a note (`EmbedView`) a picture
+  sits on the page's own colour (`Theme.bg`: a transparent PNG's background is the page's, as
+  beside it), without a frame; Settings → Editor → "Frame around pictures"
+  (`AppSettings.pictureFrames`, device-local, off; `b.app.settings()` key `pictureFrames`) draws
+  the hairline `borderSubtle` frame around each. A picture not shown yet (loading, from the
+  internet waiting for "Show", a format the device cannot decode) has its frame either way: it
+  marks the picture's place. Opening one (a click on the embed,
   a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
   `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
   raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the

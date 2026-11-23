@@ -174,6 +174,11 @@ class AppSettings : public QObject {
     /// waits for "Show" — a synced or imported note cannot make the device fetch anything).
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    /// A hairline frame around the pictures shown in notes (EmbedView; default off: a picture
+    /// sits on the page's own colour, its transparent parts show the page). A picture not shown
+    /// yet — loading, from the internet waiting for "Show", a format the device cannot decode —
+    /// has its frame either way.
+    Q_PROPERTY(bool pictureFrames READ pictureFrames WRITE setPictureFrames NOTIFY pictureFramesChanged FINAL)
     /// Task status history (docs/SYNTAX.md §5 "Time tracking and status history"; default off):
     /// a status change adds a `State "DONE" from "TODO" [time]` line to the task's `:LOGBOOK:`, and
     /// "In progress" starts its clock (leaving it stops the clock), as Logseq does. Pushed into the
@@ -457,6 +462,8 @@ public:
     void setPropertiesExpanded(bool on);
     bool webPicturesShown() const;
     void setWebPicturesShown(bool on);
+    bool pictureFrames() const;
+    void setPictureFrames(bool on);
     QString exportWebPictures() const;
     void setExportWebPictures(const QString &mode);
     bool spellCheck() const;
@@ -669,6 +676,7 @@ Q_SIGNALS:
     void editorSourceModeChanged();
     void propertiesExpandedChanged();
     void webPicturesShownChanged();
+    void pictureFramesChanged();
     void exportWebPicturesChanged();
     void spellCheckChanged();
     void taskStatusHistoryChanged();

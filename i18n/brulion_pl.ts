@@ -17675,7 +17675,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="86"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1343"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1310"/>
         <source>Notebook</source>
         <translation>Notatnik</translation>
     </message>
@@ -20085,6 +20085,16 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1302"/>
         <source>Show pictures from the internet without asking</source>
         <translation>Pokazuj obrazy z internetu bez pytania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1309"/>
+        <source>Frame around pictures</source>
+        <translation>Ramka wokół obrazów</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1310"/>
+        <source>A thin line around each picture in a note. Off: pictures sit right on the page.</source>
+        <translation>Cienka linia wokół każdego obrazu w notatce. Wyłączone: obrazy leżą wprost na stronie.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="85"/>
