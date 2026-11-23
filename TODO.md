@@ -109,12 +109,6 @@ done in the repository simply disappears from the list.
   by tag (a block tagged `#pilne` tinted); a theme as a page of its own (`#theme`, a `theme` block,
   picked in Settings → Appearance and synced); `b.app.settings()` for the notebook's own settings
   (`.brulion/config.json`: journal folder, templates) beside the device's.
-* **Focus after a click in the top bar (desktop)** — a mouse click on the top bar while a day of
-  the Journal is edited leaves the Journal's editor as the place the focus returns to: an AI
-  dialog closed later on another page (the editor's "Rewrite") gives the focus to the hidden
-  Journal's editor (found by the shell self-test's `checkContributions`, which therefore runs after
-  `checkAiWriting`). Typing then could go into a note that is not on screen: make a hidden view's
-  editor never take the focus back.
 * **Gym: next steps** — Polish instructions for the common exercises (free-exercise-db's are
   English); the exercises' pictures checked on a real phone; the rest timer's notification with the
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).

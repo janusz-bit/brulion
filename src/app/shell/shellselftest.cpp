@@ -65,6 +65,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
+#include <QQmlEngine>
 #include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -7886,6 +7887,124 @@ void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check
         focused->forceActiveFocus();
 }
 
+/// A hidden view never takes the keyboard back (docs/UI.md "Keyboard shortcuts (desktop)"):
+/// today's journal day edited, a popup that goes while open — what a top bar button's tooltip did,
+/// gone with an extension's button under the pointer: Qt's overlay still names the journal's
+/// editor as the item to give the keyboard back to when the next popup closes —, then a page shown
+/// (the Journal kept, hidden) with a block edited, and the rename dialog opened over it and closed
+/// with Escape: the keyboard is the page's block's again, never the hidden journal's. Nor does the
+/// hidden journal's editor given the focus outright (forceActiveFocus) keep it: the view shown gets
+/// it. Back at home the journal's day is edited again as before.
+void checkHiddenViewFocus(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *ws = app->workspace();
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    const QString today = ws->journalPath(app->today(0));
+    const QString page = u"Przepisy.md"_s;
+    // Today's day: a visible item of the visual tree (list delegates are not in the QObject
+    // tree), on screen or not (it may be taller than the window).
+    std::function<QQuickItem *(QQuickItem *)> dayIn = [&](QQuickItem *item) -> QQuickItem * {
+        if (!item->isVisible())
+            return nullptr;
+        if (editsLoaded(item, u"journalDayEditor"_s, today))
+            return item;
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children) {
+            if (QQuickItem *found = dayIn(child))
+                return found;
+        }
+        return nullptr;
+    };
+    const auto waitDay = [&] {
+        QQuickItem *found = nullptr;
+        waitFor([&] { return (found = dayIn(window->contentItem())) != nullptr; });
+        return found;
+    };
+    app->goHome();
+    QQuickItem *day = waitDay();
+    QPointer<QQuickItem> journal = day;
+    while (journal && !isA(journal, "JournalsView"))
+        journal = journal->parentItem();
+    check(day && journal, "today's day is shown in the Journal");
+    if (!day || !journal)
+        return;
+    uidriver::callQml(day, "startEditing", {QVariant(0), QVariant(-1)});
+    QPointer<QQuickItem> dayEdit;
+    check(waitFor([&] {
+              dayEdit = day->property("activeEditor").value<QQuickItem *>();
+              return dayEdit && dayEdit->hasActiveFocus();
+          }),
+          "a block of today's journal is edited");
+    // A tooltip of the top bar that goes while it is shown, the journal's block edited.
+    QQuickItem *topBar = window->findChild<QQuickItem *>(u"shellTopBar"_s);
+    check(topBar != nullptr, "the top bar is there");
+    if (topBar) {
+        QQmlComponent component(qmlEngine(window->contentItem()));
+        component.setData(QByteArrayLiteral("import QtQuick.Controls\nToolTip { text: \"Podpowiedź samotestu\" }\n"),
+                          QUrl());
+        QObject *tip = component.create();
+        check(tip != nullptr, "a tooltip for the top bar is made");
+        if (tip) {
+            tip->setProperty("parent", QVariant::fromValue(topBar));
+            QMetaObject::invokeMethod(tip, "open");
+            check(waitFor([&] { return tip->property("opened").toBool(); }), "it is shown over the top bar");
+            delete tip;
+        }
+        check(dayEdit && dayEdit->hasActiveFocus(), "the tooltip leaves the journal's block edited");
+    }
+    // A page, the Journal kept hidden, a block of it edited.
+    app->openPage(page);
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, page);
+    check(editor != nullptr && !journal->isVisible(), "a page is shown, the Journal hidden");
+    if (!editor)
+        return;
+    uidriver::callQml(editor, "startEditing", {QVariant(0), QVariant(-1)});
+    QPointer<QQuickItem> pageEdit;
+    check(waitFor([&] {
+              pageEdit = editor->property("activeEditor").value<QQuickItem *>();
+              return pageEdit && pageEdit->hasActiveFocus();
+          }),
+          "a block of the page is edited");
+    const auto inPage = [&] {
+        QQuickItem *focus = window->activeFocusItem();
+        return focus && editor->isAncestorOf(focus) && !(journal && journal->isAncestorOf(focus));
+    };
+    // A dialog opened over it and closed (Escape, real keys).
+    app->requestItemAction(u"rename"_s, page);
+    QObject *rename = window->findChild<QObject *>(u"shellRename"_s);
+    check(rename && waitFor([&] { return rename->property("opened").toBool(); }), "the rename dialog opens");
+    if (rename) {
+        sendKey(window, Qt::Key_Escape);
+        if (!waitFor([&] { return !rename->property("visible").toBool(); })) {
+            check(false, "Escape closes the rename dialog");
+            QMetaObject::invokeMethod(rename, "close");
+            waitFor([&] { return !rename->property("visible").toBool(); });
+        }
+    }
+    check(waitFor(inPage), "the closed dialog gives the keyboard back to the page, not to the hidden Journal");
+    // The hidden journal's editor given the focus outright: the view shown takes it over.
+    if (dayEdit)
+        dayEdit->forceActiveFocus();
+    check(inPage() && (!pageEdit || pageEdit->hasActiveFocus()),
+          "the hidden Journal's editor given the keyboard hands it to the page shown");
+    // Home again: the journal is shown and edited as before.
+    uidriver::callQml(editor, "stopEditing", {QVariant(false)});
+    app->goHome();
+    day = waitDay();
+    if (day)
+        uidriver::callQml(day, "startEditing", {QVariant(0), QVariant(-1)});
+    check(day && waitFor([&] {
+              QQuickItem *edit = day->property("activeEditor").value<QQuickItem *>();
+              return edit && edit->hasActiveFocus();
+          }),
+          "back at home, the journal's day takes the keyboard again");
+    if (day)
+        uidriver::callQml(day, "stopEditing", {QVariant(false)});
+    settle(100);
+    if (focused && focused->isVisible())
+        focused->forceActiveFocus();
+}
+
 /// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
 /// the page's corner and typewriter scrolling (desktop), and one command's shortcut changed in
 /// Settings → Keyboard shortcuts with real keys: another command's key is refused with the reason,
@@ -11636,14 +11755,17 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3h-canvas. A canvas: made, opened, moved, zoomed, a card added and typed, connected, undone, saved.
     checkCanvas(window, app, check);
     closeMenus(window);
+    // 3h-app. Extension items in the UI (b.app.contribute): a top bar button and a status bar text,
+    // tapped.
+    checkContributions(window, app, check);
+    closeMenus(window);
     // 3h-ai'. The AI in the editor (rewrite → Replace → Undo) and the chat list's rename / delete.
     // (Before the ✨'s step, as the steps that leave the keyboard focus in a view.)
     checkAiWriting(window, app, check);
     closeMenus(window);
-    // 3h-app. Extension items in the UI (b.app.contribute): a top bar button and a status bar text,
-    // tapped. (After the AI in the editor: a click on the top bar while a journal day is edited
-    // left the rewrite dialog's focus, closed, to that hidden day's editor.)
-    checkContributions(window, app, check);
+    // 3h-focus. A hidden view never takes the keyboard back: a dialog closed over a page, a tooltip
+    // having gone while the journal was edited, gives it to the page, not to the hidden Journal.
+    checkHiddenViewFocus(window, app, check);
     closeMenus(window);
     // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
     checkAiButton(window, app, check);

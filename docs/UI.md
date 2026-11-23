@@ -781,6 +781,18 @@ popup that takes the focus is shown (`DeviceInfo.focusPopupShown`, closing ones 
 transitions are over (`Theme.durationSlow` + 120 ms, asked again while such a popup stays).
 The shell self-test (`checkFocusAndShortcuts`) puts the focus on the root item and expects it back.
 
+A hidden view never has the keyboard: typing would go into a note that is not on screen. Qt's
+overlay remembers the item that had the focus when a popup opened, to give it back when a popup
+that took the focus closes, and keeps it when that popup goes while shown (a top bar button's
+tooltip removed with the extension's item under the pointer): the next dialog closed, on whatever
+view, hands the focus to that item — a journal day's block edited back then, its view kept hidden
+since. So each kept view's `Loader` (`ShellRouteView`'s `KeptLoader`, "Navigation" below)
+passes the focus on the moment anything inside it gets it while hidden — such a restore, a view's
+own `forceActiveFocus()` — to the view shown (`ShellRouteView.focusShownView()`), whose editor gets
+it back where it was. The shell self-test's `checkHiddenViewFocus` reproduces it (a popup gone while
+the journal was edited, the rename dialog closed over a page, the hidden journal's editor given the
+focus outright).
+
 Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageController`):
 
 | Keys | Editing a block | Blocks selected (Esc, Shift+↑/↓, Ctrl+A, a drag, …) |
@@ -2309,7 +2321,8 @@ touch keyboard goes). The main window's main pane also builds them ahead, in the
 Tasks, Calendar, Journal, All pages, Search —, each by an asynchronous `Loader` over several frames,
 hidden, with its plain route; so even the first switch to one is instant (opening one still being
 built finishes it at once). A view built hidden leaves the keyboard alone: it takes it in its
-`takeFocus()` when first shown (docs/PERFORMANCE.md "Switching views"). Other views (a page,
+`takeFocus()` when first shown (docs/PERFORMANCE.md "Switching views"); a hidden view given the
+focus passes it to the view shown ("Keyboard shortcuts (desktop)" above). Other views (a page,
 Graph, Settings, …) are made for their route and deleted when another view is shown; the side
 panel keeps none.
 
