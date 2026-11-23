@@ -1906,6 +1906,7 @@ FocusScope {
                 editor.scrollRowTo(row, where)
         }
         function onQuitRequested(force: bool) { editor.vimQuitRequested(force) }
+        function onViewRequested() { editor.vimReportView() }
     }
     Connections {
         target: editor.controller
@@ -1914,6 +1915,40 @@ FocusScope {
             if (editor.controller.editingRow < 0 && vim.typing)
                 vim.reset()
         }
+    }
+
+    /// H M L ask where the view is: the first and last row it shows (source mode: the positions of
+    /// the text) go to VimSession.setView().
+    function vimReportView(): void {
+        if (controller === null)
+            return
+        if (controller.sourceMode) {
+            const source = sourceLoader.item as SourceEditor
+            if (source !== null)
+                source.reportVimView()
+            return
+        }
+        // The view in the editor's own coordinates (a day of the journal stream: what its scroller
+        // shows of it), and the rows drawn in it.
+        let top = 0
+        let bottom = visibleBottom()
+        if (scroller !== null) {
+            top = Math.max(top, editor.mapFromItem(scroller, 0, 0).y)
+            bottom = Math.min(bottom, editor.mapFromItem(scroller, 0, scroller.height).y)
+        }
+        const step = Math.max(2, lineHeight / 2)
+        let first = -1
+        let last = -1
+        for (let y = top + 1; y < bottom && first < 0; y += step) {
+            mapPoint(editor, listContent, editor.width / 2, y)
+            first = rowAt(mapped.x, mapped.y)
+        }
+        for (let y = bottom - 1; y > top && last < 0; y -= step) {
+            mapPoint(editor, listContent, editor.width / 2, y)
+            last = rowAt(mapped.x, mapped.y)
+        }
+        if (first >= 0)
+            vim.setView(first, Math.max(first, last))
     }
 
     /// zt / zz / zb: the row to the view's top, middle or bottom.
@@ -1946,13 +1981,17 @@ FocusScope {
         return vim.enabled && key === Qt.Key_Escape && modifiers === Qt.NoModifier && vim.mode === "normal"
                && vim.pending === "" && vim.commandLine === ""
     }
-    /// Ctrl+R, Ctrl+D, Ctrl+U and Ctrl+[ are Vim's in its command modes, Ctrl+W and Ctrl+H in its
+    /// Ctrl+R, Ctrl+D, Ctrl+U, Ctrl+A, Ctrl+X and Ctrl+[ are Vim's in its command modes, Ctrl+W and Ctrl+H in its
     /// command line (a window shortcut given one of them yields there; docs/UI.md "Vim mode").
     function vimOwnsShortcut(key: int, modifiers: int): bool {
         if ((modifiers & (Qt.AltModifier | Qt.MetaModifier | Qt.ShiftModifier)) !== 0 || (modifiers & Qt.ControlModifier) === 0)
             return false
         // The command line's Ctrl+W (a word back) and Ctrl+H (a character) too: not the window's.
         if (vim.commandLine !== "" && (key === Qt.Key_W || key === Qt.Key_H))
+            return true
+        // Ctrl+A / Ctrl+X add to and subtract from a number (select all and cut still work in
+        // replace mode and in insert mode, where Vim has no commands).
+        if ((key === Qt.Key_A || key === Qt.Key_X) && vim.mode !== "replace")
             return true
         return key === Qt.Key_R || key === Qt.Key_D || key === Qt.Key_U || key === Qt.Key_BracketLeft
     }

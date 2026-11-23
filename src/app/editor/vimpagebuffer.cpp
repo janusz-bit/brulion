@@ -564,6 +564,32 @@ void VimPageBuffer::scroll(int line, vim::ScrollTo where)
         onScroll(p.row, where);
 }
 
+bool VimPageBuffer::viewLines(int &first, int &last) const
+{
+    int topRow = 0, bottomRow = 0;
+    if (!onView || !onView(topRow, bottomRow))
+        return false;
+    rebuild();
+    // The first row of the view that has a line (a hidden one has none), and the last line of the
+    // last such row.
+    int a = -1, b = -1;
+    for (int r = topRow; r <= bottomRow && a < 0; ++r)
+        a = lineOf(r);
+    for (int r = bottomRow; r >= topRow && b < 0; --r) {
+        const int l = lineOf(r);
+        if (l < 0)
+            continue;
+        b = l;
+        while (b + 1 < m_lines.size() && m_lines.at(b + 1).row == r)
+            ++b;
+    }
+    if (a < 0 || b < a)
+        return false;
+    first = a;
+    last = b;
+    return true;
+}
+
 QVariant VimPageBuffer::anchor(Position p) const
 {
     const Place pl = place(p.line);

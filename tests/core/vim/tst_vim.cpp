@@ -98,6 +98,14 @@ private Q_SLOTS:
     void malformed_data();
     void malformed();
     void characters();
+    void viewLines_data();
+    void viewLines();
+    void macroState();
+    void macroNotation_data();
+    void macroNotation();
+    void macroStopsWhenItNeverEnds();
+    void globalAnchorsFollowLines();
+    void sentenceMessagesAndJumps();
 };
 
 void TestVim::keys_data()
@@ -478,6 +486,196 @@ void TestVim::keys_data()
     // Folds and scrolling do not move the caret of a plain text.
     QTest::newRow("zz") << u"a|b"_s << u"zz"_s << u"a|b"_s;
     QTest::newRow("za") << u"a|b"_s << u"za"_s << u"a|b"_s;
+
+    // Ctrl+A / Ctrl+X on numbers.
+    QTest::newRow("C-a") << u"|Zażółć 5 gęślą"_s << u"<C-a>"_s << u"Zażółć |6 gęślą"_s;
+    QTest::newRow("C-a in the number") << u"a1|23b"_s << u"<C-a>"_s << u"a12|4b"_s;
+    QTest::newRow("C-a on the first digit") << u"a|123"_s << u"<C-a>"_s << u"a12|4"_s;
+    QTest::newRow("C-a count") << u"|9"_s << u"5<C-a>"_s << u"1|4"_s;
+    QTest::newRow("C-x") << u"|10"_s << u"<C-x>"_s << u"|9"_s;
+    QTest::newRow("C-x count") << u"|100"_s << u"25<C-x>"_s << u"7|5"_s;
+    QTest::newRow("C-x below zero") << u"|3"_s << u"5<C-x>"_s << u"-|2"_s;
+    QTest::newRow("C-a negative") << u"|-5"_s << u"<C-a>"_s << u"-|4"_s;
+    QTest::newRow("C-a negative from its digit") << u"-|5"_s << u"<C-a>"_s << u"-|4"_s;
+    QTest::newRow("C-a negative to zero") << u"-|1"_s << u"<C-a>"_s << u"|0"_s;
+    QTest::newRow("C-x zero") << u"|0"_s << u"<C-x>"_s << u"-|1"_s;
+    QTest::newRow("C-a negative across zero") << u"|-2"_s << u"5<C-a>"_s << u"|3"_s;
+    QTest::newRow("C-a the number after the caret") << u"|abc 12 de 7"_s << u"<C-a>"_s << u"abc 1|3 de 7"_s;
+    QTest::newRow("C-a skips numbers behind") << u"1 2| x 3"_s << u"<C-a>"_s << u"1 2 x |4"_s;
+    QTest::newRow("C-a no number") << u"|Zażółć"_s << u"<C-a>"_s << u"|Zażółć"_s;
+    QTest::newRow("C-a number only behind") << u"a 1 b| c"_s << u"<C-a>"_s << u"a 1 b| c"_s;
+    QTest::newRow("C-a only this line") << u"|a\n1"_s << u"<C-a>"_s << u"|a\n1"_s;
+    QTest::newRow("C-a decimal point") << u"|v2.0"_s << u"<C-a>"_s << u"v|3.0"_s;
+    QTest::newRow("C-a date day") << u"2026-11-|23"_s << u"<C-a>"_s << u"2026-11-2|4"_s;
+    QTest::newRow("C-a date month") << u"2026-|11-23"_s << u"<C-a>"_s << u"2026-1|2-23"_s;
+    QTest::newRow("C-a date year") << u"|2026-11-23"_s << u"<C-a>"_s << u"202|7-11-23"_s;
+    QTest::newRow("C-x after a letter") << u"foo-|1"_s << u"<C-x>"_s << u"foo-|0"_s;
+    QTest::newRow("C-a after a space") << u"a |-1"_s << u"<C-a>"_s << u"a |0"_s;
+    QTest::newRow("C-a leading zeros") << u"|007"_s << u"<C-a>"_s << u"00|8"_s;
+    QTest::newRow("C-a leading zeros carry") << u"|009"_s << u"<C-a>"_s << u"01|0"_s;
+    QTest::newRow("C-x leading zeros") << u"|0010"_s << u"<C-x>"_s << u"000|9"_s;
+    QTest::newRow("C-a leading zeros grow") << u"|099"_s << u"<C-a>"_s << u"10|0"_s;
+    QTest::newRow("C-a hex") << u"|0xff"_s << u"<C-a>"_s << u"0x10|0"_s;
+    QTest::newRow("C-a hex upper") << u"|0xFE"_s << u"<C-a>"_s << u"0xF|F"_s;
+    QTest::newRow("C-a hex width") << u"|0x0f"_s << u"<C-a>"_s << u"0x1|0"_s;
+    QTest::newRow("C-a hex letter") << u"|0x09"_s << u"<C-a>"_s << u"0x0|a"_s;
+    QTest::newRow("C-a hex in the middle") << u"0x1|f"_s << u"<C-a>"_s << u"0x2|0"_s;
+    QTest::newRow("C-a hex prefix") << u"0|x1f"_s << u"<C-a>"_s << u"0x2|0"_s;
+    QTest::newRow("C-x hex wraps") << u"|0x0"_s << u"<C-x>"_s << u"0xfffffffffffffff|f"_s;
+    QTest::newRow("C-a bin") << u"|0b101"_s << u"<C-a>"_s << u"0b11|0"_s;
+    QTest::newRow("C-a bin grows") << u"|0b1"_s << u"<C-a>"_s << u"0b1|0"_s;
+    QTest::newRow("C-x bin") << u"|0b100"_s << u"<C-x>"_s << u"0b01|1"_s;
+    QTest::newRow("C-a 0x without digits is 0") << u"|0xg"_s << u"<C-a>"_s << u"|1xg"_s;
+    QTest::newRow("C-a overflow stays") << u"|9223372036854775807"_s << u"<C-a>"_s << u"922337203685477580|7"_s;
+    QTest::newRow("C-a dot") << u"|1 2 3"_s << u"<C-a>w."_s << u"2 |3 3"_s;
+    QTest::newRow("C-a dot with a count") << u"|1 1 1"_s << u"3<C-a>w."_s << u"4 |4 1"_s;
+    QTest::newRow("C-a dot with a new count") << u"|1 1 1"_s << u"3<C-a>w2."_s << u"4 |3 1"_s;
+    QTest::newRow("C-x dot") << u"|5 5"_s << u"<C-x>w."_s << u"4 |4"_s;
+    QTest::newRow("C-a undo") << u"|5"_s << u"<C-a>u"_s << u"|5"_s;
+    QTest::newRow("C-a Polish text around") << u"|zażółć 99 gęślą"_s << u"<C-a>"_s << u"zażółć 10|0 gęślą"_s;
+    QTest::newRow("V C-a") << u"|1\n2\n3"_s << u"VG<C-a>"_s << u"|2\n3\n4"_s;
+    QTest::newRow("V C-x count") << u"|10\n20"_s << u"Vj5<C-x>"_s << u"|5\n15"_s;
+    QTest::newRow("V g C-a") << u"|0\n0\n0"_s << u"VGg<C-a>"_s << u"|1\n2\n3"_s;
+    QTest::newRow("V g C-x") << u"|9\n9\n9"_s << u"VGg<C-x>"_s << u"|8\n7\n6"_s;
+    QTest::newRow("V g C-a skips lines without a number") << u"|0\nx\n0"_s << u"VGg<C-a>"_s << u"|1\nx\n2"_s;
+    QTest::newRow("v C-a") << u"|a1 b2"_s << u"vl<C-a>"_s << u"|a2 b2"_s;
+    QTest::newRow("v C-a a number outside the selection") << u"|a b2"_s << u"vl<C-a>"_s << u"|a b2"_s;
+    QTest::newRow("v C-a two lines") << u"|1 1\n1 1"_s << u"vj<C-a>"_s << u"|2 1\n2 1"_s;
+    QTest::newRow("V C-a dot") << u"|1\n2\n3\n4"_s << u"Vj<C-a>jj."_s << u"2\n3\n|4\n5"_s;
+
+    // Sentences.
+    QTest::newRow(")") << u"|Pierwsze zdanie. Drugie zdanie! Trzecie? Czwarte."_s << u")"_s
+                       << u"Pierwsze zdanie. |Drugie zdanie! Trzecie? Czwarte."_s;
+    QTest::newRow("2)") << u"|Pierwsze zdanie. Drugie zdanie! Trzecie? Czwarte."_s << u"2)"_s
+                        << u"Pierwsze zdanie. Drugie zdanie! |Trzecie? Czwarte."_s;
+    QTest::newRow("3)") << u"|Pierwsze zdanie. Drugie zdanie! Trzecie? Czwarte."_s << u"3)"_s
+                        << u"Pierwsze zdanie. Drugie zdanie! Trzecie? |Czwarte."_s;
+    QTest::newRow(") to the end") << u"Pierwsze zdanie. |Drugie."_s << u")"_s << u"Pierwsze zdanie. Drugie|."_s;
+    QTest::newRow(") at the end stays") << u"Pierwsze zdanie. Drugie|."_s << u")"_s << u"Pierwsze zdanie. Drugie|."_s;
+    QTest::newRow(") from the middle") << u"Pier|wsze zdanie. Drugie."_s << u")"_s << u"Pierwsze zdanie. |Drugie."_s;
+    QTest::newRow(") from the blanks") << u"Pierwsze zdanie.| Drugie."_s << u")"_s << u"Pierwsze zdanie. |Drugie."_s;
+    QTest::newRow(") from the terminator") << u"Pierwsze zdanie|. Drugie."_s << u")"_s << u"Pierwsze zdanie. |Drugie."_s;
+    QTest::newRow("(") << u"Pierwsze zdanie. Dru|gie zdanie!"_s << u"("_s << u"Pierwsze zdanie. |Drugie zdanie!"_s;
+    QTest::newRow("( from a start") << u"Pierwsze zdanie. |Drugie zdanie!"_s << u"("_s
+                                    << u"|Pierwsze zdanie. Drugie zdanie!"_s;
+    QTest::newRow("((") << u"Pierwsze zdanie. Dru|gie zdanie!"_s << u"(("_s << u"|Pierwsze zdanie. Drugie zdanie!"_s;
+    QTest::newRow("( at the very start") << u"|Pierwsze."_s << u"("_s << u"|Pierwsze."_s;
+    QTest::newRow("2(") << u"A. B. C. D|."_s << u"2("_s << u"A. B. |C. D."_s;
+    QTest::newRow("9( past the start") << u"A. B|."_s << u"9("_s << u"|A. B."_s;
+    QTest::newRow(") abbreviation") << u"|Kup np. mleko. Potem idź."_s << u")"_s << u"Kup np. mleko. |Potem idź."_s;
+    QTest::newRow(") title") << u"|Dr. Kowalski przyszedł. Nowe zdanie."_s << u")"_s
+                             << u"Dr. Kowalski przyszedł. |Nowe zdanie."_s;
+    QTest::newRow(") small letter after a period") << u"|Waga 5 kg. i tak. Dalej."_s << u")"_s
+                                                   << u"Waga 5 kg. i tak. |Dalej."_s;
+    QTest::newRow(") approx.") << u"|Waga ok. 5 kg. Dalej."_s << u")"_s << u"Waga ok. 5 kg. |Dalej."_s;
+    QTest::newRow(") ellipsis") << u"|Czekaj... Co? Nic."_s << u")"_s << u"Czekaj... |Co? Nic."_s;
+    QTest::newRow(") ellipsis small letter") << u"|Hm... może tak. Dalej."_s << u")"_s << u"Hm... może tak. |Dalej."_s;
+    QTest::newRow(") question and small letter") << u"|Czy to ok? tak. Nie."_s << u")"_s << u"Czy to ok? |tak. Nie."_s;
+    QTest::newRow(") list number") << u"|1. Pierwszy punkt. Drugi."_s << u")"_s << u"1. Pierwszy punkt. |Drugi."_s;
+    QTest::newRow(") closing quote") << u"|Powiedział \"Dość.\" Potem wyszedł."_s << u")"_s
+                                     << u"Powiedział \"Dość.\" |Potem wyszedł."_s;
+    QTest::newRow(") closing bracket") << u"|Zobacz (to jest ważne.) Dalej."_s << u")"_s
+                                       << u"Zobacz (to jest ważne.) |Dalej."_s;
+    QTest::newRow(") a number with a point") << u"|Pi to 3.14 mniej więcej. Dalej."_s << u")"_s
+                                             << u"Pi to 3.14 mniej więcej. |Dalej."_s;
+    QTest::newRow(") Polish letters") << u"|Zażółć gęślą jaźń. Łódź."_s << u")"_s << u"Zażółć gęślą jaźń. |Łódź."_s;
+    QTest::newRow(") across lines") << u"|Ala ma\nkota. Kot ma\nAlę."_s << u")"_s << u"Ala ma\nkota. |Kot ma\nAlę."_s;
+    QTest::newRow("2) across lines") << u"|Ala ma\nkota. Kot ma\nAlę."_s << u"2)"_s << u"Ala ma\nkota. Kot ma\nAlę|."_s;
+    QTest::newRow(") a line ends a sentence") << u"|Ala ma kota.\nKot ma Alę."_s << u")"_s
+                                              << u"Ala ma kota.\n|Kot ma Alę."_s;
+    QTest::newRow(") indentation") << u"|Ala ma kota.\n   Kot ma Alę."_s << u")"_s << u"Ala ma kota.\n   |Kot ma Alę."_s;
+    QTest::newRow(") paragraph") << u"|Jeden.\n\nDwa."_s << u")"_s << u"Jeden.\n|\nDwa."_s;
+    QTest::newRow("2) paragraph") << u"|Jeden.\n\nDwa."_s << u"2)"_s << u"Jeden.\n\n|Dwa."_s;
+    QTest::newRow(") paragraph without a period") << u"|Jeden\ndwa\n\ntrzy"_s << u")"_s << u"Jeden\ndwa\n|\ntrzy"_s;
+    QTest::newRow(") empty lines are one") << u"|Jeden.\n\n\nDwa."_s << u"))"_s << u"Jeden.\n\n\n|Dwa."_s;
+    QTest::newRow("( paragraph") << u"Jeden.\n\n|Dwa."_s << u"("_s << u"Jeden.\n|\nDwa."_s;
+    QTest::newRow("(( paragraph") << u"Jeden.\n\n|Dwa."_s << u"(("_s << u"|Jeden.\n\nDwa."_s;
+    QTest::newRow("( across lines") << u"Ala ma\nkota. Kot ma\nAl|ę."_s << u"("_s << u"Ala ma\nkota. |Kot ma\nAlę."_s;
+    QTest::newRow("d)") << u"|Pierwsze zdanie. Drugie."_s << u"d)"_s << u"|Drugie."_s;
+    QTest::newRow("d) last") << u"Pierwsze zdanie. Dru|gie."_s << u"d)"_s << u"Pierwsze zdanie. Dr|u"_s;
+    QTest::newRow("d(") << u"Pierwsze zdanie. Dru|gie."_s << u"d("_s << u"Pierwsze zdanie. |gie."_s;
+    QTest::newRow("c)") << u"|Ala. Ola."_s << u"c)Ela. <Esc>"_s << u"Ela.| Ola."_s;
+    QTest::newRow("y) $p") << u"|Ala. Ola."_s << u"y)$p"_s << u"Ala. Ola.Ala.| "_s;
+    QTest::newRow("is") << u"Pierwsze zdanie. Dru|gie zdanie! Trzecie?"_s << u"dis"_s
+                        << u"Pierwsze zdanie. | Trzecie?"_s;
+    QTest::newRow("as") << u"Pierwsze zdanie. Dru|gie zdanie! Trzecie?"_s << u"das"_s
+                        << u"Pierwsze zdanie. |Trzecie?"_s;
+    QTest::newRow("is first") << u"|Pierwsze zdanie. Drugie."_s << u"dis"_s << u"| Drugie."_s;
+    QTest::newRow("as first") << u"|Pierwsze zdanie. Drugie."_s << u"das"_s << u"|Drugie."_s;
+    QTest::newRow("as last takes the blanks before") << u"Pierwsze zdanie. Drug|ie."_s << u"das"_s
+                                                     << u"Pierwsze zdanie|."_s;
+    QTest::newRow("is last") << u"Pierwsze zdanie. Drug|ie."_s << u"dis"_s << u"Pierwsze zdanie.| "_s;
+    QTest::newRow("is the only sentence") << u"Je|den."_s << u"dis"_s << u"|"_s;
+    QTest::newRow("as the only sentence") << u"Je|den."_s << u"das"_s << u"|"_s;
+    QTest::newRow("2as") << u"|A. B. C. D."_s << u"2das"_s << u"|C. D."_s;
+    QTest::newRow("2is") << u"|A. B. C. D."_s << u"2dis"_s << u"|B. C. D."_s;
+    QTest::newRow("3is") << u"|A. B. C. D."_s << u"3dis"_s << u"| C. D."_s;
+    QTest::newRow("cis") << u"Pierwsze zdanie. Dru|gie."_s << u"cisNowe.<Esc>"_s << u"Pierwsze zdanie. Nowe|."_s;
+    QTest::newRow("is on the blanks") << u"Pierwsze zdanie.| Drugie."_s << u"dis"_s << u"Pierwsze zdanie.|Drugie."_s;
+    QTest::newRow("as on the blanks") << u"Pierwsze zdanie.| Drugie."_s << u"das"_s << u"Pierwsze zdanie|."_s;
+    QTest::newRow("is across lines") << u"Ala ma\nko|ta. Kot ma\nAlę."_s << u"dis"_s << u"| Kot ma\nAlę."_s;
+    QTest::newRow("as across lines") << u"Ala ma\nko|ta. Kot ma\nAlę."_s << u"das"_s << u"|Kot ma\nAlę."_s;
+    QTest::newRow("as takes a line break between sentences") << u"Ala ma kota|.\nKot ma Alę."_s << u"das"_s
+                                                             << u"|Kot ma Alę."_s;
+    QTest::newRow("as at a paragraph's end keeps the break") << u"Jeden. Dw|a.\n\nTrzy."_s << u"das"_s
+                                                             << u"Jeden|.\n\nTrzy."_s;
+    QTest::newRow("is on an empty line") << u"a.\n|\nb."_s << u"dis"_s << u"a.\n|\nb."_s;
+    QTest::newRow("yis $p") << u"|Ala. Ola."_s << u"yis$p"_s << u"Ala. Ola.Ala|."_s;
+    QTest::newRow("vis d") << u"Ala. Ol|a. Ela."_s << u"visd"_s << u"Ala. | Ela."_s;
+    QTest::newRow("vas d") << u"Ala. Ol|a. Ela."_s << u"vasd"_s << u"Ala. |Ela."_s;
+    QTest::newRow("is with an abbreviation") << u"Kup np. mle|ko. Potem."_s << u"dis"_s << u"| Potem."_s;
+    QTest::newRow("is in Polish") << u"Zażółć gęś|lą jaźń. Łódź."_s << u"dis"_s << u"| Łódź."_s;
+
+    // Macros.
+    QTest::newRow("qa @a") << u"|abcdef"_s << u"qaxq@a"_s << u"|cdef"_s;
+    QTest::newRow("3@a") << u"|abcdef"_s << u"qaxq3@a"_s << u"|ef"_s;
+    QTest::newRow("@@") << u"|abcdef"_s << u"qaxq@a@@"_s << u"|def"_s;
+    QTest::newRow("2@@") << u"|abcdefg"_s << u"qaxq@a2@@"_s << u"|efg"_s;
+    QTest::newRow("macro with insert and motion") << u"|a\nb\nc"_s << u"qqA!<Esc>jq2@q"_s << u"a!\nb!\nc|!"_s;
+    QTest::newRow("recursive macro") << u"|a\nb\nc\nd"_s << u"qaqqaA.<Esc>j@aq@a"_s << u"a.\nb.\nc.\nd|."_s;
+    QTest::newRow("macro runs keys, not text") << u"|aa bb\ncc dd"_s << u"qqdwqj@q"_s << u"bb\n|dd"_s;
+    QTest::newRow("macro stops at a failed motion") << u"|axb axb axb"_s << u"qqfxrYq5@q"_s << u"aYb aYb a|Yb"_s;
+    QTest::newRow("qA appends") << u"|abcdef"_s << u"qaxqqAxq@a"_s << u"|ef"_s;
+    QTest::newRow("macro @:") << u"|a\na"_s << u":s/a/b/<CR>j@:"_s << u"b\n|b"_s;
+    QTest::newRow("macro in the register") << u"|abc"_s << u"qaxq\"ap"_s << u"b|xc"_s;
+    QTest::newRow("a yanked text runs") << u"|dw one two"_s << u"\"ayiww@a"_s << u"dw |two"_s;
+    QTest::newRow("q typed in insert mode") << u"|abc"_s << u"qaiq<Esc>q@a"_s << u"|qqabc"_s;
+    QTest::newRow("Enter in a macro") << u"|ab"_s << u"qqA<CR>x<Esc>q@q"_s << u"ab\nx\n|x"_s;
+    QTest::newRow("Backspace in a macro") << u"|abc"_s << u"qqA<BS>x<Esc>q@q"_s << u"ab|x"_s;
+    QTest::newRow("Polish text typed by a macro") << u"|a\nb"_s << u"qqAżółć<Esc>jq@q"_s << u"ażółć\nbżół|ć"_s;
+    QTest::newRow("macro and the dot repeat") << u"|a b c d"_s << u"qqdwq@q."_s << u"|d"_s;
+    QTest::newRow("a macro is one undo step") << u"|abc"_s << u"qqA1<Esc>A2<Esc>q@qu"_s << u"abc1|2"_s;
+    QTest::newRow("@ of an empty register") << u"|abc"_s << u"@z"_s << u"|abc"_s;
+    QTest::newRow("@@ without a macro") << u"|abc"_s << u"@@"_s << u"|abc"_s;
+
+    // :normal and :g.
+    QTest::newRow(":normal") << u"|a b c"_s << u":norm dw<CR>"_s << u"|b c"_s;
+    QTest::newRow(":normal insert") << u"|abc"_s << u":normal ihello<lt>Esc><CR>"_s << u"hell|oabc"_s;
+    QTest::newRow(":normal ends an insert") << u"|a\nb\nc"_s << u":%norm A!<CR>"_s << u"a!\nb!\nc|!"_s;
+    QTest::newRow(":normal range") << u"|a\nb\nc"_s << u":2,3norm Ax<CR>"_s << u"a\nbx\nc|x"_s;
+    QTest::newRow(":normal a failing line goes on") << u"|ax\nb\nax"_s << u":%norm fxrY<CR>"_s << u"aY\nb\na|Y"_s;
+    QTest::newRow(":normal one undo step") << u"|a\nb"_s << u":%norm Ax<CR>u"_s << u"|a\nb"_s;
+    QTest::newRow(":g d") << u"|a1\nb\na2\nb"_s << u":g/a/d<CR>"_s << u"b\n|b"_s;
+    QTest::newRow(":v d") << u"|a1\nb\na2\nb"_s << u":v/a/d<CR>"_s << u"a1\n|a2"_s;
+    QTest::newRow(":g! d") << u"|a1\nb\na2\nb"_s << u":g!/a/d<CR>"_s << u"a1\n|a2"_s;
+    QTest::newRow(":g other delimiter") << u"|a1\nb\na2\nb"_s << u":g#a#d<CR>"_s << u"b\n|b"_s;
+    QTest::newRow(":g s") << u"|a1\nb\na2\nb"_s << u":g/a/s/a/x/<CR>"_s << u"x1\nb\n|x2\nb"_s;
+    QTest::newRow(":g without a command") << u"|a1\nb\na2\nb"_s << u":g/a/<CR>"_s << u"a1\nb\n|a2\nb"_s;
+    QTest::newRow(":g range") << u"|a1\na2\nb\na3\na4"_s << u":2,4g/a/d<CR>"_s << u"a1\nb\n|a4"_s;
+    QTest::newRow(":g smart case") << u"|a1\nb"_s << u":g/A/d<CR>"_s << u"|a1\nb"_s;
+    QTest::newRow(":g ignores case") << u"|A1\nb"_s << u":g/a/d<CR>"_s << u"|b"_s;
+    QTest::newRow(":g Polish") << u"|Zażółć\nx\nZażółć"_s << u":g/Zażółć/d<CR>"_s << u"|x"_s;
+    QTest::newRow(":g all lines") << u"|a1\na2"_s << u":g/a/d<CR>"_s << u"|"_s;
+    QTest::newRow(":g a dot is a dot") << u"|a\nb"_s << u":g/./d<CR>"_s << u"|a\nb"_s;
+    QTest::newRow(":g j") << u"|a\nb\na\nc"_s << u":g/a/j<CR>"_s << u"a b\na| c"_s;
+    QTest::newRow(":g normal") << u"|a\nb\nc\nb"_s << u":g/b/norm Ax<CR>"_s << u"a\nbx\nc\nb|x"_s;
+    QTest::newRow(":g no match") << u"|a\nb"_s << u":g/zzz/d<CR>"_s << u"|a\nb"_s;
+    QTest::newRow(":g y A") << u"|a1\nb\na2"_s << u":g/a/y A<CR>G\"ap"_s << u"a1\nb\na2\n|a1\na2"_s;
+    QTest::newRow(":g is one undo step") << u"|a1\nb\na2"_s << u":g/a/d<CR>u"_s << u"|a1\nb\na2"_s;
+    QTest::newRow(":g a deleted line is skipped") << u"|a\na\nb"_s << u":g/a/.,+1d<CR>"_s << u"|b"_s;
+    QTest::newRow(":g sets the search") << u"|ab\nx\nab"_s << u":g/ab/<CR>gg/<CR>"_s << u"ab\nx\n|ab"_s;
+    QTest::newRow(":g does not nest") << u"|a\nb"_s << u":g/a/g/b/d<CR>"_s << u"|a\nb"_s;
+    QTest::newRow(":g empty pattern") << u"|ab\nc\nab"_s << u"/ab<CR>gg:g//d<CR>"_s << u"|c"_s;
 }
 
 void TestVim::keys()
@@ -724,11 +922,14 @@ void TestVim::keysLeftToTheEditor()
     QVERIFY(!f.engine.feed(Key::special(Qt::Key_Return, Qt::ControlModifier)));
     QVERIFY(!f.engine.feed(Key::special(Qt::Key_F2)));
     QVERIFY(!f.engine.feed(Key{Qt::Key_E, Qt::ControlModifier, u"\x05"_s}));
+    QVERIFY(!f.engine.feed(Key{Qt::Key_O, Qt::ControlModifier, u"\x0f"_s})); // the jump list is not there
     Key altX{Qt::Key_X, Qt::AltModifier, u"x"_s};
     QVERIFY(!f.engine.feed(altX));
     // Vim's own: Ctrl+R, Ctrl+D, Ctrl+U, Ctrl+[, Esc; typed characters always.
     QVERIFY(f.engine.feed(Key::special(Qt::Key_R, Qt::ControlModifier)));
     QVERIFY(f.engine.feed(Key::special(Qt::Key_D, Qt::ControlModifier)));
+    QVERIFY(f.engine.feed(Key{Qt::Key_A, Qt::ControlModifier, u"\x01"_s})); // a number: the editor's select all gives way
+    QVERIFY(f.engine.feed(Key{Qt::Key_X, Qt::ControlModifier, u"\x18"_s}));
     QVERIFY(f.engine.feed(Key::special(Qt::Key_BracketLeft, Qt::ControlModifier)));
     QVERIFY(f.engine.feed(Key::fromText(u"Q"_s))); // no command: taken all the same
     QVERIFY(f.engine.feed(Key::special(Qt::Key_Escape)));
@@ -738,6 +939,14 @@ void TestVim::keysLeftToTheEditor()
     QVERIFY(!f.engine.feed(Key::fromText(u"x"_s)));
     QVERIFY(!f.engine.feed(Key::special(Qt::Key_Return)));
     QVERIFY(!f.engine.feed(Key::special(Qt::Key_R, Qt::ControlModifier)));
+    QVERIFY(!f.engine.feed(Key{Qt::Key_A, Qt::ControlModifier, u"\x01"_s}));
+    QVERIFY(!f.engine.feed(Key{Qt::Key_X, Qt::ControlModifier, u"\x18"_s}));
+    QVERIFY(f.engine.feed(Key::special(Qt::Key_Escape)));
+    QCOMPARE(f.engine.mode(), Mode::Normal);
+    // Replace mode: Ctrl+A and Ctrl+X are the editor's too (select all, cut).
+    QVERIFY(f.engine.feed(Key::fromText(u"R"_s)));
+    QVERIFY(!f.engine.feed(Key{Qt::Key_A, Qt::ControlModifier, u"\x01"_s}));
+    QVERIFY(!f.engine.feed(Key{Qt::Key_X, Qt::ControlModifier, u"\x18"_s}));
     QVERIFY(f.engine.feed(Key::special(Qt::Key_Escape)));
     QCOMPARE(f.engine.mode(), Mode::Normal);
     // Shift+arrows select in the editor.
@@ -855,6 +1064,14 @@ void TestVim::boundaries_data()
     QTest::newRow("O at the start") << u"|a"_s << u"O<Esc>"_s << u"|\na"_s;
     QTest::newRow("V on the last line") << u"a\n|b"_s << u"Vjd"_s << u"|a"_s;
     QTest::newRow("Vk on the first") << u"|a\nb"_s << u"Vkd"_s << u"|b"_s;
+    QTest::newRow("empty buffer C-a") << u"|"_s << u"<C-a><C-x>"_s << u"|"_s;
+    QTest::newRow("empty buffer sentences") << u"|"_s << u")(d)d(disdas"_s << u"|"_s;
+    QTest::newRow("empty buffer H M L") << u"|"_s << u"HMLdHdL"_s << u"|"_s;
+    QTest::newRow("empty buffer macros") << u"|"_s << u"qaxq@a@@:g/x/d<CR>:norm x<CR>"_s << u"|"_s;
+    QTest::newRow("sentences of a blank line") << u"|  "_s << u")(dis"_s << u"|"_s;
+    QTest::newRow("a terminator alone") << u"|."_s << u")dis"_s << u"|"_s;
+    QTest::newRow("huge count sentences") << u"|A. B."_s << u"99999)99999("_s << u"|A. B."_s;
+    QTest::newRow("C-a huge count") << u"|1"_s << u"99999<C-a>"_s << u"10000|0"_s;
 }
 
 void TestVim::boundaries()
@@ -871,7 +1088,7 @@ void TestVim::malformed_data()
 {
     QTest::addColumn<QString>("keys");
     // Nothing of these may crash, leave a command pending or change the text.
-    QTest::newRow("unknown") << u"QZgqzx!@"_s;
+    QTest::newRow("unknown") << u"QZgQzx!K"_s;
     QTest::newRow("operator Esc") << u"d<Esc>"_s;
     QTest::newRow("operator unknown") << u"dQ"_s;
     QTest::newRow("register unknown") << u"\"!p"_s;
@@ -895,6 +1112,20 @@ void TestVim::malformed_data()
     QTest::newRow("backtick unset") << u"`q'q"_s;
     QTest::newRow("dot nothing") << u"."_s;
     QTest::newRow("visual garbage") << u"vQ<Esc>"_s;
+    QTest::newRow("q unknown") << u"q!"_s;
+    QTest::newRow("@ unknown") << u"@!"_s;
+    QTest::newRow("q Esc") << u"q<Esc>"_s;
+    QTest::newRow("@ Esc") << u"@<Esc>"_s;
+    QTest::newRow("@: nothing") << u"@:"_s;
+    QTest::newRow(":g unclosed") << u":g/x<CR>"_s;
+    QTest::newRow(":g empty") << u":g<CR>"_s;
+    QTest::newRow(":g bad delimiter") << u":ga<CR>"_s;
+    QTest::newRow(":g without a pattern") << u":g//d<CR>"_s;
+    QTest::newRow(":normal empty") << u":norm<CR>"_s;
+    QTest::newRow(":normal unknown keys") << u":norm QZgQzx!K<CR>"_s;
+    QTest::newRow("is unknown in a visual") << u"visQ<Esc>"_s;
+    QTest::newRow("g C-a without a number") << u"g<C-a>"_s;
+    QTest::newRow("C-a on a word") << u"<C-a><C-x>"_s;
 }
 
 void TestVim::malformed()
@@ -906,6 +1137,165 @@ void TestVim::malformed()
     QCOMPARE(f.engine.pending(), QString());
     QVERIFY(!f.engine.commandLineActive());
     QCOMPARE(f.engine.mode(), Mode::Normal);
+}
+
+void TestVim::viewLines_data()
+{
+    QTest::addColumn<QString>("before");
+    QTest::addColumn<int>("top");
+    QTest::addColumn<int>("pageLines");
+    QTest::addColumn<QString>("keys");
+    QTest::addColumn<QString>("after");
+    const QString text = u"|a\n  b\nc\nd\ne\nf\ng\nh\ni\nj"_s;
+    // The view shows lines 2-6 (c d e f g).
+    QTest::newRow("H") << text << 2 << 5 << u"H"_s << u"a\n  b\n|c\nd\ne\nf\ng\nh\ni\nj"_s;
+    QTest::newRow("2H") << text << 2 << 5 << u"2H"_s << u"a\n  b\nc\n|d\ne\nf\ng\nh\ni\nj"_s;
+    QTest::newRow("3H") << text << 2 << 5 << u"3H"_s << u"a\n  b\nc\nd\n|e\nf\ng\nh\ni\nj"_s;
+    QTest::newRow("9H stops at the bottom") << text << 2 << 5 << u"9H"_s << u"a\n  b\nc\nd\ne\nf\n|g\nh\ni\nj"_s;
+    QTest::newRow("L") << text << 2 << 5 << u"L"_s << u"a\n  b\nc\nd\ne\nf\n|g\nh\ni\nj"_s;
+    QTest::newRow("2L") << text << 2 << 5 << u"2L"_s << u"a\n  b\nc\nd\ne\n|f\ng\nh\ni\nj"_s;
+    QTest::newRow("9L stops at the top") << text << 2 << 5 << u"9L"_s << u"a\n  b\n|c\nd\ne\nf\ng\nh\ni\nj"_s;
+    QTest::newRow("M") << text << 2 << 5 << u"M"_s << u"a\n  b\nc\nd\n|e\nf\ng\nh\ni\nj"_s;
+    QTest::newRow("M of an even view") << text << 2 << 4 << u"M"_s << u"a\n  b\nc\n|d\ne\nf\ng\nh\ni\nj"_s;
+    QTest::newRow("H goes to the first non-blank") << u"|a\n  b\nc\nd"_s << 1 << 3 << u"H"_s
+                                                  << u"a\n  |b\nc\nd"_s;
+    QTest::newRow("dH") << u"a\n  b\nc\nd\ne\n|f\ng\nh\ni\nj"_s << 2 << 5 << u"dH"_s << u"a\n  b\n|g\nh\ni\nj"_s;
+    QTest::newRow("dL") << u"a\n  b\n|c\nd\ne\nf\ng\nh\ni\nj"_s << 2 << 5 << u"dL"_s << u"a\n  b\n|h\ni\nj"_s;
+    QTest::newRow("dM") << u"a\n  b\n|c\nd\ne\nf\ng\nh\ni\nj"_s << 2 << 5 << u"dM"_s << u"a\n  b\n|f\ng\nh\ni\nj"_s;
+    QTest::newRow("H is a jump") << u"a\nb\n|c\nd\ne"_s << 0 << 5 << u"H``"_s << u"a\nb\n|c\nd\ne"_s;
+    QTest::newRow("L of a short text") << u"|a\nb\nc"_s << 0 << 20 << u"L"_s << u"a\nb\n|c"_s;
+    QTest::newRow("M of a short text") << u"|a\nb\nc\nd"_s << 0 << 20 << u"M"_s << u"a\n|b\nc\nd"_s;
+    QTest::newRow("vLd") << u"a\n  b\n|c\nd\ne\nf\ng\nh\ni\nj"_s << 2 << 5 << u"vLd"_s << u"a\n  b\n|\nh\ni\nj"_s;
+    QTest::newRow("VHd") << u"a\nb\nc\n|d\ne"_s << 1 << 3 << u"VHd"_s << u"a\n|e"_s;
+    QTest::newRow("yL P") << u"|a\nb\nc"_s << 0 << 2 << u"yLGp"_s << u"a\nb\nc\n|a\nb"_s;
+    QTest::newRow("H after the view moved") << u"|a\nb\nc\nd\ne\nf"_s << 3 << 3 << u"H"_s << u"a\nb\nc\n|d\ne\nf"_s;
+}
+
+void TestVim::viewLines()
+{
+    QFETCH(QString, before);
+    QFETCH(int, top);
+    QFETCH(int, pageLines);
+    QFETCH(QString, keys);
+    QFETCH(QString, after);
+    Fixture f(before);
+    f.buffer.setPageLines(pageLines);
+    f.buffer.setViewTop(top);
+    QCOMPARE(f.run(keys), after);
+    QCOMPARE(f.engine.mode(), Mode::Normal);
+}
+
+void TestVim::macroState()
+{
+    Fixture f(u"|abc"_s);
+    QCOMPARE(f.engine.recordingRegister(), QChar());
+    f.run(u"qa"_s);
+    QCOMPARE(f.engine.recordingRegister(), QChar(u'a'));
+    f.run(u"x"_s);
+    QCOMPARE(f.engine.recordingRegister(), QChar(u'a'));
+    f.run(u"q"_s);
+    QCOMPARE(f.engine.recordingRegister(), QChar());
+    // The register holds the keys as text (the q that ended it is not in it).
+    QCOMPARE(f.shared.get(u'a').text, u"x"_s);
+    QVERIFY(!f.shared.get(u'a').linewise);
+    // A macro of insert mode, with a special key and a "<".
+    f.run(u"qbA<lt>b><CR><Esc>q"_s);
+    QCOMPARE(f.shared.get(u'b').text, u"A<lt>b><CR><Esc>"_s);
+    // The recorded keys run while the text is as recorded; edited as text, the text runs.
+    f.run(u"gg"_s);
+    f.buffer.setText(u"abc"_s);
+    f.buffer.setCursor(Position{0, 0});
+    f.run(u"@a"_s);
+    QCOMPARE(dump(f.buffer), u"|bc"_s);
+    QCOMPARE(f.shared.macroKeys(u'a').size(), 1);
+    // Recording stops by itself when asked to (the setting went off): what was recorded stays.
+    f.run(u"qcl"_s);
+    QCOMPARE(f.engine.recordingRegister(), QChar(u'c'));
+    f.engine.stopRecording();
+    QCOMPARE(f.engine.recordingRegister(), QChar());
+    QCOMPARE(f.shared.get(u'c').text, u"l"_s);
+    // Recording is not nested: q while recording stops, @ inside records the keys, not what they play.
+    f.run(u"qd@aq"_s);
+    QCOMPARE(f.shared.get(u'd').text, u"@a"_s);
+    // A digit is a register too; the unnamed one is not.
+    f.run(u"q1xq"_s);
+    QCOMPARE(f.shared.get(u'1').text, u"x"_s);
+    // The last macro and the count of @@.
+    QCOMPARE(f.shared.lastMacro, QChar(u'a'));
+    QCOMPARE(f.engine.pending(), QString());
+}
+
+void TestVim::macroNotation_data()
+{
+    QTest::addColumn<QString>("notation");
+    for (const QString &n : {u"dw"_s, u"ciwNowe<Esc>"_s, u":s/a/b/<CR>"_s, u"<C-r>"_s, u"i<lt>b>"_s,
+                             u"<Left><Right><Up><Down><Home><End><PageUp><PageDown><Insert>"_s, u"<BS><Del><Tab><S-Tab>"_s,
+                             u"<C-[>"_s, u"<A-x>"_s, u"Zażółć gęślą"_s, u"<C-a>g<C-a>"_s, u"<lt><lt>"_s, u""_s})
+        QTest::newRow(qPrintable(n)) << n;
+}
+
+void TestVim::macroNotation()
+{
+    QFETCH(QString, notation);
+    QCOMPARE(keysToNotation(keysFromNotation(notation)), notation);
+}
+
+void TestVim::macroStopsWhenItNeverEnds()
+{
+    Fixture f(u"|abc"_s);
+    // A macro that calls itself and never fails would never end: it is stopped.
+    f.shared.recorded(u'a', keysFromNotation(u"0@a"_s));
+    f.run(u"@a"_s);
+    QCOMPARE(f.engine.message(), Message::MacroStopped);
+    QCOMPARE(dump(f.buffer), u"|abc"_s);
+    QCOMPARE(f.engine.mode(), Mode::Normal);
+    QCOMPARE(f.buffer.undoSteps(), 0);
+    // The engine goes on as before.
+    f.run(u"x"_s);
+    QCOMPARE(dump(f.buffer), u"|bc"_s);
+    // A macro that fails stops the rest of its count at once.
+    f.shared.recorded(u'b', keysFromNotation(u"lx"_s));
+    f.run(u"gg100@b"_s);
+    QCOMPARE(dump(f.buffer), u"|b"_s);
+    // The register of another macro, deeper: @b inside @c runs where @c is.
+    f.buffer.setText(u"a b c d"_s);
+    f.shared.recorded(u'b', keysFromNotation(u"dw"_s));
+    f.shared.recorded(u'c', keysFromNotation(u"@b@b"_s));
+    f.run(u"gg@c"_s);
+    QCOMPARE(dump(f.buffer), u"|c d"_s);
+    QCOMPARE(f.buffer.undoSteps(), 1); // (setText cleared the history; @c is one step)
+}
+
+void TestVim::globalAnchorsFollowLines()
+{
+    // :g marks the lines first: a command that removes or adds lines does not shift the others.
+    Fixture f(u"|h\nx1\nx2\nx3"_s);
+    f.run(u":g/x/normal ggdd<CR>"_s);
+    QCOMPARE(dump(f.buffer), u"|x3"_s);
+    Fixture g(u"|x1\ny\nx2"_s);
+    g.run(u":g/x/normal yyp<CR>"_s);
+    QCOMPARE(dump(g.buffer), u"x1\nx1\ny\nx2\n|x2"_s);
+    // The whole of it is one step of undo, and the register of the last delete is the last line's.
+    Fixture h(u"|a1\nb\na2\nb"_s);
+    h.run(u":g/a/d<CR>"_s);
+    QCOMPARE(h.buffer.undoSteps(), 1);
+    QCOMPARE(h.shared.get(QChar()).text, u"a2"_s);
+    h.run(u"u"_s);
+    QCOMPARE(h.buffer.text(), u"a1\nb\na2\nb"_s);
+    // The message of a pattern that is nowhere.
+    h.run(u":g/zzz/d<CR>"_s);
+    QCOMPARE(h.engine.message(), Message::PatternNotFound);
+    QCOMPARE(h.engine.messageArg(), u"zzz"_s);
+}
+
+void TestVim::sentenceMessagesAndJumps()
+{
+    // ( and ) are jumps: `` goes back to where the last one started.
+    Fixture f(u"|Ala. Ola. Ela."_s);
+    f.run(u"))``"_s);
+    QCOMPARE(dump(f.buffer), u"Ala. |Ola. Ela."_s);
+    f.run(u"``"_s);
+    QCOMPARE(dump(f.buffer), u"Ala. Ola. |Ela."_s);
 }
 
 void TestVim::characters()

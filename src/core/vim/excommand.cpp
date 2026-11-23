@@ -1,8 +1,11 @@
 // The Vim engine's command line (vim.h): typing a `:` command or a `/` `?` search, and running it —
 // :w :q :wq :x, a line number, :[range]s/old/new/[flags] (plain text, never a pattern), :d :y :>
-// :< :j over a range, :noh.
+// :< :j over a range, :[range]g/text/command and :v (the lines that have the text — plain text too —
+// or not), :[range]normal keys, :noh.
 #include "vim.h"
 #include "vim_p.h"
+
+#include <QScopedValueRollback>
 
 #include <algorithm>
 
@@ -397,6 +400,17 @@ void Engine::runExCommand(const QString &input)
     }
     if (is(u"noh"_s, u"nohlsearch"_s))
         return;
+    if (name == u"g" || is(u"g"_s, u"global"_s) || name == u"v" || is(u"v"_s, u"vglobal"_s)) {
+        globalCommand(first, last, given, bang || name.startsWith(u'v'), text.mid(nameEnd).trimmed());
+        return;
+    }
+    if (is(u"norm"_s, u"normal"_s)) {
+        QString keys = text.mid(nameEnd);
+        while (keys.startsWith(u' ') || keys.startsWith(u'\t'))
+            keys.remove(0, 1);
+        normalCommand(first, last, given, keys);
+        return;
+    }
     if (name == u"d" || is(u"d"_s, u"delete"_s) || name == u"y" || is(u"y"_s, u"yank"_s)) {
         QChar reg;
         QString rest = args;
@@ -547,6 +561,96 @@ void Engine::substitute(int first, int last, const QString &argsIn)
         recordChange(c, false);
     }
     setMessage(Message::Substituted, needle, substitutions, linesChanged);
+}
+
+void Engine::globalCommand(int first, int last, bool given, bool invert, const QString &args)
+{
+    if (m_inGlobal) {
+        setMessage(Message::NotAnEditorCommand, u"global"_s);
+        return;
+    }
+    QString pattern;
+    QString command;
+    if (args.isEmpty()) {
+        pattern = m_shared->lastSearch;
+    } else {
+        const QChar delimiter = args[0];
+        if (delimiter.isLetterOrNumber() || delimiter == u' ' || delimiter == u'"' || delimiter == u'|') {
+            setMessage(Message::NotAnEditorCommand, args);
+            return;
+        }
+        int i = 1;
+        pattern = unescapePattern(untilDelimiter(args, i, delimiter));
+        command = args.mid(i).trimmed();
+        if (pattern.isEmpty())
+            pattern = m_shared->lastSearch;
+    }
+    if (pattern.isEmpty()) {
+        setMessage(Message::PatternNotFound, QString());
+        return;
+    }
+    m_shared->lastSearch = pattern;
+    m_shared->lastSearchWholeWord = false;
+    const Qt::CaseSensitivity cs = smartCase(pattern);
+    if (!given) {
+        first = 0;
+        last = lastLine();
+    }
+    // The matching lines are marked first, then each one gets the command (a line a command removed
+    // is gone from the list; the lines it moves are followed).
+    QList<QVariant> marked;
+    int lastMatch = -1;
+    for (int l = first; l <= last; ++l) {
+        if (lineText(l).contains(pattern, cs) != invert) {
+            marked.append(m_buffer->lineAnchor(l));
+            lastMatch = l;
+        }
+    }
+    if (marked.isEmpty()) {
+        setMessage(Message::PatternNotFound, pattern);
+        return;
+    }
+    if (command.isEmpty()) {
+        // :g/text/ prints the lines: the caret goes to the last one.
+        setMark(u'`', m_buffer->cursor());
+        moveTo(firstNonBlank(lastMatch));
+        return;
+    }
+    const QScopedValueRollback<bool> inGlobal(m_inGlobal, true);
+    m_buffer->beginChange(); // the whole of it is one step of undo
+    for (const QVariant &anchor : std::as_const(marked)) {
+        const int line = m_buffer->lineOfAnchor(anchor);
+        if (line < 0 || line > lastLine())
+            continue;
+        m_buffer->setCursor(Position{line, 0});
+        clearMessage();
+        runExCommand(command);
+        if (m_message == Message::NotAnEditorCommand || m_message == Message::InvalidRange)
+            break;
+    }
+    m_buffer->endChange();
+    m_buffer->setCursor(clampNormal(m_buffer->cursor()));
+}
+
+void Engine::normalCommand(int first, int last, bool given, const QString &keys)
+{
+    if (keys.isEmpty()) {
+        setMessage(Message::NotAnEditorCommand, u"normal"_s);
+        return;
+    }
+    const QList<Key> played = keysFromNotation(keys);
+    if (!given) {
+        first = last = m_buffer->cursor().line;
+    }
+    m_buffer->beginChange();
+    // Line numbers as Vim has them: the range is counted once, whatever the keys do to the text.
+    for (int l = first; l <= last && l <= lastLine(); ++l) {
+        m_buffer->setCursor(Position{l, 0});
+        runKeysNow(played);
+    }
+    m_buffer->endChange();
+    if (m_mode == Mode::Normal)
+        m_buffer->setCursor(clampNormal(m_buffer->cursor()));
 }
 
 } // namespace brulion::vim

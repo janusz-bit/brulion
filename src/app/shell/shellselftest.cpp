@@ -5356,6 +5356,26 @@ void checkVimKeys(QQuickWindow *window, AppController *app, const Check &check)
           "Vim: :%s over the page, plain text");
     keys(u"u"_s);
     check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }), "Vim: one u undoes the :s");
+    // Numbers: Ctrl+A is Vim's here, not select all.
+    keys(u"ggA 7\x1b"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń 7\n- czwarty\n"_s; }), "Vim: A types a number");
+    sendKey(window, Qt::Key_A, Qt::ControlModifier, QString(QChar(1)));
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń 8\n- czwarty\n"_s; }), "Vim: Ctrl+A adds to the number");
+    keys(u"uu"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }), "Vim: both steps are undone");
+    // H M L go by what the view shows (both blocks are in it), a macro is one undo step.
+    keys(u"Lx"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- zwarty\n"_s; }), "Vim: L goes to the view's last block");
+    keys(u"Hx"_s);
+    check(waitFor([&] { return text() == u"- ażółć żółwia jaźń\n- zwarty\n"_s; }), "Vim: H goes to the view's first block");
+    keys(u"uu"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }), "Vim: undone");
+    keys(u"ggqqA!\x1bjq@q"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń!\n- czwarty!\n"_s; }), "Vim: a macro is recorded and played");
+    keys(u"u"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń!\n- czwarty\n"_s; }), "Vim: a played macro is one undo step");
+    keys(u"u"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }), "Vim: the recorded keys' step is undone");
 
     // Source mode: the same keys over the page's text.
     app->requestUiAction(u"toggleSourceMode"_s);

@@ -517,6 +517,24 @@ Engine::Motion Engine::motion(const QString &keys, const QString &arg, int count
         m.valid = m.to != cur;
         return m;
     }
+    if (keys == u"(" || keys == u")")
+        return sentenceMotion(keys == u")", n, forOperator);
+    if (keys == u"H" || keys == u"M" || keys == u"L") {
+        // The view's top, middle and bottom lines (a count: that many from the top / the bottom).
+        int top = 0, bottom = 0;
+        if (!m_buffer->viewLines(top, bottom))
+            return m;
+        top = std::clamp(top, 0, lastLine());
+        bottom = std::clamp(bottom, top, lastLine());
+        const int line = keys == u"H" ? std::min(top + n - 1, bottom)
+                         : keys == u"L" ? std::max(bottom - n + 1, top)
+                                        : top + (bottom - top) / 2;
+        m.to = firstNonBlank(line);
+        m.kind = MotionKind::Linewise;
+        m.jump = true;
+        m.valid = true;
+        return m;
+    }
     if (keys == u"%") {
         if (hasCount) { // N%: that percentage of the lines
             if (n > 100)
@@ -723,6 +741,8 @@ Engine::Range Engine::textObject(const QString &keys, int count, Position anchor
     const bool inner = keys[0] == u'i';
     const QChar what = keys[1];
     const QString s = lineText(cursor.line);
+    if (what == u's')
+        return sentenceObject(inner, count, cursor);
 
     if (what == u'w' || what == u'W') {
         const bool big = what == u'W';

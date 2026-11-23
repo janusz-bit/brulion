@@ -81,6 +81,15 @@ Flickable {
         if (top < root.contentY + Theme.space4 || top + root.rect.height > root.contentY + visibleHeight - Theme.space4)
             root.contentY = Math.max(0, Math.min(top - visibleHeight / 3, root.contentHeight - visibleHeight))
     }
+    /// Vim's H M L: the text positions of the first and the last line the view shows.
+    function reportVimView(): void {
+        if (!root.editor)
+            return
+        const visibleHeight = root.height - root.toolbarRoom
+        const top = Math.max(0, root.contentY - source.y)
+        root.editor.vimSession.setView(source.positionAt(0, top + 1),
+                                       source.positionAt(0, Math.max(top + 1, top + visibleHeight - 1)))
+    }
     /// The find bar's replaces: one step of the text's own undo history.
     function replaceRanges(ranges: list<var>, text: string): void {
         EditorInput.replaceRanges(source.textDocument, ranges, text)

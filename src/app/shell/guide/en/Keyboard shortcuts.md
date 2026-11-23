@@ -139,6 +139,10 @@ Used to Vim? Turn on *Settings → Editor → Vim keys* (the same switch is at t
 - Every change is one step of undo: `u` (or Ctrl+Z) takes back a whole `cw` together with what you typed. Ctrl+R redoes, `.` repeats the last change.
 - `/text` and `?text` search (plain text; a capital letter makes the case count), `n` / `N` go on. `:s/old/new/g` replaces in the line, `:%s/old/new/g` in the whole page — plain text, not patterns.
 - `:w` saves, `:q` goes back.
+- Numbers: Ctrl+A / Ctrl+X add to and subtract from the number under or after the cursor (`5<C-a>` adds 5; hexadecimal `0x1f`, binary `0b101` and leading zeros keep their form; in `2026-11-23` the day is 23, not −23).
+- Sentences: `(` and `)` move by sentences, `is` and `as` select one (`das` deletes a sentence). A sentence ends at `.`, `!` or `?` followed by a space or the end of the line; abbreviations such as “np.” or “dr.” and a small letter after a period do not end one.
+- Macros: `qa` … `q` records the keys into register `a`, `@a` plays them (`3@a`, `@@` again, `@:` repeats the last `:` command). A macro stops at the first command that fails, and all that it did is one step of undo.
+- `H` `M` `L` go to the top, the middle and the bottom line of what the screen shows. `:g/text/d` deletes every line that has the text, `:v/text/d` every line that has not, `:g/text/normal A.` types keys on every such line (plain text, not patterns).
 - `"a` … `"z` are registers (`"ayy`, then `"ap` — also in another page), `"+` is the system clipboard: `"+yy` copies the block for other apps.
 - In Markdown source mode (Ctrl+E) the same keys work on the page's text.
 
@@ -156,12 +160,17 @@ Used to Vim? Turn on *Settings → Editor → Vim keys* (the same switch is at t
 | `/text`, `?text`, `n` `N` `*` `#` | search |
 | `:s/a/b/g`, `:%s/a/b/g` | replace (plain text) |
 | `:w`, `:q`, `:wq`, `ZZ`, `:12` | save, back, line 12 |
+| Ctrl+A, Ctrl+X (`g` + them in visual mode) | add to / subtract from a number |
+| `(` `)`, `is` `as` | sentences |
+| `H` `M` `L` | top, middle, bottom line of the screen |
+| `qa` … `q`, `@a`, `@@`, `@:` | record, play a macro |
+| `:g/text/cmd`, `:v/text/cmd`, `:normal keys` | a command on the lines that have the text (or have not), keys typed on lines |
 | `ma`, `` `a ``, `'a` | marks |
 | `za` `zo` `zc` `zR` `zM` | fold and unfold blocks |
 
 Polish letters: a command is the character its key types. On the Polish programmer's keyboard everything is where Vim has it, and ą, ę, ż… are only what commands look for: `fą` jumps to the next “ą”, `rż` turns the letter into “ż”.
 
-Where Vim and Brulion meet: Ctrl+R is redo; Esc in normal mode does not select the block (`V` does) — it leaves focus mode; Ctrl+V, Ctrl+A, Ctrl+F, Ctrl+E, Ctrl+O, Tab and the app's other shortcuts keep working as they do without Vim. Not there yet: the block selection of Ctrl+V, macros (`q`, `@`), patterns in searches.
+Where Vim and Brulion meet: Ctrl+R is redo and Ctrl+A / Ctrl+X change numbers (select all and cut work in insert mode); Esc in normal mode does not select the block (`V` does) — it leaves focus mode; Ctrl+V, Ctrl+F, Ctrl+E, Ctrl+O, Tab and the app's other shortcuts keep working as they do without Vim. Not there yet: the block selection of Ctrl+V, the jump list (Ctrl+O / Ctrl+I), patterns in searches.
 
 ## Drawings
 In the drawing editor (when you aren't typing text). More: [[Drawings|Drawings]].

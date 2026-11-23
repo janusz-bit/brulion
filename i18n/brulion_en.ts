@@ -218,7 +218,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2583"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2622"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -2358,7 +2358,7 @@
 <context>
     <name>brulion::editor::VimSession</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/vimsession.cpp" line="198"/>
+        <location filename="../src/app/editor/vimsession.cpp" line="226"/>
         <source>%n substitution(s)</source>
         <translation>
             <numerusform>%n substitution</numerusform>
@@ -2366,7 +2366,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/editor/vimsession.cpp" line="198"/>
+        <location filename="../src/app/editor/vimsession.cpp" line="226"/>
         <source>on %n line(s)</source>
         <comment>substitutions</comment>
         <translation>

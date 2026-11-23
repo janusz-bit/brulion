@@ -2201,7 +2201,7 @@ selection), source mode's (`handleVimSourceKey`; a text selected with the mouse 
 becomes the visual selection). In insert mode Vim takes only Esc and Ctrl+[ — every other key is
 the editor's as without Vim (Enter splits the block, the completion popups, Tab indents). In the
 command modes (normal, visual, replace) it takes every key that types a character and the keys Vim
-has (Esc, Enter, Backspace, Delete, the arrows, Home, End, PgUp, PgDn, Ctrl+R, Ctrl+D, Ctrl+U); of
+has (Esc, Enter, Backspace, Delete, the arrows, Home, End, PgUp, PgDn, Ctrl+R, Ctrl+D, Ctrl+U, Ctrl+A, Ctrl+X); of
 the rest only the editor's shortcuts go on (`vimPasses`: Ctrl, Alt or Meta with anything, Tab /
 Shift+Tab, F-keys, Shift+arrows), nothing that would type. The TextEdit is read-only in the command
 modes (`InlineEditor.vimCommands`; no input method composes into it) with a block caret over the
@@ -2292,24 +2292,91 @@ in the tab's history, at its start closes the tab when there are others, else go
 | `:w` `:q` `:q!` `:wq` `:x` `ZZ` `ZQ`, `:N` `:$`, `:[range]d` `y` `>` `<` `j`, `:u` `:red`, `:noh` | the command line (ranges: `%` `.` `$` N `'a` `'<,'>` `+N` `-N`) |
 | `:[range]s/old/new/[g i I n]`, `:s`, `&` | substitute plain text (never a pattern): `&` in the new text is the match, `\r` a line break, any delimiter |
 | `za` `zo` `zc` `zR` `zM`, `zt` `zz` `zb` | folds, scrolling |
+| `(` `)`, `is` `as` (also in visual mode) | sentences (below) |
+| `H` `M` `L` (`3H` `3L`: the third line from the top / bottom) | the first non-blank of the view's top, middle, bottom line; a linewise motion and a jump (below) |
+| Ctrl+A, Ctrl+X (counts; visual mode: each line's first number in the selection, `g` Ctrl+A / `g` Ctrl+X: each one more) | add to / subtract from a number (below) |
+| `q{a-z A-Z 0-9}` … `q`, `@{reg}` `@@` `@:` (counts) | macros (below) |
+| `:[range]g/text/cmd`, `:[range]v/text/cmd` (`:g!`), `:[range]norm[al] keys` | a command on the lines that have the text (or have not), keys typed on lines (below) |
 
-Not there: block visual mode (Ctrl+V pastes), macros (`q` `@`), patterns in `/` and `:s`, `:g`,
-`H` `M` `L`, sentences, Ctrl+A / Ctrl+X on numbers, the jump list (Ctrl+O / Ctrl+I). TODO.md has
-them.
+**Sentences.** A sentence ends at `.` `!` `?` followed by the end of the line or a blank (closing
+`)` `]` `"` `'` `”` `»` may stand between); an empty line is a boundary and is a stop of `(` `)`
+(a run of them is one); a line break inside a paragraph is not one — Vim's rules, so in an outline
+page of blocks without full stops a sentence is the whole run of blocks up to an empty line. Notes
+need three exceptions, kept simple (`sentences.cpp`): a period after one of a short list of
+abbreviations (`np` `tzn` `tj` `itd` `itp` `tzw` `ok` `dr` `prof` `mgr` `inż` `ul` `al` `pl` `godz`
+`tel` `nr` `wg` `zob` `por` `ang` `ks` `św` `płk` `gen` `mjr` `kpt` `im` `etc` `vs` `mr` `mrs` `ms`
+`jr` `sr` `st` `cf` `eg` `ie` `fig`) is no end; a period after the number of a list item at the
+line's start (`1. `) is none; and a period whose next word, on the same line, starts with a small
+letter is none ("ok. 5 kg. i tak"). `?` and `!` always end one. `)` goes to the start of the next
+sentence (at the last one: the text's last character), `(` to the start of this one, else of the
+previous one; both are jumps and motions of operators (`d)`, `c(`). `is` is the sentence without
+the blanks after it (the blanks between sentences are an item of their own for `is`), `as` with the
+blanks after it — none after the last one of a paragraph: the blanks before it; the line break
+after a sentence belongs to `as` only when another sentence follows in the paragraph. A count takes
+more sentences (`2das`). `is` in visual mode does not grow an existing selection yet.
+
+**Numbers.** Ctrl+A / Ctrl+X (`numbers.cpp`) work on the first number that ends after the caret
+(under it or after it, on its line): decimal, hexadecimal `0x1F` / `0X1f` and binary `0b101` (Vim's
+`nrformats=bin,hex`). A `-` is a sign unless a letter, digit or `_` stands before it — unlike Vim,
+in `2026-11-23` the day is 23 and `foo-1` is 1 (notes are full of dates). Leading zeros keep the
+width (`009` → `010`), hexadecimal and binary keep their width and the case of their digits and
+wrap around at 64 bits, decimal numbers stop at the 64-bit limits. The caret ends on the number's
+last character; the change is repeatable with `.` (a new count too) and one undo step. In normal
+and visual mode these keys are Vim's: select all and cut give way (BlockEditor's `vimOwnsShortcut`),
+in insert and replace mode they are the editor's.
+
+**H M L.** The view is the editor's: `Buffer::viewLines()` asks `VimSession`, which emits
+`viewRequested()` and gets the answer through `setView(first, last)` before the signal returns —
+BlockEditor answers with the first and last row drawn in the viewport (`vimReportView()`, through
+`rowAt()`; a journal day: what its scroller shows of it), SourceEditor with the text positions at
+the Flickable's top and bottom (`reportVimView()`). A buffer that does not know (no answer) leaves
+the keys without effect. `H` / `L` stop at the other end of the view, `M` is the middle line
+(`(last - first) / 2` from the top).
+
+**Macros.** `q{reg}` records what the engine is fed (`Engine::feed`: key events, so a macro runs on
+whatever text is there when it plays, not on the text it was recorded on — typing in insert mode
+included), the `q` that ends it is dropped; the keys of a macro played by `@` are not recorded
+again. `vim::Shared` keeps them (`Shared::recorded()`) and writes their notation (`keysToNotation()`:
+`ciwNowe<Esc>`, `<C-r>`, `<lt>`) into the register as its text, so `"ap` shows a macro and a yanked
+or edited text runs too (`@a` plays the keys while the register still holds their notation, else
+`keysFromNotation(text)`; a linewise register ends with Enter); `qA` appends. `@@` is the last one,
+`@:` the last command line, counts repeat. Playing is the engine's queue: a macro that calls
+itself (`qaq`, `qa…@aq`, `@a`) is not recursion of the stack but keys put in front of the queue
+as Vim's typeahead, and it ends where Vim's does — at the first failing command (a motion that
+cannot move, a search or `:s` that finds nothing, an empty register, a number that is not there…);
+one that never fails stops after 400000 keys ("Macro stopped"). All it does is one undo step
+(the buffer's `beginChange()` around it). Typing played in insert mode is the engine's own:
+text, Enter (a new block: as the editor's Enter without its list continuation, completion or
+auto-pairing), Backspace, Delete, ←, →, Home, End; other keys are skipped. The status shows
+"recording @a" (`VimSession.recording`) until `q`; turning the setting off ends it.
+
+**`:g` and `:normal`.** `:g/text/cmd` — text is plain (smart case, as `/`), any delimiter but a
+letter, digit, blank, `"` or `|`; no `cmd` goes to the last matching line; `cmd` is any command of
+the command line, also `normal`; `:g!` and `:v` take the lines without the text; a range limits it
+(default the whole page). The matching lines are marked first (`Buffer::lineAnchor()`: block uids
+on a page, text cursors at the lines' ends in source mode — a removed line is gone from the list)
+and each gets the command with the caret at its start; the whole of it is one undo step; `:g`
+does not nest. `:[range]normal keys` types keys in normal mode on each line of the range (the
+current line without one) as Vim does, line numbers counted once; keys are written as in Vim's
+mappings (`<Esc>` `<CR>` `<C-a>`: typed as those letters in the command line), an unfinished command
+or insert ends as Esc would end it, a failing line does not stop the next ones.
 
 **Clashes with the app's keys.** The app's shortcuts keep working in normal mode where Vim has
 nothing on them (Ctrl+K, Ctrl+O, Ctrl+F, Ctrl+E, Ctrl+Z / Ctrl+Y, Ctrl+C / Ctrl+V, Ctrl+A, Tab,
 Alt+↑ …). Vim's in the command modes: Ctrl+R (redo; also over a custom shortcut given Ctrl+R —
-it works in insert mode and elsewhere), Ctrl+D / Ctrl+U, Ctrl+[ (Esc), and Ctrl+W, Ctrl+U, Ctrl+H in the
-command line. Esc in normal mode with nothing to cancel does not select the block (`V` does): it
-goes on to the view — focus mode ends. Ctrl+V, Ctrl+A, Ctrl+X, Ctrl+O, Ctrl+I, Ctrl+F, Ctrl+E,
-Ctrl+N, Ctrl+P keep the app's meaning, not Vim's.
+it works in insert mode and elsewhere), Ctrl+D / Ctrl+U, Ctrl+A / Ctrl+X (numbers: the editor's select all
+and cut give way in the command modes, not in insert and replace mode), Ctrl+[ (Esc), and Ctrl+W, Ctrl+U,
+Ctrl+H in the command line. Esc in normal mode with nothing to cancel does not select the block (`V` does): it
+goes on to the view — focus mode ends. Ctrl+V (block visual mode), Ctrl+O, Ctrl+I (the jump list),
+Ctrl+F, Ctrl+E, Ctrl+N, Ctrl+P keep the app's meaning, not Vim's. Not there: block visual mode,
+patterns in `/` and `:s` (a safe pattern engine first), the jump list — TODO.md has them.
 
-Tests: `tst_vim` (the engine on a TextBuffer: 400+ key sequences with Polish text, counts, undo
-grouping, the dot repeat, registers and the clipboard, the command line, boundaries and malformed
-input), `tst_editor_vim` (VimSession over a PageController and over a source TextEdit: blocks as
+Tests: `tst_vim` (the engine on a TextBuffer: 650+ key sequences with Polish text, counts, undo
+grouping, the dot repeat, registers and the clipboard, the command line, numbers, sentences, H M L,
+macros, `:g` and `:normal`, boundaries and malformed input), `tst_editor_vim` (VimSession over a PageController and over a source TextEdit: blocks as
 lines, one undo step per change, visual selections, folds, tables and the frontmatter, block ids,
-registers across pages, `:w` `:q`, a key's cost on a 5000-block page against a keystroke's), the
+registers across pages, `:w` `:q`, macros, `:g` and sentences over blocks and over source text, H M L
+with the view's answer, a key's cost on a 5000-block page against a keystroke's), the
 shell self-test (`checkVimKeys`: real keys into a page and its source on the phone and the desktop
 layout).
 

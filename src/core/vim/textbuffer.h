@@ -21,6 +21,8 @@ public:
     /// What > and < add or take away per level ("\t" by default).
     void setIndentUnit(const QString &unit) { m_indentUnit = unit; }
     void setPageLines(int lines) { m_pageLines = lines; }
+    /// The first line the view shows (H M L): it shows pageLines() lines from it.
+    void setViewTop(int line) { m_viewTop = line; }
 
     int lineCount() const override { return int(m_lines.size()); }
     QString line(int i) const override { return i >= 0 && i < m_lines.size() ? m_lines[i] : QString(); }
@@ -48,6 +50,10 @@ public:
         forcedQuit = force;
     }
     int pageLines() const override { return m_pageLines; }
+    bool viewLines(int &first, int &last) const override;
+    /// Marks follow their lines (a line removed: gone), as the editors' buffers do.
+    QVariant anchor(Position p) const override;
+    Position anchorPosition(const QVariant &anchor) const override;
 
     // What the engine did (tests).
     Mode mode() const { return m_mode; }
@@ -64,8 +70,14 @@ private:
         QStringList before;
         QStringList after;
         Position cursorBefore;
+        QList<quint64> idsBefore;
+        QList<quint64> idsAfter;
     };
+    void record(const QStringList &before, const QList<quint64> &idsBefore, Position cursor);
     QStringList m_lines;
+    QList<quint64> m_ids; ///< per line: its identity (anchors)
+    quint64 m_nextId = 1;
+    int m_viewTop = 0;
     Position m_cursor;
     Position m_anchor;
     SelectionShape m_shape = SelectionShape::None;
@@ -74,6 +86,7 @@ private:
     int m_pageLines = 20;
     int m_depth = 0;
     QStringList m_openBefore;
+    QList<quint64> m_openIds;
     Position m_openCursor;
     bool m_openChanged = false;
     QList<Step> m_undo;

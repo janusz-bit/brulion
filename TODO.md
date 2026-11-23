@@ -211,11 +211,12 @@ done in the repository simply disappears from the list.
     `config.json` from `.brulion/`, and merging by keys would lose words);
   * underlines also outside the edited block and in the Markdown source mode.
 * **Vim mode: what Vim has beyond it** (docs/UI.md "Vim mode") — block visual mode (Ctrl+V:
-  the app's paste today), macros (`q`, `@`), patterns in `/` `?` and `:s` (plain text today: a
-  safe pattern engine first), `:g`, `H` `M` `L` (the view's lines), sentences (`(` `)`, `is` `as`),
-  Ctrl+A / Ctrl+X on numbers, the jump list (Ctrl+O / Ctrl+I: the app's keys today); checked with
-  a hardware keyboard on an Android phone and in the browser build (offscreen and the shell
-  self-test only so far).
+  the app's paste today), patterns in `/` `?` `:s` `:g` (plain text today: a safe pattern engine
+  first), the jump list (Ctrl+O / Ctrl+I: the app's keys today), `is` / `as` growing a visual
+  selection; the macros, Ctrl+A / Ctrl+X, sentences, H M L and `:g` / `:normal` are tested on the
+  engine, over blocks and over source text only — checked with a hardware keyboard on an Android
+  phone and in the browser build (offscreen and the shell self-test only so far; H M L read the
+  view of BlockEditor and SourceEditor, which only a real window shows).
 * **Start screen on real devices** — the redesigned start screen (docs/UI.md "The start screen")
   was checked offscreen only: on an Android phone, a recent notebook on shared storage without
   "All files access" (shown as available, opening it asks) and the rows' × as touch targets; in

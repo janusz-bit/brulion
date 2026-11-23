@@ -52,7 +52,7 @@ QString toggled(const QString &s)
 
 bool isTextObjectKey(QChar c)
 {
-    return u"wWpbB()[]{}<>\"'`"_s.contains(c);
+    return u"wWpsbB()[]{}<>\"'`"_s.contains(c);
 }
 
 } // namespace
@@ -147,6 +147,34 @@ QList<Key> keysFromNotation(const QString &s)
         const QString ch = charAt(s, i);
         out.append(Key::fromText(ch));
         i += int(ch.size());
+    }
+    return out;
+}
+
+QString keysToNotation(const QList<Key> &keys)
+{
+    static const QHash<int, QString> names{
+            {Qt::Key_Escape, u"<Esc>"_s},   {Qt::Key_Return, u"<CR>"_s},     {Qt::Key_Enter, u"<CR>"_s},
+            {Qt::Key_Backspace, u"<BS>"_s}, {Qt::Key_Delete, u"<Del>"_s},    {Qt::Key_Tab, u"<Tab>"_s},
+            {Qt::Key_Backtab, u"<S-Tab>"_s}, {Qt::Key_Left, u"<Left>"_s},    {Qt::Key_Right, u"<Right>"_s},
+            {Qt::Key_Up, u"<Up>"_s},        {Qt::Key_Down, u"<Down>"_s},     {Qt::Key_Home, u"<Home>"_s},
+            {Qt::Key_End, u"<End>"_s},      {Qt::Key_PageUp, u"<PageUp>"_s}, {Qt::Key_PageDown, u"<PageDown>"_s},
+            {Qt::Key_Insert, u"<Insert>"_s}};
+    QString out;
+    for (const Key &k : keys) {
+        const Qt::KeyboardModifiers mods = k.modifiers & ~(Qt::KeypadModifier | Qt::GroupSwitchModifier);
+        const bool ctrlDown = mods & Qt::ControlModifier;
+        const bool alt = mods & Qt::AltModifier;
+        if (k.key == Qt::Key_BracketLeft && ctrlDown) {
+            out += u"<C-[>"_s;
+        } else if (k.key >= Qt::Key_A && k.key <= Qt::Key_Z && (ctrlDown || alt) && !(ctrlDown && alt)) {
+            out += u'<' + QString(ctrlDown ? u'C' : u'A') + u'-' + QChar(char16_t(u'a' + (k.key - Qt::Key_A))) + u'>';
+        } else if (const auto it = names.constFind(k.key); it != names.cend() && (k.text.isEmpty() || k.text[0].unicode() < 0x20)) {
+            out += *it;
+        } else if (!k.text.isEmpty() && k.text[0].unicode() >= 0x20 && k.text[0].unicode() != 0x7F) {
+            for (const QChar c : k.text)
+                out += c == u'<' ? u"<lt>"_s : QString(c);
+        }
     }
     return out;
 }
@@ -253,6 +281,39 @@ void Shared::deleted(QChar name, const Register &reg)
     }
     store(name, reg);
     m_registers.insert(u'"', isAsciiUpper(name) ? m_registers.value(name.toLower()) : reg);
+}
+
+void Shared::recorded(QChar name, const QList<Key> &keys)
+{
+    if (!(isAsciiLower(name) || isAsciiUpper(name) || isAsciiDigit(name)))
+        return;
+    const QChar target = isAsciiUpper(name) ? name.toLower() : name;
+    QList<Key> all = isAsciiUpper(name) ? macroKeys(target) : QList<Key>();
+    all += keys;
+    m_macros.insert(target, all);
+    Register r;
+    r.text = keysToNotation(all);
+    m_registers.insert(target, r);
+}
+
+QList<Key> Shared::macroKeys(QChar name) const
+{
+    if (isAsciiUpper(name))
+        name = name.toLower();
+    const Register r = get(name);
+    if (r.isEmpty())
+        return {};
+    const auto it = m_macros.constFind(name);
+    if (it != m_macros.cend() && keysToNotation(*it) == r.text)
+        return *it;
+    QList<Key> keys;
+    const QStringList parts = r.text.split(u'\n');
+    for (int i = 0; i < parts.size(); ++i) {
+        keys += keysFromNotation(parts[i]);
+        if (i + 1 < parts.size() || r.linewise)
+            keys.append(Key::special(Qt::Key_Return));
+    }
+    return keys;
 }
 
 // --- Engine: state -----------------------------------------------------------------------------
@@ -547,6 +608,10 @@ bool Engine::feed(const Key &key)
         break;
     }
     clearMessage();
+    // A macro being recorded keeps the keys typed (not those a macro plays); the q that ends it is
+    // taken off again.
+    if (!m_recording.isNull() && !m_playing)
+        m_recorded.append(key);
     const QString t = tokenOf(key);
     if (m_mode == Mode::Insert)
         return feedInsert(t);
@@ -556,10 +621,12 @@ bool Engine::feed(const Key &key)
     }
     if (!m_cmdType.isNull())
         return feedCommandLine(t);
-    // Of Ctrl+letter only Vim's keys that clash with no shortcut of the editor: Ctrl+R (redo),
-    // Ctrl+D / Ctrl+U (half a screen), Ctrl+[ (Esc, above).
+    // Of Ctrl+letter only Vim's keys that clash with no shortcut of the editor in a command mode:
+    // Ctrl+R (redo), Ctrl+D / Ctrl+U (half a screen), Ctrl+A / Ctrl+X (a number: the editor's
+    // select all and cut give way), Ctrl+[ (Esc, above).
     if (t.size() == 1 && t[0].unicode() < 0x20 && t[0] != QChar(Esc) && t[0] != QChar(Enter) && t[0] != QChar(Backspace)
-        && t[0] != QChar(ctrl('R')) && t[0] != QChar(ctrl('D')) && t[0] != QChar(ctrl('U'))) {
+        && t[0] != QChar(ctrl('R')) && t[0] != QChar(ctrl('D')) && t[0] != QChar(ctrl('U'))
+        && !((t[0] == QChar(ctrl('A')) || t[0] == QChar(ctrl('X'))) && m_mode != Mode::Replace)) {
         m_pending.clear();
         return false;
     }
@@ -615,7 +682,8 @@ bool Engine::isMotionKey(const QString &keys) const
                                      u"E"_s,  u"ge"_s, u"gE"_s, u"0"_s, u"^"_s, u"$"_s, u"g_"_s, u"g0"_s, u"g$"_s,
                                      u"gj"_s, u"gk"_s, u"gg"_s, u"G"_s, u"{"_s, u"}"_s, u"%"_s,  u"|"_s,  u"f"_s,
                                      u"F"_s,  u"t"_s,  u"T"_s,  u";"_s, u","_s, u"n"_s, u"N"_s,  u"*"_s,  u"#"_s,
-                                     u"g*"_s, u"g#"_s, u"`"_s,  u"'"_s, u"+"_s, u"-"_s, u"_"_s,  u" "_s};
+                                     u"g*"_s, u"g#"_s, u"`"_s,  u"'"_s, u"+"_s, u"-"_s, u"_"_s,  u" "_s,
+                                     u"H"_s,  u"M"_s,  u"L"_s,  u"("_s, u")"_s};
     if (motions.contains(keys))
         return true;
     if (keys.size() != 1)
@@ -787,11 +855,26 @@ Engine::Parse Engine::parse(const QString &keys, Command &cmd) const
         cmd.all = keys.mid(start, 1 + arg.size());
         return i + 1 + arg.size() == keys.size() ? Parse::Done : Parse::Invalid;
     }
+    if (c == u'q' || c == u'@') {
+        if (visual)
+            return Parse::Invalid;
+        if (i + 1 >= keys.size())
+            return Parse::Incomplete;
+        const QChar arg = keys[i + 1];
+        const bool ok = isAsciiLower(arg) || isAsciiUpper(arg) || isAsciiDigit(arg)
+                        || (c == u'@' && (arg == u'@' || arg == u':' || arg == u'"'));
+        if (!ok)
+            return Parse::Invalid;
+        cmd.keys = c;
+        cmd.arg = QString(arg);
+        cmd.all = keys.mid(start, 2);
+        return i + 2 == keys.size() ? Parse::Done : Parse::Invalid;
+    }
     if (c == u'g' || c == u'Z' || c == u'z') {
         if (i + 1 >= keys.size())
             return Parse::Incomplete;
         const QString two = keys.mid(i, 2);
-        static const QStringList actions{u"gJ"_s, u"gp"_s, u"gP"_s, u"gi"_s, u"gv"_s, u"ZZ"_s, u"ZQ"_s,
+        static const QStringList actions{u"g\x01"_s, u"g\x18"_s, u"gJ"_s, u"gp"_s, u"gP"_s, u"gi"_s, u"gv"_s, u"ZZ"_s, u"ZQ"_s,
                                          u"zz"_s, u"zt"_s, u"zb"_s, u"za"_s, u"zo"_s, u"zc"_s, u"zR"_s,
                                          u"zM"_s, u"zA"_s, u"zO"_s, u"zC"_s, u"z."_s, u"z-"_s};
         if (actions.contains(two) && i + 2 == keys.size()) {
@@ -819,7 +902,8 @@ Engine::Parse Engine::parse(const QString &keys, Command &cmd) const
     static const QString normalOne = u"iaIAoOxXsSR~JpPu.DCYvV:&"_s;
     static const QString visualOne = u"xXsSR~JpPuUDCYvVoO:rIA"_s;
     const QString &ones = visual ? visualOne : normalOne;
-    if (ones.contains(c) || c == QChar(ctrl('R')) || c == QChar(Delete) || c == QChar(Insert)) {
+    if (ones.contains(c) || c == QChar(ctrl('R')) || c == QChar(ctrl('A')) || c == QChar(ctrl('X'))
+        || c == QChar(Delete) || c == QChar(Insert)) {
         cmd.keys = c;
         cmd.all = c;
         return i + 1 == keys.size() ? Parse::Done : Parse::Invalid;
@@ -844,6 +928,10 @@ bool Engine::feedToken(const QString &token)
             setMode(Mode::Normal);
             m_buffer->setCursor(clampNormal(cur));
         }
+        return true;
+    }
+    if (!m_recording.isNull() && !m_playing && m_pending.isEmpty() && !visual && token == u"q"_s) {
+        finishRecording();
         return true;
     }
     m_pending += token;
@@ -1378,6 +1466,7 @@ void Engine::execute(const Command &cmd, bool repeating)
                 keys = keys == u"w" ? u"ce"_s : u"cE"_s;
             m = motion(keys, cmd.arg, cmd.count, hasCount, true);
             if (!m.valid) {
+                m_failed = true;
                 m_buffer->setCursor(cur);
                 return;
             }
@@ -1386,8 +1475,10 @@ void Engine::execute(const Command &cmd, bool repeating)
             range = rangeOf(m, cur, cmd.op, false);
             m_buffer->setCursor(cur);
         }
-        if (!range.valid)
+        if (!range.valid) {
+            m_failed = true;
             return;
+        }
         applyOperator(cmd.op, range, cmd.reg, n, false);
         if (cmd.op != u"y" && cmd.op != u"c")
             recordChange(cmd, false);
@@ -1402,6 +1493,7 @@ void Engine::execute(const Command &cmd, bool repeating)
     if (isMotionKey(cmd.keys)) {
         Motion m = motion(cmd.keys, cmd.arg, cmd.count, hasCount, false);
         if (!m.valid) {
+            m_failed = true;
             if (m_buffer->cursor() != cur)
                 m_buffer->setCursor(cur);
             return;
@@ -1547,6 +1639,13 @@ void Engine::execute(const Command &cmd, bool repeating)
     } else if (k == u"p" || k == u"P" || k == u"gp" || k == u"gP") {
         put(cmd.reg, n, k == u"p" || k == u"gp", k.size() == 2);
         recordChange(cmd, false);
+    } else if (k == QChar(ctrl('A')) || k == QChar(ctrl('X'))) {
+        addToNumber(k == QChar(ctrl('A')) ? n : -qint64(n));
+        recordChange(cmd, false);
+    } else if (k == u"q") {
+        startRecording(cmd.arg[0]);
+    } else if (k == u"@") {
+        runMacro(cmd.arg[0], n);
     } else if (k == u"u") {
         undo(n, false);
     } else if (k == QChar(ctrl('R'))) {
@@ -1621,6 +1720,7 @@ void Engine::executeVisual(const Command &cmd, bool repeating)
             return;
         Motion m = motion(k, cmd.arg, cmd.count, cmd.count > 0, false);
         if (!m.valid) {
+            m_failed = true;
             if (m_buffer->cursor() != cur)
                 moveTo(cur, true);
             return;
@@ -1663,8 +1763,10 @@ void Engine::executeVisual(const Command &cmd, bool repeating)
     // Text objects grow the selection.
     if (cmd.op.isEmpty() && k.size() == 2 && (k[0] == u'i' || k[0] == u'a') && isTextObjectKey(k[1])) {
         const Range r = textObject(k, cmd.count, m_visualAnchor, cur, true);
-        if (!r.valid)
+        if (!r.valid) {
+            m_failed = true;
             return;
+        }
         if (r.linewise) {
             m_visualAnchor = Position{r.from.line, 0};
             setMode(Mode::VisualLine);
@@ -1794,6 +1896,11 @@ void Engine::executeVisual(const Command &cmd, bool repeating)
     } else if (k == u"J" || k == u"gJ") {
         m_buffer->setCursor(Position{a.line, 0});
         join(std::max(2, b.line - a.line + 1), k == u"J");
+    } else if (k == QChar(ctrl('A')) || k == QChar(ctrl('X')) || k == u"g\x01"_s || k == u"g\x18"_s) {
+        const bool up = k.back() == QChar(ctrl('A'));
+        addToNumbersInSelection(a, r.linewise ? Position{b.line, lineLength(b.line)} : r.to, r.linewise,
+                                up ? n : -qint64(n), k.size() == 2);
+        moveTo(clampNormal(a));
     } else if (k == u"r") {
         beginChange();
         for (int l = b.line; l >= a.line; --l) {

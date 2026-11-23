@@ -17,7 +17,8 @@ Rectangle {
     readonly property bool commandLine: session !== null && session.commandLine !== ""
     readonly property string detail: session === null ? ""
                                      : commandLine ? session.commandLine
-                                     : session.pending !== "" ? session.pending : session.message
+                                     : session.pending !== "" ? session.pending
+                                     : session.message !== "" ? session.message : session.recording
     readonly property bool error: session !== null && !commandLine && session.pending === "" && session.messageError
 
     implicitWidth: row.implicitWidth + 2 * Theme.space2

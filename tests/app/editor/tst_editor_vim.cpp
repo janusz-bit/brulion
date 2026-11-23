@@ -87,6 +87,10 @@ private Q_SLOTS:
     void adoptSelections();
     void sourceMode();
     void sourceModeUndo();
+    void macrosOverBlocks();
+    void globalOverBlocks();
+    void viewLinesOverBlocks();
+    void sourceModeMore();
     void normalModeKeyCost();
 };
 
@@ -158,6 +162,25 @@ void TestEditorVim::blocks_data()
     QTest::newRow(">> in code") << u"```\nx\ny\n```\n"_s << 0 << 2 << u">>"_s << u"```\nx\n\ty\n```\n"_s << u"0:3"_s;
     QTest::newRow("dd whole code block") << u"- a\n\n```\nx\n```\n"_s << 1 << 0 << u"dd"_s << u"- a\n\n"_s << u"0:0"_s;
     QTest::newRow("J in code") << u"```\nx\n  y\n```\n"_s << 0 << 0 << u"J"_s << u"```\nx y\n```\n"_s << u"0:1"_s;
+    // Numbers, sentences.
+    QTest::newRow("C-a") << u"- zadanie 5 z 9\n"_s << 0 << 0 << u"<C-a>"_s << u"- zadanie 6 z 9\n"_s << u"0:8"_s;
+    QTest::newRow("C-x count") << u"- [ ] kupić 12 jaj\n"_s << 0 << 0 << u"5<C-x>"_s << u"- [ ] kupić 7 jaj\n"_s
+                               << u"0:6"_s;
+    QTest::newRow("C-a a date") << u"- 2026-11-23 spotkanie\n"_s << 0 << 5 << u"<C-a>"_s
+                                << u"- 2026-12-23 spotkanie\n"_s << u"0:6"_s;
+    QTest::newRow("C-a only in this block") << u"- a\n- 7\n"_s << 0 << 0 << u"<C-a>"_s << u"- a\n- 7\n"_s << u"0:0"_s;
+    QTest::newRow("V C-a over blocks") << u"- 1\n- 2\n- x\n- 3\n"_s << 0 << 0 << u"VGg<C-a>"_s
+                                       << u"- 2\n- 4\n- x\n- 6\n"_s << u"0:0"_s;
+    QTest::newRow(")") << u"- Pierwsze zdanie. Drugie zdanie.\n"_s << 0 << 0 << u")"_s
+                       << u"- Pierwsze zdanie. Drugie zdanie.\n"_s << u"0:17"_s;
+    QTest::newRow(") into the next block") << u"- Zażółć.\n- Gęślą.\n"_s << 0 << 0 << u"))"_s
+                                           << u"- Zażółć.\n- Gęślą.\n"_s << u"1:5"_s;
+    QTest::newRow("das") << u"- Pierwsze zdanie. Drugie zdanie.\n"_s << 0 << 20 << u"das"_s
+                         << u"- Pierwsze zdanie.\n"_s << u"0:15"_s;
+    QTest::newRow("cis") << u"- Pierwsze zdanie. Drugie zdanie.\n"_s << 0 << 0 << u"cisNowe.<Esc>"_s
+                         << u"- Nowe. Drugie zdanie.\n"_s << u"0:4"_s;
+    QTest::newRow("das over blocks") << u"- Ala ma\n- kota. Ola ma psa.\n"_s << 0 << 0 << u"das"_s
+                                     << u"- Ola ma psa.\n"_s << u"0:0"_s;
 }
 
 void TestEditorVim::blocks()
@@ -608,6 +631,173 @@ void TestEditorVim::sourceModeUndo()
     QCOMPARE(text(), u"razx dwa\ntrzy"_s);
     e.vim.keys(u"o4<CR>5<Esc>u"_s);
     QCOMPARE(text(), u"razx dwa\ntrzy"_s);
+}
+
+void TestEditorVim::macrosOverBlocks()
+{
+    // A macro plays the keys over blocks, one undo step for all of it.
+    Editor e(u"- ala\n- ola\n- ela\n"_s);
+    e.at(0, 0);
+    e.run(u"qqA!<Esc>jq"_s);
+    QCOMPARE(e.text(), u"- ala!\n- ola\n- ela\n"_s);
+    QCOMPARE(e.vim.recording(), QString());
+    e.run(u"@q"_s);
+    QCOMPARE(e.text(), u"- ala!\n- ola!\n- ela\n"_s);
+    QCOMPARE(e.caret(), u"2:2"_s);
+    e.run(u"gg5@q"_s); // (the first block is done again, then the others; the last j fails)
+    QCOMPARE(e.text(), u"- ala!!\n- ola!!\n- ela!\n"_s);
+    e.run(u"u"_s); // the whole of it
+    QCOMPARE(e.text(), u"- ala!\n- ola!\n- ela\n"_s);
+    // A macro that splits blocks and types: the editor's Enter and its text.
+    Editor f(u"- ab\n"_s);
+    f.at(0, 0);
+    f.run(u"qqA<CR>x<Esc>q"_s);
+    QCOMPARE(f.text(), u"- ab\n- x\n"_s);
+    f.run(u"@q"_s);
+    QCOMPARE(f.text(), u"- ab\n- x\n- x\n"_s);
+    f.run(u"u"_s);
+    QCOMPARE(f.text(), u"- ab\n- x\n"_s);
+    // The status tells what is being recorded.
+    Editor g(u"- a\n"_s);
+    g.at(0, 0);
+    g.run(u"qw"_s);
+    QCOMPARE(g.vim.recording(), u"recording @w"_s);
+    QVERIFY(g.vim.status().contains(u"recording @w"_s));
+    g.run(u"q"_s);
+    QCOMPARE(g.vim.recording(), QString());
+    // Recording ends with the setting (what was typed so far stays).
+    g.run(u"qex"_s);
+    g.vim.setEnabled(false);
+    QCOMPARE(g.vim.recording(), QString());
+    g.vim.setEnabled(true);
+    QCOMPARE(g.vim.recording(), QString());
+    // A recursive macro runs to the end of the page.
+    Editor h(u"- a\n- b\n- c\n- d\n"_s);
+    h.at(0, 0);
+    h.run(u"qaqqaA.<Esc>j@aq@a"_s);
+    QCOMPARE(h.text(), u"- a.\n- b.\n- c.\n- d.\n"_s);
+    h.run(u"u"_s);
+    QCOMPARE(h.text(), u"- a.\n- b\n- c\n- d\n"_s);
+}
+
+void TestEditorVim::globalOverBlocks()
+{
+    Editor e(u"- ala\n- kot\n- ola\n- pies\n- ela\n"_s);
+    e.at(0, 0);
+    e.run(u":g/la/d<CR>"_s);
+    QCOMPARE(e.text(), u"- kot\n- pies\n"_s);
+    e.run(u"u"_s); // one step
+    QCOMPARE(e.text(), u"- ala\n- kot\n- ola\n- pies\n- ela\n"_s);
+    e.run(u"gg:v/la/s/$/?/<CR>"_s);
+    QCOMPARE(e.text(), u"- ala\n- kot\n- ola\n- pies\n- ela\n"_s); // (plain text: "$" is not found)
+    e.run(u":g/la/normal A!<CR>"_s);
+    QCOMPARE(e.text(), u"- ala!\n- kot\n- ola!\n- pies\n- ela!\n"_s);
+    e.run(u"u"_s);
+    QCOMPARE(e.text(), u"- ala\n- kot\n- ola\n- pies\n- ela\n"_s);
+    // The marked blocks are followed: a command that removes the first block does not shift the rest.
+    Editor f(u"- h\n- x1\n- x2\n- x3\n"_s);
+    f.at(0, 0);
+    f.run(u":g/x/normal ggdd<CR>"_s);
+    QCOMPARE(f.text(), u"- x3\n"_s);
+    f.run(u"u"_s);
+    QCOMPARE(f.text(), u"- h\n- x1\n- x2\n- x3\n"_s);
+    // :normal over a range of blocks.
+    Editor g(u"- a\n- b\n- c\n"_s);
+    g.at(0, 0);
+    g.run(u":2,3norm Ax<CR>"_s);
+    QCOMPARE(g.text(), u"- a\n- bx\n- cx\n"_s);
+    // Folded blocks are lines of their own: a match in what a fold hides is not a line.
+    Editor h(u"- a\n  - hidden x\n- b x\n"_s);
+    h.at(0, 0);
+    h.run(u"zc:g/x/d<CR>"_s);
+    QCOMPARE(h.text(), u"- a\n  - hidden x\n"_s);
+}
+
+void TestEditorVim::viewLinesOverBlocks()
+{
+    // Rows: 0 a, 1 b, 2 d, 3 a code block of two lines, 4 e, 5 f.
+    Editor e(u"- a\n- b\n- d\n```\nx\ny\n```\n- e\n- f\n"_s);
+    int asked = 0;
+    // The view shows rows 1-3 (the code block is the last of them).
+    QObject::connect(&e.vim, &VimSession::viewRequested, &e.vim, [&] {
+        ++asked;
+        e.vim.setView(1, 3);
+    });
+    e.at(0, 0);
+    e.run(u"H"_s);
+    QCOMPARE(asked, 1);
+    QCOMPARE(e.caret(), u"1:0"_s);
+    e.run(u"L"_s);
+    QCOMPARE(e.caret(), u"3:2"_s); // the last line of the code block
+    e.run(u"M"_s);
+    QCOMPARE(e.caret(), u"2:0"_s);
+    e.run(u"2H"_s);
+    QCOMPARE(e.caret(), u"2:0"_s);
+    e.run(u"LH``"_s); // H is a jump
+    QCOMPARE(e.caret(), u"3:2"_s);
+    // An editor that cannot tell where the view is: nothing moves.
+    QObject::disconnect(&e.vim, &VimSession::viewRequested, nullptr, nullptr);
+    e.at(2, 0);
+    e.run(u"H"_s);
+    QCOMPARE(e.caret(), u"2:0"_s);
+    // As an operator: the lines of the view.
+    QObject::connect(&e.vim, &VimSession::viewRequested, &e.vim, [&] { e.vim.setView(0, 1); });
+    e.at(0, 0);
+    e.run(u"dL"_s);
+    QCOMPARE(e.text(), u"- d\n```\nx\ny\n```\n- e\n- f\n"_s);
+}
+
+void TestEditorVim::sourceModeMore()
+{
+    Editor e(u"a\nb\n"_s);
+    e.page.setSourceMode(true);
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData("import QtQuick\nTextEdit { textFormat: TextEdit.PlainText }", QUrl());
+    std::unique_ptr<QObject> object(component.create());
+    auto *edit = qobject_cast<QQuickItem *>(object.get());
+    QVERIFY(edit);
+    const auto setText = [&](const QString &t) {
+        edit->setProperty("text", t);
+        edit->setProperty("cursorPosition", 0);
+    };
+    const auto text = [&] { return edit->property("text").toString(); };
+    const auto cursor = [&] { return edit->property("cursorPosition").toInt(); };
+    setText(u"a1\nb\nc\nd\ne"_s);
+    e.vim.setSourceEdit(edit);
+    // H M L: the positions the view starts and ends at are in lines 1 and 3.
+    QObject::connect(&e.vim, &VimSession::viewRequested, &e.vim, [&] { e.vim.setView(3, 7); });
+    e.vim.keys(u"H"_s);
+    QCOMPARE(cursor(), 3);
+    e.vim.keys(u"L"_s);
+    QCOMPARE(cursor(), 7);
+    e.vim.keys(u"M"_s);
+    QCOMPARE(cursor(), 5);
+    // Numbers and sentences in the text.
+    setText(u"Zażółć 41 gęślą. Jaźń.\nx"_s);
+    e.vim.keys(u"<C-a>"_s);
+    QCOMPARE(text(), u"Zażółć 42 gęślą. Jaźń.\nx"_s);
+    e.vim.keys(u"0)"_s);
+    QCOMPARE(cursor(), 17);
+    e.vim.keys(u")"_s);
+    QCOMPARE(cursor(), 23);
+    // :g on the text: the marked lines are followed through the edits, all of it is one undo step.
+    setText(u"h\nx1\nx2\nx3"_s);
+    e.vim.keys(u":g/x/normal ggdd<CR>"_s);
+    QCOMPARE(text(), u"x3"_s);
+    e.vim.keys(u"u"_s);
+    QCOMPARE(text(), u"h\nx1\nx2\nx3"_s);
+    e.vim.keys(u":g/x/s/x/y/<CR>"_s);
+    QCOMPARE(text(), u"h\ny1\ny2\ny3"_s);
+    e.vim.keys(u"u"_s);
+    QCOMPARE(text(), u"h\nx1\nx2\nx3"_s);
+    e.vim.keys(u":g!/x/d<CR>"_s);
+    QCOMPARE(text(), u"x1\nx2\nx3"_s);
+    // A macro in the text, one undo step.
+    e.vim.keys(u"ggqqA!<Esc>jq2@q"_s);
+    QCOMPARE(text(), u"x1!\nx2!\nx3!"_s);
+    e.vim.keys(u"u"_s);
+    QCOMPARE(text(), u"x1!\nx2\nx3"_s);
 }
 
 void TestEditorVim::normalModeKeyCost()
