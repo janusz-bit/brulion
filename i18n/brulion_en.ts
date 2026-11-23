@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1231"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1232"/>
         <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1284"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1286"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1294"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1296"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1295"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1297"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -218,7 +218,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2583"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2622"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -2248,7 +2248,7 @@
 <context>
     <name>brulion::editor::VimSession</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/vimsession.cpp" line="198"/>
+        <location filename="../src/app/editor/vimsession.cpp" line="226"/>
         <source>%n substitution(s)</source>
         <translation>
             <numerusform>%n substitution</numerusform>
@@ -2256,7 +2256,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/editor/vimsession.cpp" line="198"/>
+        <location filename="../src/app/editor/vimsession.cpp" line="226"/>
         <source>on %n line(s)</source>
         <comment>substitutions</comment>
         <translation>

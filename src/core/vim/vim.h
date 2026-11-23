@@ -20,9 +20,10 @@
 // line, the command line of : / ?), counts, motions (h j k l w W b B e E ge gE 0 ^ $ g_ gg G { } f
 // F t T ; , % | + - _ Enter, n N * #, ` ' marks, Ctrl+D / Ctrl+U), operators (d c y > < g~ gu gU)
 // with motions and text objects (iw aw iW aW ip ap i" a" i' a' i` a` i( a( ib ab i[ a[ i{ a{ iB aB
-// i< a<), dd cc yy D C S s x X r R ~ J gJ p P gp gP Y, u and Ctrl+R (the buffer's undo / redo),
-// the dot repeat, registers ("" "0-"9 "- "a-"z "A-"Z "+ "* "_ ". "/ ":), marks (m, `, ', '<,
-// '>, ``), :w :q :q! :wq :x :{line} :[range]s/old/new/[gin] (plain text: no patterns) and :noh.
+// i< a< is as), sentences ( ), H M L, Ctrl+A / Ctrl+X on numbers, macros (q @), dd cc yy D C S s x
+// X r R ~ J gJ p P gp gP Y, u and Ctrl+R (the buffer's undo / redo), the dot repeat, registers ("" "0-"9 "- "a-"z "A-"Z "+ "* "_ ". "/ ":), marks (m, `, ', '<,
+// '>, ``), :w :q :q! :wq :x :{line} :[range]s/old/new/[gin] (plain text: no patterns), :g :v
+// :normal and :noh.
 // Commands are read from the character a key types, not its place on the keyboard (Vim's way):
 // with a Polish layout the letters are Latin, and ą ę ó … are only arguments (fą, rź, /żółw).
 #pragma once
@@ -92,6 +93,9 @@ struct Key {
 /// <Tab> <Left> <Right> <Up> <Down> <Home> <End> <PageUp> <PageDown> <Space> <lt>, <C-x> (Ctrl+x),
 /// <C-[> (the tests' and the self-tests' keys).
 QList<Key> keysFromNotation(const QString &notation);
+/// The same the other way: keys written as keysFromNotation() reads them (a macro's text in its
+/// register).
+QString keysToNotation(const QList<Key> &keys);
 
 /// What the engine reports to the user (the app words it: VimSession::messageText()).
 enum class Message {
@@ -110,6 +114,7 @@ enum class Message {
     Saved,
     Unsupported, ///< arg: what (a command the engine does not have)
     ReadOnly,    ///< the buffer refused an edit
+    MacroStopped, ///< a macro ran for too long (a recursive one that never fails)
 };
 
 /// A buffer the engine edits — the block editor's page, the source mode's text, TextBuffer.
@@ -183,6 +188,13 @@ public:
         Q_UNUSED(action);
         return false;
     }
+    /// The lines the view shows, first and last (H M L); false when the buffer does not know.
+    virtual bool viewLines(int &first, int &last) const
+    {
+        Q_UNUSED(first);
+        Q_UNUSED(last);
+        return false;
+    }
     /// zt zz zb: scroll the view so that line `line` is at its top, middle or bottom.
     virtual void scroll(int line, ScrollTo where)
     {
@@ -193,6 +205,10 @@ public:
     /// position, `anchorPosition()` back (line -1: gone). The default keeps the position as it is.
     virtual QVariant anchor(Position p) const;
     virtual Position anchorPosition(const QVariant &anchor) const;
+    /// The same for a whole line (:g marks lines, then runs a command on each): `lineOfAnchor()` is
+    /// the line it is on now, -1 when it was removed. The default goes by anchor().
+    virtual QVariant lineAnchor(int line) const { return anchor(Position{line, 0}); }
+    virtual int lineOfAnchor(const QVariant &anchor) const { return anchorPosition(anchor).line; }
 };
 
 /// What all engines share (Vim's registers and its last search, char search and change are
@@ -221,12 +237,20 @@ public:
     QString lastSubstitute; ///< :s's text and replacement (:s and & without them)
     QString lastReplacement;
     QString lastInserted; ///< ". register
+    QChar lastMacro;      ///< @@: the register @ ran last
     QString lastCommand;  ///< ": register
     QStringList searchHistory;
     QStringList commandHistory;
     // The last f F t T and its character (; ,).
     QChar lastFind;
     QString lastFindChar;
+
+    /// A macro recorded with q into `name` (A-Z append): its keys, and their notation as the
+    /// register's text (so "ap shows it and a yanked text can be run too).
+    void recorded(QChar name, const QList<Key> &keys);
+    /// What @`name` runs: the recorded keys while the register still holds their notation, else the
+    /// register's text as keys (a linewise one ends with Enter).
+    QList<Key> macroKeys(QChar name) const;
 
     /// The last change (the dot repeat): its keys and the text its insert typed.
     struct Change {
@@ -246,6 +270,7 @@ public:
 private:
     void store(QChar name, const Register &reg);
     QHash<QChar, Register> m_registers;
+    QHash<QChar, QList<Key>> m_macros;
 };
 
 /// The Vim state machine for one buffer.
@@ -274,6 +299,11 @@ public:
     int messageCount() const { return m_messageCount; }
     int messageCount2() const { return m_messageCount2; }
     void clearMessage();
+
+    /// The register a macro is being recorded into (q), 0 when none.
+    QChar recordingRegister() const { return m_recording; }
+    /// Stop recording (the setting went off): what was recorded so far is kept.
+    void stopRecording();
 
     /// Back to normal mode with nothing pending (a page changed under it, the editor lost the
     /// keys): an insert in progress ends (its change too).
@@ -374,6 +404,28 @@ private:
     bool parseLineAddress(const QString &text, int &i, int &line);
     void substitute(int first, int last, const QString &args);
     void searchCommand(const QString &pattern, bool forward, int count);
+    void globalCommand(int first, int last, bool given, bool invert, const QString &args);
+    void normalCommand(int first, int last, bool given, const QString &keys);
+
+    // Numbers (numbers.cpp): Ctrl+A / Ctrl+X.
+    bool addToNumberOnLine(int line, int fromColumn, int toColumn, qint64 delta, Position &caret);
+    void addToNumber(qint64 delta);
+    void addToNumbersInSelection(Position from, Position to, bool lines, qint64 delta, bool progressive);
+
+    // Sentences (sentences.cpp): ( ) is as.
+    Motion sentenceMotion(bool forward, int count, bool forOperator);
+    Range sentenceObject(bool inner, int count, Position cursor) const;
+
+    // Macros (macros.cpp).
+    void startRecording(QChar reg);
+    void finishRecording();
+    void runMacro(QChar reg, int count);
+    /// Keys played as if typed: a macro's, :normal's. Insert mode's typing is the engine's own here.
+    void playKeys(const QList<Key> &keys);
+    void runKeysNow(const QList<Key> &keys);
+    void drainKeys();
+    void typeIntoBuffer(const Key &key);
+    bool commandFailed() const;
 
     Buffer *m_buffer = nullptr;
     Shared *m_shared = nullptr;
@@ -394,6 +446,14 @@ private:
     Command m_insertCommand;
     bool m_changeOpen = false;
     bool m_repeating = false;
+    // Macros.
+    QChar m_recording;
+    QList<Key> m_recorded;
+    bool m_playing = false;
+    QList<Key> m_queue;
+    int m_keyBudget = 0;
+    bool m_failed = false; ///< the last key's command failed (a motion that did not move…)
+    bool m_inGlobal = false;
     QStringList m_replaced;        ///< replace mode: the characters typed over (Backspace)
     Shared::Change m_visualChange; ///< a visual c: its change, recorded at Esc
     bool m_visualChangePending = false;

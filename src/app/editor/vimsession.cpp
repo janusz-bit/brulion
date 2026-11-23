@@ -38,8 +38,10 @@ VimSession::VimSession(QObject *parent) : QObject(parent), m_engine(std::make_un
         Q_EMIT scrollRequested(row, -1, where == vim::ScrollTo::Top ? -1 : where == vim::ScrollTo::Bottom ? 1 : 0);
     };
     m_page.onQuit = [this](bool force) { Q_EMIT quitRequested(force); };
+    m_page.onView = [this](int &first, int &last) { return requestView(first, last); };
     m_source.onMode = [this](vim::Mode) { publish(); };
     m_source.onQuit = [this](bool force) { Q_EMIT quitRequested(force); };
+    m_source.onView = [this](int &first, int &last) { return requestView(first, last); };
     m_source.onSave = [this] { return m_controller && m_controller->save(); };
     m_source.onScroll = [this](int position, vim::ScrollTo where) {
         Q_EMIT scrollRequested(-1, position, where == vim::ScrollTo::Top ? -1 : where == vim::ScrollTo::Bottom ? 1 : 0);
@@ -58,6 +60,7 @@ void VimSession::setEnabled(bool on)
         return;
     m_enabled = on;
     m_engine->reset();
+    m_engine->stopRecording();
     Q_EMIT enabledChanged();
     publish();
 }
@@ -171,6 +174,12 @@ QString VimSession::commandLine() const
     return m_enabled ? m_engine->commandLine() : QString();
 }
 
+QString VimSession::recording() const
+{
+    const QChar reg = m_enabled ? m_engine->recordingRegister() : QChar();
+    return reg.isNull() ? QString() : tr("recording @%1").arg(reg);
+}
+
 QString VimSession::status() const
 {
     if (!m_enabled)
@@ -184,7 +193,26 @@ QString VimSession::status() const
         out += u"  "_s + pending();
     else if (!m_message.isEmpty())
         out += u"  "_s + m_message;
+    else if (!recording().isEmpty())
+        out += u"  "_s + recording();
     return out;
+}
+
+bool VimSession::requestView(int &first, int &last)
+{
+    m_viewFirst = m_viewLast = -1;
+    Q_EMIT viewRequested();
+    if (m_viewFirst < 0)
+        return false;
+    first = m_viewFirst;
+    last = std::max(m_viewFirst, m_viewLast);
+    return true;
+}
+
+void VimSession::setView(int first, int last)
+{
+    m_viewFirst = first;
+    m_viewLast = last;
 }
 
 QString VimSession::messageText(vim::Message m, const QString &arg, int count, int count2)
@@ -206,6 +234,7 @@ QString VimSession::messageText(vim::Message m, const QString &arg, int count, i
     case vim::Message::Saved: return tr("Saved");
     case vim::Message::Unsupported: return tr("Not supported: %1").arg(arg);
     case vim::Message::ReadOnly: return tr("This text cannot be changed here");
+    case vim::Message::MacroStopped: return tr("Macro stopped: it ran for too long");
     }
     return {};
 }
@@ -219,7 +248,8 @@ void VimSession::publish()
                          && m != vim::Message::SearchHitBottom && m != vim::Message::SearchHitTop;
         m_engine->clearMessage();
     }
-    const QString state = mode() + u'\x1f' + pending() + u'\x1f' + commandLine() + u'\x1f' + m_message;
+    const QString state = mode() + u'\x1f' + pending() + u'\x1f' + commandLine() + u'\x1f' + m_message + u'\x1f'
+                          + recording();
     if (state == m_lastState)
         return;
     m_lastState = state;

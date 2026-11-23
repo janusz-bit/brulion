@@ -29,6 +29,8 @@ public:
     std::function<void(bool force)> onQuit;
     std::function<bool()> onSave;
     std::function<void(int position, vim::ScrollTo where)> onScroll;
+    /// The text positions of the view's first and last lines (H M L); false when not known.
+    std::function<bool(int &first, int &last)> onView;
     void setPageLines(int lines) { m_pageLines = std::max(1, lines); }
     /// What > and < put in or take out: a tab, or the spaces the text indents with.
     QString indentUnit() const;
@@ -53,6 +55,9 @@ public:
     void quit(bool force) override;
     int pageLines() const override { return m_pageLines; }
     void scroll(int line, vim::ScrollTo where) override;
+    bool viewLines(int &first, int &last) const override;
+    QVariant lineAnchor(int line) const override;
+    int lineOfAnchor(const QVariant &anchor) const override;
     QVariant anchor(vim::Position p) const override;
     vim::Position anchorPosition(const QVariant &anchor) const override;
 

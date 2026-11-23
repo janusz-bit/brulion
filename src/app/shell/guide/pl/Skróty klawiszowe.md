@@ -139,6 +139,10 @@ Znasz Vima? Włącz *Ustawienia → Edytor → Klawisze Vima* (ten sam przełąc
 - Każda zmiana to jeden krok cofania: `u` (albo Ctrl+Z) cofa całe `cw` razem z tym, co wpisałeś. Ctrl+R ponawia, `.` powtarza ostatnią zmianę.
 - `/tekst` i `?tekst` szukają (zwykły tekst; wielka litera sprawia, że wielkość liter się liczy), `n` / `N` idą dalej. `:s/stare/nowe/g` zamienia w wierszu, `:%s/stare/nowe/g` na całej stronie — zwykły tekst, nie wzorce.
 - `:w` zapisuje, `:q` wraca.
+- Liczby: Ctrl+A / Ctrl+X dodają do liczby pod kursorem albo za nim i odejmują od niej (`5<C-a>` dodaje 5; szesnastkowe `0x1f`, dwójkowe `0b101` i zera na początku zachowują swoją postać; w `2026-11-23` dniem jest 23, nie −23).
+- Zdania: `(` i `)` przechodzą po zdaniach, `is` i `as` zaznaczają zdanie (`das` je usuwa). Zdanie kończy się na `.`, `!` albo `?`, po których jest spacja albo koniec wiersza; skróty takie jak „np.” czy „dr.” i mała litera po kropce zdania nie kończą.
+- Makra: `qa` … `q` nagrywa klawisze do rejestru `a`, `@a` je odtwarza (`3@a`, `@@` jeszcze raz, `@:` powtarza ostatnie polecenie `:`). Makro zatrzymuje się na pierwszym poleceniu, które się nie uda, a wszystko, co zrobiło, to jeden krok cofania.
+- `H` `M` `L` skaczą do górnego, środkowego i dolnego wiersza tego, co widać na ekranie. `:g/tekst/d` usuwa każdy wiersz z tym tekstem, `:v/tekst/d` każdy bez niego, `:g/tekst/normal A.` wpisuje klawisze w każdym takim wierszu (zwykły tekst, nie wzorce).
 - `"a` … `"z` to rejestry (`"ayy`, potem `"ap` — także na innej stronie), `"+` to schowek systemu: `"+yy` kopiuje blok dla innych programów.
 - W trybie źródła Markdown (Ctrl+E) te same klawisze działają na tekście strony.
 
@@ -156,12 +160,17 @@ Znasz Vima? Włącz *Ustawienia → Edytor → Klawisze Vima* (ten sam przełąc
 | `/tekst`, `?tekst`, `n` `N` `*` `#` | szukaj |
 | `:s/a/b/g`, `:%s/a/b/g` | zamień (zwykły tekst) |
 | `:w`, `:q`, `:wq`, `ZZ`, `:12` | zapisz, wstecz, wiersz 12 |
+| Ctrl+A, Ctrl+X (w trybie wizualnym z `g`) | dodaj do liczby / odejmij od niej |
+| `(` `)`, `is` `as` | zdania |
+| `H` `M` `L` | górny, środkowy, dolny wiersz ekranu |
+| `qa` … `q`, `@a`, `@@`, `@:` | nagraj makro, odtwórz je |
+| `:g/tekst/pol`, `:v/tekst/pol`, `:normal klawisze` | polecenie na wierszach z tekstem (albo bez niego), klawisze wpisane w wierszach |
 | `ma`, `` `a ``, `'a` | znaczniki |
 | `za` `zo` `zc` `zR` `zM` | zwijanie i rozwijanie bloków |
 
 Polskie litery: polecenie to znak, który daje klawisz. Na polskiej klawiaturze programisty wszystko jest tam, gdzie ma to Vim, a ą, ę, ż… są tylko tym, czego polecenia szukają: `fą` skacze do następnego „ą”, `rż` zamienia literę na „ż”.
 
-Gdzie Vim spotyka się z Brulionem: Ctrl+R to ponów; Esc w trybie normalnym nie zaznacza bloku (robi to `V`) — wychodzi z trybu skupienia; Ctrl+V, Ctrl+A, Ctrl+F, Ctrl+E, Ctrl+O, Tab i pozostałe skróty aplikacji działają tak jak bez Vima. Jeszcze ich nie ma: zaznaczenia blokowego Ctrl+V, makr (`q`, `@`), wzorców w wyszukiwaniu.
+Gdzie Vim spotyka się z Brulionem: Ctrl+R to ponów, a Ctrl+A / Ctrl+X zmieniają liczby (zaznacz wszystko i wytnij działają w trybie wstawiania); Esc w trybie normalnym nie zaznacza bloku (robi to `V`) — wychodzi z trybu skupienia; Ctrl+V, Ctrl+F, Ctrl+E, Ctrl+O, Tab i pozostałe skróty aplikacji działają tak jak bez Vima. Jeszcze ich nie ma: zaznaczenia blokowego Ctrl+V, listy skoków (Ctrl+O / Ctrl+I), wzorców w wyszukiwaniu.
 
 ## Rysunki
 W edytorze rysunku (gdy nie piszesz tekstu). Więcej: [[Rysunki|Rysunki]].

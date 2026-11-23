@@ -51,6 +51,8 @@ class VimSession : public QObject {
     /// What the last command reported ("Not found: …"), "" when nothing; `messageError`: a failure.
     Q_PROPERTY(QString message READ message NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool messageError READ messageError NOTIFY stateChanged FINAL)
+    /// "recording @a" while a macro is being recorded (q), "" else.
+    Q_PROPERTY(QString recording READ recording NOTIFY stateChanged FINAL)
     /// All of it in one line for a status bar: the command line, else the mode with the pending
     /// keys or the message ("" while off).
     Q_PROPERTY(QString status READ status NOTIFY stateChanged FINAL)
@@ -74,6 +76,7 @@ public:
     bool typing() const;
     QString pending() const;
     QString commandLine() const;
+    QString recording() const;
     QString message() const { return m_message; }
     bool messageError() const { return m_messageError; }
     QString status() const;
@@ -83,6 +86,9 @@ public:
     /// Keys in Vim's notation ("dw", "ciwnowe<Esc>", ":s/a/b/<CR>"), the self-tests' way in; what
     /// insert mode leaves to the editor is typed into the edited block (or the source text).
     Q_INVOKABLE void keys(const QString &notation);
+    /// The answer to viewRequested(): the view's first and last row (positions of the text in source
+    /// mode), -1: not known.
+    Q_INVOKABLE void setView(int first, int last);
     /// Back to normal mode (a page changed, the setting went off, the editor gave up the keys).
     Q_INVOKABLE void reset();
     /// Insert mode where the caret is (a click into the text while the mode was normal does not
@@ -119,12 +125,15 @@ Q_SIGNALS:
     /// zt zz zb: `row` (blocks) or text `position` (source mode, row -1) to the view's top (-1),
     /// middle (0) or bottom (1).
     void scrollRequested(int row, int position, int where);
+    /// H M L ask where the view is: answer with setView() (a direct connection: before this returns).
+    void viewRequested();
     /// :q / ZZ — close the page (go back, or close its tab or window).
     void quitRequested(bool force);
 
 private:
     void updateBuffer();
     void publish();
+    bool requestView(int &first, int &last);
     vim::Buffer *activeBuffer();
 
     bool m_enabled = false;
@@ -138,6 +147,8 @@ private:
     QMetaObject::Connection m_pathConnection;
     QString m_message;
     bool m_messageError = false;
+    int m_viewFirst = -1;
+    int m_viewLast = -1;
     // What publish() last told.
     QString m_lastState;
 };

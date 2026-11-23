@@ -60,6 +60,8 @@ public:
     std::function<void(int row, int anchor, int cursor)> onTextSelection;
     std::function<void(vim::Mode mode)> onMode;
     std::function<void(int row, vim::ScrollTo where)> onScroll;
+    /// The rows at the view's top and bottom (H M L); false when not known.
+    std::function<bool(int &firstRow, int &lastRow)> onView;
     std::function<void(bool force)> onQuit;
     void setPageLines(int lines) { m_pageLines = std::max(1, lines); }
     /// The text selection shown (tests).
@@ -92,6 +94,7 @@ public:
     int pageLines() const override { return m_pageLines; }
     bool fold(int line, vim::FoldAction action) override;
     void scroll(int line, vim::ScrollTo where) override;
+    bool viewLines(int &first, int &last) const override;
     QVariant anchor(vim::Position p) const override;
     vim::Position anchorPosition(const QVariant &anchor) const override;
 

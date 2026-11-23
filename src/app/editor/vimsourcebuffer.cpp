@@ -413,6 +413,38 @@ void VimSourceBuffer::scroll(int lineIndex, vim::ScrollTo where)
         onScroll(positionOf(Position{lineIndex, 0}), where);
 }
 
+bool VimSourceBuffer::viewLines(int &first, int &last) const
+{
+    int from = 0, to = 0;
+    if (!onView || !onView(from, to))
+        return false;
+    first = positionAt(from).line;
+    last = positionAt(to).line;
+    return true;
+}
+
+QVariant VimSourceBuffer::lineAnchor(int line) const
+{
+    QTextDocument *doc = document();
+    const QTextBlock b = doc ? doc->findBlockByNumber(line) : QTextBlock();
+    if (!b.isValid())
+        return {};
+    // A cursor at the line's end: the document moves it with the edits, and a removed line leaves
+    // it at the start of what followed (not at an end).
+    QTextCursor c(doc);
+    c.setPosition(b.position() + b.length() - 1);
+    return QVariant::fromValue(c);
+}
+
+int VimSourceBuffer::lineOfAnchor(const QVariant &anchor) const
+{
+    const QTextCursor c = anchor.value<QTextCursor>();
+    if (c.isNull() || c.document() != document())
+        return -1;
+    const QTextBlock b = c.block();
+    return b.isValid() && c.position() == b.position() + b.length() - 1 ? b.blockNumber() : -1;
+}
+
 QVariant VimSourceBuffer::anchor(Position p) const
 {
     return positionOf(p);
