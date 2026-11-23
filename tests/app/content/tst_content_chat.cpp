@@ -1182,8 +1182,9 @@ private Q_SLOTS:
         QCOMPARE(chats->send(spring, u"Halo?"_s), spring);
         QTRY_VERIFY(!chats->failureOf(spring).isEmpty());
         QTRY_COMPARE(listed(list), (QStringList{u"[pinned] Żółw"_s, u"[recent] Źródło"_s, u"Łąka"_s}));
-        QVERIFY2(value(list, 1, "failure").toString().contains(u"brak połączenia"_s),
-                 qPrintable(value(list, 1, "failure").toString()));
+        // (The order was this before the failure too: wait for the row's line itself.)
+        QTRY_VERIFY2(value(list, 1, "failure").toString().contains(u"brak połączenia"_s),
+                     qPrintable(value(list, 1, "failure").toString()));
         // An answer unread meanwhile comes back later: above the failure.
         m_model.replies = {answer(u"Tak."_s)};
         QCOMPARE(chats->send(meadow, u"Na pewno?"_s), meadow);

@@ -271,9 +271,11 @@ private Q_SLOTS:
         QVERIFY(syncAndWait(sync));
         QCOMPARE(sync->state(), u"idle"_s);
         QCOMPARE(ws->readFile(u"Z laptopa.md"_s), u"- przyszło przez Syncthing #telefon\n"_s);
-        QFile sent(folder.path() + u"/Notatka.md"_s);
-        QVERIFY(sent.open(QIODevice::ReadOnly));
-        QCOMPARE(QString::fromUtf8(sent.readAll()), u"- napisane na telefonie\n"_s);
+        {
+            QFile sent(folder.path() + u"/Notatka.md"_s);
+            QVERIFY(sent.open(QIODevice::ReadOnly));
+            QCOMPARE(QString::fromUtf8(sent.readAll()), u"- napisane na telefonie\n"_s);
+        } // (closed: Windows deletes no open file, removeRecursively() below)
         QVERIFY(server.requests().isEmpty()); // nothing went to the server
         QCOMPARE(sync->lastReport().value(u"downloaded"_s).toInt(), 1);
         QCOMPARE(sync->history().size(), 1);
