@@ -98,12 +98,12 @@ done in the repository simply disappears from the list.
   the type checker on an Android phone (built in, measured, not run on one yet), the browser's
   hostile-extension self-test in a real browser beside CI's headless Chrome
   (`scripts/wasm-smoke.mjs --extensions`).
-* **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and six
-  slots of the UI are scriptable, and agents change the running app live (docs/EXTENSIONS.md "The
-  app (`b.app`)", "Live code"). Still open: the built-in AI assistant's tools for `b.app` (a theme,
+* **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and
+  eleven slots of the UI are scriptable, and agents change the running app live (docs/EXTENSIONS.md
+  "The app (`b.app`)", "Live code"). Still open: the built-in AI assistant's tools for `b.app` (a theme,
   a setting, a button — its tool set is what the fine-tuned on-device model learned, so the bench
-  runs first: docs/FINETUNE.md); more slots (the tab bar's menu, the folder tree's menu, the
-  phone's bottom navigation, the editor's toolbar on the keyboard, the share sheet); replacing a
+  runs first: docs/FINETUNE.md); the bottom navigation's and the keyboard toolbar's extension
+  buttons checked on a real phone (the self-test's phone run has them); replacing a
   built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
   input rules (`b.app.inputRule`) in source mode too (its TextEdit has an undo stack of its own) and
   the tint of `b.app.tagStyle` in rows drawn by `PageItem` / `JournalDayItem` (behind their

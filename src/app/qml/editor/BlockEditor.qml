@@ -1011,6 +1011,23 @@ FocusScope {
         Workspace.extensions.runBlockCommand(name, path, line, selection)
         return true
     }
+    /// An extension's button of the keyboard's toolbar (b.app.contribute("keyboardToolbar", …)) on
+    /// the edited block: saved first, its command reads the line as shown (ctx.block) and gets the
+    /// selection (ctx.selection).
+    function runToolbarItem(extension: string, id: string): void {
+        if (!controller)
+            return
+        // (Read before the calls below, as runExtensionCommand's.)
+        const owner = extension + ""
+        const itemId = id + ""
+        const row = currentRow()
+        if (row < 0 || controller.sourceMode)
+            return
+        const selection = selectionForExtensions()
+        const line = controller.savedLineAt(row)
+        const path = controller.path + ""
+        AppScripting.activate("keyboardToolbar", owner, itemId, path, line, { selection: selection })
+    }
     /// What the user points at — one reading for the AI in the editor (startWriting) and an
     /// extension's ctx.selection (selectionForExtensions), so the two never disagree: "source"
     /// (source mode: its text and selection), "edit" (the block being edited: its text and

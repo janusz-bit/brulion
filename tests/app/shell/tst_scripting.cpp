@@ -507,6 +507,84 @@ private Q_SLOTS:
         QTRY_VERIFY(brulion::ui::ThemeOverrides::instance()->tokens(false).isEmpty());
     }
 
+    // The slots of 0.29 (docs/EXTENSIONS.md "Items of the UI"): what a command gets from each.
+    void newSlotsGiveTheirContext()
+    {
+        openApp(false);
+        // (No # in a raw literal here: moc reads this file.)
+        const QVariantMap loaded = extensions()->loadLive(
+                u"sloty"_s,
+                u"b.command(\"opisz\", function(ctx)\n"
+                "    local s = ctx.shared\n"
+                "    local files = if s and s.files then tostring(#s.files) else \"-\"\n"
+                "    return `page={ctx.page} folder={ctx.folder or \"-\"} path={ctx.path or \"-\"} `\n"
+                "        .. `block={if ctx.block then ctx.block.text else \"-\"} sel={ctx.selection} `\n"
+                "        .. `shared={if s then s.text else \"-\"} in={if s then tostring(s.incoming) else \"-\"} `\n"
+                "        .. `title={if s then s.title else \"-\"} files={files}`\n"
+                "end)\n"
+                "b.app.contribute(\"tabMenu\", { id = \"t\", label = \"Karta\", command = \"opisz\" })\n"
+                "b.app.contribute(\"folderMenu\", { id = \"f\", label = \"Folder\", command = \"opisz\" })\n"
+                "b.app.contribute(\"bottomNav\", { id = \"n\", label = \"Opis\", icon = \"info\", command = \"opisz\" "
+                "})\n"
+                "b.app.contribute(\"keyboardToolbar\", { id = \"k\", label = \"Opis\", icon = \"info\", command = "
+                "\"opisz\" })\n"
+                "b.app.contribute(\"share\", { id = \"s\", label = \"Opisz\", command = \"opisz\" })\n"_s,
+                {u"app"_s}, u"Sloty"_s, u"live:test"_s);
+        QVERIFY2(loaded.value(u"ok"_s).toBool(), qPrintable(loaded.value(u"error"_s).toString()));
+        // (A command's returned text is its message: the toast.)
+        QSignalSpy toasts(extensions(), &WorkspaceExtensions::message);
+        const auto said = [&](const QString &slot, const QString &item, const QString &path, int line,
+                              const QVariantMap &context) {
+            toasts.clear();
+            if (!scripting()->activate(slot, u"sloty"_s, item, path, line, context))
+                return u"(gone)"_s;
+            return toasts.isEmpty() ? u"(silent)"_s : toasts.last().value(0).toString();
+        };
+        // A tab's menu: the tab's page.
+        QCOMPARE(said(u"tabMenu"_s, u"t"_s, u"Dom.md"_s, -1, {}),
+                 u"page=Dom folder=- path=- block=- sel= shared=- in=- title=- files=-"_s);
+        // The folder tree: a folder's row, a page's.
+        QCOMPARE(said(u"folderMenu"_s, u"f"_s, QString(), -1,
+                      {{u"path"_s, u"Projekty/Łódź"_s}, {u"folder"_s, u"Projekty/Łódź"_s}}),
+                 u"page= folder=Projekty/Łódź path=Projekty/Łódź block=- sel= shared=- in=- title=- files=-"_s);
+        QCOMPARE(said(u"folderMenu"_s, u"f"_s, u"Dom.md"_s, -1, {{u"path"_s, u"Dom.md"_s}}),
+                 u"page=Dom folder=- path=Dom.md block=- sel= shared=- in=- title=- files=-"_s);
+        // Fields of other slots never pass (a context's `shared` from a folder's row).
+        QCOMPARE(said(u"folderMenu"_s, u"f"_s, QString(), -1, {{u"path"_s, u"A"_s}, {u"shared"_s, u"x"_s}}),
+                 u"page= folder=- path=A block=- sel= shared=- in=- title=- files=-"_s);
+        // The keyboard's toolbar: the edited block (its line as saved, from 0 as the editor's
+        // savedLineAt()) and the selection the editor passes.
+        QTRY_COMPARE(said(u"keyboardToolbar"_s, u"k"_s, u"Dom.md"_s, 1, {{u"selection"_s, u"zada"_s}}),
+                     u"page=Dom folder=- path=- block=zadanie sel=zada shared=- in=- title=- files=-"_s);
+        // The bottom navigation: the page on screen.
+        QCOMPARE(said(u"bottomNav"_s, u"n"_s, u"Dom.md"_s, 1, {{u"selection"_s, u"zada"_s}}),
+                 u"page=Dom folder=- path=- block=- sel= shared=- in=- title=- files=-"_s);
+        // Shared into Brulion: the text as edited in the dialog, the share's title.
+        m_app->receiveShare({{u"subject"_s, u"Żurek"_s}, {u"text"_s, u"Przepis na żurek"_s}});
+        QVERIFY(!m_app->pendingShare().isEmpty());
+        QCOMPARE(
+                said(u"share"_s, u"s"_s, QString(), -1, {{u"text"_s, u"Przepis na żurek, poprawiony"_s}}),
+                u"page= folder=- path=- block=- sel= shared=Przepis na żurek, poprawiony in=true title=Żurek files=0"_s);
+        m_app->dismissShare();
+        // Shared files: their texts, one after another.
+        const QString dir = m_app->shareInboxPath() + u"/1792000000000-1"_s;
+        const QString lodz = dir + u"/0/Łódź.md"_s, krakow = dir + u"/1/Kraków.txt"_s;
+        QVERIFY(writeFile(lodz, "- dworzec"));
+        QVERIFY(writeFile(krakow, "- rynek"));
+        m_app->receiveShare(
+                {{u"dir"_s, dir},
+                 {u"files"_s, QVariantList{QVariantMap{{u"path"_s, lodz}, {u"name"_s, u"Łódź.md"_s}},
+                                           QVariantMap{{u"path"_s, krakow}, {u"name"_s, u"Kraków.txt"_s}}}}});
+        QCOMPARE(said(u"share"_s, u"s"_s, QString(), -1, {{u"text"_s, QString()}}),
+                 u"page= folder=- path=- block=- sel= shared=- dworzec\n\n- rynek in=true title=Łódź files=2"_s);
+        m_app->dismissShare();
+        // A page shared from Brulion: its Markdown.
+        QCOMPARE(said(u"share"_s, u"s"_s, u"Dom.md"_s, -1, {}),
+                 u"page=Dom folder=- path=- block=- sel= shared=# Dom\n- zadanie\n in=false title=Dom files=-"_s);
+        QVERIFY(extensions()->unloadLive(u"sloty"_s));
+        QVERIFY(!scripting()->activate(u"share"_s, u"sloty"_s, u"s"_s));
+    }
+
     void liveCodeShadowsAPage()
     {
         openApp(true);

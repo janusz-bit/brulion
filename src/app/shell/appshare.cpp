@@ -428,6 +428,26 @@ bool AppController::shareSavesFiles() const
            || notebook::composeSharedText(m_share->subject, m_share->text, m_share->url).trimmed().isEmpty();
 }
 
+QVariantMap AppController::sharedForExtensions(const QString &editedText) const
+{
+    if (!m_share)
+        return {};
+    const QVariantMap shown = pendingShare();
+    QVariantList files;
+    QStringList texts;
+    for (const ShareFile &file : m_shareFiles) {
+        if (!file.error.isEmpty())
+            continue;
+        files.append(QVariantMap{{u"name"_s, file.name}, {u"title"_s, file.title}, {u"text"_s, file.content}});
+        texts.append(file.content);
+    }
+    const bool hasFiles = shareSavesFiles();
+    return {{u"incoming"_s, true},
+            {u"title"_s, shown.value(u"title"_s).toString()},
+            {u"text"_s, hasFiles ? texts.join(u"\n\n"_s) : editedText},
+            {u"files"_s, files}};
+}
+
 void AppController::dismissShare()
 {
     clearShare();

@@ -85,6 +85,16 @@ QVariantMap themeLayerTable(const ThemeLayer &layer);
 ///   blockMenu  an item of a block's menu (its bullet's menu, a right-click); a command gets ctx.block
 ///   slash      an entry of the editor's `/` menu: a command on the block (ctx.block) or Markdown
 ///              inserted (`insert`)
+///   tabMenu    an item of a tab's menu (wide windows: a right-click on a tab); a command gets the
+///              tab's page as ctx.page
+///   folderMenu an item of the folder tree's row menu (the sidebar, the drawer on phones); a command
+///              gets the row: ctx.path, and ctx.folder for a folder's row or ctx.page for a page's
+///   bottomNav  a button of the phone's bottom navigation after its views (an icon, the label its
+///              name): at most MaxBottomNavItems of all extensions, never instead of a view
+///   keyboardToolbar a button of the editor's toolbar on the on-screen keyboard (touch UIs): an icon;
+///              a command works on the edited block (ctx.block) and its selection (ctx.selection)
+///   share      an action of the share dialogs — text or files shared into Brulion, a page shared
+///              from it (Export page): a command only, it gets what is shared as ctx.shared
 QStringList contributionSlots();
 bool isContributionSlot(QStringView slot);
 
@@ -111,14 +121,32 @@ struct Contribution {
 inline constexpr int MaxContributionLabel = 100;
 inline constexpr int MaxContributionTooltip = 300;
 inline constexpr int MaxContributionInsert = 20000;
-/// Items of one extension in one slot (more is an error), and of every extension in one slot.
+/// Items of one extension in one slot (more is an error), and of every extension in one slot —
+/// the menus' and bars' limits; the bottom navigation, the keyboard's toolbar and the share
+/// dialogs have room for fewer (contributionLimits()).
 inline constexpr int MaxContributionsPerSlot = 16;
 inline constexpr int MaxContributionsInSlot = 64;
+/// The bottom navigation's buttons of all extensions together (the bar keeps its views).
+inline constexpr int MaxBottomNavItems = 2;
+/// The keyboard toolbar's buttons and the share dialogs' actions: of one extension, of all.
+inline constexpr int MaxKeyboardToolbarPerExtension = 4;
+inline constexpr int MaxKeyboardToolbarItems = 8;
+inline constexpr int MaxShareActionsPerExtension = 4;
+inline constexpr int MaxShareActions = 8;
+
+/// How many items a slot takes: of one extension, of every extension together.
+struct ContributionLimits {
+    int perExtension = MaxContributionsPerSlot;
+    int all = MaxContributionsInSlot;
+};
+ContributionLimits contributionLimits(QStringView slot);
 
 /// An item table of b.app.contribute in `slot` as a Contribution (its extension left empty): `id`
 /// (letters, digits, - and _, at most 64), `label`, `icon`, `tooltip`, `tone`, `order` and one
-/// of `command`, `view` (+ `params`), `page`, `run`, `insert` — the slot decides which it needs.
-/// Unknown keys are errors (a misspelt `comand` must not pass silently).
+/// of `command`, `view` (+ `params`), `page`, `run`, `insert` — the slot decides which it needs
+/// (`insert` only in "slash", only `command` in "share", an `icon` in "bottomNav" and
+/// "keyboardToolbar": their buttons show nothing else). Unknown keys are errors (a misspelt
+/// `comand` must not pass silently).
 bool contributionFrom(const QString &slot, const QVariantMap &item, Contribution *out, QString *error);
 /// A Contribution as a table (b.app.contributions(), the remote control's `contributions`).
 QVariantMap contributionTable(const Contribution &item);

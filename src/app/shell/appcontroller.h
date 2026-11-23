@@ -669,6 +669,11 @@ public:
     Q_INVOKABLE QVariantMap saveShare(const QVariantMap &choice);
     /// Drop the waiting share ("Cancel"): nothing is written, the copies are removed.
     Q_INVOKABLE void dismissShare();
+    /// The waiting share as an extension's share action gets it (ctx.shared, docs/EXTENSIONS.md
+    /// "Items of the UI"): { incoming: true, title, text, files: [{name, title, text}] } — `text`
+    /// the dialog's `editedText` for a share of text, else the readable files' texts one after
+    /// another (a blank line between them); `files` the readable files. {} when none waits.
+    QVariantMap sharedForExtensions(const QString &editedText) const;
     /// Where the platform puts its copies of shared files (<dataDir>/share-in; Android's
     /// ShareActivity: files/share-in/<stamp>). Only a share's folder inside it is ever removed.
     QString shareInboxPath() const;

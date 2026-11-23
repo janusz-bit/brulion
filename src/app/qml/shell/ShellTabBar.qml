@@ -15,7 +15,9 @@ import Brulion
 // pane of a split view like the view without the edge. A click shows a tab, a
 // middle click or its × closes it, a drag along the bar moves it (AppController.moveTab), a
 // right-click (or a long press) opens its menu: Close tab, Close other tabs, Show in split view /
-// Close split view, Move to new window (desktop). The + at the end opens a new tab (Ctrl+T).
+// Close split view, Move to new window (desktop), then the extensions' items
+// (b.app.contribute("tabMenu", …): a command gets the tab's page as ctx.page; docs/UI.md "Extension
+// items in the UI"). The + at the end opens a new tab (Ctrl+T).
 Rectangle {
     id: bar
 
@@ -392,6 +394,21 @@ Rectangle {
                 text: qsTr("Move to new window")
                 iconName: "app-window"
                 onTriggered: AppController.detachTab(tabMenu.tabId)
+            }
+            // The extensions' items (b.app.contribute("tabMenu", …)): their commands get the
+            // tab's page (ctx.page; "" for a view that is no page).
+            BMenuSeparator {
+                id: tabExtensionsAt
+                visible: tabExtensions.count > 0
+                height: visible ? implicitHeight : 0
+            }
+            ShellContributionItems {
+                id: tabExtensions
+                menu: tabMenu
+                after: tabExtensionsAt
+                slot: "tabMenu"
+                onPicked: (extension, id) => AppScripting.activate("tabMenu", extension, id,
+                                                                   AppController.routeText(AppController.tabRoute(tabMenu.tabId), "path"), -1)
             }
         }
     }

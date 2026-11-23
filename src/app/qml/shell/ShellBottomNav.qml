@@ -5,8 +5,12 @@ import QtQuick.Templates as T
 import Brulion
 
 // ShellBottomNav — the phone's bottom navigation: five views (AppSettings.bottomNavTabs, by
-// default Journal, Pages, Search, Tasks, Calendar; Settings → Appearance → Layout) and nothing
-// else: every item switches the view and shows which one is current. Actions live on the top
+// default Journal, Pages, Search, Tasks, Calendar; Settings → Appearance → Layout), then at most
+// two buttons of extensions (b.app.contribute("bottomNav", …), docs/UI.md "Extension items in the
+// UI"): their icon, their label as the name; one that opens a view of its extension shows as
+// current while that view does. They come after the views and only while every item still gets
+// its 48 px (a narrow phone shows fewer of them: never one view less). Every item switches the
+// view and shows which one is current. Actions live on the top
 // bar — the notebook's button opens the drawer, + quick capture —, so none of them repeats here.
 // A floating capsule (as in Instagram or Material 3's apps): a raised, rounded bar held off the
 // screen's edges, its items icons only; the current view's item grows into an accent-tinted pill
@@ -23,6 +27,22 @@ Rectangle {
     readonly property string view: AppController.currentView
     /// The items shown, in the bar's order (AppSettings.bottomNavTabs: known views only).
     readonly property list<string> shownIds: AppSettings.bottomNavTabs
+    readonly property list<var> noRows: []
+    /// The extensions' buttons as text: made again only when they change.
+    readonly property string itemsKey: Workspace.extensions !== null
+                                       ? Workspace.extensions.contributionsKey("bottomNav", Workspace.extensions.appRevision) : ""
+    readonly property list<var> extensionItems: nav.itemsKey !== ""
+                                                ? Workspace.extensions.contributions("bottomNav", nav.itemsKey.length) : nav.noRows
+    /// How many of them are shown: as many as leave every item its smallest width.
+    readonly property int extensionsShown: Math.max(0, Math.min(nav.extensionItems.length,
+            Math.floor((capsule.width - 2 * nav.innerPadding + 2) / (nav.minItemWidth + 2)) - nav.shownIds.length))
+    /// The items in the bar: the views and the extensions' buttons shown.
+    readonly property int itemCount: nav.shownIds.length + nav.extensionsShown
+    /// The route's extension view ("extension/name"), "" for another view.
+    readonly property string extensionView: view === "extension"
+                                            ? AppController.routeText(AppController.currentRoute, "extension") + "/"
+                                              + AppController.routeText(AppController.currentRoute, "name")
+                                            : ""
     /// An item's label.
     function titleOf(id: string): string {
         switch (id) {
@@ -80,15 +100,20 @@ Rectangle {
             AppController.navigate({ view: id })
     }
 
-    /// An item of the bar: a view's tab (`currentView`: the route's view).
+    /// An item of the bar: a view's tab (`currentView`: the route's view), or an extension's
+    /// button (`label` and `glyph` given; `extensionCurrent`: the view it opens is shown).
     component NavTab: T.AbstractButton {
         id: tab
         property string itemId
         property string currentView
-        readonly property string title: nav.titleOf(itemId)
-        readonly property bool current: itemId === currentView
-                                        || (itemId === "journals" && currentView === "journal")
-                                        || (itemId === "tags" && currentView === "tag")
+        property string label
+        property string glyph
+        property bool extensionCurrent: false
+        readonly property string title: tab.label !== "" ? tab.label : nav.titleOf(itemId)
+        readonly property bool current: tab.label !== "" ? tab.extensionCurrent
+                                        : itemId === currentView
+                                          || (itemId === "journals" && currentView === "journal")
+                                          || (itemId === "tags" && currentView === "tag")
         /// The current item's width: its pill with the icon and the name — at most what the other
         /// items leave at their smallest (a name too long even then elides).
         /// (font.pixelSize read for real: a method's result is not followed — the width follows
@@ -96,7 +121,7 @@ Rectangle {
         readonly property real pillWidth: nameMetrics.font.pixelSize <= 0 ? nav.minItemWidth
                                           : Math.min(Math.ceil(nameMetrics.advanceWidth(tab.title)) + Theme.iconSize + 8 + 2 * 14,
                                                    capsule.width - 2 * nav.innerPadding
-                                                   - (nav.shownIds.length - 1) * (nav.minItemWidth + 2))
+                                                   - (nav.itemCount - 1) * (nav.minItemWidth + 2))
 
         objectName: "bottomNav_" + itemId
         focusPolicy: Qt.StrongFocus
@@ -130,7 +155,7 @@ Rectangle {
                 spacing: 8
                 BIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    name: nav.iconOf(tab.itemId)
+                    name: tab.glyph !== "" ? tab.glyph : nav.iconOf(tab.itemId)
                     size: Theme.iconSize
                     color: tab.current ? Theme.accentText : tab.pressed || tab.hovered ? Theme.fg : Theme.fgMuted
                     // The flashcards to study now, at the icon's corner.
@@ -217,6 +242,29 @@ Rectangle {
                     itemId: modelData
                     currentView: nav.view
                     onClicked: nav.openView(viewTab.itemId, viewTab.current)
+                }
+            }
+            Repeater {
+                // The extensions' buttons (b.app.contribute("bottomNav", …)): a command gets the
+                // page on screen (ctx.page).
+                model: nav.extensionItems
+                delegate: NavTab {
+                    id: extensionTab
+                    // (A row of WorkspaceExtensions.contributions(): its `id` and `icon` read
+                    // through modelData — a delegate's property cannot have those names.)
+                    required property var modelData
+                    required property int index
+                    required property string extension
+                    readonly property string opens: UiModels.stringField(extensionTab.modelData, "view")
+                    visible: extensionTab.index < nav.extensionsShown
+                    itemId: UiModels.stringField(extensionTab.modelData, "id")
+                    objectName: "contribution_bottomNav_" + extensionTab.itemId
+                    label: UiModels.stringField(extensionTab.modelData, "label")
+                    glyph: UiModels.stringField(extensionTab.modelData, "icon")
+                    currentView: nav.view
+                    extensionCurrent: extensionTab.opens !== "" && nav.extensionView === extensionTab.extension + "/" + extensionTab.opens
+                    onClicked: AppScripting.activate("bottomNav", extensionTab.extension, extensionTab.itemId,
+                                                     AppController.routeText(AppController.currentRoute, "path"), -1)
                 }
             }
         }

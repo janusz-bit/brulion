@@ -13,7 +13,9 @@ import Brulion
 // system's print dialog; Android: the system's print service; the browser: its print dialog).
 // The file is made by an ExportController of the page (scope "page": the attachments it links
 // to come along) in the background; folders, the whole notebook and the other formats are in
-// Import and export ("More export options…").
+// Import and export ("More export options…"). The extensions' share actions follow
+// (ShellShareActions, b.app.contribute("share", …)): one gets the page as ctx.shared and the dialog
+// closes.
 //
 //   ContentExportDialog { id: exportDialog; tools: tools }
 //   exportDialog.openFor(page.path)          // the formats
@@ -288,6 +290,15 @@ BDialog {
             onClicked: {
                 dialog.pending = ""
                 exporter.cancel()
+            }
+        }
+        ShellShareActions {
+            objectName: "pageExportActions"
+            Layout.fillWidth: true
+            enabled: !exporter.busy
+            onPicked: (extension, id) => {
+                AppScripting.activate("share", extension, id, dialog.path, -1)
+                dialog.close()
             }
         }
         BButton {

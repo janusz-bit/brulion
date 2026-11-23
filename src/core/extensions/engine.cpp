@@ -3297,12 +3297,12 @@ int Engine::appContributeImpl(lua_State *L)
         if (c.extension == extension)
             ++own;
     }
-    if (own >= MaxContributionsPerSlot)
-        return failWith(L, u"b.app.contribute: at most %1 items of one extension in “%2”"_s.arg(MaxContributionsPerSlot)
-                                   .arg(slot));
-    if (all >= MaxContributionsInSlot)
-        return failWith(L, u"b.app.contribute: “%1” is full (%2 items of all extensions)"_s.arg(slot).arg(
-                                   MaxContributionsInSlot));
+    const ContributionLimits limits = contributionLimits(slot);
+    if (own >= limits.perExtension)
+        return failWith(
+                L, u"b.app.contribute: at most %1 items of one extension in “%2”"_s.arg(limits.perExtension).arg(slot));
+    if (all >= limits.all)
+        return failWith(L, u"b.app.contribute: “%1” is full (%2 items of all extensions)"_s.arg(slot).arg(limits.all));
     m_contributions.append(item);
     ++m_appRevision;
     m_host->appChanged(extension);

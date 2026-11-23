@@ -312,7 +312,8 @@ components — no Material/Fusion look, so all targets look identical.
   accent's text keeps 4.5:1 on its tint —, a hairline edge and an elevation-2 shadow), the page's surface
   (`Theme.bg`) around it — the bar's room is its own, nothing of a view lies under it. Every item
   is one `NavTab`, at least 48 px wide, its view's name its accessible name and a tooltip on a
-  long press: the others are icons only, sharing the room evenly; the **current view's item grows
+  long press (after the views up to two extensions' buttons, `bottomNav` in "Extension items in
+  the UI", only while every item keeps its 48 px): the others are icons only, sharing the room evenly; the **current view's item grows
   into an accent-tinted pill** with its name beside the icon (`accentBg`, `accentText`; the width
   animated with a small overshoot), at most what the other items leave at their 48 px, so at the
   larger text sizes the name stays whole and only an extreme one elides. A pressed item shrinks a
@@ -390,7 +391,8 @@ components — no Material/Fusion look, so all targets look identical.
   page, the text editable before saving — never through quick capture's date parsing —, files
   listed by name with their first lines or the reason they cannot be saved, all as plain text; a
   refused save (a page whose name differs only in letter case exists) keeps the dialog open with
-  the reason; "Cancel" drops the share and its copies; `requestUiAction("share")` opens it once
+  the reason; "Cancel" drops the share and its copies; an extension's share action
+  (`share`, "Extension items in the UI") takes the share instead — nothing saved, the dialog closes; `requestUiAction("share")` opens it once
   a user notebook is ready), new page / folder, rename, move
   (`ShellMoveDialog`), delete confirmation, about; toasts. Views reach the shell's dialogs for a
   page or folder through `AppController.requestItemAction(action, path)` (`move`, `rename`,
@@ -556,7 +558,8 @@ in rendered text" below).
   folder… (the export tab, folder scope), Rename…, Move to trash (the confirmation
   counts its pages and warns for the notebook's special folders). A page: Open in side
   panel (wide), favorites, Move to…, Copy link (`PageTools.wikiLink`: the page part of every
-  copied link, `notebook::pageLinkTarget` — the shortest target, a daily note by its file name), Rename…, Page history, Move to trash. A daily note is a
+  copied link, `notebook::pageLinkTarget` — the shortest target, a daily note by its file name), Rename…, Page history, Move to trash. Before Move to trash
+  both have the extensions' items (`folderMenu`, "Extension items in the UI"). A daily note is a
   file here like any other — renamed, moved and dragged (a misfiled day can be put right) — also
   in All pages, F2 and the More menu of a daily note opened as a page; only the journal view
   (by date) and the page's own menu there offer neither. The "Pages" header's "+": New page,
@@ -683,7 +686,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   the keys: a menu or dialog that took them hid the keyboard, and the toolbar stays docked under
   it, on phones on the bottom navigation, which comes back); a tap on the text brings the keyboard
   and the toolbar back. "Hide keyboard" ends the editing and takes it away. Its tools follow
-  `BlockEditor.toolbarMode`: `block`, `cell` (a table cell — Undo, Redo, Next cell,
+  `BlockEditor.toolbarMode`: `block` (with the extensions' buttons before Undo: `keyboardToolbar`,
+  "Extension items in the UI"), `cell` (a table cell — Undo, Redo, Next cell,
   Hide keyboard; `BlockEditor.editingTable`; after Undo / Redo the same cell goes on being
   edited, and every cell tool first commits the word the keyboard is still composing),
   `source` (source mode — `[[`, `#`, `/`, the source's own Undo / Redo, Hide keyboard),
@@ -1126,8 +1130,9 @@ to `contributionsKey(slot, appRevision)` (the slot's rows as compact JSON) and i
 `contributions(slot, key.length)`: a QML string property notifies only when its value changes, so a
 status bar text that counts on every change of a note does not make the top bar's buttons, the
 menus' items or every editor's slash list again. A click, a tap or Space (Enter in a menu) runs
-the item through `AppScripting.activate(slot, extension, id, path, line)`: its command (on a page:
-`ctx.page`; on a block: `ctx.block`), view, page or palette command. A delegate reads
+the item through `AppScripting.activate(slot, extension, id, path, line, context)`: its command (on a page:
+`ctx.page`; on a block: `ctx.block`; the folder tree's row in `context` as `ctx.path` / `ctx.folder`;
+a share as `ctx.shared`), view, page or palette command. A delegate reads
 the row's `id` and `icon` through `modelData` (`UiModels.stringField`): a delegate's property cannot
 have those names. Where each slot shows:
 
@@ -1164,6 +1169,29 @@ have those names. Where each slot shows:
   `insertAfterBlock`), the caret at the end of the last one — in one undo step; an item that runs a
   command removes "/…" and the editor runs it on the block (`{action: "extension"}` →
   `BlockEditor.runSlashItem`).
+* `tabMenu` — `ShellTabBar.qml`'s tab menu, after Move to new window and a separator
+  (`contribution_tabMenu_<id>`, `ShellContributionItems`): run with the tab's route's page
+  (`AppController.tabRoute(id).path`, "" for a tab that shows no page).
+* `folderMenu` — `ShellSidebar.qml`'s row menu (`sidebarContextMenu`), a section after Page history,
+  before Move to trash (`contribution_folderMenu_<id>`): `ShellSidebar.runTreeItem()` runs it with
+  the row — a folder as `{path, folder}` and no page, a page as its path (`ctx.page`) and
+  `{path, folder: ""}`, another file as `{path, folder: ""}` only (the map kept in a property:
+  built inside the call, compiled code passed it empty).
+* `bottomNav` — `ShellBottomNav.qml`: `NavTab`s after the views (`contribution_bottomNav_<id>`), the
+  icon, the label as the name, current (the accent pill with the label) while the view the item opens
+  shows. At most two (appapi.h `MaxBottomNavItems`), and only as many as leave every item of the
+  capsule its 48 px (`extensionsShown`): the views are never squeezed out; the current pill's width
+  counts them (`itemCount`). Run with the route's page.
+* `keyboardToolbar` — `MobileEditToolbar.qml`'s block tools, after the insert tools (voice note) and
+  a separator, before Undo (`contribution_keyboardToolbar_<id>`, a `ToolButton`: no focus, the
+  label as its name, the tooltip on a long press): `BlockEditor.runToolbarItem()` commits the
+  composed word and runs it with the selection (`selectionForExtensions()`, `{selection}` → `offerSelection`) on
+  the edited block's saved line. Not in the cell's or the source's tools.
+* `share` — `ShellShareActions.qml` (`contribution_share_<id>`, a `BButton` each under "With an
+  extension"): in `ShellShareDialog.qml` below its hints — run with the dialog's text as edited
+  (`{text}` → `AppController.sharedForExtensions()`), then the share is dismissed (nothing saved) and
+  the dialog closes — and in `ContentExportDialog.qml` before "More export options…" — run with the
+  page's path (AppScripting reads it as `ctx.shared`), the dialog closes.
 
 Menus keep BMenu's rules: the items are plain `BMenuItem`s inserted after a marker item
 (`ShellContributionItems.after`) — the arrows reach them, Enter runs them —, never `danger` (what
@@ -2728,7 +2756,8 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   click shows a tab (in the focused pane; a tab already shown in the other pane focuses that pane),
   a middle click or × closes it, a drag along the bar moves it (`moveTab`), a right-click or long
   press opens its menu: Close tab, Close other tabs, Show in split view / Close split view,
-  Move to new window (desktop). Closing the shown tab shows its neighbour (the next one, else
+  Move to new window (desktop), then the extensions' items (`tabMenu`, "Extension items in the
+  UI"). Closing the shown tab shows its neighbour (the next one, else
   the previous one); closing the last one leaves a fresh tab at home.
 * **Split view** (wide windows): the main area holds two panes side by side (`SplitView` with
   `BSplitHandle`): **Split view** (the top bar's More, the palette, a tab's menu Show in

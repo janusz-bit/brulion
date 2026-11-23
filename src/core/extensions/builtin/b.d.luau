@@ -46,6 +46,20 @@ type Hit = {
     task: string?,
 }
 
+-- What a share action gets (b.app.contribute("share", …), docs/EXTENSIONS.md "Items of the UI").
+type SharedFile = {
+    name: string,
+    title: string,
+    text: string,
+}
+
+type Shared = {
+    text: string,
+    title: string,
+    incoming: boolean,
+    files: { SharedFile }?,
+}
+
 type Context = {
     page: string,
     block: Block?,
@@ -54,6 +68,9 @@ type Context = {
     messages: { any }?,
     conversation: string?,
     omitted: number?,
+    folder: string?,
+    path: string?,
+    shared: Shared?,
 }
 
 type Node = { [string]: any }

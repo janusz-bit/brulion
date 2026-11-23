@@ -278,7 +278,19 @@ QVariantMap themeLayerTable(const ThemeLayer &layer)
 
 QStringList contributionSlots()
 {
-    return {u"toolbar"_s, u"statusbar"_s, u"sidebar"_s, u"pageMenu"_s, u"blockMenu"_s, u"slash"_s};
+    return {u"toolbar"_s, u"statusbar"_s,  u"sidebar"_s,   u"pageMenu"_s,        u"blockMenu"_s, u"slash"_s,
+            u"tabMenu"_s, u"folderMenu"_s, u"bottomNav"_s, u"keyboardToolbar"_s, u"share"_s};
+}
+
+ContributionLimits contributionLimits(QStringView slot)
+{
+    if (slot == u"bottomNav")
+        return {MaxBottomNavItems, MaxBottomNavItems};
+    if (slot == u"keyboardToolbar")
+        return {MaxKeyboardToolbarPerExtension, MaxKeyboardToolbarItems};
+    if (slot == u"share")
+        return {MaxShareActionsPerExtension, MaxShareActions};
+    return {};
 }
 
 bool isContributionSlot(QStringView slot)
@@ -367,9 +379,18 @@ bool contributionFrom(const QString &slot, const QVariantMap &item, Contribution
         *error = u"the slash menu runs a command or inserts Markdown, not a view"_s;
         return false;
     }
+    if (slot == u"share" && c.command.isEmpty()) {
+        *error = u"a share action runs one of the extension's commands (it gets ctx.shared): a “command”"_s;
+        return false;
+    }
+    if ((slot == u"bottomNav" || slot == u"keyboardToolbar") && c.icon.isEmpty()) {
+        *error = u"a button of “%1” shows only its icon: it needs an “icon”"_s.arg(slot);
+        return false;
+    }
     if (c.label.isEmpty()) {
-        *error =
-                slot == u"toolbar" ? u"a button needs a “label”: its name and tooltip"_s : u"an item needs a “label”"_s;
+        *error = slot == u"toolbar" || slot == u"bottomNav" || slot == u"keyboardToolbar"
+                         ? u"a button needs a “label”: its name and tooltip"_s
+                         : u"an item needs a “label”"_s;
         return false;
     }
     *out = c;

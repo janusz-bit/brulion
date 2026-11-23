@@ -352,7 +352,7 @@ Never compute a hash yourself.
 | `app settings` | | the settings a client may change: `{settings [{key, scope, group, kind, label, value, options?, min?, max?, size?}]}` — the device's (`scope: "device"`), then the open notebook's own (`"notebook"`: `.brulion/config.json`) | |
 | `app set <key> <value>` | a JSON value (a bare word is a string) | change one at once: `{key, value}` | yes |
 | `app theme` | `[--tokens JSON \| --stdin] [--clear] [--catalog]` | this client's theme tokens (checked first, exit 2 `bad_tokens`), cleared, or none: `{extensions, live, light, dark, catalog?}` | yes |
-| `app contributions` | `[--slot S]` | the items extensions put into the UI (toolbar, statusbar, sidebar, pageMenu, blockMenu, slash) | |
+| `app contributions` | `[--slot S]` | the items extensions put into the UI (toolbar, statusbar, sidebar, pageMenu, blockMenu, slash, tabMenu, folderMenu, bottomNav, keyboardToolbar, share) | |
 | `app inspect [<handle>]` | `[--depth N] [--properties] [--limit N]` | the window's item tree: `{root: {handle, type, objectName, text?, geometry, visible, secret?, properties?, children? \| childCount?}, items, truncated}` | |
 | `app set-property <handle> <name> <value>` | a JSON value | write an item's property (its binding goes): `{handle, name, before, after}` | yes |
 | `app events` | `[--since N] [--wait MS]` | the app's recent events `{events [{id, type, at, …}], next, first}`; waits up to 30 s for a new one | |
@@ -1375,7 +1375,8 @@ brulion-cli app changes && brulion-cli app revert          # what changed, and a
   as the client's input.
 * **load** runs an extension's Luau as the extension `id` for this run only, without an approval
   (the client was let in to change the app): its commands, views, hooks, UI items
-  (`b.app.contribute`: toolbar, statusbar, sidebar, pageMenu, blockMenu, slash) and theme take
+  (`b.app.contribute`: toolbar, statusbar, sidebar, pageMenu, blockMenu, slash, tabMenu, folderMenu,
+  bottomNav, keyboardToolbar, share) and theme take
   effect at once. Loading it again replaces it; while loaded it **shadows** the page or built-in
   extension of that id, which runs again after `unload`. Code that fails is not kept (the
   version before it, if any, runs on): `ok: false` with the error and its line (exit 6).

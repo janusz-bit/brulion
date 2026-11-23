@@ -3,8 +3,8 @@ import QtQuick
 import Brulion
 
 // ShellContributionItems — the items extensions put into a menu (b.app.contribute; docs/UI.md
-// "Extension items in the UI"): one BMenuItem per item of `slot` ("pageMenu", "blockMenu", the
-// top bar's "toolbar" on phones), inserted into `menu` right after `after` (an item of the menu;
+// "Extension items in the UI"): one BMenuItem per item of `slot` ("pageMenu", "blockMenu",
+// "tabMenu", "folderMenu", the top bar's "toolbar" on phones), inserted into `menu` right after `after` (an item of the menu;
 // null: at its top), in the items' order. They follow Workspace.extensions.appRevision: an item an
 // extension or an agent adds, changes or removes shows at once, also in an open menu — and only
 // then are they made again (WorkspaceExtensions.contributionsKey). `shown` false: none; `count` how

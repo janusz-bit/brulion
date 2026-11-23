@@ -178,7 +178,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1216"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1233"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -186,7 +186,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1218"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1235"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -194,7 +194,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1259"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1276"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -202,7 +202,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1275"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1292"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -210,7 +210,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1348"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1365"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -218,7 +218,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2622"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2639"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -1708,7 +1708,7 @@
 <context>
     <name>ShellBottomNav</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellBottomNav.qml" line="114"/>
+        <location filename="../src/app/qml/shell/ShellBottomNav.qml" line="139"/>
         <source>%n to study now</source>
         <translation>
             <numerusform>%n to study now</numerusform>
@@ -1905,8 +1905,8 @@
 <context>
     <name>ShellShareDialog</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8969"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="35"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9219"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1914,7 +1914,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="33"/>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
         <source>%n file(s) shared</source>
         <translation>
             <numerusform>%n file shared</numerusform>
@@ -2819,7 +2819,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceextensions.cpp" line="2514"/>
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="2519"/>
         <source>%1 copied to %2 (%n page(s)).</source>
         <translation>
             <numerusform>%1 copied to %2 (%n page).</numerusform>
