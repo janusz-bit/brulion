@@ -867,6 +867,33 @@ public:
     Q_INVOKABLE QString tableCsv(int row) const;
     /// tableCsv() on the clipboard; false when there is none or `row` is no table.
     Q_INVOKABLE bool copyTableCsv(int row);
+    // Cell ranges (the table's cell selection, io/tablecells.h): `rows` are the table's row indexes
+    // as shown, in order (-1 the header), the columns `firstColumn`..`lastColumn`.
+    /// The cells as "tsv" (spreadsheets: formulas as results) or "markdown" (a table of its own);
+    /// "" when `row` is no table or the range names no cell.
+    Q_INVOKABLE QString tableCellsText(int row, const QList<int> &rows, int firstColumn, int lastColumn,
+                                       const QString &format) const;
+    /// tableCellsText() on the clipboard; `cut` empties the cells too (one undo step). { ok, reason }
+    /// as copyText(), with `ok` false and reason "" when there was nothing to copy.
+    Q_INVOKABLE QVariantMap copyTableCells(int row, const QList<int> &rows, int firstColumn, int lastColumn,
+                                           const QString &format, bool cut = false);
+    /// Empty the cells (one undo step); how many had text.
+    Q_INVOKABLE int clearTableCells(int row, const QList<int> &rows, int firstColumn, int lastColumn);
+    /// How many cells `text` holds as a grid (io::parsePastedCells()): more than one is a paste
+    /// into several cells, one a text for the cell's own field.
+    Q_INVOKABLE int pastedCellCount(const QString &text) const;
+    /// Paste `text` (a Markdown table, TSV, CSV or lines: io::parsePastedCells()) with its top-left
+    /// cell at (`rows.first()`, `column`): `rows` are the rows from there down as shown, the
+    /// selection the paste is made over `selectedRows` x `selectedColumns` (one value fills it).
+    /// One undo step. { ok, cells, rowsAdded, columnsCut, rows, columns (the rectangle filled), truncated, readOnly }; ok false when
+    /// nothing changed.
+    Q_INVOKABLE QVariantMap pasteTableCells(int row, const QList<int> &rows, int column, int selectedRows,
+                                            int selectedColumns, const QString &text);
+    /// pasteTableCells() of the clipboard's text (clipboardText()).
+    Q_INVOKABLE QVariantMap pasteClipboardCells(int row, const QList<int> &rows, int column, int selectedRows,
+                                                int selectedColumns);
+    /// pastedCellCount() of the clipboard's text.
+    Q_INVOKABLE int clipboardCellCount() const;
     /// "<page title>.csv" for the save picker.
     Q_INVOKABLE QString tableCsvFileName(int row) const;
     /// Write tableCsv() (with a UTF-8 BOM, which spreadsheets need to read Polish letters) to a

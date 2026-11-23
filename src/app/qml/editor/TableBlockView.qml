@@ -25,6 +25,11 @@ import Brulion
 // closeCell(): the cell stays edited after undo and redo), and the cell is kept above it. The
 // table is the current block meanwhile (Ctrl+Shift+C, the palette's link commands); a cell left
 // for the palette or the side panel leaves the table selected (stayCurrent()).
+// A rectangle of cells is selected with Shift+click or Shift+arrows (a cell's at the text's edge:
+// the cell is left, the keys go to `rangeKeys`): arrows move it, Enter / F2 or a typed character edit
+// the cell, Delete / Backspace empty the cells, Ctrl+C / Ctrl+X copy and cut them as TSV (the block
+// menu copies them as Markdown too), Ctrl+V pastes TSV, CSV, a Markdown table or lines there, Esc
+// leaves it (PageController.copyTableCells / clearTableCells / pasteTableCells: one undo step each).
 // Sorting and filters (docs/SYNTAX.md §9): the Column submenu sorts the rows by the cell's column
 // (PageController.sortTable: the file's rows rewritten, one undo step) and "Filter rows" shows a
 // row of filter fields under the header (one per column: "> 100", "!text", "zolw"); rows that do
@@ -82,6 +87,8 @@ Item {
     readonly property int noCell: -99
     /// A command for the cell being edited (its field acts on it): "next", "leave".
     signal cellCommand(string command)
+    /// Shift+click on cell (toRow, toColumn) while a cell is edited: its field selects up to it.
+    signal cellExtend(int toRow, int toColumn)
 
     // The buttons' own height (the Loader's, from its item's implicit size at creation), not a
     // Row's, which a positioner only sets in its next polish.
@@ -155,8 +162,12 @@ Item {
             return
         root.block.controller.selectedRow = -1
         root.block.controller.stopEditing()
+        // (The column first: row and column change together, no cell in between is edited.)
+        editColumn = -1
         editRow = r
         editColumn = c
+        root.caretAtStart = -1
+        root.typedText = ""
     }
     /// startCell(r, c) once the events being handled are done (as Qt.callLater: repeated calls
     /// merge into the last one).
@@ -209,6 +220,317 @@ Item {
     function finish(): void {
         editRow = -2
         editColumn = -1
+    }
+
+    // ---- The cell selection -----------------------------------------------------------------------
+    /// The selected rectangle: from the anchor to the cursor cell (-1 the header, -2: none). Not
+    /// while a cell is edited: leaving it by Shift+arrows or Shift+click selects.
+    property int anchorRow: -2
+    property int anchorColumn: -1
+    property int cursorRow: -2
+    property int cursorColumn: -1
+    readonly property bool hasSelection: anchorRow > -2
+    readonly property bool multiCell: anchorRow > -2 && (anchorRow !== cursorRow || anchorColumn !== cursorColumn)
+    /// The caret of the cell that opens next (-1: at its end): a cell reached by Left / Right / Up /
+    /// Down (startCell() hands it to the field and forgets it).
+    property int caretAtStart: -1
+    /// The keys of the selection (rangeKeys) hold the keyboard.
+    readonly property bool selecting: hasSelection && rangeKeys.activeFocus
+    function selectionTop(): int { return Math.min(anchorRow, cursorRow) }
+    function selectionBottom(): int { return Math.max(anchorRow, cursorRow) }
+    function selectionLeft(): int { return Math.min(anchorColumn, cursorColumn) }
+    function selectionRight(): int { return Math.max(anchorColumn, cursorColumn) }
+    function inSelection(r: int, c: int): bool {
+        return anchorRow > -2 && r >= selectionTop() && r <= selectionBottom() && c >= selectionLeft() && c <= selectionRight()
+    }
+    /// The rows of the selection as shown (-1 the header), and from its top row down.
+    function selectedRows(): list<int> {
+        return BlockViews.tableRowsBetween(root.block.rowData.tableData, anchorRow, cursorRow)
+    }
+    function selectedRowCount(): int {
+        return selectedRows().length
+    }
+    function selectedColumnCount(): int {
+        return selectionRight() - selectionLeft() + 1
+    }
+    function selectedCellCount(): int {
+        return selectedRowCount() * selectedColumnCount()
+    }
+    /// Select (anchor) .. (cursor) and give the selection the keys.
+    function select(ar: int, ac: int, cr: int, cc: int): void {
+        if (ac < 0 || ac >= columns || cc < 0 || cc >= columns || ar < -1 || cr < -1 || ar >= rows.length || cr >= rows.length)
+            return
+        root.anchorRow = ar
+        root.anchorColumn = ac
+        root.cursorRow = cr
+        root.cursorColumn = cc
+        root.block.controller.selectedRow = -1
+        rangeKeys.forceActiveFocus()
+        root.revealCell(cr, cc)
+    }
+    function clearSelection(): void {
+        root.anchorRow = -2
+        root.anchorColumn = -1
+        root.cursorRow = -2
+        root.cursorColumn = -1
+    }
+    /// select() once the events being handled are done (a paste or a new row first changes the table).
+    property int laterAnchorRow: -2
+    property int laterAnchorColumn: -1
+    property int laterCursorRow: -2
+    property int laterCursorColumn: -1
+    /// How far down from the top row the selection later reaches (-1: to the given cursor row).
+    property int laterRowSpan: -1
+    function selectLater(ar: int, ac: int, cr: int, cc: int, rowSpan: int): void {
+        root.laterAnchorRow = ar
+        root.laterAnchorColumn = ac
+        root.laterCursorRow = cr
+        root.laterCursorColumn = cc
+        root.laterRowSpan = rowSpan
+        selectLaterTimer.restart()
+    }
+    Later {
+        id: selectLaterTimer
+        onTriggered: {
+            if (root.block === null || root.block.editor === null || !root.block.editor.alive)
+                return
+            const toRow = root.laterRowSpan > 0
+                          ? BlockViews.tableRowAfter(root.block.rowData.tableData, root.laterAnchorRow, root.laterRowSpan - 1)
+                          : root.laterCursorRow
+            root.select(root.laterAnchorRow, root.laterAnchorColumn, toRow, root.laterCursorColumn)
+        }
+    }
+    /// The cursor cell's place is in view: the table's sideways scroll, and the page's.
+    function revealCell(r: int, c: int): void {
+        const left = root.columnX(c)
+        const right = left + root.columnWidth(c)
+        if (left < frame.contentX)
+            frame.contentX = left
+        else if (right > frame.contentX + frame.width)
+            frame.contentX = Math.max(0, Math.min(right - frame.width, frame.contentWidth - frame.width))
+        root.block.editor.ensureVisible(root, Qt.rect(0, root.rowY(r), root.width, root.rowHeight))
+    }
+    /// The cell reached from (r, c) by an arrow key: Up / Down the shown row above / below (the
+    /// header and the last row stop), Left / Right the neighbouring column; the cell itself at an edge.
+    function neighbour(r: int, c: int, key: int): point {
+        let toR = r
+        let toC = c
+        if (key === Qt.Key_Up && r > -1) {
+            toR = root.nextShownRow(r, -1)
+        } else if (key === Qt.Key_Down) {
+            const next = root.nextShownRow(r, 1)
+            if (next < root.rows.length)
+                toR = next
+        } else if (key === Qt.Key_Left && c > 0) {
+            toC = c - 1
+        } else if (key === Qt.Key_Right && c + 1 < root.columns) {
+            toC = c + 1
+        }
+        return Qt.point(toC, toR)
+    }
+    /// A key of the selection (rangeKeys).
+    function rangeKey(event: KeyEvent): void {
+        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+        const alt = (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)) !== 0
+        event.accepted = true
+        if (alt) {
+            event.accepted = false
+            return
+        }
+        switch (event.key) {
+        case Qt.Key_Up:
+        case Qt.Key_Down:
+        case Qt.Key_Left:
+        case Qt.Key_Right: {
+            if (ctrl) {
+                event.accepted = false
+                return
+            }
+            const to = root.neighbour(root.cursorRow, root.cursorColumn, event.key)
+            if (shift)
+                root.select(root.anchorRow, root.anchorColumn, to.y, to.x)
+            else
+                root.select(to.y, to.x, to.y, to.x)
+            return
+        }
+        case Qt.Key_Home:
+        case Qt.Key_End: {
+            const toC = event.key === Qt.Key_Home ? 0 : root.columns - 1
+            const toR = ctrl ? (event.key === Qt.Key_Home ? -1 : root.nextShownRow(root.rows.length, -1)) : root.cursorRow
+            if (shift)
+                root.select(root.anchorRow, root.anchorColumn, toR, toC)
+            else
+                root.select(toR, toC, toR, toC)
+            return
+        }
+        case Qt.Key_Tab:
+        case Qt.Key_Backtab: {
+            const back = event.key === Qt.Key_Backtab || shift
+            const r = root.cursorRow
+            const c = root.cursorColumn
+            if (!back && c + 1 < root.columns) {
+                root.select(r, c + 1, r, c + 1)
+            } else if (back && c > 0) {
+                root.select(r, c - 1, r, c - 1)
+            } else if (!back) {
+                const next = root.nextShownRow(r, 1)
+                if (next >= root.rows.length && !root.readOnly) {
+                    // The last cell: a new row (as in a cell being edited).
+                    root.block.controller.addTableRow(root.blockIndex)
+                    root.selectLater(next, 0, next, 0, -1)
+                } else if (next < root.rows.length) {
+                    root.select(next, 0, next, 0)
+                }
+            } else if (r > -1) {
+                const prev = root.nextShownRow(r, -1)
+                root.select(prev, root.columns - 1, prev, root.columns - 1)
+            }
+            return
+        }
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+        case Qt.Key_F2:
+            if (ctrl) {
+                event.accepted = false
+                return
+            }
+            root.startCell(root.cursorRow, root.cursorColumn)
+            return
+        case Qt.Key_Escape: {
+            const blockRow = root.blockIndex
+            const list = root.block.editor.listView
+            root.clearSelection()
+            root.block.controller.selectedRow = blockRow
+            list.forceActiveFocus()
+            return
+        }
+        case Qt.Key_Delete:
+        case Qt.Key_Backspace:
+            if (!shift && !ctrl)
+                root.clearCells()
+            else
+                event.accepted = false
+            return
+        default:
+            break
+        }
+        if (ctrl && !shift) {
+            switch (event.key) {
+            case Qt.Key_C: root.copyCells("tsv", false); return
+            case Qt.Key_X: root.copyCells("tsv", true); return
+            case Qt.Key_V: root.pasteCells(); return
+            case Qt.Key_A: root.select(-1, 0, root.nextShownRow(root.rows.length, -1), root.columns - 1); return
+            case Qt.Key_Z: root.stepSelection(false); return
+            case Qt.Key_Y: root.stepSelection(true); return
+            }
+        } else if (ctrl && shift && event.key === Qt.Key_Z) {
+            root.stepSelection(true)
+            return
+        }
+        // A character typed over the cell: the cell is edited, with that text in place of its own.
+        if (!ctrl && event.text !== "" && Js.charCodeAt(event.text, 0) >= 32 && Js.charCodeAt(event.text, 0) !== 127) {
+            root.typedText = event.text
+            root.startCell(root.cursorRow, root.cursorColumn)
+            return
+        }
+        event.accepted = false
+    }
+    /// Undo / redo with the selection kept (the editor's own step would hand the keys to the list).
+    function stepSelection(redo: bool): void {
+        if (root.block.editor.readOnlyRefuses())
+            return
+        if (redo)
+            root.block.controller.redo()
+        else
+            root.block.controller.undo()
+    }
+    /// Shift+click on cell (r, c) while a cell is edited: that cell is left, the cells up to (r, c) selected.
+    function extendFromEdit(r: int, c: int): void {
+        root.cellExtend(r, c)
+    }
+    /// The text typed over a selected cell, which the field that opens takes in place of the cell's.
+    property string typedText: ""
+    /// The controller's answers (a map read through a holder: compiled code needs the type).
+    MapHolder { id: answer }
+    /// Copy the selected cells ("tsv" or "markdown"); `cut` empties them.
+    function copyCells(format: string, cut: bool): void {
+        const controller = root.block.controller
+        const count = root.selectedCellCount()
+        const block = root.blockIndex
+        const left = root.selectionLeft()
+        const right = root.selectionRight()
+        const picked = root.selectedRows()
+        answer.map = controller.copyTableCells(block, picked, left, right, format, cut)
+        if (answer.map.ok === true)
+            root.block.editor.notice(cut ? qsTr("Cut %n cell(s)", "", count) : qsTr("Copied %n cell(s)", "", count), "success", null)
+        else if (answer.map.reason === "noClipboard")
+            root.block.editor.notice(qsTr("Could not copy: the clipboard is not available"), "error", null)
+    }
+    /// Empty the selected cells.
+    function clearCells(): void {
+        const controller = root.block.controller
+        const block = root.blockIndex
+        const left = root.selectionLeft()
+        const right = root.selectionRight()
+        const picked = root.selectedRows()
+        controller.clearTableCells(block, picked, left, right)
+    }
+    /// Paste the clipboard's text with its top-left cell at the selection's, over the selection.
+    function pasteCells(): void {
+        const top = root.selectionTop()
+        const left = root.selectionLeft()
+        const rowCount = root.selectedRowCount()
+        const columnCount = root.selectedColumnCount()
+        root.pasteAt(top, left, rowCount, columnCount)
+    }
+    /// Paste the clipboard's text from cell (r, c) down and right over `rowCount` x `columnCount`
+    /// cells; the cells it filled are then selected.
+    function pasteAt(r: int, c: int, rowCount: int, columnCount: int): void {
+        const editor = root.block.editor
+        const controller = root.block.controller
+        const block = root.blockIndex
+        const down = BlockViews.tableRowsFrom(root.block.rowData.tableData, r)
+        answer.map = controller.pasteClipboardCells(block, down, c, rowCount, columnCount)
+        if (answer.map.readOnly === true)
+            return
+        if (answer.map.ok !== true) {
+            editor.notice(qsTr("Nothing to paste"), "info", null)
+            return
+        }
+        // (Typed copies: passed on after other calls.)
+        const pastedRows = answer.map.rows + 0
+        const lastColumn = c + answer.map.columns - 1
+        const pastedCells = answer.map.cells + 0
+        const cut = answer.map.columnsCut + 0
+        editor.notice(qsTr("Pasted %n cell(s)", "", pastedCells), "success", null)
+        if (cut > 0)
+            editor.notice(qsTr("%n column(s) of the pasted text did not fit the table and were left out", "", cut), "info", null)
+        root.selectLater(r, c, -1, lastColumn, pastedRows)
+    }
+
+    /// The keys of the cell selection: an item with no size that holds the keyboard while cells are
+    /// selected (the editor's list would take Up / Down for blocks). Losing the keyboard ends the selection.
+    Item {
+        id: rangeKeys
+        objectName: "tableRangeKeys"
+        width: 0
+        height: 0
+        activeFocusOnTab: false
+        Keys.onPressed: (event) => root.rangeKey(event)
+        // The list's own keys (selecting blocks) and the app's shortcuts do not take these.
+        Keys.onShortcutOverride: (event) => {
+            if (!root.hasSelection)
+                return
+            const plain = (event.modifiers & (Qt.AltModifier | Qt.MetaModifier)) === 0
+            event.accepted = plain && (event.modifiers & Qt.ControlModifier) !== 0
+                             && (event.key === Qt.Key_C || event.key === Qt.Key_X || event.key === Qt.Key_V || event.key === Qt.Key_A
+                                 || event.key === Qt.Key_Z || event.key === Qt.Key_Y)
+        }
+        onActiveFocusChanged: {
+            if (!activeFocus)
+                root.clearSelection()
+        }
     }
     // The editor's toolbar follows the cell being edited (a table delegate destroyed while a cell
     // is edited hands it back too).
@@ -305,6 +627,13 @@ Item {
             return
         EditorInput.commitPreedit(input)
         root.cellCommand("leave")
+    }
+    /// The length of the text of the cell being edited (-1: none is).
+    function cellLength(): int {
+        const input = root.cellInput
+        if (input === null)
+            return -1
+        return input.length
     }
     /// The cell field asks to be kept above the toolbar and the keyboard once they show.
     property T.TextField ensureFor: null
@@ -440,6 +769,9 @@ Item {
                                 map: root.cellData(rowItem.r, cell.c)
                             }
                             readonly property bool editingCell: root.editRow === rowItem.r && root.editColumn === c
+                            /// In the selected rectangle of cells; the cursor cell of it.
+                            readonly property bool picked: root.inSelection(rowItem.r, c)
+                            readonly property bool cursorCell: root.hasSelection && rowItem.r === root.cursorRow && c === root.cursorColumn
                             /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
                             property string hoveredLink: ""
                             /// Where a right-click was, in the scene (the block menu's place).
@@ -454,6 +786,7 @@ Item {
                             height: rowItem.height
                             Accessible.role: cell.headerCell ? Accessible.ColumnHeader : Accessible.Cell
                             Accessible.name: cell.shown
+                            Accessible.selected: cell.picked
 
                             Rectangle {
                                 visible: cell.c > 0
@@ -466,6 +799,15 @@ Item {
                                 anchors.fill: parent
                                 anchors.margins: 1
                                 color: Theme.alpha(Theme.info, Theme.dark ? 0.07 : 0.06)
+                            }
+                            // The selected cells (a rectangle), the cursor cell outlined.
+                            Rectangle {
+                                visible: cell.picked
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                color: Theme.alpha(Theme.accent, Theme.dark ? 0.26 : 0.16)
+                                border.width: cell.cursorCell ? 2 : 0
+                                border.color: Theme.focusRing
                             }
                             BRichText {
                                 id: cellText
@@ -584,6 +926,15 @@ Item {
                                 onTapped: (eventPoint) => {
                                     const x = eventPoint.position.x
                                     const y = eventPoint.position.y
+                                    // Shift+click with a cell edited or selected: the cells up to this one.
+                                    if ((EditorInput.keyboardModifiers() & Qt.ShiftModifier) !== 0 && !root.block.editor.selectionMode
+                                            && (root.editRow > -2 || root.hasSelection)) {
+                                        if (root.editRow > -2)
+                                            root.extendFromEdit(rowItem.r, cell.c)
+                                        else
+                                            root.select(root.anchorRow, root.anchorColumn, rowItem.r, cell.c)
+                                        return
+                                    }
                                     if (root.block.editor.blockTapped(root.blockIndex))
                                         return // Shift+click, the touch selection mode
                                     // Reminder, 🔁 and priority chips name ranges of the cell's text:
@@ -641,9 +992,13 @@ Item {
                                         }
                                     }
                                     Component.onCompleted: {
-                                        text = root.rawText(rowItem.r, cell.c)
-                                        cursorPosition = length
+                                        // A character typed over a selected cell replaces its text.
+                                        text = root.typedText !== "" ? root.typedText : root.rawText(rowItem.r, cell.c)
+                                        const caret = root.caretAtStart
+                                        cursorPosition = caret < 0 ? length : Math.min(caret, length)
                                         ready = true
+                                        if (root.typedText !== "")
+                                            root.block.controller.setTableCell(root.blockIndex, rowItem.r, cell.c, text, true)
                                         root.cellInput = input
                                         forceActiveFocus()
                                         // Above the toolbar and the keyboard (also once they show).
@@ -652,6 +1007,10 @@ Item {
                                     Component.onDestruction: if (root.cellInput === input) root.cellInput = null
                                     Connections {
                                         target: root
+                                        function onCellExtend(toRow: int, toColumn: int) {
+                                            if (root.cellInput === input)
+                                                input.extendTo(toRow, toColumn)
+                                        }
                                         function onCellCommand(command: string) {
                                             if (root.cellInput !== input)
                                                 return
@@ -659,6 +1018,7 @@ Item {
                                                 input.next()
                                             else if (command === "leave")
                                                 input.leave(root.noCell, 0)
+
                                         }
                                     }
                                     /// Commit the text, do `edit` to the table (its rows are made anew:
@@ -680,6 +1040,62 @@ Item {
                                         else if (edit === "insertRow")
                                             controller.insertTableRow(block, a)
                                         root.startCellLater(r, c)
+                                    }
+                                    /// Go to cell (toR, toC), the caret at `caret` (-1: its end).
+                                    function go(toR: int, toC: int, caret: int): void {
+                                        if (input.done)
+                                            return
+                                        EditorInput.commitPreedit(input)
+                                        root.caretAtStart = caret
+                                        input.leave(toR, toC)
+                                    }
+                                    /// Leave the cell, selecting the rectangle from it to (toR, toC) (Shift+arrows,
+                                    /// Shift+click): the keys go to the selection.
+                                    function extendTo(toR: int, toC: int): void {
+                                        if (input.done)
+                                            return
+                                        EditorInput.commitPreedit(input)
+                                        input.done = true
+                                        root.commit(rowItem.r, cell.c, input.text)
+                                        const r = rowItem.r
+                                        const c = cell.c
+                                        root.finish()
+                                        root.select(r, c, toR, toC)
+                                    }
+                                    /// The arrow keys: Up / Down always go to the cell above / below (the header
+                                    /// and the last row stop them), Left / Right when the caret is at the text's
+                                    /// edge — with Shift the cell selection grows that way instead. False: the
+                                    /// field's own key (moving the caret, selecting text).
+                                    function arrow(key: int, shift: bool): bool {
+                                        if (input.preeditText !== "")
+                                            return false
+                                        const horizontal = key === Qt.Key_Left || key === Qt.Key_Right
+                                        if (horizontal) {
+                                            const atEdge = key === Qt.Key_Left ? input.cursorPosition === 0 : input.cursorPosition === input.length
+                                            if (!atEdge || (!shift && input.selectedText !== ""))
+                                                return false
+                                        }
+                                        const to = root.neighbour(rowItem.r, cell.c, key)
+                                        if (shift) {
+                                            input.extendTo(to.y, to.x)
+                                        } else if (to.y !== rowItem.r || to.x !== cell.c) {
+                                            input.go(to.y, to.x, key === Qt.Key_Left ? -1 : key === Qt.Key_Right ? 0 : input.cursorPosition)
+                                        }
+                                        return true
+                                    }
+                                    /// Ctrl+V of text that is several cells: pasted from this cell on. False: the
+                                    /// clipboard holds one text, which the field pastes itself.
+                                    function pasteCells(): bool {
+                                        if (root.block.controller.clipboardCellCount() < 2)
+                                            return false
+                                        EditorInput.commitPreedit(input)
+                                        input.done = true
+                                        root.commit(rowItem.r, cell.c, input.text)
+                                        const r = rowItem.r
+                                        const c = cell.c
+                                        root.finish()
+                                        root.pasteAt(r, c, 1, 1)
+                                        return true
                                     }
                                     function next(): void {
                                         const r = rowItem.r
@@ -770,6 +1186,15 @@ Item {
                                         } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
                                             input.undoTable()
                                             event.accepted = true
+                                        } else if (((event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier)) === Qt.ControlModifier
+                                                    && event.key === Qt.Key_V)
+                                                   || ((event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier)) === Qt.ShiftModifier
+                                                       && event.key === Qt.Key_Insert)) {
+                                            event.accepted = input.pasteCells()
+                                        } else if ((event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) === 0
+                                                   && (event.key === Qt.Key_Up || event.key === Qt.Key_Down
+                                                       || event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
+                                            event.accepted = input.arrow(event.key, (event.modifiers & Qt.ShiftModifier) !== 0)
                                         }
                                     }
                                 }

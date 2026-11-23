@@ -63,6 +63,13 @@ BMenu {
     property int tableColumns: 0
     property string cellAlign: ""
     readonly property bool inCell: cellRow > -2
+    /// The cells selected in the table when the menu opened (Shift+click, Shift+arrows) and the one it
+    /// was opened from is among them: their rows (as shown), first and last column. The selection
+    /// ends once the menu has the keys, so the items work on this copy of it.
+    property list<int> pickedRows: []
+    property int pickedFirst: 0
+    property int pickedLast: 0
+    readonly property bool cellsPicked: pickedRows.length > 0
     /// The block is a table (its CSV and filter items).
     property bool table: false
     /// Bumped when a click toggled an alignment's check mark: its binding takes over again.
@@ -92,6 +99,14 @@ BMenu {
         menu.tableRows = inCell ? cellRows : 0
         menu.tableColumns = inCell ? cellColumns : 0
         menu.cellAlign = inCell ? cellAlign : ""
+        const picked = inCell ? editor.tableAt(row) : null
+        if (picked !== null && picked.inSelection(cellRow, cellColumn)) {
+            menu.pickedRows = picked.selectedRows()
+            menu.pickedFirst = picked.selectionLeft()
+            menu.pickedLast = picked.selectionRight()
+        } else {
+            menu.pickedRows = noRows
+        }
         info.map = controller.blocks.get(row)
         table = info.map.view === "table"
         listItem = info.map.kind === "listItem"
@@ -105,8 +120,31 @@ BMenu {
         unmovable = !inSelection ? "" : span ? editor.spanReason : !controller.selectionContiguous ? editor.gapReason : ""
         uncuttable = inSelection && span ? editor.spanReason : ""
     }
+    readonly property list<int> noRows: []
+    function clearPicked(r: int): void {
+        const picked = menu.pickedRows
+        const first = menu.pickedFirst
+        const last = menu.pickedLast
+        menu.controller.clearTableCells(r, picked, first, last)
+    }
+    /// Copy (or cut) the picked cells: "tsv" or "markdown".
+    function copyPicked(format: string, cut: bool): void {
+        const r = menu.row()
+        if (r < 0)
+            return
+        const count = menu.pickedRows.length * (menu.pickedLast - menu.pickedFirst + 1)
+        const picked = menu.pickedRows
+        const first = menu.pickedFirst
+        const last = menu.pickedLast
+        copied.map = menu.controller.copyTableCells(r, picked, first, last, format, cut)
+        if (copied.map.ok === true)
+            menu.editor.notice(cut ? qsTr("Cut %n cell(s)", "", count) : qsTr("Copied %n cell(s)", "", count), "success", null)
+        else if (copied.map.reason === "noClipboard")
+            menu.editor.notice(qsTr("Could not copy: the clipboard is not available"), "error", null)
+    }
     /// The block's shape when the menu opened (BlockListModel.get()).
     MapHolder { id: info }
+    MapHolder { id: copied }
     /// The rows of the block selection.
     function selectedRows(): list<var> {
         return controller.selectedRows()
@@ -307,6 +345,38 @@ BMenu {
         text: qsTr("Summarize with AI")
         iconName: "scroll-text"
         onTriggered: menu.writeWith("summarize")
+    }
+    OptionalItem {
+        objectName: "tableCopyCells"
+        shown: menu.cellsPicked
+        text: qsTr("Copy cells")
+        iconName: "copy"
+        onTriggered: menu.copyPicked("tsv", false)
+    }
+    OptionalItem {
+        objectName: "tableCopyCellsMarkdown"
+        shown: menu.cellsPicked
+        text: qsTr("Copy cells as Markdown")
+        iconName: "copy"
+        onTriggered: menu.copyPicked("markdown", false)
+    }
+    OptionalItem {
+        objectName: "tableCutCells"
+        shown: menu.cellsPicked && !menu.readOnly
+        text: qsTr("Cut cells")
+        iconName: "scissors"
+        onTriggered: menu.copyPicked("tsv", true)
+    }
+    OptionalItem {
+        objectName: "tableClearCells"
+        shown: menu.cellsPicked && !menu.readOnly
+        text: qsTr("Clear cells")
+        iconName: "trash-2"
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.clearPicked(r)
+        }
     }
     OptionalItem {
         objectName: "tableCopyCsv"

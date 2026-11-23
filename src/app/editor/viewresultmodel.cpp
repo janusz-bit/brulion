@@ -492,6 +492,7 @@ void ViewResultModel::refresh()
         m_viewIndex = view; // (a view by its name)
         Q_EMIT viewIndexChanged();
     }
+    m_written.clear();
     *m_view = m_ok ? notebook::viewResultFromJson(QJsonObject::fromVariantMap(result)) : views::ViewResult();
     rebuild();
 }
@@ -696,6 +697,20 @@ int ViewResultModel::lineOfRow(int row) const
     return int(tableLines().indexOf(row));
 }
 
+int ViewResultModel::neighbourRow(int row, int step) const
+{
+    const QList<int> lines = tableLines();
+    qsizetype i = lines.indexOf(row);
+    if (i < 0 || step == 0)
+        return -1;
+    const int direction = step > 0 ? 1 : -1;
+    for (i += direction; i >= 0 && i < lines.size(); i += direction) {
+        if (lines.at(i) >= 0)
+            return lines.at(i);
+    }
+    return -1;
+}
+
 double ViewResultModel::columnWidth(int column, bool touch) const
 {
     if (column < 0 || column >= m_view->columns.size())
@@ -865,6 +880,9 @@ QString ViewResultModel::cellText(int row, int column) const
 
 QString ViewResultModel::cellEditText(int row, int column) const
 {
+    const auto written = m_written.constFind(qint64(row) * 65536 + column);
+    if (written != m_written.cend())
+        return *written;
     const QVariant v = cellValue(row, column);
     if (v.typeId() == QMetaType::QStringList)
         return v.toStringList().join(u", "_s);
@@ -982,7 +1000,10 @@ QVariantMap ViewResultModel::editCell(int row, int column, const QVariant &value
         e.key = col.property;
         e.type = col.type;
     }
-    return applyEdit(row, &e);
+    const QVariantMap answer = applyEdit(row, &e);
+    if (answer.value(u"ok"_s).toBool() && value.typeId() == QMetaType::QString)
+        m_written.insert(qint64(row) * 65536 + column, value.toString());
+    return answer;
 }
 
 QVariantMap ViewResultModel::moveRow(int row, int from, int to)

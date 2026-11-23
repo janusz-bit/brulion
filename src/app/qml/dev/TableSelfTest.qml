@@ -16,7 +16,12 @@ import Brulion
 // each step is undone and the page's text comes back byte for byte. Sorting from the header's menu
 // (the summary row stays, the rows keep their lines, one undo step; rows already in order: nothing
 // written), the filter row (typing "> 40" hides a row, nothing is written, "Clear filters"), "Copy
-// as CSV" (formulas as their results) and a ```chart of the table following its cells.
+// as CSV" (formulas as their results) and a ```chart of the table following its cells. With a
+// keyboard (desktop): the arrow keys, Tab and Home / End between cells (Up / Down always, Left / Right
+// at the text's edge, the caret where the cell is entered), Shift+arrows and Shift+click selecting a
+// rectangle of cells, Ctrl+C / Ctrl+X / Delete / Ctrl+V on it (TSV; a paste from the cell being
+// edited too, rows added below the last one), the block menu's "Copy cells as Markdown", a typed
+// character editing the cell, Esc leaving, each change one undo step.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -102,6 +107,9 @@ QtObject {
     function cellInput(): T.TextField {
         const t = test.view()
         return t ? t.cellInput : null
+    }
+    function cellTextLength(): int {
+        return test.view().cellLength()
     }
     function editing(r: int, c: int): bool {
         const t = test.view()
@@ -248,6 +256,11 @@ QtObject {
         stepsPart2()
         stepsPart3()
         stepsPart4()
+        stepsPart5()
+        stepsPart6()
+        stepsPart7()
+        stepsPart8()
+        stepsPart9()
     }
     function stepsPart1(): void {
         if (test.window.at()) {
@@ -418,6 +431,203 @@ QtObject {
             test.window.checkWait("the chart follows the table: " + (test.chartView() ? test.chartView().description : ""))
         if (test.window.at()) test.undoes(2, "two undo steps take the cell and the chart back")
         if (test.window.at()) check(test.window.pageText() === test.before, "the page's text is as it was")
+    }
+
+    /// The steps' reads of the selection.
+    function sel(): TableBlockView { return test.view() }
+    function selected(top: int, left: int, bottom: int, right: int): bool {
+        const t = test.sel()
+        return t.hasSelection && t.selectionTop() === top && t.selectionLeft() === left && t.selectionBottom() === bottom
+               && t.selectionRight() === right
+    }
+    function selecting(): bool {
+        const t = test.sel()
+        return t !== null && t.selecting && test.editor.editingTable === null
+    }
+    function sendClipboard(text: string): void { test.page.copyText(text) }
+    function shiftClickCell(r: int, c: int): void {
+        test.window.taskEvents.mouseClick(test.view(), test.cellX(c), test.cellY(r), Qt.LeftButton, Qt.ShiftModifier, -1)
+    }
+
+    /// Between cells with the keys (desktop).
+    function stepsPart5(): void {
+        if (test.window.touchRun)
+            return
+        // ---- Arrow keys between cells -----------------------------------------------------------------
+        if (test.window.at()) test.tapCell(0, 1)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 1), "a click edits the cell")
+        if (test.window.at()) test.keyClick(Qt.Key_Down, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(1, 1), "Down edits the cell below")
+        if (test.window.at()) test.keyClick(Qt.Key_Up, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 1), "Up edits the cell above")
+        if (test.window.at()) test.keyClick(Qt.Key_Up, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(-1, 1), "Up goes on to the header")
+        if (test.window.at()) test.keyClick(Qt.Key_Up, Qt.NoModifier)
+        if (test.window.at()) {
+            check(test.editing(-1, 1), "nothing above the header: the cell stays edited")
+            check(test.view().hasSelection === false, "…and nothing is selected")
+            test.keyClick(Qt.Key_Left, Qt.NoModifier)
+        }
+        if (test.window.at()) check(test.editing(-1, 1) && test.cellInput().cursorPosition === 0,
+                                    "Left in the text moves the caret (it came with the one of the cell below), not the cell")
+        if (test.window.at()) test.keyClick(Qt.Key_Right, Qt.NoModifier)
+        if (test.window.at()) test.keyClick(Qt.Key_End, Qt.NoModifier)
+        if (test.window.at()) check(test.editing(-1, 1) && test.cellInput().cursorPosition === test.cellTextLength(), "End goes to the end of the cell's text")
+        if (test.window.at()) test.keyClick(Qt.Key_Home, Qt.NoModifier)
+        if (test.window.at()) check(test.editing(-1, 1) && test.cellInput().cursorPosition === 0, "Home goes to the start of it")
+        if (test.window.at()) test.keyClick(Qt.Key_Left, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(-1, 0), "Left at the start of the text edits the cell on the left")
+        if (test.window.at()) check(test.cellInput().cursorPosition === test.cellTextLength(), "…the caret at its end")
+        if (test.window.at()) test.keyClick(Qt.Key_Left, Qt.NoModifier)
+        if (test.window.at()) test.keyClick(Qt.Key_Home, Qt.NoModifier)
+        if (test.window.at()) test.keyClick(Qt.Key_Left, Qt.NoModifier)
+        if (test.window.at()) check(test.editing(-1, 0), "nothing left of the first column")
+        if (test.window.at()) test.keyClick(Qt.Key_End, Qt.NoModifier)
+        if (test.window.at()) test.keyClick(Qt.Key_Right, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(-1, 1), "Right at the end of the text edits the cell on the right")
+        if (test.window.at()) check(test.cellInput().cursorPosition === 0, "…the caret at its start")
+        if (test.window.at()) test.keyClick(Qt.Key_Tab, Qt.NoModifier)
+        if (test.window.at()) test.keyClick(Qt.Key_Tab, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(-1, 3), "Tab moves on")
+        if (test.window.at()) test.keyClick(Qt.Key_Tab, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 0), "Tab in the header's last cell goes to the next row")
+        if (test.window.at()) test.keyClick(Qt.Key_Backtab, Qt.ShiftModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(-1, 3), "Shift+Tab goes back")
+        if (test.window.at()) test.keyClick(Qt.Key_Escape, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editor.editingTable === null && test.page.selectedRow === test.row, "Esc ends the editing")
+        if (test.window.at()) check(test.window.pageText() === test.before, "moving between cells wrote nothing")
+        if (test.window.at()) test.tapCell(3, 2)
+        if (test.window.at()) test.window.waitStep(test.editing(3, 2), "the last row's cell is edited")
+        if (test.window.at()) test.keyClick(Qt.Key_Down, Qt.NoModifier)
+        if (test.window.at()) check(test.editing(3, 2) && test.rows().length === 4, "Down in the last row neither moves nor adds a row")
+        if (test.window.at()) test.keyClick(Qt.Key_Escape, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editor.editingTable === null, "closed")
+    }
+
+    /// Selecting cells: Shift+arrows and Shift+click, copy, cut, delete, paste, typing over (desktop).
+    function stepsPart6(): void {
+        if (test.window.touchRun)
+            return
+        // ---- Shift+arrows from a cell being edited -----------------------------------------------------
+        if (test.window.at()) test.tapCell(0, 1)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 1), "a click edits the cell")
+        if (test.window.at()) test.keyClick(Qt.Key_Down, Qt.ShiftModifier)
+        if (test.window.at()) test.window.waitStep(test.selecting() && test.selected(0, 1, 1, 1), "Shift+Down leaves the cell and selects two")
+        if (test.window.at()) test.keyClick(Qt.Key_Right, Qt.ShiftModifier)
+        if (test.window.at()) test.window.waitStep(test.selected(0, 1, 1, 2) && test.sel().selectedCellCount() === 4, "Shift+Right adds a column")
+        if (test.window.at()) test.keyClick(Qt.Key_Left, Qt.ShiftModifier)
+        if (test.window.at()) test.window.waitStep(test.selected(0, 1, 1, 1), "Shift+Left takes it back")
+        if (test.window.at()) test.keyClick(Qt.Key_Right, Qt.ShiftModifier)
+        if (test.window.at()) test.window.waitStep(test.selected(0, 1, 1, 2), "selected again")
+        // ---- Copy as TSV, the block menu's Markdown ---------------------------------------------------
+        if (test.window.at()) test.keyClick(Qt.Key_C, Qt.ControlModifier)
+        if (test.window.at() && !test.window.waiting(test.clipboard() === "6,5\t89\n4\t45"))
+            test.window.checkWait("Ctrl+C copies the cells as TSV: " + test.clipboard())
+        if (test.window.at()) test.rightClickCell(1, 2)
+        if (test.window.at())
+            test.window.waitStep(test.menuOpen() && test.menu().cellsPicked && test.menuItem(test.menu(), "tableCopyCellsMarkdown") !== null
+                                 && test.menuItem(test.menu(), "tableCopyCellsMarkdown").visible,
+                                 "a right-click on a selected cell offers the cells' commands")
+        test.chooseTop("tableCopyCellsMarkdown")
+        if (test.window.at() && !test.window.waiting(Js.indexOf(test.clipboard(), "| Ilość | Cena |") === 0))
+            test.window.checkWait("the cells as a Markdown table: " + test.clipboard())
+        if (test.window.at()) check(Js.indexOf(test.clipboard(), "6,5 |") > 0 && Js.indexOf(test.clipboard(), "---:") > 0, "with its rows and alignments: " + test.clipboard())
+        if (test.window.at()) check(test.window.pageText() === test.before, "copying wrote nothing")
+    }
+    function stepsPart7(): void {
+        if (test.window.touchRun)
+            return
+        // ---- Paste over the selection -----------------------------------------------------------------
+        if (test.window.at()) test.tapCell(0, 1)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 1), "a click edits the cell")
+        if (test.window.at()) test.keyClick(Qt.Key_Down, Qt.ShiftModifier)
+        if (test.window.at()) test.window.waitStep(test.selecting(), "selecting")
+        if (test.window.at()) test.sendClipboard("ż\tó\nł\tć\n")
+        if (test.window.at()) test.keyClick(Qt.Key_V, Qt.ControlModifier)
+        if (test.window.at()) test.window.waitStep(test.raw(0, 1) === "ż" && test.raw(0, 2) === "ó" && test.raw(1, 1) === "ł" && test.raw(1, 2) === "ć",
+                                                   "Ctrl+V pastes the grid from the selection's top-left cell")
+        if (test.window.at()) test.window.waitStep(test.selecting() && test.selected(0, 1, 1, 2), "the pasted cells are selected")
+        if (test.window.at()) check(test.raw(1, 3) === "=B2*C2" && test.rows().length === 4, "other cells are as they were")
+        if (test.window.at()) test.undoes(1, "one undo step takes the paste back")
+        // One value fills the selection.
+        if (test.window.at()) test.sendClipboard("0")
+        if (test.window.at()) test.keyClick(Qt.Key_V, Qt.ControlModifier)
+        if (test.window.at()) test.window.waitStep(test.raw(0, 1) === "0" && test.raw(0, 2) === "0" && test.raw(1, 1) === "0" && test.raw(1, 2) === "0",
+                                                   "one value fills the whole selection")
+        if (test.window.at()) test.undoes(1, "one undo step takes the fill back")
+        // ---- Delete, cut ------------------------------------------------------------------------------
+        if (test.window.at()) test.keyClick(Qt.Key_Delete, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.raw(0, 1) === "" && test.raw(1, 2) === "" && test.raw(2, 1) === "2", "Delete empties the selected cells only")
+        if (test.window.at()) test.undoes(1, "one undo step brings them back")
+        if (test.window.at()) test.keyClick(Qt.Key_X, Qt.ControlModifier)
+        if (test.window.at()) test.window.waitStep(test.raw(0, 1) === "" && test.raw(1, 1) === "", "Ctrl+X empties them")
+        if (test.window.at()) check(test.clipboard() === "6,5\t89\n4\t45", "…after copying them: " + test.clipboard())
+        if (test.window.at()) test.undoes(1, "one undo step brings them back")
+    }
+    function stepsPart8(): void {
+        if (test.window.touchRun)
+            return
+        // ---- Typing over a cell, Enter, the arrows of the selection -------------------------------------
+        if (test.window.at()) test.keyClick(Qt.Key_Up, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.selecting() && test.selected(0, 2, 0, 2), "an arrow key moves the selection (one cell now)")
+        if (test.window.at()) test.keyClick(Qt.Key_Left, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.selected(0, 1, 0, 1), "Left moves it")
+        if (test.window.at()) test.keyClick(Qt.Key_Return, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 1) && test.cellInput().text === "6,5", "Enter edits the cell")
+        if (test.window.at()) test.keyClick(Qt.Key_Escape, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editor.editingTable === null, "closed")
+        if (test.window.at()) test.tapCell(0, 0)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 0), "a click edits the cell")
+        if (test.window.at()) test.keyClick(Qt.Key_Down, Qt.ShiftModifier)
+        if (test.window.at()) test.window.waitStep(test.selecting(), "selecting")
+        if (test.window.at()) test.keyClick(Qt.Key_Up, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.selected(0, 0, 0, 0), "one cell")
+        if (test.window.at()) test.window.typeKeys("Ż")
+        if (test.window.at()) test.window.waitStep(test.editing(0, 0) && test.cellInput().text === "Ż", "a typed character edits the cell with that text")
+        if (test.window.at()) check(test.raw(0, 0) === "Ż", "the typed character reaches the document")
+        if (test.window.at()) test.keyClick(Qt.Key_Escape, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editor.editingTable === null, "Esc cancels the cell's typing")
+        if (test.window.at()) check(test.window.pageText() === test.before, "the page is as it was")
+    }
+    function stepsPart9(): void {
+        if (test.window.touchRun)
+            return
+        // ---- Shift+click, Ctrl+A, Tab at the end, Esc ---------------------------------------------------
+        if (test.window.at()) test.tapCell(0, 0)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 0), "a click edits the cell")
+        if (test.window.at()) test.shiftClickCell(2, 2)
+        if (test.window.at()) test.window.waitStep(test.selecting() && test.selected(0, 0, 2, 2) && test.sel().selectedCellCount() === 9,
+                                                   "Shift+click selects the cells up to it")
+        if (test.window.at()) test.shiftClickCell(1, 3)
+        if (test.window.at()) test.window.waitStep(test.selected(0, 0, 1, 3), "Shift+click again moves the end")
+        if (test.window.at()) test.keyClick(Qt.Key_A, Qt.ControlModifier)
+        if (test.window.at()) test.window.waitStep(test.selected(-1, 0, 3, 3), "Ctrl+A selects every cell")
+        if (test.window.at()) test.keyClick(Qt.Key_Tab, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.rows().length === 5 && test.selected(4, 0, 4, 0), "Tab at the last cell adds a row, its first cell selected")
+        if (test.window.at()) test.undoes(1, "one undo step takes the row back")
+        if (test.window.at()) test.keyClick(Qt.Key_Escape, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(!test.sel().hasSelection && test.page.selectedRow === test.row, "Esc ends the selection, the table selected")
+        // ---- A paste from the cell being edited: rows added below the last one --------------------------
+        if (test.window.at()) test.tapCell(3, 0)
+        if (test.window.at()) test.window.waitStep(test.editing(3, 0), "a click edits the last row's cell")
+        if (test.window.at()) test.sendClipboard("x\ny\nz")
+        if (test.window.at()) test.keyClick(Qt.Key_V, Qt.ControlModifier)
+        if (test.window.at()) test.window.waitStep(test.rows().length === 6 && test.raw(3, 0) === "x" && test.raw(5, 0) === "z",
+                                                   "Ctrl+V of several lines: rows are added below the last one")
+        if (test.window.at()) test.window.waitStep(test.selecting() && test.selected(3, 0, 5, 0), "the pasted cells are selected")
+        if (test.window.at()) test.undoes(1, "one undo step takes the paste and its rows back")
+        if (test.window.at()) test.keyClick(Qt.Key_Escape, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(!test.sel().hasSelection, "ended")
+        // A single line is the field's own paste, at the caret.
+        if (test.window.at()) test.tapCell(0, 0)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 0), "a click edits the cell")
+        if (test.window.at()) test.sendClipboard("ąę")
+        if (test.window.at()) test.keyClick(Qt.Key_V, Qt.ControlModifier)
+        if (test.window.at()) test.window.waitStep(test.editing(0, 0) && Js.indexOf(test.cellInput().text, "ąę") >= 0 && !test.sel().hasSelection,
+                                                   "a line of text is pasted into the cell's field")
+        if (test.window.at()) test.keyClick(Qt.Key_Escape, Qt.NoModifier)
+        if (test.window.at()) test.window.waitStep(test.editor.editingTable === null, "closed")
+        if (test.window.at()) check(test.window.pageText() === test.before, "the page is as it was")
     }
     function csvCopied(): bool {
         return Js.indexOf(test.clipboard(), "Pozycja,Ilość,Cena,Razem" + test.crlf) === 0

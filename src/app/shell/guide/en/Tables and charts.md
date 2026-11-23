@@ -37,6 +37,14 @@ Right-click a cell or a column header (on a phone, tap the cell and choose **Mor
 
 The summary row always stays visible and counts all rows, hidden ones included.
 
+## Moving between cells and selecting them
+With a keyboard a table works like a spreadsheet:
+
+- **Tab** and **Shift+Tab** go to the next and the previous cell (**Tab** in the last cell adds a row), **Enter** to the cell below (in the last row it adds one), the **arrow keys** to the neighbouring cell — **↑** and **↓** always, **←** and **→** when the caret is at the edge of the cell's text. **Home** and **End** go to the start and the end of the text. **Esc** leaves the cell.
+- **Shift+arrows** or **Shift+click** select a rectangle of cells. **Ctrl+C** copies them as text for a spreadsheet (tabs between the columns, formulas as their results), **Ctrl+X** cuts them, **Delete** empties them, **Ctrl+V** pastes. The right-click menu also has **Copy cells as Markdown**.
+- **Ctrl+V** into a cell takes text from a spreadsheet (or CSV, or a Markdown table, or just lines) and fills the cells from it downwards and to the right; rows missing at the bottom are added, columns that do not fit are left out. One value pasted over a selection fills all of it. Every change is one step of **Ctrl+Z**.
+- With the cells selected, **Enter** or **F2** edits the first one and typing a character replaces its text.
+
 ## CSV: spreadsheets
 - **Copy as CSV** in the table menu copies it to the clipboard, and **Save as CSV…** saves it to a file that you open in Excel, LibreOffice or Google Sheets. Formulas go into the file as their results.
 - `/Table from CSV…` inserts a table from a CSV file. Brulion recognizes by itself whether the values are separated by commas, semicolons or tabs, and copes with quotes, accented letters (also in files from older Excel versions) and line breaks inside cells. Values come in as text — even those that were formulas in the spreadsheet.

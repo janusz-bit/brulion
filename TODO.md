@@ -226,9 +226,14 @@ done in the repository simply disappears from the list.
 
 * **Database views: what remains** — dragging cards on a board and a calendar was tested with the
   mouse and the offscreen self-test, not yet with a finger on a real phone nor in the browser
-  build; Bases' map view (Obsidian's Maps plugin) is a table;
-  a table's cells have no keyboard navigation (Tab / arrows between cells) and no multi-cell
-  selection or paste, as Obsidian's tables have.
+  build; Bases' map view (Obsidian's Maps plugin) is a table; a database view's table has keys
+  between cells only while one is edited (Tab, the arrows: docs/UI.md "Database views") — no cell
+  cursor without editing, no multi-cell selection, copy or paste there (a paste into several rows
+  would be several edits, some of other files, which one toast's Undo cannot take back); a
+  Markdown table's keys between cells and its cell selection (docs/UI.md "Special block
+  delegates") were checked in the offscreen self-test only — with a hardware keyboard on a real
+  computer, a tablet and in the browser build — and touch UIs have no range selection, only the
+  cell toolbar's "Next cell".
 * **Obsidian compatibility: what remains** — canvases keep the Advanced Canvas plugin's shapes,
   borders and portals in the file but draw plain cards; Dataview's `CALENDAR` views, inline `= …`
   queries and `dataviewjs` stay code (docs/SYNTAX.md §10 "Dataview queries").

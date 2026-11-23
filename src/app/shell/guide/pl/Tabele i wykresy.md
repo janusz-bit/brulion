@@ -37,6 +37,14 @@ Kliknij prawym przyciskiem komórkę albo nagłówek kolumny (na telefonie stukn
 
 Wiersz podsumowania zawsze zostaje widoczny i liczy wszystkie wiersze, także ukryte.
 
+## Poruszanie się po komórkach i zaznaczanie
+Z klawiaturą tabela działa jak arkusz kalkulacyjny:
+
+- **Tab** i **Shift+Tab** przechodzą do następnej i poprzedniej komórki (**Tab** w ostatniej komórce dodaje wiersz), **Enter** do komórki niżej (w ostatnim wierszu dodaje wiersz), **strzałki** do sąsiedniej komórki — **↑** i **↓** zawsze, **←** i **→**, gdy kursor stoi na brzegu tekstu komórki. **Home** i **End** idą na początek i na koniec tekstu. **Esc** opuszcza komórkę.
+- **Shift+strzałki** lub **Shift+kliknięcie** zaznaczają prostokąt komórek. **Ctrl+C** kopiuje je jako tekst dla arkusza (tabulatory między kolumnami, formuły jako ich wyniki), **Ctrl+X** wycina, **Delete** czyści, **Ctrl+V** wkleja. Menu pod prawym przyciskiem ma też **Kopiuj komórki jako Markdown**.
+- **Ctrl+V** w komórce przyjmuje tekst z arkusza (albo CSV, albo tabelę Markdown, albo zwykłe wiersze) i wypełnia nim komórki w dół i w prawo; brakujące wiersze na dole są dodawane, kolumny, które się nie mieszczą, pomijane. Jedna wartość wklejona na zaznaczenie wypełnia całe zaznaczenie. Każda zmiana to jeden krok **Ctrl+Z**.
+- Przy zaznaczonych komórkach **Enter** lub **F2** edytuje pierwszą z nich, a wpisany znak zastępuje jej tekst.
+
 ## CSV: arkusze kalkulacyjne
 - **Kopiuj jako CSV** w menu tabeli kopiuje ją do schowka, a **Zapisz jako CSV…** zapisuje do pliku, który otworzysz w Excelu, LibreOffice albo Arkuszach Google. Formuły trafiają do pliku jako wyniki.
 - `/Tabela z CSV…` wstawia tabelę z pliku CSV. Brulion sam rozpozna, czy wartości dzieli przecinek, średnik czy tabulator, i poradzi sobie z cudzysłowami, polskimi znakami (także z plików ze starszego Excela) i przejściami do nowej linii w komórkach. Wartości przychodzą jako tekst — nawet te, które w arkuszu były formułami.
