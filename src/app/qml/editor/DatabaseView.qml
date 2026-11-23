@@ -10,7 +10,10 @@ import Brulion
 // QueryHost::runView). Table: columns of built-ins, properties and formulas, a header that sorts
 // (written into the query or the base), hides and adds columns, cells edited in place — text,
 // numbers, dates and lists in a field, checkboxes toggled, a task's status and priority from a menu
-// — and summaries under the columns; wider than the column it scrolls sideways. Board: a column per
+// — and summaries under the columns; wider than the column it scrolls sideways. In a cell's field Tab /
+// Shift+Tab edit the next / previous cell that has a field (editBeside(): the written value first),
+// Up / Down the cell above / below, Left / Right at the text's edge the one beside it; Enter and
+// Escape end the editing as before. Board: a column per
 // group (a task's status by default), cards dragged between columns with the mouse or, on touch
 // screens, after a long press (the card's status, priority, date or property becomes the column's).
 // Gallery: cards with the page's cover or first picture. Calendar: a month's grid, rows on the day
@@ -173,6 +176,77 @@ Item {
         root.finishEdit(commit, commit ? editField.text : "")
         if (focused)
             root.returnFocus(editField)
+    }
+    /// The cell the keys move the edit to from (row, column): `dir` "next" / "previous" (Tab: along
+    /// the row, then the next row), "down" / "up" (the same column), "right" / "left" (the same
+    /// row). Only cells that open a field count (not a checkbox, a task's status or priority: their
+    /// menus and toggles are a click's). x: the column, y: the row; y -1: there is none.
+    function fieldBeside(row: int, column: int, dir: string): point {
+        const columns = results.columnTotal
+        let r = row
+        let c = column
+        for (let guard = 0; guard < 100000; ++guard) {
+            if (dir === "next" || dir === "right") {
+                ++c
+                if (c >= columns) {
+                    if (dir === "right")
+                        break
+                    c = 0
+                    r = root.rowBeside(r, 1)
+                }
+            } else if (dir === "previous" || dir === "left") {
+                --c
+                if (c < 0) {
+                    if (dir === "left")
+                        break
+                    c = columns - 1
+                    r = root.rowBeside(r, -1)
+                }
+            } else {
+                r = root.rowBeside(r, dir === "down" ? 1 : -1)
+            }
+            if (r < 0)
+                break
+            if (root.opensField(r, c))
+                return Qt.point(c, r)
+        }
+        return Qt.point(-1, -1)
+    }
+    function rowBeside(row: int, step: int): int {
+        return results.revision >= 0 ? results.neighbourRow(row, step) : -1
+    }
+    /// Editing the cell opens a text field (dates, numbers, text, lists).
+    function opensField(row: int, column: int): bool {
+        if (!results.cellEditable(row, column))
+            return false
+        const type = results.columnType(column)
+        return type !== "checkbox" && type !== "status" && type !== "priority"
+    }
+    /// The edit of the cell being edited moves on: its text is written, then the cell `fieldBeside()`
+    /// names is edited, shown (the table scrolls sideways, the page up or down). Tab with no cell
+    /// left ends the editing as Enter does; the other keys then stay in the field.
+    function editBeside(dir: string): void {
+        if (root.editRow < 0)
+            return
+        const to = root.fieldBeside(root.editRow, root.editColumn, dir)
+        const toRow = to.y
+        const toColumn = to.x
+        if (toRow < 0) {
+            if (dir === "next" || dir === "previous")
+                root.closeCellEditor(true)
+            return
+        }
+        EditorInput.commitPreedit(editField)
+        const text = editField.text
+        cellEditor.visible = false
+        root.finishEdit(true, text)
+        const table = content.item as TableArea
+        if (table !== null)
+            table.revealColumn(toColumn)
+        root.startEdit(toRow, toColumn)
+        const cell = root.cellItem(toRow, toColumn)
+        if (cell !== null && root.editor !== null)
+            root.editor.ensureVisible(cell, Qt.rect(0, 0, cell.width, cell.height))
     }
     function closeAddField(commit: bool): void {
         const focused = addField.activeFocus
@@ -527,6 +601,30 @@ Item {
             accessibleName: results.columnLabel(root.editColumn)
             onAccepted: root.closeCellEditor(true)
             onEscapePressed: root.closeCellEditor(false)
+            // Tab and the arrows move to the neighbouring cell (an arrow only when the caret cannot go that way).
+            Keys.onPressed: (event) => {
+                if ((event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) !== 0)
+                    return
+                let dir = ""
+                if (event.key === Qt.Key_Tab)
+                    dir = "next"
+                else if (event.key === Qt.Key_Backtab)
+                    dir = "previous"
+                else if ((event.modifiers & Qt.ShiftModifier) !== 0 || editField.preeditText !== "")
+                    return
+                else if (event.key === Qt.Key_Down)
+                    dir = "down"
+                else if (event.key === Qt.Key_Up)
+                    dir = "up"
+                else if (event.key === Qt.Key_Left && editField.cursorPosition === 0 && editField.selectedText === "")
+                    dir = "left"
+                else if (event.key === Qt.Key_Right && editField.cursorPosition === editField.length && editField.selectedText === "")
+                    dir = "right"
+                if (dir === "")
+                    return
+                event.accepted = true
+                root.editBeside(dir)
+            }
             onActiveFocusChanged: {
                 if (!activeFocus && cellEditor.visible && !cellEditor.opening) {
                     cellEditor.visible = false
@@ -689,6 +787,15 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
         onContentXChanged: if (root.editRow >= 0) cellEditor.place()
+        /// Scroll sideways until `column` is shown whole (as far as it fits).
+        function revealColumn(column: int): void {
+            const left = root.colX(column)
+            const right = left + root.colWidth(column)
+            if (left < tableFlick.contentX)
+                tableFlick.contentX = left
+            else if (right > tableFlick.contentX + tableFlick.width)
+                tableFlick.contentX = Math.max(0, Math.min(right - tableFlick.width, tableFlick.contentWidth - tableFlick.width))
+        }
 
         Rectangle {
             width: tableFlick.contentWidth

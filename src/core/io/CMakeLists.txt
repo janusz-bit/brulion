@@ -20,6 +20,7 @@ brulion_add_core_module(io
         tar.h tar.cpp
         csv.h csv.cpp
         tablecsv.h tablecsv.cpp
+        tablecells.h tablecells.cpp
         ical.h ical.cpp
         htmlmarkdown.h htmlmarkdown.cpp htmlutil_p.h
         links_p.h links.cpp

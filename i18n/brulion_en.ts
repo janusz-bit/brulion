@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1231"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1232"/>
         <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1284"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1285"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1286"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1294"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1296"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1295"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1297"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -229,7 +229,23 @@
 <context>
     <name>BlockMenu</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="230"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="141"/>
+        <source>Cut %n cell(s)</source>
+        <translation>
+            <numerusform>Cut %n cell</numerusform>
+            <numerusform>Cut %n cells</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="141"/>
+        <source>Copied %n cell(s)</source>
+        <translation>
+            <numerusform>Copied %n cell</numerusform>
+            <numerusform>Copied %n cells</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="268"/>
         <source>Copy %n block(s)</source>
         <translation>
             <numerusform>Copy %n block</numerusform>
@@ -237,7 +253,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="244"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="282"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -245,7 +261,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="632"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="702"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Delete %n block</numerusform>
@@ -571,7 +587,7 @@
 <context>
     <name>DatabaseView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="91"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n task</numerusform>
@@ -579,7 +595,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="91"/>
         <source>%n row(s)</source>
         <translation>
             <numerusform>%n row</numerusform>
@@ -1225,7 +1241,7 @@
 <context>
     <name>PropertiesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/blockviews.cpp" line="320"/>
+        <location filename="../src/app/editor/blockviews.cpp" line="345"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -1740,7 +1756,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8522"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8562"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1932,7 +1948,39 @@
 <context>
     <name>TableBlockView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="823"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="466"/>
+        <source>Cut %n cell(s)</source>
+        <translation>
+            <numerusform>Cut %n cell</numerusform>
+            <numerusform>Cut %n cells</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="466"/>
+        <source>Copied %n cell(s)</source>
+        <translation>
+            <numerusform>Copied %n cell</numerusform>
+            <numerusform>Copied %n cells</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="506"/>
+        <source>Pasted %n cell(s)</source>
+        <translation>
+            <numerusform>Pasted %n cell</numerusform>
+            <numerusform>Pasted %n cells</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="508"/>
+        <source>%n column(s) of the pasted text did not fit the table and were left out</source>
+        <translation>
+            <numerusform>%n column of the pasted text did not fit the table and was left out</numerusform>
+            <numerusform>%n columns of the pasted text did not fit the table and were left out</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="1248"/>
         <source>%1 of %n row(s) shown</source>
         <translation>
             <numerusform>%1 of %n row shown</numerusform>

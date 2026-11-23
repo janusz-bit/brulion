@@ -53,6 +53,9 @@
 //   tablecsv.h     tableToCsv(model, eval) (one Markdown table, formulas as their results),
 //                  detectCsvSeparator(text) (, ; tab, sep=), tableFromCsv(text) -> CsvTable{model,
 //                  separator, truncated} (bounded; `=` values stay text)
+//   tablecells.h   a rectangle of a table's cells: tableCellsToTsv / tableCellsToMarkdown (copy),
+//                  parsePastedCells(text) (Markdown table, TSV, CSV, lines), pasteTableCells,
+//                  clearTableCells — pure edits of a calc::TableModel
 //   ical.h         namespace ical: parse(data) -> Components (unfolding, unescaping),
 //                  Writer (CRLF, 75-octet UTF-8-safe folding, escaping), parseDateTime,
 //                  toWallClock(value, zone), parseDuration / parseDurationParts (nominal days +

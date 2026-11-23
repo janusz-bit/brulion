@@ -6853,6 +6853,51 @@ void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &c
             check(back, "Enter gives the keys back to the page's editor, not to the hidden field");
         }
     }
+    // Tab and the arrows between cells: Alfa's status (row 0, column 1) is typed into, Tab writes it and
+    // edits the next cell (the cost beside it — off screen on a phone, the table scrolls to it), Tab
+    // again writes that and edits the next row's first cell with a field (the title column has none:
+    // Beta's status), Up goes back up, Escape drops what is typed there.
+    mouseMove(window, {1, 1});
+    QPointF statusAt;
+    QQuickItem *status = settled(u"viewCell0_1"_s, {0.5, 0.5}, &statusAt);
+    check(status != nullptr, "the table shows the status cell");
+    if (status) {
+        tapOrClick(window, statusAt, touch);
+        QPointer<QQuickItem> field;
+        check(waitFor([&] {
+                  field = shownNamed(window->contentItem(), u"viewCellEditor"_s);
+                  return field && field->hasActiveFocus();
+              }),
+              "a tap on the status cell opens its field, focused");
+        if (field) {
+            // (The view: the field's holder `cellEditor` is its child.)
+            QQuickItem *view = field->parentItem() ? field->parentItem()->parentItem() : nullptr;
+            const auto editing = [&](int row, int column) {
+                return view && field->hasActiveFocus() && view->property("editRow").toInt() == row
+                       && view->property("editColumn").toInt() == column;
+            };
+            QMetaObject::invokeMethod(field, "selectAll");
+            typeChars(window, u"pilne"_s);
+            sendKey(window, Qt::Key_Tab);
+            check(waitFor([&] { return ws->readFile(pageA).contains(u"status: pilne"_s); }, 5000), "Tab writes the cell");
+            check(waitFor([&] { return editing(0, 2); }), "Tab edits the next cell: the cost");
+            check(field->property("text").toString() == u"10"_s, "its field holds its text");
+            typeChars(window, u"11"_s); // (replaces the selected text)
+            sendKey(window, Qt::Key_Tab);
+            check(waitFor([&] { return ws->readFile(pageA).contains(u"koszt: 11"_s); }, 5000), "Tab writes that cell too");
+            check(waitFor([&] { return editing(1, 1); }), "Tab at the row's end edits the next row's first cell with a field: Beta's status");
+            check(field->property("text").toString() == u"zrobione"_s, "its field holds its text");
+            sendKey(window, Qt::Key_Up);
+            check(waitFor([&] { return editing(0, 1); }), "Up edits the cell above");
+            check(field->property("text").toString() == u"pilne"_s, "its field holds the text written");
+            sendKey(window, Qt::Key_Escape);
+            check(waitFor([&] { return !field->hasActiveFocus() && view->property("editRow").toInt() < 0; }),
+                  "Escape ends the editing");
+            check(ws->readFile(pageA) == u"---\nstatus: pilne\nkoszt: 11\n---\nTreść alfy.\n"_s,
+                  "Alfa's page is as the keys left it");
+            check(ws->readFile(pageB).contains(u"status: zrobione"_s), "the other row's page is as it was");
+        }
+    }
     // The board: the card from "To do" (column 0) to "In progress" (column 1, on screen also on a
     // phone's width: near its left edge).
     mouseMove(window, {1, 1});

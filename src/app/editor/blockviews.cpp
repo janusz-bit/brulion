@@ -96,6 +96,31 @@ int BlockViews::tableNextShownRow(const QVariantMap &table, int row, int step) c
     return step > 0 ? rows : -1;
 }
 
+QList<int> BlockViews::tableRowsBetween(const QVariantMap &table, int from, int to) const
+{
+    const QVariantList shown = table.value(u"shown"_s).toList();
+    const int rows = int(table.value(u"rows"_s).toList().size());
+    const int lo = std::max(-1, std::min(from, to));
+    const int hi = std::min(rows - 1, std::max(from, to));
+    QList<int> out;
+    for (int r = lo; r <= hi; ++r) {
+        if (r == lo || r == hi || rowShown(shown, r))
+            out.append(r);
+    }
+    return out;
+}
+
+int BlockViews::tableRowAfter(const QVariantMap &table, int row, int steps) const
+{
+    const QList<int> down = tableRowsFrom(table, row);
+    return down.isEmpty() ? row : down.at(std::clamp<int>(steps, 0, int(down.size()) - 1));
+}
+
+QList<int> BlockViews::tableRowsFrom(const QVariantMap &table, int row) const
+{
+    return tableRowsBetween(table, row, int(table.value(u"rows"_s).toList().size()) - 1);
+}
+
 QList<qreal> BlockViews::tableColumnWidths(const QVariantMap &table, const QFont &headerFont, const QFont &cellFont,
                                            qreal width, int padding) const
 {

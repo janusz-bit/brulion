@@ -43,6 +43,13 @@ public:
     /// The shown row after (`step` 1) or before (-1) row `row` (-1 the header): the row count
     /// after the last, -1 before the first.
     Q_INVOKABLE int tableNextShownRow(const QVariantMap &table, int row, int step) const;
+    /// The rows shown from row `from` to row `to` (either order; -1 the header, which is first), the
+    /// two themselves too whatever the filters say (the row being edited): the cell selection's rows.
+    Q_INVOKABLE QList<int> tableRowsBetween(const QVariantMap &table, int from, int to) const;
+    /// The row `steps` shown rows below `row` (the last one when there are fewer).
+    Q_INVOKABLE int tableRowAfter(const QVariantMap &table, int row, int steps) const;
+    /// tableRowsBetween() from `row` down to the last row.
+    Q_INVOKABLE QList<int> tableRowsFrom(const QVariantMap &table, int row) const;
     /// Natural column widths (header in `headerFont`, cells in `cellFont`, plus `padding` on both
     /// sides, 56…280 px), stretched to fill `width` when they are narrower together.
     Q_INVOKABLE QList<qreal> tableColumnWidths(const QVariantMap &table, const QFont &headerFont, const QFont &cellFont,

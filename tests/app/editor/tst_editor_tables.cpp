@@ -1,6 +1,6 @@
 // Tables and charts in the editor (PageController, BlockListModel, ChartView): sorting a table (one
 // undo step, the rest of the page byte for byte, CRLF), the view's filters (nothing written, rows
-// shown), CSV out (clipboard, file with a BOM) and in ("/Tabela z CSV…"), the chartData of a ```chart
+// shown), a rectangle of cells copied, emptied and pasted into (one undo step each, CRLF kept), CSV out (clipboard, file with a BOM) and in ("/Tabela z CSV…"), the chartData of a ```chart
 // block following its table, and ChartView laying it out and painting it in both themes.
 // BRULION_CHART_SHOTS=<dir> saves the painted charts as PNG.
 #include "blocklistmodel.h"
@@ -193,6 +193,109 @@ private Q_SLOTS:
         // Out of range: nothing.
         f.page.setTableFilter(-1, 0, u"x"_s);
         f.page.setTableFilter(row, -1, u"x"_s);
+    }
+
+    void cellRange()
+    {
+        Fixture f(Content);
+        const int row = f.rowOf(u"table"_s);
+        QVERIFY(row >= 0);
+        const auto rows = [](std::initializer_list<int> list) { return QList<int>(list); };
+        // Copy: TSV (the formula's result), Markdown (a table of its own); nothing is written.
+        QCOMPARE(f.page.tableCellsText(row, rows({1, 2}), 1, 2, u"tsv"_s), u"3\t12,50\n100\t0,10"_s);
+        QCOMPARE(f.page.tableCellsText(row, rows({-1, 0}), 0, 0, u"tsv"_s), u"Pozycja\nŻółta farba"_s);
+        const QString sum = f.page.tableCellsText(row, rows({4}), 0, 2, u"tsv"_s);
+        QVERIFY2(sum.startsWith(u"Suma\t\t141"_s), qPrintable(sum));
+        QCOMPARE(f.page.tableCellsText(row, rows({0, 1}), 0, 1, u"markdown"_s),
+                 u"| Pozycja       | Ilość |\n| :------------ | ----: |\n| Żółta farba   |     2 |\n| Wałek \\| mały |     3 |"_s);
+        QVERIFY(f.page.tableCellsText(0, rows({0}), 0, 0, u"tsv"_s).isEmpty()); // the heading is no table
+        QVERIFY(f.page.tableCellsText(row, rows({}), 0, 0, u"tsv"_s).isEmpty());
+        QVERIFY(f.page.copyTableCells(row, rows({0, 1}), 0, 1, u"tsv"_s).value(u"ok"_s).toBool());
+        QCOMPARE(QGuiApplication::clipboard()->text(), u"Żółta farba\t2\nWałek | mały\t3"_s);
+        QCOMPARE(f.page.text(), Content);
+        QVERIFY(!f.page.canUndo());
+
+        // Cut: copied, then emptied, one undo step.
+        QVERIFY(f.page.copyTableCells(row, rows({2, 3}), 1, 2, u"tsv"_s, true).value(u"ok"_s).toBool());
+        QCOMPARE(QGuiApplication::clipboard()->text(), u"100\t0,10\n1\t89"_s);
+        QVERIFY2(!f.page.text().contains(u"0,10"_s) && !f.page.text().contains(u"89"_s) && f.page.text().contains(u"| Ćwieki"_s),
+                 qPrintable(f.page.text()));
+        f.page.undo();
+        QCOMPARE(f.page.text(), Content);
+
+        // Clear.
+        QCOMPARE(f.page.clearTableCells(row, rows({0, 1}), 1, 2), 4);
+        QCOMPARE(f.page.clearTableCells(row, rows({0, 1}), 1, 2), 0); // nothing left: no new step
+        f.page.undo();
+        QCOMPARE(f.page.text(), Content);
+        QVERIFY(!f.page.canUndo());
+
+        // Paste: TSV from the top-left cell, one undo step; rows are added for the rest.
+        QVariantMap r = f.page.pasteTableCells(row, rows({3, 4}), 0, 1, 1, u"Młotek\t4\t30\nPiła\t1\t99\nŻelazko\t2\t50\n"_s);
+        QCOMPARE(r.value(u"ok"_s).toBool(), true);
+        QCOMPARE(r.value(u"cells"_s).toInt(), 9);
+        QCOMPARE(r.value(u"rowsAdded"_s).toInt(), 1);
+        QCOMPARE(r.value(u"rows"_s).toInt(), 3);
+        QCOMPARE(r.value(u"columns"_s).toInt(), 3);
+        QVERIFY2(f.page.text().contains(u"| Młotek"_s) && f.page.text().contains(u"| Piła"_s) && f.page.text().contains(u"| Żelazko"_s),
+                 qPrintable(f.page.text()));
+        QVERIFY(f.page.text().endsWith(u"\n\nKoniec strony.\n"_s));
+        f.page.undo();
+        QCOMPARE(f.page.text(), Content);
+        // A column too many is left out and said; a Markdown table is read as a grid.
+        r = f.page.pasteTableCells(row, rows({0}), 1, 1, 1, u"| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |"_s);
+        QCOMPARE(r.value(u"columnsCut"_s).toInt(), 1);
+        QCOMPARE(r.value(u"cells"_s).toInt(), 4);
+        f.page.undo();
+        // One value over a selection fills it.
+        r = f.page.pasteTableCells(row, rows({0, 1}), 1, 2, 2, u"7"_s);
+        QCOMPARE(r.value(u"cells"_s).toInt(), 4);
+        f.page.undo();
+        QCOMPARE(f.page.text(), Content);
+        // Nothing to paste, no such cell: nothing written.
+        QCOMPARE(f.page.pasteTableCells(row, rows({0}), 0, 1, 1, QString()).value(u"ok"_s).toBool(), false);
+        QCOMPARE(f.page.pasteTableCells(row, rows({0}), 9, 1, 1, u"x"_s).value(u"ok"_s).toBool(), false);
+        QCOMPARE(f.page.pasteTableCells(0, rows({0}), 0, 1, 1, u"x"_s).value(u"ok"_s).toBool(), false);
+        QCOMPARE(f.page.pasteTableCells(row, rows({0}), 0, 1, 1, u"Żółta farba"_s).value(u"ok"_s).toBool(), false); // the same text
+        QCOMPARE(f.page.text(), Content);
+        QVERIFY(!f.page.canUndo());
+        QCOMPARE(f.page.pastedCellCount(u"a\tb\nc\td"_s), 4);
+        QCOMPARE(f.page.pastedCellCount(u"jedna linia"_s), 1);
+        QCOMPARE(f.page.pastedCellCount(QString()), 0);
+    }
+
+    void cellRangeCrlf()
+    {
+        QString crlf = Content;
+        crlf.replace(u"\n"_s, u"\r\n"_s);
+        Fixture f(crlf);
+        const int row = f.rowOf(u"table"_s);
+        QList<int> rows{0, 1};
+        QVERIFY(f.page.pasteTableCells(row, rows, 1, 1, 1, u"8\t9\n10\t11"_s).value(u"ok"_s).toBool());
+        QVERIFY2(f.page.text().contains(u"| Wałek \\| mały |    10 |          11 |\r\n"_s), qPrintable(f.page.text()));
+        QVERIFY(!f.page.text().contains(QRegularExpression(u"[^\r]\n"_s)));
+        f.page.undo();
+        QCOMPARE(f.page.text(), crlf);
+        QCOMPARE(f.page.clearTableCells(row, rows, 0, 0), 2);
+        QVERIFY(!f.page.text().contains(QRegularExpression(u"[^\r]\n"_s)));
+        f.page.undo();
+        QCOMPARE(f.page.text(), crlf);
+    }
+
+    void cellRangeReadOnly()
+    {
+        Fixture f(Content);
+        f.page.setReadOnly(true);
+        const int row = f.rowOf(u"table"_s);
+        const QList<int> rows{0};
+        QCOMPARE(f.page.clearTableCells(row, rows, 0, 0), 0);
+        QVariantMap r = f.page.pasteTableCells(row, rows, 0, 1, 1, u"x"_s);
+        QCOMPARE(r.value(u"ok"_s).toBool(), false);
+        QCOMPARE(r.value(u"readOnly"_s).toBool(), true);
+        QCOMPARE(f.page.copyTableCells(row, rows, 0, 0, u"tsv"_s, true).value(u"ok"_s).toBool(), false);
+        QCOMPARE(f.page.text(), Content);
+        // Copying is not writing.
+        QVERIFY(f.page.copyTableCells(row, rows, 0, 0, u"tsv"_s).value(u"ok"_s).toBool());
     }
 
     void csvOut()

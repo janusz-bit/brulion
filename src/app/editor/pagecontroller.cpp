@@ -16,6 +16,7 @@
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
 #include "index/vaultindex.h"
+#include "io/tablecells.h"
 #include "io/tablecsv.h"
 #include "markdown/encrypted.h"
 #include "markdown/highlight.h"
@@ -4014,6 +4015,95 @@ bool PageController::copyTableCsv(int row)
 {
     // Through copyText(): a clipboard that did not take the table must not be reported as copied.
     return copyText(tableCsv(row)).value(u"ok"_s).toBool();
+}
+
+QString PageController::tableCellsText(int row, const QList<int> &rows, int firstColumn, int lastColumn,
+                                       const QString &format) const
+{
+    if (!validRow(row))
+        return {};
+    const markdown::BlockEntry &e = m_model->document().at(row);
+    const auto model = calc::parseTable(e.body);
+    if (!model)
+        return {};
+    const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
+    const calc::TableEval eval = calc::evaluateTable(*model, locale, calc::pageScope(m_model->text(), e.line, locale));
+    const io::TableCells cells{rows, firstColumn, lastColumn};
+    return format == u"markdown" ? io::tableCellsToMarkdown(*model, eval, cells) : io::tableCellsToTsv(*model, eval, cells);
+}
+
+QVariantMap PageController::copyTableCells(int row, const QList<int> &rows, int firstColumn, int lastColumn,
+                                           const QString &format, bool cut)
+{
+    if (cut && refusesEdit())
+        return readOnlyResult();
+    const QVariantMap result = copyText(tableCellsText(row, rows, firstColumn, lastColumn, format));
+    if (cut && result.value(u"ok"_s).toBool())
+        clearTableCells(row, rows, firstColumn, lastColumn);
+    return result;
+}
+
+int PageController::clearTableCells(int row, const QList<int> &rows, int firstColumn, int lastColumn)
+{
+    if (refusesEdit() || !validRow(row))
+        return 0;
+    auto model = calc::parseTable(m_model->document().at(row).body);
+    if (!model)
+        return 0;
+    const int cleared = io::clearTableCells(*model, io::TableCells{rows, firstColumn, lastColumn});
+    if (cleared > 0)
+        editBody(row, calc::serializeTable(*model));
+    return cleared;
+}
+
+int PageController::pastedCellCount(const QString &text) const
+{
+    const io::PastedCells pasted = io::parsePastedCells(text);
+    int cells = 0;
+    for (const QStringList &record : pasted.grid)
+        cells += int(record.size());
+    return cells;
+}
+
+int PageController::clipboardCellCount() const
+{
+    return pastedCellCount(clipboardText());
+}
+
+QVariantMap PageController::pasteClipboardCells(int row, const QList<int> &rows, int column, int selectedRows,
+                                                int selectedColumns)
+{
+    return pasteTableCells(row, rows, column, selectedRows, selectedColumns, clipboardText());
+}
+
+QVariantMap PageController::pasteTableCells(int row, const QList<int> &rows, int column, int selectedRows,
+                                            int selectedColumns, const QString &text)
+{
+    QVariantMap result{{u"ok"_s, false}, {u"cells"_s, 0}, {u"rowsAdded"_s, 0}, {u"columnsCut"_s, 0},
+                       {u"rows"_s, 0}, {u"columns"_s, 0}, {u"truncated"_s, false}, {u"readOnly"_s, false}};
+    if (refusesEdit()) {
+        result.insert(u"readOnly"_s, true);
+        return result;
+    }
+    if (!validRow(row))
+        return result;
+    auto model = calc::parseTable(m_model->document().at(row).body);
+    const io::PastedCells pasted = io::parsePastedCells(text);
+    if (!model || pasted.grid.isEmpty())
+        return result;
+    const io::PasteResult done = io::pasteTableCells(
+            *model, io::PasteTarget{rows, column, selectedRows, selectedColumns}, pasted.grid);
+    result.insert(u"cells"_s, done.cells);
+    result.insert(u"rowsAdded"_s, done.rowsAdded);
+    result.insert(u"columnsCut"_s, done.columnsCut);
+    result.insert(u"rows"_s, done.rows);
+    result.insert(u"columns"_s, done.columns);
+    result.insert(u"truncated"_s, pasted.truncated);
+    if (!done.changed())
+        return result;
+    editBody(row, calc::serializeTable(*model));
+    result.insert(u"ok"_s, true);
+    return result;
 }
 
 QString PageController::tableCsvFileName(int row) const

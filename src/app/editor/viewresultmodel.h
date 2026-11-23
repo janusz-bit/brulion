@@ -229,6 +229,9 @@ public:
     Q_INVOKABLE double tableWidth(bool touch) const;
     /// The line of the table showing `row` (tableLines()), -1 none.
     Q_INVOKABLE int lineOfRow(int row) const;
+    /// The row after (`step` > 0) or before (< 0) `row` in the table's order (a group's header line
+    /// skipped), -1 when there is none.
+    Q_INVOKABLE int neighbourRow(int row, int step) const;
     /// The rows of group `group` in order (a board's column).
     Q_INVOKABLE QList<int> groupRows(int group) const;
     /// Calendars: the day `day` of the grid (0 … 41) as "YYYY-MM-DD", its day of the month, whether it
@@ -336,6 +339,10 @@ private:
     QString m_error;
     QVariantMap m_result; ///< the host's answer
     std::unique_ptr<views::ViewResult> m_view;
+    /// The text a cell was last written with (row * 65536 + column), until the next refresh reads it
+    /// from the files: the rows wait for an edit (hold()), so cellEditText() would show the old one
+    /// to a Tab that comes back to the cell.
+    QHash<qint64, QString> m_written;
     QList<Row> m_rows;
     ViewListModel *m_columns = nullptr;
     ViewListModel *m_groups = nullptr;
