@@ -12,7 +12,10 @@ import Brulion
 // at once (where it was scrolled, its filters) instead of building it anew, which took 0.5–1 s on
 // a phone (docs/PERFORMANCE.md "Switching views"). A kept view is hidden with its editing ended
 // (`endEditing()`), and keeps the route it was shown with; the kept views go when the pane shows
-// no route (a split pane closed). Nothing else keeps a view (the shell self-test's "5n").
+// no route (a split pane closed). Nothing else keeps a view (the shell self-test's "5n"). A hidden
+// kept view never keeps the keyboard: given it (a popup closed hands it back to an item Qt
+// remembered from long ago, a view's own forceActiveFocus()), it passes it to the view shown at
+// once — `focusShownView()` (docs/UI.md "Keyboard shortcuts (desktop)").
 //
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
@@ -114,6 +117,12 @@ Item {
     readonly property string viewStatusPosition: traits.statusPosition
     /// Vim's mode / command line of the view's editor (PageView, JournalsView: `statusVim`).
     readonly property string viewStatusVim: traits.statusVim
+
+    /// Gives the keyboard to the view shown, where its focus was (its editor's block): a hidden
+    /// kept view got it (KeptLoader.hiddenFocused).
+    function focusShownView(): void {
+        root.shownLoader.forceActiveFocus()
+    }
 
     /// Ends the editing the view's docked touch toolbar is for (views without one: nothing).
     function endEditing(): void {
@@ -292,7 +301,10 @@ Item {
         property bool kept
         /// Its view has been shown (the first time, it takes the keyboard: onViewChanged).
         property bool everShown
+        /// Something inside it got the keyboard while it is hidden (focusShownView() hands it on).
+        signal hiddenFocused()
         onShownChanged: if (shown && keepViews) kept = true
+        onActiveFocusChanged: if (activeFocus && !shown) hiddenFocused()
         onActiveChanged: if (!active) everShown = false
         anchors.fill: parent
         active: shown || kept
@@ -306,6 +318,7 @@ Item {
         keepViews: root.keepViews
         sourceComponent: journalsView
         onLoaded: root.preloaded()
+        onHiddenFocused: root.focusShownView()
     }
     KeptLoader {
         id: allPagesLoader
@@ -313,6 +326,7 @@ Item {
         keepViews: root.keepViews
         sourceComponent: allPagesView
         onLoaded: root.preloaded()
+        onHiddenFocused: root.focusShownView()
     }
     KeptLoader {
         id: searchLoader
@@ -320,6 +334,7 @@ Item {
         keepViews: root.keepViews
         sourceComponent: searchView
         onLoaded: root.preloaded()
+        onHiddenFocused: root.focusShownView()
     }
     KeptLoader {
         id: tasksLoader
@@ -327,6 +342,7 @@ Item {
         keepViews: root.keepViews
         sourceComponent: tasksView
         onLoaded: root.preloaded()
+        onHiddenFocused: root.focusShownView()
     }
     KeptLoader {
         id: calendarLoader
@@ -334,6 +350,7 @@ Item {
         keepViews: root.keepViews
         sourceComponent: calendarView
         onLoaded: root.preloaded()
+        onHiddenFocused: root.focusShownView()
     }
 
     Component { id: journalsView; JournalsView { route: root.journalsRoute; inSidePanel: root.inSidePanel; paneActive: root.paneActive && journalsLoader.shown } }
