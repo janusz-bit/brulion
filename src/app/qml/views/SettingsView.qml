@@ -1311,6 +1311,13 @@ Item {
                 checked: AppSettings.pictureFrames
                 onToggled: AppSettings.pictureFrames = checked
             }
+            SettingSwitch {
+                objectName: "settingsCodeLineNumbers"
+                text: qsTr("Line numbers in code blocks")
+                description: qsTr("Each line of a code block numbered on its left. The numbers are not part of the text: copying the code leaves them out.")
+                checked: AppSettings.codeLineNumbers
+                onToggled: AppSettings.codeLineNumbers = checked
+            }
             // Preview.
             Rectangle {
                 Layout.fillWidth: true

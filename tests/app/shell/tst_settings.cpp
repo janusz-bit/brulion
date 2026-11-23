@@ -583,6 +583,11 @@ private Q_SLOTS:
             s.setPictureFrames(true);
             s.setPictureFrames(true);
             QCOMPARE(frames.size(), 1);
+            QVERIFY(!s.codeLineNumbers()); // (code blocks without line numbers: off until asked for)
+            QSignalSpy lineNumbers(&s, &AppSettings::codeLineNumbersChanged);
+            s.setCodeLineNumbers(true);
+            s.setCodeLineNumbers(true);
+            QCOMPARE(lineNumbers.size(), 1);
             QSignalSpy vim(&s, &AppSettings::vimModeChanged);
             s.setVimMode(true);
             s.setVimMode(true);
@@ -610,6 +615,7 @@ private Q_SLOTS:
             QVERIFY(s.vimMode());
             QVERIFY(!s.wordCountShown());
             QVERIFY(s.pictureFrames()); // kept after a restart
+            QVERIFY(s.codeLineNumbers());
             const QVariantMap shortcuts = s.shortcutOverrides();
             QCOMPARE(shortcuts.size(), 3);
             QCOMPARE(shortcuts.value(u"journal.today"_s).toString(), u"Ctrl+Alt+J"_s);

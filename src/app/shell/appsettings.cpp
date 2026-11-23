@@ -88,6 +88,7 @@ constexpr auto kEditorSource = "editor/sourceMode"_L1;
 constexpr auto kPropertiesExpanded = "editor/propertiesExpanded"_L1;
 constexpr auto kWebPictures = "editor/webPicturesShown"_L1;
 constexpr auto kPictureFrames = "editor/pictureFrames"_L1;
+constexpr auto kCodeLineNumbers = "editor/codeLineNumbers"_L1;
 constexpr auto kSpellCheck = "spelling/enabled"_L1;
 constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
 constexpr auto kSpellLanguages = "spelling/languages"_L1;
@@ -1380,6 +1381,17 @@ void AppSettings::setPictureFrames(bool on)
 {
     if (store(kPictureFrames, on, pictureFrames()))
         Q_EMIT pictureFramesChanged();
+}
+
+bool AppSettings::codeLineNumbers() const
+{
+    return m_settings->value(kCodeLineNumbers, false).toBool();
+}
+
+void AppSettings::setCodeLineNumbers(bool on)
+{
+    if (store(kCodeLineNumbers, on, codeLineNumbers()))
+        Q_EMIT codeLineNumbersChanged();
 }
 
 bool AppSettings::spellCheck() const

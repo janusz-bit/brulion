@@ -130,6 +130,7 @@ QList<SettingSpec> makeSpecs()
     specs << toggle("propertiesExpanded", "editor", "propertiesExpanded", "the page properties open expanded");
     specs << toggle("webPictures", "editor", "webPicturesShown", "pictures from the internet shown without asking");
     specs << toggle("pictureFrames", "editor", "pictureFrames", "a frame around the pictures in notes");
+    specs << toggle("codeLineNumbers", "editor", "codeLineNumbers", "line numbers beside code blocks");
     specs << toggle("taskStatusHistory", "editor", "taskStatusHistory", "a task's status changes are noted");
     specs << toggle("spellCheck", "editor", "spellCheck", "spell checking");
     specs << toggle("wordCount", "editor", "wordCountShown", "the word count in a page's corner");

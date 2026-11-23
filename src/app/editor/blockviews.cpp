@@ -1,10 +1,13 @@
 #include "blockviews.h"
 
+#include <QAbstractTextDocumentLayout>
 #include <QCoreApplication>
 #include <QFontInfo>
 #include <QFontMetricsF>
 #include <QLocale>
 #include <QRegularExpression>
+#include <QTextBlock>
+#include <QTextLayout>
 
 #include <algorithm>
 #include <cmath>
@@ -228,6 +231,32 @@ int BlockViews::lineStart(const QString &text, int line) const
             return int(i + 1);
     }
     return 0;
+}
+
+QString codeLineNumberColumn(const QTextDocument *document)
+{
+    if (!document || document->isEmpty())
+        return u"1"_s;
+    // (Lays out what is not laid out yet: a long text is laid out in steps.)
+    if (QAbstractTextDocumentLayout *layout = document->documentLayout())
+        layout->blockBoundingRect(document->lastBlock());
+    QString column;
+    int number = 0;
+    for (QTextBlock block = document->firstBlock(); block.isValid(); block = block.next()) {
+        if (number > 0)
+            column += u'\n';
+        column += QString::number(++number);
+        const QTextLayout *layout = block.layout();
+        const int lines = layout ? layout->lineCount() : 1;
+        for (int i = 1; i < lines; ++i)
+            column += u'\n';
+    }
+    return column;
+}
+
+QString BlockViews::codeLineNumbers(QQuickTextDocument *document) const
+{
+    return codeLineNumberColumn(document ? document->textDocument() : nullptr);
 }
 
 QVariantMap BlockViews::propertyOf(const QVariantList &properties, const QString &key) const
