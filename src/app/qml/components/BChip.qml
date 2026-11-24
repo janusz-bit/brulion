@@ -94,16 +94,21 @@ T.AbstractButton {
         id: chipContent
         readonly property real spacing: control.size === "small" ? 4 : 5
         readonly property bool iconShown: chipIcon.width > 0 && chipIcon.height > 0
-        readonly property bool labelShown: chipLabel.width > 0 && chipLabel.height > 0
+        /// The text's own width (at most 280); the chip's implicit width counts it, so a chip given
+        /// less room (a layout shrinking it, an explicit width) elides its text instead of overflowing.
+        readonly property real labelNatural: Math.min(chipLabel.implicitWidth, 280)
+        readonly property bool labelShown: labelNatural > 0 && chipLabel.height > 0
         readonly property real labelX: iconShown ? chipIcon.width + spacing : 0
+        /// What the text has beside the icon and the ×.
+        readonly property real labelRoom: width - labelX - (control.removable ? spacing + removeWidth : 0)
         readonly property real removeX: labelShown ? labelX + chipLabel.width + spacing : labelX
         // The × circle stays small; on touch UIs its hit area is a full touch target (taller than
         // the chip's visual part, which is fine: it is inside the chip's own touch-sized hit area).
         readonly property real removeCircle: control.visualHeight - 6
         readonly property real removeWidth: Theme.touchUi ? Theme.touchTarget : removeCircle
         readonly property real removeHeight: Theme.touchUi ? control.hitHeight : removeCircle
-        implicitWidth: control.removable ? removeX + removeWidth
-                       : labelShown ? labelX + chipLabel.width
+        implicitWidth: control.removable ? labelX + (labelShown ? labelNatural + spacing : 0) + removeWidth
+                       : labelShown ? labelX + labelNatural
                        : iconShown ? chipIcon.width : 0
         implicitHeight: Math.max(iconShown ? chipIcon.height : 0, labelShown ? chipLabel.height : 0,
                                  control.removable ? removeHeight : 0)
@@ -124,7 +129,9 @@ T.AbstractButton {
             font: control.font
             color: control.fgColor
             elide: Text.ElideRight
-            width: Math.min(implicitWidth, 280)
+            // (Its natural width when it fits, give or take rounding: no "…" for half a pixel.)
+            width: chipContent.labelRoom >= chipContent.labelNatural - 0.5 ? chipContent.labelNatural
+                                                                           : Math.max(0, chipContent.labelRoom)
         }
         // The × button: created for removable chips only (most chips in lists are not).
         Loader {
