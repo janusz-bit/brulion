@@ -776,7 +776,7 @@
 <context>
     <name>ExportPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="246"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="249"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -784,7 +784,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="247"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="250"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n attachment</numerusform>
@@ -1606,7 +1606,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2955"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2962"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1614,7 +1614,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2820"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2827"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1646,7 +1646,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2193"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2200"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1654,7 +1654,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2644"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2651"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1662,7 +1662,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2822"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2829"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2493,7 +2493,7 @@
 <context>
     <name>brulion::ioviews::ExportController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/exportcontroller.cpp" line="637"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="671"/>
         <source>%n picture(s) from the internet were not included – the copies are limited to %1 in all; the export keeps their addresses.</source>
         <translation>
             <numerusform>%n picture from the internet was not included – the copies are limited to %1 in all; the export keeps its address.</numerusform>

@@ -10,6 +10,10 @@
 //             and Pandoc exports carry copies: the device's cached ones, the missing ones fetched
 //             first — Workspace::loadWebPicture; a failure keeps the address, with a warning);
 //             webPicturesApply: the chosen format can include them
+//   protect   (protectApply: html-single) the file protected with a password (setPassword(); never
+//             stored): the lock page of password-protected publishing (publish/protect.h) — the
+//             document encrypted with AES-256-GCM under a key from PBKDF2, the browser asks for
+//             the password and opens it with WebCrypto, also from a file on disk
 //   state     "idle" → prepare() → "preparing" (reading in chunks, then the exporter off the GUI
 //             thread; progress) → "ready" (fileName, sizeText, warnings) → saveTo(url) /
 //             saveInBrowser() / saveToExportFolder() → "saved" (savedTo) | "error" (errorText)
@@ -42,6 +46,7 @@
 #include "workspace.h"
 
 #include "io/exporter.h"
+#include "publish/protect.h"
 
 #include <QHash>
 #include <QList>
@@ -96,6 +101,12 @@ class ExportController : public QObject {
     /// The chosen format can include copies of pictures from the internet (html-site,
     /// html-single, pdf, docx, pandoc).
     Q_PROPERTY(bool webPicturesApply READ webPicturesApply NOTIFY optionsChanged FINAL)
+    /// The chosen format can be protected with a password (html-single).
+    Q_PROPERTY(bool protectApply READ protectApply NOTIFY optionsChanged FINAL)
+    /// Protect the file with a password where protectApply (default off; printing never is).
+    Q_PROPERTY(bool protect READ protect WRITE setProtect NOTIFY optionsChanged FINAL)
+    /// setPassword() was given one.
+    Q_PROPERTY(bool hasPassword READ hasPassword NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString state READ state NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged FINAL)
     Q_PROPERTY(qreal progress READ progress NOTIFY progressChanged FINAL)
@@ -142,6 +153,10 @@ public:
     QString webPictures() const { return m_webPictures; }
     void setWebPictures(const QString &mode);
     bool webPicturesApply() const;
+    bool protectApply() const { return m_format == u"html-single"; }
+    bool protect() const { return m_protect; }
+    void setProtect(bool protect);
+    bool hasPassword() const { return !m_password.isEmpty(); }
     QString state() const { return m_state; }
     bool busy() const { return m_state == u"preparing" || m_state == u"saving"; }
     qreal progress() const { return m_progress; }
@@ -167,6 +182,8 @@ public:
     /// Browser: the browser's save picker (Chromium on https) or a download, a file each
     /// (platform/wasm/wasmfiles.h). Elsewhere: false.
     Q_INVOKABLE bool saveInBrowser();
+    /// The password of `protect` (kept in memory only; a change forgets the produced file).
+    Q_INVOKABLE void setPassword(const QString &password);
     /// Forget the produced file (back to "idle").
     Q_INVOKABLE void discard();
     Q_INVOKABLE void cancel();
@@ -184,6 +201,8 @@ public:
     /// The most bytes of copies of pictures from the internet one export includes ("include";
     /// default 256 MB; tests). Past it the export keeps their addresses, with a warning.
     void setWebCopiesLimit(qint64 bytes) { m_webLimit = std::max<qint64>(0, bytes); }
+    /// PBKDF2 rounds of `protect` (default publish::ProtectIterations; tests).
+    void setProtectIterations(quint32 rounds) { m_protectIterations = std::max<quint32>(1, rounds); }
     /// Clock for the export's time stamps (default: Workspace::now()).
     void setClock(std::function<QDateTime()> clock) { m_clock = std::move(clock); }
 
@@ -262,6 +281,9 @@ private:
     QStringList m_readWarnings;
     QString m_webPictures = QStringLiteral("link");
     QString m_paperSize;
+    bool m_protect = false;
+    QString m_password;
+    quint32 m_protectIterations = publish::ProtectIterations;
     bool m_printing = false;
     QString m_printToFile;
     // The copies of pictures from the internet being collected (webPictures "include").

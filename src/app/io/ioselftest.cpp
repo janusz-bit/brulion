@@ -1,6 +1,7 @@
 #include "ioselftest.h"
 
 #include "appcontroller.h"
+#include "exportcontroller.h"
 #include "workspace.h"
 
 #include <QCoreApplication>
@@ -714,6 +715,7 @@ private:
             QMetaObject::invokeMethod(dialog, "reject");
             check(waitFor([dialog] { return !dialog->property("visible").toBool(); }), "the save dialog closes");
         }
+        pageExportWithPassword(qobject_cast<ioviews::ExportController *>(controller), dialog);
         QQuickItem *print = item("pageExportPrint");
         check(shown(print), "the page's export offers “Print…”");
         if (!shown(print))
@@ -726,6 +728,62 @@ private:
         QFile file(printed);
         check(file.open(QIODevice::ReadOnly) && file.read(5) == "%PDF-", "the printed pages are there");
         settle(300);
+    }
+
+    // 8b. HTML with a password: the HTML tile shows "Protect with a password"; on, "Save as
+    //     file…" waits for the password typed twice, then makes the lock page (no word of the
+    //     page in it) and opens the save dialog; off again for the steps after it.
+    void pageExportWithPassword(ioviews::ExportController *controller, QObject *saveDialog)
+    {
+        const QQuickItem *grid = item("pageExportFormats");
+        QQuickItem *html = grid ? lastOf(grid->childItems(),
+                                         [](const QQuickItem *tile) {
+                                             return tile->objectName() == u"pageExportFormat_html-single"_s;
+                                         })
+                                : nullptr;
+        if (!controller || !shown(html)) {
+            check(false, "the page's export offers HTML");
+            return;
+        }
+        controller->setProtectIterations(1000);
+        tap(html);
+        QQuickItem *protect = nullptr;
+        check(waitFor([&] {
+                  protect = item("exportProtect");
+                  return controller->format() == u"html-single" && shown(protect);
+              }),
+              "HTML offers “Protect with a password”");
+        if (!shown(protect))
+            return;
+        tap(protect);
+        QQuickItem *password = item("exportPassword");
+        QQuickItem *confirm = item("exportPasswordConfirm");
+        QQuickItem *save = item("pageExportSave");
+        check(waitFor([&] { return controller->protect() && shown(password) && shown(confirm); }),
+              "the switch asks for the password twice");
+        check(save && !save->isEnabled(), "“Save as file…” waits for the password");
+        if (!shown(password) || !shown(confirm) || !save)
+            return;
+        password->setProperty("text", u"Źdźbło trawy na łące"_s);
+        confirm->setProperty("text", u"Źdźbło trawy"_s);
+        settle(100);
+        check(!save->isEnabled() && !controller->hasPassword(), "passwords that differ are not taken");
+        confirm->setProperty("text", u"Źdźbło trawy na łące"_s);
+        check(waitFor([&] { return save->isEnabled() && controller->hasPassword(); }), "the same password twice is");
+        {
+            OpenWatcher watcher(saveDialog);
+            tap(save);
+            check(waitFor([&watcher] { return watcher.opened(); }, 20000),
+                  "“Save as file…” makes the protected HTML and opens the save dialog");
+            const QString page = controller->result().isEmpty() ? QString()
+                                                                : QString::fromUtf8(controller->result().first().data);
+            check(page.contains(u"id=\"brulion-sealed\""_s) && !page.contains(u"Zażółć"_s),
+                  "the file is the lock page, nothing of the page readable");
+            QMetaObject::invokeMethod(saveDialog, "reject");
+            check(waitFor([saveDialog] { return !saveDialog->property("visible").toBool(); }), "the save dialog closes");
+        }
+        tap(protect);
+        check(waitFor([controller] { return !controller->protect(); }), "the switch turns protection off");
     }
 
     // 9. Publishing (docs/UI.md "Publishing"): the page's "Publish…" with no target yet asks for
