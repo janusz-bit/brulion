@@ -1357,6 +1357,7 @@ private Q_SLOTS:
         QSignalSpy plain(app.get(), &AppController::toastRequested);
         QSignalSpy shown(app.get(), &AppController::toastWithActionRequested);
         QSignalSpy triggered(app.get(), &AppController::toastActionTriggered);
+        QSignalSpy removed(app.get(), &AppController::toastRemoved);
         app->toastAction(u"Usunięto 3 bloki"_s, u"info"_s, u"Cofnij"_s, undo);
         QCOMPARE(shown.size(), 1);
         QCOMPARE(plain.size(), 0);
@@ -1375,6 +1376,7 @@ private Q_SLOTS:
         app->hostToastRemoved(7);
         QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 1);
         QCOMPARE(triggered.size(), 0);
+        QCOMPARE(removed.size(), 0); // its button was pressed: not "gone without"
 
         // Without a function: the button is reported by the id toastWithAction() gave.
         const int id = app->toastWithAction(u"Przeniesiono „Zażółć”"_s, u"success"_s, u"Cofnij"_s);
@@ -1391,8 +1393,13 @@ private Q_SLOTS:
         const int gone = app->toastWithAction(u"Ślad"_s, u"info"_s, u"Cofnij"_s);
         app->setToastHostId(gone, 10);
         app->hostToastRemoved(10);
+        QCOMPARE(removed.size(), 1);
+        QCOMPARE(removed.first().at(0).toInt(), gone);
         app->hostToastActionTriggered(10);
         QCOMPARE(triggered.size(), 1);
+        app->hostToastRemoved(10); // once
+        app->hostToastRemoved(99); // a toast of the host that had no button
+        QCOMPARE(removed.size(), 1);
 
         // toastRestore(): the pages come back from the trash, also with no view left.
         const QString page = app->workspace()->createPage(u"Gęś"_s);

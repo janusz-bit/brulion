@@ -853,6 +853,9 @@ Q_SIGNALS:
     void toastWithActionRequested(int id, const QString &text, const QString &kind, const QString &actionText);
     /// The button of toastWithAction()'s toast `id` was pressed.
     void toastActionTriggered(int id);
+    /// toastWithAction()'s toast `id` went without its button pressed: whoever waited for
+    /// toastActionTriggered(id) need not any more.
+    void toastRemoved(int id);
 
 private Q_SLOTS:
     void onFirstFrame();

@@ -468,11 +468,13 @@ FocusScope {
     Component.onDestruction: {
         alive = false
         editor.controller = null
-        // The look's dialogs live in the overlay: they go with the view.
+        // The dialogs of the look and of encryption live in the overlay: they go with the view.
         if (iconDialog)
             iconDialog.destroy()
         if (coverDialog)
             coverDialog.destroy()
+        if (encryptionDialog)
+            encryptionDialog.destroy()
     }
     /// False once the view is being destroyed: a route change queued just before (the shell
     /// switching to another view) does nothing then.

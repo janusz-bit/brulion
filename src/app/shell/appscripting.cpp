@@ -627,15 +627,24 @@ QVariant AppScripting::call(const QString &whoCalls, const QString &operation, c
             if (!app)
                 return;
             const int id = app->toastWithAction(text, kind, label);
-            auto *connection = new QMetaObject::Connection;
-            *connection = QObject::connect(app, &AppController::toastActionTriggered, app,
-                                           [app, id, extension, command, connection](int pressed) {
-                                               if (pressed != id)
-                                                   return;
-                                               QObject::disconnect(*connection);
-                                               delete connection;
-                                               app->workspace()->extensions()->runCommand(extension, command);
-                                           });
+            // What waits for the button: it goes when the button is pressed and when the toast
+            // goes without it (else every toast left a connection behind for good).
+            auto *waiting = new QObject(app);
+            waiting->setObjectName(u"extensionToastButton"_s); // (tests count them)
+            QObject::connect(app, &AppController::toastActionTriggered, waiting,
+                             [app, id, extension, command, waiting](int pressed) {
+                                 if (pressed != id)
+                                     return;
+                                 QObject::disconnect(app, nullptr, waiting, nullptr); // once
+                                 waiting->deleteLater();
+                                 app->workspace()->extensions()->runCommand(extension, command);
+                             });
+            QObject::connect(app, &AppController::toastRemoved, waiting, [app, id, waiting](int removed) {
+                if (removed != id)
+                    return;
+                QObject::disconnect(app, nullptr, waiting, nullptr);
+                waiting->deleteLater();
+            });
         });
         return {};
     }

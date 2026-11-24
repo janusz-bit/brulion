@@ -2596,8 +2596,11 @@ void AppController::hostToastRemoved(int hostId)
     m_chatToasts.remove(id);
     m_rewindToasts.remove(id);
     m_chatMarkToasts.remove(id);
+    m_automationToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));
+    if (id > 0)
+        Q_EMIT toastRemoved(id);
 }
 
 void AppController::beginOpenIn(const QString &target)
