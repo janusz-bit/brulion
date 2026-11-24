@@ -583,6 +583,11 @@ private Q_SLOTS:
             s.setPictureFrames(true);
             s.setPictureFrames(true);
             QCOMPARE(frames.size(), 1);
+            QVERIFY(s.lightPictureBacking()); // (pictures on a light backing in a dark theme: on)
+            QSignalSpy backing(&s, &AppSettings::lightPictureBackingChanged);
+            s.setLightPictureBacking(false);
+            s.setLightPictureBacking(false);
+            QCOMPARE(backing.size(), 1);
             QVERIFY(!s.codeLineNumbers()); // (code blocks without line numbers: off until asked for)
             QSignalSpy lineNumbers(&s, &AppSettings::codeLineNumbersChanged);
             s.setCodeLineNumbers(true);
@@ -615,6 +620,7 @@ private Q_SLOTS:
             QVERIFY(s.vimMode());
             QVERIFY(!s.wordCountShown());
             QVERIFY(s.pictureFrames()); // kept after a restart
+            QVERIFY(!s.lightPictureBacking());
             QVERIFY(s.codeLineNumbers());
             const QVariantMap shortcuts = s.shortcutOverrides();
             QCOMPARE(shortcuts.size(), 3);

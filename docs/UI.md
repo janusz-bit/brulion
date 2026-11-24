@@ -4244,7 +4244,13 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   the hairline `borderSubtle` frame around each. A picture not shown yet (loading, from the
   internet waiting for "Show", a format the device cannot decode) has its frame either way: it
   marks the picture's place. A note's own `picture-frames` option wins over the setting ("Note
-  options"). Opening one (a click on the embed,
+  options"). In a dark theme a picture lies on a light backing (`Theme.pictureBacking`, a dimmed
+  paper) under its painted area — in the note, in `ContentPictureView` and in `WebPictureViewer` —
+  so a transparent PNG or SVG with dark lines (a diagram, a scan) stays readable; an opaque photo
+  covers it. Settings → Editor → "Light background under pictures in a dark theme"
+  (`AppSettings.lightPictureBacking`, device-local, on; `b.app.settings()` key
+  `lightPictureBacking`) turns it off. A drawing never gets it (its picture has a dark version).
+  Opening one (a click on the embed,
   a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
   `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
   raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the

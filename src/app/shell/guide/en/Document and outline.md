@@ -101,6 +101,8 @@ While you read you can still select blocks and copy them (also “Copy link” �
 ## Images and files
 Paste a picture (Ctrl+V), drop files onto the page or use `/Image…` — the file picker accepts several pictures at once, in the browser too. The files go to the attachments folder (`assets/`) and are embedded as `![[file.png]]`.
 
+In a dark theme a picture lies on a light background, so a diagram or a scan with dark lines on a transparent background doesn't vanish into the dark page; photos look the same. **Settings → Editor → Light background under pictures in a dark theme** turns it off (e.g. for white logos made for dark pages). Drawings have a dark version of their own and never get it.
+
 You insert a file of any type as a link with the `/File…` command: `[[report.docx]]` appears in the text (several chosen files — several links). A file from outside the notebook goes to the attachments folder, and a file that is already in the notebook stays where it is. A note, a picture, a PDF, a recording and a video open as usual when clicked; other files open in Brulion read-only, as text.
 
 Clicking an embedded picture shows the picture alone, fitted to the view (a small picture stays at its natural size, without blurry enlarging). When the picture is larger than the view, clicking it or the “Zoom to actual size” button (on a phone and in a narrow view, the magnifier icon) shows it at its natural size, and you can drag it around. Below the picture are the notes that embed it or link to it (on a wide screen also in the side panel, on the Links tab).

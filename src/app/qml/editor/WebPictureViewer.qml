@@ -207,6 +207,18 @@ T.Popup {
             boundsBehavior: Flickable.StopAtBounds
             TouchFlick.enabled: !viewer.actualSize
 
+            // In a dark theme a light backing under the picture (AppSettings.lightPictureBacking,
+            // as ContentPictureView): a transparent picture's dark lines stay readable.
+            Rectangle {
+                objectName: "webPictureViewerBacking"
+                visible: image.status === Image.Ready && Theme.dark && AppSettings.lightPictureBacking
+                x: image.x + (image.width - image.paintedWidth) / 2
+                y: image.y + (image.height - image.paintedHeight) / 2
+                width: image.paintedWidth
+                height: image.paintedHeight
+                color: Theme.pictureBacking
+            }
+
             Image {
                 id: image
 

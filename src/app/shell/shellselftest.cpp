@@ -5107,6 +5107,75 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     app->goHome();
 }
 
+/// 5r. A picture in a dark theme lies on a light backing (AppSettings.lightPictureBacking): its
+/// embed in a note and the picture view put one under the painted picture — a transparent diagram's
+/// dark lines would vanish into the dark page — none in the light theme or with the setting off.
+void checkPictureBacking(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *workspace = app->workspace();
+    AppSettings *settings = app->settings();
+    const QString mode = settings->themeMode();
+    const bool wasOn = settings->lightPictureBacking();
+    const QString page = u"Plan na jasnym tle.md"_s;
+    check(workspace->writeFile(page, u"Przezroczysty plan:\n\n![[plan-mieszkania.svg]]\n"_s),
+          "a page embeds a picture");
+    const auto shown = [window](const char *name) {
+        return uidriver::topmost(window, [name](QQuickItem *item) {
+            return item->objectName() == QLatin1StringView(name) && item->isVisible();
+        });
+    };
+    const auto embedImage = [window] {
+        return uidriver::topmost(window, [](QQuickItem *item) {
+            return item->objectName() == u"embedImage" && item->property("status").toInt() == 1
+                   && item->property("source").toUrl().path().endsWith(u"/plan-mieszkania.svg"_s);
+        });
+    };
+    // The backing named `backing` is shown exactly under the painted picture, or hidden.
+    const auto backingIs = [&](const char *backing, const std::function<QQuickItem *()> &image, bool expected) {
+        return waitFor([&] {
+            QQuickItem *b = shown(backing);
+            QQuickItem *img = image();
+            if (!expected)
+                return b == nullptr && img != nullptr;
+            if (!b || !img)
+                return false;
+            const QSizeF painted(img->property("paintedWidth").toReal(), img->property("paintedHeight").toReal());
+            const QPointF at = img->mapToItem(b->parentItem(),
+                                              QPointF((img->width() - painted.width()) / 2,
+                                                      (img->height() - painted.height()) / 2));
+            return painted.width() > 0 && std::abs(b->width() - painted.width()) < 0.5
+                   && std::abs(b->height() - painted.height()) < 0.5 && std::abs(b->x() - at.x()) < 0.5
+                   && std::abs(b->y() - at.y()) < 0.5;
+        });
+    };
+    const auto themes = [&](const char *backing, const std::function<QQuickItem *()> &image, const char *what) {
+        const auto say = [what](const char *rest) { return QByteArray(QByteArray(what) + rest); };
+        settings->setLightPictureBacking(true);
+        settings->setThemeMode(u"dark"_s);
+        check(backingIs(backing, image, true), say(": a light backing under the picture in the dark theme").constData());
+        settings->setLightPictureBacking(false);
+        check(backingIs(backing, image, false), say(": none with the setting off").constData());
+        settings->setLightPictureBacking(true);
+        settings->setThemeMode(u"light"_s);
+        check(backingIs(backing, image, false), say(": none in the light theme").constData());
+    };
+    app->openPage(page);
+    check(waitFor([&] { return embedImage() != nullptr; }, 5000), "the embedded picture is shown");
+    themes("embedPictureBacking", embedImage, "an embedded picture");
+    app->openPage(u"assets/plan-mieszkania.svg"_s);
+    const auto pictureImage = [window] {
+        return uidriver::topmost(window, [](QQuickItem *item) {
+            return item->objectName() == u"pictureImage" && item->isVisible() && item->property("status").toInt() == 1;
+        });
+    };
+    check(waitFor([&] { return pictureImage() != nullptr; }, 5000), "the picture opens on its own");
+    themes("pictureBacking", pictureImage, "the picture view");
+    settings->setThemeMode(mode);
+    settings->setLightPictureBacking(wasOn);
+    app->goHome();
+    workspace->deleteForever(workspace->deletePage(page));
+}
+
 /// 5j. A drawing another program wrote (excalidraw.com frames its strokes with its own margins):
 /// its embed has the shape of the file's own size from the start, the picture of the drawing image
 /// provider the same — nothing below it moves when it has loaded — and keeps it while the app's
@@ -12036,6 +12105,8 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         checkLinkPreviews(window, app, check, controllerFor);
         // 5b. A picture opens as a picture (checkPictureView).
         checkPictureView(window, app, check, controllerFor);
+        // 5r. A picture on a light backing in a dark theme (checkPictureBacking).
+        checkPictureBacking(window, app, check);
         // 5k. PDFs: the thumbnail, the viewer, drawing on a page (checkPdfViewer).
         checkPdfViewer(window, app, check, controllerFor);
         // Audio and video: the player of an embed, the now-playing bar, the player view, a voice note.

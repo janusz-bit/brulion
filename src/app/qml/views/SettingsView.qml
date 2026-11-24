@@ -1312,6 +1312,13 @@ Item {
                 onToggled: AppSettings.pictureFrames = checked
             }
             SettingSwitch {
+                objectName: "settingsLightPictureBacking"
+                text: qsTr("Light background under pictures in a dark theme")
+                description: qsTr("Transparent pictures with dark lines (diagrams, scans) stay readable. Photos look the same.")
+                checked: AppSettings.lightPictureBacking
+                onToggled: AppSettings.lightPictureBacking = checked
+            }
+            SettingSwitch {
                 objectName: "settingsCodeLineNumbers"
                 text: qsTr("Line numbers in code blocks")
                 description: qsTr("Each line of a code block numbered on its left. The numbers are not part of the text: copying the code leaves them out.")

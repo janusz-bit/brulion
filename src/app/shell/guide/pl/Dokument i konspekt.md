@@ -101,6 +101,8 @@ Podczas czytania nadal zaznaczysz i skopiujesz bloki (także „Kopiuj link” �
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…` — okno wyboru plików przyjmie kilka obrazów naraz, także w przeglądarce. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 
+W ciemnym motywie obraz leży na jasnym tle, więc diagram albo skan z ciemnymi liniami na przezroczystym tle nie znika w ciemnej stronie; zdjęcia wyglądają tak samo. **Ustawienia → Edytor → Jasne tło pod obrazkami w ciemnym motywie** to wyłącza (np. dla białych logo zrobionych na ciemne strony). Rysunki mają własną ciemną wersję i nigdy go nie dostają.
+
 Plik dowolnego typu wstawisz jako link poleceniem `/Plik…`: w tekście pojawi się `[[raport.docx]]` (kilka wybranych plików — kilka linków). Plik spoza notatnika trafia do folderu załączników, a plik, który już jest w notatniku, zostaje na swoim miejscu. Notatka, obraz, PDF, nagranie i film otwierają się po kliknięciu jak zwykle, a inne pliki w Brulionie tylko do odczytu, jako tekst.
 
 Kliknięcie osadzonego obrazu pokazuje samo zdjęcie dopasowane do widoku (mały obraz zostaje w naturalnej wielkości, bez rozmywającego powiększania). Gdy zdjęcie jest większe od widoku, kliknięcie na nim albo przycisk „Pokaż naturalny rozmiar” (na telefonie i w wąskim widoku ikona lupy) pokazuje je w naturalnej wielkości z możliwością przeciągania. Pod zdjęciem są notatki, które je osadzają albo do niego linkują (na szerokim ekranie także w panelu bocznym, w zakładce Linki).

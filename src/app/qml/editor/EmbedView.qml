@@ -21,6 +21,9 @@ import Brulion
 // comes from the drawing image provider in the app's theme (`url` light, `darkUrl` dark:
 // EditorHost::drawingUrl) — a theme change shows the other one at once, the old one kept until
 // the new one is there (retainWhileLoading), rendered at its own size × the screen's ratio.
+// In a dark theme a picture (not a drawing: it has a dark version) lies on a light backing under
+// its painted area (AppSettings.lightPictureBacking, on by default): a transparent PNG or SVG with
+// dark lines would vanish into the dark page; an opaque photo covers the backing.
 // A picture whose format this device cannot decode (the model's `decodable`: WebP or AVIF without
 // Qt's image plugins, EditorHost::canDecodePicture) is not loaded: its frame names the file and
 // the format, like the picture view (ContentPictureView), instead of a load error.
@@ -223,6 +226,19 @@ Column {
                 border.width: root.pictureFrames || !loaded ? 1 : 0
                 border.color: Theme.borderSubtle
                 clip: true
+
+                // The light backing in a dark theme (under the painted picture only: an SVG fitted
+                // into its frame leaves the rest on the page's colour).
+                Rectangle {
+                    objectName: "embedPictureBacking"
+                    visible: picture.loaded && !embed.drawing && Theme.dark && AppSettings.lightPictureBacking
+                    x: img.x + (img.width - img.paintedWidth) / 2
+                    y: img.y + (img.height - img.paintedHeight) / 2
+                    width: img.paintedWidth
+                    height: img.paintedHeight
+                    radius: Math.max(0, Theme.radius - 1)
+                    color: Theme.pictureBacking
+                }
 
                 // Decoded at most 2048 px wide/high: a phone photo (12 MP) would otherwise take
                 // 48 MB (+ mipmaps) per embed. No PreserveAspectFit: with it Qt also scales small

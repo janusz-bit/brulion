@@ -88,6 +88,7 @@ constexpr auto kEditorSource = "editor/sourceMode"_L1;
 constexpr auto kPropertiesExpanded = "editor/propertiesExpanded"_L1;
 constexpr auto kWebPictures = "editor/webPicturesShown"_L1;
 constexpr auto kPictureFrames = "editor/pictureFrames"_L1;
+constexpr auto kLightPictureBacking = "editor/lightPictureBacking"_L1;
 constexpr auto kCodeLineNumbers = "editor/codeLineNumbers"_L1;
 constexpr auto kSpellCheck = "spelling/enabled"_L1;
 constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
@@ -1381,6 +1382,17 @@ void AppSettings::setPictureFrames(bool on)
 {
     if (store(kPictureFrames, on, pictureFrames()))
         Q_EMIT pictureFramesChanged();
+}
+
+bool AppSettings::lightPictureBacking() const
+{
+    return m_settings->value(kLightPictureBacking, true).toBool();
+}
+
+void AppSettings::setLightPictureBacking(bool on)
+{
+    if (store(kLightPictureBacking, on, lightPictureBacking()))
+        Q_EMIT lightPictureBackingChanged();
 }
 
 bool AppSettings::codeLineNumbers() const

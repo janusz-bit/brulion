@@ -351,6 +351,19 @@ Item {
         TouchFlick.enabled: !root.actualSize
         T.ScrollBar.vertical: BScrollBar {}
 
+        // In a dark theme a light backing under the picture's painted area (AppSettings.
+        // lightPictureBacking): a transparent diagram's dark lines stay readable. Not a drawing (it
+        // has a dark version of its own).
+        Rectangle {
+            objectName: "pictureBacking"
+            visible: root.pictureLoaded && !root.drawing && Theme.dark && AppSettings.lightPictureBacking
+            x: picture.x + (picture.width - picture.paintedWidth) / 2
+            y: picture.y + (picture.height - picture.paintedHeight) / 2
+            width: picture.paintedWidth
+            height: picture.paintedHeight
+            color: Theme.pictureBacking
+        }
+
         Image {
             id: picture
 
