@@ -4133,13 +4133,21 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         return;
     }
 
-    // The thumbnail: drawn, white page with a hairline frame (also in the dark theme).
+    // The thumbnail: drawn, white page with a hairline frame (also in the dark theme). Its colour
+    // is read once the view has faded in: a view newly shown (coming from another one than the
+    // attachment's) is still translucent over the dark ground when the thumbnail is ready.
     app->openPage(note);
     QQuickItem *tile = nullptr;
+    const auto opaque = [](QQuickItem *item) {
+        for (; item; item = item->parentItem())
+            if (item->opacity() < 1)
+                return false;
+        return true;
+    };
     check(waitFor(
                   [&] {
                       tile = shownNamed(window->contentItem(), u"pdfEmbedTile"_s);
-                      return tile && tile->property("loaded").toBool();
+                      return tile && tile->property("loaded").toBool() && opaque(tile);
                   },
                   15000),
           "the PDF's thumbnail is drawn in the note");
