@@ -1080,12 +1080,13 @@ frontmatter or the leading `key:: value` lines, keys in any case):
 ---
 line-numbers: true     # numery-linii — line numbers beside the code blocks
 picture-frames: false  # ramki — a hairline frame around the pictures
+picture-backing: true  # jasne-tlo — a light background under the pictures in a dark theme
 text-width: wide       # szerokosc-tekstu — narrow | normal | wide | full (wąska | normalna | szeroka | pełna)
 tasks: ignore          # zadania: ignoruj — §5 "Ignoring a page's tasks"
 ---
 ```
 
-* **Flags** (`line-numbers`, `picture-frames`): `true` / `yes` / `tak` / `on` / `1` or `false` /
+* **Flags** (`line-numbers`, `picture-frames`, `picture-backing`): `true` / `yes` / `tak` / `on` / `1` or `false` /
   `no` / `nie` / `off` / `0` (any case; a list's first item); **a width**: `narrow`, `normal`,
   `wide`, `full` or `wąska`, `normalna`, `szeroka`, `pełna` (any case, diacritics optional) — the
   device setting's choices (600, 680, 960 px, the full width). Any other value is no option.

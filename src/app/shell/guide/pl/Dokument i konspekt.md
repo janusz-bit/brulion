@@ -23,10 +23,10 @@ Ta strona jest dokumentem; [[Zadania|Zadania]] też. Dziennik domyślnie jest ko
 ## Opcje notatki
 Menu strony **⋯** → **Opcje notatki…** ustawia, jak pokazywać tę jedną notatkę, niezależnie od ustawień urządzenia:
 - **Zadania w Zadaniach i kalendarzu** — wyłączone: pola wyboru zostają na stronie, ale jej zadania nie trafiają na listy zadań (lista rzeczy do spakowania, lista kontrolna do kopiowania).
-- **Numery linii w blokach kodu**, **Ramki wokół obrazków** — Jak w ustawieniach, Włączone albo Wyłączone.
+- **Numery linii w blokach kodu**, **Ramki wokół obrazków**, **Jasne tło pod obrazkami** (w ciemnym motywie) — Jak w ustawieniach, Włączone albo Wyłączone.
 - **Szerokość tekstu** — Jak w ustawieniach, Wąska, Normalna, Szeroka albo Pełna.
 
-Wybory zapisują się w notatce jako właściwości (`numery-linii: true`, `ramki: false`, `szerokosc-tekstu: szeroka`, `zadania: ignoruj`; przy angielskim interfejsie `line-numbers`, `picture-frames`, `text-width`, `tasks: ignore`), więc notatka wygląda tak samo na każdym urządzeniu. „Jak w ustawieniach” z powrotem usuwa właściwość.
+Wybory zapisują się w notatce jako właściwości (`numery-linii: true`, `ramki: false`, `jasne-tlo: false`, `szerokosc-tekstu: szeroka`, `zadania: ignoruj`; przy angielskim interfejsie `line-numbers`, `picture-frames`, `picture-backing`, `text-width`, `tasks: ignore`), więc notatka wygląda tak samo na każdym urządzeniu. „Jak w ustawieniach” z powrotem usuwa właściwość.
 
 ## Bloki
 Blokiem jest każdy punkt listy, a poza listami — każdy akapit, nagłówek, tabela, cytat, blok kodu. Kliknij blok, żeby go edytować; poza edycją widzisz go sformatowanego.
@@ -101,7 +101,7 @@ Podczas czytania nadal zaznaczysz i skopiujesz bloki (także „Kopiuj link” �
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…` — okno wyboru plików przyjmie kilka obrazów naraz, także w przeglądarce. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 
-W ciemnym motywie obraz leży na jasnym tle, więc diagram albo skan z ciemnymi liniami na przezroczystym tle nie znika w ciemnej stronie; zdjęcia wyglądają tak samo. **Ustawienia → Edytor → Jasne tło pod obrazkami w ciemnym motywie** to wyłącza (np. dla białych logo zrobionych na ciemne strony). Rysunki mają własną ciemną wersję i nigdy go nie dostają.
+W ciemnym motywie obraz leży na jasnym tle, więc diagram albo skan z ciemnymi liniami na przezroczystym tle nie znika w ciemnej stronie; zdjęcia wyglądają tak samo. **Ustawienia → Edytor → Jasne tło pod obrazkami w ciemnym motywie** to wyłącza (np. dla białych logo zrobionych na ciemne strony), a **Opcje notatki…** (wyżej) ustawiają to dla jednej notatki. Rysunki mają własną ciemną wersję i nigdy go nie dostają.
 
 Plik dowolnego typu wstawisz jako link poleceniem `/Plik…`: w tekście pojawi się `[[raport.docx]]` (kilka wybranych plików — kilka linków). Plik spoza notatnika trafia do folderu załączników, a plik, który już jest w notatniku, zostaje na swoim miejscu. Notatka, obraz, PDF, nagranie i film otwierają się po kliknięciu jak zwykle, a inne pliki w Brulionie tylko do odczytu, jako tekst.
 

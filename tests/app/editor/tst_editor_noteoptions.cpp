@@ -100,6 +100,34 @@ private Q_SLOTS:
         QCOMPARE(f.page.codeLineNumbers(), 1);
     }
 
+    /// The light backing under pictures: on / off written as the interface's key, "As in Settings"
+    /// removes it; each change one undo step.
+    void pictureBacking()
+    {
+        Fixture f(u"---\ntags: [stos]\n---\n![[stos.png]]\n"_s);
+        QCOMPARE(f.page.pictureBacking(), -1);
+        QSignalSpy changed(&f.page, &PageController::noteOptionsChanged);
+        QVERIFY(f.set(u"pictureBacking"_s, u"off"_s));
+        QCOMPARE(f.page.text(), u"---\ntags: [stos]\njasne-tlo: false\n---\n![[stos.png]]\n"_s);
+        QCOMPARE(f.option(u"pictureBacking"_s), u"off"_s);
+        QCOMPARE(f.page.pictureBacking(), 0);
+        QVERIFY(f.set(u"pictureBacking"_s, u"on"_s));
+        QCOMPARE(f.page.text(), u"---\ntags: [stos]\njasne-tlo: true\n---\n![[stos.png]]\n"_s);
+        QCOMPARE(f.page.pictureBacking(), 1);
+        QCOMPARE(changed.size(), 2);
+        QVERIFY(f.set(u"pictureBacking"_s, QString()));
+        QCOMPARE(f.page.text(), u"---\ntags: [stos]\n---\n![[stos.png]]\n"_s);
+        QCOMPARE(f.page.pictureBacking(), -1);
+        f.page.undo();
+        QCOMPARE(f.page.pictureBacking(), 1);
+        f.page.undo();
+        QCOMPARE(f.page.pictureBacking(), 0);
+        Fixture g(u"Tekst\n"_s, u"en"_s);
+        QVERIFY(g.set(u"pictureBacking"_s, u"off"_s));
+        QCOMPARE(g.page.text(), u"---\npicture-backing: false\n---\nTekst\n"_s);
+        QVERIFY(!g.set(u"pictureBacking"_s, u"tak"_s));
+    }
+
     void englishInterface()
     {
         Fixture f(u"Tekst\n"_s, u"en"_s);

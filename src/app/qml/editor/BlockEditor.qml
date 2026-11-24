@@ -3526,6 +3526,7 @@ FocusScope {
         id: webPictureViewerComponent
         WebPictureViewer {
             id: pictureViewer
+            noteBacking: editor.controller !== null ? editor.controller.pictureBacking : -1
             MapHolder {
                 id: shownPicture
                 map: pictureViewer.picture

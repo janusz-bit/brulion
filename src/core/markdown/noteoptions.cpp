@@ -50,6 +50,7 @@ QString noteOptionName(NoteOption option)
     case NoteOption::PictureFrames: return u"pictureFrames"_s;
     case NoteOption::TextWidth: return u"textWidth"_s;
     case NoteOption::Tasks: return u"tasks"_s;
+    case NoteOption::PictureBacking: return u"pictureBacking"_s;
     }
     return {};
 }
@@ -57,7 +58,8 @@ QString noteOptionName(NoteOption option)
 std::optional<NoteOption> parseNoteOptionName(QStringView name)
 {
     for (const NoteOption o :
-         {NoteOption::LineNumbers, NoteOption::PictureFrames, NoteOption::TextWidth, NoteOption::Tasks}) {
+         {NoteOption::LineNumbers, NoteOption::PictureFrames, NoteOption::TextWidth, NoteOption::Tasks,
+          NoteOption::PictureBacking}) {
         if (name == noteOptionName(o))
             return o;
     }
@@ -71,6 +73,7 @@ QStringList noteOptionKeys(NoteOption option)
     case NoteOption::PictureFrames: return {u"picture-frames"_s, u"ramki"_s};
     case NoteOption::TextWidth: return {u"text-width"_s, u"szerokosc-tekstu"_s};
     case NoteOption::Tasks: return {u"tasks"_s, u"zadania"_s};
+    case NoteOption::PictureBacking: return {u"picture-backing"_s, u"jasne-tlo"_s};
     }
     return {};
 }
@@ -177,6 +180,7 @@ NoteOptions noteOptions(const Properties &properties)
     out.pictureFrames = parseNoteFlag(valueOf(NoteOption::PictureFrames));
     out.textWidth = parseNoteTextWidth(valueOf(NoteOption::TextWidth));
     out.tasksIgnored = tasksIgnored(properties);
+    out.pictureBacking = parseNoteFlag(valueOf(NoteOption::PictureBacking));
     return out;
 }
 

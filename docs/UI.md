@@ -4249,7 +4249,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   so a transparent PNG or SVG with dark lines (a diagram, a scan) stays readable; an opaque photo
   covers it. Settings → Editor → "Light background under pictures in a dark theme"
   (`AppSettings.lightPictureBacking`, device-local, on; `b.app.settings()` key
-  `lightPictureBacking`) turns it off. A drawing never gets it (its picture has a dark version).
+  `lightPictureBacking`) turns it off; a note's own `picture-backing` option wins over it in the
+  note and its `WebPictureViewer` ("Note options"). A drawing never gets it (its picture has a dark
+  version).
   Opening one (a click on the embed,
   a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
   `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
@@ -6503,21 +6505,26 @@ save, only a change of some note's properties).
 
 A note's own options (docs/SYNTAX.md §4 "Note options") — page properties, so they travel with the
 file — win over the device's settings for that note: `PageController.noteOptions` ({ lineNumbers,
-pictureFrames: "" | "on" | "off", textWidth: "" | "narrow" | "normal" | "wide" | "full", tasks: "" |
-"ignore" }; "" — the device's setting) follows the page's text as it is edited (source mode too),
-typed for the views as `codeLineNumbers`, `pictureFrames` (-1 the device's, 0 off, 1 on) and
+pictureFrames, pictureBacking: "" | "on" | "off", textWidth: "" | "narrow" | "normal" | "wide" |
+"full", tasks: "" | "ignore" }; "" — the device's setting) follows the page's text as it is edited
+(source mode too), typed for the views as `codeLineNumbers`, `pictureFrames`, `pictureBacking` (-1
+the device's, 0 off, 1 on) and
 `textWidth` (-1, or the pixels Settings stores: 600, 680, 960, 0 for the full width).
 
 * **Where they show**: `CodeBlockView` numbers the lines with the note's `codeLineNumbers`, else
   `AppSettings.codeLineNumbers`; `EmbedView` frames pictures with the note's `pictureFrames`, else
-  `AppSettings.pictureFrames`; `PageView` keeps the text within the note's `textWidth`, else
+  `AppSettings.pictureFrames`, and in a dark theme lays them on a light backing with the note's
+  `pictureBacking`, else `AppSettings.lightPictureBacking` (so does the note's `WebPictureViewer`;
+  the picture view of an attachment, shared by every note, follows the device's setting);
+  `PageView` keeps the text within the note's `textWidth`, else
   `AppSettings.editorWidth` (a page's own view and a daily note opened as a page; the Journal's list
   of days keeps one width for all of them). `tasks` is the property of SYNTAX §5 "Ignoring a page's
   tasks" (`Workspace.tasksIgnored`).
 * **The dialog** (`qml/content/ContentNoteOptionsDialog.qml`): the page menu ⋯ and the top bar's More
   → "Note options…" (`requestUiAction("noteOptions")`; pages, not in reading mode or a read-only
   view). A switch "Tasks in Tasks and the calendar", then "Line numbers in code blocks", "Frames
-  around pictures" — As in Settings | On | Off — and "Text width" — As in Settings | Narrow |
+  around pictures", "Light background under pictures" (in a dark theme) — As in Settings | On |
+  Off — and "Text width" — As in Settings | Narrow |
   Normal | Wide | Full —, each row saying what the device's setting is. A choice is written at once
   (`PageController.setNoteOption`: one undo step, only the option's line changes; a refusal — a
   frontmatter Brulion cannot edit safely — in a toast); the properties panel shows the keys as

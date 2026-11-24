@@ -5109,7 +5109,8 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
 
 /// 5r. A picture in a dark theme lies on a light backing (AppSettings.lightPictureBacking): its
 /// embed in a note and the picture view put one under the painted picture — a transparent diagram's
-/// dark lines would vanish into the dark page — none in the light theme or with the setting off.
+/// dark lines would vanish into the dark page — none in the light theme or with the setting off;
+/// a note's own `jasne-tlo` option wins over the setting.
 void checkPictureBacking(QQuickWindow *window, AppController *app, const Check &check)
 {
     Workspace *workspace = app->workspace();
@@ -5162,6 +5163,18 @@ void checkPictureBacking(QQuickWindow *window, AppController *app, const Check &
     app->openPage(page);
     check(waitFor([&] { return embedImage() != nullptr; }, 5000), "the embedded picture is shown");
     themes("embedPictureBacking", embedImage, "an embedded picture");
+    // The note's own option (`jasne-tlo`, "Note options") wins over the device's setting.
+    const QString own = u"Plan bez jasnego tła.md"_s;
+    check(workspace->writeFile(own, u"---\njasne-tlo: nie\n---\n![[plan-mieszkania.svg]]\n"_s)
+                  && workspace->writeFile(page, u"---\njasne-tlo: tak\n---\n![[plan-mieszkania.svg]]\n"_s),
+          "two notes set their own light backing");
+    settings->setThemeMode(u"dark"_s);
+    settings->setLightPictureBacking(false);
+    app->openPage(page);
+    check(backingIs("embedPictureBacking", embedImage, true), "a note's own option on: a backing with the setting off");
+    settings->setLightPictureBacking(true);
+    app->openPage(own);
+    check(backingIs("embedPictureBacking", embedImage, false), "a note's own option off: none with the setting on");
     app->openPage(u"assets/plan-mieszkania.svg"_s);
     const auto pictureImage = [window] {
         return uidriver::topmost(window, [](QQuickItem *item) {
@@ -5174,6 +5187,7 @@ void checkPictureBacking(QQuickWindow *window, AppController *app, const Check &
     settings->setLightPictureBacking(wasOn);
     app->goHome();
     workspace->deleteForever(workspace->deletePage(page));
+    workspace->deleteForever(workspace->deletePage(own));
 }
 
 /// 5j. A drawing another program wrote (excalidraw.com frames its strokes with its own margins):

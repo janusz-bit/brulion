@@ -110,8 +110,10 @@ private Q_SLOTS:
     void names()
     {
         for (const NoteOption o :
-             {NoteOption::LineNumbers, NoteOption::PictureFrames, NoteOption::TextWidth, NoteOption::Tasks})
+             {NoteOption::LineNumbers, NoteOption::PictureFrames, NoteOption::TextWidth, NoteOption::Tasks,
+              NoteOption::PictureBacking})
             QCOMPARE(parseNoteOptionName(noteOptionName(o)), o);
+        QCOMPARE(parseNoteOptionName(u"pictureBacking"), NoteOption::PictureBacking);
         QCOMPARE(parseNoteOptionName(u"lineNumbers"), NoteOption::LineNumbers);
         QCOMPARE(parseNoteOptionName(u"line-numbers"), std::nullopt);
         QCOMPARE(noteOptionKey(NoteOption::LineNumbers, false), u"line-numbers"_s);
@@ -119,6 +121,33 @@ private Q_SLOTS:
         QCOMPARE(noteOptionKey(NoteOption::PictureFrames, true), u"ramki"_s);
         QCOMPARE(noteOptionKey(NoteOption::TextWidth, true), u"szerokosc-tekstu"_s);
         QCOMPARE(noteOptionKey(NoteOption::Tasks, true), u"zadania"_s);
+        QCOMPARE(noteOptionKey(NoteOption::PictureBacking, false), u"picture-backing"_s);
+        QCOMPARE(noteOptionKey(NoteOption::PictureBacking, true), u"jasne-tlo"_s);
+    }
+
+    /// The light backing under pictures in a dark theme (`picture-backing` / `jasne-tlo`): a flag.
+    void pictureBacking_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("backing");
+        const int none = -1;
+        QTest::newRow("nothing") << u"# Notatka\n\n![[stos.png]]\n"_s << none;
+        QTest::newRow("yaml off") << u"---\npicture-backing: false\n---\n![[stos.png]]\n"_s << 0;
+        QTest::newRow("yaml polish on") << u"---\njasne-tlo: tak\n---\nZażółć gęślą jaźń\n"_s << 1;
+        QTest::newRow("any case") << u"---\nJasne-Tlo: NIE\n---\nTekst\n"_s << 0;
+        QTest::newRow("logseq crlf") << u"jasne-tlo:: on\r\n\r\n- blok\r\n"_s << 1;
+        QTest::newRow("english first") << u"---\njasne-tlo: true\npicture-backing: false\n---\n"_s << 0;
+        QTest::newRow("no value") << u"---\npicture-backing: może\n---\n"_s << none;
+        QTest::newRow("block property") << u"- blok\n  picture-backing:: false\n"_s << none;
+    }
+    void pictureBacking()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, backing);
+        const NoteOptions o = optionsOf(content);
+        QCOMPARE(flag(o.pictureBacking), backing);
+        // (The other options are left alone.)
+        QCOMPARE(flag(o.pictureFrames), -1);
     }
 
     void fromNotes_data()
@@ -194,11 +223,13 @@ private Q_SLOTS:
         };
         set(NoteOption::LineNumbers, true, PropertyType::Checkbox);
         set(NoteOption::PictureFrames, false, PropertyType::Checkbox);
+        set(NoteOption::PictureBacking, false, PropertyType::Checkbox);
         set(NoteOption::TextWidth, noteTextWidthValue(NoteTextWidth::Full, polish), PropertyType::Text);
         set(NoteOption::Tasks, polish ? u"ignoruj"_s : u"ignore"_s, PropertyType::Text);
         const NoteOptions o = optionsOf(text);
         QCOMPARE(o.lineNumbers, true);
         QCOMPARE(o.pictureFrames, false);
+        QCOMPARE(o.pictureBacking, false);
         QCOMPARE(o.textWidth, NoteTextWidth::Full);
         QVERIFY(o.tasksIgnored);
         // The text after the properties stays as it was.

@@ -31,6 +31,11 @@ T.Popup {
     property var picture: ({})
     /// Fitted into the window ↔ the picture's own pixels (the flickable then).
     property bool actualSize: false
+    /// The note's own `picture-backing` option (PageController.pictureBacking: -1 the device's
+    /// setting, 0 off, 1 on): in a dark theme the picture lies on a light backing.
+    property int noteBacking: -1
+    readonly property bool backing: Theme.dark && (viewer.noteBacking >= 0 ? viewer.noteBacking > 0
+                                                                           : AppSettings.lightPictureBacking)
 
     /// "Save to notebook" in the bar.
     signal saveRequested()
@@ -207,11 +212,12 @@ T.Popup {
             boundsBehavior: Flickable.StopAtBounds
             TouchFlick.enabled: !viewer.actualSize
 
-            // In a dark theme a light backing under the picture (AppSettings.lightPictureBacking,
-            // as ContentPictureView): a transparent picture's dark lines stay readable.
+            // In a dark theme a light backing under the picture (`backing`: the note's option or
+            // AppSettings.lightPictureBacking, as EmbedView): a transparent picture's dark lines
+            // stay readable.
             Rectangle {
                 objectName: "webPictureViewerBacking"
-                visible: image.status === Image.Ready && Theme.dark && AppSettings.lightPictureBacking
+                visible: image.status === Image.Ready && viewer.backing
                 x: image.x + (image.width - image.paintedWidth) / 2
                 y: image.y + (image.height - image.paintedHeight) / 2
                 width: image.paintedWidth

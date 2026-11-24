@@ -22,7 +22,8 @@ import Brulion
 // EditorHost::drawingUrl) — a theme change shows the other one at once, the old one kept until
 // the new one is there (retainWhileLoading), rendered at its own size × the screen's ratio.
 // In a dark theme a picture (not a drawing: it has a dark version) lies on a light backing under
-// its painted area (AppSettings.lightPictureBacking, on by default): a transparent PNG or SVG with
+// its painted area (AppSettings.lightPictureBacking, on by default — or the note's own
+// `picture-backing` option, PageController.pictureBacking): a transparent PNG or SVG with
 // dark lines would vanish into the dark page; an opaque photo covers the backing.
 // A picture whose format this device cannot decode (the model's `decodable`: WebP or AVIF without
 // Qt's image plugins, EditorHost::canDecodePicture) is not loaded: its frame names the file and
@@ -59,6 +60,11 @@ Column {
     /// §4 "Note options"), else the device's setting.
     readonly property int notePictureFrames: root.controller !== null ? root.controller.pictureFrames : -1
     readonly property bool pictureFrames: notePictureFrames >= 0 ? notePictureFrames > 0 : AppSettings.pictureFrames
+    /// In a dark theme pictures lie on a light backing: the note's own option (`picture-backing`),
+    /// else the device's setting.
+    readonly property int notePictureBacking: root.controller !== null ? root.controller.pictureBacking : -1
+    readonly property bool pictureBacking: Theme.dark && (notePictureBacking >= 0 ? notePictureBacking > 0
+                                                                                  : AppSettings.lightPictureBacking)
     signal clicked(string target)
     /// A click on a drawing (`drawing`: an SVG with an embedded scene): the drawing editor.
     signal drawingClicked(string path)
@@ -231,7 +237,7 @@ Column {
                 // into its frame leaves the rest on the page's colour).
                 Rectangle {
                     objectName: "embedPictureBacking"
-                    visible: picture.loaded && !embed.drawing && Theme.dark && AppSettings.lightPictureBacking
+                    visible: picture.loaded && !embed.drawing && root.pictureBacking
                     x: img.x + (img.width - img.paintedWidth) / 2
                     y: img.y + (img.height - img.paintedHeight) / 2
                     width: img.paintedWidth
