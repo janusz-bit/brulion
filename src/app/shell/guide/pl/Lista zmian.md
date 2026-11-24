@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.29.1 — 24 listopada 2026
+
+**Nowe**
+- **Eksport HTML z hasłem** — eksport strony, folderu albo notatnika do dokumentu HTML ma przełącznik **Chroń hasłem**: plik jest zaszyfrowany (AES-256, hasło wpisujesz dwa razy) i otwiera się hasłem w aktualnej przeglądarce, także z dysku albo z e-maila. Zapomnianego hasła nie da się odzyskać ([[Import i eksport]]).
+- **Obrazki w ciemnym motywie** — obrazek leży na jasnym, przygaszonym tle, więc przezroczyste schematy i skany z ciemnymi liniami są czytelne; nieprzezroczyste zdjęcie je zakrywa. **Ustawienia → Edytor → Jasne tło pod obrazkami w ciemnym motywie** je wyłącza, a **Opcje notatki…** ustawiają je dla jednej notatki (`jasne-tlo`, po angielsku `picture-backing`).
+- **Dużo mniej pamięci na obrazki** — obrazek jest dekodowany w rozmiarze swojej ramki i tylko wtedy, gdy jest w widoku albo blisko niego: strona z 40 zdjęciami z telefonu zajmuje najwyżej ok. 0,5 GB zamiast 2,1 GB i przewija się bez zacięć. Zwolniona pamięć wraca do systemu, gdy aplikacja odpoczywa.
+
+**Poprawki**
+- Czat z AI na telefonie znów mieści się na ekranie: etykiety rozmowy z agentem zawijają się, zamiast wypychać wiadomości, pole wiadomości i Wyślij za prawą krawędź.
+- Drobne wycieki: dwa okna, przycisk powiadomienia rozszerzenia i dwie listy, których nic nie czyściło.
+
 ## 0.29.0 — 23 listopada 2026
 
 **Nowe**

@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.29.1 — November 24, 2026
+
+**New**
+- **HTML export with a password** — exporting a page, a folder or the notebook as an HTML document has a **Protect with a password** switch: the file is encrypted (AES-256, the password typed twice) and opens with the password in a current browser, also from a disk or an e-mail. A forgotten password cannot be recovered ([[Import and export]]).
+- **Pictures in a dark theme** — a picture lies on a light, dimmed backing, so transparent diagrams and scans with dark lines stay readable; an opaque photo covers it. **Settings → Editor → Light background under pictures in a dark theme** turns it off, and **Note options…** sets it for one note (`picture-backing`, in Polish `jasne-tlo`).
+- **Far less memory for pictures** — a picture is decoded at the size its frame shows it, and only while it is in or near the view: a page of 40 phone photos takes about 0.5 GB at most instead of 2.1 GB and scrolls without stalls. Memory freed is given back to the system once the app is quiet.
+
+**Fixes**
+- The AI chat on a phone fits the screen again: the chips of an agent conversation wrap instead of pushing the messages, the message field and Send past the right edge.
+- Small leaks: two dialogs, an extension notification's button and two lists that were never cleared.
+
 ## 0.29.0 — November 23, 2026
 
 **New**
