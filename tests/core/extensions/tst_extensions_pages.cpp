@@ -432,6 +432,30 @@ private Q_SLOTS:
         QCOMPARE(errorLine(title, error), line);
     }
 
+    void assistantsSourceKeepsItsPermissions_data()
+    {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("line");
+        QTest::newRow("pl") << u"pl"_s << u"uprawnienia: [ai, aplikacja, zapis]\n"_s;
+        QTest::newRow("en") << u"en"_s << u"permissions: [ai, app, write]\n"_s;
+    }
+    void assistantsSourceKeepsItsPermissions()
+    {
+        // The assistant changes the app too (its tools over b.app): its source as a page asks for
+        // `app` as well, in the page's language, and reads back as the built-in's.
+        QFETCH(QString, language);
+        QFETCH(QString, line);
+        const Extension assistant = builtinExtension(u"asystent"_s);
+        QCOMPARE(assistant.permissions, (QStringList{u"ai"_s, u"app"_s, u"write"_s}));
+        const QString content = builtinSourcePage(assistant, language);
+        QVERIFY2(content.contains(line), qPrintable(content.left(300)));
+        const QString title = language == u"en" ? u"AI assistant"_s : u"Asystent AI"_s;
+        const ParsedNote note = markdown::parseNote(title + u".md"_s, content);
+        const PageExtension page = readPageExtension(title + u".md"_s, note, content);
+        QVERIFY2(page.problems.isEmpty(), qPrintable(page.problems.join(u", "_s)));
+        QCOMPARE(page.permissions, assistant.permissions);
+    }
+
     void builtinSourceAsAPage_data()
     {
         QTest::addColumn<QString>("language");
