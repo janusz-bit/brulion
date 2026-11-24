@@ -230,6 +230,12 @@ done in the repository simply disappears from the list.
 
 ## Views and data
 
+* **Photos turned by their EXIF orientation** — a photo a phone stored sideways with an
+  orientation tag is shown as stored in a note and in the picture view (`Image.autoTransform` is
+  off), while exports, OCR and the pictures an AI gets turn it upright. Turning it needs the
+  header size turned too (`picturesize.h`: the frame of a note's picture has its final height at
+  creation) and the picture view's OCR frames mapped the other way (`AttachmentIndexer` maps them
+  onto the file's own pixels today).
 * **Database views: what remains** — dragging cards on a board and a calendar was tested with the
   mouse and the offscreen self-test, not yet with a finger on a real phone nor in the browser
   build; Bases' map view (Obsidian's Maps plugin) is a table; a database view's table has keys
@@ -449,6 +455,22 @@ Details in docs/PERFORMANCE.md, "Next steps":
 * developer QML and self-tests (`qml/dev`, `qml/content/*SelfTest.qml`) outside `src/app`, so that
   releases do not package QtTest, QuickTest and Qt.labs.folderlistmodel (L9b: APK −0.84 MB, web
   version −0.27 MB before wasm-opt);
+* **Pictures and memory: what is left** (docs/PERFORMANCE.md "Pictures and memory") — measuring a
+  page of photos on a real phone (PSS, and whether one screen of reach around the view is more
+  than a phone needs); the copy of every shown picture Qt Quick keeps in main memory beside its
+  texture (half of what a shown picture takes where textures are main memory too: phones,
+  integrated graphics); canvas cards and extension pages hold their pictures as before (they are
+  small or few); the journal's kept days hold theirs for 30 s after the view is left; `NearView`
+  looks at every picture frame of a window once per frame (one `mapRectToScene` each: 6 % of the
+  GUI thread's instructions while a page of forty photos scrolls) — for pages of hundreds of
+  pictures, look per scroller and only when it moved;
+* **Scrolling: empty texts make every scroll step walk the page** — a `Text` whose text was never
+  set keeps Qt's `ItemObservesViewport` flag ("until its size is known"), so each scroll step
+  walks from the list down to every such item (`QQuickItemPrivate::transformChanged`: 60 % of the
+  GUI thread's instructions while a page of forty photos scrolls, measured 2026-11-24; a block row
+  has at least one, a picture's frame three). `--env BENCH_VIEWPORT_OBSERVERS=1` of
+  tests/bench/app lists them; clearing the flag on empty texts (or not creating them) would take
+  that walk away — not tried yet;
 * **File dialogs — check by hand**: Windows (Open/Save in import, export, "Image…" and the event
   log), AppImage in a real GNOME and KDE session (the portal dialog; without a desktop session
   checked only with xdg-desktop-portal-gtk under Xvfb), Android with Google Drive (import and

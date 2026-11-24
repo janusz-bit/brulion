@@ -13,6 +13,18 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **Memory with photos in notes** (2026-11-24). A page with photos took as much memory as all its
+  photos decoded at once, each far larger than it was shown: a page of forty phone photos went
+  over 2 GB. And after you closed such a page the program kept most of that for as long as it
+  ran, so it looked as if memory leaked. Now a photo is decoded only while it is on screen or
+  about one screen away, at the size it is shown, and lets go when you scroll past it; what the
+  program no longer needs goes back to the system. The same page now peaks at 0.54 GB — the
+  program with that notebook open takes 0.43 GB to begin with — and after two rounds of opening
+  every page and every photo of the notebook it holds 0.5 GB instead of 1.6 GB. A photo opened on its
+  own, fitted into the window, takes about a quarter of what it did. What you may notice: a photo you scroll to very quickly
+  appears a moment after its frame. (Measured on Linux; phones work the same way and have not been
+  measured yet.)
+
 * **The save after typing in long pages, also in the Markdown source** (2026-11-22). When you
   pause typing, Brulion saves the page and takes the new version into its index. On a page of
   5000 blocks with tags that took the interface 7–8 ms after every pause, now 4–5 ms: the tags as
@@ -3199,6 +3211,129 @@ through a staging file, History kept, no temporary file left, a cancel leaves th
 `tst_backup_large` (a sparse file of 1 GiB + 5 MiB through a backup — every read within 1 MiB of the
 last — and a restore into another notebook).
 
+### Pictures and memory (2026-11-24)
+
+The report: the app takes much more memory once pictures and notes are opened, and it looks
+like a leak. Measured with a new scenario, `pictures` (tests/bench/app: a notebook of 60 photos of
+12 MP and 10 screenshots from `make-picture-vault.py` — an album page of 40 photos, 30 pages of
+four, 30 pages of text, 30 journal days; each round opens the album and wheels to its end and
+back, opens every picture in the picture view, opens every page, with the journal and 3 s of rest
+in between; a memory mark after a garbage collection at every step). Release builds of `main`
+(v0.29.0, `78cbe106`) and of this change, Xvfb + llvmpipe — textures are the process's memory
+there, as on a phone or with integrated graphics —, a 1280 × 800 window at ratio 1, medians of
+three runs, MB resident / in use by malloc / decoded pixels of the pictures the window holds:
+
+| step | `main` | now |
+|---|---|---|
+| the notebook open on its journal (20 days with photos), settled | 536 / 267 / 48 | 423 / 190 / 4 |
+| the album opened | 769 / 515 / 264 | 479 / 241 / 7 |
+| … scrolled to its end | 2030 / 1342 / 528 | 504 / 261 / 4 |
+| … and back | 2086 / 1374 / 528 | 502 / 262 / 9 |
+| the journal again | 1675 / 318 / 48 | 488 / 212 / 4 |
+| 70 pictures opened one after another (the last) | 1615 / 344 / 55 | 520 / 223 / 5 |
+| the journal again | 1615 / 320 / 48 | 481 / 213 / 4 |
+| 60 pages opened one after another (the last) | 1619 / 339 / 48 | 506 / 232 / 4 |
+| the journal: the end of round one | 1618 / 327 / 48 | 489 / 220 / 4 |
+| the end of round two | 1627 / 329 / 48 | 498 / 222 / 4 |
+| peak (VmHWM) | 2086 | 536 |
+
+Two things, neither of them a leak of objects: after six rounds the window has the same 5071
+items as after one, and malloc's memory in use went from 329 to 334 MB in `main` and from 220 to
+224 MB now — about 1 MB a round in both; over 100 page openings in the 10 000-note notebook the
+QObjects alive at the same page differ by 3 in `main` and by 2 now.
+
+1. **Every picture of a page was decoded, at 2048 px a side.** A page is created whole
+   (`BlockEditor.wholePageRows`), so every picture's `Image` existed and loaded: a 12 MP photo
+   shown 560 × 420 as 2048 × 1536 pixels — 12.6 MB — plus its texture with mipmaps, 16.8 MB. Forty
+   of them: the 1.3 GB in use at the album's end.
+2. **What was freed stayed with the process.** Back at the journal malloc had 320 MB in use and
+   the process 1.7 GB resident (1.4 GB in another batch of runs: what a heap keeps depends on
+   where its last blocks landed). glibc unmaps a block above its mmap threshold when it is freed,
+   but moves that threshold up to the largest such block freed (at most 32 MiB): after the first
+   photo was freed every later one came from a heap, and a heap gives pages back by itself only
+   from its top.
+
+What changed (docs/UI.md "Pictures hold their pixels only near the view"):
+
+* **Decoded for the frame** (`PictureDecode`): the frame's longer side in device pixels, in steps
+  of 64 / 128 px, both sides of `Image.sourceSize` (Qt fits the file into the square and scales
+  nothing up), no mipmaps. The photo above: 640 × 480, 1.2 MB and a texture as large. The picture
+  view decodes the fitted picture the same way (a 12 MP photo in that window: 1024 × 768 instead
+  of 2048 × 1536) and its own pixels, on "Zoom to actual size", at up to 2048 px as before; a
+  canvas group's background picture and a video's first frame get a size too.
+* **Only near the view** (`NearView`): a picture's frame gives its `Image` a source within one
+  window height of the window and takes it away beyond two; a kept view's pictures go 30 s after
+  it was hidden. A row its list is still creating (it sits at the list's top meanwhile) is not
+  looked at until the list has placed it — without that every picture of a page was decoded once
+  for nothing (`tst_near_view` `rowsStillBeingCreated`: 32 of 32 far rows).
+* **Given back when quiet** (`MemoryKeeper`, `platform::releaseFreeMemory()`): `malloc_trim` on
+  a worker thread 2 s after the last picture or page was let go (at the latest after 10 s), at
+  once when the app leaves the foreground — the only time Android's allocator is asked to purge
+  (it gives freed pages back by itself, and what was purged is mapped again when needed next).
+
+What each part gives, the same scenario with one of them switched off (one run each; resident
+MB at the album's end / at the end of round two / the peak):
+
+| | album's end | end | peak |
+|---|---|---|---|
+| all three | 504 | 498 | 536 |
+| `BRULION_NEAR_VIEW=0`: every picture of a page loaded, at its frame's size | 571 | 502 | 590 |
+| `BRULION_MEMORY_KEEPER=0`: nothing given back | 519 | 544 | 545 |
+| `main` | 2030 | 1627 | 2086 |
+
+At ratio 1 the decode size does most of it (1.2 MB a picture and as much for its texture,
+instead of 29 MB), also of what the process kept after freeing: with small pictures there is
+little left to keep. `NearView`'s share grows with the screen's ratio and the page's length (a
+phone at ratio 2.625 decodes a frame as wide as its screen at 1024 px: 3.1 MB and its texture,
+for every picture of the page without it). The giving back takes 0–7 ms on its worker thread
+with a process of 500–800 MB (`brulion.memory` debug lines: 5–40 MB a time in this scenario, 3 MB
+after the index of 10 000 notes was built).
+
+**A fixed mmap threshold was measured and left out.** `mallopt(M_MMAP_THRESHOLD, 512 KiB)` makes
+every large block go back the moment it is freed, without waiting for the app to be quiet: the
+scenario ended at 490 instead of 498 MB and peaked at 528 instead of 538 MB (one run each; 4 MiB
+and 32 MiB: 489 / 537 and 504 / 539) — 2 %. Its price: every block above the threshold then
+starts as fresh pages the kernel maps and zeroes, each time one is allocated — a long page's
+text, its block list. So glibc keeps its own moving threshold and the keeper alone gives back.
+
+What it costs elsewhere (medians of three runs, typing of five, the builds run in turns):
+
+| | `main` | now |
+|---|---|---|
+| the album scrolled (80 wheel notches down, 80 up): longest frame interval / longest GUI stall | 90 / 66 ms | 36 / 14 ms |
+| … frame interval p95 | 17.1 ms | 17.4 ms |
+| the album opened: to its frame | 80 ms | 77 ms |
+| typing in the 5000-block outline: key → frame p95; GUI instructions of the save / its merge / five Enters / six undos | 15.4 ms; 3.7 / 17.8 / 323 / 159 M | 15.4 ms; 3.7 / 17.8 / 323 / 159 M |
+| 10 000 notes: first start to ready / resident then | 1.49 s / 608 MB | 1.42 s / 612 MB |
+| the 5000-block outline opened: GUI instructions until settled | 5546 M | 5480 M |
+| 200 page openings (10 000 notes): frame median / p95, resident at the end | 38 / 65 ms, 815 MB | 38 / 69 ms, 806 MB |
+
+The scroll's stall in `main` is the textures of 2048 px being uploaded as their rows come into
+view; now a picture that comes within reach is decoded on Qt's reader thread and uploaded at its
+frame's size. (The probe's `scroll_insns_M` reads 99 M for `main` and 620 M now and is not
+comparable here: it subtracts the idle rate of the half second before the scroll, in which `main`
+was still loading its pictures. `perf` on both: 587 M and 647 M GUI instructions during the
+scroll, 6 % of the latter in `NearView`'s looks — one `mapRectToScene` per frame of a page per
+window frame.)
+
+Also fixed, from reading the code for objects that outlive their owners: the encryption dialog of
+a page view and the task dependency dialog of an editor were made on the window's overlay and
+never destroyed with their view (one dialog left per view that had opened it); an extension's
+toast with a button left a connection on `AppController::toastActionTriggered` for good unless the
+button was pressed (now `toastRemoved(id)` ends the wait, `tst_shell_scripting`,
+`tst_shell_navigation`); the automation toasts' routes and the paths of the PDFs asked for
+thumbnails were kept after their toast or notebook had gone.
+
+Found on the way, not changed here (TODO.md): a photo turned by its EXIF orientation is shown as
+stored in notes and the picture view; and 60 % of the GUI thread's instructions while that album
+scrolls go into `QQuickItemPrivate::transformChanged` walking from the list to every empty `Text`
+of its rows — in `main` as now ("Pitfalls" below).
+
+Reproduce: tests/bench/app/README.md, scenario `pictures`. Guards: `tests/app/memory`
+(`tst_near_view`, `tst_memory_keeper`), `tests/platform/tst_processmemory`, the shell self-test's
+step "5r" (a page of thirty photos: which are loaded, at what size, the page as tall after
+scrolling to its end).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -3500,3 +3635,33 @@ steps, 1 MB L2 cache) shows k up to 1.27 for linear code, hence its limit of 1.5
   first and `push-vault` checks for empty files; check the vault after a reboot before trusting
   a big-vault number.
 * Profiles (perf DWARF, qmlprofiler) slow the app 1.5–3×: use them for attribution, not timing.
+* **Resident memory is not memory in use** ("Pictures and memory"): glibc keeps freed blocks in
+  its heaps — after its mmap threshold moved over their size, megabytes-large ones too — so a
+  process stays as large as at its peak. Compare `heap_mb` (malloc's memory in use) with `rss_mb`
+  before calling something a leak, and count objects (`items`, `objAlive`) at the same place in
+  two rounds.
+* **A row its list is still creating sits at the list's top.** `ListView` parents a delegate it
+  creates in the background to its content at once (`QQuickItemView::initItem`), at 0,0 and
+  culled, and places it when its creation ends, frames later. Anything that looks at where items
+  are, frame by frame, sees every such row in view for a moment (`NearView` waits for the view's
+  `itemAt()` to know the row).
+* **`Image.sourceSize` of a raster file is in device pixels** (the screen's ratio applies to SVG
+  and image providers only); with both sides given Qt fits the file into the box keeping its
+  shape and scales nothing up — unless `fillMode` is `PreserveAspectFit` / `Crop`, which makes it
+  scale small pictures up to the box.
+* **`Image.retainWhileLoading` switched off after the source changed drops the picture being
+  loaded**, not the one kept (`QQuickImageBase::setRetainWhileLoading` clears the pending pixmap):
+  switch it before the source (`EmbedView.hold()`).
+* **An empty `Text` observes the viewport for good.** A `QQuickText` starts with
+  `ItemObservesViewport` "until its size is known" and drops it in `setText()` — which returns
+  early for the text it already has, the empty one. While a scrolled view has such an item below
+  it, every scroll step walks the item tree from the view down to it
+  (`QQuickItemPrivate::transformChanged`). `--env BENCH_VIEWPORT_OBSERVERS=1` lists the observers
+  at every memory mark of a run.
+* **`scroll_insns_M` subtracts the idle rate of the half second before the scroll**: when one
+  build is still busy then (loading a page's pictures), its number comes out small. Check with
+  `perf-scenario.sh` and the window `mark:scroll_start..scroll_counters_end`.
+* **Other sessions on the same machine** (builds, test runs of other work in progress) move
+  timings by tens of percent between two batches a quarter of an hour apart (the same binary:
+  Enter on the 5000-block outline 12.6 ms in one batch, 5.6 ms in the next). Interleave the builds
+  run by run, take five runs, and compare instruction counts where they exist.

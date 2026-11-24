@@ -755,12 +755,51 @@ def m_workload(run):
     return out
 
 
+def m_pictures(run):
+    """Memory per step of the `pictures` scenario: every `mem:<step>` mark as rss / anon / heap,
+    the pictures the window holds and their decoded megabytes; the peak (VmHWM) and what the last
+    round left over the first (`leak_*`: home after the pages of the last round less the first)."""
+    mk = run["marks"]
+    out = {}
+    homes = []
+    for name in sorted(mk):
+        if not name.startswith("mem:"):
+            continue
+        m, step = mk[name], name[4:]
+        heap = (m["mallocInUseKB"] + m.get("mallocMmapKB", 0)) / 1024.0
+        out["rss_mb:" + step] = m["VmRSS"] / 1024.0
+        out["anon_mb:" + step] = m["RssAnon"] / 1024.0
+        out["heap_mb:" + step] = heap
+        out["pictures:" + step] = m.get("pictures", 0)
+        out["picture_mb:" + step] = m.get("pictureKB", 0) / 1024.0
+        out["items:" + step] = m.get("items", 0)
+        if step.startswith("home:after_pages:"):
+            homes.append((int(step.rsplit(":", 1)[1]), m, heap))
+    end = mk.get("mem:pictures:end")
+    if end:
+        out["peak_rss_mb"] = end["VmHWM"] / 1024.0
+    start = mk.get("mem:home:start")
+    if start and end:
+        out["grown_rss_mb"] = (end["VmRSS"] - start["VmRSS"]) / 1024.0
+        out["grown_anon_mb"] = (end["RssAnon"] - start["RssAnon"]) / 1024.0
+    homes.sort()
+    if len(homes) >= 2:
+        (_, a, heap_a), (_, b, heap_b) = homes[0], homes[-1]
+        rounds = homes[-1][0] - homes[0][0]
+        out["leak_rss_mb_per_round"] = (b["VmRSS"] - a["VmRSS"]) / 1024.0 / rounds
+        out["leak_anon_mb_per_round"] = (b["RssAnon"] - a["RssAnon"]) / 1024.0 / rounds
+        out["leak_heap_mb_per_round"] = (heap_b - heap_a) / rounds
+        out["leak_items_per_round"] = (b.get("items", 0) - a.get("items", 0)) / rounds
+    return out
+
+
 SCENARIOS = {
     "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "source-typing": m_typing,
     "select-copy": m_select_copy, "search": m_search,
     "switcher": m_switcher, "views": m_views, "graph": m_graph, "journal-scroll": m_journal_scroll,
     "page-scroll": m_page_scroll, "page-resize": m_page_resize,
     "switch-pages": m_switch_pages, "idle": m_idle, "idle-edit": m_idle, "workload": m_workload,
+    "pictures": m_pictures,
 }
 
 

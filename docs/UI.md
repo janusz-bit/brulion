@@ -4244,11 +4244,14 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   the hairline `borderSubtle` frame around each. A picture not shown yet (loading, from the
   internet waiting for "Show", a format the device cannot decode) has its frame either way: it
   marks the picture's place. A note's own `picture-frames` option wins over the setting ("Note
-  options"). Opening one (a click on the embed,
+  options"). A picture is loaded only while its frame is in or near the window's view, decoded
+  for the frame and not at the file's size ("Scrolling performance" → "Pictures hold their pixels
+  only near the view"). Opening one (a click on the embed,
   a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
   `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
   raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the
-  view —; when the fitted picture differs from its own pixels, a click on it or the "Zoom to
+  view —, decoded for the size it is shown at (`PictureDecode`; its own pixels at most 2048 px a
+  side); when the fitted picture differs from its own pixels, a click on it or the "Zoom to
   actual size" button (in a view narrower than 600 px — a phone, or on the desktop between
   the sidebar and the side panel — a magnifier icon, its name in the tooltip, on touch that of a
   long press, and for screen readers: as text it left the file name no room) shows those pixels (then
@@ -5633,7 +5636,8 @@ or agenda row) follows these; the reasons are below.
    a `revision` the Repeater bumps on `itemAdded` / `itemRemoved`. What a block shows from
    elsewhere is there when it is created: a model's first run in `componentComplete`
    (`QQmlParserStatus`, as `QueryResultModel`), not a `Qt.callLater` / `QTimer` later; a
-   picture's size from its file's header (`picturesize.h`), not from the loaded image.
+   picture's size from its file's header (`picturesize.h`), not from the loaded image — which is
+   loaded only near the view ("Pictures hold their pixels only near the view" below).
 2. **Nothing changes a row's height while the user only scrolls or points.** No room that
    appears on hover or under the resting mouse pointer: hover controls take no room or keep
    theirs (the query header's edit button); room that comes and goes belongs to a user's action
@@ -6144,6 +6148,67 @@ without laying unchanged texts out again, the sprites, a frame); `tst_content_jo
 and `tst_content_journals_span_qml(_touch)_dayitem` run the journal's self-tests with it (real mouse
 and touch input through the drawn days). Numbers: docs/PERFORMANCE.md "Z10 stage A2: a journal day
 as one item".
+
+### Pictures hold their pixels only near the view
+
+A page created whole has every picture's frame from the start. The frame is cheap; the picture
+in it is not: a phone's photo (12 MP) shown 560 × 420 was decoded at 2048 px a side — 12.6 MB of
+pixels — and drawn from a texture with mipmaps, 16.8 MB more, and every picture of the page at
+once, so a page of forty photos held over a gigabyte, most of it never looked at. Three things
+keep that down (numbers: docs/PERFORMANCE.md "Pictures and memory"):
+
+* **`NearView`** (attached: `NearView.near`, `NearView.enabled`; `src/app/ui/nearview.h`) tells an
+  item whether it is in its window's view or within reach of it. A picture's frame (`EmbedView`'s
+  `embedPicture`) hands its `Image` a source only while it is near, so a picture is decoded when
+  its frame comes within **one window height** (or width) of the window and lets go beyond
+  **two** — farther than it entered, so that reading back and forth around one place decodes
+  nothing again; a window lower than 480 px reaches as far as one of 480. Hidden — its view kept
+  in the background, the window minimised, the app in the background — it lets go after 30 s (a
+  look at another view and back shows the pictures at once). The frames of a window are looked at
+  once per frame it draws (`QQuickWindow::afterAnimating`: after the polish, on the GUI thread), by
+  their rectangle in the window, whatever scrolls them — a page, a day of the journal stream, a
+  split pane; nothing runs while nothing is drawn, except one timer for the hidden ones. Loading
+  is asynchronous (the decode never runs on the GUI thread), so a picture scrolled to faster than
+  it decodes shows its empty frame for a moment. `BRULION_NEAR_VIEW=0` makes every item near (A/B
+  measurements).
+* **`PictureDecode`** (singleton; `src/app/ui/picturedecode.h`) gives the side a raster picture is
+  decoded at: the longer side of its frame in device pixels, rounded up to a step (64 px up to
+  512, 128 px above; at most 2048), as `Image.sourceSize` of both sides — Qt fits the file into
+  that square with its aspect ratio and scales nothing up. A frame shows its picture at most a
+  quarter smaller than decoded, so it needs no mipmaps; a window being resized decodes a picture
+  again only at a step, and the one shown stays until the new one is there
+  (`Image.retainWhileLoading` — only for the same file: `EmbedView` hands the source over by hand,
+  `hold()`, so that another file's picture is never drawn in this one's frame). The picture view
+  (`ContentPictureView`) decodes the fitted picture the same way and its own pixels ("Zoom to
+  actual size") at up to 2048 px a side. An SVG is rendered into its largest box as before.
+* **`MemoryKeeper`** (`src/app/ui/memorykeeper.h`; `main()` makes it) gives freed memory back to
+  the system: pictures out of reach, a page left, the index built, the app in the background each
+  tell it (`released()`), and once nothing was let go for 2 s (at the latest 10 s after the first)
+  it asks the allocator on a worker thread (`platform::releaseFreeMemory()`: glibc's
+  `malloc_trim`; nothing on Windows and in the browser) — at once when the app leaves the
+  foreground, which is also the only time Android's allocator is asked to purge (it gives freed
+  pages back by itself). Without it glibc kept what was freed: the process stayed as large as at
+  its peak for as long as it ran (docs/ARCHITECTURE.md "Process memory").
+  `BRULION_MEMORY_KEEPER=0` switches the giving back off (A/B).
+
+For contributors:
+
+* The frame's size never depends on `near` (rule 1 below: final height at creation). A picture
+  with a size in its header has its frame from it. One without is loaded as soon as it exists,
+  wherever it is (`NearView.enabled` only once it was measured: its row grows then, not under a
+  reader who scrolls to it), and keeps the size it measured (`seenSize`, of that file: `seenOf`)
+  after it let go; so does one whose loaded shape differs from its header's. A row never changes
+  its height because a picture came or went.
+* Anything that holds megabytes per item in a list — a decoded picture, a rendered page — asks
+  `NearView.near` on the item that has its *place* (not on the `Image`: its size may follow what
+  it loaded) and gives the decoder its shown size, not the file's.
+* Tests: `tests/app/memory` (`tst_near_view`: items in, near and far from the view, the
+  hysteresis, hidden items and windows, items that come and go mid-look, a QML page of pictures
+  loaded and let go by frames alone; `tst_memory_keeper`: when memory is given back, the decode
+  sides), `tests/platform/tst_processmemory` (what the allocator gives back, by the process's
+  resident size), the shell's self-test ("5r": a page of thirty photos — the frames' sizes, which
+  are loaded, at what size, and that the page is as tall after scrolling to its end), and the
+  `pictures` scenario of tests/bench/app.
 
 ### The scroll bar: `RowScroll` (`src/app/ui/rowscroll.h`)
 
@@ -7207,6 +7272,10 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   wheel and the scroll bars' paging scroll like a web browser in every Flickable ("Scrolling
   performance" → "Wheel and scroll bar"); `SmoothScroll.scrollBy(flickable, dx, dy)` scrolls the
   same way from QML. Static library `brulion_ui_smoothscroll`, tested by `tests/app/smoothscroll`.
+* **`NearView`** (attached, `NearView.near`), **`PictureDecode`** (singleton) and `MemoryKeeper`:
+  pictures hold their pixels only near the window's view, decoded for the place that shows them,
+  and freed memory goes back to the system ("Scrolling performance" → "Pictures hold their pixels
+  only near the view"). Static library `brulion_ui_memory`, tested by `tests/app/memory`.
 * **`TouchFlick`** (attached, `TouchFlick.enabled: true` on a Flickable / ListView): touch flicks
   at the finger's speed on Android ("Scrolling performance"); static library `brulion_ui_touch`
   (Qt Quick, no private Qt headers), tested by `tests/app/touch`. As an attached type it carries

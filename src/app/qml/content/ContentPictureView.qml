@@ -45,11 +45,14 @@ import Brulion
 // the pixel size from Workspace.pictureSize (the file's header, no decode): the picture's own
 // size in the pixels view, and the decode box — both of its sides follow the picture's shape, so
 // Qt scales it without stretching it to a box of another shape (an SVG is rendered at sourceSize
-// itself). A raster picture is decoded at most 2048 px a side (a 12 MP photo would otherwise
-// take 48 MB plus mipmaps) and never more than its own pixels (no PreserveAspectFit, which makes
-// Qt scale a smaller picture *up* to sourceSize); an SVG is re-rendered up to 2048 px a side
-// (vector: a bigger render stays sharp — a raster picture would only get a bigger item over the
-// same pixels).
+// itself). A raster picture is decoded for what the view shows: fitted, at the fitted picture's
+// size in device pixels (PictureDecode: in steps, so that a window being resized decodes it again
+// only now and then — a 12 MP photo fitted into a 1280 × 800 window holds 3 MB, not the 12.6 MB of
+// 2048 px a side, with a texture as large and no mipmaps); at its own pixels at most 2048 px a
+// side (a 12 MP photo would otherwise take 48 MB) — and never more than its own pixels (no
+// PreserveAspectFit, which makes Qt scale a smaller picture *up* to sourceSize). The picture shown
+// stays while the other size is decoded. An SVG is re-rendered up to 2048 px a side (vector: a
+// bigger render stays sharp — a raster picture would only get a bigger item over the same pixels).
 Item {
     id: root
 
@@ -115,22 +118,65 @@ Item {
     }
     onFileRevisionChanged: root.readHeaderSize()
     onTextOnlyChanged: root.readHeaderSize()
-    Component.onCompleted: root.readHeaderSize()
+    Component.onCompleted: {
+        root.readHeaderSize()
+        root.holdSource()
+    }
+    /// What the picture is loaded from: `source`, handed over by hand (holdSource()) for the
+    /// order of two things: the picture shown stops being kept *before* another file's URL is
+    /// set — kept, it would be drawn in the new picture's frame until that one is there.
+    /// (Image.retainWhileLoading switched off after the URL was set would drop the picture being
+    /// loaded instead.)
+    property string heldSource: ""
+    /// The picture shown is `heldSource`'s: decoded again for another size (fitted ↔ its own
+    /// pixels, a window resized), it stays until the new one is there.
+    property bool heldShown: false
+    function holdSource(): void {
+        const url = "" + root.source
+        if (url === root.heldSource)
+            return
+        root.heldShown = false
+        root.heldSource = url
+    }
+    onSourceChanged: root.holdSource()
     readonly property bool headerKnown: headerSize.width > 0 && headerSize.height > 0
+    /// The loaded picture's size (0 × 0: none, or one being loaded without the last one kept):
+    /// what `shownSize` is without a header. Kept by hand from the picture's status, not bound to
+    /// its implicit size: once a load has begun Qt resets that inside the next change of the
+    /// picture's geometry (QQuickImage::updatePaintedGeometry) — in the middle of the bindings
+    /// that follow this very size, a binding loop.
+    property size loadedSize: Qt.size(0, 0)
+    function noteLoaded(): void {
+        if (picture.status === Image.Ready)
+            root.loadedSize = Qt.size(picture.implicitWidth, picture.implicitHeight)
+        else if (!(picture.status === Image.Loading && picture.retainWhileLoading))
+            root.loadedSize = Qt.size(0, 0)
+    }
     /// The picture's own pixels in the pixels view (the loaded size when the header has none).
     readonly property size shownSize: headerKnown ? headerSize
-                                     : Qt.size(Math.max(1, picture.implicitWidth),
-                                               Math.max(1, picture.implicitHeight))
-    /// What the picture is decoded at: its own shape, at most 2048 px a side (see above).
+                                     : Qt.size(Math.max(1, loadedSize.width), Math.max(1, loadedSize.height))
+    /// What the picture is decoded at: its own shape; a raster picture fitted into the view at
+    /// what the view shows of it, its own pixels at most 2048 px a side (see above).
     /// (-1 × -1: none — Image.sourceSize reset.)
     readonly property size decodeSize: {
         if (!root.headerKnown)
-            return root.scalable ? Qt.size(-1, -1) : Qt.size(2048, 2048)
-        const k = root.scalable ? Math.min(2048 / root.headerSize.width, 2048 / root.headerSize.height)
-                                : Math.min(1, 2048 / root.headerSize.width, 2048 / root.headerSize.height)
+            return root.scalable ? Qt.size(-1, -1) : Qt.size(PictureDecode.maxSide, PictureDecode.maxSide)
+        const longer = Math.max(root.headerSize.width, root.headerSize.height)
+        // The fitted picture by the header and the view themselves, not through shownSize and
+        // fittedSize: those follow the loaded picture when a header has no size, and what
+        // the picture is asked for must not hang on what loading it changes.
+        const fit = Math.min(1, flick.width / root.headerSize.width, flick.height / root.headerSize.height)
+        const side = root.scalable ? PictureDecode.maxSide
+                   : root.actualSize ? Math.min(longer, PictureDecode.maxSide)
+                   : PictureDecode.sideWithin(root.headerSize.width * fit, root.headerSize.height * fit,
+                                              Screen.devicePixelRatio, Math.min(longer, PictureDecode.maxSide))
+        const k = side / longer
         return Qt.size(Math.max(1, Math.round(root.headerSize.width * k)),
                        Math.max(1, Math.round(root.headerSize.height * k)))
     }
+    /// The picture fitted into the view (logical pixels).
+    readonly property size fittedSize: Qt.size(Math.max(1, Math.round(root.shownSize.width * root.fitScale)),
+                                               Math.max(1, Math.round(root.shownSize.height * root.fitScale)))
     /// The words the search found here (route.search) and their places on the picture (fractions of
     /// its own pixels, Workspace.attachments.matchRects: OCR's words), again when the file changes or
     /// OCR reads more; × in the bar hides them.
@@ -156,8 +202,12 @@ Item {
         const k = Math.min(flick.width / root.shownSize.width, flick.height / root.shownSize.height)
         return root.scalable ? k : Math.min(1, k)
     }
-    /// The picture is loaded and drawn (the shell's self-test).
-    readonly property bool pictureLoaded: picture.status === Image.Ready && picture.paintedWidth > 0
+    /// The picture is loaded and drawn (the shell's self-test) — also while it is decoded again at
+    /// another size, the one shown kept meanwhile.
+    readonly property bool pictureLoaded: (picture.status === Image.Ready
+                                           || (picture.status === Image.Loading && picture.retainWhileLoading
+                                               && picture.implicitWidth > 0))
+                                          && picture.paintedWidth > 0
     /// The fitted picture is not its own pixels: the size toggle is offered.
     readonly property bool canZoom: root.pictureLoaded && Math.abs(root.fitScale - 1) > 0.01
     readonly property string sizeToggleText: root.actualSize ? qsTr("Fit to view") : qsTr("Zoom to actual size")
@@ -358,15 +408,22 @@ Item {
             x: Math.max(0, (flick.width - width) / 2)
             y: refs.visible ? Math.min(Theme.space4, Math.max(0, (flick.height - height) / 2))
                             : Math.max(0, (flick.height - height) / 2)
-            width: root.actualSize ? root.shownSize.width : Math.max(1, Math.round(root.shownSize.width * root.fitScale))
-            height: root.actualSize ? root.shownSize.height : Math.max(1, Math.round(root.shownSize.height * root.fitScale))
-            source: root.asText ? "" : root.source
+            width: root.actualSize ? root.shownSize.width : root.fittedSize.width
+            height: root.actualSize ? root.shownSize.height : root.fittedSize.height
+            source: root.asText ? "" : root.heldSource
             sourceSize: root.decodeSize
-            // A drawing's other theme or version: the shown one stays until it is there.
-            retainWhileLoading: root.drawing
+            // A drawing's other theme or version, the picture decoded for another size: the shown
+            // one stays until it is there — not another file's (holdSource()).
+            retainWhileLoading: root.drawing || root.heldShown
+            onStatusChanged: {
+                root.noteLoaded()
+                if (picture.status === Image.Ready)
+                    root.heldShown = true
+            }
             fillMode: root.scalable ? Image.PreserveAspectFit : Image.Stretch
             asynchronous: true
-            mipmap: true
+            // (Only where the picture is drawn smaller than it was decoded or rendered.)
+            mipmap: root.scalable || !root.headerKnown
             Accessible.role: Accessible.Graphic
             Accessible.name: root.fileName
 

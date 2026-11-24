@@ -191,6 +191,18 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   exported symbols by name, the rest as `file(+offset)` for `addr2line -f -C -e <file>
   <offset>` with the same build), then the process dies of the same signal (exit status and core
   dump unchanged). Nothing elsewhere and in sanitizer builds, whose own reports win.
+* **Process memory** (`processmemory.h`; tests/platform `tst_processmemory`): asking the
+  process's allocator to give freed memory back to the system. glibc keeps it: a block above its
+  mmap threshold is unmapped when freed, but the threshold moves up to the largest such block
+  freed (at most 32 MiB), and what is freed inside a heap stays with the process — a page of
+  photos left behind 1.4 GB resident with 320 MB in use. `releaseFreeMemory()` — glibc
+  `malloc_trim(0)`, Android `mallopt(M_PURGE_ALL)` (`M_PURGE` before API 34): the free pages
+  inside the heaps (0–7 ms, on a worker thread); `canReleaseFreeMemory()`, `keepsFreedMemory()`
+  (glibc: worth asking whenever the app is quiet; Android gives back by itself and is asked only
+  in the background), `residentBytes()` (`/proc/self/statm`). Nothing on Windows, macOS and in the browser, and nothing under a
+  sanitizer (its own allocator). Called by the app's `MemoryKeeper` once it is quiet (docs/UI.md
+  "Pictures hold their pixels only near the view"). A fixed mmap threshold instead was measured
+  and left out (docs/PERFORMANCE.md "Pictures and memory").
 * **PDF pages** (`pdfpages.h`; tests/platform `tst_pdfpages`): `pdfAvailable()`, `pdfInfo(file,
   pageSizes)` — the pages and their sizes in points (all, or the first page's only), a
   password-protected file `locked` —,

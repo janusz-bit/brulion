@@ -115,6 +115,9 @@ Item {
                     anchors.fill: parent
                     visible: !tile.started && tile.poster !== ""
                     source: tile.poster
+                    // (A frame of the video, up to 4K: decoded for the tile that shows it, in
+                    // steps — not again at every width of a window being resized.)
+                    sourceSize.width: PictureDecode.side(width, 0, Screen.devicePixelRatio)
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
                     smooth: true

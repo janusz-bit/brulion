@@ -195,6 +195,9 @@ FocusScope {
                     anchors.fill: parent
                     visible: root.video && !root.started && root.poster !== ""
                     source: root.poster
+                    // (A frame of the video, up to 4K: decoded for the view that shows it, in
+                    // steps — not again at every width of a window being resized.)
+                    sourceSize.width: PictureDecode.side(width, 0, Screen.devicePixelRatio)
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
                 }

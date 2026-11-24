@@ -104,6 +104,11 @@ Item {
             asynchronous: true
             fillMode: card.backgroundStyle === "repeat" ? Image.Tile
                       : card.backgroundStyle === "ratio" ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+            // Decoded at about the size shown, as a card's picture below (a few steps, not every
+            // zoom): a 12 MP photo behind a group took 48 MB and as much again as a texture. A
+            // repeated picture keeps its own pixels (0: no size asked for) — its tiles are that large.
+            sourceSize.width: card.backgroundStyle === "repeat" ? 0
+                : Math.min(2048, Math.pow(2, Math.ceil(Math.log(Math.max(64, card.width * card.zoom * 1.5)) / Math.LN2)))
             opacity: 0.85
         }
     }

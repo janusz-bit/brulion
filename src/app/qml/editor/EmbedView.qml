@@ -14,6 +14,10 @@ import Brulion
 // header), and the view's height is a binding, not the Column's own (a positioner sets it only in
 // its next polish): a block that grew when its picture had loaded moved everything below it while
 // the page or the journal scrolled (docs/UI.md "Scrolling performance").
+// A picture holds its pixels only in or near the window's view (NearView on its frame: a page is
+// created whole, with every picture's frame), decoded at the size its frame shows it
+// (PictureDecode), not at the file's: docs/UI.md "Pictures hold their pixels only near the view".
+// Its frame keeps its place either way.
 // A drawing (the embed's `drawing`: an SVG with an embedded scene, a `.excalidraw` scene, an
 // Obsidian Excalidraw plugin file — docs/SYNTAX.md §2) is shown at
 // its own size, never enlarged like other SVGs (it is handwriting, drawn at one unit a pixel), with
@@ -198,17 +202,45 @@ Column {
                 /// (Also while a drawing's other theme or version loads: the shown one stays, its size too.)
                 readonly property bool loaded: (img.status === Image.Ready || (img.retainWhileLoading && img.status === Image.Loading))
                                                && img.implicitWidth > 0 && img.implicitHeight > 0
+                /// What the loaded picture measured: the frame of a picture without a size in
+                /// its header, or of another shape than its header's, keeps it when the picture
+                /// lets go of its pixels out of the view's reach — its row must not change its
+                /// height while the page only scrolls. A raster picture's is its decoded size, of
+                /// the file's shape; such a frame is as large as its natural size (the 2048-px box
+                /// below), so the two agree. `seenOf`: the file it was measured of (`seenKey`: its
+                /// URL and what its header said then) — another file's measure is none.
+                property size seenSize: Qt.size(0, 0)
+                property string seenOf: ""
+                readonly property string seenKey: embed.urlText + "|" + embed.knownWidth + "x" + embed.knownHeight
+                readonly property bool seen: seenOf !== "" && seenOf === seenKey
+                function noteSeen(): void {
+                    if (img.status === Image.Ready && img.implicitWidth > 0 && img.implicitHeight > 0) {
+                        seenSize = Qt.size(img.implicitWidth, img.implicitHeight)
+                        seenOf = seenKey
+                    }
+                }
                 /// The loaded picture has another shape than the file's header said (Qt's pixmap
-                /// cache still had the file's old picture, replaced since): the frame takes the
+                /// cache still had the file's old picture, replaced since; a photo turned by its
+                /// EXIF orientation is not: Qt draws the file's own pixels): the frame takes the
                 /// picture's shape, never stretching it. Normally the two agree, so nothing moves
-                /// when it has loaded (an SVG's rendered size differs slightly, in its rounding).
-                readonly property bool otherShape: loaded && embed.sizeKnown
-                    && Math.abs(img.implicitWidth * embed.knownHeight - img.implicitHeight * embed.knownWidth)
-                       > 0.02 * img.implicitWidth * embed.knownHeight
-                readonly property real naturalWidth: embed.sizeKnown && !otherShape ? embed.knownWidth
-                                                     : loaded ? img.implicitWidth : 320
-                readonly property real naturalHeight: embed.sizeKnown && !otherShape ? embed.knownHeight
-                                                      : loaded ? img.implicitHeight : 180
+                /// when it has loaded. A pixel off is the same shape: Qt rounds the decoded sides
+                /// (an SVG's rendered ones too), and a thin picture decoded for its frame — 768 ×
+                /// 15 of a banner of 2000 × 40 — would otherwise count as another one, be decoded
+                /// at its natural size, agree again, and so on for good.
+                readonly property bool otherShape: {
+                    if (!seen || !embed.sizeKnown)
+                        return false
+                    const h = seenSize.width * embed.knownHeight / embed.knownWidth
+                    const w = seenSize.height * embed.knownWidth / embed.knownHeight
+                    return Math.abs(seenSize.height - h) > Math.max(1.5, 0.02 * h)
+                        && Math.abs(seenSize.width - w) > Math.max(1.5, 0.02 * w)
+                }
+                /// The frame follows the picture's own measure, not the header's: no size in the
+                /// header, or another shape. (Then the picture is decoded at its natural size, not
+                /// at the frame's — the frame would follow what it asked for.)
+                readonly property bool measured: !embed.sizeKnown || otherShape
+                readonly property real naturalWidth: !measured ? embed.knownWidth : seen ? seenSize.width : 320
+                readonly property real naturalHeight: !measured ? embed.knownHeight : seen ? seenSize.height : 180
                 // Natural size, at most the column width and 420 px high; a picture from the
                 // internet not shown yet at least as high as its placeholder.
                 width: Math.min(root.width, naturalWidth, 420 * naturalWidth / Math.max(1, naturalHeight))
@@ -224,28 +256,73 @@ Column {
                 border.color: Theme.borderSubtle
                 clip: true
 
-                // Decoded at most 2048 px wide/high: a phone photo (12 MP) would otherwise take
-                // 48 MB (+ mipmaps) per embed. No PreserveAspectFit: with it Qt also scales small
-                // images *up* to sourceSize; the frame has the picture's aspect ratio anyway.
-                // SVG is rendered at sourceSize itself — both sides given, it would be stretched
-                // to a 2048 px square — so it is fitted (aspect kept) into the largest box shown.
+                // Only in or near the window's view (NearView: the frame's place, whatever
+                // scrolls it), and decoded for the frame, not for the file: a phone photo (12 MP)
+                // shown 560 × 420 took 12.6 MB at the 2048 px it was decoded at before, and a
+                // texture of 16.8 MB with its mipmaps — every picture of a page at once, as a page
+                // is created whole. The side: the frame's longer one in device pixels, in steps
+                // (PictureDecode), at most 2048; a frame that follows its picture's own measure
+                // (`measured`) gets the 2048 box, never its own size back. A square box: Qt fits
+                // the file into it with its aspect ratio and scales nothing up. No
+                // PreserveAspectFit: with it Qt also scales small images *up* to sourceSize; the
+                // frame has the picture's aspect ratio anyway. SVG is rendered at sourceSize
+                // itself — both sides given, it would be stretched to a 2048 px square — so it is
+                // fitted (aspect kept) into the largest box shown.
+                // (A picture without a size in its header is measured first, as soon as it
+                // exists — were it left until it came near, its row would grow under the reader
+                // scrolling to it.)
+                NearView.enabled: embed.image && (embed.sizeKnown || picture.seen)
+                readonly property bool near: NearView.near
+                readonly property int decodeSide: embed.scalable || measured ? PictureDecode.maxSide
+                    : PictureDecode.side(width, height, Screen.devicePixelRatio)
+                /// The URL the picture is loaded from once its frame is near the view ("": none).
+                readonly property string wantedUrl: !embed.image || !embed.decodable || embed.webPending ? ""
+                    : embed.drawing && Theme.dark && embed.darkUrlText !== "" ? embed.darkUrlText
+                    : embed.urlText
+                /// What the Image loads: `wantedUrl` near the view, "" out of its reach. Handed over
+                /// by hand (hold()) for the order of two things: the picture shown stops being
+                /// kept *before* another file's URL is set — kept, it would be drawn in the new
+                /// picture's frame until that one is there. (Image.retainWhileLoading switched off
+                /// after the URL was set would drop the picture being loaded instead.)
+                property string heldUrl: ""
+                /// The picture shown is `heldUrl`'s: decoded again for a frame of another size, it
+                /// stays until the new one is there.
+                property bool heldShown: false
+                function hold(): void {
+                    const url = picture.near ? picture.wantedUrl : ""
+                    if (url === picture.heldUrl)
+                        return
+                    picture.heldShown = false
+                    picture.heldUrl = url
+                }
+                onWantedUrlChanged: picture.hold()
+                onNearChanged: picture.hold()
+                Component.onCompleted: picture.hold()
                 Image {
                     id: img
                     objectName: "embedImage"
                     anchors.fill: parent
                     anchors.margins: 1
-                    source: !embed.image || !embed.decodable || embed.webPending ? ""
-                            : embed.drawing && Theme.dark && embed.darkUrlText !== "" ? embed.darkUrlText
-                            : embed.urlText
+                    source: picture.heldUrl
                     // (Logical pixels for a drawing: Qt renders image providers at the screen's ratio.)
                     sourceSize: embed.drawing && embed.sizeKnown
                                 ? Qt.size(Math.ceil(embed.knownWidth), Math.ceil(embed.knownHeight))
-                                : embed.scalable ? Qt.size(1024, 420) : Qt.size(2048, 2048)
-                    retainWhileLoading: embed.drawing
+                                : embed.scalable ? Qt.size(1024, 420) : Qt.size(picture.decodeSide, picture.decodeSide)
+                    // The picture shown stays until the next one is there: a drawing's other theme
+                    // or version, a picture decoded again for a wider frame — not another file's.
+                    retainWhileLoading: embed.drawing || picture.heldShown
                     fillMode: embed.scalable ? Image.PreserveAspectFit : Image.Stretch
                     asynchronous: true
                     smooth: true
-                    mipmap: true
+                    // Mipmaps (a third more texture) only where the picture is drawn much smaller
+                    // than it was decoded: an SVG rendered into its largest box, a picture at its
+                    // natural size in a narrow frame. One decoded for its frame needs none.
+                    mipmap: embed.scalable || picture.measured
+                    onStatusChanged: {
+                        picture.noteSeen()
+                        if (img.status === Image.Ready)
+                            picture.heldShown = true
+                    }
                     Accessible.role: Accessible.Graphic
                     Accessible.name: embed.alt !== "" ? embed.alt : embed.name
                 }
