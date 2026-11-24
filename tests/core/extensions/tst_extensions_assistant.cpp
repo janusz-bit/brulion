@@ -15,7 +15,8 @@
 // written (the reference read, the page checked, refused while it does not load, written with the
 // user's yes), a picture looked at (a request of its own with the picture, its answer the tool's
 // result), an unknown tool, too many turns, the command the palette does not offer and its run by
-// hand.
+// hand; the app's own tools only with ctx.appTools (a setting changed with the user's yes, a command
+// of the app run, a theme page written and picked, a button written as an extension).
 
 #include "ai/ai.h"
 #include "extensions/builtin.h"
@@ -144,6 +145,80 @@ class TestExtensionsAssistant : public QObject {
         messages.append(QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, question}});
         return m_engine->runCommand(u"asystent"_s, u"chat"_s,
                                     {{u"page"_s, page}, {u"messages"_s, messages}, {u"conversation"_s, conversation}});
+    }
+
+    /// ask() as the app asks where its model is on the network: ctx.appTools, the app's own tools.
+    Result askWithApp(const QString &question)
+    {
+        const QVariantList messages{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, question}}};
+        return m_engine->runCommand(u"asystent"_s, u"chat"_s,
+                                    {{u"page"_s, QString()}, {u"messages"_s, messages}, {u"appTools"_s, true}});
+    }
+
+    /// The app, played: three settings, three commands; what was set and run, in order.
+    QVariantList m_appCalls;
+    QVariantMap m_appValues;
+    void playTheApp()
+    {
+        m_appCalls.clear();
+        m_appValues = {{u"theme"_s, u"system"_s}, {u"fontScale"_s, 1.0}, {u"journalsFolder"_s, u"journals"_s}};
+        m_host->onApp = [this](const QString &, const QString &operation, const QVariantMap &args,
+                               QString *error) -> QVariant {
+            if (operation == u"settings") {
+                return QVariantList{QVariantMap{{u"key"_s, u"theme"_s},
+                                                {u"scope"_s, u"device"_s},
+                                                {u"group"_s, u"Appearance"_s},
+                                                {u"kind"_s, u"choice"_s},
+                                                {u"label"_s, u"Theme"_s},
+                                                {u"value"_s, m_appValues.value(u"theme"_s)},
+                                                {u"options"_s, QStringList{u"system"_s, u"light"_s, u"dark"_s}}},
+                                    QVariantMap{{u"key"_s, u"fontScale"_s},
+                                                {u"scope"_s, u"device"_s},
+                                                {u"group"_s, u"Appearance"_s},
+                                                {u"kind"_s, u"number"_s},
+                                                {u"label"_s, u"Font size"_s},
+                                                {u"value"_s, m_appValues.value(u"fontScale"_s)},
+                                                {u"min"_s, 0.8},
+                                                {u"max"_s, 1.5}},
+                                    QVariantMap{{u"key"_s, u"journalsFolder"_s},
+                                                {u"scope"_s, u"notebook"_s},
+                                                {u"group"_s, u"Journal"_s},
+                                                {u"kind"_s, u"path"_s},
+                                                {u"label"_s, u"Journal folder"_s},
+                                                {u"value"_s, m_appValues.value(u"journalsFolder"_s)}}};
+            }
+            if (operation == u"commands") {
+                return QVariantList{QVariantMap{{u"id"_s, u"go.calendar"_s},
+                                                {u"title"_s, u"Go to calendar"_s},
+                                                {u"subtitle"_s, QString()},
+                                                {u"shortcut"_s, u"Ctrl+3"_s},
+                                                {u"enabled"_s, true}},
+                                    QVariantMap{{u"id"_s, u"theme.toggle"_s},
+                                                {u"title"_s, u"Toggle dark theme"_s},
+                                                {u"subtitle"_s, QString()},
+                                                {u"shortcut"_s, QString()},
+                                                {u"enabled"_s, true}},
+                                    QVariantMap{{u"id"_s, u"ext.asystent.chat"_s},
+                                                {u"title"_s, u"AI: a turn"_s},
+                                                {u"subtitle"_s, QString()},
+                                                {u"shortcut"_s, QString()},
+                                                {u"enabled"_s, true}}};
+            }
+            if (operation == u"set") {
+                const QString key = args.value(u"key"_s).toString();
+                if (key == u"fontScale" && args.value(u"value"_s).toDouble() > 1.5) {
+                    *error = u"fontScale is 0.8 … 1.5"_s;
+                    return {};
+                }
+                if (key != u"themePage" && !m_appValues.contains(key)) {
+                    *error = u"no setting “%1”"_s.arg(key);
+                    return {};
+                }
+                m_appValues.insert(key, args.value(u"value"_s));
+            }
+            m_appCalls.append(QVariantMap{{u"operation"_s, operation}, {u"args"_s, args}});
+            return {};
+        };
     }
 
 private Q_SLOTS:
@@ -1582,6 +1657,256 @@ private Q_SLOTS:
         r = m_engine->resume(r.call, answering(u"Napisałem [[Licznik zadań]]: naciśnij Uruchom na jego stronie."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
         QVERIFY2(r.value.toString().endsWith(u"✏️ Zmienione: [[Rozszerzenia/Licznik zadań]]"_s), qPrintable(r.value.toString()));
+    }
+
+    // The app's own tools: only with ctx.appTools (the app, its model on the network) — never for the
+    // model on the device, which gets the twelve tools and the system text it was trained on.
+    void theAppsToolsOnlyWhereTheAppAsks()
+    {
+        QVERIFY(open(sampleNotes()));
+        Result r = ask(u"Włącz ciemny motyw"_s);
+        QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
+        QCOMPARE(request.value(u"tools"_s).toList().size(), 12);
+        const QString system = request.value(u"system"_s).toString();
+        QVERIFY(!system.contains(u"app_settings"_s));
+        // A model that calls one anyway: no such tool.
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"app_settings"_s, {})}));
+        QVERIFY(lastResults(r).value(0).toMap().value(u"isError"_s).toBool());
+        QVERIFY(firstResult(r).startsWith(u"No tool named"_s));
+
+        QVERIFY(open(sampleNotes()));
+        r = askWithApp(u"Włącz ciemny motyw"_s);
+        request = r.value.toMap().value(u"request"_s).toMap();
+        const QVariantList tools = request.value(u"tools"_s).toList();
+        QCOMPARE(tools.size(), 18);
+        QStringList names;
+        for (const QVariant &t : tools)
+            names << t.toMap().value(u"name"_s).toString();
+        QCOMPARE(names.mid(12), (QStringList{u"app_settings"_s, u"change_setting"_s, u"app_commands"_s,
+                                             u"run_app_command"_s, u"set_theme"_s, u"add_button"_s}));
+        // The rules say when; the notes' rules are the same text before them.
+        QVERIFY(request.value(u"system"_s).toString().startsWith(system));
+        QVERIFY(request.value(u"system"_s).toString().contains(u"app_settings, potem change_setting"_s));
+        // Both providers take them.
+        QString error;
+        std::optional<ai::Request> made = ai::requestFrom(request, &error);
+        QVERIFY2(made, qPrintable(error));
+        ai::Settings claude;
+        claude.apiKey = u"k"_s;
+        QVERIFY2(ai::httpRequest(claude, *made, &error), qPrintable(error));
+        ai::Settings own;
+        own.provider = u"openai"_s;
+        own.model = u"qwen3"_s;
+        QVERIFY2(ai::httpRequest(own, *made, &error), qPrintable(error));
+    }
+
+    void changesASettingWithTheUsersYes()
+    {
+        QVERIFY(open(sampleNotes()));
+        playTheApp();
+        Result r = askWithApp(u"Włącz ciemny motyw i powiększ czcionkę"_s);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"app_settings"_s, {{u"words"_s, u"theme"_s}})}));
+        QString listed = firstResult(r);
+        QVERIFY2(listed.contains(u"theme = \"system\" — Theme (Appearance, choice); one of: system, light, dark"_s),
+                 qPrintable(listed));
+        QVERIFY(!listed.contains(u"fontScale"_s));
+        QCOMPARE(m_statuses.value(m_statuses.size() - 2), u"Przeglądam ustawienia aplikacji…"_s);
+        r = m_engine->resume(r.call, calling({call(u"c2"_s, u"app_settings"_s, {})}));
+        listed = firstResult(r);
+        QVERIFY2(listed.contains(u"fontScale = 1 — Font size (Appearance, number); 0.8 … 1.5"_s), qPrintable(listed));
+        QVERIFY2(
+                listed.contains(
+                        u"journalsFolder = \"journals\" — Journal folder (Journal, path, the notebook's: every device of it)"_s),
+                qPrintable(listed));
+        // An option as the model wrote it (its letter case aside) — asked first, then set.
+        r = m_engine->resume(r.call, calling({call(u"c3"_s, u"change_setting"_s,
+                                                   {{u"key"_s, u"theme"_s}, {u"value"_s, u"Dark"_s}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"choose"_s);
+        QCOMPARE(r.value.toMap().value(u"prompt"_s).toString(),
+                 u"AI chce zmienić ustawienie „Theme” z \"system\" na \"dark\""_s);
+        QVERIFY(m_appCalls.isEmpty());
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(0));
+        QCOMPARE(firstResult(r), u"Changed theme (Theme) to \"dark\"."_s);
+        QCOMPARE(m_appCalls.size(), 1);
+        QCOMPARE(m_appCalls[0].toMap().value(u"args"_s).toMap().value(u"value"_s).toString(), u"dark"_s);
+        // Not a value of it: refused before the user is asked; one it has already: nothing to do;
+        // one the app refuses: its reason; a key that is none.
+        r = m_engine->resume(
+                r.call,
+                calling({call(u"c4"_s, u"change_setting"_s, {{u"key"_s, u"theme"_s}, {u"value"_s, u"sepia"_s}}),
+                         call(u"c5"_s, u"change_setting"_s, {{u"key"_s, u"theme"_s}, {u"value"_s, u"dark"_s}}),
+                         call(u"c6"_s, u"change_setting"_s, {{u"key"_s, u"tema"_s}, {u"value"_s, u"dark"_s}})}));
+        QVariantList results = lastResults(r);
+        QVERIFY2(results[0]
+                         .toMap()
+                         .value(u"content"_s)
+                         .toString()
+                         .startsWith(u"Not changed: \"sepia\" is no value of theme"_s),
+                 qPrintable(results[0].toMap().value(u"content"_s).toString()));
+        QVERIFY(results[0].toMap().value(u"isError"_s).toBool());
+        QVERIFY(results[1].toMap().value(u"content"_s).toString().contains(u"already"_s));
+        QVERIFY(results[2].toMap().value(u"content"_s).toString().startsWith(u"No setting \"tema\""_s));
+        QCOMPARE(m_appCalls.size(), 1);
+        // Out of its range: refused before the user is asked.
+        r = m_engine->resume(r.call, calling({call(u"c7"_s, u"change_setting"_s,
+                                                   {{u"key"_s, u"fontScale"_s}, {u"value"_s, u"2"_s}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
+        QVERIFY2(firstResult(r).startsWith(u"Not changed: 2 is outside fontScale"_s), qPrintable(firstResult(r)));
+        // One the app refuses: its reason.
+        m_appValues.remove(u"journalsFolder"_s);
+        r = m_engine->resume(r.call, calling({call(u"c9"_s, u"change_setting"_s,
+                                                   {{u"key"_s, u"journalsFolder"_s}, {u"value"_s, u"Dziennik"_s}})}));
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(0));
+        QVERIFY2(firstResult(r).startsWith(u"Not changed: "_s)
+                         && firstResult(r).contains(u"no setting “journalsFolder”"_s),
+                 qPrintable(firstResult(r)));
+        QCOMPARE(m_appCalls.size(), 1);
+        r = m_engine->resume(r.call, calling({call(u"c8"_s, u"change_setting"_s,
+                                                   {{u"key"_s, u"fontScale"_s}, {u"value"_s, u"1.2"_s}})}));
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(0));
+        QCOMPARE(firstResult(r), u"Changed fontScale (Font size) to 1.2."_s);
+        r = m_engine->resume(r.call, answering(u"Gotowe: ciemny motyw i większa czcionka."_s));
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        // What it changed in the app, after the answer, in the notes' language.
+        QCOMPARE(r.value.toString(),
+                 u"Gotowe: ciemny motyw i większa czcionka.\n\n⚙️ W aplikacji: theme → \"dark\", fontScale → 1.2"_s);
+        QCOMPARE(file(u"Dom.md"_s), sampleNotes().value(u"Dom.md"_s));
+    }
+
+    void runsACommandOfTheApp()
+    {
+        QVERIFY(open(sampleNotes(), QDate(2026, 11, 11), u"en"_s));
+        playTheApp();
+        Result r = askWithApp(u"Open the calendar"_s);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"app_commands"_s, {{u"words"_s, u"calendar"_s}})}));
+        QCOMPARE(firstResult(r), u"go.calendar — Go to calendar [Ctrl+3]"_s);
+        // Its own commands are none of them.
+        r = m_engine->resume(r.call,
+                             calling({call(u"c2"_s, u"app_commands"_s, {{u"words"_s, u"AI"_s}}),
+                                      call(u"c3"_s, u"run_app_command"_s, {{u"id"_s, u"ext.asystent.chat"_s}})}));
+        QVERIFY(lastResults(r)
+                        .value(0)
+                        .toMap()
+                        .value(u"content"_s)
+                        .toString()
+                        .startsWith(u"No command of the app matches"_s));
+        QVERIFY(lastResults(r).value(1).toMap().value(u"isError"_s).toBool());
+        r = m_engine->resume(r.call, calling({call(u"c4"_s, u"run_app_command"_s, {{u"id"_s, u"go.calendar"_s}})}));
+        QCOMPARE(r.value.toMap().value(u"prompt"_s).toString(),
+                 u"The AI wants to run the app's command “Go to calendar”"_s);
+        // Declined: not run.
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(2));
+        QCOMPARE(firstResult(r), u"The user declined this change."_s);
+        QVERIFY(m_appCalls.isEmpty());
+        r = m_engine->resume(r.call, calling({call(u"c5"_s, u"run_app_command"_s, {{u"id"_s, u"go.calendar"_s}})}));
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(0));
+        QCOMPARE(firstResult(r), u"The command \"Go to calendar\" runs once this answer is written."_s);
+        QCOMPARE(m_appCalls.size(), 1);
+        QCOMPARE(m_appCalls[0].toMap().value(u"operation"_s).toString(), u"run"_s);
+        r = m_engine->resume(r.call, answering(u"The calendar opens."_s));
+        QCOMPARE(r.value.toString(), u"The calendar opens.\n\n⚙️ In the app: Go to calendar"_s);
+    }
+
+    void makesAThemePage()
+    {
+        QHash<QString, QString> notes = sampleNotes();
+        notes.insert(u"Motywy/Notatka.md"_s, u"- zwykła strona, nie motyw\n"_s);
+        QVERIFY(open(notes));
+        playTheApp();
+        Result r = askWithApp(u"Zrób mi motyw sepia z morskim akcentem"_s);
+        // A token that is none, a value out of range: refused with what is wrong, nothing written.
+        r = m_engine->resume(
+                r.call, calling({call(u"c1"_s, u"set_theme"_s,
+                                      {{u"name"_s, u"Sepia"_s}, {u"tokens"_s, QVariantMap{{u"bgg"_s, u"#f4ecd8"_s}}}}),
+                                 call(u"c2"_s, u"set_theme"_s,
+                                      {{u"name"_s, u"Sepia"_s}, {u"tokens"_s, QVariantMap{{u"radius"_s, 99}}}}),
+                                 call(u"c3"_s, u"set_theme"_s, {{u"name"_s, u"Sepia"_s}})}));
+        QVariantList results = lastResults(r);
+        QVERIFY2(results[0].toMap().value(u"content"_s).toString().startsWith(u"Not written: "_s)
+                         && results[0].toMap().value(u"content"_s).toString().contains(u"bg"_s),
+                 qPrintable(results[0].toMap().value(u"content"_s).toString()));
+        QVERIFY(results[1].toMap().value(u"isError"_s).toBool());
+        QVERIFY(results[2].toMap().value(u"content"_s).toString().startsWith(u"No tokens given"_s));
+        QVERIFY(!m_vault->exists(u"Motywy/Sepia.md"_s));
+        // The check took nothing of the app's theme with it.
+        QVERIFY(m_engine->themes().isEmpty());
+        // A good one: asked, written as a theme page, picked for the notebook.
+        r = m_engine->resume(r.call,
+                             calling({call(u"c4"_s, u"set_theme"_s,
+                                           {{u"name"_s, u"Sepia"_s},
+                                            {u"description"_s, u"Papier w jasnym, morski akcent."_s},
+                                            {u"tokens"_s, QVariantMap{{u"accent"_s, u"#1f8a80"_s}, {u"radius"_s, 9}}},
+                                            {u"light"_s, QVariantMap{{u"bg"_s, u"#f4ecd8"_s}, {u"fg"_s, u"#3b2f20"_s}}},
+                                            {u"dark"_s, QVariantMap{{u"bg"_s, u"#14110c"_s}}}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"choose"_s);
+        QVERIFY(r.value.toMap().value(u"prompt"_s).toString().startsWith(u"AI chce utworzyć motyw „Sepia”"_s));
+        QVERIFY(m_engine->themes().isEmpty());
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(0));
+        QVERIFY2(firstResult(r).startsWith(u"Wrote the theme [[Motywy/Sepia]] and picked it"_s),
+                 qPrintable(firstResult(r)));
+        QCOMPARE(file(u"Motywy/Sepia.md"_s), u"---\ntags: [motyw]\n---\n\nPapier w jasnym, morski "
+                                             u"akcent.\n\n```theme\naccent: #1f8a80\nradius: 9\nlight:\n"
+                                             "  bg: #f4ecd8\n  fg: #3b2f20\ndark:\n  bg: #14110c\n```\n"_s);
+        QCOMPARE(m_appCalls.size(), 1);
+        QCOMPARE(m_appCalls[0].toMap().value(u"args"_s).toMap().value(u"key"_s).toString(), u"themePage"_s);
+        QCOMPARE(m_appCalls[0].toMap().value(u"args"_s).toMap().value(u"value"_s).toString(), u"Motywy/Sepia.md"_s);
+        QVERIFY(m_engine->themes().isEmpty());
+        // A page of that name that is no theme is never replaced.
+        r = m_engine->resume(
+                r.call,
+                calling({call(u"c5"_s, u"set_theme"_s,
+                              {{u"name"_s, u"Notatka"_s}, {u"tokens"_s, QVariantMap{{u"accent"_s, u"#123456"_s}}}})}));
+        QVERIFY(firstResult(r).contains(u"no theme"_s));
+        r = m_engine->resume(r.call, answering(u"Motyw Sepia gotowy."_s));
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(
+                r.value.toString(),
+                u"Motyw Sepia gotowy.\n\n✏️ Zmienione: [[Motywy/Sepia]]\n\n⚙️ W aplikacji: themePage → Motywy/Sepia.md"_s);
+    }
+
+    void addsAButtonAsAnExtension()
+    {
+        QVERIFY(open(sampleNotes()));
+        playTheApp();
+        Result r = askWithApp(u"Dodaj przycisk do kalendarza w górnym pasku"_s);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"add_button"_s, {{u"label"_s, u"Kalendarz"_s}}),
+                                              call(u"c2"_s, u"add_button"_s,
+                                                   {{u"label"_s, u"Kalendarz"_s}, {u"command"_s, u"go.kalendarz"_s}}),
+                                              call(u"c3"_s, u"add_button"_s,
+                                                   {{u"label"_s, u"Kalendarz"_s},
+                                                    {u"place"_s, u"roof"_s},
+                                                    {u"command"_s, u"go.calendar"_s}})}));
+        QVariantList results = lastResults(r);
+        QVERIFY(results[0].toMap().value(u"content"_s).toString().startsWith(u"Give either the command"_s));
+        QVERIFY(results[1].toMap().value(u"content"_s).toString().startsWith(u"No command \"go.kalendarz\""_s));
+        QVERIFY(results[2].toMap().value(u"content"_s).toString().startsWith(u"No place \"roof\""_s));
+        r = m_engine->resume(r.call, calling({call(u"c4"_s, u"add_button"_s,
+                                                   {{u"label"_s, u"Kalendarz „na teraz”"_s},
+                                                    {u"icon"_s, u"calendar"_s},
+                                                    {u"command"_s, u"go.calendar"_s}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"choose"_s);
+        QVERIFY2(r.value.toMap()
+                         .value(u"prompt"_s)
+                         .toString()
+                         .contains(u"Rozszerzenia/Przycisk – Kalendarz „na teraz”"_s),
+                 qPrintable(r.value.toMap().value(u"prompt"_s).toString()));
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(0));
+        QVERIFY2(firstResult(r).startsWith(
+                         u"Wrote the extension [[Rozszerzenia/Przycisk – Kalendarz „na teraz”]] with the button."_s),
+                 qPrintable(firstResult(r)));
+        const QString page = file(u"Rozszerzenia/Przycisk – Kalendarz „na teraz”.md"_s);
+        QVERIFY2(page.startsWith(u"---\ntags: [extension]\npermissions: [app]\n"_s), qPrintable(page));
+        QVERIFY2(page.contains(
+                         u"```luau\nb.app.contribute(\"toolbar\", { id = \"button\", label = \"Kalendarz „na teraz”\", "
+                         "icon = \"calendar\", run = \"go.calendar\" })\n```"_s),
+                 qPrintable(page));
+        // The page it wrote is an extension that loads and contributes the button (once approved).
+        const QVariantMap checked = m_host->checkExtension(u"Rozszerzenia/Przycisk – Kalendarz „na teraz”"_s, page);
+        QVERIFY2(checked.value(u"ok"_s).toBool(), qPrintable(checked.value(u"error"_s).toString()));
+        QCOMPARE(checked.value(u"permissions"_s).toStringList(), QStringList{u"app"_s});
+        QVERIFY(m_appCalls.isEmpty()); // (nothing of the app changed before Run)
+        r = m_engine->resume(r.call, answering(u"Dodałem przycisk: naciśnij Uruchom na jego stronie."_s));
+        QVERIFY2(r.ok(), qPrintable(r.error));
     }
 
     void looksAtAPicture()

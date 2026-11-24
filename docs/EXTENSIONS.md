@@ -1542,7 +1542,31 @@ small model wrote reminders so): when the user's message asks for one ("przypomn
 its own writes `📅 2026-11-12 8:30` as `⏰ 2026-11-12 08:30` — in what the user approves too; a
 task's line keeps its due date — and its result says so ("The time went in as a reminder, ⏰ …: 📅
 is a due date and rings no alarm."); the same change written again as a reminder is the change made
-already (a fine-tuned model wrote the line a second time so). Its system text is a list of rules, after the
+already (a fine-tuned model wrote the line a second time so). **The app's own tools** come after
+these only where the app runs the turn and its model is on the network (`ctx.appTools`, set by
+`WorkspaceExtensions::runChat` when the provider is not `local`; never in `brulion-cli acp agent`
+nor the bench): the model on the device keeps exactly the twelve tools and the system text it was
+trained on (docs/FINETUNE.md), and the rules get one more line on when to use them. Six tools over
+`b.app` (the assistant has the permission `app`): `app_settings` (`b.app.settings()`, a line per
+setting — `key = value — label (group, kind)`, its options or range, the notebook's marked —, those
+with every word asked for), `change_setting` (an option as the model wrote it, letter case aside; a
+toggle from true / on / tak …; a number checked against its range and a value that is none of the
+setting's refused before the user is asked; one it has already "Not changed: … already"; then
+`b.choose` — "The AI wants to change the setting “Theme” from "system" to "dark"" — and
+`b.app.set`, the app's refusal as the result), `app_commands` (the palette's commands with the
+words, the assistant's own left out, at most 40) and `run_app_command` (asked first; `b.app.run`
+runs it once the turn's answer is written), `set_theme` (the tokens for both modes and `light` /
+`dark`, checked as `b.app.theme` checks them — an unknown token, a value of the wrong kind or out
+of range is the result, nothing written — and taken back at once; then, asked first, a theme page
+`Motywy/<name>.md` / `Themes/<name>.md` tagged `motyw` / `theme` with the tokens as a
+```` ```theme ```` block, docs/SYNTAX.md §13, never over a page that is no theme, picked for the
+notebook with `b.app.set("themePage", …)`) and `add_button` (a button in `toolbar`, `sidebar`,
+`statusbar`, `pageMenu`, `tabMenu` or `bottomNav` that runs a command of the app — one
+`app_commands` knows — or opens a page: written, checked and asked first, as an extension page
+`Rozszerzenia/Przycisk – <label>.md` / `Extensions/Button – <label>.md` with `permissions: [app]`
+and one `b.app.contribute`, which shows once the user presses Run on it, as any code the AI wrote).
+Every app change counts as a change of the question (a claim of one is no longer asked for again),
+and the AI's message ends with them: `⚙️ W aplikacji: theme → "dark"` / `⚙️ In the app: …`. Its system text is a list of rules, after the
 notes' syntax: search before answering about the notes and answer once a result does; answer only
 from what the tools gave, a result of the kind asked for under another name too; ask back when the request does not say what it is about; answer general
 questions without tools; a request to add or change ("remind me…", "tick off…") makes the change,
@@ -1586,7 +1610,7 @@ while the assistant is on (docs/UI.md "Top bar": a new conversation about the pa
 the journal's stream today's note —, one beside it in the side panel, the conversations, a summary
 of the page as a new conversation; a spinner while `aiPending`, none while a chat view shows the turn — `WorkspaceChats.runningShown`). Like the gym, its source can run
 from a page of the notebook and be changed there: a page tagged as an extension, with
-`permissions: [write, ai]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
+`permissions: [ai, app, write]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
 has `overrides: asystent`) — Settings → Extensions → AI → **The assistant's code → Edit the code**
 writes it, as for the gym, the habits and the flashcards. An editor that talks to agents (Zed, a
 JetBrains IDE) runs the same `chat` through `brulion-cli acp agent` (docs/CLI.md "The assistant in
@@ -1605,7 +1629,9 @@ conversation's first message: `WorkspaceExtensions::chatPartners()`), and the co
 keeps the choice in its frontmatter, `partner: <extension>/<command>` (docs/SYNTAX.md §14) — other
 conversations keep theirs. A turn runs the command like the assistant's `chat`: `ctx.messages` (the
 conversation, the user's last; pictures as `images`), `ctx.page` (the page it is about, "" none),
-`ctx.conversation` and `ctx.omitted`; what it returns — a text — is the AI's message, written into
+`ctx.conversation`, `ctx.omitted` and `ctx.appTools` (true where the app runs the turn and the
+model of the settings is on the network: a partner may then offer the model tools over `b.app`, as
+the assistant does — a model on the device is left the tools it knows); what it returns — a text — is the AI's message, written into
 the conversation with its time; an error is the turn's failure, shown with Try again. It may ask
 (`b.choose`: the chat shows the question in the conversation), say what it does (`b.status`) and ask
 a model (`b.ai`, with the permission `ai`) — or answer without any: a partner needs no model. Turns

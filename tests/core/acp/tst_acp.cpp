@@ -11,7 +11,8 @@
 // modes and models) read and set before the first prompt and during a turn; sessions resumed and
 // loaded, a failed load followed by a new session; commands, usage, the plan, tool calls with
 // their output and terminals, messages by id; the agent's requests for files and terminals handed
-// on; pictures and embedded text falling back to links; open(), forget(), rename().
+// on; pictures and embedded text falling back to links; open(), forget(), rename() — also while a
+// stopped turn's answer or an option is on its way —, close() and a new session under the same key.
 #include "acp/acp.h"
 
 #include <QJsonArray>
@@ -921,6 +922,113 @@ private Q_SLOTS:
         closing.reply(closing.last(u"session/new"_s), QJsonObject{{u"sessionId"_s, u"z"_s}});
         other.close(u"k"_s);
         QCOMPARE(closing.last(u"session/close"_s).value(u"params"_s).toObject().value(u"sessionId"_s).toString(), u"z"_s);
+    }
+
+    // A conversation renamed while its stopped turn's answer is still on its way: the answer ends
+    // the session's turn under the new name, and the turn sent meanwhile goes on in that session.
+    void renamedWhileStoppedTurnOnItsWay()
+    {
+        Agent agent;
+        Client client(agent.sender());
+        agent.client = &client;
+        QSignalSpy finished(&client, &Client::finished);
+        QSignalSpy failed(&client, &Client::failed);
+        const QString before = u"AI/2026-11-24 Zakupy na środę"_s;
+        const QString after = u"AI/2026-11-24 Zakupy na piątek"_s;
+        QVERIFY(client.prompt(before, input(u"pierwsze pytanie"_s, u"p"_s)));
+        agent.initialize();
+        agent.reply(agent.last(u"session/new"_s), QJsonObject{{u"sessionId"_s, u"s"_s}});
+        const QJsonObject stopped = agent.last(u"session/prompt"_s);
+        client.cancel(before);
+        QCOMPARE(agent.last(u"session/cancel"_s).value(u"params"_s).toObject().value(u"sessionId"_s).toString(),
+                 u"s"_s);
+        client.rename(before, after);
+        QVERIFY(!client.hasSession(before));
+        QCOMPARE(client.keyOf(u"s"_s), after);
+        // A turn sent meanwhile waits for the stopped one to end …
+        QVERIFY(client.prompt(after, input(u"pierwsze pytanie"_s, u"drugie pytanie"_s)));
+        QCOMPARE(agent.count(u"session/prompt"_s), 1);
+        agent.chunk(u"s"_s, u"Jeszcze piszę o środzie"_s); // (said after the cancel: not heard)
+        agent.reply(stopped, QJsonObject{{u"stopReason"_s, u"cancelled"_s}});
+        // … then goes on in the same session, under the conversation's new name.
+        QCOMPARE(agent.count(u"session/new"_s), 1);
+        QCOMPARE(agent.count(u"session/prompt"_s), 2);
+        const QJsonObject next = agent.last(u"session/prompt"_s);
+        QCOMPARE(next.value(u"params"_s).toObject().value(u"sessionId"_s).toString(), u"s"_s);
+        QCOMPARE(promptText(next), u"drugie pytanie"_s);
+        QVERIFY(client.running(after));
+        agent.chunk(u"s"_s, u"Piątek: chleb, mleko"_s);
+        agent.reply(next, QJsonObject{{u"stopReason"_s, u"end_turn"_s}});
+        QCOMPARE(failed.size(), 0);
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first().at(0).toString(), after);
+        QCOMPARE(finished.first().at(1).toString(), u"Piątek: chleb, mleko"_s);
+        QVERIFY(!client.running(after));
+    }
+
+    // A session's option set, the conversation renamed before the agent answered: the turn goes on
+    // under the new name (the option's answer finds its session).
+    void renamedWhileOptionOnItsWay()
+    {
+        Agent agent;
+        Client client(agent.sender());
+        agent.client = &client;
+        QSignalSpy finished(&client, &Client::finished);
+        TurnInput in = input(u"pytanie"_s, u"p"_s);
+        in.config.insert(u"model"_s, u"opus"_s);
+        QVERIFY(client.prompt(u"a"_s, in));
+        agent.initialize();
+        const QJsonObject options{
+                {u"sessionId"_s, u"s"_s},
+                {u"configOptions"_s,
+                 QJsonArray{QJsonObject{
+                         {u"id"_s, u"model"_s},
+                         {u"name"_s, u"Model"_s},
+                         {u"type"_s, u"select"_s},
+                         {u"currentValue"_s, u"sonnet"_s},
+                         {u"options"_s, QJsonArray{QJsonObject{{u"value"_s, u"sonnet"_s}, {u"name"_s, u"Sonnet"_s}},
+                                                   QJsonObject{{u"value"_s, u"opus"_s}, {u"name"_s, u"Opus"_s}}}}}}}};
+        agent.reply(agent.last(u"session/new"_s), options);
+        const QJsonObject set = agent.last(u"session/set_config_option"_s);
+        QVERIFY(!set.isEmpty());
+        QCOMPARE(agent.count(u"session/prompt"_s), 0);
+        client.rename(u"a"_s,
+                      u"b"_s); // (a turn's session moves along only through WorkspaceAgents' wait; here directly)
+        agent.reply(set, QJsonObject{});
+        QCOMPARE(agent.count(u"session/prompt"_s), 1);
+        QCOMPARE(client.session(u"b"_s).options.value(0).current.toString(), u"opus"_s);
+        agent.chunk(u"s"_s, u"Gotowe"_s);
+        agent.reply(agent.last(u"session/prompt"_s), QJsonObject{{u"stopReason"_s, u"end_turn"_s}});
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first().at(0).toString(), u"b"_s);
+    }
+
+    // A conversation closed and asked again before the old turn's answer came: that answer is not
+    // taken for the new session's.
+    void closedAndAskedAgain()
+    {
+        Agent agent;
+        Client client(agent.sender());
+        agent.client = &client;
+        QSignalSpy finished(&client, &Client::finished);
+        QSignalSpy failed(&client, &Client::failed);
+        QVERIFY(client.prompt(u"k"_s, input(u"stare"_s, u"p"_s)));
+        agent.initialize();
+        agent.reply(agent.last(u"session/new"_s), QJsonObject{{u"sessionId"_s, u"s"_s}});
+        const QJsonObject old = agent.last(u"session/prompt"_s);
+        client.close(u"k"_s);
+        QVERIFY(client.prompt(u"k"_s, input(u"nowe"_s, u"p"_s)));
+        QCOMPARE(agent.count(u"session/new"_s), 2);
+        const QJsonObject made = agent.last(u"session/new"_s);
+        agent.reply(old, QJsonObject{{u"stopReason"_s, u"end_turn"_s}}); // (the closed session's)
+        QCOMPARE(finished.size(), 0);
+        QCOMPARE(failed.size(), 0);
+        agent.reply(made, QJsonObject{{u"sessionId"_s, u"t"_s}});
+        QCOMPARE(promptText(agent.last(u"session/prompt"_s)), u"nowe"_s);
+        agent.chunk(u"t"_s, u"Nowa odpowiedź"_s);
+        agent.reply(agent.last(u"session/prompt"_s), QJsonObject{{u"stopReason"_s, u"end_turn"_s}});
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first().at(1).toString(), u"Nowa odpowiedź"_s);
     }
 
     void blocks()

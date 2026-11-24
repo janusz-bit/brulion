@@ -10,6 +10,10 @@
 #include "workspaceextensions.h"
 
 #include "capture.h"
+#include "pickedfiles.h"
+#ifdef Q_OS_WASM
+#include "wasm/wasmfiles.h"
+#endif
 
 #include "ai/local.h"
 #include "aireport/aireport.h"
@@ -1212,6 +1216,62 @@ QString WorkspaceChats::addClipboardPicture()
     if (!path.isEmpty() && !m_added.contains(path))
         m_added.append(path);
     return path;
+}
+
+bool WorkspaceChats::browserPicker() const
+{
+#ifdef Q_OS_WASM
+    return true;
+#else
+    return false;
+#endif
+}
+
+int WorkspaceChats::pickPicturesInBrowser()
+{
+#ifdef Q_OS_WASM
+    if (!m_workspace->ready())
+        return 0;
+    const int pick = ++m_lastPick;
+    QStringList filters;
+    for (const QString &extension : paths::pictureExtensions())
+        filters << u"*."_s + extension;
+    const QPointer<WorkspaceChats> self(this);
+    platform::wasm::openFiles({tr("Pictures (%1)").arg(filters.join(u' '))}, true, MaxPickedPictureBytes,
+                              MaxPickedPicturesBytes, [self, pick](const QList<platform::PickedFile> &files) {
+                                  if (!self || files.isEmpty())
+                                      return; // (cancelled, or the notebook went meanwhile)
+                                  const QStringList stored = self->addPickedPictures(files);
+                                  if (!stored.isEmpty())
+                                      Q_EMIT self->picturesPicked(pick, stored);
+                              });
+    return pick;
+#else
+    return 0;
+#endif
+}
+
+QStringList WorkspaceChats::addPickedPictures(const QList<platform::PickedFile> &files)
+{
+    QStringList stored;
+    if (!m_workspace->ready())
+        return stored;
+    for (const platform::PickedFile &file : files) {
+        // (The browser names a file as the user's system does: its extension says what it is.)
+        if (!file.isRead() || file.data.isEmpty()
+            || !paths::pictureExtensions().contains(paths::extension(file.name).toLower()))
+            continue;
+        const QString path = m_workspace->importAttachment(file.name, file.data);
+        if (path.isEmpty())
+            continue;
+        if (!m_added.contains(path))
+            m_added.append(path);
+        if (!stored.contains(path))
+            stored.append(path);
+    }
+    if (stored.size() < files.size())
+        Q_EMIT picturesRefused();
+    return stored;
 }
 
 void WorkspaceChats::dropPicture(const QString &path)

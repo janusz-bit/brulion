@@ -116,6 +116,53 @@ local INTERFACE = {
 local W = if b.lang() == "pl" then WRITTEN.pl else WRITTEN.en
 local T = if b.uiLang() == "pl" then INTERFACE.pl else INTERFACE.en
 
+-- The app's own tools (ctx.appTools: the app runs the assistant and its model is on the network —
+-- never the model on the device, whose tools are what it was trained on: docs/FINETUNE.md).
+local APP_WRITTEN = {
+    pl = {
+        rules = "\n- Sama aplikacja, tylko na prośbę: jej ustawienie (motyw jasny albo ciemny, akcent, czcionki, układ, edytor) → app_settings, potem change_setting; własny motyw z kolorami i czcionkami → set_theme; przycisk w aplikacji (górny pasek, pasek boczny, menu strony, dolna nawigacja) → add_button; polecenie aplikacji (otwórz widok, przełącz coś) → app_commands, potem run_app_command. Każdą zmianę też zatwierdza użytkownik.",
+        changed = "⚙️ W aplikacji: %s",
+        themeFolder = "Motywy/",
+        themeTag = "motyw",
+        themeAbout = "Motyw, który zrobił asystent AI.",
+        buttonFolder = "Rozszerzenia/",
+        buttonPrefix = "Przycisk – ",
+        buttonAbout = "Przycisk „%s”, który dodał asystent AI.",
+    },
+    en = {
+        rules = "\n- The app itself, only when asked: a setting of it (the light or dark theme, the accent, fonts, the layout, the editor) → app_settings, then change_setting; a theme of one's own with colours and fonts → set_theme; a button in the app (the top bar, the sidebar, a page's menu, the bottom navigation) → add_button; a command of the app (open a view, switch something) → app_commands, then run_app_command. The user approves each of these changes too.",
+        changed = "⚙️ In the app: %s",
+        themeFolder = "Themes/",
+        themeTag = "theme",
+        themeAbout = "A theme the AI assistant made.",
+        buttonFolder = "Extensions/",
+        buttonPrefix = "Button – ",
+        buttonAbout = "The button “%s”, added by the AI assistant.",
+    },
+}
+local APP_INTERFACE = {
+    pl = {
+        settings = "Przeglądam ustawienia aplikacji…",
+        commands = "Przeglądam polecenia aplikacji…",
+        changeSetting = "AI chce zmienić ustawienie „%s” z %s na %s",
+        runCommand = "AI chce uruchomić polecenie aplikacji „%s”",
+        createTheme = "AI chce utworzyć motyw „%s” i użyć go w tym notatniku:\n\n%s",
+        replaceTheme = "AI chce zastąpić motyw „%s” nowym i użyć go w tym notatniku:\n\n%s",
+        createButton = "AI chce dodać przycisk „%s” jako rozszerzenie „%s” (pokaże się, gdy naciśniesz Uruchom na jego stronie):\n\n%s",
+    },
+    en = {
+        settings = "Looking through the app's settings…",
+        commands = "Looking through the app's commands…",
+        changeSetting = "The AI wants to change the setting “%s” from %s to %s",
+        runCommand = "The AI wants to run the app's command “%s”",
+        createTheme = "The AI wants to create the theme “%s” and use it in this notebook:\n\n%s",
+        replaceTheme = "The AI wants to replace the theme “%s” with a new one and use it in this notebook:\n\n%s",
+        createButton = "The AI wants to add the button “%s” as the extension “%s” (it shows once you press Run on its page):\n\n%s",
+    },
+}
+local WA = if b.lang() == "pl" then APP_WRITTEN.pl else APP_WRITTEN.en
+local TA = if b.uiLang() == "pl" then APP_INTERFACE.pl else APP_INTERFACE.en
+
 local function trim(s: string): string
     return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -340,6 +387,94 @@ table.insert(TOOLS, {
     },
 })
 
+
+-- The app's own tools: offered only with ctx.appTools (above), after the notes' tools.
+local APP_TOOLS = {
+    {
+        name = "app_settings",
+        description = "Lists the app's settings that may be changed, with their values: the theme (theme: light, dark or system; accent; density; fontScale; uiFont …), the layout, the editor (fonts, width, line spacing, focus and reading modes …), the built-in extensions, reminders; and the open notebook's own (journal folder and file names, templates, the week's first day, its theme page). Each line: key = value — its label (group, kind), the values it takes. Give words to narrow it (\"theme\", \"font\", \"journal\"). Call it before change_setting.",
+        input = {
+            type = "object",
+            properties = {
+                words = { type = "string", description = "Words of the setting's key, label or group; none: all of them" },
+            },
+        },
+    },
+    {
+        name = "change_setting",
+        description = "Changes one setting of the app (a key app_settings listed) to a value it takes: a choice one of its options, a toggle true or false, a number within its range, a colour \"#rrggbb\", a list of its options. Applied at once — a device's setting on this device, the notebook's for every device of the notebook. The user approves it first.",
+        input = {
+            type = "object",
+            properties = {
+                key = { type = "string", description = "The setting's key, as app_settings gives it" },
+                value = { type = "string", description = "Its new value (true / false for a toggle, a number, a colour, one of its options; a list as values separated by commas)" },
+            },
+            required = { "key", "value" },
+        },
+    },
+    {
+        name = "app_commands",
+        description = "Lists the commands of the app's command palette whose id or title has the words given: their id, title and shortcut — opening a view (calendar, tasks, graph …), switching the theme, the side panel, focus mode, and the extensions' commands. Call it before run_app_command.",
+        input = {
+            type = "object",
+            properties = {
+                words = { type = "string", description = "Words of the command's title or id" },
+            },
+            required = { "words" },
+        },
+    },
+    {
+        name = "run_app_command",
+        description = "Runs one command of the app's command palette by its id (from app_commands), as the palette runs it, once this answer is written. The user approves it first.",
+        input = {
+            type = "object",
+            properties = {
+                id = { type = "string", description = "The command's id" },
+            },
+            required = { "id" },
+        },
+    },
+    {
+        name = "set_theme",
+        description = "Makes a theme of the app — colours, corner radii, spacing, fonts — as a theme page of the notebook and picks it for the notebook (Settings → Appearance → Themes lists it; it syncs with the notebook). Tokens: the surfaces bg, bgElevated, bgSunken, bgHover, bgSelected; text fg, fgMuted, fgFaint; lines border, borderSubtle; accent, accentText, accentBg, primary, link, tagBg, tagFg; danger, warning, success, info; selection, mark, focusRing; the radii radiusSm (0–24), radius (0–32), radiusLg (0–40); space (3–6); the fonts fontUi, fontSans, fontSerif, fontMono (a family on the device). Colours as \"#rrggbb\". Tokens for one mode only go in light or dark. The user approves it first; an unknown token or a wrong value is refused with what is wrong.",
+        input = {
+            type = "object",
+            properties = {
+                name = { type = "string", description = "The theme's name (its page's title)" },
+                tokens = { type = "object", description = "Tokens for both modes: {\"accent\": \"#1f8a80\", \"radius\": 9}" },
+                light = { type = "object", description = "Tokens of the light mode only: {\"bg\": \"#f4ecd8\", \"fg\": \"#3b2f20\"}" },
+                dark = { type = "object", description = "Tokens of the dark mode only: {\"bg\": \"#14110c\"}" },
+                description = { type = "string", description = "One sentence on the theme" },
+            },
+            required = { "name" },
+        },
+    },
+    {
+        name = "add_button",
+        description = "Adds a button to the app's UI that runs one of the app's commands (an id from app_commands) or opens a page: written as a small extension, which shows the button once the user presses Run on its page (tell them). Places: toolbar (the top bar; on phones the More menu), sidebar, statusbar, pageMenu, tabMenu, bottomNav (the phone's bottom navigation). The user approves it first.",
+        input = {
+            type = "object",
+            properties = {
+                label = { type = "string", description = "The button's name (its tooltip too)" },
+                place = { type = "string", enum = { "toolbar", "sidebar", "statusbar", "pageMenu", "tabMenu", "bottomNav" }, description = "Where it goes (default toolbar)" },
+                icon = { type = "string", description = "One of the app's icons: star, sun, moon, calendar, timer, bookmark, zap, palette, sparkles, house, list-todo, notebook-pen … (default star)" },
+                command = { type = "string", description = "The id of an app command it runs (from app_commands)" },
+                page = { type = "string", description = "Or the page it opens (made when missing)" },
+            },
+            required = { "label" },
+        },
+    },
+}
+local APP_TOOL_NAMES: { [string]: boolean } = {}
+for _, tool in APP_TOOLS do
+    APP_TOOL_NAMES[tool.name] = true
+end
+-- The notes' tools and then the app's: what a turn with ctx.appTools offers.
+local TOOLS_WITH_APP: { any } = table.clone(TOOLS)
+for _, tool in APP_TOOLS do
+    table.insert(TOOLS_WITH_APP, tool)
+end
+
 local STATUS = { todo = " ", doing = "/", done = "x", cancelled = "-" }
 
 local function str(v: any): string
@@ -444,7 +579,7 @@ type LineChanged = { result: string, asked: string }
 type Session = { all: boolean, changed: { string }, conversation: string, calls: { [string]: boolean },
     writes: number, lastPage: string, made: { [string]: Made }, tasks: { TaskChanged }, asked: string,
     lines: { [string]: LineChanged }, again: boolean, declined: boolean, already: boolean, nudged: boolean,
-    refused: { [string]: boolean } }
+    refused: { [string]: boolean }, appTools: boolean, app: { string } }
 
 -- Is `name` the session's conversation: its path ("AI/2026-11-16 Co mam jutro", ".md" or not, a
 -- ref's "#L…" after it) or, without a folder, its title (b.search names pages by their titles)?
@@ -1283,6 +1418,13 @@ local READING = { search_notes = true, query_notes = true, list_pages = true, re
 -- again, a task's line written over with what it said before).
 local CHANGING = { append_to_journal = true, append_to_page = true, write_page = true, update_block = true,
     write_extension = true }
+-- (… and the app's own tools so.)
+READING.app_settings = true
+READING.app_commands = true
+CHANGING.change_setting = true
+CHANGING.run_app_command = true
+CHANGING.set_theme = true
+CHANGING.add_button = true
 
 -- A call as a key: its tool and its input, the input's keys in order.
 local function callKey(name: string, input: any): string
@@ -1352,6 +1494,377 @@ local function changeKey(name: string, input: any): string
         return callKey(name, input)
     end
     return table.concat(parts, "\0")
+end
+
+-- ---- The app's own tools (ctx.appTools) ------------------------------------------------------------
+
+-- A setting's or a token's value as the model reads it: a text quoted, a list in brackets.
+local function valueText(v: any): string
+    if type(v) == "table" then
+        local parts = {}
+        for _, item in v do
+            table.insert(parts, str(item))
+        end
+        return "[" .. table.concat(parts, ", ") .. "]"
+    elseif type(v) == "string" then
+        return "\"" .. v .. "\""
+    end
+    return str(v)
+end
+
+-- One setting of b.app.settings() as a line: key = value — label (group, kind), what it takes.
+local function settingLine(s: any): string
+    local line = str(s.key) .. " = " .. valueText(s.value) .. " — " .. str(s.label) .. " (" .. str(s.group) .. ", "
+        .. str(s.kind) .. (if s.scope == "notebook" then ", the notebook's: every device of it" else "") .. ")"
+    if type(s.options) == "table" and #s.options > 0 then
+        local options = {}
+        for _, o in s.options do
+            table.insert(options, str(o))
+        end
+        line ..= "; one of: " .. table.concat(options, ", ")
+    end
+    if str(s.kind) == "number" and s.min ~= nil then
+        line ..= "; " .. str(s.min) .. " … " .. str(s.max)
+    end
+    return line
+end
+
+-- Do the folded words of `words` (all of them) appear in `text`?
+local function hasWords(text: string, words: string): boolean
+    local hay = b.fold(text)
+    for word in b.fold(words):gmatch("%S+") do
+        if not hay:find(word, 1, true) then
+            return false
+        end
+    end
+    return true
+end
+
+-- The value `given` (as the model wrote it: a text, a number, a bool, a list) in the kind of the
+-- setting `s`; nil when it is none of its values.
+local function settingValue(s: any, given: any): any
+    local kind = str(s.kind)
+    if kind == "toggle" then
+        if type(given) == "boolean" then
+            return given
+        end
+        local word = b.fold(trim(str(given)))
+        if word == "true" or word == "on" or word == "yes" or word == "tak" or word == "1" then
+            return true
+        elseif word == "false" or word == "off" or word == "no" or word == "nie" or word == "0" then
+            return false
+        end
+        return nil
+    elseif kind == "number" then
+        return tonumber(given)
+    elseif kind == "list" then
+        if type(given) == "table" then
+            return given
+        end
+        local items = {}
+        for part in str(given):gmatch("[^,]+") do
+            if trim(part) ~= "" then
+                table.insert(items, trim(part))
+            end
+        end
+        return items
+    elseif kind == "choice" and type(s.options) == "table" then
+        -- (An option as the model wrote it, letter case aside.)
+        local wanted = b.fold(trim(str(given)))
+        for _, o in s.options do
+            if b.fold(str(o)) == wanted then
+                return str(o)
+            end
+        end
+        return nil
+    end
+    return trim(str(given))
+end
+
+-- A theme page's text (docs/SYNTAX.md §13 "Theme pages"): its tag, a sentence, the tokens as a
+-- ```theme block — both modes' first, then light: and dark:, each in the order of their names.
+local function themeLines(tokens: any, indent: string, out: { string })
+    local names = {}
+    for name in tokens do
+        if name ~= "light" and name ~= "dark" then
+            table.insert(names, str(name))
+        end
+    end
+    table.sort(names)
+    for _, name in names do
+        local v = tokens[name]
+        local text = str(v)
+        if type(v) == "string" and (text:find("%s") or text:find("//", 1, true)) then
+            text = "\"" .. text:gsub("\"", "") .. "\""
+        end
+        table.insert(out, indent .. name .. ": " .. text)
+    end
+end
+
+local function themePageText(about: string, tokens: any): string
+    local lines = { "---", "tags: [" .. WA.themeTag .. "]", "---", "", about, "", "```theme" }
+    themeLines(tokens, "", lines)
+    for _, mode in { "light", "dark" } do
+        if type(tokens[mode]) == "table" and next(tokens[mode]) ~= nil then
+            table.insert(lines, mode .. ":")
+            themeLines(tokens[mode], "  ", lines)
+        end
+    end
+    table.insert(lines, "```")
+    return table.concat(lines, "\n") .. "\n"
+end
+
+-- Is the page named `page` a theme page (tagged theme or motyw)?
+local function isThemePage(page: string): boolean
+    local info = b.page(page)
+    for _, tag in if info then info.tags else {} do
+        if tag == "theme" or tag == "motyw" then
+            return true
+        end
+    end
+    return false
+end
+
+-- b.app.settings() or b.app.commands(), or the reason it has none ("" when it has).
+local function appList(list: () -> { any }): ({ any }, string)
+    local ok, result = pcall(list)
+    if not ok then
+        return {}, tostring(result)
+    end
+    return result, ""
+end
+
+-- What the app's change was, for the message's "⚙️ In the app: …" line.
+local function appChanged(session: Session, what: string)
+    session.writes += 1
+    table.insert(session.app, what)
+end
+
+local BUTTON_PLACES = { toolbar = true, sidebar = true, statusbar = true, pageMenu = true, tabMenu = true,
+    bottomNav = true }
+
+-- Runs one of the app's tools (only offered with ctx.appTools): its result and whether it failed.
+local function runAppTool(session: Session, name: string, input: any): (string, boolean)
+    if name == "app_settings" then
+        b.status(TA.settings)
+        local words = trim(str(input.words))
+        local settings, why = appList(b.app.settings)
+        if why ~= "" then
+            return why, true
+        end
+        local lines = {}
+        for _, s in settings do
+            if words == "" or hasWords(str(s.key) .. " " .. str(s.label) .. " " .. str(s.group), words) then
+                table.insert(lines, settingLine(s))
+            end
+        end
+        if #lines == 0 then
+            return "No setting matches \"" .. words .. "\": call app_settings without words for all of them.", false
+        end
+        return table.concat(lines, "\n"), false
+    elseif name == "change_setting" then
+        local key = trim(str(input.key))
+        local settings, why = appList(b.app.settings)
+        if why ~= "" then
+            return why, true
+        end
+        local setting = nil
+        for _, s in settings do
+            if s.key == key then
+                setting = s
+                break
+            end
+        end
+        if setting == nil then
+            return "No setting \"" .. key .. "\": app_settings lists them.", true
+        end
+        local value = settingValue(setting, input.value)
+        if value == nil then
+            return "Not changed: " .. valueText(input.value) .. " is no value of " .. settingLine(setting), true
+        end
+        if str(setting.kind) == "number" and setting.min ~= nil
+            and (value < tonumber(setting.min) or value > tonumber(setting.max)) then
+            return "Not changed: " .. str(value) .. " is outside " .. settingLine(setting), true
+        end
+        if valueText(value) == valueText(setting.value) then
+            return "Not changed: " .. key .. " is " .. valueText(value) .. " already. Tell the user it is so.", false
+        end
+        if not confirm(session, string.format(TA.changeSetting, str(setting.label), valueText(setting.value),
+            valueText(value))) then
+            return DECLINED, true
+        end
+        local ok, err = pcall(b.app.set, key, value)
+        if not ok then
+            return "Not changed: " .. tostring(err), true
+        end
+        appChanged(session, key .. " → " .. valueText(value))
+        return "Changed " .. key .. " (" .. str(setting.label) .. ") to " .. valueText(value) .. ".", false
+    elseif name == "app_commands" then
+        b.status(TA.commands)
+        local words = trim(str(input.words))
+        local commands, why = appList(b.app.commands)
+        if why ~= "" then
+            return why, true
+        end
+        local lines = {}
+        for _, c in commands do
+            if #lines >= 40 then
+                break
+            end
+            local id = str(c.id)
+            if c.enabled ~= false and id:sub(1, 13) ~= "ext.asystent." and hasWords(id .. " " .. str(c.title) .. " "
+                .. str(c.subtitle), words) then
+                local line = id .. " — " .. str(c.title)
+                if str(c.subtitle) ~= "" then
+                    line ..= " (" .. str(c.subtitle) .. ")"
+                end
+                if str(c.shortcut) ~= "" then
+                    line ..= " [" .. str(c.shortcut) .. "]"
+                end
+                table.insert(lines, line)
+            end
+        end
+        if #lines == 0 then
+            return "No command of the app matches \"" .. words .. "\": try other words.", false
+        end
+        return table.concat(lines, "\n"), false
+    elseif name == "run_app_command" then
+        local id = trim(str(input.id))
+        local commands, why = appList(b.app.commands)
+        if why ~= "" then
+            return why, true
+        end
+        local command = nil
+        for _, c in commands do
+            if c.id == id then
+                command = c
+                break
+            end
+        end
+        if command == nil or id:sub(1, 13) == "ext.asystent." then
+            return "No command \"" .. id .. "\": app_commands lists them.", true
+        elseif command.enabled == false then
+            return "The command \"" .. str(command.title) .. "\" cannot run now.", true
+        end
+        if not confirm(session, string.format(TA.runCommand, str(command.title))) then
+            return DECLINED, true
+        end
+        local ok, err = pcall(b.app.run, id)
+        if not ok then
+            return tostring(err), true
+        end
+        appChanged(session, str(command.title))
+        return "The command \"" .. str(command.title) .. "\" runs once this answer is written.", false
+    elseif name == "set_theme" then
+        local title = trim(str(input.name))
+        if title == "" then
+            return "A theme's name is needed.", true
+        end
+        local tokens: { [string]: any } = {}
+        if type(input.tokens) == "table" then
+            for k, v in input.tokens do
+                tokens[str(k)] = v
+            end
+        end
+        for _, mode in { "light", "dark" } do
+            if type(input[mode]) == "table" and next(input[mode]) ~= nil then
+                tokens[mode] = input[mode]
+            end
+        end
+        if next(tokens) == nil then
+            return "No tokens given: give the colours, radii or fonts to set (tokens, light, dark).", true
+        end
+        -- Checked as b.app.theme checks a theme (an unknown token, a wrong kind of value, one out of
+        -- range), then taken back at once: the theme is the page's, picked for the notebook.
+        local fine, err = pcall(b.app.theme, tokens)
+        pcall(b.app.theme, nil)
+        if not fine then
+            return "Not written: " .. tostring(err):gsub("^.-b%.app%.theme: ", "") .. ". Fix the tokens and call it again.", true
+        end
+        local page = if title:find("/", 1, true) then title else WA.themeFolder .. title
+        local before = b.read(page)
+        if before ~= nil and not isThemePage(page) then
+            return "[[" .. page .. "]] is a page that is no theme: choose another name.", true
+        end
+        local about = trim(str(input.description))
+        local content = themePageText(if about ~= "" then about else WA.themeAbout, tokens)
+        local what = string.format(if before == nil then TA.createTheme else TA.replaceTheme, title, preview(content))
+        if not confirm(session, what) then
+            return DECLINED, true
+        end
+        local ok, written = pcall(b.write, page, content)
+        if not ok then
+            return tostring(written), true
+        end
+        noteChanged(session, page)
+        local path = (page:gsub("%.md$", "")) .. ".md"
+        local picked, why = pcall(b.app.set, "themePage", path)
+        if not picked then
+            return "Wrote the theme page [[" .. page .. "]], but it could not be picked (" .. tostring(why)
+                .. "): tell the user to pick it in Settings → Appearance → Themes.", false
+        end
+        table.insert(session.app, "themePage → " .. path)
+        return "Wrote the theme [[" .. page .. "]] and picked it for this notebook (Settings → Appearance → Themes lists it).", false
+    elseif name == "add_button" then
+        local label = trim(str(input.label)):gsub("%s+", " ")
+        local place = trim(str(input.place))
+        if place == "" then
+            place = "toolbar"
+        end
+        local icon = trim(str(input.icon))
+        if icon == "" then
+            icon = "star"
+        end
+        local command, page = trim(str(input.command)), trim(str(input.page))
+        if label == "" then
+            return "A button's label is needed.", true
+        elseif not BUTTON_PLACES[place] then
+            return "No place \"" .. place .. "\": toolbar, sidebar, statusbar, pageMenu, tabMenu or bottomNav.", true
+        elseif (command == "") == (page == "") then
+            return "Give either the command it runs (an id from app_commands) or the page it opens.", true
+        end
+        if command ~= "" then
+            local commands, why = appList(b.app.commands)
+            if why ~= "" then
+                return why, true
+            end
+            local known = false
+            for _, c in commands do
+                if c.id == command then
+                    known = true
+                    break
+                end
+            end
+            if not known then
+                return "No command \"" .. command .. "\": app_commands lists them.", true
+            end
+        end
+        label = whole(label, 100)
+        local what = if command ~= "" then string.format("run = %q", command) else string.format("page = %q", page)
+        local code = string.format("b.app.contribute(%q, { id = \"button\", label = %q, icon = %q, %s })", place, label, icon, what)
+        local about = string.format(WA.buttonAbout, label)
+        local content = table.concat({ "---", "tags: [extension]", "permissions: [app]",
+            "description: " .. (about:gsub("[\r\n]", " ")), "---", "", about, "", "```luau", code, "```", "" }, "\n")
+        local pageName = WA.buttonFolder .. WA.buttonPrefix .. (label:gsub("[/\\#%[%]|^:]", " "))
+        local before = b.read(pageName)
+        if before ~= nil and not isExtensionPage(pageName) then
+            return "[[" .. pageName .. "]] is a page that is no extension: give the button another label.", true
+        end
+        local report, failed = checkReport(b.checkExtension(pageName, content))
+        if failed then
+            return "Not written. " .. report, true
+        end
+        if not confirm(session, string.format(TA.createButton, label, pageName, preview(content))) then
+            return DECLINED, true
+        end
+        local ok, err = pcall(b.write, pageName, content)
+        if not ok then
+            return tostring(err), true
+        end
+        noteChanged(session, pageName)
+        return "Wrote the extension [[" .. pageName .. "]] with the button. It shows once the user presses Run on its page (or in Settings → Extensions): tell them.", false
+    end
+    return "No tool named \"" .. name .. "\".", true
 end
 
 -- Runs a tool: its result's text and whether it failed.
@@ -1669,6 +2182,8 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         noteChanged(session, page)
         return "Wrote the extension [[" .. page .. "]]. " .. report
             .. " It runs once the user presses Run on its page (or in Settings → Extensions): tell them, and what it does.", false
+    elseif session.appTools and APP_TOOL_NAMES[name] then
+        return runAppTool(session, name, input)
     end
     return "No tool named \"" .. name .. "\".", true
 end
@@ -1812,13 +2327,17 @@ b.command("chat", function(ctx)
     end
     local session: Session = { all = false, changed = {}, conversation = str(ctx.conversation), calls = {},
         writes = 0, lastPage = "", made = {}, tasks = {}, asked = b.fold(str(history[#history].content)),
-        lines = {}, again = false, declined = false, already = false, nudged = false, refused = {} }
-    local system: string = W.system
+        lines = {}, again = false, declined = false, already = false, nudged = false, refused = {},
+        appTools = ctx.appTools == true, app = {} }
+    -- The app's own tools only where the app runs this and the model is on the network (ctx.appTools):
+    -- the model on the device gets the tools and the system text it was trained on (docs/FINETUNE.md).
+    local system: string = if session.appTools then W.system .. WA.rules else W.system
+    local tools = if session.appTools then TOOLS_WITH_APP else TOOLS
     local answer: string? = nil
     local idle = 0 -- turns in a row, after a change, whose every call only repeated what was done
     for round = 1, MAX_ROUNDS do
         b.status("") -- (the model thinks: the chat's dots alone)
-        local said, reply = b.ai({ system = system, messages = messages, tools = TOOLS, maxTokens = 8000, thoughts = true })
+        local said, reply = b.ai({ system = system, messages = messages, tools = tools, maxTokens = 8000, thoughts = true })
         table.insert(messages, { role = "assistant", raw = reply.raw })
         if not reply.toolCalls then
             if round < MAX_ROUNDS and claimsUnmade(session, history, str(said)) then
@@ -1908,6 +2427,9 @@ b.command("chat", function(ctx)
     local parts = { if said == "" then "…" else said }
     if #session.changed > 0 then
         table.insert(parts, string.format(W.changed, table.concat(session.changed, ", ")))
+    end
+    if #session.app > 0 then
+        table.insert(parts, string.format(WA.changed, table.concat(session.app, ", ")))
     end
     if wasCut and #history == 1 then
         table.insert(parts, string.format(W.cut, page, MAX_PAGE))

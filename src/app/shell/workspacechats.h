@@ -48,6 +48,10 @@
 #include <functional>
 #include <utility>
 
+namespace brulion::platform {
+struct PickedFile;
+}
+
 namespace brulion::shell {
 
 class Workspace;
@@ -165,6 +169,9 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(bool onDevice READ onDevice NOTIFY settingsChanged FINAL)
     /// A photo can be taken for a message (Android's camera app; platform/capture.h).
     Q_PROPERTY(bool cameraAvailable READ cameraAvailable CONSTANT FINAL)
+    /// Pictures for a message come from the browser's own file picker (the WebAssembly build:
+    /// pickPicturesInBrowser(), not the FilePicker of the other builds).
+    Q_PROPERTY(bool browserPicker READ browserPicker CONSTANT FINAL)
     /// A message can be dictated (the system's speech recognizer, or one of the app's own).
     Q_PROPERTY(bool dictationAvailable READ dictationAvailable NOTIFY dictationChanged FINAL)
     /// Dictation listens now.
@@ -417,6 +424,20 @@ public:
     Q_INVOKABLE QStringList addPicturesTo(const QStringList &attached, const QList<QUrl> &files);
     /// The clipboard's picture stored so ("" none on it).
     Q_INVOKABLE QString addClipboardPicture();
+    /// The browser's file picker for pictures, several at once (call it from a click or a tap:
+    /// browsers open it only on a user's gesture): picturesPicked(this pick, their vault paths)
+    /// follows once they are read and stored, picturesRefused() too when some were no pictures,
+    /// too large or over the pick's total; nothing when the pick was cancelled. The pick's number
+    /// (a view takes only its own pick's pictures); 0 outside the browser.
+    Q_INVOKABLE int pickPicturesInBrowser();
+    bool browserPicker() const;
+    /// Files of the browser's picker stored as addPicture() stores a file: the vault paths of
+    /// those that are pictures (by their name's extension), were read and could be stored.
+    QStringList addPickedPictures(const QList<brulion::platform::PickedFile> &files);
+    /// A picture of the browser's picker larger than this is refused unread (and the pick stops
+    /// at this total: the browser holds the files it read in memory).
+    static constexpr qint64 MaxPickedPictureBytes = 50LL * 1024 * 1024;
+    static constexpr qint64 MaxPickedPicturesBytes = 200LL * 1024 * 1024;
     /// A picture added but taken off the message before it was sent: deleted again.
     Q_INVOKABLE void dropPicture(const QString &path);
     /// The address of a picture of the notebook to show (Workspace::assetUrl).
@@ -553,6 +574,9 @@ Q_SIGNALS:
     void agentRemembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     /// addPictures() got files that are no pictures (or could not be stored).
     void picturesRefused();
+    /// The pictures pickPicturesInBrowser()'s pick `pick` stored, in the order picked (some may
+    /// have been refused).
+    void picturesPicked(int pick, const QStringList &paths);
     void photoTaken(const QString &path);
     void captureFailed(const QString &why);
     void dictationChanged();
@@ -601,6 +625,7 @@ private:
     QPointer<ChatTurn> m_onDevice;              // the turn the model on the device answers
     QHash<QString, int> m_shown; // by path, lower case: the chat views showing it
     QStringList m_added;         // pictures added and not sent yet (dropPicture deletes only those)
+    [[maybe_unused]] int m_lastPick = 0; // pickPicturesInBrowser()'s last pick (the browser build)
     bool m_runningShown = false;
     QString m_notifyMode = QStringLiteral("background");
     std::function<bool()> m_appActive;

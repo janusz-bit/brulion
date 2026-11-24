@@ -1108,11 +1108,12 @@ bool WorkspaceExtensions::runChat(const QString &path, const QVariantList &messa
     }
     // (The conversation's own page by its name, as b.read names pages: its tools leave it out.)
     const QString conversation = path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path;
-    const QVariantMap ctx{{u"page"_s, page},
-                          {u"selection"_s, QString()},
-                          {u"messages"_s, messages},
-                          {u"conversation"_s, conversation},
-                          {u"omitted"_s, omitted}};
+    // ctx.appTools: the app is here (b.app works) and the model is on the network — the built-in
+    // assistant then offers its tools for the app itself; never to the model on the device, which
+    // gets the tools it was trained on (docs/FINETUNE.md).
+    const QVariantMap ctx{{u"page"_s, page},         {u"selection"_s, QString()},
+                          {u"messages"_s, messages}, {u"conversation"_s, conversation},
+                          {u"omitted"_s, omitted},   {u"appTools"_s, m_aiSettings.provider != u"local"}};
     // (Another conversation's question, shown or waiting, stays: turns run side by side.)
     m_current = CallContext{};
     m_current.chat = path;

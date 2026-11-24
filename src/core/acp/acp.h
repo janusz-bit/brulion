@@ -491,6 +491,9 @@ private:
     };
     struct Session
     {
+        /// Which session this is, for good: an answer of the agent finds its session by it, so a
+        /// conversation renamed (or closed and asked again) meanwhile gets what is its own.
+        quint64 serial = 0;
         QString id;                 // "" before session/new answered
         bool creating = false;      // session/new (or authenticate, load, resume) on its way
         std::optional<Turn> turn;   // the turn running (or cancelled, its answer still to come)
@@ -500,6 +503,10 @@ private:
         std::optional<TurnState> last;     // the last turn that finished
     };
 
+    /// The session of `key`, made (with a serial of its own) when there is none.
+    Session &entry(const QString &key);
+    /// The conversation whose session has `serial` now ("": it was closed or forgotten).
+    QString keyOfSerial(quint64 serial) const;
     void start();
     void startTurn(const QString &key);
     void newSession(const QString &key, bool tryResume);
@@ -531,6 +538,7 @@ private:
     bool m_close = false;
     QList<AuthMethod> m_authMethods;
     QHash<QString, Session> m_sessions; // by conversation
+    quint64 m_serials = 0;              // the last Session::serial given
 };
 
 } // namespace brulion::acp

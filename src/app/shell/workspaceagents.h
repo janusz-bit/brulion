@@ -376,6 +376,9 @@ private:
     void setQuestion(const QString &path, const Question &question);
     void clearQuestion(const QString &path);
     void finish(const QString &path);
+    /// The rename of `path` its turn waited for (m_renamedDuringTurn): the session and its record go
+    /// to the new name.
+    void followRename(const QString &path);
     const AgentConfig *config(const QString &id) const;
     /// What every turn of the agent's process `p` sends: the folder, Brulion's tools (with its
     /// grant's live tools unless `child`, and with `chatToken` the chat's), the options.
@@ -454,6 +457,9 @@ private:
     QHash<QString, Process *> m_processes; // by agent id
     QHash<QString, QString> m_turns;       // conversation → agent id, of the turns running
     QHash<QString, int> m_seen;            // conversation → the messages its running turn will have seen
+    /// Conversations renamed while their turn ran (from → to): their session and its record go along
+    /// when the turn ends (followRename()).
+    QHash<QString, QString> m_renamedDuringTurn;
     QHash<QString, Question> m_questions;  // by conversation
     QHash<QString, Terminal *> m_terminals; // by id
     /// The output of terminals released in a turn that runs (shown with their tool calls until it

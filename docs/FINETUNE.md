@@ -39,7 +39,10 @@ invoices, a trip, a garden). The results below that say "42 hand-written" are of
 `assistantbench::run()` copies the task's notebook into an empty folder, opens it as the app does
 (a `Vault`, its `VaultIndex` built from every note, the `NotebookHost` with the task's clock and
 language, the index updated after each write) and loads the built-in assistant in the Luau engine.
-It then runs the assistant's `chat` command with the task's conversation, as the AI chat would:
+It then runs the assistant's `chat` command with the task's conversation, as the AI chat would
+with the model on the device — without `ctx.appTools`, so the assistant offers the twelve tools for
+the notes and never its tools for the app itself (those go only to a model on the network:
+docs/EXTENSIONS.md "AI"), and what the model learnt is what it gets in the app:
 
 * every `b.ai` request goes, through `ai::requestFrom()`, to a **responder**: the model on the device
   (`brulion-assistantbench`, `ai::answerLocally()` — the request cut to fit, the model's own

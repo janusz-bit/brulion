@@ -20,9 +20,8 @@ done in the repository simply disappears from the list.
   side chats (`/btw`: a fork shown only inside its conversation); a delegated conversation that
   wakes its parent when it ends (today an agent starts and waits); webhooks that start a scheduled
   conversation; a secret the agent asks for in a private card (T3's `request_secret`); a usage
-  history with costs (T3 reads the agents' own session logs); a session renamed while a stopped
-  turn of it is still on its way keeps its old key in `acp::Client` (the next turn starts a new
-  session); all of it tried with a real Claude Code and Codex.
+  history with costs (T3 reads the agents' own session logs); all of it tried with a real Claude
+  Code and Codex.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
@@ -51,8 +50,8 @@ done in the repository simply disappears from the list.
   photo's path, kept only in memory) and dictation with Google's recognizer and with none
   (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's summarised thinking with a real
   key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
-  real microphone on Windows; the browser picks no picture files for the chat yet (its file picker is
-  the editor's own, `platform/wasm/wasmfiles.h`); the chat's notifications (an answer, a failure, a
+  real microphone on Windows; the browser's picture picker for a message in a real browser (CI's
+  headless Chrome cannot open a file picker); the chat's notifications (an answer, a failure, a
   question while the app is behind another: docs/UI.md "AI chat") on a real phone — Android shows
   them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser;
   conversations untouched for a while archived by themselves (a setting, off by default: T3 Code's
@@ -100,9 +99,10 @@ done in the repository simply disappears from the list.
   (`scripts/wasm-smoke.mjs --extensions`).
 * **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and
   eleven slots of the UI are scriptable, and agents change the running app live (docs/EXTENSIONS.md
-  "The app (`b.app`)", "Live code"). Still open: the built-in AI assistant's tools for `b.app` (a theme,
-  a setting, a button — its tool set is what the fine-tuned on-device model learned, so the bench
-  runs first: docs/FINETUNE.md); the bottom navigation's and the keyboard toolbar's extension
+  "The app (`b.app`)", "Live code"). Still open: the built-in AI assistant's tools for the app (a
+  setting, a command, a theme page, a button: docs/EXTENSIONS.md "AI") for the model on the device —
+  they go to models on the network only (`ctx.appTools`), as the fine-tuned model learned the notes'
+  twelve tools: tasks for them in the bench and a training round first (docs/FINETUNE.md); the bottom navigation's and the keyboard toolbar's extension
   buttons checked on a real phone (the self-test's phone run has them); replacing a
   built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
   input rules (`b.app.inputRule`) in source mode too (its TextEdit has an undo stack of its own) and

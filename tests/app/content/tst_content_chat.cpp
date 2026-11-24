@@ -8,15 +8,17 @@
 // (ChatMessageModel: roles, rendered text — links, lists, numbers, tasks, headings, code —, the page it is about) and
 // the list of conversations (ChatListModel: only conversations of AI/, newest first, their names without the date,
 // previews); the time of each message written and shown, a day's line above it, pictures sent with a message
-// (attachments of the notebook, the model's images, a model that does not see them), several conversations answering at
-// once (an OpenAI-compatible server played by FakeAiServer) and the model on the device taking them one at a time in
-// line, a conversation too long for the model sent from a later turn (the model told, the view's line), a partner of
-// the user's own (an extension's chat command), renaming and deleting a conversation, Claude's thinking the turn
-// shows, and answers the user reported or hid (Report response: the marks in the page's frontmatter, folded rows,
-// the list's preview, an older page, marks made in another app; the report's draft and its link).
+// (attachments of the notebook, the model's images, a model that does not see them; the browser picker's files),
+// several conversations answering at once (an OpenAI-compatible server played by FakeAiServer) and the model on the
+// device taking them one at a time in line, a conversation too long for the model sent from a later turn (the model
+// told, the view's line), a partner of the user's own (an extension's chat command), renaming and deleting a
+// conversation, Claude's thinking the turn shows, and answers the user reported or hid (Report response: the marks in
+// the page's frontmatter, folded rows, the list's preview, an older page, marks made in another app; the report's draft
+// and its link).
 #include "chatmodels.h"
 
 #include "aireportdraft.h"
+#include "pickedfiles.h"
 
 #include "workspace.h"
 #include "workspacechats.h"
@@ -30,6 +32,7 @@
 #include "vault/localstore.h"
 #include "vault/vault.h"
 
+#include <QBuffer>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -693,6 +696,49 @@ private Q_SLOTS:
         QCOMPARE(value(model, 2, "pictures").value<QList<QUrl>>().size(), 1);
         // Nothing at all: nothing sent.
         QCOMPARE(chats->send(path, u"  "_s, QString(), {}), QString());
+    }
+
+    // The browser's picker (pickPicturesInBrowser: the WebAssembly build) hands over files read
+    // into memory: stored as a file's pictures are; one that is no picture, too large or over the
+    // pick's total refused (picturesRefused), the others kept in the order picked.
+    void picturesFromTheBrowsersPicker()
+    {
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        QVERIFY(!chats->browserPicker()); // (this build: the FilePicker)
+        QCOMPARE(chats->pickPicturesInBrowser(), 0);
+        QImage image(40, 30, QImage::Format_RGB32);
+        image.fill(QColor(200, 120, 40));
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly) && image.save(&buffer, "PNG"));
+        platform::PickedFile first{u"Paragon żółty.png"_s, png, png.size()};
+        platform::PickedFile text{u"notatka.txt"_s, QByteArray("x"), 1};
+        platform::PickedFile big{u"skan.jpg"_s, QByteArray(), 300LL * 1024 * 1024};
+        big.tooLarge = true;
+        platform::PickedFile second{u"zdjęcie.PNG"_s, png, png.size()};
+        platform::PickedFile over{u"jeszcze.png"_s, QByteArray(), png.size()};
+        over.overTotal = true;
+        QSignalSpy refused(chats, &shell::WorkspaceChats::picturesRefused);
+        const QStringList stored = chats->addPickedPictures({first, text, big, second, over});
+        QCOMPARE(stored.size(), 2);
+        QCOMPARE(refused.size(), 1);
+        QVERIFY(stored.at(0).contains(u"Paragon"_s));
+        QVERIFY(stored.at(1).contains(u"zdj"_s));
+        for (const QString &path : stored)
+            QVERIFY2(ws->exists(path), qPrintable(path));
+        // Taken off before sending: deleted again, as a file's.
+        chats->dropPicture(stored.at(1));
+        QVERIFY(!ws->exists(stored.at(1)));
+        // Sent: embedded in the message.
+        const QString path = chats->send(QString(), u"Ile kosztował?"_s, QString(), {stored.at(0)});
+        QVERIFY2(ws->read(path).contains(u"![["_s + stored.at(0) + u"]]"_s), qPrintable(ws->read(path)));
+        QTRY_VERIFY(!chats->turn(path)->running());
+        // All of them fine: nothing refused.
+        refused.clear();
+        QCOMPARE(chats->addPickedPictures({second}).size(), 1);
+        QCOMPARE(refused.size(), 0);
+        QVERIFY(chats->addPickedPictures({}).isEmpty());
     }
 
     void timesAsShown()

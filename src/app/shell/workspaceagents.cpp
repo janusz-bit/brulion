@@ -199,8 +199,8 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
         for (const QString &path : std::exchange(m_activityPending, {}))
             Q_EMIT activityChanged(path);
     });
-    // A conversation renamed: its session, and the record of it, go along (not while it answers:
-    // its turn finishes under the path it started with).
+    // A conversation renamed: its session, and the record of it, go along (while it answers, once
+    // its turn ended: the turn finishes under the path it started with).
     // A conversation deleted: its sessions closed, its record dropped.
     connect(m_workspace, &Workspace::pathRemoved, this, [this](const QString &path) {
         // Its chat grants end (its sessions close).
@@ -215,6 +215,7 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
         }
         if (m_turns.contains(path))
             stop(path);
+        m_renamedDuringTurn.removeIf([&path](const auto &entry) { return entry.value() == path; });
         for (Process *p : std::as_const(m_processes))
             p->client->close(path);
         store(path, std::nullopt);
@@ -246,8 +247,15 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
             if (g.conversation == from)
                 g.conversation = to;
         }
-        if (m_turns.contains(from))
+        // (Renamed again while the turn of its first name still runs: that rename goes further.)
+        for (QString &target : m_renamedDuringTurn) {
+            if (target == from)
+                target = to;
+        }
+        if (m_turns.contains(from)) {
+            m_renamedDuringTurn.insert(from, to);
             return;
+        }
         for (Process *p : std::as_const(m_processes))
             p->client->rename(from, to);
         if (const std::optional<Stored> entry = stored(from)) {
@@ -1215,6 +1223,7 @@ void WorkspaceAgents::stop(const QString &path)
         p->client->cancel(path);
         endTerminals(id, path); // (its commands end with it, whatever the agent does)
     }
+    followRename(path);
 }
 
 bool WorkspaceAgents::running(const QString &path) const
@@ -1526,6 +1535,22 @@ void WorkspaceAgents::finish(const QString &path)
     noteWorking();
     m_activityPending.remove(path);
     clearQuestion(path);
+    followRename(path);
+}
+
+void WorkspaceAgents::followRename(const QString &path)
+{
+    const QString to = m_renamedDuringTurn.take(path);
+    if (to.isEmpty() || to == path)
+        return;
+    // (acp::Client finds a session by its own serial: a stopped turn's answer still on its way
+    // ends the session's turn under the new name, so the next one goes on in that session.)
+    for (Process *p : std::as_const(m_processes))
+        p->client->rename(path, to);
+    if (const std::optional<Stored> entry = stored(path)) {
+        store(path, std::nullopt);
+        store(to, entry);
+    }
 }
 
 QString WorkspaceAgents::failureText(const QString &name, const acp::Failure &failure) const
@@ -2264,6 +2289,7 @@ void WorkspaceAgents::abandon()
     m_recovering.clear();
     m_turns.clear();
     m_seen.clear();
+    m_renamedDuringTurn.clear();
     for (Process *p : std::as_const(m_processes)) {
         releaseGrant(p);
         p->client->blockSignals(true);
@@ -2289,6 +2315,7 @@ void WorkspaceAgents::reset()
 {
     m_released.clear();
     m_turns.clear();
+    m_renamedDuringTurn.clear();
     m_recovering.clear();
     m_remoteTurns.clear();
     m_alive = std::make_shared<bool>(true); // (what is on its way is not heard)

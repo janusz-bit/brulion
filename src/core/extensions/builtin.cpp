@@ -44,7 +44,9 @@ QList<BuiltinExtension> builtinExtensions()
         BuiltinExtension assistant;
         assistant.extension.id = u"asystent"_s;
         assistant.extension.source = QString::fromUtf8(resource(u"asystent.luau"_s));
-        assistant.extension.permissions = {u"ai"_s, u"write"_s};
+        // (`app`: its tools for the app itself — settings, a theme, a button, a command —, offered
+        // only where the app runs it and the model is on the network: ctx.appTools.)
+        assistant.extension.permissions = {u"ai"_s, u"app"_s, u"write"_s};
         // The extensions' reference (docs/EXTENSIONS.md): the model reads it to write one.
         {
             QFile reference(u":/extensions/EXTENSIONS.md"_s);

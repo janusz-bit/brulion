@@ -1083,10 +1083,12 @@ whether the browser passes on pressure and the other end of the stylus.
   `QEventLoop::exec()`); dialogs and operations must be asynchronous (signals, `open()`).
 * Files from/to the user: our own browser file picking (`platform/wasm/wasmfiles.h` over
   Qt's private `QWasmLocalFileAccess`; `showOpenFilePicker`, and where it is missing, `<input
-  type=file>`): several files at once for import, "Image…" and "File…", files over the limit (as on the
-  desktop: 512 MB for import, 200 MB for a picture) skipped without reading, and reading stops at the
-  file with which the selection would exceed the total (import: 1.5 GB as on the desktop, pictures: 512 MB
-  — the browser holds all read files in memory before they reach the notebook;
+  type=file>`): several files at once for import, "Image…", "File…" and the AI chat's pictures for a
+  message (`WorkspaceChats::pickPicturesInBrowser()`), files over the limit (as on the desktop: 512 MB
+  for import, 200 MB for a picture; 50 MB for a chat's picture) skipped without reading, and reading
+  stops at the file with which the selection would exceed the total (import: 1.5 GB as on the desktop,
+  pictures: 512 MB, a chat's pictures: 200 MB — the browser holds all read files in memory before they
+  reach the notebook;
   `PickCollector`, `platform/pickedfiles.h`, checked on every platform); saving — the browser's save
   dialog (`showSaveFilePicker`, Chromium on https) or a plain download. No Qt Widgets
   (`QFileDialog::getOpenFileContent()` needs them), and Qt's own file dialog for the browser

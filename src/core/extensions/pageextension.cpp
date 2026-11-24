@@ -457,7 +457,7 @@ QString builtinSourcePage(const Extension &builtin, const QString &language)
     const QString &source = builtin.source;
     QStringList perms;
     for (const QString &p : builtin.permissions)
-        perms << (en ? p : p == u"write" ? u"zapis"_s : p);
+        perms << (en ? p : p == u"write" ? u"zapis"_s : p == u"app" ? u"aplikacja"_s : p);
     QString out = u"---\n"_s;
     out += en ? u"tags: [extension]\n"_s : u"tags: [rozszerzenie]\n"_s;
     out += (en ? u"overrides: "_s : u"zastępuje: "_s) + builtin.id + u'\n';

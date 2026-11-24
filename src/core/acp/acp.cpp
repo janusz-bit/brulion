@@ -695,11 +695,30 @@ const TurnState *Client::lastTurn(const QString &key) const
     return it == m_sessions.cend() || !it->last ? nullptr : &*it->last;
 }
 
+Client::Session &Client::entry(const QString &key)
+{
+    auto it = m_sessions.find(key);
+    if (it == m_sessions.end()) {
+        it = m_sessions.insert(key, Session{});
+        it->serial = ++m_serials;
+    }
+    return *it;
+}
+
+QString Client::keyOfSerial(quint64 serial) const
+{
+    for (auto it = m_sessions.cbegin(); it != m_sessions.cend(); ++it) {
+        if (it->serial == serial)
+            return it.key();
+    }
+    return {};
+}
+
 bool Client::prompt(const QString &key, const TurnInput &input)
 {
     if (running(key))
         return false;
-    Session &s = m_sessions[key];
+    Session &s = entry(key);
     if (s.turn && s.turn->openOnly && !s.turn->cancelled) {
         // (The session being made by open() takes this turn.)
         s.turn->input.firstPrompt = input.firstPrompt;
@@ -735,7 +754,7 @@ bool Client::open(const QString &key, const TurnInput &input)
 {
     if (m_phase == Phase::Failed)
         return false;
-    Session &s = m_sessions[key];
+    Session &s = entry(key);
     if (s.turn || !s.id.isEmpty() || s.next)
         return true;
     s.turn = Turn{};
@@ -826,7 +845,7 @@ QJsonObject Client::sessionParams(const TurnInput &input) const
 
 void Client::newSession(const QString &key, bool tryResume)
 {
-    Session &s = m_sessions[key];
+    Session &s = entry(key);
     s.creating = true;
     const TurnInput &input = s.turn->input;
     QJsonObject params = sessionParams(input);
@@ -836,49 +855,53 @@ void Client::newSession(const QString &key, bool tryResume)
         method = m_resume ? u"session/resume"_s : u"session/load"_s;
         params.insert(u"sessionId"_s, resume);
     }
-    m_connection.request(method, params, [this, key, resume](const QJsonValue &result, const Connection::Error &error) {
-        const auto it = m_sessions.find(key);
-        if (it == m_sessions.end())
-            return;
-        it->creating = false;
-        const QString id = error.code != 0 ? QString()
-                           : resume.isEmpty() ? result.toObject().value(u"sessionId"_s).toString()
-                                              : resume;
-        if (!id.isEmpty() && (!it->turn || it->turn->cancelled)) {
-            // (A turn cancelled meanwhile: the next one goes on in this session.)
-            it->id = id;
-            it->info.options = readOptions(result.toObject());
-            Q_EMIT sessionStarted(key, id, !resume.isEmpty());
-        }
-        if (!it->turn)
-            return;
-        if (it->turn->cancelled) {
-            endTurn(key);
-            return;
-        }
-        if (error.code == AuthRequired) {
-            Q_EMIT authRequired(key, m_authMethods, error.message);
-            return;
-        }
-        if (!resume.isEmpty() && error.code != 0 && error.code != Connection::ClosedCode) {
-            newSession(key, false); // (the earlier session is gone: a new one, with the conversation so far)
-            return;
-        }
-        if (error.code != 0) {
-            fail(key, failureOf(error));
-            return;
-        }
-        if (id.isEmpty()) {
-            fail(key, Failure{Failure::Kind::Malformed, u"session/new gave no sessionId"_s});
-            return;
-        }
-        sessionReady(key, id, result.toObject(), resume.isEmpty(), !resume.isEmpty());
-    });
+    m_connection.request(
+            method, params,
+            [this, serial = s.serial, resume](const QJsonValue &result, const Connection::Error &error) {
+                // (The conversation's key now: it may have been renamed meanwhile.)
+                const QString key = keyOfSerial(serial);
+                const auto it = m_sessions.find(key);
+                if (key.isEmpty() || it == m_sessions.end())
+                    return;
+                it->creating = false;
+                const QString id = error.code != 0    ? QString()
+                                   : resume.isEmpty() ? result.toObject().value(u"sessionId"_s).toString()
+                                                      : resume;
+                if (!id.isEmpty() && (!it->turn || it->turn->cancelled)) {
+                    // (A turn cancelled meanwhile: the next one goes on in this session.)
+                    it->id = id;
+                    it->info.options = readOptions(result.toObject());
+                    Q_EMIT sessionStarted(key, id, !resume.isEmpty());
+                }
+                if (!it->turn)
+                    return;
+                if (it->turn->cancelled) {
+                    endTurn(key);
+                    return;
+                }
+                if (error.code == AuthRequired) {
+                    Q_EMIT authRequired(key, m_authMethods, error.message);
+                    return;
+                }
+                if (!resume.isEmpty() && error.code != 0 && error.code != Connection::ClosedCode) {
+                    newSession(key, false); // (the earlier session is gone: a new one, with the conversation so far)
+                    return;
+                }
+                if (error.code != 0) {
+                    fail(key, failureOf(error));
+                    return;
+                }
+                if (id.isEmpty()) {
+                    fail(key, Failure{Failure::Kind::Malformed, u"session/new gave no sessionId"_s});
+                    return;
+                }
+                sessionReady(key, id, result.toObject(), resume.isEmpty(), !resume.isEmpty());
+            });
 }
 
 void Client::sessionReady(const QString &key, const QString &id, const QJsonObject &result, bool fresh, bool resumed)
 {
-    Session &s = m_sessions[key];
+    Session &s = entry(key);
     s.id = id;
     s.info.options = readOptions(result);
     s.turn->fresh = fresh;
@@ -914,10 +937,12 @@ void Client::applyOptions(const QString &key)
         rest.remove(w.key());
         it->turn->input.config = rest;
         it->creating = true; // (no prompt nor other option meanwhile)
-        sendOption(key, *option, w.value(), [this, key] {
-            if (auto s = m_sessions.find(key); s != m_sessions.end())
-                s->creating = false;
-            applyOptions(key);
+        sendOption(key, *option, w.value(), [this, serial = it->serial] {
+            const QString now = keyOfSerial(serial);
+            if (now.isEmpty())
+                return;
+            m_sessions[now].creating = false;
+            applyOptions(now);
         });
         return;
     }
@@ -953,9 +978,11 @@ void Client::sendOption(const QString &key, const ConfigOption &option, const QJ
     }
     const QString id = option.id;
     m_connection.request(method, params,
-                         [this, key, id, value, then = std::move(then)](const QJsonValue &result, const Connection::Error &error) {
+                         [this, serial = m_sessions.value(key).serial, id, value,
+                          then = std::move(then)](const QJsonValue &result, const Connection::Error &error) {
+                             const QString key = keyOfSerial(serial);
                              const auto it = m_sessions.find(key);
-                             if (it == m_sessions.end())
+                             if (key.isEmpty() || it == m_sessions.end())
                                  return;
                              if (error.code == 0) {
                                  const QJsonObject r = result.toObject();
@@ -978,7 +1005,7 @@ void Client::sendOption(const QString &key, const ConfigOption &option, const QJ
 
 bool Client::setOption(const QString &key, const QString &id, const QJsonValue &value)
 {
-    Session &s = m_sessions[key];
+    Session &s = entry(key);
     if (s.id.isEmpty() || s.creating || (s.turn && !s.turn->prompting)) {
         s.wanted.insert(id, value); // (set when the session is there, before its prompt)
         return true;
@@ -1027,9 +1054,10 @@ void Client::authenticate(const QString &key, const QString &methodId)
         return;
     it->creating = true;
     m_connection.request(u"authenticate"_s, QJsonObject{{u"methodId"_s, methodId}},
-                         [this, key](const QJsonValue &, const Connection::Error &error) {
+                         [this, serial = it->serial](const QJsonValue &, const Connection::Error &error) {
+                             const QString key = keyOfSerial(serial);
                              const auto it = m_sessions.find(key);
-                             if (it == m_sessions.end())
+                             if (key.isEmpty() || it == m_sessions.end())
                                  return;
                              it->creating = false;
                              if (!it->turn)
@@ -1048,7 +1076,7 @@ void Client::authenticate(const QString &key, const QString &methodId)
 
 void Client::sendPrompt(const QString &key)
 {
-    Session &s = m_sessions[key];
+    Session &s = entry(key);
     Turn &t = *s.turn;
     t.prompting = true;
     const QList<Block> &blocks = t.fresh && !t.input.firstPrompt.isEmpty() ? t.input.firstPrompt : t.input.prompt;
@@ -1059,9 +1087,12 @@ void Client::sendPrompt(const QString &key)
     if (!t.input.turnId.isEmpty())
         params.insert(u"_meta"_s, QJsonObject{{TurnMetaKey, t.input.turnId}});
     m_connection.request(u"session/prompt"_s, params,
-                         [this, key](const QJsonValue &result, const Connection::Error &error) {
+                         [this, serial = s.serial](const QJsonValue &result, const Connection::Error &error) {
+                             // (A conversation renamed while its turn, or a stopped one, was on its
+                             // way: the answer is the session's under its new key.)
+                             const QString key = keyOfSerial(serial);
                              const auto it = m_sessions.find(key);
-                             if (it == m_sessions.end() || !it->turn)
+                             if (key.isEmpty() || it == m_sessions.end() || !it->turn)
                                  return;
                              if (it->turn->cancelled) {
                                  endTurn(key);

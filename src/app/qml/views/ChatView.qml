@@ -444,6 +444,16 @@ FocusScope {
         // (A file that is no picture: picturesRefused().)
         root.attached = root.chats.addPicturesTo(root.attached, files)
     }
+    /// The paperclip's file pick: the browser's own picker in the browser build (its pictures
+    /// come with picturesPicked), else the FilePicker.
+    function pickPictures(): void {
+        if (root.chats.browserPicker)
+            root.picturePick = root.chats.pickPicturesInBrowser()
+        else
+            picturePicker.open()
+    }
+    /// The browser picker's pick this view waits for (0 none: another view's pick is not ours).
+    property int picturePick: 0
     /// Ctrl+V: a picture on the clipboard goes with the message (text is pasted as text).
     function pastePicture(): bool {
         const stored = root.chats.addClipboardPicture()
@@ -491,6 +501,13 @@ FocusScope {
         function onPicturesRefused() {
             if (root.visible)
                 AppController.toast(qsTr("Only pictures go with a message (PNG, JPEG, WebP, GIF)"), "info")
+        }
+        function onPicturesPicked(pick: int, paths: list<string>) {
+            if (pick === 0 || pick !== root.picturePick)
+                return
+            root.picturePick = 0
+            for (let i = 0; i < paths.length; ++i)
+                root.attach(paths[i])
         }
         function onPhotoTaken(path: string) {
             if (!root.takingPhoto)
@@ -2449,14 +2466,14 @@ FocusScope {
                         id: attachButton
                         objectName: "chatAttach"
                         Layout.alignment: Qt.AlignBottom
-                        visible: picturePicker.available || root.chats.cameraAvailable
+                        visible: picturePicker.available || root.chats.cameraAvailable || root.chats.browserPicker
                         label: qsTr("Add a picture")
                         iconName: "paperclip"
                         onClicked: {
                             if (root.chats.cameraAvailable)
                                 attachMenu.popup(attachButton, 0, -attachMenu.implicitHeight - Theme.space1)
                             else
-                                picturePicker.open()
+                                root.pickPictures()
                         }
                     }
                     BMenu {
@@ -2470,11 +2487,11 @@ FocusScope {
                         }
                         BMenuItem {
                             objectName: "chatPickPicture"
-                            visible: picturePicker.available
+                            visible: picturePicker.available || root.chats.browserPicker
                             height: visible ? implicitHeight : 0
                             text: qsTr("Picture from a file…")
                             iconName: "image"
-                            onTriggered: picturePicker.open()
+                            onTriggered: root.pickPictures()
                         }
                     }
                     Rectangle {

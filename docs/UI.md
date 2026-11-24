@@ -1634,7 +1634,11 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   removable chip (`chatPage`, "goes along with the question") and, when an extension offers a chat
   partner, who answers (`chatNewPartner`, "Answers: AI assistant ▾": the same menu).
 * **Pictures with a message**: the paperclip (`chatAttach`) picks pictures from files (`FilePicker`:
-  PNG, JPEG, WebP, GIF, BMP — several at once) or, on Android, opens a menu (`chatAttachMenu`) with
+  PNG, JPEG, WebP, GIF, BMP — several at once; in the browser its own file picker,
+  `WorkspaceChats.pickPicturesInBrowser()` over `platform/wasm/wasmfiles.h` — `browserPicker` —: each
+  picture at most 50 MB, a pick 200 MB, read into memory and stored as a file's are, the pick's
+  pictures handed to the view that asked, `picturesPicked(pick, paths)`) or, on Android, opens a
+  menu (`chatAttachMenu`) with
   **Take a photo** (`chatTakePhoto`: the system's camera app, `platform/capture.h`) and **Picture
   from a file…**; Ctrl+V with a picture on the clipboard (not with text) adds it, and pictures dropped
   on the conversation do too (`DropArea`, `chatDropHint` while they hover). Each is stored at once as
@@ -1947,7 +1951,12 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   `session/load` — its replayed history not heard — where the agent offers them; a new session with
   the conversation so far when that fails). A conversation that changed meanwhile — another
   partner answered, a message written on another device — gets a new session with all of it; one
-  renamed takes its session along; one deleted stops its turn and closes its session
+  renamed takes its session along — renamed while its turn runs, once the turn ends
+  (`WorkspaceAgents::followRename`); renamed after Stop while the stopped turn's answer is still on
+  its way, at once: `acp::Client` finds a session by a serial of its own, never by the
+  conversation's name an answer was asked under, so that answer ends the session's turn under the
+  new name and the next turn goes on in the same session (an answer for a session closed meanwhile
+  is never taken for a new one's); one deleted stops its turn and closes its session
   (`session/close` where the agent offers it).
 * **Questions**: `session/request_permission` is the conversation's question (`chatQuestion`): its
   title "Claude Code asks: Write Dom.md", what it would do under it — a file's change as a diff
