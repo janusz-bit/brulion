@@ -34640,6 +34640,11 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Na razie nie ma nic do wyeksportowania.</translation>
     </message>
     <message>
+        <location filename="../src/app/io/exportcontroller.cpp" line="467"/>
+        <source>Type the password that opens the file.</source>
+        <translation>Wpisz hasło, które otworzy plik.</translation>
+    </message>
+    <message>
         <location filename="../src/app/io/exportcontroller.cpp" line="469"/>
         <source>Reading the notes…</source>
         <translation>Wczytywanie notatek…</translation>
@@ -41832,6 +41837,39 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/main.cpp" line="713"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
+    </message>
+</context>
+<context>
+    <name>ExportPasswordBox</name>
+    <message>
+        <location filename="../src/app/qml/io/ExportPasswordBox.qml" line="40"/>
+        <source>Protect with a password</source>
+        <translation>Chroń hasłem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ExportPasswordBox.qml" line="42"/>
+        <source>The file is encrypted; the browser asks for the password and opens it.</source>
+        <translation>Plik jest zaszyfrowany; przeglądarka pyta o hasło i go otwiera.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ExportPasswordBox.qml" line="54"/>
+        <source>Password</source>
+        <translation>Hasło</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ExportPasswordBox.qml" line="68"/>
+        <source>Repeat the password</source>
+        <translation>Powtórz hasło</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ExportPasswordBox.qml" line="70"/>
+        <source>The passwords differ.</source>
+        <translation>Hasła się różnią.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ExportPasswordBox.qml" line="79"/>
+        <source>A forgotten password cannot be recovered. Anyone with the file may try passwords: choose a long one, several words. The file opens in a current browser, also from a disk or an e-mail.</source>
+        <translation>Zapomnianego hasła nie da się odzyskać. Każdy, kto ma plik, może próbować haseł: wybierz długie, z kilku słów. Plik otwiera się w aktualnej przeglądarce, także z dysku albo z e-maila.</translation>
     </message>
 </context>
 </TS>

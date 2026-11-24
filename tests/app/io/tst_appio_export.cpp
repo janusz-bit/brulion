@@ -3,10 +3,14 @@
 // attachments), the summary and its errors, producing a Markdown ZIP / tasks CSV / single HTML in
 // the background, saving to a picked file and to the export folder, and resetting on changes;
 // pictures from the internet kept as addresses or included as copies (the device's cache, the
-// missing ones fetched from a tiny HTTP server on 127.0.0.1, failures as warnings).
+// missing ones fetched from a tiny HTTP server on 127.0.0.1, failures as warnings); one HTML file
+// protected with a password (the lock page of protected publishing, opened here from the scheme).
 #include "exportcontroller.h"
 #include "workspace.h"
 
+#include "crypto/aead.h"
+#include "crypto/base64.h"
+#include "crypto/hash.h"
 #include "io/zip.h"
 #include "vault/vault.h"
 #include "webpicture/picturecache.h"
@@ -16,6 +20,9 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -72,6 +79,28 @@ QStringList zipPaths(const QByteArray &zip)
         out.append(e.path);
     out.sort();
     return out;
+}
+
+/// The page a lock page (publish/protect.h) holds, nullopt for a wrong password — decrypted from
+/// the scheme with core crypto's primitives.
+std::optional<QString> openLockPage(const QByteArray &data, const QString &password)
+{
+    namespace crypto = brulion::crypto;
+    static const QRegularExpression json(
+            uR"re(<script type="application/json" id="brulion-sealed">([^<]*)</script>)re"_s);
+    const QRegularExpressionMatch m = json.match(QString::fromUtf8(data));
+    if (!m.hasMatch())
+        return std::nullopt;
+    const QJsonObject sealed = QJsonDocument::fromJson(m.captured(1).toUtf8()).object();
+    const auto b64 = [&sealed](const QString &key) {
+        return crypto::decodeBase64(sealed.value(key).toString()).value_or(QByteArray());
+    };
+    const QByteArray k = crypto::pbkdf2(crypto::Hash::Sha256, password.toUtf8(), b64(u"salt"_s),
+                                        quint32(sealed.value(u"iterations"_s).toInteger()), 32)
+                                 .toByteArray();
+    const QByteArray key = crypto::hmac(crypto::Hash::Sha256, k, b64(u"page"_s));
+    const auto plain = crypto::aesgcm::open(key, b64(u"iv"_s), {}, b64(u"data"_s));
+    return plain ? std::optional<QString>(QString::fromUtf8(plain->toByteArray())) : std::nullopt;
 }
 
 } // namespace
@@ -308,6 +337,73 @@ private Q_SLOTS:
         QTRY_VERIFY(!c.summary().value(u"valid"_s).toBool());
         c.prepare();
         QCOMPARE(c.state(), u"error"_s);
+    }
+
+    void passwordProtectedHtml()
+    {
+        // One HTML file with a password: only the lock page with ciphertext (no word of the note,
+        // not its title), opened with the password, not with another; a fresh salt every time.
+        const QString password = u"Źdźbło trawy na łące"_s;
+        auto ws = open({{u"Zakupy na święta.md"_s, "- mleko i jabłka\n- żółty ser\n"}});
+        ExportController c;
+        c.setWorkspace(ws.get());
+        c.setProtectIterations(1000);
+        c.setScope(u"page"_s);
+        c.setPage(u"Zakupy na święta.md"_s);
+        c.setFormat(u"html-single"_s);
+        QTRY_COMPARE(c.summary().value(u"files"_s).toInt(), 1);
+        QVERIFY(c.protectApply());
+        QVERIFY(!c.protect());
+        QSignalSpy options(&c, &ExportController::optionsChanged);
+        c.setProtect(true);
+        QCOMPARE(options.size(), 1);
+        // No password yet: nothing is made.
+        c.prepare();
+        QCOMPARE(c.state(), u"error"_s);
+        QVERIFY(!c.errorText().isEmpty());
+
+        c.setPassword(password);
+        QVERIFY(c.hasPassword());
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(c.result().size(), 1);
+        QVERIFY2(c.fileName().endsWith(u".html"_s), qPrintable(c.fileName()));
+        const QByteArray locked = c.result().first().data;
+        const QString lockHtml = QString::fromUtf8(locked);
+        QVERIFY(lockHtml.contains(u"id=\"brulion-sealed\""_s));
+        for (const QString &word : {u"mleko"_s, u"jabłka"_s, u"żółty"_s, u"Zakupy"_s, u"święta"_s})
+            QVERIFY2(!lockHtml.contains(word), qPrintable(word));
+        const auto opened = openLockPage(locked, password);
+        QVERIFY(opened);
+        QVERIFY(opened->contains(u"mleko i jabłka"_s));
+        QVERIFY(opened->contains(u"Zakupy na święta"_s));
+        QVERIFY(!openLockPage(locked, u"zdzblo trawy na lace"_s));
+
+        // Again: a new salt, other bytes, the same page.
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QVERIFY(c.result().first().data != locked);
+        QVERIFY(openLockPage(c.result().first().data, password));
+
+        // A new password forgets the file made with the old one.
+        c.setPassword(u"inne hasło"_s);
+        QCOMPARE(c.state(), u"idle"_s);
+        QVERIFY(c.result().isEmpty());
+
+        // Off: the plain page again.
+        c.setProtect(false);
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QVERIFY(QString::fromUtf8(c.result().first().data).contains(u"mleko i jabłka"_s));
+
+        // Other formats are never protected (the switch stays, it does not apply).
+        c.setProtect(true);
+        c.setFormat(u"markdown-zip"_s);
+        QVERIFY(!c.protectApply());
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        const QStringList entries = zipPaths(c.result().first().data);
+        QVERIFY2(entries.size() == 1 && entries.first().endsWith(u"Zakupy na święta.md"_s), qPrintable(entries.join(u", "_s)));
     }
 
     void suggestedSaveFile()

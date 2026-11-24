@@ -33,6 +33,7 @@ BDialog {
         { value: "link", text: qsTr("Keep addresses"), icon: Theme.compact ? "" : "link" },
         { value: "include", text: qsTr("Include copies"), icon: Theme.compact ? "" : "image" }
     ]
+    readonly property alias pageExporter: exporter
     /// The route "More export options…" opens.
     property var _preset: ({})
 
@@ -57,11 +58,12 @@ BDialog {
     readonly property string currentName: AppController.routeText(dialog.current, "name")
     /// The page can be exported (ExportController.summary.valid).
     readonly property bool exportable: AppController.routeFlag(exporter.summary, "valid")
-    readonly property bool copyable: format === "markdown-file" || format === "html-single"
+    readonly property bool copyable: format === "markdown-file" || (format === "html-single" && !exporter.protect)
 
     function openFor(pagePath: string, andPrint: bool): void {
         dialog.pending = ""
         dialog.path = pagePath
+        passwordBox.reset()
         exporter.discard()
         dialog.open()
         if (andPrint)
@@ -98,6 +100,7 @@ BDialog {
     onClosed: {
         exporter.cancel()
         dialog.pending = ""
+        passwordBox.reset()
     }
 
     ExportController {
@@ -217,6 +220,13 @@ BDialog {
         }
     }
 
+    // A password: one HTML file encrypted, opened in the browser with it (like protected publishing).
+    ExportPasswordBox {
+        id: passwordBox
+        Layout.fillWidth: true
+        exporter: dialog.pageExporter
+    }
+
     ColumnLayout {
         Layout.fillWidth: true
         visible: exporter.busy
@@ -246,7 +256,7 @@ BDialog {
             iconName: "download"
             text: AppController.isWasm ? qsTr("Download") : qsTr("Save as file…")
             busy: exporter.busy && dialog.pending !== ""
-            enabled: !exporter.busy && dialog.exportable
+            enabled: !exporter.busy && dialog.exportable && passwordBox.ready
             onClicked: dialog.produce(AppController.isWasm ? "browser" : "save")
         }
         BButton {
@@ -254,7 +264,7 @@ BDialog {
             Layout.fillWidth: true
             iconName: "download"
             text: qsTr("Save to Downloads")
-            enabled: !exporter.busy && dialog.exportable
+            enabled: !exporter.busy && dialog.exportable && passwordBox.ready
             onClicked: dialog.produce("downloads")
         }
         BButton {

@@ -131,6 +131,8 @@ PDF and DOCX are made by Brulion itself: headings, lists with task checkboxes, t
 
 **Print…** on a computer opens the system's print dialog (printer, number of copies, paper size), on Android the system's printing with its printers and the “Save as PDF” option, and in the browser its own print dialog.
 
+**Protect with a password** (for HTML — here and in **Import and export** for **HTML document**) encrypts the file the way [[#Publishing|password-protected pages]] are: whoever opens it sees only “Protected page” with a password field, and the browser opens the page with the password — also straight from a disk or an e-mail attachment, with the pictures inside. Nothing of the note shows without it, not even its title (only the file's name, which you choose when saving). Type the password twice; Brulion does not keep it, and a forgotten password cannot be recovered. Choose a long one (several words): anyone with the file may try passwords.
+
 ### A QR code
 The quickest way to hand a note to someone in the same room: **QR code…** in the page menu (⋮), in **More** or in the command palette (“Share as QR code…”) shows the note as a QR code. Point another phone's camera at it and the note's text appears there — no internet, no account and no app on the other side. **QR code…** in a block's menu (or in **More** of a selection) does the same with the chosen blocks only.
 

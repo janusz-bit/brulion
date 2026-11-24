@@ -131,6 +131,8 @@ PDF i DOCX robi sam Brulion: nagłówki, listy z polami wyboru zadań, tabele, k
 
 **Drukuj…** na komputerze otwiera okno drukowania systemu (drukarka, liczba kopii, rozmiar papieru), na Androidzie — drukowanie systemu z jego drukarkami i opcją „Zapisz jako PDF”, a w przeglądarce — jej okno drukowania.
 
+**Chroń hasłem** (dla HTML — tutaj i w **Import i eksport** dla **Dokumentu HTML**) szyfruje plik tak jak [[#Publikowanie|strony chronione hasłem]]: kto go otworzy, widzi tylko „Strona chroniona” z polem na hasło, a przeglądarka otwiera nim stronę — także prosto z dysku albo z załącznika e-maila, z obrazkami w środku. Bez hasła nie widać niczego z notatki, nawet jej tytułu (tylko nazwę pliku, którą wybierasz przy zapisie). Hasło wpisujesz dwa razy; Brulion go nie przechowuje, a zapomnianego hasła nie da się odzyskać. Wybierz długie (kilka słów): każdy, kto ma plik, może próbować haseł.
+
 ### Kod QR
 Najszybszy sposób, żeby przekazać notatkę komuś obok: **Kod QR…** w menu strony (⋮), w **Więcej** albo w palecie poleceń („Udostępnij jako kod QR…”) pokazuje notatkę jako kod QR. Skieruj na niego aparat innego telefonu, a pojawi się na nim tekst notatki — bez internetu, bez konta i bez żadnej aplikacji po drugiej stronie. **Kod QR…** w menu bloku (albo w **Więcej** zaznaczenia) robi to samo tylko z wybranymi blokami.
 

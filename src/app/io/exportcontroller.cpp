@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <optional>
 #include <utility>
 
 #ifdef Q_OS_WASM
@@ -55,6 +56,21 @@ qint64 totalBytes(const QList<io::ExportedFile> &files)
     for (const io::ExportedFile &f : files)
         bytes += f.data.size();
     return bytes;
+}
+
+/// The HTML document(s) of `result` as lock pages opened with `protection`'s password (any
+/// thread: one PBKDF2 a file). Only the lock pages are kept: no plain copy can slip through.
+void protectFiles(io::ExportResult &result, const publish::SiteProtection &protection)
+{
+    const publish::LockTexts texts = publish::lockTexts();
+    QList<io::ExportedFile> files;
+    for (io::ExportedFile &f : result.files) {
+        const publish::ProtectedSite site =
+                publish::protectSite({io::FileEntry{u"index.html"_s, std::exchange(f.data, {})}}, protection, texts);
+        if (site.errorCode.isEmpty() && site.files.size() == 1)
+            files.append(io::ExportedFile{f.name, f.mime, site.files.constFirst().data});
+    }
+    result.files = std::move(files);
 }
 
 bool isInFolder(const VaultPath &path, const QString &folder)
@@ -265,6 +281,20 @@ bool ExportController::webPicturesApply() const
            || m_format == u"docx";
 }
 
+void ExportController::setProtect(bool protect)
+{
+    if (protect == m_protect)
+        return;
+    m_protect = protect;
+    discard();
+    Q_EMIT optionsChanged();
+}
+
+void ExportController::setPassword(const QString &password)
+{
+    setOption(m_password, password);
+}
+
 void ExportController::setPaperSize(const QString &paper)
 {
     setOption(m_paperSize, io::paperSizeId(io::paperSizeFromId(paper)));
@@ -433,6 +463,10 @@ void ExportController::prepare()
     if (busy())
         return;
     m_printing = false;
+    if (m_protect && protectApply() && m_password.isEmpty()) {
+        setState(u"error"_s, tr("Type the password that opens the file."));
+        return;
+    }
     startReading();
 }
 
@@ -707,16 +741,31 @@ void ExportController::runExporter()
     io::ExportInput input = exportInput();
     setProgress(-1, tr("Creating “%1”…").arg(exporter->name()));
     const int generation = m_generation;
+    // A password: the document becomes the lock page of password-protected publishing
+    // (publish/protect.h; a fresh salt for every file).
+    std::optional<publish::SiteProtection> protection;
+    if (m_protect && protectApply()) {
+        protection.emplace();
+        protection->password = m_password;
+        protection->iterations = m_protectIterations;
+    }
     runInBackground<io::ExportResult>(
-            this, [exporter, input = std::move(input)] { return io::runExport(*exporter, input); },
+            this,
+            [exporter, input = std::move(input), protection] {
+                io::ExportResult result = io::runExport(*exporter, input);
+                if (protection)
+                    protectFiles(result, *protection);
+                return result;
+            },
             [this, generation](const io::ExportResult &result) {
                 if (generation != m_generation || m_state != u"preparing")
                     return;
                 m_result = result.files;
                 m_warnings = m_readWarnings + result.warnings;
                 setProgress(1);
-                qCInfo(logging::lcIo).noquote() << u"Export as %1: %2 file(s), %3, %4 warning(s)"_s.arg(
-                        m_format, QString::number(m_result.size()), logging::formatBytes(totalBytes(m_result)),
+                qCInfo(logging::lcIo).noquote() << u"Export as %1%2: %3 file(s), %4, %5 warning(s)"_s.arg(
+                        m_format, m_protect && protectApply() ? u" (password)"_s : QString(),
+                        QString::number(m_result.size()), logging::formatBytes(totalBytes(m_result)),
                         QString::number(m_warnings.size()));
                 if (m_result.isEmpty()) {
                     setState(u"error"_s, result.warnings.isEmpty() ? tr("Nothing was exported.") : result.warnings.first());

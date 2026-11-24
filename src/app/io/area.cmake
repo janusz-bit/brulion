@@ -115,6 +115,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/ImportPreview.qml
     qml/io/ImportPathCard.qml
     qml/io/ExportPanel.qml
+    qml/io/ExportPasswordBox.qml
     qml/io/PublishPanel.qml
     qml/io/PublishTargetDialog.qml
     qml/io/IoPathPickerDialog.qml

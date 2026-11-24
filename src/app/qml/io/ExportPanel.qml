@@ -13,6 +13,9 @@ import Brulion
 // addresses" (the export shows them only online) or "Include copies" (copies from the device's cache,
 // the missing ones fetched first); the choice is remembered on the device (AppSettings).
 //
+// The HTML document can be protected with a password (ExportPasswordBox: encrypted like protected
+// publishing, the browser asks for the password).
+//
 // Saving: desktop and Android — the system's file picker in save mode (FilePicker; Android: the
 // system's "Save as" document picker; "Save to Downloads" writes into the Download folder
 // instead); browser — the browser's save picker or a download (platform/wasm/wasmfiles.h).
@@ -277,6 +280,13 @@ ColumnLayout {
         }
     }
 
+    // ---- A password (one HTML file) ----------------------------------------------------------------
+    ExportPasswordBox {
+        id: passwordBox
+        Layout.fillWidth: true
+        exporter: exporterObject
+    }
+
     // ---- Export ------------------------------------------------------------------------------------
     Flow {
         Layout.fillWidth: true
@@ -287,7 +297,7 @@ ColumnLayout {
             iconName: "upload"
             variant: "primary"
             busy: exporterObject.busy
-            enabled: !!exporterObject.summary.valid
+            enabled: !!exporterObject.summary.valid && passwordBox.ready
             onClicked: exporterObject.prepare()
         }
         BButton {
