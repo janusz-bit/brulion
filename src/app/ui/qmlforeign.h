@@ -6,8 +6,9 @@
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
 // (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; SmoothScroll (brulion_ui_smoothscroll),
 // the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons (brulion_ui_icons),
-// BIcon's image URLs; and FilePicker (brulion_ui_files), the system's file picker (`FilePicker { fileMode:
-// FilePicker.OpenFiles }`).
+// BIcon's image URLs; FilePicker (brulion_ui_files), the system's file picker (`FilePicker { fileMode:
+// FilePicker.OpenFiles }`); and NearView and PictureDecode (brulion_ui_memory): whether an item is in or
+// near its window's view, and the size a picture is decoded at for the place that shows it.
 #pragma once
 
 #include "dateshelper.h"
@@ -16,9 +17,11 @@
 #include "gestureinsets.h"
 #include "iconprovider.h"
 #include "jshelper.h"
-#include "later.h"
 #include "keyboardinsets.h"
+#include "later.h"
 #include "mapholder.h"
+#include "nearview.h"
+#include "picturedecode.h"
 #include "rowscroll.h"
 #include "smoothscroll.h"
 #include "texthelper.h"
@@ -162,6 +165,25 @@ struct TouchFlickForeign {
     QML_NAMED_ELEMENT(TouchFlick)
     QML_UNCREATABLE("TouchFlick is an attached property: ListView { TouchFlick.enabled: true }")
     QML_ATTACHED(brulion::ui::TouchFlick)
+};
+
+// Whether an item is in or near its window's view (nearview.h): `NearView.near`.
+struct NearViewForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::NearView)
+    QML_NAMED_ELEMENT(NearView)
+    QML_UNCREATABLE("NearView is an attached property: Image { source: frame.NearView.near ? url : \"\" }")
+    QML_ATTACHED(brulion::ui::NearView)
+};
+
+// The size a picture is decoded at for the place that shows it (picturedecode.h).
+struct PictureDecodeForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::PictureDecode)
+    QML_NAMED_ELEMENT(PictureDecode)
+    QML_SINGLETON
+public:
+    static PictureDecode *create(QQmlEngine *, QJSEngine *) { return new PictureDecode; }
 };
 
 struct RowScrollForeign {

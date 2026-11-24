@@ -468,9 +468,29 @@ private Q_SLOTS:
         QTRY_COMPARE(toasts.count(), 1);
         QCOMPARE(toasts.first().value(1).toString(), u"Zwarty układ"_s);
         QCOMPARE(toasts.first().value(3).toString(), u"Cofnij"_s);
-        // Its button runs the extension's other command.
+        // Its button runs the extension's other command, once; nothing waits for it afterwards.
+        const auto waiting = [this] {
+            return m_app->findChildren<QObject *>(u"extensionToastButton"_s, Qt::FindDirectChildrenOnly).size();
+        };
+        QCOMPARE(waiting(), 1);
+        Q_EMIT m_app->toastActionTriggered(toasts.first().value(0).toInt() + 1000); // another toast's
+        QCOMPARE(waiting(), 1);
         Q_EMIT m_app->toastActionTriggered(toasts.first().value(0).toInt());
         QTRY_COMPARE(m_app->settings()->density(), u"comfortable"_s);
+        QTRY_COMPARE(waiting(), 0);
+        // A toast that goes without its button pressed leaves nothing waiting either: its
+        // button pressed afterwards (it cannot be) runs nothing.
+        extensions()->runCommand(extensions()->pageExtension(kPage), u"zwarty"_s);
+        QTRY_COMPARE(toasts.count(), 2);
+        QCOMPARE(m_app->settings()->density(), u"compact"_s);
+        QCOMPARE(waiting(), 1);
+        const int gone = toasts.last().value(0).toInt();
+        m_app->setToastHostId(gone, 31);
+        m_app->hostToastRemoved(31);
+        QTRY_COMPARE(waiting(), 0);
+        Q_EMIT m_app->toastActionTriggered(gone);
+        QTest::qWait(50);
+        QCOMPARE(m_app->settings()->density(), u"compact"_s);
     }
 
     void itemsShowAndRun()

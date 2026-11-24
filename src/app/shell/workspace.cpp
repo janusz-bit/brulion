@@ -386,6 +386,7 @@ void Workspace::close()
     m_dataUrls.clear();
     m_dataUrlSizes.clear();
     m_drawingPictures.clear(); // (by the paths of that notebook)
+    m_pdfAsked.clear();        // (its PDFs' files)
     m_vault->stopWatching();
     disconnect(m_vault.get(), nullptr, this, nullptr);
     disconnect(m_index.get(), nullptr, this, nullptr);

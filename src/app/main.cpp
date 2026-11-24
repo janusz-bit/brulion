@@ -8,6 +8,7 @@
 #include "ui/gestureinsets.h" // the system's gesture zones at the window's edges (GestureInsets)
 #include "ui/keyboardinsets.h" // the on-screen keyboard's height (KeyboardInsets)
 #include "ui/keyboardsources.h"
+#include "ui/memorykeeper.h" // freed memory goes back to the system once the app is quiet (MemoryKeeper)
 #include "ui/qmlshutdown.h" // the QML gone before the engine and the application object at quit
 #include "ui/smoothscroll.h" // the wheel and the scroll bars scroll like a web browser (SmoothScroll)
 #include "ui/uifonts.h" // the bundled text fonts (Inter, Literata, JetBrains Mono)
@@ -397,6 +398,9 @@ int main(int argc, char *argv[])
     brulion::ui::GestureInsets gestureInsets;
     // The mouse wheel moves every Flickable like a browser's smooth scrolling (smoothscroll.h).
     brulion::ui::SmoothScroll::instance();
+    // Memory the app frees — a page left, pictures out of reach of the view, the index built —
+    // goes back to the system once it is quiet (memorykeeper.h).
+    brulion::ui::MemoryKeeper *memoryKeeper = brulion::ui::MemoryKeeper::instance();
     // Qt Quick opens file: URLs itself: a URL property naming a file of another machine (on Windows
     // a connection to it) is emptied, unless it is the open notebook's (localnetwork.h). Installed
     // in the app's one QML engine (every window and self-test lives in it); before the controller,
@@ -458,6 +462,13 @@ int main(int argc, char *argv[])
         const auto guardNotebook = [&fileUrlGuard, workspace] { fileUrlGuard.setNotebooks({workspace->rootPath()}); };
         QObject::connect(workspace, &brulion::shell::Workspace::openChanged, workspace, guardNotebook);
         guardNotebook();
+        // What a route or a notebook left behind, and what the index's worker threads freed.
+        QObject::connect(controller.get(), &AppController::currentRouteChanged, memoryKeeper,
+                         &brulion::ui::MemoryKeeper::released);
+        QObject::connect(workspace, &brulion::shell::Workspace::readyChanged, memoryKeeper,
+                         &brulion::ui::MemoryKeeper::released);
+        QObject::connect(workspace, &brulion::shell::Workspace::openChanged, memoryKeeper,
+                         &brulion::ui::MemoryKeeper::released);
         if (fixedNow.isValid()) {
             controller->setClock([fixedNow] { return fixedNow; });
             logs.setClock([fixedNow] { return fixedNow; });

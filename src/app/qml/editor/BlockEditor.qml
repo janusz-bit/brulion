@@ -651,7 +651,12 @@ FocusScope {
 
     /// False once the editor is being destroyed (the deferred calls below check it).
     property bool alive: true
-    Component.onDestruction: alive = false
+    Component.onDestruction: {
+        alive = false
+        // (Made on the window's content item, to cover the window: it goes with the editor.)
+        if (dependencyDialog)
+            dependencyDialog.destroy()
+    }
 
     // Deferred work (instead of Qt.callLater, whose closures are not compiled ahead of time): the
     // Later calls below — posted events like Qt.callLater's, restarted: repeated requests before

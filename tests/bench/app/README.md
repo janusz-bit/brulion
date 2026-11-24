@@ -14,9 +14,10 @@ GUI thread's time goes" below).
 
 | File | What |
 |---|---|
-| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `source-typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `page-scroll`, `page-resize`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
+| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `source-typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `page-scroll`, `page-resize`, `switch-pages`, `idle`, `idle-edit`, `workload`, `pictures`; see the header) |
 | `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`; Qt's CorePrivate and GuiPrivate headers) |
 | `make-bench-vault.py <dir>` | a deterministic synthetic notebook: 10 000 notes (≈ 650 journal days over two years + pages in 40 folders, links, tags, tasks with dates and reminders, a few queries), `Bench/Konspekt 5000.md` (5000-block outline), `Bench/Dokument 5000.md` (5000-block document), `Bench/Mała strona.md`; `<dir>.pages.txt` lists 50 pages for page switching |
+| `make-picture-vault.py <dir>` | a notebook of photos (ImageMagick: `nix shell nixpkgs#imagemagick -c …`): 60 JPEG photos of 12 MP (every fifth upright, every seventh turned by its EXIF orientation) and 10 PNG screenshots in `assets/`, `Album.md` (40 photos on one page), 30 pages of four photos each, 30 pages of text and 30 journal days (twenty with two photos); `<dir>.pictures.txt`, `<dir>.pages.txt` and `<dir>.album.txt` list them for the `pictures` scenario |
 | `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; Xvfb or offscreen); writes one JSONL per run |
 | `bench-matrix.sh` | the whole matrix for several labelled builds (`BINS="base=… cur=…"`; `ENVS="cur=VAR=value"`: one label's environment, e.g. the same binary with `BRULION_PAGE_ITEM=1`), group by group (`startup-big-short`: first + warm starts only, for slow machines; `page-scroll`, `page-resize`: the 300-block and 5000-block pages) |
 | `analyze.py <dir>…` | metrics per run → median / min / max / p25 / p75 per metric and label (`--csv`, `--json`) |
@@ -148,6 +149,33 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   thread's counters at both; to the first blocks would compare views that show them before or
   after the rest of the opening's work).
 * `switch-pages`: 200 page openings: time to the page's frame, heap / RSS / item count every 20.
+* `pictures` (the notebook of `make-picture-vault.py`; docs/PERFORMANCE.md "Pictures and memory"):
+  `BENCH_CYCLES` rounds (2) of — the album (`BENCH_PAGE`) opened, wheeled to its end and back;
+  every picture of `BENCH_PICTURES` opened in the picture view; every page of `BENCH_PAGES`
+  opened — each followed by the journal ("home") and `BENCH_REST_MS` (3000) of rest. A memory mark
+  after a garbage collection at every step (`album:<round>`, `album_end:`, `album_back:`,
+  `home:after_album:`, `viewer:<round>:<n>`, `home:after_viewer:`, `pages:<round>:<n>`,
+  `home:after_pages:`): `rss_mb:<step>`, `anon_mb:` (RssAnon: with llvmpipe under Xvfb the
+  textures are the process's memory too), `heap_mb:` (malloc in use + its mapped blocks),
+  `pictures:` / `picture_mb:` (the Images that hold a picture and their decoded megabytes: implicit
+  size × the screen's ratio² × 4 bytes) and `items:`; `peak_rss_mb` (VmHWM), `grown_*` (the end less
+  `home:start`) and `leak_*_per_round` (home after the pages of the last round less the first:
+  what a round leaves behind — a leak grows with `BENCH_CYCLES`). `--env BRULION_NEAR_VIEW=0`
+  loads every picture wherever its frame is and `--env BRULION_MEMORY_KEEPER=0` gives nothing
+  back to the system (the A/B of `NearView` and `MemoryKeeper`); `--env
+  QT_LOGGING_RULES=brulion.memory.debug=true` logs every time memory is given back, how much and
+  how long it took, `brulion.nearview.debug=true` every picture that comes within reach or leaves.
+  `--env BENCH_VIEWPORT_OBSERVERS=1` (any scenario) adds to every memory mark the items that
+  observe the viewport, by class — while a scrolled view has one below it, every scroll step walks
+  the item tree down to it (docs/PERFORMANCE.md "Pitfalls").
+
+  ```sh
+  nix shell nixpkgs#imagemagick -c tests/bench/app/make-picture-vault.py /tmp/vaults/photos
+  nix develop -c nix shell nixpkgs#xvfb -c tests/bench/app/run-bench.py --bin build-rel/src/app/brulion \
+    --probe /tmp/probe/libbenchprobe.so --vault /tmp/vaults/photos --scenario pictures --runs 3 --label cur \
+    --out /tmp/results/pictures --timeout 900 --env BENCH_PAGE=Album.md \
+    --env BENCH_PAGES=/tmp/vaults/photos.pages.txt --env BENCH_PICTURES=/tmp/vaults/photos.pictures.txt
+  ```
 
 ## Autosave: where the GUI thread's time goes
 

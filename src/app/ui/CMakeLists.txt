@@ -116,6 +116,24 @@ target_link_libraries(brulion_ui_scroll PUBLIC Qt6::Core Qt6::Quick)
 qt_extract_metatypes(brulion_ui_scroll)
 brulion_set_warnings(brulion_ui_scroll)
 
+# brulion_ui_memory — what keeps the app's memory bounded by what the screen shows
+# (docs/PERFORMANCE.md "Pictures and memory"): NearView (nearview.h), the attached type that tells
+# an item whether it is in or near its window's view — a picture holds its pixels only there —;
+# PictureDecode (picturedecode.h), the size a picture is decoded at for the place that shows it;
+# MemoryKeeper (memorykeeper.h), which hands freed memory back to the system once the app is quiet
+# (platform/processmemory.h). Qt Quick's public API only; a static library so that tests/app/memory
+# drives them with a window without the app; registered as "NearView" and "PictureDecode" by
+# qmlforeign.h, the keeper is made by main().
+qt_add_library(brulion_ui_memory STATIC
+    nearview.h nearview.cpp
+    picturedecode.h picturedecode.cpp
+    memorykeeper.h memorykeeper.cpp
+)
+target_include_directories(brulion_ui_memory PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_memory PUBLIC Qt6::Core Qt6::Gui Qt6::Quick PRIVATE brulion_platform)
+qt_extract_metatypes(brulion_ui_memory)
+brulion_set_warnings(brulion_ui_memory)
+
 # brulion_ui_layoutdump — LayoutDump (layoutdump.h): what a window shows (texts with colours and
 # fonts, targets, boxes, the theme's tokens) as JSON for the UI benchmark (`--dump-layout`,
 # tests/app/uibench). Qt Quick's public API only; a static library so that

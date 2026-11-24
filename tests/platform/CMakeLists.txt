@@ -44,6 +44,11 @@ target_compile_definitions(tst_spellbackends PRIVATE BRULION_TEST_SPELL_BACKEND=
 # a stack, and each still dies of its signal. Linux with glibc only (skipped elsewhere and in
 # sanitizer builds).
 brulion_add_test(tst_crashreport SOURCES tst_crashreport.cpp LIBS brulion_platform)
+# Asking the allocator to give freed memory back (processmemory.h): with glibc what freed blocks
+# leave behind in the heap — small ones, large ones once the mmap threshold moved over them —
+# stays with the process until it is asked for, by the process's resident size; elsewhere (and
+# under a sanitizer) the call says there is nothing to do.
+brulion_add_test(tst_processmemory SOURCES tst_processmemory.cpp LIBS brulion_platform)
 # Where OCR's engine and models are looked for and which languages it reads (ocrdata.h) — pure, so
 # tested on every platform.
 brulion_add_test(tst_ocrdata SOURCES tst_ocrdata.cpp LIBS brulion_platform)

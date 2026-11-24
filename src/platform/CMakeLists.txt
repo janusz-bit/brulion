@@ -18,7 +18,9 @@
 #                Hunspell's dictionaries are; pure, tested everywhere), spellbackends (spell checking
 #                of the editor: one backend per build, below), traywindow (the tray calendar placed
 #                by Wayland's layer shell: one backend per build, below), crashreport (a crash's
-#                signal, thread and stack on stderr: Linux with glibc, nothing elsewhere), capture (a
+#                signal, thread and stack on stderr: Linux with glibc, nothing elsewhere),
+#                processmemory (the allocator set up to give freed memory back to the system: glibc's
+#                thresholds and malloc_trim, Android's purge; nothing elsewhere), capture (a
 #                photo from the camera and dictation for the AI chat: one backend per build, below;
 #                the hook for a speech recognizer of the app's own), devicefolder (the folder of
 #                this device a notebook in the app's storage syncs with: Android's picked folders
@@ -40,6 +42,7 @@ qt_add_library(brulion_platform STATIC
     spellbackends.h
     traywindow.h
     crashreport.h crashreport.cpp
+    processmemory.h processmemory.cpp
     filesync.h filesync.cpp
     capture.h capture.cpp
     devicefolder.h devicefolder.cpp

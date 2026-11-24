@@ -10,6 +10,7 @@
 #include "keyboardinsets.h"
 #include "mediaengine.h"
 #include "mediaplayback.h"
+#include "nearview.h"
 #include "pagecontroller.h"
 #include "shortcutmap.h"
 #include "themepages.h"
@@ -5262,6 +5263,161 @@ void checkDrawingFrame(QQuickWindow *window, AppController *app, const Check &ch
     settings->setThemeMode(mode);
     const bool back = waitFor([&] { return showsTheme(wasDark); }, 5000);
     check(switched && back && !moved, "the embed keeps its size while the app's theme switches");
+    app->goHome();
+}
+
+/// 5r. Pictures hold their pixels only near the view (docs/UI.md "Pictures hold their pixels only
+/// near the view"): a page of thirty photos is created whole — every frame at its final size, from
+/// the file's header — yet only the frames within reach of the window load their picture, decoded
+/// for the frame and not at the file's size; at the page's end the last ones load and the first
+/// ones let go, and nothing moved meanwhile: the page is as tall as it was.
+void checkPicturesNearTheView(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *workspace = app->workspace();
+    // A photo larger than any frame (and than what the frame asks the decoder for).
+    QImage photo(2400, 1800, QImage::Format_RGB32);
+    for (int y = 0; y < photo.height(); ++y) {
+        auto *line = reinterpret_cast<QRgb *>(photo.scanLine(y));
+        for (int x = 0; x < photo.width(); ++x)
+            line[x] = qRgb(x * 255 / photo.width(), y * 255 / photo.height(), 120);
+    }
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    const bool encoded = buffer.open(QIODevice::WriteOnly) && photo.save(&buffer, "JPG", 80);
+    const QString path = encoded ? workspace->saveAttachment(u"Zdjęcie ze szlaku.jpg"_s, bytes) : QString();
+    constexpr int Count = 30;
+    QString text;
+    for (int i = 1; i <= Count; ++i)
+        text += u"Dzień %1 na szlaku — żółta gęś\n\n![[Zdjęcie ze szlaku.jpg]]\n\n"_s.arg(i);
+    const QString page = u"Album ze szlaku.md"_s;
+    check(!path.isEmpty() && workspace->writeFile(page, text), "a page embeds thirty photos");
+    // The frames of the page shown, from its top (kept views are hidden: not among them).
+    const auto frames = [window] {
+        QList<QQuickItem *> found =
+                uidriver::matching(window, [](QQuickItem *item) { return item->objectName() == u"embedPicture"; });
+        std::ranges::sort(found, {}, [](QQuickItem *item) { return item->mapToScene(QPointF(0, 0)).y(); });
+        return found;
+    };
+    const auto imageOf = [](QQuickItem *frame) -> QQuickItem * {
+        const QList<QQuickItem *> children = frame->childItems();
+        const auto it = std::ranges::find(children, u"embedImage"_s, &QQuickItem::objectName);
+        return it == children.cend() ? nullptr : *it;
+    };
+    constexpr int Null = 0, Ready = 1; // Image.status
+    const auto status = [&imageOf](QQuickItem *frame) {
+        QQuickItem *image = imageOf(frame);
+        return image ? image->property("status").toInt() : -1;
+    };
+    app->openPage(page);
+    // (Every row placed by its list, one under the other: a row still being created in the
+    // background sits at the list's top until then, among the first ones.)
+    const auto placed = [&frames] {
+        const QList<QQuickItem *> found = frames();
+        if (found.size() != Count)
+            return false;
+        for (qsizetype i = 1; i < found.size(); ++i) {
+            const qreal above = found.at(i - 1)->mapToScene(QPointF(0, 0)).y();
+            if (found.at(i)->mapToScene(QPointF(0, 0)).y() < above + found.at(i - 1)->height())
+                return false;
+        }
+        return true;
+    };
+    check(waitFor(placed, 20000), "every picture of the page has its frame");
+    const QList<QQuickItem *> all = frames();
+    if (all.size() != Count) {
+        std::fprintf(stderr, "selftest: %d picture frames\n", int(all.size()));
+        app->goHome();
+        return;
+    }
+    QQuickItem *first = all.first();
+    QQuickItem *last = all.last();
+    QQuickItem *list = enclosingFlickable(first);
+    check(list && waitFor([&] { return status(first) == Ready; }, 10000), "the pictures in the window are shown");
+    if (!list) {
+        app->goHome();
+        return;
+    }
+    const QSizeF shown = first->size();
+    const bool sameSize = std::ranges::all_of(all, [&shown](QQuickItem *frame) { return frame->size() == shown; });
+    check(sameSize && shown.height() > 100, "every frame has its final size at once, from the file's header");
+    const auto loaded = [&] { return int(std::ranges::count(all, Ready, status)); };
+    const int atTop = loaded();
+    std::fprintf(stderr, "selftest: %d of %d pictures loaded at the page's top, frames %.0f x %.0f\n", atTop, Count,
+                 shown.width(), shown.height());
+    check(atTop >= 1 && atTop <= Count / 2, "only the pictures near the window are loaded");
+    check(status(last) == Null && imageOf(last)->property("source").toUrl().isEmpty(),
+          "a picture far below the window holds no pixels");
+    {
+        // Decoded for its frame: at least what the frame shows, a step more at most.
+        QQuickItem *image = imageOf(first);
+        const QSize asked = image->property("sourceSize").toSize();
+        const double longer = std::max(shown.width(), shown.height()) * window->effectiveDevicePixelRatio();
+        const double decoded =
+                std::max(image->property("implicitWidth").toDouble(), image->property("implicitHeight").toDouble());
+        std::fprintf(stderr, "selftest: a frame of %.0f device pixels asks for %d x %d, decoded %.0f\n", longer,
+                     asked.width(), asked.height(), decoded);
+        check(asked.width() == asked.height() && asked.width() >= longer - 1 && asked.width() <= longer * 1.25 + 64
+                      && asked.width() < 2048 && decoded > 0 && decoded <= asked.width(),
+              "a photo is decoded for its frame, not at the file's size");
+    }
+    const double tall = list->property("contentHeight").toDouble();
+    const double top = list->property("originY").toDouble();
+    const qint64 releases = brulion::ui::NearView::releases();
+    list->setProperty("contentY", top + tall - list->height());
+    check(waitFor([&] { return status(last) == Ready && status(first) == Null; }, 10000),
+          "at the page's end the last pictures load and the first ones let go");
+    check(brulion::ui::NearView::releases() > releases && loaded() <= Count / 2,
+          "what scrolled out of reach was let go");
+    settle(100);
+    const bool still = std::ranges::all_of(all, [&shown](QQuickItem *frame) { return frame->size() == shown; });
+    check(still && std::abs(list->property("contentHeight").toDouble() - tall) < 0.5,
+          "no row moved while pictures came and went: the page is as tall as it was");
+    list->setProperty("contentY", top);
+    check(waitFor([&] { return status(first) == Ready && status(last) == Null; }, 10000),
+          "back at the top the first pictures are there again");
+
+    // A thin picture: decoded for its frame, its short side is a few pixels, rounded (2000 × 40 as
+    // 768 × 15) — still the file's shape. Taken for another shape it was decoded at its natural
+    // size, agreed with its header again, was decoded for its frame, and so on for good.
+    QImage banner(2000, 40, QImage::Format_RGB32);
+    banner.fill(QColor(40, 120, 90));
+    QByteArray bannerBytes;
+    QBuffer bannerBuffer(&bannerBytes);
+    const bool bannerEncoded = bannerBuffer.open(QIODevice::WriteOnly) && banner.save(&bannerBuffer, "PNG");
+    const QString bannerPath =
+            bannerEncoded ? workspace->saveAttachment(u"Baner ze szlaku.png"_s, bannerBytes) : QString();
+    const QString bannerPage = u"Baner ze szlaku.md"_s;
+    check(!bannerPath.isEmpty() && workspace->writeFile(bannerPage, u"Baner\n\n![[Baner ze szlaku.png]]\n"_s),
+          "a page embeds a thin banner");
+    app->openPage(bannerPage);
+    QQuickItem *bannerFrame = nullptr;
+    check(waitFor(
+                  [&] {
+                      const QList<QQuickItem *> shown = frames();
+                      bannerFrame = shown.size() == 1 ? shown.first() : nullptr;
+                      return bannerFrame && status(bannerFrame) == Ready;
+                  },
+                  10000),
+          "the banner is shown");
+    if (bannerFrame) {
+        QQuickItem *image = imageOf(bannerFrame);
+        const QSize asked = image->property("sourceSize").toSize();
+        const QSizeF frameSize = bannerFrame->size();
+        // (Looked at again and again for a while: the size it asks for must not come and go.)
+        bool steady = true;
+        waitFor(
+                [&] {
+                    steady = steady && image->property("sourceSize").toSize() == asked
+                             && bannerFrame->size() == frameSize;
+                    return false;
+                },
+                400);
+        std::fprintf(stderr, "selftest: the banner's frame %.0f x %.0f asks for %d x %d\n", frameSize.width(),
+                     frameSize.height(), asked.width(), asked.height());
+        check(steady && status(bannerFrame) == Ready && asked.width() < 2048 && frameSize.height() > 0
+                      && std::abs(frameSize.width() / frameSize.height() - 50.0) < 5.0,
+              "a thin picture keeps its frame's decode size and its file's shape");
+    }
     app->goHome();
 }
 
@@ -12139,6 +12295,8 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         checkDrawing(window, app, check);
         // 5j. A drawing another program wrote: its embed's frame never moves.
         checkDrawingFrame(window, app, check);
+        // 5r. Pictures hold their pixels only near the view.
+        checkPicturesNearTheView(window, app, check);
         // 5e. The default reminder time set on a clock in the settings; phones: the list of sections.
         checkSettingsClock(window, app, check);
         if (window->width() < 900)

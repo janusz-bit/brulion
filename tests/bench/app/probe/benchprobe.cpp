@@ -13,7 +13,7 @@
 //   BENCH_SCENARIO   startup | open-page | typing | source-typing | select-copy | search |
 //                    switcher | views |
 //                    graph | journal-scroll | page-scroll | page-resize | switch-pages | idle |
-//                    idle-edit | workload (see buildScenario())
+//                    idle-edit | workload | pictures (see buildScenario())
 //   BENCH_PAGE       page path for open-page / typing / source-typing / select-copy / idle-edit /
 //                    page-scroll /
 //                    page-resize ("Bench/Konspekt 5000.md")
@@ -23,7 +23,13 @@
 //   BENCH_ROW        row to edit (typing, select-copy; default 10)
 //   BENCH_NAV_DELAY_MS open-page: ms to wait before the first opening (mark nav_delay; default 0):
 //                    time for a profiler attached at "settled" / "kept_settled" to start
-//   BENCH_PAGES      file with one page path per line (switch-pages, workload)
+//   BENCH_PAGES      file with one page path per line (switch-pages, workload, pictures)
+//   BENCH_PICTURES   pictures: file with one picture path per line (opened one after another)
+//   BENCH_CYCLES     pictures: how many rounds of album / viewer / pages (default 2)
+//   BENCH_REST_MS    pictures: the wait at home after each round (default 3000; 35000 lets Qt's
+//                    pixmap cache expire: 30 s)
+//   BENCH_VIEWPORT_OBSERVERS  1: every memory mark lists the shown items that observe the
+//                    viewport (QQuickItem::ItemObservesViewport), by class and name
 //   BENCH_IDLE_MS    idle duration (default 30000)
 //   BENCH_TIMEOUT_MS whole-run watchdog (default 240000): exit code 3
 //   BENCH_KEEP       1: do not quit at the end
@@ -346,6 +352,18 @@ QByteArray typeName(const QObject *o)
     return n;
 }
 
+QStringList readLines(const QByteArray &file)
+{
+    QStringList lines;
+    QFile f(QString::fromUtf8(file));
+    if (!file.isEmpty() && f.open(QIODevice::ReadOnly)) {
+        for (const QByteArray &l : f.readAll().split('\n'))
+            if (!l.trimmed().isEmpty())
+                lines.append(QString::fromUtf8(l.trimmed()));
+    }
+    return lines;
+}
+
 QJsonObject procStatus()
 {
     QJsonObject o;
@@ -353,7 +371,7 @@ QJsonObject procStatus()
     if (f.open(QIODevice::ReadOnly)) {
         const QList<QByteArray> lines = f.readAll().split('\n');
         for (const QByteArray &l : lines) {
-            for (const char *key : {"VmRSS", "VmHWM", "RssAnon", "RssFile", "VmSize", "Threads"}) {
+            for (const char *key : {"VmRSS", "VmHWM", "RssAnon", "RssFile", "RssShmem", "VmSize", "Threads"}) {
                 if (l.startsWith(key) && l.size() > qsizetype(strlen(key)) && l.at(qsizetype(strlen(key))) == ':') {
                     QByteArray v = l.mid(qsizetype(strlen(key)) + 1).trimmed();
                     v = v.split(' ').first();
@@ -706,15 +724,11 @@ public:
         installObjectHooks();
         g_io = new std::vector<IoRec>();
         g_io->reserve(4096);
-        const QByteArray pagesFile = qgetenv("BENCH_PAGES");
-        if (!pagesFile.isEmpty()) {
-            QFile f(QString::fromUtf8(pagesFile));
-            if (f.open(QIODevice::ReadOnly)) {
-                for (const QByteArray &l : f.readAll().split('\n'))
-                    if (!l.trimmed().isEmpty())
-                        m_pages.append(QString::fromUtf8(l.trimmed()));
-            }
-        }
+        m_pages = readLines(qgetenv("BENCH_PAGES"));
+        m_pictures = readLines(qgetenv("BENCH_PICTURES"));
+        m_cycles = std::max(1, envOr("BENCH_CYCLES", "2").toInt());
+        m_restMs = std::max(0, envOr("BENCH_REST_MS", "3000").toInt());
+        m_viewportObservers = envOr("BENCH_VIEWPORT_OBSERVERS", "0") == "1";
         emitJson({{u"ev"_s, u"start"_s},
                   {u"scenario"_s, m_scenario},
                   {u"pid"_s, qint64(getpid())},
@@ -831,7 +845,85 @@ private:
         }
         QJsonObject o = procStatus();
         o.insert(u"items"_s, countItems());
+        const PictureStats pictures = pictureStats();
+        o.insert(u"pictures"_s, pictures.ready);
+        o.insert(u"picturesLoading"_s, pictures.loading);
+        o.insert(u"pictureKB"_s, pictures.bytes / 1024);
+        if (m_viewportObservers)
+            o.insert(u"viewportObservers"_s, viewportObservers());
         mark(u"mem:"_s + name, 0, o);
+    }
+
+    /// BENCH_VIEWPORT_OBSERVERS=1: the items with QQuickItem::ItemObservesViewport, by class (and
+    /// name; "(hidden)": not visible — they count too). While a scrolled view has one below it,
+    /// every scroll step walks the item tree from the view down to it
+    /// (QQuickItemPrivate::transformChanged; docs/PERFORMANCE.md "Pitfalls").
+    QJsonObject viewportObservers()
+    {
+        QHash<QString, int> counts;
+        walk(m_window ? m_window->contentItem() : nullptr, [&counts](QQuickItem *it) {
+            if (it->flags().testFlag(QQuickItem::ItemObservesViewport)) {
+                QString key = QString::fromLatin1(it->metaObject()->className());
+                if (!it->objectName().isEmpty())
+                    key += u'#' + it->objectName();
+                if (!it->isVisible())
+                    key += u" (hidden)"_s;
+                ++counts[key];
+            }
+            return true;
+        });
+        QJsonObject out;
+        for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+            out.insert(it.key(), it.value());
+        return out;
+    }
+
+    /// The pictures the window's items hold: every Image / AnimatedImage (QQuickImageBase), shown
+    /// or not, that has loaded its source — and what their pixels take decoded, 4 bytes each (the
+    /// copy Qt keeps beside the texture; the texture itself is as much again, a third more with
+    /// mipmaps). Icons count too (a few kilobytes each).
+    struct PictureStats {
+        int ready = 0, loading = 0;
+        qint64 bytes = 0;
+    };
+    PictureStats pictureStats()
+    {
+        PictureStats stats;
+        if (!m_window)
+            return stats;
+        walk(m_window->contentItem(), [&stats](QQuickItem *it) {
+            if (!it->inherits("QQuickImageBase"))
+                return true;
+            const int status = it->property("status").toInt(); // QQuickImageBase::Ready 1, Loading 2
+            if (status == 2) {
+                ++stats.loading;
+            } else if (status == 1) {
+                // (implicit size: the pixmap's, over its device pixel ratio.)
+                const qreal dpr = it->window() ? it->window()->effectiveDevicePixelRatio() : 1.0;
+                const qreal w = it->implicitWidth() * dpr, h = it->implicitHeight() * dpr;
+                if (w > 0 && h > 0) {
+                    ++stats.ready;
+                    stats.bytes += qint64(w * h * 4);
+                }
+            }
+            return true;
+        });
+        return stats;
+    }
+    /// The picture view shows `path` loaded (ContentPictureView: `pictureLoaded`).
+    bool pictureShown(const QString &path)
+    {
+        bool shown = false;
+        walk(m_window ? m_window->contentItem() : nullptr, [&](QQuickItem *it) {
+            if (shown || !it->isVisible())
+                return false;
+            if (it->objectName() == u"pictureView" && it->property("path").toString() == path) {
+                shown = it->property("pictureLoaded").toBool();
+                return false;
+            }
+            return true;
+        });
+        return shown;
     }
 
     // ---- window, frames, stalls ---------------------------------------------------------------
@@ -2129,6 +2221,76 @@ private:
         }
     }
 
+    /// Memory while pictures and notes are opened and after they are left: `BENCH_CYCLES` rounds
+    /// of (1) the album page (BENCH_PAGE: a page of many photos) opened, scrolled to its end and
+    /// back, (2) every picture of BENCH_PICTURES opened in the picture view, (3) every page of
+    /// BENCH_PAGES opened, each followed by the journal ("home") and BENCH_REST_MS of rest. Memory
+    /// marks (`mem:<step>:<round>`, after a garbage collection): what a step holds, what is given
+    /// back at home, and whether the second round ends higher than the first (a leak).
+    void picturesSteps()
+    {
+        if (m_pages.isEmpty())
+            m_pages = {m_page};
+        const auto home = [this](const QString &tag) {
+            action(u"home"_s, [this] { navigate({{u"view"_s, u"journals"_s}}); });
+            waitUntil(u"home_loaded:"_s + tag, [this] { return pictureStats().loading == 0; }, 60000);
+            waitSettled(u"home_settled:"_s + tag, 1000, 60000);
+            wait(m_restMs);
+            action(u"mem"_s, [this, tag] { markMem(u"home:"_s + tag, true); });
+        };
+        home(u"start"_s);
+        for (int cycle = 0; cycle < m_cycles; ++cycle) {
+            const QString c = QString::number(cycle);
+            // (1) The album: opened, read to its end and back.
+            action(u"nav"_s, [this, c] {
+                mark(u"nav_start:album:"_s + c);
+                navigate({{u"view"_s, u"page"_s}, {u"path"_s, m_page}});
+            });
+            waitUntil(u"page_content:album:"_s + c, [this] { return pageShown(m_page); }, 120000);
+            waitUntil(u"album_loaded:"_s + c, [this] { return pictureStats().loading == 0; }, 120000);
+            waitSettled(u"album_settled:"_s + c, 1000, 120000);
+            action(u"mem"_s, [this, c] { markMem(u"album:"_s + c, true); });
+            for (int i = 0; i < 240; ++i) {
+                action(u"wheel"_s, [this] { wheel(-240, u"down"_s); });
+                wait(30);
+            }
+            waitUntil(u"album_end_loaded:"_s + c, [this] { return pictureStats().loading == 0; }, 120000);
+            waitSettled(u"album_end_settled:"_s + c, 1000, 120000);
+            action(u"mem"_s, [this, c] { markMem(u"album_end:"_s + c, true); });
+            for (int i = 0; i < 240; ++i) {
+                action(u"wheel"_s, [this] { wheel(240, u"up"_s); });
+                wait(30);
+            }
+            waitUntil(u"album_back_loaded:"_s + c, [this] { return pictureStats().loading == 0; }, 120000);
+            waitSettled(u"album_back_settled:"_s + c, 1000, 120000);
+            action(u"mem"_s, [this, c] { markMem(u"album_back:"_s + c, true); });
+            home(u"after_album:"_s + c);
+            // (2) The picture view: one picture after another.
+            for (qsizetype i = 0; i < m_pictures.size(); ++i) {
+                const QString picture = m_pictures.at(i);
+                action(u"nav"_s, [this, picture] { navigate({{u"view"_s, u"page"_s}, {u"path"_s, picture}}); });
+                waitUntil(u"picture"_s, [this, picture] { return pictureShown(picture); }, 60000, false);
+                wait(120);
+                if ((i + 1) % 10 == 0 || i + 1 == m_pictures.size())
+                    action(u"mem"_s, [this, c, i] { markMem(u"viewer:%1:%2"_s.arg(c).arg(i + 1), true); });
+            }
+            if (!m_pictures.isEmpty())
+                home(u"after_viewer:"_s + c);
+            // (3) Pages, with pictures and without.
+            for (qsizetype i = 0; i < m_pages.size(); ++i) {
+                const QString page = m_pages.at(i);
+                action(u"nav"_s, [this, page] { navigate({{u"view"_s, u"page"_s}, {u"path"_s, page}}); });
+                waitUntil(u"page"_s, [this, page] { return pageShown(page); }, 60000, false);
+                waitUntil(u"page_loaded"_s, [this] { return pictureStats().loading == 0; }, 60000, false);
+                wait(120);
+                if ((i + 1) % 10 == 0 || i + 1 == m_pages.size())
+                    action(u"mem"_s, [this, c, i] { markMem(u"pages:%1:%2"_s.arg(c).arg(i + 1), true); });
+            }
+            home(u"after_pages:"_s + c);
+        }
+        action(u"mem"_s, [this] { markMem(u"pictures:end"_s, true); });
+    }
+
     void buildScenario()
     {
         // The start route (--route) decides what "content" means for startup.
@@ -2191,6 +2353,8 @@ private:
             idleSteps(u"editing"_s);
         } else if (s == u"workload") {
             workloadSteps();
+        } else if (s == u"pictures") {
+            picturesSteps();
         } else {
             emitJson({{u"ev"_s, u"error"_s}, {u"what"_s, u"unknown scenario "_s + s}});
         }
@@ -2205,7 +2369,10 @@ private:
     int m_scrollWait = -1;
     int m_navDelay = 0;
     bool m_keep = false;
-    QStringList m_pages;
+    QStringList m_pages, m_pictures;
+    int m_cycles = 2;
+    int m_restMs = 3000;
+    bool m_viewportObservers = false;
     int m_resizeBase = 1280;
     int m_resizeWidth = 920;
     int m_resizeTarget = 0;
