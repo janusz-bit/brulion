@@ -494,7 +494,7 @@ end, { label = "How many open tasks" })
 | `b.app.commands()` | the command palette's commands, each `{ id, title, shortcut, enabled }` |
 | `b.app.run(id)` | runs one: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
 | `b.app.settings()` | the settings an extension may change, with their values and what they take: this device's (`scope = "device"`), then the notebook's own (`scope = "notebook"`, kept in `.brulion/config.json` and synced: `journalsFolder`, `journalFileFormat`, `journalTemplate`, `templatesFolder`, `newPagesFolder`, `weekStartsOn`, `defaultReminderTime`, the flashcards' `flashcards.tags`, `flashcards.clozeBold` …, `themePage`) |
-| `b.app.get(key)`, `b.app.set(key, value)` | one setting: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; the notebook's for every device of it: `b.app.set("journalsFolder", "Diary")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Themes/Sepia.md")` |
+| `b.app.get(key)`, `b.app.set(key, value)` | one setting: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; the notebook's for every device of it: `b.app.set("journalsFolder", "Diary")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Themes/Sepia.md")`; `brulion-cli extension run` reads only the notebook's (`b.app.get("journalsFolder")`) |
 | `b.app.navigate(view)` | shows a view: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
 | `b.app.open(page, { line = 12, side = true })` | opens a page, at a line, in the side panel |
 | `b.app.back()` | goes back |

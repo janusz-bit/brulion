@@ -76,9 +76,9 @@ public:
     /// what follows from its settings is out of date (the app's macros of it).
     std::function<void(const QString &extension)> onSettingChanged;
     /// b.app's operations (Host::app): the app answers them. Unset: a dry run answers the ones
-    /// that read with a state of no app ({view = "", platform = "cli"}, no commands, no settings)
-    /// and notes the ones that change it (dryApp()); a host that is no dry run says the app is
-    /// not there.
+    /// that read with a state of no app ({view = "", platform = "cli"}, no commands, of the settings
+    /// the notebook's own from its config — b.app.get("journalsFolder") — and no device's) and notes
+    /// the ones that change it (dryApp()); a host that is no dry run says the app is not there.
     std::function<QVariant(const QString &extension, const QString &operation, const QVariantMap &args, QString *error)>
             onApp;
     /// The theme or the UI items of an extension changed (Host::appChanged).

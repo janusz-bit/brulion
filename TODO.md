@@ -20,9 +20,8 @@ done in the repository simply disappears from the list.
   side chats (`/btw`: a fork shown only inside its conversation); a delegated conversation that
   wakes its parent when it ends (today an agent starts and waits); webhooks that start a scheduled
   conversation; a secret the agent asks for in a private card (T3's `request_secret`); a usage
-  history with costs (T3 reads the agents' own session logs); a session renamed while a stopped
-  turn of it is still on its way keeps its old key in `acp::Client` (the next turn starts a new
-  session); all of it tried with a real Claude Code and Codex.
+  history with costs (T3 reads the agents' own session logs); all of it tried with a real Claude
+  Code and Codex.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
@@ -107,8 +106,7 @@ done in the repository simply disappears from the list.
   built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
   input rules (`b.app.inputRule`) in source mode too (its TextEdit has an undo stack of its own) and
   the tint of `b.app.tagStyle` in rows drawn by `PageItem` / `JournalDayItem` (behind their
-  switches) and in exports; in `brulion-cli extension run`, the notebook's own settings for
-  `b.app.get` (they are there without the app: `.brulion/config.json`).
+  switches) and in exports.
 * **Gym: next steps** — Polish instructions for the rest of the exercises (the 144 common ones
   have them; the other free-exercise-db's stay English); the exercises' pictures checked on a real phone; the rest timer's notification with the
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).

@@ -11,7 +11,8 @@
 // modes and models) read and set before the first prompt and during a turn; sessions resumed and
 // loaded, a failed load followed by a new session; commands, usage, the plan, tool calls with
 // their output and terminals, messages by id; the agent's requests for files and terminals handed
-// on; pictures and embedded text falling back to links; open(), forget(), rename().
+// on; pictures and embedded text falling back to links; open(), forget(), rename() (also while an
+// answer is on its way).
 #include "acp/acp.h"
 
 #include <QJsonArray>
@@ -428,6 +429,70 @@ private Q_SLOTS:
         QCOMPARE(other.count(u"session/prompt"_s), 0);
         QVERIFY(late.hasSession(key));
         QCOMPARE(lateFailed.size(), 0);
+    }
+
+    void renameWhileAnswerOnItsWay()
+    {
+        // A page renamed while its stopped turn's answer is still on its way: the answer finds the
+        // session under its new name, and the turn sent meanwhile goes on in that session.
+        Agent agent;
+        Client client(agent.sender());
+        agent.client = &client;
+        QSignalSpy finished(&client, &Client::finished);
+        QSignalSpy failed(&client, &Client::failed);
+        client.prompt(u"Rozmowy/Żółw.md"_s, input(u"p"_s, u"p"_s));
+        agent.initialize();
+        agent.reply(agent.last(u"session/new"_s), QJsonObject{{u"sessionId"_s, u"s"_s}});
+        const QJsonObject stopped = agent.last(u"session/prompt"_s);
+        client.cancel(u"Rozmowy/Żółw.md"_s);
+        client.rename(u"Rozmowy/Żółw.md"_s, u"Rozmowy/Łoś.md"_s);
+        QCOMPARE(client.sessionId(u"Rozmowy/Łoś.md"_s), u"s"_s);
+        QVERIFY(client.prompt(u"Rozmowy/Łoś.md"_s, input(u"p"_s, u"Co dalej?"_s)));
+        QCOMPARE(agent.count(u"session/prompt"_s), 1); // (it waits for the stopped one)
+        agent.reply(stopped, QJsonObject{{u"stopReason"_s, u"cancelled"_s}});
+        QCOMPARE(agent.count(u"session/new"_s), 1);
+        QCOMPARE(agent.count(u"session/prompt"_s), 2);
+        const QJsonObject next = agent.last(u"session/prompt"_s);
+        QCOMPARE(next.value(u"params"_s).toObject().value(u"sessionId"_s).toString(), u"s"_s);
+        QCOMPARE(promptText(next), u"Co dalej?"_s);
+        agent.chunk(u"s"_s, u"Dalej: żurawie"_s);
+        agent.reply(next, QJsonObject{{u"stopReason"_s, u"end_turn"_s}});
+        QCOMPARE(failed.size(), 0);
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.first().at(0).toString(), u"Rozmowy/Łoś.md"_s);
+        QVERIFY(!client.running(u"Rozmowy/Łoś.md"_s));
+
+        // Renamed while a turn runs, and while its session is still being made: its answer comes
+        // under the new name.
+        client.prompt(u"a"_s, input(u"p"_s, u"p"_s));
+        client.rename(u"a"_s, u"b"_s);
+        agent.reply(agent.last(u"session/new"_s), QJsonObject{{u"sessionId"_s, u"t"_s}});
+        QCOMPARE(client.sessionId(u"b"_s), u"t"_s);
+        const QJsonObject running = agent.last(u"session/prompt"_s);
+        client.rename(u"b"_s, u"c"_s);
+        agent.chunk(u"t"_s, u"Gotowe"_s);
+        agent.reply(running, QJsonObject{{u"stopReason"_s, u"end_turn"_s}});
+        QCOMPARE(finished.size(), 2);
+        QCOMPARE(finished.last().at(0).toString(), u"c"_s);
+        QVERIFY(!client.hasSession(u"a"_s));
+        QVERIFY(!client.hasSession(u"b"_s));
+
+        // A conversation closed and begun again under the same name: the closed one's late answer
+        // does not end the new turn.
+        client.prompt(u"d"_s, input(u"p"_s, u"p"_s));
+        agent.reply(agent.last(u"session/new"_s), QJsonObject{{u"sessionId"_s, u"u"_s}});
+        const QJsonObject closed = agent.last(u"session/prompt"_s);
+        client.close(u"d"_s);
+        client.prompt(u"d"_s, input(u"p"_s, u"p"_s));
+        const QJsonObject fresh = agent.last(u"session/new"_s);
+        agent.reply(closed, QJsonObject{{u"stopReason"_s, u"cancelled"_s}});
+        QVERIFY(client.running(u"d"_s));
+        agent.reply(fresh, QJsonObject{{u"sessionId"_s, u"v"_s}});
+        agent.chunk(u"v"_s, u"Nowa"_s);
+        agent.reply(agent.last(u"session/prompt"_s), QJsonObject{{u"stopReason"_s, u"end_turn"_s}});
+        QCOMPARE(finished.size(), 3);
+        QCOMPARE(finished.last().at(1).toString(), u"Nowa"_s);
+        QCOMPARE(failed.size(), 0);
     }
 
     void signIn()

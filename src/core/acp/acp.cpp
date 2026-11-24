@@ -4,6 +4,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <atomic>
 
 using namespace Qt::StringLiterals;
 
@@ -836,10 +837,12 @@ void Client::newSession(const QString &key, bool tryResume)
         method = m_resume ? u"session/resume"_s : u"session/load"_s;
         params.insert(u"sessionId"_s, resume);
     }
-    m_connection.request(method, params, [this, key, resume](const QJsonValue &result, const Connection::Error &error) {
-        const auto it = m_sessions.find(key);
+    m_connection.request(method, params, [this, serial = s.serial, resume](const QJsonValue &result,
+                                                                           const Connection::Error &error) {
+        const auto it = findSerial(serial);
         if (it == m_sessions.end())
             return;
+        const QString now = it.key(); // (renamed meanwhile, perhaps)
         it->creating = false;
         const QString id = error.code != 0 ? QString()
                            : resume.isEmpty() ? result.toObject().value(u"sessionId"_s).toString()
@@ -848,31 +851,31 @@ void Client::newSession(const QString &key, bool tryResume)
             // (A turn cancelled meanwhile: the next one goes on in this session.)
             it->id = id;
             it->info.options = readOptions(result.toObject());
-            Q_EMIT sessionStarted(key, id, !resume.isEmpty());
+            Q_EMIT sessionStarted(now, id, !resume.isEmpty());
         }
         if (!it->turn)
             return;
         if (it->turn->cancelled) {
-            endTurn(key);
+            endTurn(now);
             return;
         }
         if (error.code == AuthRequired) {
-            Q_EMIT authRequired(key, m_authMethods, error.message);
+            Q_EMIT authRequired(now, m_authMethods, error.message);
             return;
         }
         if (!resume.isEmpty() && error.code != 0 && error.code != Connection::ClosedCode) {
-            newSession(key, false); // (the earlier session is gone: a new one, with the conversation so far)
+            newSession(now, false); // (the earlier session is gone: a new one, with the conversation so far)
             return;
         }
         if (error.code != 0) {
-            fail(key, failureOf(error));
+            fail(now, failureOf(error));
             return;
         }
         if (id.isEmpty()) {
-            fail(key, Failure{Failure::Kind::Malformed, u"session/new gave no sessionId"_s});
+            fail(now, Failure{Failure::Kind::Malformed, u"session/new gave no sessionId"_s});
             return;
         }
-        sessionReady(key, id, result.toObject(), resume.isEmpty(), !resume.isEmpty());
+        sessionReady(now, id, result.toObject(), resume.isEmpty(), !resume.isEmpty());
     });
 }
 
@@ -914,10 +917,9 @@ void Client::applyOptions(const QString &key)
         rest.remove(w.key());
         it->turn->input.config = rest;
         it->creating = true; // (no prompt nor other option meanwhile)
-        sendOption(key, *option, w.value(), [this, key] {
-            if (auto s = m_sessions.find(key); s != m_sessions.end())
-                s->creating = false;
-            applyOptions(key);
+        sendOption(key, *option, w.value(), [this](const QString &now) {
+            m_sessions[now].creating = false;
+            applyOptions(now);
         });
         return;
     }
@@ -929,9 +931,11 @@ void Client::applyOptions(const QString &key)
     sendPrompt(key);
 }
 
-void Client::sendOption(const QString &key, const ConfigOption &option, const QJsonValue &value, std::function<void()> then)
+void Client::sendOption(const QString &key, const ConfigOption &option, const QJsonValue &value,
+                        std::function<void(const QString &)> then)
 {
-    const QString session = m_sessions.value(key).id;
+    const Session &s = m_sessions[key];
+    const QString session = s.id;
     QString method;
     QJsonObject params{{u"sessionId"_s, session}};
     switch (option.via) {
@@ -953,10 +957,12 @@ void Client::sendOption(const QString &key, const ConfigOption &option, const QJ
     }
     const QString id = option.id;
     m_connection.request(method, params,
-                         [this, key, id, value, then = std::move(then)](const QJsonValue &result, const Connection::Error &error) {
-                             const auto it = m_sessions.find(key);
+                         [this, serial = s.serial, id, value, then = std::move(then)](const QJsonValue &result,
+                                                                                      const Connection::Error &error) {
+                             const auto it = findSerial(serial);
                              if (it == m_sessions.end())
                                  return;
+                             const QString now = it.key();
                              if (error.code == 0) {
                                  const QJsonObject r = result.toObject();
                                  if (r.value(u"configOptions"_s).isArray()) {
@@ -968,11 +974,11 @@ void Client::sendOption(const QString &key, const ConfigOption &option, const QJ
                                              o.current = value;
                                      }
                                  }
-                                 Q_EMIT sessionChanged(key);
+                                 Q_EMIT sessionChanged(now);
                              }
                              // (An option the agent refused is left as it is: the turn goes on.)
                              if (then)
-                                 then();
+                                 then(now);
                          });
 }
 
@@ -1027,22 +1033,23 @@ void Client::authenticate(const QString &key, const QString &methodId)
         return;
     it->creating = true;
     m_connection.request(u"authenticate"_s, QJsonObject{{u"methodId"_s, methodId}},
-                         [this, key](const QJsonValue &, const Connection::Error &error) {
-                             const auto it = m_sessions.find(key);
+                         [this, serial = it->serial](const QJsonValue &, const Connection::Error &error) {
+                             const auto it = findSerial(serial);
                              if (it == m_sessions.end())
                                  return;
+                             const QString now = it.key();
                              it->creating = false;
                              if (!it->turn)
                                  return;
                              if (it->turn->cancelled) {
-                                 endTurn(key);
+                                 endTurn(now);
                                  return;
                              }
                              if (error.code != 0) {
-                                 fail(key, failureOf(error));
+                                 fail(now, failureOf(error));
                                  return;
                              }
-                             newSession(key, true);
+                             newSession(now, true);
                          });
 }
 
@@ -1059,34 +1066,35 @@ void Client::sendPrompt(const QString &key)
     if (!t.input.turnId.isEmpty())
         params.insert(u"_meta"_s, QJsonObject{{TurnMetaKey, t.input.turnId}});
     m_connection.request(u"session/prompt"_s, params,
-                         [this, key](const QJsonValue &result, const Connection::Error &error) {
-                             const auto it = m_sessions.find(key);
+                         [this, serial = s.serial](const QJsonValue &result, const Connection::Error &error) {
+                             const auto it = findSerial(serial);
                              if (it == m_sessions.end() || !it->turn)
                                  return;
+                             const QString now = it.key();
                              if (it->turn->cancelled) {
-                                 endTurn(key);
+                                 endTurn(now);
                                  return;
                              }
                              if (error.code != 0) {
                                  if (error.code == Connection::ClosedCode)
                                      it->id.clear(); // (the session went with the agent)
-                                 fail(key, failureOf(error));
+                                 fail(now, failureOf(error));
                                  return;
                              }
                              const QString reason = result.toObject().value(u"stopReason"_s).toString();
                              const QString text = it->turn->state.text.trimmed();
                              if (reason == u"refusal") {
-                                 fail(key, Failure{Failure::Kind::Refusal, text});
+                                 fail(now, Failure{Failure::Kind::Refusal, text});
                                  return;
                              }
                              // (A turn of tool calls only — a file written — ends without words.)
                              if (text.isEmpty() && (it->turn->state.tools.isEmpty() || reason == u"cancelled")) {
-                                 fail(key, Failure{Failure::Kind::Empty, reason});
+                                 fail(now, Failure{Failure::Kind::Empty, reason});
                                  return;
                              }
                              it->last = it->turn->state;
-                             endTurn(key);
-                             Q_EMIT finished(key, text, reason);
+                             endTurn(now);
+                             Q_EMIT finished(now, text, reason);
                          });
 }
 
@@ -1170,6 +1178,17 @@ void Client::failAll(const Failure &failure)
             it->id.clear();
         fail(key, failure);
     }
+}
+
+quint64 Client::nextSerial()
+{
+    static std::atomic<quint64> serial{0};
+    return ++serial;
+}
+
+QHash<QString, Client::Session>::iterator Client::findSerial(quint64 serial)
+{
+    return std::find_if(m_sessions.begin(), m_sessions.end(), [serial](const Session &s) { return s.serial == serial; });
 }
 
 QString Client::keyOf(const QString &sessionId) const

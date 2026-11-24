@@ -163,62 +163,20 @@ QList<SettingSpec> makeSpecs()
 
 QList<SettingSpec> makeNotebookSpecs()
 {
-    const auto spec = [](const char *key, const char *kind, const char *label) {
-        SettingSpec s;
-        s.key = QString::fromLatin1(key);
-        s.group = u"notebook"_s;
-        s.kind = QString::fromLatin1(kind);
-        s.property = s.key;
-        s.label = QString::fromLatin1(label);
-        s.notebook = true;
-        return s;
-    };
-    const auto choice = [&](const char *key, QStringList options, const char *label) {
-        SettingSpec s = spec(key, "choice", label);
-        s.options = std::move(options);
-        return s;
-    };
+    // The notebook's own, as the core lists them (brulion-cli's extension run reads the same).
     QList<SettingSpec> specs;
-    specs << spec("journalsFolder", "path", "the folder of the daily notes");
-    specs << spec("journalFileFormat", "text", "the daily notes' file names, a date format (\"yyyy-MM-dd\")");
-    specs << spec("journalTemplate", "path", "the daily notes' template, a page's path (\"templates/journal.md\")");
-    specs << spec("templatesFolder", "path", "the folder of the templates");
-    specs << spec("newPagesFolder", "path", "the folder of new pages (\"\": the notebook's root)");
-    specs << spec("attachmentsFolder", "path", "the folder of pasted pictures and files");
-    specs << spec("weeklyFolder", "path", "the folder of the weekly notes");
-    specs << spec("weeklyFileFormat", "text", "the weekly notes' file names (\"yyyy-'W'ww\")");
-    specs << spec("weeklyTemplate", "path", "the weekly notes' template");
-    specs << spec("monthlyFolder", "path", "the folder of the monthly notes");
-    specs << spec("monthlyFileFormat", "text", "the monthly notes' file names (\"yyyy-MM\")");
-    specs << spec("monthlyTemplate", "path", "the monthly notes' template");
-    specs << choice("journalMode", {u"outline"_s, u"document"_s}, "how daily notes are edited");
-    specs << choice("pageMode", {u"document"_s, u"outline"_s}, "how new pages are edited");
-    specs << spec("defaultReminderTime", "text", "the time of a reminder given without one, \"HH:mm\"");
-    specs << choice("weekStartsOn",
-                    {u"monday"_s, u"tuesday"_s, u"wednesday"_s, u"thursday"_s, u"friday"_s, u"saturday"_s,
-                     u"sunday"_s},
-                    "the first day of the week");
-    // The flashcards' card settings (the "flashcards" object; docs/SYNTAX.md §15).
-    specs << spec("flashcards.tags", "text", "the tags of the decks, \"flashcards, fiszki\" (\"\": this device's)");
-    specs << spec("flashcards.singleLineSeparator", "text", "a one-line card's separator (\"::\")");
-    specs << spec("flashcards.singleLineReversedSeparator", "text", "a reversed one-line card's separator (\":::\")");
-    specs << spec("flashcards.multilineSeparator", "text", "a multi-line card's separator line (\"?\")");
-    specs << spec("flashcards.multilineReversedSeparator", "text", "a reversed multi-line card's separator (\"??\")");
-    specs << spec("flashcards.multilineEndMarker", "text", "the line that ends a multi-line card (\"\": a blank line)");
-    specs << spec("flashcards.clozeHighlights", "toggle", "==highlights== are clozes");
-    specs << spec("flashcards.clozeBold", "toggle", "**bold text** is a cloze");
-    specs << spec("flashcards.clozeCurly", "toggle", "{{curly brackets}} are clozes");
-    specs << spec("flashcards.foldersAsDecks", "toggle", "a card's deck is its note's folder");
-    specs << spec("flashcards.reviewTags", "text", "the tags of notes reviewed as a whole, \"review\" (\"\": that)");
-    specs << spec("themePage", "path", "the notebook's theme page (\"\": none; Settings → Appearance)");
+    for (const extensions::NotebookSetting &n : extensions::notebookSettings()) {
+        SettingSpec s;
+        s.key = n.key;
+        s.group = u"notebook"_s;
+        s.kind = n.kind;
+        s.property = n.key;
+        s.options = n.options;
+        s.label = n.label;
+        s.notebook = true;
+        specs << s;
+    }
     return specs;
-}
-
-const QStringList &weekDays()
-{
-    static const QStringList days{u"monday"_s, u"tuesday"_s,  u"wednesday"_s, u"thursday"_s,
-                                  u"friday"_s, u"saturday"_s, u"sunday"_s};
-    return days;
 }
 
 // Edit distance (the nearest key in an error).
@@ -294,15 +252,8 @@ QVariant AppScripting::read(const SettingSpec &spec) const
 {
     if (spec.notebook) {
         // Workspace.config: the same JSON the command line prints (notebook::vaultConfigJson).
-        const QVariantMap config = m_app->workspace()->vaultConfig();
-        const qsizetype dot = spec.property.indexOf(u'.');
-        const QVariant v = dot < 0 ? config.value(spec.property)
-                                   : config.value(spec.property.left(dot)).toMap().value(spec.property.mid(dot + 1));
-        if (spec.key == u"weekStartsOn") {
-            const int day = v.toInt();
-            return day >= 1 && day <= 7 ? weekDays().at(day - 1) : weekDays().first();
-        }
-        return spec.kind == u"toggle" ? QVariant(v.toBool()) : QVariant(v.toString());
+        const extensions::NotebookSetting *setting = extensions::notebookSetting(spec.key);
+        return setting ? extensions::notebookSettingValue(*setting, m_app->workspace()->vaultConfig()) : QVariant();
     }
     QObject *target = spec.onApp ? static_cast<QObject *>(m_app) : static_cast<QObject *>(m_app->settings());
     const QVariant v = target->property(spec.property.toLatin1().constData());
@@ -318,13 +269,9 @@ QVariant AppScripting::read(const SettingSpec &spec) const
 bool AppScripting::write(const SettingSpec &spec, const QVariant &value)
 {
     if (spec.notebook) {
-        QVariant v = value;
-        if (spec.key == u"weekStartsOn")
-            v = int(weekDays().indexOf(value.toString())) + 1;
-        const qsizetype dot = spec.property.indexOf(u'.');
-        const QVariantMap change = dot < 0 ? QVariantMap{{spec.property, v}}
-                                           : QVariantMap{{spec.property.left(dot), QVariantMap{{spec.property.mid(dot + 1), v}}}};
-        return m_app->workspace()->isOpen() && m_app->workspace()->setConfig(change);
+        const extensions::NotebookSetting *setting = extensions::notebookSetting(spec.key);
+        return setting && m_app->workspace()->isOpen()
+               && m_app->workspace()->setConfig(extensions::notebookSettingChange(*setting, value));
     }
     QObject *target = spec.onApp ? static_cast<QObject *>(m_app) : static_cast<QObject *>(m_app->settings());
     const int index = target->metaObject()->indexOfProperty(spec.property.toLatin1().constData());

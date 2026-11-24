@@ -433,7 +433,8 @@ public:
     /// The conversation `key` is gone: its turn cancelled, its session closed where the agent
     /// closes sessions (`session/close`), and forgotten.
     void close(const QString &key);
-    /// The conversation `from` is now `to` (a page renamed): its session goes with it.
+    /// The conversation `from` is now `to` (a page renamed): its session goes with it, also while a
+    /// turn of it (a cancelled one too) still waits for the agent's answer.
     void rename(const QString &from, const QString &to);
 
     /// After the handshake: the agent's name ("" before), its version, whether it takes pictures,
@@ -491,6 +492,9 @@ private:
     };
     struct Session
     {
+        /// Which session this is, for as long as it lives: an answer of the agent finds its session
+        /// by it, under whatever conversation it is now (rename()), and never a later one of the same.
+        quint64 serial = nextSerial();
         QString id;                 // "" before session/new answered
         bool creating = false;      // session/new (or authenticate, load, resume) on its way
         std::optional<Turn> turn;   // the turn running (or cancelled, its answer still to come)
@@ -506,14 +510,18 @@ private:
     void sessionReady(const QString &key, const QString &id, const QJsonObject &result, bool fresh, bool resumed);
     void applyOptions(const QString &key);
     void sendPrompt(const QString &key);
+    /// `then` gets the conversation the session is under when the agent answered.
     void sendOption(const QString &key, const ConfigOption &option, const QJsonValue &value,
-                    std::function<void()> then);
+                    std::function<void(const QString &)> then);
     void fail(const QString &key, const Failure &failure);
     void failAll(const Failure &failure);
     void endTurn(const QString &key);
     void onRequest(const QJsonValue &id, const QString &method, const QJsonObject &params);
     void onNotification(const QString &method, const QJsonObject &params);
     QJsonObject sessionParams(const TurnInput &input) const;
+    static quint64 nextSerial();
+    /// The session numbered `serial` (end(): gone).
+    QHash<QString, Session>::iterator findSerial(quint64 serial);
 
     Connection m_connection;
     QString m_version;
