@@ -97,6 +97,9 @@ QtObject {
     // ---- Brand ---------------------------------------------------------------------------
     readonly property color ink: "#1f2430"
     readonly property color paper: "#fbf7ee"
+    /// Under a picture in a dark theme (AppSettings.lightPictureBacking): paper, a shade dimmer so
+    /// it does not glare beside the dark page; dark lines of a transparent picture read on it.
+    readonly property color pictureBacking: "#e9e5dc"
     readonly property color marginRed: "#e2574c"
     readonly property color amber: "#f2b33d"
     readonly property color gridBlue: "#9fc3e6"

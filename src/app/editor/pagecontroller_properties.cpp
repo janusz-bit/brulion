@@ -243,6 +243,7 @@ void PageController::updateNoteOptions()
     const auto flag = [](std::optional<bool> value) { return value ? (*value ? u"on"_s : u"off"_s) : QString(); };
     const QVariantMap map{{u"lineNumbers"_s, flag(o.lineNumbers)},
                           {u"pictureFrames"_s, flag(o.pictureFrames)},
+                          {u"pictureBacking"_s, flag(o.pictureBacking)},
                           {u"textWidth"_s, o.textWidth ? markdown::noteTextWidthName(*o.textWidth) : QString()},
                           {u"tasks"_s, o.tasksIgnored ? u"ignore"_s : QString()}};
     if (map == m_noteOptions)
@@ -260,6 +261,12 @@ int PageController::codeLineNumbers() const
 int PageController::pictureFrames() const
 {
     const QString v = m_noteOptions.value(u"pictureFrames"_s).toString();
+    return v.isEmpty() ? -1 : v == u"on" ? 1 : 0;
+}
+
+int PageController::pictureBacking() const
+{
+    const QString v = m_noteOptions.value(u"pictureBacking"_s).toString();
     return v.isEmpty() ? -1 : v == u"on" ? 1 : 0;
 }
 
@@ -357,6 +364,7 @@ QVariantMap PageController::setNoteOption(const QString &name, const QString &gi
         switch (*option) {
         case NoteOption::LineNumbers:
         case NoteOption::PictureFrames:
+        case NoteOption::PictureBacking:
             written = value == u"on";
             type = PropertyType::Checkbox;
             break;

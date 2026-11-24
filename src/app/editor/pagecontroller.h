@@ -222,12 +222,15 @@ class PageController : public QObject {
     /// EditorHost::webPicture()), host (a web picture's site), error } }.
     Q_PROPERTY(QVariantMap look READ look NOTIFY lookChanged FINAL)
     /// The note's own options (docs/SYNTAX.md §4 "Note options", markdown/noteoptions.h), from its
-    /// properties as they are now: { lineNumbers, pictureFrames: "" (the device's setting) | "on" |
-    /// "off", textWidth: "" | "narrow" | "normal" | "wide" | "full", tasks: "" | "ignore" }.
+    /// properties as they are now: { lineNumbers, pictureFrames, pictureBacking: "" (the device's
+    /// setting) | "on" | "off", textWidth: "" | "narrow" | "normal" | "wide" | "full", tasks: "" |
+    /// "ignore" }.
     Q_PROPERTY(QVariantMap noteOptions READ noteOptions NOTIFY noteOptionsChanged FINAL)
     /// The same typed, for the block views and the page: -1 the device's setting, 0 off, 1 on.
     Q_PROPERTY(int codeLineNumbers READ codeLineNumbers NOTIFY noteOptionsChanged FINAL)
     Q_PROPERTY(int pictureFrames READ pictureFrames NOTIFY noteOptionsChanged FINAL)
+    /// The light backing under pictures in a dark theme (AppSettings.lightPictureBacking).
+    Q_PROPERTY(int pictureBacking READ pictureBacking NOTIFY noteOptionsChanged FINAL)
     /// The width the note's text keeps within in pixels as Settings stores one (600, 680, 960; 0:
     /// the full width), -1: the device's setting.
     Q_PROPERTY(int textWidth READ textWidth NOTIFY noteOptionsChanged FINAL)
@@ -423,8 +426,10 @@ public:
     QVariantMap noteOptions() const { return m_noteOptions; }
     int codeLineNumbers() const;
     int pictureFrames() const;
+    int pictureBacking() const;
     int textWidth() const;
-    /// Set option `option` ("lineNumbers" | "pictureFrames" | "textWidth" | "tasks") to `value` as
+    /// Set option `option` ("lineNumbers" | "pictureFrames" | "pictureBacking" | "textWidth" |
+    /// "tasks") to `value` as
     /// in `noteOptions` ("on" / "off"; a width's name; "ignore"); "" removes every key of the
     /// option, so the device's setting holds again. The key the note has (the first of the
     /// option's keys, any case) keeps its place and its language; a new one is the interface's

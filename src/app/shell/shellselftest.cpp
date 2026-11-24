@@ -4133,13 +4133,21 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         return;
     }
 
-    // The thumbnail: drawn, white page with a hairline frame (also in the dark theme).
+    // The thumbnail: drawn, white page with a hairline frame (also in the dark theme). Its colour
+    // is read once the view has faded in: a view newly shown (coming from another one than the
+    // attachment's) is still translucent over the dark ground when the thumbnail is ready.
     app->openPage(note);
     QQuickItem *tile = nullptr;
+    const auto opaque = [](QQuickItem *item) {
+        for (; item; item = item->parentItem())
+            if (item->opacity() < 1)
+                return false;
+        return true;
+    };
     check(waitFor(
                   [&] {
                       tile = shownNamed(window->contentItem(), u"pdfEmbedTile"_s);
-                      return tile && tile->property("loaded").toBool();
+                      return tile && tile->property("loaded").toBool() && opaque(tile);
                   },
                   15000),
           "the PDF's thumbnail is drawn in the note");
@@ -5105,6 +5113,89 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     if (phone)
         check(nav && waitFor([&] { return nav->isVisible(); }), "back on the page, the bottom navigation too");
     app->goHome();
+}
+
+/// 5r. A picture in a dark theme lies on a light backing (AppSettings.lightPictureBacking): its
+/// embed in a note and the picture view put one under the painted picture — a transparent diagram's
+/// dark lines would vanish into the dark page — none in the light theme or with the setting off;
+/// a note's own `jasne-tlo` option wins over the setting.
+void checkPictureBacking(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *workspace = app->workspace();
+    AppSettings *settings = app->settings();
+    const QString mode = settings->themeMode();
+    const bool wasOn = settings->lightPictureBacking();
+    const QString page = u"Plan na jasnym tle.md"_s;
+    check(workspace->writeFile(page, u"Przezroczysty plan:\n\n![[plan-mieszkania.svg]]\n"_s),
+          "a page embeds a picture");
+    const auto shown = [window](const char *name) {
+        return uidriver::topmost(window, [name](QQuickItem *item) {
+            return item->objectName() == QLatin1StringView(name) && item->isVisible();
+        });
+    };
+    const auto embedImage = [window] {
+        return uidriver::topmost(window, [](QQuickItem *item) {
+            return item->objectName() == u"embedImage" && item->property("status").toInt() == 1
+                   && item->property("source").toUrl().path().endsWith(u"/plan-mieszkania.svg"_s);
+        });
+    };
+    // The backing named `backing` is shown exactly under the painted picture, or hidden.
+    const auto backingIs = [&](const char *backing, const std::function<QQuickItem *()> &image, bool expected) {
+        return waitFor([&] {
+            QQuickItem *b = shown(backing);
+            QQuickItem *img = image();
+            if (!expected)
+                return b == nullptr && img != nullptr;
+            if (!b || !img)
+                return false;
+            const QSizeF painted(img->property("paintedWidth").toReal(), img->property("paintedHeight").toReal());
+            const QPointF at = img->mapToItem(b->parentItem(),
+                                              QPointF((img->width() - painted.width()) / 2,
+                                                      (img->height() - painted.height()) / 2));
+            return painted.width() > 0 && std::abs(b->width() - painted.width()) < 0.5
+                   && std::abs(b->height() - painted.height()) < 0.5 && std::abs(b->x() - at.x()) < 0.5
+                   && std::abs(b->y() - at.y()) < 0.5;
+        });
+    };
+    const auto themes = [&](const char *backing, const std::function<QQuickItem *()> &image, const char *what) {
+        const auto say = [what](const char *rest) { return QByteArray(QByteArray(what) + rest); };
+        settings->setLightPictureBacking(true);
+        settings->setThemeMode(u"dark"_s);
+        check(backingIs(backing, image, true), say(": a light backing under the picture in the dark theme").constData());
+        settings->setLightPictureBacking(false);
+        check(backingIs(backing, image, false), say(": none with the setting off").constData());
+        settings->setLightPictureBacking(true);
+        settings->setThemeMode(u"light"_s);
+        check(backingIs(backing, image, false), say(": none in the light theme").constData());
+    };
+    app->openPage(page);
+    check(waitFor([&] { return embedImage() != nullptr; }, 5000), "the embedded picture is shown");
+    themes("embedPictureBacking", embedImage, "an embedded picture");
+    // The note's own option (`jasne-tlo`, "Note options") wins over the device's setting.
+    const QString own = u"Plan bez jasnego tła.md"_s;
+    check(workspace->writeFile(own, u"---\njasne-tlo: nie\n---\n![[plan-mieszkania.svg]]\n"_s)
+                  && workspace->writeFile(page, u"---\njasne-tlo: tak\n---\n![[plan-mieszkania.svg]]\n"_s),
+          "two notes set their own light backing");
+    settings->setThemeMode(u"dark"_s);
+    settings->setLightPictureBacking(false);
+    app->openPage(page);
+    check(backingIs("embedPictureBacking", embedImage, true), "a note's own option on: a backing with the setting off");
+    settings->setLightPictureBacking(true);
+    app->openPage(own);
+    check(backingIs("embedPictureBacking", embedImage, false), "a note's own option off: none with the setting on");
+    app->openPage(u"assets/plan-mieszkania.svg"_s);
+    const auto pictureImage = [window] {
+        return uidriver::topmost(window, [](QQuickItem *item) {
+            return item->objectName() == u"pictureImage" && item->isVisible() && item->property("status").toInt() == 1;
+        });
+    };
+    check(waitFor([&] { return pictureImage() != nullptr; }, 5000), "the picture opens on its own");
+    themes("pictureBacking", pictureImage, "the picture view");
+    settings->setThemeMode(mode);
+    settings->setLightPictureBacking(wasOn);
+    app->goHome();
+    workspace->deleteForever(workspace->deletePage(page));
+    workspace->deleteForever(workspace->deletePage(own));
 }
 
 /// 5j. A drawing another program wrote (excalidraw.com frames its strokes with its own margins):
@@ -12036,6 +12127,8 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         checkLinkPreviews(window, app, check, controllerFor);
         // 5b. A picture opens as a picture (checkPictureView).
         checkPictureView(window, app, check, controllerFor);
+        // 5r. A picture on a light backing in a dark theme (checkPictureBacking).
+        checkPictureBacking(window, app, check);
         // 5k. PDFs: the thumbnail, the viewer, drawing on a page (checkPdfViewer).
         checkPdfViewer(window, app, check, controllerFor);
         // Audio and video: the player of an embed, the now-playing bar, the player view, a voice note.

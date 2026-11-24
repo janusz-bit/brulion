@@ -5,7 +5,8 @@ import Brulion
 
 // ContentNoteOptionsDialog — the note's own options (docs/UI.md "Note options", docs/SYNTAX.md §4
 // "Note options"): whether its tasks are in Tasks and the calendar, line numbers beside its code
-// blocks, frames around its pictures and its text width. "As in Settings" leaves the choice to
+// blocks, frames around its pictures, the light background under its pictures in a dark theme and
+// its text width. "As in Settings" leaves the choice to
 // the device's setting (Settings → Editor); any other choice is written at once into the note's
 // properties (PageController.setNoteOption: one undo step each, the key in the interface's
 // language), so it travels with the file and shows in the properties panel.
@@ -22,6 +23,7 @@ BDialog {
     /// The note's options now (PageController.noteOptions).
     readonly property string lineNumbers: dialog.option("lineNumbers")
     readonly property string pictureFrames: dialog.option("pictureFrames")
+    readonly property string pictureBacking: dialog.option("pictureBacking")
     readonly property string textWidth: dialog.option("textWidth")
     readonly property bool tasksIgnored: dialog.option("tasks") === "ignore"
     /// The device's text width as a name ("" for a width no choice has).
@@ -110,6 +112,24 @@ BDialog {
             controlled: true
             currentValue: dialog.pictureFrames
             onActivated: (value) => dialog.setOption("pictureFrames", value)
+        }
+    }
+    ShellSettingRow {
+        Layout.fillWidth: true
+        title: qsTr("Light background under pictures")
+        //: %1: "on" or "off", the device's setting
+        description: qsTr("In a dark theme. As in Settings: %1.").arg(dialog.onOff(AppSettings.lightPictureBacking))
+        BSegmented {
+            objectName: "noteOptionPictureBacking"
+            accessibleName: qsTr("Light background under pictures")
+            model: [
+                { value: "", text: qsTr("As in Settings") },
+                { value: "on", text: qsTr("On") },
+                { value: "off", text: qsTr("Off") }
+            ]
+            controlled: true
+            currentValue: dialog.pictureBacking
+            onActivated: (value) => dialog.setOption("pictureBacking", value)
         }
     }
     ShellSettingRow {

@@ -179,6 +179,12 @@ class AppSettings : public QObject {
     /// yet — loading, from the internet waiting for "Show", a format the device cannot decode —
     /// has its frame either way.
     Q_PROPERTY(bool pictureFrames READ pictureFrames WRITE setPictureFrames NOTIFY pictureFramesChanged FINAL)
+    /// In a dark theme a picture is drawn on a light backing (Theme.pictureBacking; default on):
+    /// a transparent PNG or SVG with dark lines (a diagram, a scan) stays readable instead of
+    /// vanishing into the dark page. An opaque picture covers the backing, so photos look the same.
+    /// Drawings have a dark version of their own and never get it. EmbedView and the picture viewers.
+    Q_PROPERTY(bool lightPictureBacking READ lightPictureBacking WRITE setLightPictureBacking NOTIFY
+                       lightPictureBackingChanged FINAL)
     /// Line numbers beside the code blocks of notes (CodeBlockView; default off): each line of
     /// the block's text numbered from 1, a wrapped line once. They are not part of the text (a
     /// copy, the file and the export have none).
@@ -469,6 +475,8 @@ public:
     void setWebPicturesShown(bool on);
     bool pictureFrames() const;
     void setPictureFrames(bool on);
+    bool lightPictureBacking() const;
+    void setLightPictureBacking(bool on);
     bool codeLineNumbers() const;
     void setCodeLineNumbers(bool on);
     QString exportWebPictures() const;
@@ -684,6 +692,7 @@ Q_SIGNALS:
     void propertiesExpandedChanged();
     void webPicturesShownChanged();
     void pictureFramesChanged();
+    void lightPictureBackingChanged();
     void codeLineNumbersChanged();
     void exportWebPicturesChanged();
     void spellCheckChanged();

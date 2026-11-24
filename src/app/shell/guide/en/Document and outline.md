@@ -23,10 +23,10 @@ This page is a document; so is [[Tasks|Tasks]]. The journal is an outline by def
 ## Note options
 The page menu **⋯** → **Note options…** sets how this one note is shown, whatever the device's settings say:
 - **Tasks in Tasks and the calendar** — off: the checkboxes stay on the page, but its tasks are left out of the task lists (a packing list, a checklist to copy).
-- **Line numbers in code blocks**, **Frames around pictures** — As in Settings, On or Off.
+- **Line numbers in code blocks**, **Frames around pictures**, **Light background under pictures** (in a dark theme) — As in Settings, On or Off.
 - **Text width** — As in Settings, Narrow, Normal, Wide or Full.
 
-The choices are saved in the note as properties (`line-numbers: true`, `picture-frames: false`, `text-width: wide`, `tasks: ignore`; with the Polish interface `numery-linii`, `ramki`, `szerokosc-tekstu`, `zadania: ignoruj`), so the note looks the same on every device. “As in Settings” removes the property again.
+The choices are saved in the note as properties (`line-numbers: true`, `picture-frames: false`, `picture-backing: false`, `text-width: wide`, `tasks: ignore`; with the Polish interface `numery-linii`, `ramki`, `jasne-tlo`, `szerokosc-tekstu`, `zadania: ignoruj`), so the note looks the same on every device. “As in Settings” removes the property again.
 
 ## Blocks
 A block is every list item and, outside lists, every paragraph, heading, table, quote and code block. Click a block to edit it; when you aren't editing it, you see it formatted.
@@ -100,6 +100,8 @@ While you read you can still select blocks and copy them (also “Copy link” �
 
 ## Images and files
 Paste a picture (Ctrl+V), drop files onto the page or use `/Image…` — the file picker accepts several pictures at once, in the browser too. The files go to the attachments folder (`assets/`) and are embedded as `![[file.png]]`.
+
+In a dark theme a picture lies on a light background, so a diagram or a scan with dark lines on a transparent background doesn't vanish into the dark page; photos look the same. **Settings → Editor → Light background under pictures in a dark theme** turns it off (e.g. for white logos made for dark pages), and **Note options…** (above) sets it for one note. Drawings have a dark version of their own and never get it.
 
 You insert a file of any type as a link with the `/File…` command: `[[report.docx]]` appears in the text (several chosen files — several links). A file from outside the notebook goes to the attachments folder, and a file that is already in the notebook stays where it is. A note, a picture, a PDF, a recording and a video open as usual when clicked; other files open in Brulion read-only, as text.
 
