@@ -206,12 +206,13 @@ class TestRemoteControl : public QObject {
         return false;
     }
 
-    void startApp(bool remoteControl, const QString &size = u"1280x800"_s)
+    void startApp(bool remoteControl, const QString &size = u"1280x800"_s, const QStringList &more = {})
     {
         QStringList args{u"--vault"_s,          m_vault,       u"--size"_s, size, u"--now"_s,
                          u"2026-10-14 10:00"_s, u"--locale"_s, u"pl"_s};
         if (remoteControl)
             args.append(u"--remote-control"_s);
+        args.append(more);
         m_app.setProcessEnvironment(environment());
         // A file, not a pipe: nobody reads a pipe while the test waits for the command line.
         m_app.setStandardOutputFile(m_log, QIODevice::Append);
@@ -1252,6 +1253,67 @@ private Q_SLOTS:
         QCOMPARE(app({u"navigate"_s, uR"({"view":"settings","section":"extensions"})"_s}).code, 0);
         r = app({u"wait"_s, u"--object-name"_s, u"chatScheduleRow"_s, u"--timeout"_s, QString::number(20000 * kSlowdown)});
         QVERIFY2(r.code == 0, qPrintable(r.describe()));
+    }
+
+    // A conversation with an agent on a phone: the chips over it (who answers, how it asks, the page)
+    // give way, the conversation — its header's buttons, the messages, the field — stays in the
+    // window. (The chips at their full width in Polish once pushed it all past the right edge.)
+    void chatOnAPhone()
+    {
+        {
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.setValue(u"devtools/remoteControl"_s, true);
+            settings.setValue(
+                    u"ai/agents"_s,
+                    QString::fromUtf8(QJsonDocument(
+                            QJsonArray{QJsonObject{{u"id"_s, u"claude"_s},
+                                                   {u"name"_s, u"Claude Code"_s},
+                                                   {u"command"_s, u"\"%1\""_s.arg(QStringLiteral(FAKE_ACP_AGENT))},
+                                                    {u"tools"_s, false}}})
+                                    .toJson(QJsonDocument::Compact)));
+        }
+        const auto cleanUp = qScopeGuard([this] {
+            stopApp();
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.remove(u"ai/agents"_s);
+            settings.setValue(u"devtools/remoteControl"_s, false);
+        });
+        startApp(false, u"412x915"_s, {u"--touch"_s});
+        Run r;
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [](const Run &x) { return x.code == 0 && x.result().value(u"ready"_s).toBool(); }, kStartMs,
+                         &r),
+                 qPrintable(r.describe()));
+        const double windowWidth = r.result().value(u"window"_s).toObject().value(u"width"_s).toDouble();
+        QCOMPARE(windowWidth, 412.0);
+        r = app({u"chat"_s, u"start"_s, u"Witaj"_s, u"--partner"_s, u"acp:claude"_s, u"--page"_s,
+                 u"Długa nazwa strony o zażółconej gęślej jaźni"_s, u"--wait"_s, u"--timeout"_s,
+                 QString::number(30000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        const QString path = r.result().value(u"path"_s).toString();
+        QCOMPARE(app({u"navigate"_s,
+                      QString::fromUtf8(QJsonDocument(QJsonObject{{u"view"_s, u"chat"_s}, {u"path"_s, path}})
+                                                .toJson(QJsonDocument::Compact))})
+                         .code,
+                 0);
+        r = app({u"wait"_s, u"--object-name"_s, u"chatApprovals"_s, u"--timeout"_s,
+                 QString::number(20000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(app({u"wait"_s, u"--idle"_s, u"--timeout"_s, QString::number(20000 * kSlowdown)}).code, 0);
+        for (const QString &name :
+             {u"chatPartner"_s, u"chatApprovals"_s, u"chatAboutPage"_s, u"chatOpenPage"_s, u"chatNewHere"_s,
+              u"chatConversation"_s, u"chatMessages"_s, u"chatInput"_s, u"chatSend"_s}) {
+            r = app({u"find"_s, u"--object-name"_s, name});
+            QVERIFY2(r.code == 0, qPrintable(r.describe()));
+            const QJsonArray items = r.result().value(u"items"_s).toArray();
+            QVERIFY2(!items.isEmpty(), qPrintable(name));
+            const QJsonObject g = items.first().toObject().value(u"geometry"_s).toObject();
+            const double right = g.value(u"x"_s).toDouble() + g.value(u"width"_s).toDouble();
+            QVERIFY2(g.value(u"width"_s).toDouble() > 0, qPrintable(name));
+            QVERIFY2(right <= windowWidth + 0.5,
+                     qPrintable(u"%1 ends at %2 in a window %3 wide"_s.arg(name).arg(right).arg(windowWidth)));
+        }
     }
 
     // No private runtime folder ($XDG_RUNTIME_DIR unset, Qt's <temp>/runtime-<user> not to be

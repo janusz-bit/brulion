@@ -1153,62 +1153,73 @@ FocusScope {
                 Layout.topMargin: Theme.space2
                 visible: root.path !== ""
                 spacing: Theme.space2
-                // (Its name is the top bar's title, the side panel's header in the panel.)
-                BChip {
-                    id: partnerChip
-                    objectName: "chatPartner"
-                    visible: root.choosesPartner || root.partnerHere !== ""
-                    Layout.maximumWidth: 200
-                    iconName: "sparkles"
-                    text: root.partnerName(root.partnerHere)
-                    interactive: root.choosesPartner
-                    outlined: false
-                    Accessible.name: qsTr("Answered by %1").arg(partnerChip.text)
-                    onClicked: partnerMenu.popup(partnerChip, 0, partnerChip.height)
-                }
-                // How an AI agent's questions are answered here (T3 Code's permission modes).
-                BChip {
-                    id: approvalsChip
-                    objectName: "chatApprovals"
-                    visible: root.chats.isAgent(root.partnerHere)
-                    iconName: "shield-check"
-                    text: root.approvalsLabel(root.approvalsHere)
-                    interactive: true
-                    outlined: false
-                    Accessible.name: qsTr("Approvals: %1").arg(approvalsChip.text)
-                    onClicked: approvalsMenu.popup(approvalsChip, 0, approvalsChip.height)
-                }
-                BChip {
-                    objectName: "chatForkSource"
-                    visible: root.forkSource !== ""
-                    Layout.maximumWidth: 220
-                    iconName: "git-branch"
-                    text: qsTr("Forked from %1").arg(root.chats.nameOf(root.forkSource))
-                    interactive: true
-                    outlined: false
-                    onClicked: root.open(root.forkSource, false)
-                }
-                Item {
+                // The chips wrap onto another line where they do not fit (a phone), and a chip
+                // wider than the whole line elides its text: chips in the row itself, at their
+                // preferred widths (a layout never shrinks an item without fillWidth), pushed the
+                // whole conversation — its messages, the field — past the window's right edge.
+                Flow {
+                    id: headerChips
                     Layout.fillWidth: true
-                }
-                BChip {
-                    visible: messages.page !== ""
-                    Layout.maximumWidth: 220
-                    iconName: "file-text"
-                    text: messages.page
-                    interactive: true
-                    outlined: false
-                    Accessible.name: qsTr("About the page %1").arg(messages.page)
-                    onClicked: tools.openLink("page:" + Js.encodeURIComponent(messages.page), root.path, false)
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: Theme.space2
+                    // (Its name is the top bar's title, the side panel's header in the panel.)
+                    BChip {
+                        id: partnerChip
+                        objectName: "chatPartner"
+                        visible: root.choosesPartner || root.partnerHere !== ""
+                        width: Math.min(implicitWidth, 200, headerChips.width)
+                        iconName: "sparkles"
+                        text: root.partnerName(root.partnerHere)
+                        interactive: root.choosesPartner
+                        outlined: false
+                        Accessible.name: qsTr("Answered by %1").arg(partnerChip.text)
+                        onClicked: partnerMenu.popup(partnerChip, 0, partnerChip.height)
+                    }
+                    // How an AI agent's questions are answered here (T3 Code's permission modes).
+                    BChip {
+                        id: approvalsChip
+                        objectName: "chatApprovals"
+                        visible: root.chats.isAgent(root.partnerHere)
+                        width: Math.min(implicitWidth, headerChips.width)
+                        iconName: "shield-check"
+                        text: root.approvalsLabel(root.approvalsHere)
+                        interactive: true
+                        outlined: false
+                        Accessible.name: qsTr("Approvals: %1").arg(approvalsChip.text)
+                        onClicked: approvalsMenu.popup(approvalsChip, 0, approvalsChip.height)
+                    }
+                    BChip {
+                        objectName: "chatForkSource"
+                        visible: root.forkSource !== ""
+                        width: Math.min(implicitWidth, 220, headerChips.width)
+                        iconName: "git-branch"
+                        text: qsTr("Forked from %1").arg(root.chats.nameOf(root.forkSource))
+                        interactive: true
+                        outlined: false
+                        onClicked: root.open(root.forkSource, false)
+                    }
+                    BChip {
+                        objectName: "chatAboutPage"
+                        visible: messages.page !== ""
+                        width: Math.min(implicitWidth, 220, headerChips.width)
+                        iconName: "file-text"
+                        text: messages.page
+                        interactive: true
+                        outlined: false
+                        Accessible.name: qsTr("About the page %1").arg(messages.page)
+                        onClicked: tools.openLink("page:" + Js.encodeURIComponent(messages.page), root.path, false)
+                    }
                 }
                 BIconButton {
                     objectName: "chatOpenPage"
+                    Layout.alignment: Qt.AlignTop
                     label: qsTr("Open the conversation as a page")
                     iconName: "file-text"
                     onClicked: AppController.openPage(root.path)
                 }
                 BIconButton {
                     objectName: "chatNewHere"
+                    Layout.alignment: Qt.AlignTop
                     visible: !root.listShown
                     label: qsTr("New conversation")
                     iconName: "plus"
