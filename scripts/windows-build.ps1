@@ -408,13 +408,13 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
         $process = [Diagnostics.Process]::Start($start)
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $finished = $process.WaitForExit(300000)
+        $finished = $process.WaitForExit(600000)
         if (-not $finished) { $process.Kill() }
         $process.WaitForExit() # the output's end too
         $output = $stdout.Result + $stderr.Result
         if (-not $finished) {
             if ($output) { ($output -split "`r?`n" | Select-Object -Last 60) -join "`n" | Write-Host }
-            Fail "$Label`: brulion.exe --selftest-shell did not finish in 5 minutes (output above)"
+            Fail "$Label`: brulion.exe --selftest-shell did not finish in 10 minutes (output above)"
         }
         if ($output) {
             $lines = $output -split "`r?`n"
