@@ -1237,6 +1237,7 @@ int WorkspaceChats::pickPicturesInBrowser()
     for (const QString &extension : paths::pictureExtensions())
         filters << u"*."_s + extension;
     const QPointer<WorkspaceChats> self(this);
+    //: %1: the file name patterns of pictures, e.g. "*.png *.jpg *.jpeg"
     platform::wasm::openFiles({tr("Pictures (%1)").arg(filters.join(u' '))}, true, MaxPickedPictureBytes,
                               MaxPickedPicturesBytes, [self, pick](const QList<platform::PickedFile> &files) {
                                   if (!self || files.isEmpty())

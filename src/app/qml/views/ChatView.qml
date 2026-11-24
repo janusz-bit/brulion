@@ -505,8 +505,10 @@ FocusScope {
         function onPicturesPicked(pick: int, paths: list<string>) {
             if (pick === 0 || pick !== root.picturePick)
                 return
+            const joined = Js.concatStrings(root.attached, paths)
+            const unique = Js.uniqueStrings(joined)
             root.picturePick = 0
-            root.attached = Js.uniqueStrings(Js.concatStrings(root.attached, paths))
+            root.attached = unique
         }
         function onPhotoTaken(path: string) {
             if (!root.takingPhoto)
