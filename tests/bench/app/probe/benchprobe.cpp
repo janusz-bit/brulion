@@ -1356,7 +1356,9 @@ private:
     }
     void wait(int ms)
     {
-        add(u"wait"_s, nullptr, [this, ms] { return monoNs() - m_stepStart >= qint64(ms) * 1000000; });
+        // (A step fails after its timeout: a long wait needs a longer one.)
+        add(u"wait"_s, nullptr, [this, ms] { return monoNs() - m_stepStart >= qint64(ms) * 1000000; },
+            std::max<qint64>(60000, qint64(ms) + 30000));
     }
     void waitUntil(const QString &name, std::function<bool()> cond, qint64 timeoutMs = 60000, bool markIt = true)
     {

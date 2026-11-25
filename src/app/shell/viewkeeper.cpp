@@ -1,5 +1,6 @@
 #include "viewkeeper.h"
 
+#include "memorykeeper.h"
 #include "memorypolicy.h"
 
 #include <QVariant>
@@ -122,6 +123,10 @@ void ViewKeeper::drop(const QString &key)
 {
     if (QObject *loader = m_loaders.value(key))
         loader->setProperty("kept", false);
+    // What the view held goes back to the system once the app is quiet (its deletion comes first:
+    // the keeper waits).
+    if (ui::MemoryKeeper *keeper = ui::MemoryKeeper::instance())
+        keeper->released();
     Q_EMIT letGo(key);
 }
 
