@@ -159,6 +159,21 @@ std::optional<QByteArray> ContentCache::get(const VaultPath &path) const
     return bytes;
 }
 
+bool ContentCache::holds(const VaultPath &path, const QByteArray &bytes) const
+{
+    const auto it = m_items.constFind(path);
+    if (it == m_items.cend() || it->size != bytes.size())
+        return false;
+    if (!it->isText)
+        return it->bytes == bytes;
+    const QByteArray &bom = vaultutil::utf8Bom();
+    if (bytes.startsWith(bom) != it->bom)
+        return false;
+    const QByteArrayView body = it->bom ? QByteArrayView(bytes).sliced(bom.size()) : QByteArrayView(bytes);
+    // The text encoded (fast for ASCII) against the bytes, byte by byte: exact.
+    return QByteArrayView(it->text.toUtf8()) == body;
+}
+
 void ContentCache::insert(const VaultPath &path, Item item)
 {
     remove(path);
@@ -951,9 +966,8 @@ void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint6
         return;
     const auto hash = hashes.constFind(path);
     // The content the vault holds already comes with its hash (rememberContent() keeps both).
-    const std::optional<QByteArray> cached = contents.get(path);
     const QString currentHash =
-            cached && hash != hashes.cend() && *cached == current ? *hash : text::fnv1a64Hex(current);
+            hash != hashes.cend() && contents.holds(path, current) ? *hash : text::fnv1a64Hex(current);
     if (hash != hashes.cend() && *hash != currentHash) {
         // Changed behind our back without a visible stat change (coarse timestamps).
         staleContent.insert(path);

@@ -165,6 +165,8 @@ public:
     /// Larger files are never cached — and never read while scanning (see comparesContent).
     static constexpr qint64 kMaxItemBytes = kDefaultLimit / 4;
     std::optional<QByteArray> get(const VaultPath &path) const;
+    /// Does the entry of `path` hold exactly `bytes`? (A text entry compares without encoding.)
+    bool holds(const VaultPath &path, const QByteArray &bytes) const;
     bool contains(const VaultPath &path) const { return m_items.contains(path); }
     void put(const VaultPath &path, const QByteArray &bytes);
     /// `bytes` and the text they decode to (vaultutil::decodeUtf8()): kept as the text when

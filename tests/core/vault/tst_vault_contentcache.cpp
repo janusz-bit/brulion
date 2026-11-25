@@ -68,6 +68,35 @@ private Q_SLOTS:
         QCOMPARE(*back, bytes);
     }
 
+    void holdsComparesTheBytes_data()
+    {
+        QTest::addColumn<QByteArray>("stored");
+        QTest::addColumn<QByteArray>("other");
+        QTest::addColumn<bool>("same");
+        const QByteArray polish = u"- Zażółć gęślą jaźń\r\n"_s.toUtf8();
+        QTest::newRow("same") << polish << polish << true;
+        QTest::newRow("one letter") << polish << u"- Zażółć gęślą jaźn\r\n"_s.toUtf8() << false;
+        QTest::newRow("other size") << polish << polish + 'x' << false;
+        QTest::newRow("bom added") << "abc"_ba << "\xEF\xBB\xBF"_ba << false;
+        QTest::newRow("same with bom") << "\xEF\xBB\xBF" "abc"_ba << "\xEF\xBB\xBF" "abc"_ba << true;
+        QTest::newRow("bom dropped") << "\xEF\xBB\xBF" "abc"_ba << "abcdef"_ba << false;
+        // Invalid UTF-8 of the same size that decodes to the same text is other bytes.
+        QTest::newRow("same text, invalid bytes") << "\xEF\xBF\xBD" "bc"_ba << "\xF0\x9F\x98" "bc"_ba << false;
+        QTest::newRow("empty") << QByteArray() << QByteArray() << true;
+    }
+    void holdsComparesTheBytes()
+    {
+        QFETCH(QByteArray, stored);
+        QFETCH(QByteArray, other);
+        QFETCH(bool, same);
+        ContentCache cache;
+        cache.put(u"n.md"_s, stored, vaultutil::decodeUtf8(stored), keyOf(stored));
+        QCOMPARE(cache.holds(u"n.md"_s, other), same);
+        cache.put(u"b.md"_s, stored); // as bytes
+        QCOMPARE(cache.holds(u"b.md"_s, other), same);
+        QVERIFY(!cache.holds(u"none.md"_s, other));
+    }
+
     void sharesTheText()
     {
         ContentCache cache;
