@@ -45,8 +45,20 @@ struct SearchIndexAccess {
     using Doc = SearchIndex::Doc;
     using Posting = SearchIndex::Posting;
     using PostingList = SearchIndex::PostingList;
-    static const std::map<QString, PostingList> &postings(const SearchIndex &s) { return s.m_postings; }
-    static std::map<QString, PostingList> &postings(SearchIndex &s) { return s.m_postings; }
+    using Dictionary = SearchIndex::Dictionary;
+    using Term = SearchIndex::Term;
+    static const Dictionary &postings(const SearchIndex &s) { return s.m_postings; }
+    static Dictionary &postings(SearchIndex &s) { return s.m_postings; }
+    static const QList<SearchIndex::FieldCounts> &overflow(const SearchIndex &s) { return s.m_overflow; }
+    static SearchIndex::FieldCounts counts(Posting p, const QList<SearchIndex::FieldCounts> &overflow)
+    {
+        return SearchIndex::unpack(p.tf, overflow);
+    }
+    static Posting makePosting(SearchIndex &s, int doc, const SearchIndex::FieldCounts &tf)
+    {
+        return s.makePosting(doc, tf);
+    }
+    static quint32 newTermId(SearchIndex &s, Dictionary::iterator it) { return s.newTermId(it); }
     static const QList<Doc> &docs(const SearchIndex &s) { return s.m_docs; }
     static QList<Doc> &docs(SearchIndex &s) { return s.m_docs; }
     static QHash<QString, int> &byId(SearchIndex &s) { return s.m_byId; }
@@ -78,6 +90,7 @@ struct SearchCopy {
     };
     QList<Doc> docs;
     QList<std::pair<QString, SearchIndexAccess::PostingList>> postings;
+    QList<SearchIndex::FieldCounts> overflow; ///< the counts postings do not hold themselves
 };
 
 void copyDocs(const SearchIndex &search, SearchCopy &out)
@@ -86,6 +99,7 @@ void copyDocs(const SearchIndex &search, SearchCopy &out)
     out.docs.reserve(docs.size());
     for (const SearchIndexAccess::Doc &d : docs)
         out.docs.append({d.id, d.contentKey, d.length, d.used});
+    out.overflow = SearchIndexAccess::overflow(search);
 }
 
 // ---- writing ------------------------------------------------------------------------------------
@@ -590,7 +604,7 @@ public:
                 const int doc = m_renumbered.value(p.doc, -1);
                 o.varint(quint64(doc - previous)); // >= 1: sorted by doc
                 previous = doc;
-                for (const quint32 n : p.tf)
+                for (const quint32 n : A::counts(p, m_search.overflow))
                     o.varint(n);
             }
             if (timer && timer->elapsed() >= budgetMs)
@@ -833,7 +847,7 @@ QByteArray encodeSearch(const SearchIndex &search)
     SearchCopy copy;
     copyDocs(search, copy);
     for (const auto &[term, list] : SearchIndexAccess::postings(search))
-        copy.postings.append({term, list});
+        copy.postings.append({term, list.postings});
     QByteArray body;
     SearchEncoder encoder(copy);
     while (!encoder.step(body, nullptr, 0)) { }
@@ -903,8 +917,9 @@ struct Reader::SearchDecoder::Private {
         if (in.failed() || n == 0)
             return fail();
         auto &postings = A::postings(out);
-        const auto entry = postings.emplace_hint(postings.end(), term, A::PostingList());
-        A::PostingList &list = entry->second;
+        const auto entry = postings.emplace_hint(postings.end(), term, A::Term());
+        entry->second.id = A::newTermId(out, entry);
+        A::PostingList &list = entry->second.postings;
         list.reserve(n);
         QList<A::Doc> &docs = A::docs(out);
         qint64 doc = -1;
@@ -915,16 +930,15 @@ struct Reader::SearchDecoder::Private {
             doc += qint64(delta);
             if (doc >= docCount)
                 return fail();
-            A::Posting p;
-            p.doc = int(doc);
-            for (quint32 &tf : p.tf) {
+            SearchIndex::FieldCounts counts{};
+            for (quint32 &tf : counts) {
                 const quint64 v = in.varint();
                 if (v > std::numeric_limits<quint32>::max())
                     return fail();
                 tf = quint32(v);
             }
-            list.append(p);
-            docs[doc].terms.append(&entry->first);
+            list.append(A::makePosting(out, int(doc), counts));
+            docs[doc].terms.append(entry->second.id);
         }
         return in.failed() ? fail() : false;
     }
@@ -1292,7 +1306,7 @@ SnapshotTaker::State SnapshotTaker::step(int budgetMs)
         auto it = d->lastTerm.isNull() ? postings.begin() : postings.upper_bound(d->lastTerm);
         // The clock is read every 256 terms: copying one costs two reference counts.
         for (int n = 1; it != postings.end(); ++it, ++n) {
-            out.search.postings.append({it->first, it->second}); // shared
+            out.search.postings.append({it->first, it->second.postings}); // shared
             if ((n & 255) == 0 && timer.elapsed() >= budgetMs && std::next(it) != postings.end()) {
                 d->lastTerm = it->first;
                 return State::More;
