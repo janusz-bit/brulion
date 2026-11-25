@@ -464,6 +464,23 @@ Details in docs/PERFORMANCE.md, "Next steps":
   looks at every picture frame of a window once per frame (one `mapRectToScene` each: 6 % of the
   GUI thread's instructions while a page of forty photos scrolls) — for pages of hundreds of
   pictures, look per scroller and only when it moved;
+* **Memory: what is left** (docs/PERFORMANCE.md "Memory: only what is in use") — a real phone:
+  PSS in use and in the background, the kept views and the away rules there, and whether a hidden
+  window's graphics can be released on Android (`MemoryPolicy.setReleasesGraphics`, Linux only so
+  far); letting go of the program's own pages on Android (`platform::releaseProgramPages()`; the
+  system does it for cached apps by itself on recent versions) and on Windows (its working set
+  can be emptied the same way); the functions' start-up order for Android and for the AppImage
+  (`cmake/startup-order.txt` is made on Linux and read by lld only — names with the standard
+  library's types in them differ under the NDK's, and GNU ld takes another kind of file); the
+  order file is written by hand (`scripts/startup-order.py` before a release) — CI could say when
+  it is stale; a view that was let go of comes back at its top, not where it was scrolled; Qt
+  loads every image plugin for a PNG (53 libraries with KDE's formats installed); poppler and
+  what it brings are linked, not loaded with the first PDF; the Polish translation is unpacked
+  onto the heap (1.3 MB); Qt Wayland keeps a picture of the whole window for its own title bar
+  where the compositor draws none (GNOME: 4 MB at 1280 × 800, 33 MB on a 4K screen); the
+  read-only data the loader relocates (2.8 MB of tables that qmlcachegen's code points into)
+  is private to every process; fewer allocator arenas (2–8 MB less private memory, but the index
+  of 10 000 notes took 15 % longer to load in the one run tried);
 * **Scrolling: empty texts make every scroll step walk the page** — a `Text` whose text was never
   set keeps Qt's `ItemObservesViewport` flag ("until its size is known"), so each scroll step
   walks from the list down to every such item (`QQuickItemPrivate::transformChanged`: 60 % of the

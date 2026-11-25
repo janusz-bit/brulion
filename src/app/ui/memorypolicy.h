@@ -6,8 +6,9 @@
 // scene graph and graphics context, the spell checker's dictionaries, decoded icons and pictures,
 // QML types of views long left. The policy bounds each of them by use:
 //
-//   * a pane keeps `keptViews` hidden views (the most recently shown: three, so the four views
-//     of a phone's bottom navigation never rebuild each other), each for `hiddenViewMs`;
+//   * a pane keeps `keptViews` hidden views (the most recently shown: three, so a rotation
+//     through the four views of a phone's bottom navigation never rebuilds one), each for
+//     `hiddenViewMs`;
 //   * `buildAhead`: views and popups are built ahead only while the app is in use;
 //   * `inUse`: false once the app was away — another program in front for `unfocusedMs`, or no
 //     window shown at all for `hiddenMs` (the tray, a minimised window, a phone's home screen).

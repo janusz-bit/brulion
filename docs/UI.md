@@ -2471,8 +2471,9 @@ shown with, and shown again at once, where it was scrolled, instead of being bui
 building one took 0.5–1 s); a view hidden this way ends its editing first (`endEditing()`, the
 touch keyboard goes). Kept while they are in use, not for good (`ViewKeeper`,
 `src/app/shell/viewkeeper.h`; the limits are `MemoryPolicy`'s, `src/app/ui/memorypolicy.h`): a
-pane holds the three hidden views shown most recently (`MemoryPolicy.keptViews`: the four views of
-a phone's bottom navigation never rebuild each other), lets go of all of them once no view was
+pane holds the three hidden views shown most recently (`MemoryPolicy.keptViews`: a rotation
+through the four views of a phone's bottom navigation never rebuilds one; with a page or another
+view in between, the one shown longest ago is), lets go of all of them once no view was
 switched for five minutes (`hiddenViewMs`), and when the app is away (below); a view let go is
 made again when it is shown next, with its route — not where it was scrolled. The main window's
 main pane also builds one of them ahead, in the background
