@@ -6,7 +6,8 @@
 // scene graph and graphics context, the spell checker's dictionaries, decoded icons and pictures,
 // QML types of views long left. The policy bounds each of them by use:
 //
-//   * a pane keeps `keptViews` hidden views (the most recently shown), each for `hiddenViewMs`;
+//   * a pane keeps `keptViews` hidden views (the most recently shown: three, so the four views
+//     of a phone's bottom navigation never rebuild each other), each for `hiddenViewMs`;
 //   * `buildAhead`: views and popups are built ahead only while the app is in use;
 //   * `inUse`: false once the app was away — another program in front for `unfocusedMs`, or no
 //     window shown at all for `hiddenMs` (the tray, a minimised window, a phone's home screen).
@@ -24,6 +25,7 @@
 //   BRULION_MEMORY_POLICY=0   the old behaviour for A/B measurements: every view kept, everything
 //                             built ahead, nothing let go
 //   BRULION_AWAY_MS=<ms>      both delays (tests, measurements)
+//   BRULION_HIDDEN_VIEW_MS=<ms>   `hiddenViewMs` (measurements: the state after a while in one view)
 //   BRULION_RELEASE_GRAPHICS=1 / 0   a hidden window's scene graph and graphics context released
 //                             or not, whatever the platform's default (`releasesGraphics`)
 //
@@ -99,9 +101,13 @@ public:
     void setState(bool active, bool shown);
 
 public Q_SLOTS:
-    /// As if the app had been away long enough, now (`hidden`: as with no window shown): the
-    /// palette's "Free memory now", tests, measurements. The app stays in use.
+    /// Everything hidden goes now, as when the app has been away long enough (`hidden`: as with no
+    /// window shown). The app stays in use.
     void letGoNow(bool hidden = false);
+    /// Tests and measurements: the app away at once (`hidden`: as with no window shown) — not in
+    /// use, everything hidden let go —, or (`away` false) in use again. The application's own
+    /// state is not followed any more (setFollowsApplication(true) to follow it again).
+    void setAway(bool away, bool hidden = false);
 
 Q_SIGNALS:
     void inUseChanged();
@@ -124,7 +130,7 @@ private:
     QPointer<QQmlEngine> m_engine;
     QTimer m_awayTimer;    ///< the app becomes "away" when it fires
     QTimer m_releaseTimer; ///< after letGo(): the deletions it started have run
-    int m_keptViews = 2;
+    int m_keptViews = 3;
     int m_hiddenViewMs = 5 * 60 * 1000;
     int m_unfocusedMs = 60 * 1000;
     int m_hiddenMs = 8 * 1000;

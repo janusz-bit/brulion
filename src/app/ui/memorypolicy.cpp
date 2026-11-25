@@ -76,6 +76,9 @@ MemoryPolicy::MemoryPolicy(QObject *parent) : QObject(parent)
     m_releaseTimer.setTimerType(Qt::CoarseTimer);
     connect(&m_releaseTimer, &QTimer::timeout, this, &MemoryPolicy::release);
     setReleasesGraphics(false); // (BRULION_RELEASE_GRAPHICS=1 turns it on by itself)
+    bool viewOk = false;
+    if (const int viewMs = qEnvironmentVariableIntValue("BRULION_HIDDEN_VIEW_MS", &viewOk); viewOk && viewMs >= 0)
+        m_hiddenViewMs = viewMs;
     bool ok = false;
     const int ms = qEnvironmentVariableIntValue("BRULION_AWAY_MS", &ok);
     if (ok && ms >= 0) {
@@ -233,6 +236,30 @@ void MemoryPolicy::away()
     qCDebug(lcMemory) << "Away" << (hidden ? "(no window shown)" : "(another program in front)");
     letGoNow(hidden);
     // Unfocused first, hidden later: setState() starts the second round when the window goes.
+}
+
+void MemoryPolicy::setAway(bool away, bool hidden)
+{
+    if (switchedOff())
+        return;
+    m_follows = false;
+    m_awayTimer.stop();
+    m_active = !away;
+    m_shown = !away || !hidden;
+    if (!away) {
+        m_everActive = true;
+        m_letGoHidden = false;
+        if (!m_inUse) {
+            m_inUse = true;
+            Q_EMIT inUseChanged();
+        }
+        return;
+    }
+    if (m_inUse) {
+        m_inUse = false;
+        Q_EMIT inUseChanged();
+    }
+    letGoNow(hidden);
 }
 
 void MemoryPolicy::letGoNow(bool hidden)

@@ -400,7 +400,8 @@ components — no Material/Fusion look, so all targets look identical.
   "L10"): the four used most — the switcher, the palette, the top bar's More menu and quick
   capture — are built ahead in the background 3 s after the notebook is ready, one every 0.4 s,
   each by an asynchronous `Loader` (in pieces over several frames; opened before it is ready, the
-  rest is made at once: `AppShell.prebuildNext()`); the others are made the first time they open
+  rest is made at once: `AppShell.prebuildNext()`) — while the app is in use: away, the closed
+  ones go, and they are built ahead again when it is back ("Navigation": Away); the others are made the first time they open
   (`newPageNow()`, `renameNow()`, … — the extension question with the first question, through a
   `Connections` of the shell) and kept. Before that a popup's property (`commandPalette`,
   `newPage`, …) is null and its objectName is not found. The other menus of the top bar, the rail,
@@ -2458,20 +2459,56 @@ layout).
 `AppController` keeps the route history of every tab (`navigation.h`: `RouteHistory`, routes are
 `QVariantMap`s `{view, path?, line?, blockId?, date?, tag?, query?, section?, …}`; the tabs:
 `tabs.h`, "Tabs, split view and windows" below); `ShellRouteView` shows the view for a route — a
-tab's in its pane (`ShellTabPane`), and the side panel's route. A pane keeps the views of the
+tab's in its pane (`ShellTabPane`), and the side panel's route. Every view is loaded from its QML
+file when it is first shown (`ShellRouteView.viewSource()`, `Loader.setSource()` with the view's
+first properties — its route, and of the pane what it takes: `inSidePanel`, `paneActive`,
+`covered` —, `Binding`s afterwards): `ShellRouteView` names none of them as a type, since a QML
+file named in another one is loaded with it (docs/PERFORMANCE.md "Memory: only what is in use").
+A pane keeps the views of the
 phone's bottom navigation — Journal, All pages, Search, Tasks, Calendar — once it has shown them
 (`ShellRouteView.keepViews`): hidden while another view is shown, each with the route it was last
 shown with, and shown again at once, where it was scrolled, instead of being built anew (on a phone
 building one took 0.5–1 s); a view hidden this way ends its editing first (`endEditing()`, the
-touch keyboard goes). The main window's main pane also builds them ahead, in the background
-(`ShellRouteView.preloadViews`): a moment after the notebook is ready and indexed, one at a time —
-Tasks, Calendar, Journal, All pages, Search —, each by an asynchronous `Loader` over several frames,
-hidden, with its plain route; so even the first switch to one is instant (opening one still being
-built finishes it at once). A view built hidden leaves the keyboard alone: it takes it in its
+touch keyboard goes). Kept while they are in use, not for good (`ViewKeeper`,
+`src/app/shell/viewkeeper.h`; the limits are `MemoryPolicy`'s, `src/app/ui/memorypolicy.h`): a
+pane holds the three hidden views shown most recently (`MemoryPolicy.keptViews`: the four views of
+a phone's bottom navigation never rebuild each other), lets go of all of them once no view was
+switched for five minutes (`hiddenViewMs`), and when the app is away (below); a view let go is
+made again when it is shown next, with its route — not where it was scrolled. The main window's
+main pane also builds one of them ahead, in the background
+(`ShellRouteView.preloadViews`): a moment after the notebook is ready and indexed, the view the
+user went to last on this device (`ui/recentView`; none on a first start), by an asynchronous
+`Loader` over several frames, hidden, with its plain route; so the first switch to it is instant
+(opening one still being built finishes it at once). A view built hidden leaves the keyboard
+alone: it takes it in its
 `takeFocus()` when first shown (docs/PERFORMANCE.md "Switching views"); a hidden view given the
 focus passes it to the view shown ("Keyboard shortcuts (desktop)" above). Other views (a page,
 Graph, Settings, …) are made for their route and deleted when another view is shown; the side
 panel keeps none.
+
+**Away.** `MemoryPolicy` (a QML singleton; the app's instance follows the application's state and
+its windows) says when the app is not in use: another program in front for a minute, or no window
+shown — minimised, in the tray, a phone's home screen — for eight seconds (five on a phone;
+twenty right after a start into the tray). It emits `letGo(hidden)` then and everything hidden
+goes: the panes' kept views, the shell's closed popups and dialogs (`AppShell.letGoPopups()`: the
+four built ahead and the ones made when first opened that keep nothing between two openings —
+new page, rename, move, about, delete, an extension's settings and copy), the spell checker's
+dictionaries, the catalogs the built-in extensions read. A quarter of a second later (the
+deletions have run) the policy has the QML engine collect its garbage and drop the QML files
+nothing uses any more (`trimComponentCache()`), every window drop what it cached, and — where
+`releasesGraphics` is on: Linux — a window that is not shown give up its scene graph and its
+graphics context, which Qt Quick builds again when the window is shown; `MemoryKeeper` then hands
+the freed pages back to the system. Qt Quick's `Shape` does not survive that by itself (Qt 6.12:
+it keeps pointers to the nodes it made and makes a path's nodes only when the path changes — the
+notebook's round mark came back without its fill): the policy makes every `Shape` of the window
+start over (another renderer asked for, polished, its own again). In front again, the app is in
+use at once, and the popups are built ahead again. An app whose window is shown but was never in
+front (a test's X server without a window manager) counts as in use. `BRULION_MEMORY_POLICY=0`
+keeps and builds ahead everything as before (A/B measurements), `BRULION_AWAY_MS` sets the
+delays, `BRULION_HIDDEN_VIEW_MS` the kept views' time, `BRULION_RELEASE_GRAPHICS=1` / `0` the
+release of a hidden window's graphics whatever the platform. Tests: `tst_memory_policy`,
+`tst_shell_viewkeeper`, the shell self-test's "0b" (kept views, the three most recent, the one
+built ahead) and "0d" (away).
 
 | Route `view` | View | Parameters |
 |---|---|---|
@@ -3526,11 +3563,16 @@ documentation notebook.
   wavy `SpellCheckUnderline`). The word ending right at the caret (`spellCaret`) is not marked while
   it is typed; it is once the caret leaves it.
 * **Never blocking:** `SpellCheck` (`src/app/editor/spellcheck.h`) keeps a verdict per word and runs
-  `spell::SpellChecker` on a worker thread of its own, made at first use; loading a dictionary
-  (Hunspell's Polish one: a few hundred ms) and Android's checker (IPC) happen there. A word seen
+  `spell::SpellChecker` on a worker thread of its own, made for the first word asked about; loading
+  a dictionary (Hunspell's Polish one: a few hundred ms) and Android's checker (IPC) happen there. A word seen
   for the first time is Pending: queued, sent in batches of 200 after the highlighting pass, and
   only the lines waiting for it are highlighted again when the answer comes (`checked(changed)`).
   Verdicts are cached (20 000 words), so retyping asks nothing.
+* **Only while it is used:** the worker and its dictionaries (Hunspell's Polish and English ones
+  hold about 20 MB) go once no word was asked about for 90 s (`SpellCheck.idleMs`) and when the app
+  is away (`unload()`: "Navigation", Away). The verdicts stay, so nothing is underlined anew and
+  nothing asked again; the next word not seen before brings the worker back with the same settings
+  and personal words (its verdict comes after the dictionaries are read again).
 * **Menu:** a right-click on a marked word (`BlockEditor.openTextMenu`, `InlineEditor.misspelledAt`)
   puts its corrections (up to 6, asked from the worker: "Looking for corrections…" until they come, "No
   corrections") at the top of Cut / Copy / Paste, then **Add “…” to dictionary** and **Ignore**.

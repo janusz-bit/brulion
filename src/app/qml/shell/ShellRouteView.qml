@@ -12,7 +12,7 @@ import Brulion
 // at once (where it was scrolled, its filters) instead of building it anew, which took 0.5–1 s on
 // a phone (docs/PERFORMANCE.md "Switching views"). A kept view is hidden with its editing ended
 // (`endEditing()`), and keeps the route it was shown with. Kept, not hoarded (ViewKeeper,
-// MemoryPolicy; docs/PERFORMANCE.md "Memory: only what is in use"): the two shown most recently
+// MemoryPolicy; docs/PERFORMANCE.md "Memory: only what is in use"): the three shown most recently
 // stay, for five minutes after the last switch of views, and none while the app is away; they
 // all go when the pane shows no route (a split pane closed). Nothing else keeps a view (the shell
 // self-test's "5n"). A hidden

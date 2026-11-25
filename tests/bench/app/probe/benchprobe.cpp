@@ -2410,8 +2410,9 @@ private:
         action(u"mem"_s, [this] { markMem(u"pictures:end"_s, true); });
     }
 
-    /// The app away and back (memorySteps()): let go as with another program in front, the window
-    /// hidden and let go as with no window shown, the window shown again. Memory marks `away`,
+    /// The app away and back (memorySteps(); MemoryPolicy.setAway): away as with another program
+    /// in front, the window hidden and away as with no window shown, the window shown and the app
+    /// in use again. Memory marks `away`,
     /// `away_hidden`, `back` (with ":<tag>" for a tag) and `back_picture`: the pixels of the window
     /// that differ from before it was away.
     void awaySteps(const QString &tag)
@@ -2423,7 +2424,7 @@ private:
             if (m_window)
                 m_beforeAway = m_window->grabWindow();
             if (QObject *p = singleton("MemoryPolicy"))
-                QMetaObject::invokeMethod(p, "letGoNow", Q_ARG(bool, false));
+                QMetaObject::invokeMethod(p, "setAway", Q_ARG(bool, true), Q_ARG(bool, false));
         });
         wait(1500);
         mem(u"away"_s + suffix);
@@ -2434,13 +2435,15 @@ private:
         wait(500);
         action(u"away_hidden"_s, [this] {
             if (QObject *p = singleton("MemoryPolicy"))
-                QMetaObject::invokeMethod(p, "letGoNow", Q_ARG(bool, true));
+                QMetaObject::invokeMethod(p, "setAway", Q_ARG(bool, true), Q_ARG(bool, true));
         });
         wait(1500);
         mem(u"away_hidden"_s + suffix);
         action(u"show"_s, [this] {
             if (m_window)
                 m_window->show();
+            if (QObject *p = singleton("MemoryPolicy"))
+                QMetaObject::invokeMethod(p, "setAway", Q_ARG(bool, false), Q_ARG(bool, false));
         });
         waitSettled(u"back_settled"_s, 1000, 60000);
         wait(1000);
@@ -2493,9 +2496,9 @@ private:
 
     /// What the app holds: after its start (with everything it builds ahead), after a tour of its
     /// views (a page, Tasks, Calendar, All pages, Search, Graph, Tags, Settings — each `mem:view:<name>`),
-    /// back at the journal after BENCH_REST_MS (`mem:home`), and after BENCH_LONG_REST_MS more
-    /// (`mem:rested`: what goes when it is not used). Every mark after a garbage collection, with the
-    /// kernel's and malloc's own counts.
+    /// back at the journal after BENCH_REST_MS (`mem:home`), after BENCH_LONG_REST_MS more
+    /// (`mem:rested`: what goes when it is not used), then away, hidden and back (awaySteps()).
+    /// Every mark after a garbage collection, with the kernel's and malloc's own counts.
     void memorySteps()
     {
         const auto mem = [this](const QString &name, bool objects) {
@@ -2570,6 +2573,13 @@ private:
         waitSettled(u"home_settled"_s, 1000, 60000);
         wait(m_restMs);
         mem(u"home"_s, true);
+        // BENCH_LONG_REST_MS: the same view for a while longer — what goes by itself when it is
+        // not used (the spell checker's dictionaries after 90 s, the hidden views after
+        // MemoryPolicy.hiddenViewMs: BRULION_HIDDEN_VIEW_MS shortens that for a measurement).
+        if (m_longRestMs > 0) {
+            wait(m_longRestMs);
+            mem(u"rested"_s, true);
+        }
         // What goes while the app is away (MemoryPolicy, trees that have it): another program in
         // front (`mem:away`), then no window shown (`mem:away_hidden`: the window hidden, its
         // graphics released too), then shown again (`mem:back`: it must draw as before —
@@ -2610,10 +2620,6 @@ private:
             waitSettled(u"shown_settled"_s, 1000, 60000);
             wait(1000);
             mem(u"shown_again"_s, false);
-        }
-        if (m_longRestMs > 0) {
-            wait(m_longRestMs);
-            mem(u"rested"_s, true);
         }
     }
 

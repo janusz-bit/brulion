@@ -496,6 +496,8 @@ int main(int argc, char *argv[])
                          &brulion::ui::MemoryKeeper::released);
         QObject::connect(workspace, &brulion::shell::Workspace::openChanged, memoryKeeper,
                          &brulion::ui::MemoryKeeper::released);
+        QObject::connect(workspace, &brulion::shell::Workspace::memoryFreed, memoryKeeper,
+                         &brulion::ui::MemoryKeeper::released);
         if (fixedNow.isValid()) {
             controller->setClock([fixedNow] { return fixedNow; });
             logs.setClock([fixedNow] { return fixedNow; });
