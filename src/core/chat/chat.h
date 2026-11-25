@@ -60,6 +60,30 @@
 // `pinned: true` puts the conversation among the pinned ones on top, `zarchiwizowana: tak` /
 // `archived: true` out of the list into its folded "Archived" (either language's key read, the
 // values true / yes / tak / 1 / on). They only sort: a page that says so by itself is harmless.
+//
+// A side chat (`/btw`, docs/UI.md "AI chat"): a question asked beside a conversation without
+// adding it to it — a page of its own, a copy of that conversation with the question after it
+// (sideChat()), its frontmatter naming the conversation, `side: "[[AI/…]]"`, and where its own
+// messages start, `side-from: 5` (the page's messages counted from 1; the keys the same in every
+// language). The chat shows it only inside its conversation, never in the list.
+//
+//   ---
+//   zadania: ignoruj
+//   side: "[[AI/2026-11-15 Plan wyjazdu]]"
+//   side-from: 3
+//   ---
+//   - 🧑 Plan wyjazdu do Zakopanego
+//   - 🤖 Pociąg o 7:15 …
+//   - 🧑 Ile kosztuje bilet ulgowy?
+//
+// A sub-conversation started with "wake" (docs/UI.md "Agents delegate") wakes the conversation it
+// came from when its turn ends: a user's message there that starts with "↩ " and the link to the
+// sub-conversation (wakeMessage(), wakeSource()), its answer quoted, the reason it failed, the
+// question it waits on, or that it was stopped:
+//
+//   - 🧑 ↩ Podrozmowa [[AI/2026-11-22 Druga opinia]] odpowiedziała:
+//
+//     > Plan ma sens, ale pociąg o 7:15 jest pełny w soboty.
 #pragma once
 
 #include <QDate>
@@ -102,6 +126,9 @@ struct Message {
     /// Reported or hidden: its number in the frontmatter's `zgłoszone:` / `ukryte:` list
     /// (`reported:` / `hidden:`; both: reported).
     Flag flag = Flag::None;
+    /// A user's message that wakes its conversation: the sub-conversation it comes from
+    /// (wakeSource(): "AI/2026-11-22 Druga opinia"); "" for any other message.
+    QString from{};
 };
 
 struct Conversation {
@@ -122,7 +149,31 @@ struct Conversation {
     /// The frontmatter's marks (setMark()): pinned on top of the list / archived out of it.
     bool pinned = false;
     bool archived = false;
+    /// A side chat: the conversation it is beside, the frontmatter's `side:` link as written
+    /// ("AI/2026-11-15 Plan"; "" none) — sideChat() …
+    QString side{};
+    /// … and the index of its first own message (the frontmatter's `side-from:`, counted from 1
+    /// there; 0 when it says none): the messages before it are the copy of that conversation.
+    int sideFrom = 0;
 };
+
+/// What the turn of a sub-conversation that wakes its parent came to (wakeMessage()).
+enum class Wake {
+    Answered, ///< its answer was written
+    Failed,   ///< its turn failed
+    Asking,   ///< it waits for the user's answer (a permission, a change to allow)
+    Stopped   ///< the user stopped it
+};
+
+/// Why a wake message waits for the user in its conversation's queue instead of starting a turn.
+enum class WakeHeld {
+    No,
+    Limit,   ///< the conversation was woken too often in the last hour
+    Archived ///< the conversation is archived
+};
+
+/// The longest text of a sub-conversation a wake message quotes (the rest is in its page).
+inline constexpr int MaxWakeChars = 4000;
 
 /// A mark of a conversation's frontmatter that sorts the list of conversations.
 enum class Mark {
@@ -238,13 +289,37 @@ QString truncated(const QString &content, int from);
 
 /// A conversation that goes on from `content`'s message `upTo` (its index) in a page of its own
 /// ("Fork from here"): `content` up to that message's last line — its frontmatter, `partner:`,
-/// times and pictures as they are, line endings kept — with `fork: "[[source]]"` in its
-/// frontmatter (`source`: the page forked, its path with or without ".md"; "" none). "" when there
-/// is no such message.
+/// times and pictures as they are, line endings kept; `parent:`, the list's marks and a side
+/// chat's `side:` / `side-from:` left out — with `fork: "[[source]]"` in its frontmatter
+/// (`source`: the page forked, its path with or without ".md"; "" none). "" when there is no such
+/// message.
 QString forked(const QString &content, int upTo, QStringView source);
 
 /// `fork:`'s value for `source` ("AI/2026-11-15 Dom.md" → `"[[AI/2026-11-15 Dom]]"`).
 QString forkLink(QStringView source);
+
+/// A side chat of the conversation `content` (its page `source`, with or without ".md"): a copy of
+/// all of it (as forked() of its last message: its frontmatter but `parent:`, `fork:`, the list's
+/// marks and an earlier `side:`, its `partner:`, times and pictures as they are, line endings
+/// kept) with `side: "[[source]]"` and `side-from:` (the number of its first own message) in its
+/// frontmatter, and the user's `question` appended (appendMessage(), its time when valid). "" for
+/// a conversation without messages or an empty question.
+QString sideChat(const QString &content, QStringView source, QStringView question, const QDateTime &time = {},
+                 QStringView language = u"pl");
+
+/// The user's message that wakes a conversation for its sub-conversation `child` (a vault path,
+/// with or without ".md") whose turn came to `wake`: its first line "↩ Sub-conversation
+/// [[child]] answered:" ("↩ Podrozmowa [[child]] odpowiedziała:" in "pl"; failed, waits
+/// for the user's answer, was stopped), then `text` — the answer, why it failed, the question —
+/// quoted ("> " lines, pictures out), cut at MaxWakeChars with a line saying how much of it there
+/// is; with `held` a last line says why it waits for the user (`limit`: the most wakes an hour).
+QString wakeMessage(Wake wake, QStringView child, QStringView text, QStringView language = u"pl",
+                    WakeHeld held = WakeHeld::No, int limit = 0);
+
+/// The sub-conversation a message's Markdown wakes its conversation for: its first line starts
+/// with "↩" and a space and names a page in folder() as its first link → that page ("AI/…", an
+/// alias, heading or ".md" left out); "" otherwise.
+QString wakeSource(QStringView markdown);
 
 /// `content` with its frontmatter's `key:` set to `value` ("" takes the line out): the line
 /// replaced (its key matched without regard to case), or added at the frontmatter's end, or a

@@ -367,6 +367,17 @@
     </message>
 </context>
 <context>
+    <name>ChatSidePane</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ChatSidePane.qml" line="436"/>
+        <source>%n message(s) wait for the answer</source>
+        <translation>
+            <numerusform>%n message waits for the answer</numerusform>
+            <numerusform>%n messages wait for the answer</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ChatTools</name>
     <message numerus="yes">
         <location filename="../src/app/shell/chattools.cpp" line="42"/>
@@ -489,6 +500,14 @@
         <translation>
             <numerusform>[%n picture]</numerusform>
             <numerusform>[%n pictures]</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ChatView.qml" line="2230"/>
+        <source>%n message(s) from sub-conversations wait for you.</source>
+        <translation>
+            <numerusform>%n message from a sub-conversation waits for you.</numerusform>
+            <numerusform>%n messages from sub-conversations wait for you.</numerusform>
         </translation>
     </message>
 </context>
@@ -2691,6 +2710,23 @@
         <translation>
             <numerusform>Saved %n page</numerusform>
             <numerusform>Saved %n pages</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appcontroller.cpp" line="486"/>
+        <source>%n day(s)</source>
+        <comment>untouched for …</comment>
+        <translation>
+            <numerusform>%n day</numerusform>
+            <numerusform>%n days</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appcontroller.cpp" line="487"/>
+        <source>Archived %n conversation(s) untouched for %1</source>
+        <translation>
+            <numerusform>Archived %n conversation untouched for %1</numerusform>
+            <numerusform>Archived %n conversations untouched for %1</numerusform>
         </translation>
     </message>
 </context>

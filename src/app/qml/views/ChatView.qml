@@ -22,6 +22,8 @@ import Brulion
 //   {view: "chat"}                          the conversations (a wide window: beside a new one)
 //   {view: "chat", path: "AI/….md"}         one conversation
 //   {view: "chat", path, line}              … at its message at the page's line (a search's match)
+//   {view: "chat", path, side}              … with its side chat `side` open (a side chat's own path
+//                                           opens so too)
 //   {view: "chat", new: true, page, prompt} a new one about `page`; `prompt` is sent at once
 //   {view: "chat", new: true, fromLink, draft, partner, page, hidden, capped, pageMissing,
 //    partnerMissing}                        a prompt link's (brulion://chat): `draft` in the field,
@@ -39,6 +41,10 @@ import Brulion
 // (ShellAiReportDialog: the report opened as a GitHub issue or an email, or the answer only
 // hidden) — an answer reported or hidden is a folded line until Show opens it (its page's
 // frontmatter keeps the mark: chat::setFlag).
+// Side chats (`/btw <question>` in the field, or "Ask a side question"): a question answered beside
+// the conversation, never in it (WorkspaceChats.askAside) — its chips under the header, the one
+// open in ChatSidePane beside the messages (wide) or in their place (narrow). A message that woke
+// the conversation for a sub-conversation has a "From a sub-conversation" line above it.
 // Several conversations answer at once: each its own turn. Contract with the shell
 // (qml/shell/ShellRouteView.qml): `route`, `title`.
 FocusScope {
@@ -96,6 +102,19 @@ FocusScope {
     readonly property string approvalsHere: root.chats.approvals(root.path, root.chats.agentSerial)
     /// The conversation this one was forked from ("" none).
     property string forkSource
+    /// The side chat open beside it (the route's `side`; "" none), and whether this view opened it
+    /// as a step of the history (Close goes back then).
+    property string sidePath
+    property bool sidePushed: false
+    property string pendingSide
+    property bool pendingPushed: false
+    readonly property bool sideOpen: root.sidePath !== "" && root.path !== ""
+    /// The side chat beside the messages (a wide pane), else in their place.
+    readonly property bool sideBeside: root.sideOpen && root.width - (root.listShown ? 301 : 0) >= 860
+    /// The side chats of this conversation ({path, name, state, failure}).
+    readonly property list<var> sideChats: root.path !== "" ? root.chats.lineage.sideChats(root.path, root.chats.lineage.serial) : root.noVars
+    /// Every message waiting here is a sub-conversation's wake, held for the user.
+    readonly property bool heldForWake: root.path !== "" && root.chats.heldForWake(root.path, root.chats.queueSerial)
     /// Up in an empty field: the questions asked before, newest first (recallIndex: the one
     /// shown, -1 none).
     property list<string> recallList
@@ -156,7 +175,13 @@ FocusScope {
     function syncRoute(): void {
         // What was written and not sent stays with its conversation.
         root.keepDraft()
-        root.path = AppController.routeText(root.route, "path")
+        const routed = AppController.routeText(root.route, "path")
+        // A side chat opens beside its conversation (a toast's Open, a link to its page).
+        const beside = routed !== "" ? "" + root.chats.sideOf(routed) : ""
+        root.path = beside !== "" ? beside : routed
+        root.sidePath = beside !== "" ? routed : AppController.routeText(root.route, "side")
+        root.sidePushed = root.sidePath !== "" && root.sidePath === root.pendingSide && root.pendingPushed
+        root.pendingSide = ""
         root.loadDraft()
         root.page = AppController.routeText(root.route, "page")
         root.starting = root.path === "" && AppController.routeFlag(root.route, "new")
@@ -185,8 +210,8 @@ FocusScope {
         } else if (root.starting && prompt !== "") {
             input.text = prompt
             sendLater.restart()
-        } else if (root.conversationShown && (root.starting || !Theme.touchUi)) {
-            focusLater.restart()
+        } else if (root.conversationShown && (root.starting || !Theme.touchUi) && !root.sideOpen) {
+            focusLater.restart() // (a side chat opened: its pane's field takes it)
         }
     }
     function routeString(key: string): string {
@@ -262,6 +287,11 @@ FocusScope {
                 root.chats.stopDictation()
             return
         }
+        // `/btw …`: a side question, the app's own (never sent to an agent) — also while a turn runs.
+        if (root.chats.isAside(input.typedText)) {
+            root.askAsideFromField()
+            return
+        }
         const text = Js.trim(input.typedText)
         if (text === "" && root.attached.length === 0)
             return
@@ -314,11 +344,76 @@ FocusScope {
     }
     /// Ctrl+Enter while a turn runs: the message now — the turn stops, it is answered first.
     function steer(): void {
+        if (root.chats.isAside(input.typedText)) {
+            root.send() // (a side question stops nothing)
+            return
+        }
         const text = Js.trim(input.typedText)
         if (text === "" && root.attached.length === 0)
             return
         if (root.chats.steer(root.path, text, root.attached))
             root.clearField()
+    }
+    /// The field's `/btw <question>` asked (askAside()).
+    function askAsideFromField(): void {
+        const question = "" + root.chats.asideQuestion(input.typedText)
+        root.askAside(question)
+    }
+    /// `/btw <question>`: a side chat of this conversation, opened beside it.
+    function askAside(question: string): void {
+        if (root.path === "") {
+            AppController.toast(qsTr("A side question is asked beside a conversation: send its first message first."), "info")
+            return
+        }
+        if (question === "" && root.attached.length === 0) {
+            AppController.toast(qsTr("Write the side question after /btw"), "info")
+            return
+        }
+        const side = "" + root.chats.askAside(root.path, question, root.attached)
+        if (side === "") {
+            AppController.toast(qsTr("The side question could not be asked."), "error")
+            return
+        }
+        root.clearField()
+        root.openSide(side)
+    }
+    /// "Ask a side question": `/btw ` in the field, before what is written there.
+    function startAside(): void {
+        if (!root.chats.isAside(input.text))
+            input.text = "/btw " + Js.trim(input.text)
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
+    /// Opens the side chat `side` beside the conversation: a step of the history (Back closes it),
+    /// in place of the one open.
+    function openSide(side: string): void {
+        if (side === "" || root.path === "")
+            return
+        const replacing = root.sidePath !== ""
+        root.pendingSide = side
+        root.pendingPushed = replacing ? root.sidePushed : !root.inSidePanel
+        if (root.inSidePanel)
+            AppController.navigate({ view: "chat", path: root.path, side: side }, true)
+        else if (replacing)
+            AppController.replaceRoute({ view: "chat", path: root.path, side: side })
+        else
+            AppController.navigate({ view: "chat", path: root.path, side: side })
+    }
+    function closeSide(): void {
+        if (root.sidePath === "")
+            return
+        if (root.sidePushed && AppController.canGoBack && AppController.back(0))
+            return
+        if (root.inSidePanel)
+            AppController.navigate({ view: "chat", path: root.path }, true)
+        else
+            AppController.replaceRoute({ view: "chat", path: root.path })
+    }
+    /// A side chat's answer as a quote in this conversation's field (the narrow pane closes for it).
+    function bringIn(markdown: string): void {
+        if (!root.sideBeside)
+            root.closeSide()
+        root.quoteMessage(markdown)
     }
     /// Up / Down in the field: the questions asked before (Up from an empty field, or from one
     /// brought back).
@@ -604,7 +699,8 @@ FocusScope {
         const trashPath = root.chats.remove(path)
         if (trashPath === "")
             return
-        AppController.toastRestorePage(qsTr("Conversation moved to trash"), qsTr("Undo"), trashPath)
+        // (Its side chats went with it: one Undo for all.)
+        AppController.toastRestore(qsTr("Conversation moved to trash"), qsTr("Undo"), root.chats.lastRemoved())
         if (shown) {
             root.path = ""
             AppController.replaceRoute({ view: "chat" })
@@ -1161,7 +1257,8 @@ FocusScope {
         ColumnLayout {
             id: conversationPane
             objectName: "chatConversation"
-            visible: root.conversationShown
+            // (A narrow window: its side chat in its place.)
+            visible: root.conversationShown && !(root.sideOpen && !root.sideBeside)
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
@@ -1232,6 +1329,13 @@ FocusScope {
                     }
                 }
                 BIconButton {
+                    objectName: "chatAskAside"
+                    Layout.alignment: Qt.AlignTop
+                    label: qsTr("Ask a side question (/btw): answered beside the conversation, not in it")
+                    iconName: "message-square"
+                    onClicked: root.startAside()
+                }
+                BIconButton {
                     objectName: "chatOpenPage"
                     Layout.alignment: Qt.AlignTop
                     label: qsTr("Open the conversation as a page")
@@ -1266,6 +1370,46 @@ FocusScope {
                 Layout.topMargin: Theme.space1
                 path: root.path
                 onOpened: (path) => root.open(path, false)
+            }
+            // Its side chats (/btw): a click opens one beside the conversation.
+            Flow {
+                id: sideRow
+                objectName: "chatSideChats"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space2
+                Layout.topMargin: Theme.space1
+                visible: root.sideChats.length > 0
+                spacing: Theme.space1
+                BText {
+                    height: Theme.touchUi ? Math.max(24, Theme.touchTarget) : 20
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("Side chats:")
+                    variant: "faint"
+                    font.pixelSize: Theme.textSm
+                }
+                Repeater {
+                    model: root.sideChats
+                    delegate: BChip {
+                        id: sideChip
+                        required property var modelData
+                        readonly property string sidePath: AppController.routeText(sideChip.modelData, "path")
+                        readonly property string sideState: AppController.routeText(sideChip.modelData, "state")
+                        objectName: "chatSideChat"
+                        width: Math.min(implicitWidth, 240, sideRow.width)
+                        size: "small"
+                        interactive: true
+                        outlined: true
+                        selected: sideChip.sidePath === root.sidePath
+                        iconName: sideChip.sideState === "running" ? "refresh-cw" : sideChip.sideState === "queued" ? "hourglass"
+                                  : sideChip.sideState === "asking" ? "circle-help" : sideChip.sideState === "failed" ? "circle-alert"
+                                  : "message-square"
+                        variant: sideChip.sideState === "failed" ? "overdue" : "neutral"
+                        text: AppController.routeText(sideChip.modelData, "name")
+                        Accessible.name: qsTr("Side chat %1").arg(sideChip.text)
+                        onClicked: root.openSide(sideChip.sidePath)
+                    }
+                }
             }
             BMenu {
                 id: approvalsMenu
@@ -1358,6 +1502,9 @@ FocusScope {
                         required property bool revealed
                         /// Its parts when it has a drawing (ChatSegments), else [] (its rich text).
                         required property list<var> segments
+                        /// It woke the conversation for this sub-conversation ("" none) — the app's message.
+                        required property string wakeFrom
+                        required property string wakeName
                         readonly property bool mine: message.sender === "user"
                         /// The user reported or hid it: a line in its place until it is opened.
                         readonly property bool folded: message.flag !== "" && !message.revealed
@@ -1473,6 +1620,39 @@ FocusScope {
                                 }
                                 Item {
                                     Layout.fillWidth: true
+                                }
+                            }
+
+                            // A sub-conversation's end woke the conversation: from the app, not the user.
+                            Item {
+                                objectName: "chatWakeHeader"
+                                width: parent.width
+                                height: wakeLine.implicitHeight
+                                visible: message.wakeFrom !== ""
+                                Row {
+                                    id: wakeLine
+                                    anchors.right: parent.right
+                                    spacing: Theme.space1
+                                    BIcon {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        name: "corner-down-left"
+                                        size: Theme.iconSizeSm
+                                        color: Theme.fgMuted
+                                    }
+                                    BText {
+                                        objectName: "chatWakeHeaderText"
+                                        text: qsTr("From a sub-conversation: %1").arg(message.wakeName)
+                                        variant: "caption"
+                                        color: Theme.fgMuted
+                                        font.weight: Font.DemiBold
+                                        TapHandler {
+                                            onTapped: root.open(message.wakeFrom, false)
+                                        }
+                                        HoverHandler {
+                                            enabled: !Theme.touchUi
+                                            cursorShape: Qt.PointingHandCursor
+                                        }
+                                    }
                                 }
                             }
 
@@ -2079,7 +2259,9 @@ FocusScope {
                                 spacing: Theme.space2
                                 Item { Layout.fillWidth: true }
                                 BText {
-                                    text: qsTr("%n message(s) wait: the answer before them stopped.", "", root.waitingHere.length)
+                                    text: root.heldForWake
+                                          ? qsTr("%n message(s) from sub-conversations wait for you.", "", root.waitingHere.length)
+                                          : qsTr("%n message(s) wait: the answer before them stopped.", "", root.waitingHere.length)
                                     variant: "muted"
                                     wrapMode: Text.Wrap
                                 }
@@ -2627,6 +2809,26 @@ FocusScope {
                     }
                 }
             }
+        }
+
+        // ---- Its side chat (/btw) ----------------------------------------------------------------
+        Rectangle {
+            visible: root.sideOpen && root.sideBeside && root.conversationShown
+            Layout.fillHeight: true
+            implicitWidth: 1
+            color: Theme.borderSubtle
+        }
+        ChatSidePane {
+            id: sidePane
+            objectName: "chatSidePane"
+            visible: root.sideOpen && root.conversationShown
+            Layout.fillHeight: true
+            Layout.fillWidth: !root.sideBeside
+            Layout.preferredWidth: root.sideBeside ? Math.min(440, Math.max(340, root.width * 0.32)) : -1
+            path: root.sidePath
+            conversation: root.path
+            onCloseRequested: root.closeSide()
+            onBroughtIn: (markdown) => root.bringIn(markdown)
         }
     }
 }

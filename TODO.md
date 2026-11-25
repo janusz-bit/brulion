@@ -14,14 +14,15 @@ done in the repository simply disappears from the list.
   documents) — also as the desktop app runs it (Settings → Extensions → claude.ai and ChatGPT) —.
 * **T3 Code's features in the AI chat: what is still missing** — the queue and Send now, Edit from
   here, forks, quotes, @-named pages, drafts, approvals, plans to approve, a turn's changed files
-  with Undo, delegation between partners, scheduled conversations, subscription limits, the usage
-  history with API-equivalent costs from the agents' own session logs, dictation on the desktop,
-  prompt links, drawings in answers, tool calls in words, the list's pins, archive, search, badges
-  and notifications are there (docs/UI.md "AI chat", "AI agents (ACP)"). Not yet: side chats
-  (`/btw`: a fork shown only inside its conversation); a delegated conversation that wakes its
-  parent when it ends (today an agent starts and waits); the usage history read from Codex's
-  compressed rollouts (`rollout-*.jsonl.zst`: skipped) and of `codex-auto-review`'s turns (the log
-  names no model: tokens without a cost); all of it tried with a real Claude Code and Codex.
+  with Undo, delegation between partners, scheduled conversations and their webhooks, a secret the
+  agent asks for in a private card, subscription limits, the usage history with API-equivalent costs
+  from the agents' own session logs, dictation on the desktop, prompt links, drawings in answers,
+  tool calls in words, the list's pins, archive, search, badges and notifications, side chats
+  (`/btw`), sub-conversations that wake their parent and conversations archived by themselves are
+  there (docs/UI.md "AI chat", "AI agents (ACP)", "Agents delegate"). Not yet: the usage history
+  read from Codex's compressed rollouts (`rollout-*.jsonl.zst`: skipped) and of
+  `codex-auto-review`'s turns (the log names no model: tokens without a cost); all of it tried with
+  a real Claude Code and Codex.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
@@ -53,9 +54,9 @@ done in the repository simply disappears from the list.
   real microphone on Windows; the browser's picture picker for a message in a real browser (CI's
   headless Chrome cannot open a file picker); the chat's notifications (an answer, a failure, a
   question while the app is behind another: docs/UI.md "AI chat") on a real phone — Android shows
-  them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser;
-  conversations untouched for a while archived by themselves (a setting, off by default: T3 Code's
-  auto-settle) are not there.
+  them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; a side
+  chat's pane (`/btw`) on a real phone (in place of the conversation, Back closing it) and a
+  sub-conversation's wake with a real Claude Code and Codex.
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",

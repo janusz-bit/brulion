@@ -1484,6 +1484,7 @@ brulion-cli app chat start "Czy ten plan wyjazdu ma sens?" --partner acp:codex -
 brulion-cli app chat list --limit 10                           # newest change first
 brulion-cli app chat read "AI/2026-11-22 Czy ten plan wyjazdu ma sens.md" --from 0
 brulion-cli app chat send "Czy ten plan wyjazdu ma sens" "A w lutym?" --wait --timeout 300000
+brulion-cli app chat start "Sprawdź pociągi" --parent "Plan wyjazdu" --wake   # its end wakes "Plan wyjazdu"
 brulion-cli app chat stop "Czy ten plan wyjazdu ma sens"
 brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7:30" --partner acp:claude
 brulion-cli app chat schedule list && brulion-cli app chat schedule run s3f9a01bc77de
@@ -1494,11 +1495,13 @@ gh auth login --with-token < "$f"                             # the secret never
 * **A conversation** is named by its path (`AI/2026-11-22 Plan.md`; `.md` and `AI/` may be left
   out, any letter case) or by its name without the date when one conversation alone has it
   (`not_found`, `ambiguous_ref` with `candidates`). A row: `{path, name, partner, partnerName,
-  state, failure?, question?, parent?, page?, messages, changed}` — `state` is `idle`, `running`,
+  state, failure?, question?, parent?, side?, wakes?, page?, messages, changed}` — `state` is `idle`, `running`,
   `queued` (it waits for the model on the device), `asking` (its turn waits for the user's answer
   in the app: a permission, a change to allow) or `failed` (`failure` says why); `parent` the
-  conversation it is a sub-conversation of (docs/SYNTAX.md §14). `list --parent` gives the
-  sub-conversations of one.
+  conversation it is a sub-conversation of (docs/SYNTAX.md §14), `wakes` true while the end of its turn will
+  wake its parent (`--wake` below). `list --parent` gives the sub-conversations of one. A side chat (`/btw`,
+  the user's aside: docs/UI.md "AI chat") is never listed nor named by its name — its path reads it, and its
+  row has `side`, the conversation it is beside.
 * **read** gives its messages from `--from` (a position, 0 the first; `--limit`, 20): `{…the row,
   total, messages: [{position, role: user | assistant, time?, text, length, offset?, cut?}],
   next?, partial?}` — at most 30 000 characters at once: a message cut says so, and `next: {from,
@@ -1508,7 +1511,15 @@ gh auth login --with-token < "$f"                             # the secret never
   an AI agent, an extension's chat command — `partners` lists those that answer here; another:
   `not_found` with `partners`), about `--page`, and runs its turn: the row at once (exit 0). The
   partner gets only that text — give it the whole task. **send** writes the next message of a
-  conversation whose turn does not run (`busy`, exit 4, while it runs: wait for it or stop it).
+  conversation whose turn does not run (`busy`, exit 4, while it runs: wait for it or stop it; `--queue` puts
+  it in line after the answer instead).
+* **--wake** (start, send): no need to wait — when the turn ends (answered, failed, stopped by the user) or
+  stops to ask the user, the conversation it came from gets a message with the answer quoted ("↩
+  Sub-conversation [[AI/…]] answered:", docs/SYNTAX.md §14) and its partner a new turn, after a turn of it
+  that still runs (an agent's own conversation for an agent the app started — any depth below it —, the
+  parent for a script; `bad_params` when there is none; `busy` with a turn running: `--wake` goes with a
+  message sent now). At most 10 wakes of one conversation an hour and none of an archived one: the message
+  then waits there for the user (Resume). `stop` takes the wake away.
 * **wait** waits up to `--timeout` ms (60 000; at most 600 000) for the turn to end: `{path, state:
   idle, answer: {position, text, time}}` (exit 0); its failure — exit 1 `turn_failed`; a question
   for the user — exit 5 `waiting_for_user`, `{question: {text, details, options}}` in the error's
@@ -1542,7 +1553,8 @@ remote control off, and only the chat's methods (anything else: `unauthorized`).
 whose conversation asks, so:
 
 * a conversation it **starts** is a sub-conversation of its own (`parent:` in its page; another
-  `--parent` is refused), shown under it in the chat;
+  `--parent` is refused), shown under it in the chat; with `--wake` its answer comes back into the agent's
+  conversation as a message, a new turn of the agent;
 * it **sends** to and **stops** only its own sub-conversations (any depth) — reading and waiting
   are open to all (its notebook tools read every page anyway); it changes and deletes only the
   schedules it set up from there;

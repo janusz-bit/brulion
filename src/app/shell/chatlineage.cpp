@@ -43,20 +43,30 @@ ChatLineage::ChatLineage(Workspace *workspace, WorkspaceChats *chats, QObject *p
         update(path);
         bump();
     });
+    connect(m_chats, &WorkspaceChats::wakesChanged, this, &ChatLineage::bump);
 }
 
 void ChatLineage::update(const QString &path) const
 {
     if (m_dirty)
         return; // (all of them are read when asked next)
-    const QString parent = writtenParent(m_workspace, path);
-    m_parents.remove(path);
-    m_changed.remove(path);
-    if (parent.isEmpty())
-        return;
-    m_parents.insert(path, resolveParent(m_workspace, parent, path));
     const std::optional<FileStat> stat = m_workspace->vault() ? m_workspace->vault()->stat(path) : std::nullopt;
-    m_changed.insert(path, stat ? stat->mtime : 0);
+    read(path, stat ? stat->mtime : 0);
+}
+
+void ChatLineage::read(const QString &path, qint64 mtime) const
+{
+    m_parents.remove(path);
+    m_sides.remove(path);
+    m_changed.remove(path);
+    const auto [parent, side] = writtenLinks(m_workspace, path);
+    if (parent.isEmpty() && side.isEmpty())
+        return;
+    if (!parent.isEmpty())
+        m_parents.insert(path, resolveParent(m_workspace, parent, path));
+    if (!side.isEmpty())
+        m_sides.insert(path, resolveParent(m_workspace, side, path));
+    m_changed.insert(path, mtime);
 }
 
 void ChatLineage::invalidate()
@@ -73,11 +83,19 @@ void ChatLineage::bump()
 
 QString ChatLineage::writtenParent(Workspace *workspace, const QString &path)
 {
+    return writtenLinks(workspace, path).first;
+}
+
+std::pair<QString, QString> ChatLineage::writtenLinks(Workspace *workspace, const QString &path)
+{
     if (path.isEmpty() || !workspace || !workspace->isOpen() || !workspace->exists(path))
         return {};
     bool ok = false;
     const QString content = workspace->read(path, &ok);
-    return ok ? chat::parse(content).parent : QString();
+    if (!ok)
+        return {};
+    const chat::Conversation c = chat::parse(content);
+    return {c.parent, c.side};
 }
 
 QString ChatLineage::resolveParent(Workspace *workspace, const QString &parent, const QString &from)
@@ -117,18 +135,30 @@ void ChatLineage::ensure() const
         return;
     m_dirty = false;
     m_parents.clear();
+    m_sides.clear();
     m_changed.clear();
     if (!m_workspace->isOpen() || !m_workspace->vault())
         return;
     for (const FileStat &f : m_workspace->vault()->markdownFiles()) {
-        if (!chat::inFolder(f.path))
-            continue;
-        const QString parent = writtenParent(m_workspace, f.path);
-        if (parent.isEmpty())
-            continue;
-        m_parents.insert(f.path, resolveParent(m_workspace, parent, f.path));
-        m_changed.insert(f.path, f.mtime);
+        if (chat::inFolder(f.path))
+            read(f.path, f.mtime);
     }
+}
+
+QStringList ChatLineage::keysOf(const QHash<QString, QString> &map, const QString &path) const
+{
+    QStringList out;
+    if (path.isEmpty())
+        return out;
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        if (it.value().compare(path, Qt::CaseInsensitive) == 0)
+            out << it.key();
+    }
+    std::ranges::sort(out, [this](const QString &a, const QString &b) {
+        const qint64 ta = m_changed.value(a), tb = m_changed.value(b);
+        return ta != tb ? ta > tb : a < b;
+    });
+    return out;
 }
 
 QString ChatLineage::parentOf(const QString &path) const
@@ -149,17 +179,34 @@ int ChatLineage::depthOf(const QString &path) const
 QStringList ChatLineage::childrenOf(const QString &path) const
 {
     ensure();
-    QStringList out;
-    if (path.isEmpty())
-        return out;
-    for (auto it = m_parents.cbegin(); it != m_parents.cend(); ++it) {
-        if (it.value().compare(path, Qt::CaseInsensitive) == 0)
-            out << it.key();
+    return keysOf(m_parents, path);
+}
+
+QString ChatLineage::sideOf(const QString &path) const
+{
+    ensure();
+    for (auto it = m_sides.cbegin(); it != m_sides.cend(); ++it) {
+        if (it.key().compare(path, Qt::CaseInsensitive) == 0)
+            return it.value();
     }
-    std::ranges::sort(out, [this](const QString &a, const QString &b) {
-        const qint64 ta = m_changed.value(a), tb = m_changed.value(b);
-        return ta != tb ? ta > tb : a < b;
-    });
+    return {};
+}
+
+QStringList ChatLineage::sidesOf(const QString &path) const
+{
+    ensure();
+    return keysOf(m_sides, path);
+}
+
+QVariantList ChatLineage::sideChats(const QString &path, int) const
+{
+    QVariantList out;
+    for (const QString &side : sidesOf(path)) {
+        QString failure;
+        const QString state = m_chats->stateOf(side, &failure);
+        out.append(QVariantMap{
+                {u"path"_s, side}, {u"name"_s, m_chats->nameOf(side)}, {u"state"_s, state}, {u"failure"_s, failure}});
+    }
     return out;
 }
 
@@ -196,7 +243,8 @@ QVariantList ChatLineage::children(const QString &path, int) const
                                {u"name"_s, m_chats->nameOf(child)},
                                {u"partner"_s, label.isEmpty() ? partner : label},
                                {u"state"_s, state},
-                               {u"failure"_s, failure}});
+                               {u"failure"_s, failure},
+                               {u"wakes"_s, m_chats->wakesParent(child)}});
     }
     return out;
 }

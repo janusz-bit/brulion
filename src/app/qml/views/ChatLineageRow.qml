@@ -6,7 +6,8 @@ import Brulion
 // it (docs/UI.md "Agents delegate"; ChatView, under the conversation's header): a sub-conversation
 // shows the conversation it was started from as a chip ("From: Plan wyjazdu"); a conversation whose
 // agent gave other partners tasks shows each of them as a chip — its name, who answers, and its
-// state as an icon (a spinner while it runs, a question waiting, a failure) — and a click opens it
+// state as an icon (a spinner while it runs, a question waiting, a failure), "↩" when the end of its
+// turn will wake this conversation (an agent started it with wake) — and a click opens it
 // (opened(path)). Workspace.chats.lineage tells them, read again when one changes.
 Flow {
     id: row
@@ -72,7 +73,9 @@ Flow {
             readonly property string childPath: AppController.routeText(chip.modelData, "path")
             readonly property string partnerName: AppController.routeText(chip.modelData, "partner")
             readonly property string childState: AppController.routeText(chip.modelData, "state")
+            readonly property bool wakes: AppController.routeFlag(chip.modelData, "wakes")
             readonly property string about: row.stateText(chip.childState, AppController.routeText(chip.modelData, "failure"))
+                                            + (chip.wakes ? " · " + qsTr("will wake this conversation when its turn ends") : "")
             objectName: "chatSubConversation"
             size: "small"
             interactive: true
@@ -80,7 +83,7 @@ Flow {
             iconName: row.stateIcon(chip.childState)
             variant: chip.childState === "failed" ? "overdue" : "neutral"
             selected: chip.childState === "asking"
-            text: qsTr("%1 · %2").arg(AppController.routeText(chip.modelData, "name")).arg(chip.partnerName)
+            text: qsTr("%1 · %2").arg(AppController.routeText(chip.modelData, "name")).arg(chip.partnerName) + (chip.wakes ? " ↩" : "")
             Accessible.name: qsTr("Sub-conversation %1 with %2: %3").arg(AppController.routeText(chip.modelData, "name"))
                                                                      .arg(chip.partnerName).arg(chip.about)
             onClicked: row.opened(chip.childPath)

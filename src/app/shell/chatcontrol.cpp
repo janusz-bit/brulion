@@ -146,7 +146,8 @@ QString ChatControl::resolve(const QString &ref, QStringList *ambiguous) const
             continue;
         if (f.path.compare(wanted, Qt::CaseInsensitive) == 0 || f.path.compare(inFolder, Qt::CaseInsensitive) == 0)
             return f.path;
-        if (m_chats->nameOf(f.path).compare(name, Qt::CaseInsensitive) == 0)
+        // (A side chat is the user's aside: named by its path only.)
+        if (m_chats->nameOf(f.path).compare(name, Qt::CaseInsensitive) == 0 && m_chats->sideOf(f.path).isEmpty())
             named << f.path;
     }
     if (named.size() == 1)
@@ -198,6 +199,10 @@ QJsonObject ChatControl::row(const QString &path, qint64 modified) const
         const QString parent = ChatLineage::resolveParent(m_workspace, c.parent, path);
         out.insert(u"parent"_s, parent.isEmpty() ? c.parent : parent);
     }
+    if (const QString side = m_chats->sideOf(path); !side.isEmpty())
+        out.insert(u"side"_s, side);
+    if (m_chats->wakesParent(path))
+        out.insert(u"wakes"_s, true);
     if (!c.page.isEmpty())
         out.insert(u"page"_s, c.page);
     return out;
@@ -221,6 +226,8 @@ void ChatControl::list(const QJsonObject &params, const Reply &reply)
             continue;
         if (!parent.isEmpty() && m_chats->lineage()->parentOf(f.path).compare(parent, Qt::CaseInsensitive) != 0)
             continue;
+        if (!m_chats->sideOf(f.path).isEmpty())
+            continue; // (a side chat: the user's aside, shown inside its conversation only)
         entries.append({f.path, f.mtime});
     }
     std::ranges::sort(entries, [](const Entry &a, const Entry &b) {
@@ -336,8 +343,13 @@ void ChatControl::start(const QJsonObject &params, const Caller &caller, const R
                                       ChatLineage::MaxRunningChildren),
                               {{u"reason"_s, u"children"_s}, {u"max"_s, ChatLineage::MaxRunningChildren}});
     }
+    // Wake: the end of its turn wakes the conversation it came from (no wait needed).
+    const bool wake = params.value(u"wake"_s).toBool();
+    if (wake && parent.isEmpty())
+        return reply.fail(BadParams, u"wake needs a conversation to wake: start it with parent"_s,
+                          {{u"param"_s, u"wake"_s}});
     const QString page = params.value(u"page"_s).toString().trimmed();
-    const QString path = m_chats->send(QString(), text, page, {}, partner, parent);
+    const QString path = m_chats->send(QString(), text, page, {}, partner, parent, wake ? parent : QString());
     if (path.isEmpty()) {
         const QString failure = m_chats->turn(QString())->failure();
         return reply.fail(Failed, failure.isEmpty() ? u"The conversation could not be started"_s : failure, {});
@@ -362,6 +374,16 @@ void ChatControl::sendTo(const QJsonObject &params, const Caller &caller, const 
     const QString text = params.value(u"text"_s).toString().trimmed();
     if (text.isEmpty())
         return reply.fail(BadParams, u"Write the message (text)"_s, {{u"param"_s, u"text"_s}});
+    // Wake: the agent's own conversation (an ancestor of this one), a script's the parent.
+    const bool wake = params.value(u"wake"_s).toBool();
+    const QString woken = !wake ? QString() : caller.granted ? caller.conversation : m_chats->lineage()->parentOf(path);
+    if (wake && (woken.isEmpty() || !m_workspace->exists(woken)))
+        return reply.fail(BadParams, u"wake needs a conversation to wake: this one is no sub-conversation"_s,
+                          {{u"param"_s, u"wake"_s}});
+    if (wake && m_chats->isRunning(path))
+        return reply.fail(Busy,
+                          u"wake goes with a message sent now: wait for its turn (chatWait) or stop it (chatStop)"_s,
+                          {{u"state"_s, m_chats->stateOf(path)}});
     if (m_chats->isRunning(path)) {
         // In line after the answer (as a message the user writes meanwhile), when asked to.
         if (params.value(u"queue"_s).toBool() && m_chats->queue(path, text)) {
@@ -379,7 +401,7 @@ void ChatControl::sendTo(const QJsonObject &params, const Caller &caller, const 
                           u"%1 sub-conversations of its conversation run already: wait for one (chatWait)"_s.arg(
                                   ChatLineage::MaxRunningChildren),
                           {{u"reason"_s, u"children"_s}, {u"max"_s, ChatLineage::MaxRunningChildren}});
-    if (m_chats->send(path, text).isEmpty()) {
+    if (m_chats->send(path, text, QString(), {}, QString(), QString(), woken).isEmpty()) {
         const QString failure = m_chats->turn(path)->failure();
         return reply.fail(Failed, failure.isEmpty() ? u"The message could not be sent"_s : failure, {});
     }
@@ -481,6 +503,8 @@ void ChatControl::stop(const QJsonObject &params, const Caller &caller, const Re
     if (path.isEmpty() || !mayChange(caller, path, reply))
         return;
     const bool was = m_chats->isRunning(path);
+    // (Who stops it knows: no wake for it.)
+    m_chats->setWake(path, QString());
     m_chats->stop(path);
     reply.ok(QJsonObject{{u"path"_s, path}, {u"stopped"_s, was}});
 }

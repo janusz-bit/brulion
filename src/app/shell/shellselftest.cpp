@@ -8333,6 +8333,72 @@ void checkChatDrawings(QQuickWindow *window, AppController *app, const Check &ch
         focused->forceActiveFocus();
 }
 
+/// Side chats (docs/UI.md "AI chat"): "/b" in a conversation's field offers the app's /btw among the
+/// slash commands; "/btw <question>" sent makes a side chat beside the conversation — its pane opens
+/// with its question (and the failure of its turn: the partner does not run here), the route names it,
+/// the conversation's page keeps every word —; Close closes the pane; the list of conversations shows
+/// the conversation, never its side chat; deleting the conversation takes the side chat along.
+void checkChatSideChat(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    WorkspaceChats *chats = app->workspace()->chats();
+    const QString talk = u"AI/2026-11-23 Rozmowa z boczną.md"_s;
+    // (A partner that does not run here: its turns fail at once, no model is needed.)
+    const QString content =
+            u"---\ntasks: ignore\npartner: nikt/rozmowa\n---\n- 🧑 Plan wyjazdu\n- 🤖 Pociąg o 7:15.\n"_s;
+    app->workspace()->writeFile(talk, content);
+    app->navigate({{u"view"_s, u"chat"_s}, {u"path"_s, talk}});
+    QQuickItem *input = nullptr;
+    check(waitFor([&] { return (input = named(u"chatInput"_s)) != nullptr && named(u"chatMessageAi"_s) != nullptr; }),
+          "a conversation shows its field");
+    if (input)
+        input->setProperty("text", u"/b"_s);
+    check(waitFor([&] {
+              QQuickItem *chip = named(u"chatCommand"_s);
+              return chip && chip->property("text").toString() == u"/btw";
+          }),
+          "“/b” offers the app's /btw among the slash commands");
+    if (input)
+        input->setProperty("text", u"/btw Ile kosztuje bilet ulgowy?"_s);
+    QPointF at;
+    if (steadyItem(window, [&] { return named(u"chatSend"_s); }, &at))
+        tapOrClick(window, at, touch);
+    QString side;
+    check(waitFor([&] {
+              side = app->currentRoute().value(u"side"_s).toString();
+              return !side.isEmpty() && named(u"chatSidePane"_s) != nullptr && named(u"chatSideUser"_s) != nullptr;
+          }),
+          "/btw opens a side chat beside the conversation, its question in its pane");
+    check(chats->sideOf(side) == talk && app->currentRoute().value(u"path"_s).toString() == talk,
+          "the side chat is of the conversation shown");
+    check(app->workspace()->read(talk) == content, "the conversation's page gets no word of it");
+    check(waitFor([&] { return named(u"chatSideFailure"_s) != nullptr; }), "its turn's failure shows in the pane");
+    check(named(u"chatConversation"_s) == nullptr || named(u"chatSideChat"_s) != nullptr,
+          "the conversation lists it under its header (a wide window: beside it)");
+    if (steadyItem(window, [&] { return named(u"chatSideClose"_s); }, &at))
+        tapOrClick(window, at, touch);
+    check(waitFor([&] {
+              return named(u"chatSidePane"_s) == nullptr && app->currentRoute().value(u"side"_s).toString().isEmpty();
+          }),
+          "Close closes the side chat");
+    // The list: the conversation, never its side chat.
+    app->navigate({{u"view"_s, u"chat"_s}});
+    check(waitFor([&] { return named(u"chatConversation_Rozmowa z boczną"_s) != nullptr; }),
+          "the list shows the conversation");
+    check(named(u"chatConversation_"_s + chats->nameOf(side)) == nullptr, "and not its side chat");
+    // Deleted: its side chat goes with it.
+    check(!chats->remove(talk).isEmpty() && chats->lastRemoved().size() == 2 && !app->workspace()->exists(side),
+          "deleting the conversation takes its side chat along");
+    mouseMove(window, QPointF(1, 1)); // (away: no tooltip opens)
+    app->goHome();
+    settle(300);
+    closeToolTipsWaitingForDeletion(window);
+    if (focused)
+        focused->forceActiveFocus();
+}
+
 /// A secret an agent asks for (docs/UI.md "AI chat" → "A secret the agent asks for"): its private
 /// card in the conversation — who asks and the label as plain text, the reason, the page's button, a
 /// masked field —, Show unmasks it, Send hands it over as an owner-only file (never into the page),
@@ -12769,6 +12835,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ai-use. What an agent used, from its session logs: the row's line, the Usage… dialog.
     checkAgentUsage(window, app, check);
+    closeMenus(window);
+    // 3h-ai-btw. A side chat (/btw): its pane beside the conversation, out of the list.
+    checkChatSideChat(window, app, check);
     closeMenus(window);
     // 3h-ign. A page's tasks ignored from its menu, and back.
     checkIgnoreTasks(window, app, check);

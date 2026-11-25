@@ -484,6 +484,26 @@ AppController::AppController(const Options &options, QObject *parent)
         const int id = toastWithAction(tr("Scheduled conversation “%1” started").arg(title), u"info"_s, tr("Open"));
         m_chatToasts.insert(id, path);
     });
+    // Conversations untouched for a while, archived by themselves (Settings → Extensions → AI;
+    // WorkspaceChats::setAutoArchiveDays): never in the documentation; a toast says how many, its
+    // Undo brings them all back.
+    const auto autoArchive = [this] {
+        m_workspace->chats()->setAutoArchiveDays(
+                m_workspace->isOpen() && !inDocsVault() ? m_settings->aiChatAutoArchiveDays() : 0);
+    };
+    autoArchive();
+    connect(m_settings.get(), &AppSettings::aiChatAutoArchiveChanged, this, autoArchive);
+    connect(m_workspace.get(), &Workspace::openChanged, this, autoArchive);
+    connect(this, &AppController::inDocsVaultChanged, this, autoArchive);
+    connect(m_workspace->chats(), &WorkspaceChats::autoArchived, this, [this](const QStringList &paths, int days) {
+        const QString period = days == 1   ? tr("a day", "untouched for …")
+                               : days == 7 ? tr("a week", "untouched for …")
+                                           : tr("%n day(s)", "untouched for …", days);
+        const int id =
+                toastWithAction(tr("Archived %n conversation(s) untouched for %1", "", int(paths.size())).arg(period),
+                                u"info"_s, tr("Undo"));
+        m_autoArchiveToasts.insert(id, paths);
+    });
     // The model chosen in the settings is the one Settings → Extensions → AI downloads and removes.
     m_localAi->setChosen(m_settings->aiLocalModel());
     connect(m_settings.get(), &AppSettings::aiChanged, this,
@@ -2599,6 +2619,11 @@ void AppController::hostToastActionTriggered(int hostId)
             m_workspace->chats()->setArchived(path, !on);
         return;
     }
+    if (m_autoArchiveToasts.contains(id)) {
+        for (const QString &path : m_autoArchiveToasts.take(id))
+            m_workspace->chats()->setArchived(path, false);
+        return;
+    }
     Q_EMIT toastActionTriggered(id);
 }
 
@@ -2611,6 +2636,7 @@ void AppController::hostToastRemoved(int hostId)
     m_chatToasts.remove(id);
     m_rewindToasts.remove(id);
     m_chatMarkToasts.remove(id);
+    m_autoArchiveToasts.remove(id);
     m_automationToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));

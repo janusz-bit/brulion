@@ -2787,6 +2787,20 @@ private Q_SLOTS:
         r = cliLive({u"app"_s, u"chat"_s, u"send"_s, u"zajęta"_s, u"I"_s, u"jeszcze"_s});
         QCOMPARE(r.code, 4);
         QCOMPARE(r.errorCode(), u"busy"_s);
+        // --wake: no wait, the end of its turn wakes the parent conversation.
+        r = cliLive({u"app"_s, u"chat"_s, u"start"_s, u"Podsumuj"_s, u"źródła"_s, u"--parent"_s, u"AI/Plan"_s,
+                     u"--wake"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatStart"_s);
+        QCOMPARE(requests.last().params,
+                 (QJsonObject{{u"text"_s, u"Podsumuj źródła"_s}, {u"parent"_s, u"AI/Plan"_s}, {u"wake"_s, true}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"send"_s, u"AI/Plan"_s, u"I"_s, u"żółwie"_s, u"--queue"_s, u"--wake"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatSend"_s);
+        QCOMPARE(
+                requests.last().params,
+                (QJsonObject{
+                        {u"path"_s, u"AI/Plan"_s}, {u"text"_s, u"I żółwie"_s}, {u"queue"_s, true}, {u"wake"_s, true}}));
         // What the others ask.
         r = cliLive({u"app"_s, u"chat"_s, u"list"_s, u"--parent"_s, u"AI/Plan"_s, u"--limit"_s, u"7"_s});
         QCOMPARE(r.code, 0);
@@ -2907,12 +2921,22 @@ private Q_SLOTS:
                             .toString()
                             .contains(u"brulion_app_chat_start"_s));
             QStringList tools;
-            for (const QJsonValue &t :
-                 QJsonDocument::fromJson(lines.last()).object().value(u"result"_s).toObject().value(u"tools"_s).toArray())
+            QJsonObject startProperties;
+            for (const QJsonValue &t : QJsonDocument::fromJson(lines.last())
+                                               .object()
+                                               .value(u"result"_s)
+                                               .toObject()
+                                               .value(u"tools"_s)
+                                               .toArray()) {
                 tools.append(t.toObject().value(u"name"_s).toString());
-            for (const char *tool :
-                 {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
-                  "brulion_app_chat_partners", "brulion_app_chat_schedule_list", "brulion_app_chat_request_secret"})
+                if (tools.last() == u"brulion_app_chat_start")
+                    startProperties = t.toObject().value(u"inputSchema"_s).toObject().value(u"properties"_s).toObject();
+            }
+            // (Its wake: the parent woken instead of a wait.)
+            QCOMPARE(startProperties.contains(u"wake"_s), !readOnly);
+            for (const char *tool : {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
+                                     "brulion_app_chat_partners", "brulion_app_chat_schedule_list",
+                                     "brulion_app_chat_request_secret"})
                 QVERIFY2(tools.contains(QLatin1String(tool)), tool);
             // (The webhooks' server is no tool.)
             QVERIFY(!tools.contains(u"brulion_app_hooks_serve"_s));

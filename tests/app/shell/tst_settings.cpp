@@ -258,6 +258,34 @@ private Q_SLOTS:
         QCOMPARE(s.aiChatNotify(), u"background"_s);
     }
 
+    void theChatsAutoArchive()
+    {
+        // "Archive conversations untouched for": never by default; a day, 3 days, a week, 30 days
+        // kept; anything else (another version's, a number of its own) is never.
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.aiChatAutoArchive(), u"never"_s);
+            QCOMPARE(s.aiChatAutoArchiveDays(), 0);
+            QSignalSpy changed(&s, &AppSettings::aiChatAutoArchiveChanged);
+            s.setAiChatAutoArchive(u"7"_s);
+            s.setAiChatAutoArchive(u"7"_s);
+            QCOMPARE(changed.size(), 1);
+            QCOMPARE(s.aiChatAutoArchiveDays(), 7);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.aiChatAutoArchive(), u"7"_s);
+            s.setAiChatAutoArchive(u"30"_s);
+            QCOMPARE(s.aiChatAutoArchiveDays(), 30);
+            s.setAiChatAutoArchive(u"2"_s);
+            QCOMPARE(s.aiChatAutoArchive(), u"never"_s);
+        }
+        QSettings(file, QSettings::IniFormat).setValue(u"ai/chatAutoArchive"_s, u"tydzień"_s);
+        AppSettings s(file, m_tmp.path());
+        QCOMPARE(s.aiChatAutoArchiveDays(), 0);
+    }
+
     void followsOutsideLinksPersists()
     {
         // Device-local: in this device's settings, never in the synced .brulion/config.json.

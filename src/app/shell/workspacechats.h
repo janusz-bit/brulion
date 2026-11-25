@@ -24,6 +24,16 @@
 //   Workspace.chats.rename(path, "Nowa nazwa") / remove(path)        // the list's menu
 //   Workspace.chats.setPinned(path, true) / setArchived(path, true)   // its frontmatter's marks
 //   Workspace.chats.partners() / asking(path, questionSerial) / answer(path, option)
+//   Workspace.chats.askAside(path, "Ile kosztuje bilet?")               // a side chat (/btw): its path
+//
+// A side chat (`/btw`) is a conversation of its own beside another one (chat::sideChat): a copy of
+// it with the side question, answered by its partner in a turn of its own; never in the list, never
+// unread nor notified — the conversation's view shows it (lineage()->sideChats()). A sub-conversation
+// an AI agent started with "wake" (ChatControl) wakes its parent when its turn ends (setWake()): the
+// parent gets a message (chat::wakeMessage) through its queue — after its running turn, kept over a
+// restart — and its partner a turn; MaxWakesPerHour at most, an archived parent's waits for the user.
+// Conversations untouched for a while are archived by themselves when the device's setting says so
+// (setAutoArchiveDays(): when the notebook is ready, then every hour).
 //
 // Single-threaded (the GUI thread).
 
@@ -259,10 +269,11 @@ public:
     /// conversation's path, "" when nothing was sent: no text nor picture, a turn of it running,
     /// the assistant off (said in the turn's failure), no notebook, a page that could not be
     /// written. `parent`: a new conversation is a sub-conversation of that one (its page names it:
-    /// an AI agent's task for another partner, ChatControl).
+    /// an AI agent's task for another partner, ChatControl). `wakes`: the end of this turn wakes
+    /// that conversation (setWake(), armed before the turn starts).
     Q_INVOKABLE QString send(const QString &path, const QString &text, const QString &page = QString(),
                              const QStringList &pictures = QStringList(), const QString &partner = QString(),
-                             const QString &parent = QString());
+                             const QString &parent = QString(), const QString &wakes = QString());
     /// The AI's turn again on the conversation as it is (its last message the user's): after a
     /// failure or a stop. False when it cannot run now.
     Q_INVOKABLE bool retry(const QString &path);
@@ -302,6 +313,56 @@ public:
     /// not be written.
     Q_INVOKABLE bool setPinned(const QString &path, bool on);
     Q_INVOKABLE bool setArchived(const QString &path, bool on);
+
+    // ---- side chats (/btw) ------------------------------------------------------------------------
+    /// "Ask a side question" (`/btw <question>`, the conversation's menu): a side chat of the
+    /// conversation `path` — a page of its own in AI/, a copy of the conversation so far with
+    /// `question` and `pictures` after it (chat::sideChat; no journal line) — whose turn runs now
+    /// (the conversation's partner; an AI agent's session of its own). Its path, "" when nothing
+    /// was asked: no question, `path` no conversation or a side chat itself, the assistant off (said
+    /// in the turn's failure of ""), a page not written.
+    Q_INVOKABLE QString askAside(const QString &path, const QString &question,
+                                 const QStringList &pictures = QStringList());
+    /// `text` (the field's) is the app's command `/btw` — "/btw" alone or before a space or a line
+    /// break, any letter case — and its question (what follows it, trimmed; "" none).
+    Q_INVOKABLE bool isAside(const QString &text) const;
+    Q_INVOKABLE QString asideQuestion(const QString &text) const;
+    /// The conversation the side chat `path` is beside ("" none: ChatLineage::sideOf).
+    Q_INVOKABLE QString sideOf(const QString &path) const;
+    /// The AI's last message of `path` (its Markdown; "" none) — a side chat's answer brought into
+    /// its conversation's field (quote()).
+    Q_INVOKABLE QString lastAnswer(const QString &path) const;
+    /// The trash's paths of what the last remove() moved there: the conversation's, then its side
+    /// chats' (for one Undo: AppController.toastRestore).
+    Q_INVOKABLE QStringList lastRemoved() const { return m_removed; }
+
+    // ---- a sub-conversation that wakes its parent ---------------------------------------------------
+    /// The most times one conversation is woken in an hour: the next wake waits for the user (held in
+    /// its queue, the message says why) — two agents cannot wake each other for ever.
+    static constexpr int MaxWakesPerHour = 10;
+    /// When the turn of `child` ends — answered, failed, stopped by the user — or stops to ask the
+    /// user, the conversation `parent` gets a message saying so (chat::wakeMessage: its answer
+    /// quoted, cut at chat::MaxWakeChars) and its partner a turn: queued behind a running turn of it
+    /// (queue(); its waiting messages are kept over a restart). Once — a question wakes it and the
+    /// turn's end again. A parent deleted meanwhile is not woken; an archived one, or one woken
+    /// MaxWakesPerHour times in the last hour, gets the message held in its queue (Resume sends it).
+    /// Kept in the notebook's device state ("chat/wake"), following renames of both. "" `parent`
+    /// takes it away.
+    void setWake(const QString &child, const QString &parent);
+    /// The end of `child`'s turn will wake its parent (setWake()).
+    Q_INVOKABLE bool wakesParent(const QString &child) const;
+
+    // ---- conversations untouched for a while, archived by themselves (T3 Code's auto-settle) ------
+    /// Settings → Extensions → AI → "Archive conversations untouched for" (AppSettings, 0: never):
+    /// when the notebook is ready and every hour after it, archiveUntouched().
+    void setAutoArchiveDays(int days);
+    int autoArchiveDays() const { return m_autoArchiveDays; }
+    /// Archives every conversation untouched for autoArchiveDays() (none when 0): not pinned nor
+    /// archived, no side chat, its turn neither running nor asking nor failed, not unread, without
+    /// waiting messages, a draft, a sub-conversation that will wake it, not on screen — and its last
+    /// message (its time, else its page's last change) older than that before Workspace::now().
+    /// The paths archived (autoArchived() follows when there are any).
+    QStringList archiveUntouched();
 
     // ---- what needs the user: unread answers, failures, questions; notifications ----------------
     /// An answer came while no chat view showed the conversation — until one shows it. Kept in the
@@ -347,8 +408,10 @@ public:
                                           int serial = 0) const;
     Q_INVOKABLE void setAgentOption(const QString &path, const QString &partner, const QString &option,
                                     const QString &value);
-    /// The agent's slash commands matching what is typed (`typed` starts with "/"; {name,
-    /// description, hint}, at most 12); [] when `typed` is no command being written.
+    /// The slash commands matching what is typed (`typed` starts with "/"; {name, description,
+    /// hint, app}, at most 12): the app's own `/btw` (a side question, `app` true: never sent to an
+    /// agent) in a conversation that is no side chat, whoever answers it, then an AI agent's; []
+    /// when `typed` is no command being written.
     Q_INVOKABLE QVariantList agentCommands(const QString &path, const QString &partner, const QString &typed,
                                            int serial = 0) const;
     /// How much of the agent's context the conversation uses and what it cost ("" nothing known).
@@ -488,10 +551,14 @@ public:
     /// Adds `text` and `pictures` to the conversation `path`'s waiting messages; when no turn runs
     /// (and none are held) it is sent at once instead. False: nothing to send, no notebook.
     Q_INVOKABLE bool queue(const QString &path, const QString &text, const QStringList &pictures = QStringList());
-    /// The waiting messages of `path`: {id, text, pictures}, in the order they go.
+    /// The waiting messages of `path`: {id, text, pictures, from (a wake message's sub-conversation,
+    /// its name; "" none)}, in the order they go.
     Q_INVOKABLE QVariantList queued(const QString &path, int serial = 0) const;
     /// They wait for resumeQueue(): the turn before them failed or was stopped.
     Q_INVOKABLE bool queueHeld(const QString &path, int serial = 0) const;
+    /// They are held and every one of them is a sub-conversation's wake message (setWake(): held for
+    /// the limit, or an archived conversation).
+    Q_INVOKABLE bool heldForWake(const QString &path, int serial = 0) const;
     /// Takes the waiting message `id` out (its pictures deleted again unless `keepPictures`): its
     /// text — for the field, to edit it; its pictures: takenPictures() — "" when there is none.
     Q_INVOKABLE QString unqueue(const QString &path, int id, bool keepPictures = false);
@@ -562,6 +629,10 @@ Q_SIGNALS:
     void queueChanged();
     /// rewind() took messages out of `path`: AppController offers Undo (undoRewind()).
     void rewound(const QString &path, const QString &text);
+    /// wakesParent() of a conversation changed.
+    void wakesChanged();
+    /// archiveUntouched() archived `paths`, untouched for `days` (AppController's toast, with Undo).
+    void autoArchived(const QStringList &paths, int days);
     void changesChanged();
     /// An AI agent asks something in the conversation `path`, which no chat view shows: `text`
     /// says who asks what (AppController shows it as a toast with Open).
@@ -672,6 +743,25 @@ private:
     void moveQueue(const QString &from, const QString &to);
     /// Connects the recognizer of now (it may come later: one of the app's own).
     void connectSpeech();
+
+    QStringList m_removed; // the trash's paths of the last remove()
+    /// The side chat `path` (beside a conversation of the notebook): no unread, no notification.
+    bool isSideChat(const QString &path) const;
+
+    // The sub-conversations that wake their parent (child path in lower case → the parent's path)
+    // and when each parent was woken (lower case → ms since the epoch, the last hour's).
+    QHash<QString, QString> m_wakes;
+    bool m_wakesLoaded = false;
+    QHash<QString, QList<qint64>> m_woken;
+    void loadWakes();
+    void saveWakes();
+    /// The turn of `child` came to `wake` (`text`: its answer, failure, question): its parent woken.
+    void wake(const QString &child, int wake, const QString &text);
+    /// `text` in line in `path`'s queue — held (`hold`), or sent at once when nothing runs nor waits.
+    void enqueue(const QString &path, const QString &text, bool hold);
+
+    int m_autoArchiveDays = 0;
+    QTimer m_settleTimer; // every hour while autoArchiveDays() > 0
 };
 
 } // namespace brulion::shell

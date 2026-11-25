@@ -1780,6 +1780,7 @@ Item {
                 readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
                 readonly property list<var> providersWithLocal: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }, { value: "local", text: qsTr("On this device") }]
                 readonly property list<var> notifyModes: [{ value: "always", text: qsTr("Always") }, { value: "background", text: qsTr("In the background") }, { value: "never", text: qsTr("Never") }]
+                readonly property list<var> autoArchiveChoices: [{ value: "never", text: qsTr("Never") }, { value: "1", text: qsTr("1 day") }, { value: "3", text: qsTr("3 days") }, { value: "7", text: qsTr("A week") }, { value: "30", text: qsTr("30 days") }]
 
                 SettingSwitch {
                     objectName: "assistantSetting"
@@ -2011,6 +2012,19 @@ Item {
                         model: aiGroup.notifyModes
                         currentValue: AppSettings.aiChatNotify
                         onActivated: (value) => AppSettings.aiChatNotify = "" + value
+                    }
+                }
+                // The AI chat's conversations untouched for a while archived by themselves
+                // (WorkspaceChats::setAutoArchiveDays, T3 Code's auto-settle; docs/UI.md "AI chat").
+                ShellSettingRow {
+                    title: qsTr("Archive conversations untouched for")
+                    description: qsTr("Checked every hour on this device: not the pinned ones, nor those that run, ask you something, failed, are unread or have messages waiting. A toast offers Undo.")
+                    BSegmented {
+                        objectName: "aiChatAutoArchiveSetting"
+                        accessibleName: qsTr("Archive conversations untouched for")
+                        model: aiGroup.autoArchiveChoices
+                        currentValue: AppSettings.aiChatAutoArchive
+                        onActivated: (value) => AppSettings.aiChatAutoArchive = "" + value
                     }
                 }
             }

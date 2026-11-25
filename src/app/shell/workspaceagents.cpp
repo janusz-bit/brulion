@@ -428,9 +428,11 @@ QString WorkspaceAgents::context(const QString &root, const QString &conversatio
     if (tools && chat)
         lines << u"Its brulion_app_chat_* tools reach the app's other AI partners (brulion_app_chat_partners: other "
                  u"agents, the assistant): brulion_app_chat_start gives one a task as a sub-conversation of this one "
-                 u"and brulion_app_chat_wait returns its answer — for a second opinion or a subtask. When you need a "
-                 u"token, a password, a PIN or a key only the user can give, ask with brulion_app_chat_request_secret "
-                 u"(a private card in the app) — never in the chat, where it would be kept in the conversation's note."_s;
+                 u"and brulion_app_chat_wait returns its answer — for a second opinion or a subtask. With wake true "
+                 u"you need not wait: end your turn, and its end comes back as a message of this conversation that "
+                 u"starts with \"↩\" (from the app, not the user). When you need a token, a password, a PIN or a key "
+                 u"only the user can give, ask with brulion_app_chat_request_secret (a private card in the app) — never "
+                 u"in the chat, where it would be kept in the conversation's note."_s;
     lines << u"This conversation is kept in the note \"%1\" and the app writes your answers into it: never change "
              u"that note yourself."_s.arg(conversation);
     if (!page.isEmpty())

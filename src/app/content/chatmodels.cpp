@@ -5,6 +5,7 @@
 #include "markdown/math.h"
 
 #include "chat/chat.h"
+#include "chatlineage.h"
 #include "contentutil.h"
 #include "dates/dates.h"
 #include "markdown/blockdocument.h"
@@ -359,8 +360,12 @@ void ChatMessageModel::refresh()
         const markdown::RenderContext context =
                 renderContext(vaultIndex(), m_path, today, uiLocale(m_locale), paletteFromMap(m_palette));
         omitted = chat::firstSent(conversation, m_budget);
+        // (A side chat's pane: not the copy of its conversation.)
+        const qsizetype first = m_ownOnly && !conversation.side.isEmpty()
+                                        ? std::min<qsizetype>(conversation.sideFrom, conversation.messages.size())
+                                        : 0;
         QDate lastDay;
-        for (qsizetype i = 0; i < conversation.messages.size(); ++i) {
+        for (qsizetype i = first; i < conversation.messages.size(); ++i) {
             const chat::Message &m = conversation.messages.at(i);
             Row r;
             r.role = m.role == chat::Role::User ? u"user"_s : u"assistant"_s;
@@ -394,12 +399,19 @@ void ChatMessageModel::refresh()
             r.firstSent = omitted > 0 && i == omitted;
             r.number = int(i + 1);
             r.flag = m.flag == chat::Flag::Reported ? u"reported"_s : m.flag == chat::Flag::Hidden ? u"hidden"_s : QString();
+            if (!m.from.isEmpty()) {
+                const QString from = shell::ChatLineage::resolveParent(ws, m.from, m_path);
+                r.wakeFrom = from.isEmpty() ? m.from : from;
+                r.wakeName = ws->chats()->nameOf(r.wakeFrom);
+            }
             next.append(r);
         }
     }
     // A message opened again whose mark went: folded again when it is marked once more.
     for (auto it = m_revealed.begin(); it != m_revealed.end();) {
-        if (*it > next.size() || next.at(*it - 1).flag.isEmpty())
+        const int number = *it;
+        const auto row = std::ranges::find_if(next, [number](const Row &r) { return r.number == number; });
+        if (row == next.end() || row->flag.isEmpty())
             it = m_revealed.erase(it);
         else
             ++it;
@@ -412,7 +424,8 @@ void ChatMessageModel::refresh()
             [](const Row &a, const Row &b) {
                 return a.role == b.role && a.text == b.text && a.html == b.html && a.segments == b.segments
                        && a.line == b.line && a.time == b.time && a.day == b.day && a.pictures == b.pictures
-                       && a.sent == b.sent && a.firstSent == b.firstSent && a.flag == b.flag;
+                       && a.sent == b.sent && a.firstSent == b.firstSent && a.flag == b.flag && a.wakeFrom == b.wakeFrom
+                       && a.wakeName == b.wakeName;
             });
     m_page = page;
     m_title = title;
@@ -440,6 +453,8 @@ QVariant ChatMessageModel::data(const QModelIndex &index, int role) const
     case FirstSentRole: return r.firstSent;
     case FlagRole: return r.flag;
     case RevealedRole: return !r.flag.isEmpty() && m_revealed.contains(r.number);
+    case WakeFromRole: return r.wakeFrom;
+    case WakeNameRole: return r.wakeName;
     default: return {};
     }
 }
@@ -452,7 +467,17 @@ QHash<int, QByteArray> ChatMessageModel::roleNames() const
             {PicturesRole, "pictures"},   {SentRole, "sent"},
             {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"},
             {FlagRole, "flag"},           {RevealedRole, "revealed"},
-            {SegmentsRole, "segments"}};
+            {SegmentsRole, "segments"},   {WakeFromRole, "wakeFrom"},
+            {WakeNameRole, "wakeName"}};
+}
+
+void ChatMessageModel::setOwnOnly(bool own)
+{
+    if (m_ownOnly == own)
+        return;
+    m_ownOnly = own;
+    Q_EMIT ownOnlyChanged();
+    scheduleRefresh();
 }
 
 QString ChatMessageModel::textAt(int row) const
@@ -600,6 +625,10 @@ void ChatListModel::refresh()
                 continue;
             const chat::Conversation conversation = chat::parse(content);
             if (conversation.messages.isEmpty())
+                continue;
+            // A side chat (/btw): shown inside its conversation only — unless that one is gone.
+            if (!conversation.side.isEmpty()
+                && !shell::ChatLineage::resolveParent(ws, conversation.side, f.path).isEmpty())
                 continue;
             Entry e;
             e.path = f.path;

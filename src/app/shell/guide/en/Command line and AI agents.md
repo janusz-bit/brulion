@@ -154,12 +154,13 @@ Scripts and agents can talk to the app's AI chat too: start a conversation with 
 ```sh
 brulion-cli app chat partners                                     # who may answer
 brulion-cli app chat start "Is this plan any good?" --partner acp:codex --wait
+brulion-cli app chat start "Check the trains" --parent "Trip plan" --wake  # its end wakes "Trip plan"
 brulion-cli app chat list                                         # conversations and their state
 brulion-cli app chat read "Is this plan any good"                 # its messages
 brulion-cli app chat schedule add "Plan my day" --when "weekdays at 7:30"
 ```
 
-`wait` ends with exit 0 and the answer, 1 when the turn failed, 5 when it waits for your answer in the app (a permission), 3 when it still runs. With the remote control on (above) any script may; an AI agent the app starts gets these tools for its own conversation by itself (`brulion-cli mcp --app-chat`) — what it starts are sub-conversations of it ([[AI#Agents ask other agents]]).
+`wait` ends with exit 0 and the answer, 1 when the turn failed, 5 when it waits for your answer in the app (a permission), 3 when it still runs. With the remote control on (above) any script may; an AI agent the app starts gets these tools for its own conversation by itself (`brulion-cli mcp --app-chat`) — what it starts are sub-conversations of it ([[AI#Agents ask other agents]]); with `--wake` it need not wait: the end of the sub-conversation's turn comes back into its conversation as a message.
 
 A secret only you can give — a token, a password — an agent asks for with `brulion-cli app chat request-secret "GitHub token" --reason "…"` (the MCP tool `brulion_app_chat_request_secret`): you answer in a private card of the app and the agent gets a file only you can read, deleted when its answer ends ([[AI#A secret the agent asks for]]). The [[AI#Webhooks|webhooks]] of scheduled conversations are yours alone: `app chat schedule list` says a schedule has one, never its address, and no agent can make one.
 

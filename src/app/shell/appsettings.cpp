@@ -81,6 +81,7 @@ constexpr auto kChatHooksAddress = "ai/hooksAddress"_L1;
 constexpr auto kChatHooksPort = "ai/hooksPort"_L1;
 constexpr auto kChatHooksPublicUrl = "ai/hooksPublicUrl"_L1;
 constexpr auto kAiChatNotify = "ai/chatNotify"_L1;
+constexpr auto kAiChatAutoArchive = "ai/chatAutoArchive"_L1;
 constexpr auto kChatToolCalls = "ai/chatToolCalls"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
@@ -724,6 +725,25 @@ void AppSettings::setAiChatNotify(const QString &mode)
     const QString value = mode == u"always" || mode == u"never" ? mode : u"background"_s;
     if (store(kAiChatNotify, value, aiChatNotify()))
         Q_EMIT aiChatNotifyChanged();
+}
+
+QString AppSettings::aiChatAutoArchive() const
+{
+    const QString days = m_settings->value(kAiChatAutoArchive).toString();
+    return days == u"1" || days == u"3" || days == u"7" || days == u"30" ? days : u"never"_s;
+}
+
+void AppSettings::setAiChatAutoArchive(const QString &days)
+{
+    const QString value = days == u"1" || days == u"3" || days == u"7" || days == u"30" ? days : u"never"_s;
+    if (store(kAiChatAutoArchive, value, aiChatAutoArchive()))
+        Q_EMIT aiChatAutoArchiveChanged();
+}
+
+int AppSettings::aiChatAutoArchiveDays() const
+{
+    const QString days = aiChatAutoArchive();
+    return days == u"never" ? 0 : days.toInt();
 }
 
 QString AppSettings::chatToolCalls() const

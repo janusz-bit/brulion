@@ -11,7 +11,11 @@
 // for byte), a conversation too long for the model cut by whole turns, going back and forking
 // (a page cut before a message, a copy up to one), the questions brought back, quotes, and the
 // answers the user reported or hid (the frontmatter's `zgłoszone:` / `ukryte:` lists of message
-// numbers: read in their forms, set, taken away, the rest byte for byte).
+// numbers: read in their forms, set, taken away, the rest byte for byte); side chats (a copy of the
+// conversation beside it with its question, `side:` / `side-from:` read, a fork of one being no side
+// chat) and the message that wakes a conversation for its sub-conversation (answered, failed, asking,
+// stopped, in both languages, cut, held for the limit or an archived conversation; the sub-conversation
+// it names read back, look-alikes that are none).
 #include "chat/chat.h"
 
 #include <QTest>
@@ -925,6 +929,139 @@ private Q_SLOTS:
         QCOMPARE(prompts(parse(u"- 🧑 ![[x.png]]\n"_s)), QStringList());
         QCOMPARE(prompts(parse(u"- 🤖 Cześć\n- 🧑 Pytanie ([[Strona]]) dalej\n"_s)),
                  QStringList{u"Pytanie ([[Strona]]) dalej"_s});
+    }
+
+    void sideChats()
+    {
+        const QString page = u"---\nzadania: ignoruj\npartner: acp:claude\nprzypięta: tak\nfork: \"[[AI/a]]\"\n---\n"
+                             "- 🧑 Plan wyjazdu ([[Zakopane]])\n  czas:: 2026-11-15 09:12\n"
+                             "- 🤖 Pociąg o 7:15.\n  czas:: 2026-11-15 09:13\n"_s;
+        const QString side = sideChat(page, u"AI/2026-11-15 Plan wyjazdu.md"_s, u"Ile kosztuje bilet ulgowy?"_s,
+                                      QDateTime(QDate(2026, 11, 16), QTime(8, 5)), u"en"_s);
+        QCOMPARE(side, u"---\nzadania: ignoruj\npartner: acp:claude\nside: \"[[AI/2026-11-15 Plan wyjazdu]]\"\n"
+                       "side-from: 3\n---\n- 🧑 Plan wyjazdu ([[Zakopane]])\n  czas:: 2026-11-15 09:12\n"
+                       "- 🤖 Pociąg o 7:15.\n  czas:: 2026-11-15 09:13\n- 🧑 Ile kosztuje bilet ulgowy?\n"
+                       "  czas:: 2026-11-16 08:05\n"_s);
+        const Conversation c = parse(side);
+        QCOMPARE(c.side, u"AI/2026-11-15 Plan wyjazdu"_s);
+        QCOMPARE(c.sideFrom, 2);
+        QCOMPARE(c.fork, QString());
+        QVERIFY(!c.pinned);
+        QCOMPARE(c.partner, u"acp:claude"_s);
+        QCOMPARE(c.page, u"Zakopane"_s);
+        QCOMPARE(roles(c), u"UAU"_s);
+        // A turn of the conversation still running: two questions in a row (the model gets them joined).
+        const QString running = sideChat(u"- 🧑 Ą\r\n"_s, u"AI/x"_s, u"Ę?"_s);
+        QCOMPARE(running, u"---\r\nside: \"[[AI/x]]\"\r\nside-from: 2\r\n---\r\n- 🧑 Ą\r\n- 🧑 Ę?\r\n"_s);
+        QCOMPARE(history(parse(running)).size(), 1);
+        // A side chat of a side chat is beside the new one only; a fork of one is a conversation of its own.
+        QCOMPARE(parse(sideChat(side, u"AI/b"_s, u"Dalej"_s)).side, u"AI/b"_s);
+        QCOMPARE(parse(sideChat(side, u"AI/b"_s, u"Dalej"_s)).sideFrom, 3); // (`side-from: 4`: its 4th message)
+        const Conversation fork = parse(forked(side, 2, u"AI/s"_s));
+        QCOMPARE(fork.side, QString());
+        QCOMPARE(fork.sideFrom, 0);
+        QCOMPARE(fork.fork, u"AI/s"_s);
+        // Nothing to be beside, nothing asked.
+        QCOMPARE(sideChat(u"---\nzadania: ignoruj\n---\n"_s, u"AI/x"_s, u"Ą"_s), QString());
+        QCOMPARE(sideChat(page, u"AI/x"_s, u"  "_s), QString());
+        // As written elsewhere: any case, quoted, an alias; `side-from:` without `side:` means nothing.
+        QCOMPARE(parse(u"---\nSide: [[AI/R|tamta]]\nSIDE-FROM: '7'\n---\n- 🧑 Ą\n"_s).side, u"AI/R"_s);
+        QCOMPARE(parse(u"---\nSide: [[AI/R|tamta]]\nSIDE-FROM: '7'\n---\n- 🧑 Ą\n"_s).sideFrom, 6);
+        QCOMPARE(parse(u"---\nside-from: 3\n---\n- 🧑 Ą\n"_s).sideFrom, 0);
+        QCOMPARE(parse(u"---\nside: \"[[AI/x]]\"\nside-from: zero\n---\n- 🧑 Ą\n"_s).sideFrom, 0);
+        QCOMPARE(parse(u"- 🧑 Ą\n  side:: [[AI/x]]\n"_s).side, QString()); // (no frontmatter's)
+    }
+
+    void wakes_data()
+    {
+        QTest::addColumn<int>("wake");
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<int>("held");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("answered, pl") << int(Wake::Answered) << u"Plan ma sens.\n\n- pociąg o 7:15\n![[a.png]]"_s
+                                      << u"pl"_s << int(WakeHeld::No)
+                                      << u"↩ Podrozmowa [[AI/2026-11-22 Druga opinia]] odpowiedziała:\n\n"
+                                         "> Plan ma sens.\n>\n> - pociąg o 7:15"_s;
+        QTest::newRow("answered, en") << int(Wake::Answered) << u"Yes."_s << u"en"_s << int(WakeHeld::No)
+                                      << u"↩ Sub-conversation [[AI/2026-11-22 Druga opinia]] answered:\n\n> Yes."_s;
+        QTest::newRow("answered without text") << int(Wake::Answered) << u"![[a.png]]"_s << u"en"_s << int(WakeHeld::No)
+                                               << u"↩ Sub-conversation [[AI/2026-11-22 Druga opinia]] answered without "
+                                                  "text."_s;
+        QTest::newRow("failed") << int(Wake::Failed) << u"Agent padł: brak sieci\nszczegóły"_s << u"pl"_s
+                                << int(WakeHeld::No)
+                                << u"↩ Podrozmowa [[AI/2026-11-22 Druga opinia]] nie powiodła się:\n\n"
+                                   "> Agent padł: brak sieci\n> szczegóły"_s;
+        QTest::newRow("asking") << int(Wake::Asking) << u"Kodeks asks: Write Zgoda.md"_s << u"en"_s << int(WakeHeld::No)
+                                << u"↩ Sub-conversation [[AI/2026-11-22 Druga opinia]] waits for the user's answer in "
+                                   "the app:\n\n> Kodeks asks: Write Zgoda.md"_s;
+        QTest::newRow("stopped: no text") << int(Wake::Stopped) << u"cokolwiek"_s << u"pl"_s << int(WakeHeld::No)
+                                          << u"↩ Podrozmowa [[AI/2026-11-22 Druga opinia]] została zatrzymana "
+                                             "przez użytkownika."_s;
+        QTest::newRow("held: the limit") << int(Wake::Stopped) << QString() << u"en"_s << int(WakeHeld::Limit)
+                                         << u"↩ Sub-conversation [[AI/2026-11-22 Druga opinia]] was stopped by the "
+                                            "user.\n\n(It wakes this conversation no more: 10 wakes in an hour are the "
+                                            "most. It waits for the user — Resume sends it.)"_s;
+        QTest::newRow("held: archived") << int(Wake::Failed) << QString() << u"pl"_s << int(WakeHeld::Archived)
+                                        << u"↩ Podrozmowa [[AI/2026-11-22 Druga opinia]] nie powiodła się.\n\n"
+                                           "(Ta rozmowa jest zarchiwizowana: wiadomość czeka na użytkownika — Wznów ją "
+                                           "wysyła.)"_s;
+    }
+    void wakes()
+    {
+        QFETCH(int, wake);
+        QFETCH(QString, text);
+        QFETCH(QString, language);
+        QFETCH(int, held);
+        QFETCH(QString, expected);
+        const QString message =
+                wakeMessage(Wake(wake), u"AI/2026-11-22 Druga opinia.md"_s, text, language, WakeHeld(held), 10);
+        QCOMPARE(message, expected);
+        QCOMPARE(wakeSource(message), u"AI/2026-11-22 Druga opinia"_s);
+        // Written into the parent's page and read back as such.
+        const Conversation c = parse(appendMessage(u"- 🧑 Zadanie\n- 🤖 Zlecone.\n"_s, Role::User, message));
+        QCOMPARE(c.messages.size(), 3);
+        QCOMPARE(c.messages.last().from, u"AI/2026-11-22 Druga opinia"_s);
+        QCOMPARE(c.messages.first().from, QString());
+        QCOMPARE(c.messages.at(1).from, QString());
+    }
+
+    void wakeCut()
+    {
+        const QString answer = QString(u"żółw "_s).repeated(2000); // (10 000 characters)
+        const QString message = wakeMessage(Wake::Answered, u"AI/x"_s, answer, u"pl"_s);
+        QVERIFY(message.size() < MaxWakeChars + 400);
+        QVERIFY2(message.endsWith(u"…\n\n(Ucięte po 4000 z 9999 znaków: całość jest w [[AI/x]].)"_s),
+                 qPrintable(message.right(120)));
+        QVERIFY(wakeMessage(Wake::Answered, u"AI/x"_s, answer, u"en"_s)
+                        .endsWith(u"(Cut at 4000 of 9999 characters: all of it is in [[AI/x]].)"_s));
+        // A surrogate pair at the cut stays whole.
+        const QString emoji = QString(u"a"_s).repeated(MaxWakeChars - 1) + u"😀😀"_s;
+        const QString cut = wakeMessage(Wake::Answered, u"AI/x"_s, emoji, u"en"_s);
+        QVERIFY(!cut.contains(QChar(0xD83D) + QString(u"…"_s)));
+    }
+
+    void wakeSources_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("a wake") << u"↩ Sub-conversation [[AI/a|b]] answered:\n\n> x"_s << u"AI/a"_s;
+        QTest::newRow(".md and a heading") << u"↩ [[AI/Żółw.md#Koniec]] coś"_s << u"AI/Żółw"_s;
+        QTest::newRow("not in AI") << u"↩ Sub-conversation [[Dom]] answered:"_s << QString();
+        QTest::newRow("no space after the arrow") << u"↩[[AI/a]]"_s << QString();
+        QTest::newRow("no arrow first") << u"Zobacz ↩ [[AI/a]]"_s << QString();
+        QTest::newRow("the link on another line") << u"↩ Sub-conversation\n[[AI/a]]"_s << QString();
+        QTest::newRow("an open link") << u"↩ [[AI/a"_s << QString();
+        QTest::newRow("empty") << QString() << QString();
+    }
+    void wakeSources()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QString, expected);
+        QCOMPARE(wakeSource(markdown), expected);
+        // (An AI's message is never a wake.)
+        const QString answer = u"- 🤖 "_s + markdown + u"\n"_s;
+        QCOMPARE(parse(answer).messages.value(0).from, QString());
     }
 
     void quotes_data()

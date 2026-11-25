@@ -783,6 +783,8 @@ Result appChatStart(Call &call)
 {
     QJsonObject params{{u"text"_s, call.str(u"text"_s)}};
     copyGiven(call, params, {u"partner"_s, u"page"_s, u"parent"_s});
+    if (call.flag(u"wake"_s))
+        params.insert(u"wake"_s, true);
     return chatCommand(call, u"chatStart"_s, params, true);
 }
 
@@ -791,6 +793,8 @@ Result appChatSend(Call &call)
     QJsonObject params{{u"path"_s, call.str(u"conversation"_s)}, {u"text"_s, call.str(u"text"_s)}};
     if (call.flag(u"queue"_s))
         params.insert(u"queue"_s, true);
+    if (call.flag(u"wake"_s))
+        params.insert(u"wake"_s, true);
     return chatCommand(call, u"chatSend"_s, params, true);
 }
 
@@ -1312,6 +1316,9 @@ void addAppCommands(QList<Command> &out)
             QT_TRANSLATE_NOOP("brulion::cli",
                               "A conversation: its path (AI/2026-11-22 Plan.md; .md and AI/ optional) or its name"));
     const Arg waitFlag = flag(u"wait"_s, QT_TRANSLATE_NOOP("brulion::cli", "Then wait for its answer (as app chat wait)"));
+    const Arg wakeFlag = flag(u"wake"_s, QT_TRANSLATE_NOOP("brulion::cli",
+                                                           "When its turn ends, wake the parent conversation with the "
+                                                           "answer (no wait needed)"));
     const Arg timeoutOption = option(u"timeout"_s, ArgType::Int,
                                QT_TRANSLATE_NOOP("brulion::cli",
                                                  "How long to wait for the answer, ms (default 60000, at most 600000)"));
@@ -1360,29 +1367,33 @@ void addAppCommands(QList<Command> &out)
                               QT_TRANSLATE_NOOP("brulion::cli",
                                                 "A sub-conversation of this conversation (an agent the app started: "
                                                 "always its own)")),
-                       waitFlag, timeoutOption},
+                       wakeFlag, waitFlag, timeoutOption},
                       true);
     c.help = cliText(QT_TRANSLATE_NOOP(
             "brulion::cli",
             "Answers {path, name, partner, state …} at once; with --wait the answer too (as app chat wait). The "
             "partner gets only this text: give it the whole task. From an AI agent the app started, the "
-            "conversation is a sub-conversation of the agent's own (3 levels deep at most, 4 running at once)."));
+            "conversation is a sub-conversation of the agent's own (3 levels deep at most, 4 running at once). "
+            "With --wake there is no need to wait: when its turn ends (answered, failed, stopped, or asking the "
+            "user) the parent conversation gets a message with the answer and its partner a new turn (10 wakes "
+            "an hour at most)."));
     out.append(c);
-    c = chatCommandOf(u"app.chat.send"_s,
-                      QT_TRANSLATE_NOOP("brulion::cli",
-                                        "Send the next message into a conversation whose turn does not run"),
-                      appChatSend,
-                      {conversation,
-                       stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The message"),
-                                            true, true)),
-                       flag(u"queue"_s, QT_TRANSLATE_NOOP("brulion::cli",
-                                                           "While its turn runs: put it in line after the answer")),
-                       waitFlag, timeoutOption},
-                      true);
+    c = chatCommandOf(
+            u"app.chat.send"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Send the next message into a conversation whose turn does not run"),
+            appChatSend,
+            {conversation,
+             stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The message"), true,
+                                  true)),
+             flag(u"queue"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli", "While its turn runs: put it in line after the answer")),
+             wakeFlag, waitFlag, timeoutOption},
+            true);
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "Refused while its turn runs (exit 4, busy) — unless --queue puts it in line, "
                                        "sent when the answer is written (as a message the user writes meanwhile). An "
-                                       "agent the app started sends only to its own sub-conversations."));
+                                       "agent the app started sends only to its own sub-conversations. --wake: the end "
+                                       "of its turn wakes the agent's own conversation (a script's: its parent)."));
     out.append(c);
     c = chatCommandOf(u"app.chat.wait"_s,
                       QT_TRANSLATE_NOOP("brulion::cli",

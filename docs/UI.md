@@ -1367,7 +1367,9 @@ assistant's agent answers (docs/EXTENSIONS.md "AI") — or an extension's chat c
 conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's own ("AI agents
 (ACP)" below).
 
-* **Routes**: `{view: "chat"}` the conversations; `{view: "chat", path}` one; `{view: "chat", new:
+* **Routes**: `{view: "chat"}` the conversations; `{view: "chat", path}` one; `{view: "chat", path, side}` one
+  with its side chat `side` open (below; a side chat's own path as `path` opens so too — a toast's Open, a link
+  to its page); `{view: "chat", new:
   true, page?, prompt?}` a new one about `page` (a page name as a link names it), `prompt` sent at
   once ("Summarise this page"); `{view: "chat", new: true, fromLink, draft, partner?, page?, hidden?,
   capped?, pageMissing?, partnerMissing?}` a prompt link's ("Automation" below: `brulion://chat`) —
@@ -1392,7 +1394,18 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   icon), then the others — "Recent", named only under pinned ones —, newest change first; the
   **archived** (`zarchiwizowana: tak` / `archived: true`) out of it, folded at the bottom as
   "Archived 12" (`chatArchived`, the list's footer, `archivedCount`): a click unfolds them
-  (`showArchived`) under their own header, which folds them again. Archived wins over pinned.
+  (`showArchived`) under their own header, which folds them again. Archived wins over pinned. Side chats
+  (below) are never rows — nor matches of the search —, unless the conversation they name is gone.
+* **Archived by themselves** (T3 Code's auto-settle): **Settings → Extensions → AI → Archive conversations
+  untouched for** (`aiChatAutoArchiveSetting`, `AppSettings.aiChatAutoArchive`, key `ai/chatAutoArchive`:
+  **Never** — the default —, **1 day**, **3 days**, **A week**, **30 days**; a device setting) — when the
+  notebook is ready and then every hour (`WorkspaceChats.setAutoArchiveDays()` / `archiveUntouched()`, the
+  workspace's clock) every conversation whose last message (its `czas::`, else its page's last change) is
+  older is archived as the menu archives it (`setArchived`, its frontmatter): not one that is pinned,
+  archived, a side chat, running or waiting for the model, asking, showing a failure, unread, with messages
+  waiting or a draft, on screen in a chat view, or that a sub-conversation will wake. A toast says "Archived 3
+  conversations untouched for a week" with **Undo** (all of them back: `AppController`'s
+  `m_autoArchiveToasts`, `WorkspaceChats::autoArchived`). Never in the documentation notebook.
 * **What needs the user** (T3 Code's "came back to you"): a row whose turn asks something
   (`asking`: a change to allow, an agent's permission or sign-in — `chatAsking`, a question mark in
   the accent, the row's line what it asks, `question`), whose turn failed (`failure`: `chatFailed`,
@@ -1478,6 +1491,36 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   opens it), "Open the conversation as a page" (`chatOpenPage`) and, without the list, "New
   conversation". New messages scroll the list to its end (`WorkspaceChats.written`, the model's
   count).
+* **Side chats** (T3 Code's side chat, `/btw`): a question asked beside the conversation without adding it to
+  it — `/btw <question>` sent from the field (`WorkspaceChats.isAside()` / `asideQuestion()`: "/btw" alone or
+  before a space or a line break, any letter case; the app's own command, never sent to an agent, also while
+  the conversation's turn runs and with Ctrl+Enter; offered first among the slash-command chips, `chatCommand`
+  "/btw", in any conversation that is no side chat, whoever answers — `agentCommands()` gives it with `app`
+  true and leaves an agent's own `btw` out), or the header's **Ask a side question** (`chatAskAside`: "/btw " at
+  the start of the field). `WorkspaceChats.askAside(path, question, pictures)` writes the side chat — a page of
+  its own in `AI/` named after the question, a copy of the conversation with the question after it
+  (`chat::sideChat`, its `side:` and `side-from:`, docs/SYNTAX.md §14; no journal line) — and runs its turn: the
+  conversation's partner, an agent's session of its own, the model on the device in line as any turn; the
+  conversation's history never has it. It opens as a step of the history (`{view: "chat", path, side}`: Back
+  closes it) in **`chatSidePane`** (`qml/views/ChatSidePane.qml`) — beside the messages when the conversation
+  has 860 px or more (a pane of 340–440 px), else in their place: its name (`chatSideTitle`), **Bring into
+  the conversation** (`chatSideBringIn`: its last answer, `lastAnswer()`, as a quote at the start of the
+  conversation's field — `chat::quoted`; a narrow pane closes for it), **Delete** (`chatSideDelete`: to the
+  trash, the toast's Undo restores it) and **Close** (`chatSideClose`; Escape in the pane); its own messages
+  only (`chatSideMessages`, `chatSideUser` / `chatSideAi`: `ChatMessageModel.ownOnly`, from its `side-from:`
+  on; a long press or right-click: Copy, Bring into the conversation), the answer as it is written
+  (`chatSideLive`, `chatSidePartial`), what the AI does or that it waits for the model on the device
+  (`chatSideWorking`), a question of its turn with its options (`chatSideQuestion`,
+  `chatSideQuestionOption`; the pane tells `showing()`, so the question is answered there), a failure with
+  **Try again** (`chatSideFailure`, `chatSideRetry`), its waiting messages (`chatSideWaiting`), its field
+  (`chatSideInput`: Enter sends, in line after the answer while it runs) and Send / Stop (`chatSideSend`,
+  `chatSideStop`). Under the header the conversation's side chats are chips (`chatSideChats`,
+  `chatSideChat`: its name, its state's icon; the open one selected; `lineage.sideChats(path, serial)`). A
+  side chat is never in the list, its search, its sections, never unread and never a notification
+  (`WorkspaceChats` leaves it out: `sideOf()`); for agents and scripts it is no row of `chats` and no
+  conversation of a name (its path reads it, its row has `side`). A rename of the conversation rewrites its
+  `side:` link; `remove()` of the conversation moves its side chats to the trash with it and its toast's Undo
+  restores them all (`lastRemoved()` → `AppController.toastRestore`). A side chat has no side chat of its own.
 * **Reporting an answer** (Google Play's AI-Generated Content policy asks for it; every build has
   it): **Report response…** (`chatMessageReport`) opens `aiReportDialog`
   (`qml/shell/ShellAiReportDialog.qml`; `AiReportDraft`, `shell/aireportdraft.h`, over core
@@ -1587,7 +1630,8 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   stopped turn did not answer). With an empty field the button is Stop. A turn that fails or is
   stopped **holds** them (`chatHeld`: "2 messages wait: the answer before them stopped." with
   **Resume**, `chatResume` → `resumeQueue()`; a new message resumes them too, and waits after
-  them); they are kept in the notebook's device state
+  them; held sub-conversations' wake messages alone: "1 message from sub-conversations waits for you.",
+  `heldForWake()`); they are kept in the notebook's device state
   (LocalStore `chat/queued`), so a restart keeps them, held, and they follow a rename.
 * **Naming a page** (as T3 Code's @-mentions): "@" and the start of a name (at the start or after a
   space — not an address), or "[[" and anything but "]", offers the pages it may be as chips above
@@ -1720,9 +1764,12 @@ page deleted meanwhile ends the turn), `chatFailed` keeps the reason in the conv
 `showing()` / `isShown()`, `rename()`, `remove()`, `setPinned()` / `setArchived()`, what needs the
 user (`isUnread()`, `cameBack()`, `failureOf()`, `attentionChanged`) and its notifications
 (`setNotifyMode()`, `notificationWanted`), `nameOf()`, `partnerOf()` / `setPartner()`,
-`setFlag()` (an AI's answer reported or hidden) / `modelName()` (who answered, for a report), the
-secrets agents ask for (`secrets`: ChatSecrets, "A secret the agent asks for" above), the webhooks'
-server (`hooks`: HookServer, "Scheduled conversations" below), the
+`setFlag()` (an AI's answer reported or hidden) / `modelName()` (who answered, for a report), side chats
+(`askAside()`, `isAside()`, `asideQuestion()`, `sideOf()`, `lastAnswer()`, `lastRemoved()`), the wakes of
+sub-conversations (`setWake()`, `wakesParent()`, `heldForWake()`, `MaxWakesPerHour`), the conversations
+archived by themselves (`setAutoArchiveDays()`, `archiveUntouched()`, `autoArchived`), the secrets agents ask for
+(`secrets`: ChatSecrets, "A secret the agent asks for" above), the webhooks' server (`hooks`:
+HookServer, "Scheduled conversations" below), the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
 `picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
 `stopDictation` / `cancelDictation` → `dictated`; `dictationReady`, `recognizing`, `dictationElapsed`,
@@ -2120,6 +2167,24 @@ built-in assistant's tools do not change (docs/FINETUNE.md).
 * **Questions**: a sub-conversation's agent asks as any conversation's does — its question card in
   it, a toast with Open when no view shows it; the parent's agent learns from its wait that the
   sub-conversation waits for the user (`waiting_for_user`) and tells them.
+* **A sub-conversation that wakes its parent** (T3 Code's "notify the parent"): `chatStart` / `chatSend` with
+  `wake` (docs/CLI.md "Conversations": `--wake`) — the asking agent ends its turn instead of waiting, and
+  when the sub-conversation's turn ends (answered, failed, stopped by the user) or stops to ask the user, the
+  conversation it came from — the agent's own (its grant's), a script's the sub-conversation's parent — gets
+  a message (`chat::wakeMessage`, docs/SYNTAX.md §14: "↩ Sub-conversation [[AI/…]] answered:" and the answer
+  quoted, 4 000 characters at most) and its partner a turn: `WorkspaceChats::setWake()` (kept in the
+  notebook's device state `chat/wake`, following renames of both, armed before the turn starts so one that
+  fails at once wakes it too), the message going through the parent's queue — after its running turn, or
+  the turn waiting for the model on the device; kept over a restart (`chat/queued`). A question wakes it and
+  the turn's end once more; the caller's `chatStop` takes the wake away (who stops knows), a sub-conversation
+  deleted wakes nobody, a parent deleted meanwhile is not woken. At most `MaxWakesPerHour` (10) wakes of one
+  conversation an hour (the workspace's clock): the next one, and any for an **archived** parent, is held in
+  its queue for the user with a line saying why (Resume sends it) — two agents cannot wake each other for
+  ever. The sub-conversation's chip shows "↩" and its tooltip "will wake this conversation when its turn
+  ends" (`children()`'s `wakes`); in the parent the message has **From a sub-conversation: …**
+  (`chatWakeHeader`, `chatWakeHeaderText`: a tap opens it; `ChatMessageModel`'s `wakeFrom` / `wakeName` of
+  `chat::wakeSource`) above its bubble — an ordinary message of the user's side otherwise. The agents'
+  context and the MCP server's instructions say so.
 * **Limits** (`ChatControl`, `shell/chatcontrol.h`): an agent starts sub-conversations of its own
   conversation only, sends to and stops only its own sub-conversations, at most **three levels** deep
   (one that deep gets no chat grant) and **four** of one conversation running at once; a

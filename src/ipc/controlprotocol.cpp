@@ -490,11 +490,15 @@ const QList<MethodSpec> &controlMethods()
                      range(u"limit"_s, ParamType::Integer, 1, 200), range(u"offset"_s, ParamType::Integer, 0, 1e9)}));
         chat(method(u"chatStart"_s,
                     u"Start a conversation with a partner (\"\" the assistant, acp:<id>, an extension's); its "
-                    u"turn runs"_s,
+                    u"turn runs (wake: its end wakes the parent conversation)"_s,
                     {param(u"text"_s, ParamType::String, true), param(u"partner"_s, ParamType::String),
-                     param(u"page"_s, ParamType::String), param(u"parent"_s, ParamType::String)}));
-        chat(method(u"chatSend"_s, u"Send a message into a conversation whose turn does not run; its turn runs"_s,
-                    {param(u"path"_s, ParamType::String, true), param(u"text"_s, ParamType::String, true)}));
+                     param(u"page"_s, ParamType::String), param(u"parent"_s, ParamType::String),
+                     param(u"wake"_s, ParamType::Bool)}));
+        chat(method(u"chatSend"_s,
+                    u"Send a message into a conversation whose turn does not run (queue: in line after it); its "
+                    u"turn runs (wake: its end wakes the parent conversation)"_s,
+                    {param(u"path"_s, ParamType::String, true), param(u"text"_s, ParamType::String, true),
+                     param(u"queue"_s, ParamType::Bool), param(u"wake"_s, ParamType::Bool)}));
         chat(method(u"chatWait"_s,
                     u"Wait up to ms for a conversation's turn to end: its answer, the question it waits on, or "
                     u"why it failed"_s,

@@ -14,7 +14,14 @@
 // told, the view's line), a partner of the user's own (an extension's chat command), renaming and deleting a
 // conversation, Claude's thinking the turn shows, and answers the user reported or hid (Report response: the marks in
 // the page's frontmatter, folded rows, the list's preview, an older page, marks made in another app; the report's draft
-// and its link).
+// and its link). Side chats (`/btw`: a copy of the conversation with the side question, answered in its own page and
+// turn, out of the list, never unread nor notified, its pane's rows, the app's slash command, deleted and restored with
+// its conversation, following its rename, kept out of `chats`); a sub-conversation that wakes its parent (ChatControl's
+// `wake`: the answer quoted in the parent's page and its partner's turn, behind a running turn of it, a stop by the
+// user or by the caller, a failure, an archived or deleted parent, the limit of wakes an hour); conversations untouched
+// for a while archived by themselves (what is left alone, the toast's signal, a fake clock).
+#include "chatcontrol.h"
+#include "chatlineage.h"
 #include "chatmodels.h"
 
 #include "aireportdraft.h"
@@ -37,6 +44,7 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLocale>
 #include <QScopeGuard>
@@ -1439,6 +1447,363 @@ private Q_SLOTS:
         m_model.release();
         QCoreApplication::processEvents();
         QCOMPARE(wanted.size(), 6);
+    }
+
+private:
+    /// The answer of a chat method (ChatControl::handle()): ok and its result, or its error.
+    struct Answer {
+        bool done = false;
+        bool ok = false;
+        QJsonObject result;
+        QString code;
+        QString message;
+    };
+    static std::shared_ptr<Answer> ask(shell::ChatControl &control, const QString &method, const QJsonObject &params,
+                                       const shell::ChatControl::Caller &caller = {})
+    {
+        auto a = std::make_shared<Answer>();
+        shell::ChatControl::Reply reply;
+        reply.ok = [a](const QJsonObject &result) {
+            a->done = a->ok = true;
+            a->result = result;
+        };
+        reply.fail = [a](const QString &code, const QString &message, const QJsonObject &) {
+            a->done = true;
+            a->code = code;
+            a->message = message;
+        };
+        control.handle(method, params, caller, reply);
+        return a;
+    }
+
+private Q_SLOTS:
+    void sideChats()
+    {
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        bool active = false;
+        chats->setAppActive([&active] { return active; });
+        chats->setNotifyMode(u"always"_s);
+        QSignalSpy wanted(chats, &shell::WorkspaceChats::notificationWanted);
+        m_model.replies = {answer(u"Pociąg o 7:15."_s)};
+        const QString path = chats->send(QString(), u"Plan wyjazdu do Zakopanego"_s, u"Dom"_s);
+        QTRY_VERIFY(!chats->isRunning(path));
+        const QString before = ws->read(path);
+        QCOMPARE(wanted.size(), 1);
+
+        // The app's own command: `/btw` and its question, whoever answers; offered among the chips.
+        QVERIFY(chats->isAside(u"/btw Ile kosztuje bilet?"_s));
+        QVERIFY(chats->isAside(u"  /BTW"_s));
+        QVERIFY(chats->isAside(u"/btw\nczy to drogo?"_s));
+        QVERIFY(!chats->isAside(u"/btwx"_s));
+        QVERIFY(!chats->isAside(u"Pytanie /btw"_s));
+        QCOMPARE(chats->asideQuestion(u"/btw   Ile kosztuje bilet? "_s), u"Ile kosztuje bilet?"_s);
+        QCOMPARE(chats->asideQuestion(u"/btw"_s), QString());
+        QCOMPARE(chats->asideQuestion(u"Ile?"_s), QString());
+        const QVariantList commands = chats->agentCommands(path, QString(), u"/b"_s);
+        QCOMPARE(commands.size(), 1);
+        QCOMPARE(commands.first().toMap().value(u"name"_s).toString(), u"btw"_s);
+        QVERIFY(commands.first().toMap().value(u"app"_s).toBool());
+        QVERIFY(chats->agentCommands(path, QString(), u"/x"_s).isEmpty());
+        QVERIFY(chats->agentCommands(QString(), QString(), u"/"_s).isEmpty()); // (a new conversation has none)
+
+        // Asked beside it: a page of its own, a copy of the conversation with the question; no journal line.
+        const QString journal = ws->read(ws->journalPath(u"2026-11-15"_s));
+        m_model.replies = {answer(u"Ulgowy: 30 zł."_s)};
+        const QString side = chats->askAside(path, u"Ile kosztuje bilet ulgowy?"_s);
+        QCOMPARE(side, u"AI/2026-11-15 Ile kosztuje bilet ulgowy.md"_s);
+        QVERIFY(chats->isRunning(side));
+        QTRY_VERIFY(!chats->isRunning(side));
+        QCOMPARE(ws->read(path), before); // (the conversation: not a word of it)
+        QCOMPARE(ws->read(ws->journalPath(u"2026-11-15"_s)), journal);
+        QCOMPARE(ws->read(side),
+                 u"---\nzadania: ignoruj\nside: \"[[AI/2026-11-15 Plan wyjazdu do Zakopanego]]\"\nside-from: 3\n---\n"
+                 "- 🧑 Plan wyjazdu do Zakopanego ([[Dom]])\n  czas:: 2026-11-15 10:30\n"
+                 "- 🤖 Pociąg o 7:15.\n  czas:: 2026-11-15 10:30\n"
+                 "- 🧑 Ile kosztuje bilet ulgowy?\n  czas:: 2026-11-15 10:30\n"
+                 "- 🤖 Ulgowy: 30 zł.\n  czas:: 2026-11-15 10:30\n"_s);
+        // The model got the conversation so far and the question.
+        const QList<ai::Message> history = m_model.requests.last().messages;
+        QCOMPARE(history.size(), 3);
+        QVERIFY(history.last().content.endsWith(u"Ile kosztuje bilet ulgowy?"_s));
+        // Its conversation's: never unread, never a notification; listed under it, not in the list.
+        QVERIFY(!chats->isUnread(side));
+        QCOMPARE(wanted.size(), 1);
+        QCOMPARE(chats->sideOf(side), path);
+        QCOMPARE(chats->sideOf(path), QString());
+        QCOMPARE(chats->lineage()->sidesOf(path), QStringList{side});
+        const QVariantList rows = chats->lineage()->sideChats(path);
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toMap().value(u"name"_s).toString(), u"Ile kosztuje bilet ulgowy"_s);
+        QCOMPARE(rows.first().toMap().value(u"state"_s).toString(), u"idle"_s);
+        QCOMPARE(chats->lastAnswer(side), u"Ulgowy: 30 zł."_s);
+        ChatListModel list;
+        list.setWorkspace(ws.get());
+        list.refreshNow();
+        QCOMPARE(list.rowCount(), 1);
+        QCOMPARE(list.rowOf(side), -1);
+        list.setQuery(u"ulgowy"_s);
+        QCOMPARE(list.rowCount(), 0);
+        // Its pane: its own messages only.
+        ChatMessageModel pane;
+        pane.setWorkspace(ws.get());
+        pane.setPath(side);
+        pane.setOwnOnly(true);
+        pane.refreshNow();
+        QCOMPARE(pane.rowCount(), 2);
+        QCOMPARE(value(pane, 0, "markdown").toString(), u"Ile kosztuje bilet ulgowy?"_s);
+        pane.setOwnOnly(false);
+        pane.refreshNow();
+        QCOMPARE(pane.rowCount(), 4);
+        // No side chat of a side chat, nor of nothing, nor an empty question.
+        QCOMPARE(chats->askAside(side, u"Dalej?"_s), QString());
+        QCOMPARE(chats->askAside(u"AI/nie ma.md"_s, u"Ą?"_s), QString());
+        QCOMPARE(chats->askAside(path, u"  "_s), QString());
+        QVERIFY(chats->agentCommands(side, QString(), u"/"_s).isEmpty());
+        // The conversation goes on without it.
+        m_model.replies = {answer(u"Tak."_s)};
+        QCOMPARE(chats->send(path, u"A powrót?"_s), path);
+        QTRY_VERIFY(!chats->isRunning(path));
+        const QList<ai::Message> next = m_model.requests.last().messages;
+        QCOMPARE(next.size(), 3);
+        QVERIFY(!next.at(1).content.contains(u"ulgowy"_s));
+        // For scripts and agents: no conversation of `chats`, nor of a name; read by its path.
+        shell::ChatControl control(ws.get());
+        auto a = ask(control, u"chats"_s, {});
+        QCOMPARE(a->result.value(u"total"_s).toInt(), 1);
+        QCOMPARE(control.resolve(u"Ile kosztuje bilet ulgowy"_s), QString());
+        a = ask(control, u"chatRead"_s, {{u"path"_s, side}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QCOMPARE(a->result.value(u"side"_s).toString(), path);
+
+        // The conversation renamed: its side chat's link follows.
+        const QString renamed = chats->rename(path, u"Góry"_s);
+        QCOMPARE(renamed, u"AI/2026-11-15 Góry.md"_s);
+        QTRY_COMPARE(chats->sideOf(side), renamed);
+        QVERIFY2(ws->read(side).contains(u"Góry]]\""_s), qPrintable(ws->read(side)));
+        // Deleted: its side chats go to the trash with it, and come back with it.
+        const QString trash = chats->remove(renamed);
+        QVERIFY(!trash.isEmpty());
+        QCOMPARE(chats->lastRemoved().size(), 2);
+        QCOMPARE(chats->lastRemoved().first(), trash);
+        QVERIFY(!ws->exists(side));
+        QCOMPARE(ws->restoreAll(chats->lastRemoved()), 2);
+        QVERIFY(ws->exists(renamed) && ws->exists(side));
+        QTRY_COMPARE(chats->sideOf(side), renamed);
+        // A side chat whose conversation is gone is listed as any (nothing of it is lost).
+        QVERIFY(!ws->deletePage(renamed).isEmpty());
+        list.setQuery(QString());
+        QTRY_COMPARE(chats->sideOf(side), QString());
+        list.refreshNow();
+        QCOMPARE(list.rowOf(side), 0);
+    }
+
+    void aSubConversationWakesItsParent()
+    {
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        shell::ChatControl control(ws.get());
+        m_model.replies = {answer(u"Zlecę to."_s)};
+        const QString parent = chats->send(QString(), u"Zaplanuj wyjazd"_s);
+        QTRY_VERIFY(!chats->isRunning(parent));
+
+        // Wake needs a conversation to wake.
+        auto a = ask(control, u"chatStart"_s,
+                     {{u"text"_s, u"Bez rodzica"_s}, {u"partner"_s, QString()}, {u"wake"_s, true}});
+        QCOMPARE(a->code, u"bad_params"_s);
+
+        // Started with wake while the parent's next turn waits for the model: the answer waits behind it.
+        m_model.hold = true;
+        m_model.replies = {answer(u"Pociąg o 7:15 jest pełny w soboty."_s)};
+        a = ask(control, u"chatStart"_s,
+                {{u"text"_s, u"Sprawdź pociągi"_s},
+                 {u"partner"_s, QString()},
+                 {u"parent"_s, parent},
+                 {u"wake"_s, true}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString child = a->result.value(u"path"_s).toString();
+        QVERIFY(a->result.value(u"wakes"_s).toBool());
+        QVERIFY(chats->wakesParent(child));
+        QVERIFY(chats->lineage()->children(parent).first().toMap().value(u"wakes"_s).toBool());
+        // (Kept in the notebook's device state.)
+        QCOMPARE(ws->vault()->store()->get(u"chat/wake"_s).toObject().value(child.toLower()).toString(), parent);
+        QTRY_VERIFY(m_model.held != nullptr);
+        QCOMPARE(chats->send(parent, u"A hotel?"_s), parent);
+        QVERIFY(chats->isQueued(parent));
+        m_model.hold = false;
+        m_model.replies.append(answer(u"Hotel jest."_s));
+        m_model.release();
+        QVERIFY(!chats->wakesParent(child));
+        QTRY_VERIFY(!chats->isRunning(parent) && chats->queued(parent).isEmpty());
+        const chat::Conversation woken = chat::parse(ws->read(parent));
+        QCOMPARE(woken.messages.size(), 6);
+        QCOMPARE(woken.messages.at(3).text, u"Hotel jest."_s);
+        QCOMPARE(woken.messages.at(4).text, u"↩ Podrozmowa [[%1]] odpowiedziała:\n\n"
+                                            "> Pociąg o 7:15 jest pełny w soboty."_s.arg(child.chopped(3)));
+        QCOMPARE(woken.messages.at(4).from, child.chopped(3));
+        QCOMPARE(woken.messages.at(5).role, chat::Role::Assistant);
+        // Its partner got it as the user's turn.
+        QVERIFY(m_model.requests.last().messages.last().content.startsWith(u"↩ Podrozmowa"_s));
+        // The parent's view: a line over it.
+        ChatMessageModel messages;
+        messages.setWorkspace(ws.get());
+        messages.setPath(parent);
+        messages.refreshNow();
+        QCOMPARE(value(messages, 4, "wakeFrom").toString(), child);
+        QCOMPARE(value(messages, 4, "wakeName").toString(), u"Sprawdź pociągi"_s);
+        QCOMPARE(value(messages, 3, "wakeFrom").toString(), QString());
+
+        // A follow-up with wake: the parent woken again; the caller's Stop takes the wake away; the
+        // user's Stop wakes it (the parent hears of it).
+        a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"A w niedzielę?"_s}, {u"wake"_s, true}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QTRY_COMPARE(chat::parse(ws->read(parent)).messages.size(), 8);
+        m_model.hold = true;
+        a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Jeszcze raz"_s}, {u"wake"_s, true}});
+        QVERIFY(a->ok);
+        QCOMPARE(ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Ą"_s}, {u"wake"_s, true}})->code,
+                 u"busy"_s);
+        QVERIFY(ask(control, u"chatStop"_s, {{u"path"_s, child}})->ok);
+        QVERIFY(!chats->wakesParent(child));
+        m_model.release();
+        QCoreApplication::processEvents();
+        QCOMPARE(chat::parse(ws->read(parent)).messages.size(), 8);
+        a = ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"I jeszcze"_s}, {u"wake"_s, true}});
+        QVERIFY(a->ok);
+        QTRY_VERIFY(m_model.held != nullptr);
+        m_model.hold = false;
+        chats->stop(child);
+        m_model.release();
+        QTRY_COMPARE(chat::parse(ws->read(parent)).messages.size(), 10);
+        QVERIFY(chat::parse(ws->read(parent)).messages.at(8).text.endsWith(u"została zatrzymana przez użytkownika."_s));
+        // A failure says why.
+        ai::Reply broken;
+        broken.error = u"brak sieci"_s;
+        m_model.replies = {broken};
+        QVERIFY(ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Ostatnie"_s}, {u"wake"_s, true}})->ok);
+        QTRY_COMPARE(chat::parse(ws->read(parent)).messages.size(), 12);
+        QVERIFY(chat::parse(ws->read(parent)).messages.at(10).text.contains(u"nie powiodła się:\n\n> AI: "_s));
+        QVERIFY(chat::parse(ws->read(parent)).messages.at(10).text.contains(u"brak sieci"_s));
+
+        // An archived parent is not woken: the message waits for the user, held.
+        QVERIFY(chats->setArchived(parent, true));
+        m_model.replies = {answer(u"Gotowe."_s)};
+        QVERIFY(ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Po archiwum"_s}, {u"wake"_s, true}})
+                        ->ok);
+        QTRY_COMPARE(chats->queued(parent).size(), 1);
+        QVERIFY(chats->queueHeld(parent));
+        QVERIFY(chats->heldForWake(parent));
+        QCOMPARE(chats->queued(parent).first().toMap().value(u"from"_s).toString(), u"Sprawdź pociągi"_s);
+        QVERIFY(chats->queued(parent).first().toMap().value(u"text"_s).toString().endsWith(
+                u"zarchiwizowana: wiadomość czeka na użytkownika — Wznów ją wysyła.)"_s));
+        QCOMPARE(chat::parse(ws->read(parent)).messages.size(), 12);
+        QVERIFY(!chats->isRunning(parent));
+        // Resume sends it.
+        QVERIFY(chats->resumeQueue(parent));
+        QTRY_VERIFY(!chats->isRunning(parent));
+        QCOMPARE(chat::parse(ws->read(parent)).messages.size(), 14);
+        QVERIFY(chats->setArchived(parent, false));
+
+        // A parent deleted meanwhile: nobody is woken.
+        m_model.hold = true;
+        QVERIFY(ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Po usunięciu"_s}, {u"wake"_s, true}})
+                        ->ok);
+        QTRY_VERIFY(m_model.held != nullptr);
+        const QString trash = chats->remove(parent);
+        QVERIFY(!trash.isEmpty());
+        m_model.hold = false;
+        m_model.release();
+        QTRY_VERIFY(!chats->isRunning(child));
+        QVERIFY(!ws->exists(parent));
+        QVERIFY(!chats->wakesParent(child));
+    }
+
+    void wakesHaveALimit()
+    {
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        shell::ChatControl control(ws.get());
+        const QString parent = chats->send(QString(), u"Rodzic"_s);
+        QTRY_VERIFY(!chats->isRunning(parent));
+        auto a = ask(control, u"chatStart"_s,
+                     {{u"text"_s, u"Dziecko"_s}, {u"partner"_s, QString()}, {u"parent"_s, parent}});
+        QVERIFY(a->ok);
+        const QString child = a->result.value(u"path"_s).toString();
+        QTRY_VERIFY(!chats->isRunning(child));
+        // Ten wakes in an hour: each one a turn of the parent; the eleventh waits for the user.
+        int messages = int(chat::parse(ws->read(parent)).messages.size());
+        for (int i = 0; i < shell::WorkspaceChats::MaxWakesPerHour; ++i) {
+            QVERIFY(ask(control, u"chatSend"_s,
+                        {{u"path"_s, child}, {u"text"_s, u"Runda %1"_s.arg(i)}, {u"wake"_s, true}})
+                            ->ok);
+            messages += 2;
+            QTRY_COMPARE(chat::parse(ws->read(parent)).messages.size(), messages);
+            QTRY_VERIFY(!chats->isRunning(parent) && !chats->isRunning(child));
+        }
+        QVERIFY(ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Za dużo"_s}, {u"wake"_s, true}})->ok);
+        QTRY_COMPARE(chats->queued(parent).size(), 1);
+        QVERIFY(chats->queueHeld(parent));
+        QVERIFY(chats->queued(parent).first().toMap().value(u"text"_s).toString().contains(u"najwyżej 10 wybudzeń"_s));
+        QCOMPARE(chat::parse(ws->read(parent)).messages.size(), messages);
+        chats->unqueue(parent, chats->queued(parent).first().toMap().value(u"id"_s).toInt());
+        // An hour later it wakes again.
+        m_now = m_now.addSecs(3601);
+        QVERIFY(ask(control, u"chatSend"_s, {{u"path"_s, child}, {u"text"_s, u"Później"_s}, {u"wake"_s, true}})->ok);
+        QTRY_COMPARE(chat::parse(ws->read(parent)).messages.size(), messages + 2);
+    }
+
+    void untouchedConversationsArchiveThemselves()
+    {
+        const auto talk = [](const QString &when) {
+            return u"---\nzadania: ignoruj\n---\n- 🧑 Pytanie\n  czas:: %1\n- 🤖 Odpowiedź\n  czas:: %1\n"_s.arg(when);
+        };
+        QHash<QString, QString> files{
+                {u"AI/2026-11-01 Stara.md"_s, talk(u"2026-11-01 09:00"_s)},
+                {u"AI/2026-11-08 Na granicy.md"_s, talk(u"2026-11-08 11:00"_s)},
+                {u"AI/2026-11-14 Nowa.md"_s, talk(u"2026-11-14 09:00"_s)},
+                {u"AI/2026-11-01 Przypięta.md"_s,
+                 u"---\nprzypięta: tak\n---\n- 🧑 Ą\n  czas:: 2026-11-01 09:00\n- 🤖 Ę\n  czas:: 2026-11-01 09:00\n"_s},
+                {u"AI/2026-11-01 Bez czasu.md"_s, u"- 🧑 Ą\n- 🤖 Ę\n"_s},
+                {u"AI/2026-11-01 Szkic.md"_s, talk(u"2026-11-01 09:00"_s)},
+                {u"AI/2026-11-01 Nieprzeczytana.md"_s, talk(u"2026-11-01 09:00"_s)},
+                {u"AI/2026-11-01 Na ekranie.md"_s, talk(u"2026-11-01 09:00"_s)},
+                {u"AI/2026-11-01 Czeka.md"_s, talk(u"2026-11-01 09:00"_s)},
+                {u"AI/2026-11-01 Boczna.md"_s,
+                 u"---\nside: \"[[AI/2026-11-14 Nowa]]\"\nside-from: 2\n---\n- 🧑 Ą\n  czas:: 2026-11-01 09:00\n"_s},
+                {u"Notatka.md"_s, u"- 🧑 Ą\n"_s},
+        };
+        auto ws = open(files, true, {{u"AI/2026-11-01 Bez czasu.md"_s, QDateTime(QDate(2026, 10, 1), QTime(8, 0))}});
+        shell::WorkspaceChats *chats = ws->chats();
+        QSignalSpy archived(chats, &shell::WorkspaceChats::autoArchived);
+        // What needs the user, or what it is doing, is left alone.
+        chats->setDraft(u"AI/2026-11-01 Szkic.md"_s, u"Jeszcze nie wysłane"_s);
+        ws->vault()->store()->set(u"chat/unread"_s, QJsonObject{{u"ai/2026-11-01 nieprzeczytana.md"_s, 1.0}});
+        chats->showing(u"AI/2026-11-01 Na ekranie.md"_s, true);
+        chats->setWake(u"AI/2026-11-14 Nowa.md"_s, u"AI/2026-11-01 Czeka.md"_s);
+        QCOMPARE(chats->autoArchiveDays(), 0);
+        QVERIFY(chats->archiveUntouched().isEmpty()); // (never: the default)
+        // A week: the old ones now (the notebook is ready), the toast's signal with them.
+        chats->setAutoArchiveDays(7);
+        QCOMPARE(archived.size(), 1);
+        QStringList paths = archived.first().at(0).toStringList();
+        paths.sort();
+        QCOMPARE(paths, (QStringList{u"AI/2026-11-01 Bez czasu.md"_s, u"AI/2026-11-01 Stara.md"_s}));
+        QCOMPARE(archived.first().at(1).toInt(), 7);
+        QVERIFY(ws->read(u"AI/2026-11-01 Stara.md"_s).contains(u"zarchiwizowana: tak"_s));
+        QVERIFY(!ws->read(u"AI/2026-11-08 Na granicy.md"_s).contains(u"zarchiwizowana"_s));
+        QVERIFY(!ws->read(u"AI/2026-11-01 Przypięta.md"_s).contains(u"zarchiwizowana"_s));
+        QVERIFY(!ws->read(u"AI/2026-11-01 Boczna.md"_s).contains(u"zarchiwizowana"_s));
+        QCOMPARE(ws->read(u"Notatka.md"_s), u"- 🧑 Ą\n"_s);
+        // Nothing more to archive; an hour later what has aged since.
+        QVERIFY(chats->archiveUntouched().isEmpty());
+        QCOMPARE(archived.size(), 1);
+        m_now = m_now.addSecs(3600);
+        QCOMPARE(chats->archiveUntouched(), QStringList{u"AI/2026-11-08 Na granicy.md"_s});
+        // Never: nothing more.
+        chats->showing(u"AI/2026-11-01 Na ekranie.md"_s, false);
+        chats->setAutoArchiveDays(0);
+        QVERIFY(chats->archiveUntouched().isEmpty());
+        QVERIFY(!ws->read(u"AI/2026-11-01 Na ekranie.md"_s).contains(u"zarchiwizowana"_s));
     }
 
     void segments_data()

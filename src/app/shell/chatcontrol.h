@@ -15,6 +15,11 @@
 // chatRead, chatWait, chatPartners, chatSchedules) is open to all: the agent's notebook tools read
 // every page anyway. No schedule's webhook secret is ever given or taken here.
 //
+// chatStart and chatSend take `wake`: instead of waiting (chatWait), the asking agent ends its turn
+// and the end of the sub-conversation's turn wakes its conversation — the agent's own (a grant's),
+// a script's the sub-conversation's parent (WorkspaceChats::setWake); chatStop takes it away. Side
+// chats (`/btw`, the user's asides) are no conversation of `chats` nor of a name: read by path.
+//
 // GUI-free (the desktop's RemoteControl passes requests on; tests call it directly). Waits are
 // answered when the turn's state changes or their time is up, and dropped when their client is
 // gone. Single-threaded (the GUI thread).
@@ -86,7 +91,7 @@ private:
     void requestSecret(const QJsonObject &params, const Caller &caller, const Reply &reply);
 
     /// A conversation's row: {path, name, partner, partnerName, state, failure?, question?,
-    /// parent?, messages, changed}.
+    /// parent?, side?, wakes?, page?, messages, changed}.
     QJsonObject row(const QString &path, qint64 modified = -1) const;
     /// What chatWait answers for `path` now: {path, state, answer? | question? | failure?}.
     QJsonObject outcome(const QString &path) const;

@@ -15,9 +15,11 @@
 //   // folded one opened again in this view: reveal()), segments (a message with a drawing — a ```chart
 //   // of its own table, a ```mermaid diagram, a display formula —: its parts one under another,
 //   // [{kind: "text" | "chart" | "diagram" | "math", html, code, source, chartData}]; [] for text
-//   // only: messageHtml shows it)
+//   // only: messageHtml shows it), wakeFrom / wakeName (a message that woke the conversation for a
+//   // sub-conversation — chat::wakeSource —: that conversation's path and name, "" for any other)
 //   // page: the page the conversation is about ("" none), title: the page's name without the date,
-//   // omitted: the messages the model does not get
+//   // omitted: the messages the model does not get; ownOnly: a side chat's pane shows only its own
+//   // messages (from its `side-from:` on), not the copy of its conversation before them
 //   // render(markdown): an answer being written as a message shows it; segments(markdown): its
 //   // parts when it has a drawing ([] text only)
 //   // questionBefore(row): the user's question an answer answers (Report response)
@@ -38,7 +40,8 @@
 //   // archived; in each the ones that need the user (a question, a failure, an unread answer) on
 //   // top, by when they came back, then the newest change first. A query keeps the conversations
 //   // whose name or one of whose messages has all its words (case and diacritics aside) — the
-//   // messages' text kept from the last refresh: no page is read for it.
+//   // messages' text kept from the last refresh: no page is read for it. Side chats (`/btw`) are
+//   // never listed: their conversation's view shows them (one whose conversation is gone is).
 #pragma once
 
 #include "workspacemodel.h"
@@ -72,6 +75,8 @@ class ChatMessageModel : public WorkspaceListModel {
     Q_PROPERTY(int budget READ budget WRITE setBudget NOTIFY budgetChanged FINAL)
     /// How many of its first messages the model does not get (they do not fit it).
     Q_PROPERTY(int omitted READ omitted NOTIFY loaded FINAL)
+    /// Only a side chat's own messages are rows (those from its `side-from:` on): its pane.
+    Q_PROPERTY(bool ownOnly READ ownOnly WRITE setOwnOnly NOTIFY ownOnlyChanged FINAL)
 
 public:
     enum Role {
@@ -87,7 +92,9 @@ public:
         PicturePathsRole,
         FlagRole,
         RevealedRole,
-        SegmentsRole
+        SegmentsRole,
+        WakeFromRole,
+        WakeNameRole
     };
     explicit ChatMessageModel(QObject *parent = nullptr);
 
@@ -103,6 +110,8 @@ public:
     int budget() const { return m_budget; }
     void setBudget(int budget);
     int omitted() const { return m_omitted; }
+    bool ownOnly() const { return m_ownOnly; }
+    void setOwnOnly(bool own);
 
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -146,6 +155,7 @@ Q_SIGNALS:
     void paletteChanged();
     void localeChanged();
     void budgetChanged();
+    void ownOnlyChanged();
     /// The conversation was read again (page, title, exists may have changed).
     void loaded();
 
@@ -168,6 +178,8 @@ private:
         int number = 0; ///< its number in the page, from 1 (chat::setFlag)
         QString flag;   ///< "" | "reported" | "hidden"
         QVariantList segments;
+        QString wakeFrom; ///< the sub-conversation a wake message comes from ("" none)
+        QString wakeName;
     };
     QList<Row> m_rows;
     QSet<int> m_revealed; // the numbers of the folded messages opened again
@@ -179,6 +191,7 @@ private:
     bool m_exists = false;
     int m_budget = 0;
     int m_omitted = 0;
+    bool m_ownOnly = false;
 };
 
 class ChatListModel : public WorkspaceListModel {

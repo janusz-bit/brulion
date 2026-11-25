@@ -1025,6 +1025,7 @@ private:
     QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
     QHash<int, std::pair<QString, QString>> m_renameToasts; ///< toastUndoRename()'s ids → {path, old title}
     QHash<int, std::tuple<QString, QString, bool>> m_chatMarkToasts; ///< toastUndoChatMark()'s → {path, mark, on}
+    QHash<int, QStringList> m_autoArchiveToasts; ///< the conversations archived by themselves, for Undo
     QHash<int, QString> m_chatToasts; ///< an AI agent's question off screen: the toast's id → its conversation
     QHash<int, QString> m_rewindToasts; ///< "Edit from here": the toast's id → its conversation (Undo)
     /// What platform::setAgentWork() was given last: title, text, "waiting" or "".

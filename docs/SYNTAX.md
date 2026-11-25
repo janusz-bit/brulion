@@ -2787,14 +2787,62 @@ zadania: ignoruj
   they leave out.
 * **A fork**: the frontmatter's `fork: "[[AI/2026-11-15 Co mam jutro do zrobienia]]"` — the
   conversation it was forked from ("Fork from here" on a message: docs/UI.md "AI chat"). The fork
-  is a copy of that page up to the message chosen (its frontmatter but `parent:` and the list's marks, `partner:`, times and pictures
-  as they were) and goes on by itself; its view links back to the source.
+  is a copy of that page up to the message chosen (its frontmatter but `parent:`, the list's marks and a side chat's
+  `side:` / `side-from:`, `partner:`, times and pictures as they were) and goes on by itself; its view links back to
+  the source.
 * **Where it came from**: a conversation an AI agent started from another one — a task for another
   partner, docs/UI.md "Agents delegate" — names it in its frontmatter as a link,
   `parent: "[[AI/2026-11-22 Plan wyjazdu]]"` (the same key in every language, like `partner:`;
   quoted, as YAML needs a link to be; an alias, heading or block part is left out when read). A
   rename of that conversation rewrites the link, as any; the chat lists the sub-conversations under
   it. A conversation deeper than three such levels starts no more.
+* **A side chat** (`/btw`, docs/UI.md "AI chat"): a question asked beside a conversation without adding it to
+  it, a page of its own in `AI/` named after the question (no journal line) — a copy of that conversation as it
+  was (as a fork of its last message: its frontmatter but `parent:`, `fork:` and the list's marks), the
+  question after it, the answers after that. Its frontmatter names the conversation,
+  `side: "[[AI/2026-11-15 Plan wyjazdu]]"`, and where its own messages begin, `side-from: 3` (the page's
+  messages counted from 1, as the marks count them) — both keys the same in every language, read in any
+  letter case, quoted or not (`side-from:` without `side:` means nothing):
+
+  ```markdown
+  ---
+  zadania: ignoruj
+  side: "[[AI/2026-11-15 Plan wyjazdu]]"
+  side-from: 3
+  ---
+  - 🧑 Plan wyjazdu ([[Zakopane]])
+    czas:: 2026-11-15 09:12
+  - 🤖 Pociąg o 7:15.
+    czas:: 2026-11-15 09:13
+  - 🧑 Ile kosztuje bilet ulgowy?
+    czas:: 2026-11-16 08:05
+  ```
+
+  The model gets the whole page (the copy is what it knows), the chat shows only its own messages, in a pane
+  of the conversation's view, and never lists it among the conversations — unless the conversation it names is
+  no page of the notebook any more: then it is a conversation as any. A rename of the conversation rewrites
+  the link; deleted from the chat, its side chats go to the trash with it. Another app reads the keys as page
+  properties and the page as a conversation.
+* **A wake message**: a sub-conversation an AI agent started with "wake" (docs/UI.md "Agents delegate")
+  tells the conversation it came from when its turn ends — the chat appends a user's message there that
+  starts with `↩ ` and links to it, then its answer quoted, the reason it failed, or the question it waits on
+  (`↩ Podrozmowa [[AI/…]] odpowiedziała:` / `nie powiodła się:` / `czeka na odpowiedź użytkownika w
+  aplikacji:` / `została zatrzymana przez użytkownika.`; `↩ Sub-conversation [[AI/…]] answered:` / `failed:`
+  / `waits for the user's answer in the app:` / `was stopped by the user.` in an English notebook), at most
+  4 000 characters of it ("(Ucięte po 4000 z 9999 znaków: całość jest w [[AI/…]].)"), and, when it waits for
+  the user instead of waking the conversation (too many wakes in an hour, an archived conversation), a last
+  line saying why:
+
+  ```markdown
+  - 🧑 ↩ Podrozmowa [[AI/2026-11-22 Druga opinia]] odpowiedziała:
+    czas:: 2026-11-22 10:15
+
+    > Plan ma sens, ale pociąg o 7:15 jest pełny w soboty.
+  ```
+
+  It is an ordinary message of the user's side, plain Markdown (the model reads it as it is; the link follows a
+  rename): a message whose first line starts with "↩" and a space and whose first link on that line names a
+  page in `AI/` is read as one (`chat::wakeSource`) — the chat shows "From a sub-conversation" above it.
 * **Pinned, archived**: the frontmatter's `przypięta: tak` (`pinned: true`) puts the conversation
   among the pinned on top of the chat's list, `zarchiwizowana: tak` (`archived: true`) out of it
   into its folded "Archived" (docs/UI.md "AI chat"). Either language's key is read, in any letter
@@ -2821,7 +2869,8 @@ zadania: ignoruj
 * Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `formatMessage`,
   `newConversation`, `setPartner`, `setFrontmatterValue`, `setMark`, `setFlag`, `flagKey`, `picturesIn`, `withPictures`,
   `withoutPictures`, `pageTitle`, `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`,
-  `truncated` — "Edit from here" —, `forked`, `prompts`, `quoted`), tested in `tests/core/chat`.
+  `truncated` — "Edit from here" —, `forked`, `sideChat`, `wakeMessage`, `wakeSource`, `prompts`, `quoted`), tested in
+  `tests/core/chat`.
 
 ## 15. Flashcards
 

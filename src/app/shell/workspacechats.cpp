@@ -34,6 +34,8 @@
 #include <QLocale>
 #include <QMimeData>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
@@ -247,7 +249,31 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         if (!isShown(to))
             setUnread(to, true);
     });
+    // A sub-conversation that wakes its parent: both may be renamed meanwhile; a deleted one wakes
+    // nobody (a deleted parent is not woken: wake()).
+    connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
+        loadWakes();
+        bool moved = false;
+        if (m_wakes.contains(from.toLower())) {
+            m_wakes.insert(to.toLower(), m_wakes.take(from.toLower()));
+            moved = true;
+        }
+        for (QString &parent : m_wakes) {
+            if (parent.compare(from, Qt::CaseInsensitive) == 0) {
+                parent = to;
+                moved = true;
+            }
+        }
+        if (m_woken.contains(from.toLower()))
+            m_woken.insert(to.toLower(), m_woken.take(from.toLower()));
+        if (moved) {
+            saveWakes();
+            Q_EMIT wakesChanged();
+        }
+    });
     connect(m_workspace, &Workspace::pathRemoved, this, [this](const QString &path) {
+        if (wakesParent(path))
+            setWake(path, QString());
         if (ChatTurn *t = find(path); t && t->m_running)
             stop(path);
         moveQueue(path, QString());
@@ -257,6 +283,13 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     });
     connect(this, &WorkspaceChats::stateChanged, this, &WorkspaceChats::updateRunningShown);
     connect(this, &WorkspaceChats::shownChanged, this, &WorkspaceChats::updateRunningShown);
+    // Conversations untouched for a while: archived when the notebook is ready, then every hour.
+    m_settleTimer.setInterval(3600 * 1000);
+    connect(&m_settleTimer, &QTimer::timeout, this, &WorkspaceChats::archiveUntouched);
+    connect(m_workspace, &Workspace::readyChanged, this, [this] {
+        if (m_workspace->ready() && m_autoArchiveDays > 0)
+            archiveUntouched();
+    });
 }
 
 void WorkspaceChats::setStatus(const QString &key, const QString &text)
@@ -304,6 +337,7 @@ void WorkspaceChats::questionsMoved()
         if (asks) {
             t->m_cameBack = stamp();
             notifyUser(t->m_path, questionText(t->m_path).section(u'\n', 0, 0).trimmed());
+            wake(t->m_path, int(chat::Wake::Asking), questionText(t->m_path));
         } else if (t->m_failure.isEmpty()) {
             t->m_cameBack = 0;
         }
@@ -383,12 +417,23 @@ void WorkspaceChats::setAgentOption(const QString &path, const QString &partner,
 QVariantList WorkspaceChats::agentCommands(const QString &path, const QString &partner, const QString &typed, int) const
 {
     // A command being written: "/" and its name, nothing after it yet.
-    if (!isAgent(partner) || !typed.startsWith(u'/') || typed.contains(u' ') || typed.contains(u'\n'))
+    if (!typed.startsWith(u'/') || typed.contains(u' ') || typed.contains(u'\n'))
         return {};
     const QString prefix = typed.mid(1);
     QVariantList out;
+    // The app's own: a side question, whoever answers (never sent to an agent).
+    const QString aside = u"btw"_s;
+    if (!path.isEmpty() && aside.startsWith(prefix, Qt::CaseInsensitive) && !isSideChat(path))
+        out.append(
+                QVariantMap{{u"name"_s, aside},
+                            {u"description"_s, tr("Ask a side question: answered beside this conversation, not in it")},
+                            {u"hint"_s, tr("question")},
+                            {u"app"_s, true}});
+    if (!isAgent(partner))
+        return out;
     for (const QVariant &row : m_agents->commands(path, partner)) {
-        if (row.toMap().value(u"name"_s).toString().startsWith(prefix, Qt::CaseInsensitive))
+        const QString name = row.toMap().value(u"name"_s).toString();
+        if (name.compare(aside, Qt::CaseInsensitive) != 0 && name.startsWith(prefix, Qt::CaseInsensitive))
             out.append(row);
         if (out.size() == 12)
             break;
@@ -687,7 +732,7 @@ ChatTurn *WorkspaceChats::turn(const QString &path)
 }
 
 QString WorkspaceChats::send(const QString &path, const QString &text, const QString &page, const QStringList &pictures,
-                             const QString &partner, const QString &parent)
+                             const QString &partner, const QString &parent, const QString &wakes)
 {
     const QString message = text.trimmed();
     QStringList sent;
@@ -729,6 +774,9 @@ QString WorkspaceChats::send(const QString &path, const QString &text, const QSt
     }
     for (const QString &picture : std::as_const(sent))
         m_added.removeAll(picture); // (part of the notebook now)
+    // (Before the turn runs: one that fails at once wakes it too.)
+    if (!wakes.isEmpty())
+        setWake(target, wakes);
     Q_EMIT written(target);
     runTurn(turn(target));
     return target;
@@ -848,15 +896,17 @@ void WorkspaceChats::answered(const QString &key, const QString &text)
         qCWarning(logging::lcApp) << "AI chat: the answer could not be written to" << path;
         endTurn(t);
         setFailure(t, tr("The answer could not be saved."));
+        wake(path, int(chat::Wake::Failed), t->m_failure);
         return;
     }
     // Written before the turn ends: a view shows the message in place of the answer being
     // written, never neither of them.
     Q_EMIT written(path);
-    if (!isShown(path))
+    if (!isShown(path) && !isSideChat(path))
         setUnread(path, true);
     endTurn(t);
     notifyUser(path, firstLineOf(text));
+    wake(path, int(chat::Wake::Answered), text);
     sendNextQueued(path);
 }
 
@@ -868,6 +918,7 @@ void WorkspaceChats::failed(const QString &key, const QString &error)
     endTurn(t);
     setFailure(t, error);
     notifyUser(t->m_path, error.section(u'\n', 0, 0).trimmed());
+    wake(t->m_path, int(chat::Wake::Failed), error);
     // (The messages waiting for it wait for the user: Resume, or Send now.)
     loadQueue();
     if (!m_queued.value(t->m_path.toLower()).isEmpty() && !m_held.contains(t->m_path.toLower())) {
@@ -881,6 +932,9 @@ void WorkspaceChats::stop(const QString &path)
     ChatTurn *t = find(path);
     if (!t || !t->m_running)
         return;
+    // (A sub-conversation stopped by the user: its parent hears of it. Its agent's own chatStop
+    // took the wake away first.)
+    wake(t->m_path, int(chat::Wake::Stopped), QString());
     // Stopped: what waits for it is held (Resume sends it).
     loadQueue();
     if (!m_queued.value(t->m_path.toLower()).isEmpty() && !m_held.contains(t->m_path.toLower())) {
@@ -949,7 +1003,12 @@ void WorkspaceChats::reset()
     m_held.clear();
     m_rewound.clear();
     m_queueLoaded = false;
+    m_wakes.clear();
+    m_wakesLoaded = false;
+    m_woken.clear();
+    m_removed.clear();
     queueMoved();
+    Q_EMIT wakesChanged();
     Q_EMIT stateChanged();
 }
 
@@ -1007,7 +1066,7 @@ bool WorkspaceChats::isUnread(const QString &path) const
 void WorkspaceChats::setUnread(const QString &path, bool unread)
 {
     LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
-    if (!store || path.isEmpty())
+    if (!store || path.isEmpty() || (unread && isSideChat(path)))
         return;
     QJsonObject all = store->get(UnreadKey).toObject();
     const QString key = path.toLower();
@@ -1052,7 +1111,8 @@ void WorkspaceChats::setNotifyMode(const QString &mode)
 
 void WorkspaceChats::notifyUser(const QString &path, const QString &text)
 {
-    if (path.isEmpty() || m_notifyMode == u"never")
+    // (A side chat is the user's aside: shown inside its conversation, never a notification.)
+    if (path.isEmpty() || m_notifyMode == u"never" || isSideChat(path))
         return;
     const bool active = m_appActive ? m_appActive()
                                     : qobject_cast<QGuiApplication *>(QCoreApplication::instance()) != nullptr
@@ -1084,10 +1144,26 @@ QString WorkspaceChats::rename(const QString &path, const QString &name)
 
 QString WorkspaceChats::remove(const QString &path)
 {
+    m_removed.clear();
     if (path.isEmpty() || !m_workspace->exists(path))
         return {};
+    // (Deleted by the user: it wakes nobody.)
+    setWake(path, QString());
     stop(path);
-    return m_workspace->deletePage(path);
+    const QStringList sides = m_lineage->sidesOf(path);
+    const QString trash = m_workspace->deletePage(path);
+    if (trash.isEmpty())
+        return {};
+    m_removed << trash;
+    // Its side chats go with it (one Undo puts them all back: lastRemoved()).
+    for (const QString &side : sides) {
+        if (!m_workspace->exists(side))
+            continue;
+        stop(side);
+        if (const QString t = m_workspace->deletePage(side); !t.isEmpty())
+            m_removed << t;
+    }
+    return trash;
 }
 
 bool WorkspaceChats::setPinned(const QString &path, bool on)
@@ -1547,9 +1623,22 @@ QVariantList WorkspaceChats::queued(const QString &path, int) const
 {
     const_cast<WorkspaceChats *>(this)->loadQueue();
     QVariantList out;
-    for (const Waiting &w : m_queued.value(path.toLower()))
-        out.append(QVariantMap{{u"id"_s, w.id}, {u"text"_s, w.text}, {u"pictures"_s, w.pictures}});
+    for (const Waiting &w : m_queued.value(path.toLower())) {
+        const QString from = chat::wakeSource(w.text);
+        out.append(QVariantMap{{u"id"_s, w.id},
+                               {u"text"_s, w.text},
+                               {u"pictures"_s, w.pictures},
+                               {u"from"_s, from.isEmpty() ? QString() : nameOf(from)}});
+    }
     return out;
+}
+
+bool WorkspaceChats::heldForWake(const QString &path, int) const
+{
+    if (!queueHeld(path))
+        return false;
+    const QList<Waiting> list = m_queued.value(path.toLower());
+    return std::ranges::all_of(list, [](const Waiting &w) { return !chat::wakeSource(w.text).isEmpty(); });
 }
 
 bool WorkspaceChats::queueHeld(const QString &path, int) const
@@ -1878,6 +1967,252 @@ QVariantList WorkspaceChats::mentions(const QString &path, const QString &text, 
         m.insert(u"end"_s, caret);
         out.append(m);
     }
+    return out;
+}
+
+// ---- side chats (/btw) -----------------------------------------------------------------------------
+
+bool WorkspaceChats::isAside(const QString &text) const
+{
+    const QString t = text.trimmed();
+    const QString command = u"/btw"_s;
+    return t.startsWith(command, Qt::CaseInsensitive) && (t.size() == command.size() || t.at(command.size()).isSpace());
+}
+
+QString WorkspaceChats::asideQuestion(const QString &text) const
+{
+    return isAside(text) ? text.trimmed().mid(4).trimmed() : QString();
+}
+
+QString WorkspaceChats::sideOf(const QString &path) const
+{
+    return path.isEmpty() ? QString() : m_lineage->sideOf(path);
+}
+
+bool WorkspaceChats::isSideChat(const QString &path) const
+{
+    return !sideOf(path).isEmpty();
+}
+
+QString WorkspaceChats::askAside(const QString &path, const QString &question, const QStringList &pictures)
+{
+    const QString text = question.trimmed();
+    QStringList sent;
+    for (const QString &picture : pictures) {
+        if (!picture.trimmed().isEmpty() && !sent.contains(picture.trimmed()))
+            sent.append(picture.trimmed());
+    }
+    if ((text.isEmpty() && sent.isEmpty()) || path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path)
+        || isSideChat(path))
+        return {};
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    const chat::Conversation conversation = chat::parse(content);
+    if (!ok || conversation.messages.isEmpty())
+        return {};
+    if (conversation.partner.isEmpty() && !m_extensions->enabled().contains(u"asystent"_s)) {
+        setFailure(turn(QString()), tr("The AI assistant is off: switch it on in Settings → Extensions → AI."));
+        return {};
+    }
+    const QString language = m_extensions->language();
+    const QDateTime now = m_workspace->now();
+    const QString page = chat::sideChat(content, path, chat::withPictures(text, sent), now, language);
+    if (page.isEmpty())
+        return {};
+    // Named after the side question (no journal line: it belongs to its conversation).
+    const QString title = chat::pageTitle(text.isEmpty() ? nameOf(path) : text, now.date(), language);
+    const QString target =
+            paths::uniquePath(title + u".md"_s, [this](const QString &p) { return m_workspace->exists(p); });
+    if (!m_workspace->write(target, page)) {
+        setFailure(turn(QString()), tr("The conversation could not be saved."));
+        return {};
+    }
+    for (const QString &picture : std::as_const(sent))
+        m_added.removeAll(picture); // (part of the notebook now)
+    Q_EMIT written(target);
+    runTurn(turn(target));
+    return target;
+}
+
+QString WorkspaceChats::lastAnswer(const QString &path) const
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return {};
+    bool ok = false;
+    const chat::Conversation conversation = chat::parse(m_workspace->read(path, &ok));
+    for (qsizetype i = conversation.messages.size() - 1; i >= 0; --i) {
+        if (conversation.messages.at(i).role == chat::Role::Assistant)
+            return conversation.messages.at(i).text;
+    }
+    return {};
+}
+
+// ---- a sub-conversation that wakes its parent -----------------------------------------------------
+
+namespace {
+
+/// The notebook's device state of the sub-conversations that wake their parent: {child, lower case: parent}.
+const QString WakeKey = u"chat/wake"_s;
+
+} // namespace
+
+void WorkspaceChats::loadWakes()
+{
+    if (m_wakesLoaded)
+        return;
+    const LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store)
+        return;
+    m_wakesLoaded = true;
+    const QJsonObject all = store->get(WakeKey).toObject();
+    for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+        if (const QString parent = it.value().toString(); !parent.isEmpty())
+            m_wakes.insert(it.key().toLower(), parent);
+    }
+}
+
+void WorkspaceChats::saveWakes()
+{
+    LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store || !m_wakesLoaded)
+        return;
+    QJsonObject all;
+    for (auto it = m_wakes.constBegin(); it != m_wakes.constEnd(); ++it)
+        all.insert(it.key(), it.value());
+    store->set(WakeKey, all.isEmpty() ? QJsonValue(QJsonValue::Undefined) : QJsonValue(all));
+}
+
+void WorkspaceChats::setWake(const QString &child, const QString &parent)
+{
+    loadWakes();
+    if (child.isEmpty() || !m_wakesLoaded)
+        return;
+    const QString key = child.toLower();
+    if (parent.isEmpty() ? !m_wakes.contains(key) : m_wakes.value(key) == parent)
+        return;
+    if (parent.isEmpty())
+        m_wakes.remove(key);
+    else
+        m_wakes.insert(key, parent);
+    saveWakes();
+    Q_EMIT wakesChanged();
+}
+
+bool WorkspaceChats::wakesParent(const QString &child) const
+{
+    const_cast<WorkspaceChats *>(this)->loadWakes();
+    return !child.isEmpty() && m_wakes.contains(child.toLower());
+}
+
+void WorkspaceChats::wake(const QString &child, int how, const QString &text)
+{
+    loadWakes();
+    const QString key = child.toLower();
+    const auto it = m_wakes.constFind(key);
+    if (it == m_wakes.cend())
+        return;
+    const QString parent = it.value();
+    const auto outcome = chat::Wake(how);
+    // Once (a question wakes it and the end of the turn again).
+    if (outcome != chat::Wake::Asking) {
+        m_wakes.remove(key);
+        saveWakes();
+        Q_EMIT wakesChanged();
+    }
+    // A parent deleted meanwhile is not woken.
+    if (!m_workspace->ready() || !m_workspace->exists(parent))
+        return;
+    bool ok = false;
+    const chat::Conversation conversation = chat::parse(m_workspace->read(parent, &ok));
+    if (!ok || conversation.messages.isEmpty())
+        return;
+    // Archived, or woken too often in the last hour: the message waits for the user.
+    const qint64 now = m_workspace->now().toMSecsSinceEpoch();
+    QList<qint64> &times = m_woken[parent.toLower()];
+    times.removeIf([now](qint64 at) { return now - at >= 3600 * 1000 || at > now; });
+    chat::WakeHeld held = chat::WakeHeld::No;
+    if (conversation.archived)
+        held = chat::WakeHeld::Archived;
+    else if (times.size() >= MaxWakesPerHour)
+        held = chat::WakeHeld::Limit;
+    else
+        times.append(now);
+    enqueue(parent, chat::wakeMessage(outcome, child, text, m_extensions->language(), held, MaxWakesPerHour),
+            held != chat::WakeHeld::No);
+}
+
+void WorkspaceChats::enqueue(const QString &path, const QString &text, bool hold)
+{
+    loadQueue();
+    if (!m_queueLoaded)
+        return;
+    const QString key = path.toLower();
+    const bool waiting = !m_queued.value(key).isEmpty();
+    if (!hold && !waiting && !isRunning(path)) {
+        if (!send(path, text).isEmpty())
+            return;
+        hold = true; // (not sent — the assistant off, a page not written: it waits for the user)
+    }
+    // After a running turn (or what waits for it already); held: until the user resumes it.
+    m_queued[key].append(Waiting{m_nextQueued++, text, {}});
+    if (hold)
+        m_held.insert(key);
+    saveQueue();
+    queueMoved();
+}
+
+// ---- conversations untouched for a while ------------------------------------------------------------
+
+void WorkspaceChats::setAutoArchiveDays(int days)
+{
+    days = std::max(0, days);
+    if (days == m_autoArchiveDays)
+        return;
+    m_autoArchiveDays = days;
+    if (days > 0)
+        m_settleTimer.start();
+    else
+        m_settleTimer.stop();
+    if (days > 0 && m_workspace->ready())
+        archiveUntouched();
+}
+
+QStringList WorkspaceChats::archiveUntouched()
+{
+    QStringList out;
+    if (m_autoArchiveDays <= 0 || !m_workspace->ready() || !m_workspace->vault())
+        return out;
+    loadQueue();
+    loadWakes();
+    const QDateTime now = m_workspace->now();
+    const QDateTime before = now.addDays(-m_autoArchiveDays);
+    // (The parents a sub-conversation will wake: not untouched.)
+    QSet<QString> awaited;
+    for (const QString &parent : std::as_const(m_wakes))
+        awaited.insert(parent.toLower());
+    for (const FileStat &f : m_workspace->vault()->markdownFiles()) {
+        if (!chat::inFolder(f.path))
+            continue;
+        const QString key = f.path.toLower();
+        if (isRunning(f.path) || asking(f.path) || !failureOf(f.path).isEmpty() || isUnread(f.path) || isShown(f.path)
+            || !m_queued.value(key).isEmpty() || awaited.contains(key) || !draft(f.path).trimmed().isEmpty()
+            || isSideChat(f.path))
+            continue;
+        bool ok = false;
+        const QString content = m_workspace->read(f.path, &ok);
+        const chat::Conversation conversation = ok ? chat::parse(content) : chat::Conversation();
+        if (conversation.messages.isEmpty() || conversation.pinned || conversation.archived)
+            continue;
+        // Its last message's time; a page written without times: its last change.
+        const QDateTime last = conversation.messages.last().time.isValid() ? conversation.messages.last().time
+                                                                           : QDateTime::fromMSecsSinceEpoch(f.mtime);
+        if (!last.isValid() || last >= before)
+            continue;
+        if (setArchived(f.path, true))
+            out << f.path;
+    }
+    if (!out.isEmpty())
+        Q_EMIT autoArchived(out, m_autoArchiveDays);
     return out;
 }
 

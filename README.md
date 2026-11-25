@@ -147,7 +147,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   and pictures of the notebook to look at; the built-in **AI assistant** is a **chat**, as in a
   messenger: it searches and reads the whole notebook to answer, looks at its pictures, changes
   notes only with your yes (asked in the conversation), and keeps every conversation as a page
-  of the notebook (`AI/`), linked from the day's journal.
+  of the notebook (`AI/`), linked from the day's journal; a side question (`/btw`) is answered
+  beside a conversation without being added to it, and conversations left untouched for a while
+  can archive themselves (off by default).
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /
@@ -394,7 +396,9 @@ przykładowym notatnikiem.
   a model może dostać narzędzia, które wykonuje skrypt, i obrazki z notatnika do obejrzenia;
   wbudowany **Asystent AI** to **czat** jak w komunikatorze: przeszukuje i czyta cały notatnik,
   żeby odpowiedzieć, ogląda jego obrazki, zmienia notatki tylko za Twoją zgodą (pyta w rozmowie)
-  i zapisuje każdą rozmowę jako stronę notatnika (`AI/`) z linkiem w dzienniku z tego dnia. Tagi działają jak linki do stron, jak
+  i zapisuje każdą rozmowę jako stronę notatnika (`AI/`) z linkiem w dzienniku z tego dnia;
+  pytanie poboczne (`/btw`) dostaje odpowiedź obok rozmowy, nie trafiając do niej, a rozmowy
+  długo nieruszane mogą same trafiać do archiwum (domyślnie wyłączone). Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku

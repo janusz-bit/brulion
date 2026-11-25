@@ -14,6 +14,11 @@
 //   Workspace.chats.lineage.children(path, Workspace.chats.lineage.serial)   // [{path, name, partner, …}]
 //   Workspace.chats.lineage.parentOf(path)                                  // "AI/2026-11-22 Plan.md"
 //
+// Side chats (`/btw`: a question asked beside a conversation, its page naming it in `side:`) are
+// read here too: sideOf() the conversation one is beside, sideChats() those of a conversation —
+// never in the list of conversations, shown only inside theirs. A side chat whose conversation is
+// gone is none (listed as any conversation, so nothing of it is lost).
+//
 // The parents come from the pages (they may come from another device: a sync), read once — and a
 // conversation's page again when it changes, all of them when one comes or goes. Single-threaded (the
 // GUI thread).
@@ -23,6 +28,8 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+
+#include <utility>
 
 namespace brulion::shell {
 
@@ -59,12 +66,24 @@ public:
     /// How many of `path`'s sub-conversations run now.
     int runningChildren(const QString &path) const;
     /// The sub-conversations of `path` as the view shows them: {path, name, partner (its name),
-    /// state: idle | running | queued | asking | failed, failure}.
+    /// state: idle | running | queued | asking | failed, failure, wakes (its turn's end will wake
+    /// `path`: WorkspaceChats::wakesParent)}.
     Q_INVOKABLE QVariantList children(const QString &path, int serial = 0) const;
+
+    /// The conversation the side chat `path` is beside, as a vault path ("" no side chat, or one
+    /// whose conversation is no page of the notebook any more).
+    Q_INVOKABLE QString sideOf(const QString &path) const;
+    /// The side chats of `path` (vault paths), newest first.
+    QStringList sidesOf(const QString &path) const;
+    /// The side chats of `path` as its view shows them: {path, name, state, failure}, newest first.
+    Q_INVOKABLE QVariantList sideChats(const QString &path, int serial = 0) const;
 
     /// The parent of `path` as written in its page ("AI/2026-11-22 Plan"; "" none) — the
     /// Workspace alone, for WorkspaceAgents.
     static QString writtenParent(Workspace *workspace, const QString &path);
+    /// The parent and the conversation a side chat is beside, as written in the page of `path`
+    /// ({"", ""} none).
+    static std::pair<QString, QString> writtenLinks(Workspace *workspace, const QString &path);
     /// depthOf() with the Workspace alone.
     static int depth(Workspace *workspace, const QString &path);
     /// The page a parent link names, from the conversation `from` ("" none there): the vault path
@@ -87,9 +106,15 @@ private:
     int m_serial = 0;
     mutable bool m_dirty = true;
     /// The conversations that name a parent: child path → its parent's path ("" one that is gone),
-    /// and each one's last change (newest first in children()).
+    /// and each one's last change (newest first in children() and sidesOf()).
     mutable QHash<QString, QString> m_parents;
     mutable QHash<QString, qint64> m_changed;
+    /// The side chats: side chat's path → the conversation's path it is beside ("" one that is gone).
+    mutable QHash<QString, QString> m_sides;
+    /// The links of `path` read into the maps above (its entries taken out first).
+    void read(const QString &path, qint64 mtime) const;
+    /// m_parents' or m_sides' entries whose value is `path` (newest first).
+    QStringList keysOf(const QHash<QString, QString> &map, const QString &path) const;
 };
 
 } // namespace brulion::shell

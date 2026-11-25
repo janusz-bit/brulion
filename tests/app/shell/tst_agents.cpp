@@ -1446,13 +1446,17 @@ private Q_SLOTS:
                  qPrintable(ws->read(path)));
         // Its usage and its slash commands.
         QCOMPARE(chats->agentUsage(path), u"20 % of the context · 0.25 USD"_s);
-        QCOMPARE(chats->agentCommands(path, u"acp:fake"_s, u"/"_s).size(), 2);
+        // (The app's own /btw first, never the agent's: a side question.)
+        const QVariantList all = chats->agentCommands(path, u"acp:fake"_s, u"/"_s);
+        QCOMPARE(all.size(), 3);
+        QCOMPARE(all.first().toMap().value(u"name"_s).toString(), u"btw"_s);
+        QVERIFY(all.first().toMap().value(u"app"_s).toBool());
         const QVariantList review = chats->agentCommands(path, u"acp:fake"_s, u"/RE"_s);
         QCOMPARE(review.size(), 1);
         QCOMPARE(review.first().toMap().value(u"description"_s).toString(), u"Przejrzyj zmiany"_s);
         QVERIFY(chats->agentCommands(path, u"acp:fake"_s, u"/review coś"_s).isEmpty());
         QVERIFY(chats->agentCommands(path, u"acp:fake"_s, u"review"_s).isEmpty());
-        QVERIFY(chats->agentCommands(path, QString(), u"/"_s).isEmpty());
+        QCOMPARE(chats->agentCommands(path, QString(), u"/"_s).size(), 1); // (the assistant's: /btw alone)
         // (A new conversation offers the agent's last commands.)
         QCOMPARE(chats->agentCommands(QString(), u"acp:fake"_s, u"/p"_s).size(), 1);
 

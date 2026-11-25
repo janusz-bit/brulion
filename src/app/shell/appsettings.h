@@ -153,6 +153,10 @@ class AppSettings : public QObject {
     /// "Notify when the AI answers" (key `ai/chatNotify`; WorkspaceChats::setNotifyMode): "always",
     /// "background" (only while the app is not in front: the default) or "never".
     Q_PROPERTY(QString aiChatNotify READ aiChatNotify WRITE setAiChatNotify NOTIFY aiChatNotifyChanged FINAL)
+    /// "Archive conversations untouched for" (key `ai/chatAutoArchive`; WorkspaceChats::
+    /// setAutoArchiveDays): "never" (the default), or the days as a number — "1", "3", "7", "30".
+    Q_PROPERTY(QString aiChatAutoArchive READ aiChatAutoArchive WRITE setAiChatAutoArchive NOTIFY
+                       aiChatAutoArchiveChanged FINAL)
     /// "Tool calls in chat" (key `ai/chatToolCalls`; docs/UI.md "AI agents (ACP)"): "all" (default:
     /// every call of an agent's turn), "hideFinished" (a call shows while it runs and stays only if
     /// it failed), "hideAll" (only failed ones; the status line says the agent works). Questions,
@@ -430,6 +434,10 @@ public:
     void setChatHooksPublicUrl(const QString &url);
     QString aiChatNotify() const;
     void setAiChatNotify(const QString &mode);
+    QString aiChatAutoArchive() const;
+    void setAiChatAutoArchive(const QString &days);
+    /// aiChatAutoArchive() in days (0: never).
+    int aiChatAutoArchiveDays() const;
     QString chatToolCalls() const;
     void setChatToolCalls(const QString &shown);
     bool acpAvailable() const;
@@ -702,6 +710,7 @@ Q_SIGNALS:
     void acpShareChanged();
     void chatHooksChanged();
     void aiChatNotifyChanged();
+    void aiChatAutoArchiveChanged();
     void chatToolCallsChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();

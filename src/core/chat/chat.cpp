@@ -595,6 +595,9 @@ Conversation parse(QStringView content)
         static const QRegularExpression fork(u"^fork:[ \\t]*[\"']?\\[\\[([^\\[\\]|#]+)(?:[|#][^\\[\\]]*)?\\]\\][\"']?[ \\t]*$"_s,
                                              QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression parent(u"^parent:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression side(u"^side:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression sideFrom(u"^side-from:[ \\t]*[\"']?(\\d{1,7})[\"']?[ \\t]*$"_s,
+                                                 QRegularExpression::CaseInsensitiveOption);
         const auto unquoted = [](QString value) {
             value = value.trimmed();
             if (value.size() >= 2 && (value.front() == u'"' || value.front() == u'\'') && value.back() == value.front())
@@ -604,6 +607,8 @@ Conversation parse(QStringView content)
         QString named;
         QString from;
         QString forkedFrom;
+        QString besides;
+        int ownFrom = 0;
         bool pinned = false, archived = false;
         for (qsizetype j = 1; j < lines.size(); ++j) {
             if (lines.at(j).trimmed() == u"---" || lines.at(j).trimmed() == u"...") {
@@ -613,6 +618,8 @@ Conversation parse(QStringView content)
                 conversation.fork = forkedFrom;
                 conversation.pinned = pinned;
                 conversation.archived = archived;
+                conversation.side = besides;
+                conversation.sideFrom = besides.isEmpty() ? 0 : ownFrom;
                 break;
             }
             if (const auto m = fork.matchView(lines.at(j)); m.hasMatch())
@@ -625,6 +632,10 @@ Conversation parse(QStringView content)
                 named = unquoted(m.captured(1));
             if (const auto m = parent.matchView(lines.at(j)); m.hasMatch())
                 from = linkTarget(unquoted(m.captured(1)));
+            if (const auto m = side.matchView(lines.at(j)); m.hasMatch())
+                besides = linkTarget(unquoted(m.captured(1)));
+            if (const auto m = sideFrom.matchView(lines.at(j)); m.hasMatch())
+                ownFrom = std::max(0, m.captured(1).toInt() - 1);
         }
     }
     struct Open {
@@ -668,6 +679,8 @@ Conversation parse(QStringView content)
         m.endLine = open->restLines.isEmpty() ? (time.isValid() ? open->line + 1 : open->line) : open->restLines.last();
         m.time = time;
         m.pictures = picturesIn(m.text);
+        if (m.role == Role::User)
+            m.from = wakeSource(m.text);
         conversation.messages.append(m);
         open.reset();
     };
@@ -1246,10 +1259,107 @@ QString forked(const QString &content, int upTo, QStringView source)
     // (A fork is the user's own: no sub-conversation of the source's parent, neither pinned nor
     // archived as the source may be.)
     out = setFrontmatterValue(out, u"parent", {});
+    out = setFrontmatterValue(out, u"side", {});
+    out = setFrontmatterValue(out, u"side-from", {});
     out = setMark(out, Mark::Pinned, false, u"pl");
     out = setMark(out, Mark::Archived, false, u"pl");
     out = withoutFlagsAfter(out, upTo + 1);
     return source.trimmed().isEmpty() ? out : setFrontmatterValue(out, u"fork", forkLink(source));
+}
+
+QString sideChat(const QString &content, QStringView source, QStringView question, const QDateTime &time,
+                 QStringView language)
+{
+    const Conversation conversation = parse(content);
+    if (conversation.messages.isEmpty() || question.trimmed().isEmpty())
+        return {};
+    const int count = int(conversation.messages.size());
+    // (The whole conversation, as a fork of its last message — but beside it, not from it.)
+    QString out = forked(content, count - 1, {});
+    out = setFrontmatterValue(out, u"fork", {});
+    if (!source.trimmed().isEmpty())
+        out = setFrontmatterValue(out, u"side", forkLink(source));
+    out = setFrontmatterValue(out, u"side-from", QString::number(count + 1));
+    return appendMessage(out, Role::User, question, time, language);
+}
+
+namespace {
+
+/// `child` as a link's target: its vault path without ".md".
+QString childTitle(QStringView child)
+{
+    QString title = child.trimmed().toString();
+    if (title.endsWith(u".md"_s, Qt::CaseInsensitive))
+        title.chop(3);
+    return title;
+}
+
+} // namespace
+
+QString wakeMessage(Wake wake, QStringView child, QStringView text, QStringView language, WakeHeld held, int limit)
+{
+    const bool pl = language == u"pl";
+    const QString link = u"[["_s + childTitle(child) + u"]]"_s;
+    const QString who = (pl ? u"↩ Podrozmowa "_s : u"↩ Sub-conversation "_s) + link;
+    QString body = withoutPictures(text).trimmed();
+    const bool empty = body.isEmpty();
+    QString first;
+    switch (wake) {
+    case Wake::Answered:
+        first = empty ? (pl ? u" odpowiedziała bez tekstu."_s : u" answered without text."_s)
+                      : (pl ? u" odpowiedziała:"_s : u" answered:"_s);
+        break;
+    case Wake::Failed:
+        first = empty ? (pl ? u" nie powiodła się."_s : u" failed."_s) : (pl ? u" nie powiodła się:"_s : u" failed:"_s);
+        break;
+    case Wake::Asking:
+        first = pl ? u" czeka na odpowiedź użytkownika w aplikacji"_s : u" waits for the user's answer in the app"_s;
+        first += empty ? u"."_s : u":"_s;
+        break;
+    case Wake::Stopped:
+        first = pl ? u" została zatrzymana przez użytkownika."_s : u" was stopped by the user."_s;
+        body.clear();
+        break;
+    }
+    QString out = who + first;
+    if (!body.isEmpty()) {
+        const qsizetype length = body.size();
+        const bool cut = length > MaxWakeChars;
+        if (cut)
+            body = cutAt(body, MaxWakeChars).trimmed() + u'…';
+        out += u"\n\n"_s + quoted(body).trimmed();
+        if (cut)
+            out += u"\n\n"_s
+                   + (pl ? u"(Ucięte po %1 z %2 znaków: całość jest w %3.)"_s
+                         : u"(Cut at %1 of %2 characters: all of it is in %3.)"_s)
+                             .arg(QString::number(MaxWakeChars), QString::number(length), link);
+    }
+    if (held == WakeHeld::Limit)
+        out += u"\n\n"_s
+               + (pl ? u"(Nie budzi już tej rozmowy: najwyżej %1 wybudzeń w ciągu godziny. Czeka na użytkownika — "
+                       u"Wznów ją wysyła.)"_s
+                     : u"(It wakes this conversation no more: %1 wakes in an hour are the most. It waits for the user "
+                       u"— Resume sends it.)"_s)
+                         .arg(limit);
+    else if (held == WakeHeld::Archived)
+        out += u"\n\n"_s
+               + (pl ? u"(Ta rozmowa jest zarchiwizowana: wiadomość czeka na użytkownika — Wznów ją wysyła.)"_s
+                     : u"(This conversation is archived: the message waits for the user — Resume sends it.)"_s);
+    return out;
+}
+
+QString wakeSource(QStringView markdown)
+{
+    const qsizetype end = markdown.indexOf(u'\n');
+    const QStringView first = markdown.left(end < 0 ? markdown.size() : end).trimmed();
+    if (!first.startsWith(u"↩") || first.size() < 2 || !first.at(1).isSpace())
+        return {};
+    const qsizetype open = first.indexOf(u"[[");
+    const qsizetype close = open < 0 ? -1 : first.indexOf(u"]]", open + 2);
+    if (close < 0)
+        return {};
+    const QString target = linkTarget(first.mid(open, close + 2 - open).toString());
+    return inFolder(target) ? target : QString();
 }
 
 QStringList prompts(const Conversation &conversation)
