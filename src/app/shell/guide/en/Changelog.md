@@ -7,6 +7,25 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.30.0 — November 25, 2026
+
+**New**
+- **A model of your own** — **Add a model file…** (under the three models on the device) takes a GGUF file of another model — Qwen3, Llama 3.2, Gemma 3, Phi-4 mini, SmolLM… Brulion reads what the file says of itself first and tells you why when it cannot use it; it writes to it in its chat format (ChatML, Llama 3, Gemma, Phi, Mistral, DeepSeek), lets a model that thinks think and keeps its tool calls to the assistant's tools by a grammar. **Fewer tools for small models** in the assistant's settings gives a small one 8 tools instead of 12 ([[AI#A model of your own]]).
+- **The model on the device on more systems** — the AppImage (x86_64, aarch64) and Windows carry llama.cpp and whisper.cpp: the model on the device, search by meaning and transcripts work there too, none of them loaded before its first use. On Android a model answering or downloading goes on with the screen off and behind another app (a foreground service with its notification).
+- **Text while recording** — the words show under the recorder as you speak, and in the AI chat's field while you dictate; a longer recording becomes paragraphs of whole sentences, each starting with the moment it was said (`[[Lecture.m4a#t=83|1:23]]`, a click plays it from there) ([[Audio, video and voice notes]]).
+- **A side question** — `/btw` and a question, or the speech-bubble button next to the conversation's name, asks beside the conversation in a **side chat** that knows it; **Bring into the conversation** brings the answer in.
+- **Agents that wake their parent** — an agent can let a sub-conversation wake it instead of waiting: its end comes back as a message ("↩ Sub-conversation … answered:").
+- **Archived by themselves** — **Settings → Extensions → AI → Archive conversations untouched for** puts away conversations older than a day, three days, a week or 30 days (pinned, answering and waiting ones stay).
+- **A secret the agent asks for** — a token, a password, a PIN or a key is asked for in a **private card** of the conversation, never in the chat; the agent gets it as a file only you can read, deleted when its answer ends ([[AI#A secret the agent asks for]]).
+- **Webhooks** — **Also start it by a webhook** in a scheduled conversation's **Edit…**: a `POST` to its own address starts it (GitHub, Home Assistant, cron, iOS Shortcuts; on this computer, in your tailnet or through a proxy of yours) ([[AI#Webhooks]]).
+- **What an agent used** — the row of Claude Code and Codex in **Settings → Extensions → AI agents** says what it used today and in 30 days, and **Usage…** shows it day by day for 7, 30 or 90 days, per model and project, with the cost of the same tokens on the API; also `brulion-cli acp usage`.
+- **The assistant changes the app** — with a model on the network the assistant also changes Brulion itself when you ask: the theme, the font size, an accent, a button in the top bar, opening a view.
+- **An agent on another computer changes the app on the phone** — with **Let it change the app while it runs** in the agent's **Edit…**, its tools on the computer change Brulion on this device while it answers and look at it in screenshots (through `brulion-cli acp serve`).
+- **Pictures in the browser** — the AI chat's paperclip picks pictures in the browser version too.
+
+**Changes**
+- Whisper (speech recognition) computes with fewer threads on a busy processor, so a transcript no longer slows the rest of the computer.
+
 ## 0.29.1 — November 24, 2026
 
 **New**

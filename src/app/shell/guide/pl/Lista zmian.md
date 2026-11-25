@@ -7,6 +7,25 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.30.0 — 25 listopada 2026
+
+**Nowe**
+- **Własny model** — **Dodaj plik modelu…** (pod trzema modelami na urządzeniu) przyjmuje plik GGUF innego modelu — Qwen3, Llama 3.2, Gemma 3, Phi-4 mini, SmolLM… Brulion najpierw czyta, co plik mówi o sobie, i mówi, dlaczego nie może go użyć; pisze do niego w jego formacie czatu (ChatML, Llama 3, Gemma, Phi, Mistral, DeepSeek), pozwala myśleć modelowi, który myśli, i gramatyką trzyma jego wywołania przy narzędziach asystenta. **Mniej narzędzi dla małych modeli** w ustawieniach asystenta daje małemu 8 narzędzi zamiast 12 ([[AI#Własny model]]).
+- **Model na urządzeniu na większej liczbie systemów** — AppImage (x86_64, aarch64) i Windows mają llama.cpp i whisper.cpp: model na urządzeniu, szukanie po znaczeniu i transkrypcje działają także tam, a żaden nie jest ładowany przed pierwszym użyciem. Na Androidzie model, który odpowiada albo się pobiera, pracuje dalej przy wygaszonym ekranie i za inną aplikacją (usługa pierwszoplanowa z powiadomieniem).
+- **Tekst w trakcie nagrywania** — słowa pojawiają się pod nagrywarką, gdy mówisz, i w polu czatu AI, gdy dyktujesz; dłuższe nagranie staje się akapitami całych zdań, z których każdy zaczyna się od chwili, w której padł (`[[Wykład.m4a#t=83|1:23]]`, kliknięcie odtwarza od tego miejsca) ([[Dźwięk, wideo i notatki głosowe]]).
+- **Pytanie na boku** — `/btw` i pytanie albo przycisk z dymkiem obok nazwy rozmowy pyta obok rozmowy w **rozmowie pobocznej**, która ją zna; **Przenieś do rozmowy** wstawia odpowiedź.
+- **Agenci budzeni przez podrozmowy** — agent może pozwolić podrozmowie, żeby go obudziła, zamiast czekać: jej koniec wraca jako wiadomość („↩ Podrozmowa … odpowiedziała:”).
+- **Archiwizowane same** — **Ustawienia → Rozszerzenia → AI → Archiwizuj rozmowy nieruszane przez** odkłada rozmowy starsze niż dzień, trzy dni, tydzień albo 30 dni (przypięte, odpowiadające i czekające zostają).
+- **Sekret, o który prosi agent** — o token, hasło, PIN albo klucz agent prosi w **prywatnej karcie** rozmowy, nigdy w czacie; dostaje go jako plik, który możesz przeczytać tylko Ty, usuwany, gdy kończy odpowiedź ([[AI#Sekret, o który prosi agent]]).
+- **Webhooki** — **Uruchamiaj ją też webhookiem** w **Edytuj…** rozmowy według harmonogramu: `POST` na jej własny adres ją uruchamia (GitHub, Home Assistant, cron, skróty iOS; na tym komputerze, w Twoim tailnecie albo przez Twoje proxy) ([[AI#Webhooki]]).
+- **Co zużył agent** — wiersz Claude Code i Codeksu w **Ustawienia → Rozszerzenia → Agenci AI** mówi, ile zużył dziś i przez 30 dni, a **Zużycie…** pokazuje to dzień po dniu za 7, 30 albo 90 dni, według modelu i projektu, z kosztem tych samych tokenów przez API; także `brulion-cli acp usage`.
+- **Asystent zmienia aplikację** — z modelem w sieci asystent zmienia też sam Brulion, gdy poprosisz: motyw, rozmiar czcionki, akcent, przycisk na górnym pasku, otwarcie widoku.
+- **Agent na innym komputerze zmienia aplikację na telefonie** — z **Pozwól mu zmieniać działającą aplikację** w **Edytuj…** agenta jego narzędzia na komputerze zmieniają Brulion na tym urządzeniu, gdy odpowiada, i oglądają go na zrzutach ekranu (przez `brulion-cli acp serve`).
+- **Obrazki w przeglądarce** — spinacz w czacie AI wybiera obrazki także w wersji w przeglądarce.
+
+**Zmiany**
+- Whisper (rozpoznawanie mowy) liczy mniejszą liczbą wątków na zajętym procesorze, więc transkrypcja nie spowalnia już reszty komputera.
+
 ## 0.29.1 — 24 listopada 2026
 
 **Nowe**
