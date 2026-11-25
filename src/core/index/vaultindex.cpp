@@ -895,7 +895,7 @@ void VaultIndex::Private::resolveLinks(Entry &e, QList<ResolvePlan> &plans)
             e.unresolvedPlans->append({int(i), std::move(plans[i])});
         }
         if (!l.key.isEmpty())
-            multiAdd(sourcesByKey, l.key, e.path);
+            l.key = multiAddShared(sourcesByKey, l.key, e.path); // one string per distinct key
         fileLink(e.path, l, true);
     }
 }

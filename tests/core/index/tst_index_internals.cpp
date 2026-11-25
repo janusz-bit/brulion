@@ -749,6 +749,30 @@ private Q_SLOTS:
         QCOMPARE(pickBest({}), QString());
     }
 
+    // Repeated strings are one string: every note's link key of a name (the index's map key),
+    // the tag keys and task markers of the parse (a pool per thread).
+    void repeatedStringsAreShared()
+    {
+        VaultIndex index;
+        index.update(u"a.md"_s, u"- [ ] [[Żółw]] #praca\n"_s);
+        index.update(u"b.md"_s, u"- [ ] o [[żółw]] #Praca\n- [x] [[Inny]]\n"_s);
+        index.update(u"Żółw.md"_s, u"treść\n"_s);
+        const Entry *a = IndexAccess::entry(index, u"a.md"_s);
+        const Entry *b = IndexAccess::entry(index, u"b.md"_s);
+        QVERIFY(a && b);
+        QCOMPARE(a->links.size(), 1);
+        QCOMPARE(b->links.size(), 2);
+        QCOMPARE(a->links[0].key, b->links[0].key);
+        QVERIFY(a->links[0].key.isSharedWith(b->links[0].key));
+        QVERIFY(a->note.blocks[0].tags.first().isSharedWith(b->note.blocks[0].tags.first()));
+        QVERIFY(a->note.tasks.first().marker.isSharedWith(b->note.tasks.first().marker));
+        QVERIFY(!b->note.tasks.first().marker.isSharedWith(b->note.tasks.last().marker)); // " " vs "x"
+        // An edit keeps them shared.
+        index.update(u"a.md"_s, u"- [ ] [[ŻÓŁW]] znowu #praca\n"_s);
+        a = IndexAccess::entry(index, u"a.md"_s);
+        QVERIFY(a->links[0].key.isSharedWith(b->links[0].key));
+    }
+
     // An edit that keeps the note's tags patches every list read before instead of building it
     // again; the lists equal a fresh index's.
     void listsArePatchedNotRebuilt()
