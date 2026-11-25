@@ -98,6 +98,38 @@ QStringList SearchIndex::ids() const
     return m_byId.keys();
 }
 
+SearchIndex::Posting SearchIndex::makePosting(int doc, const FieldCounts &tf)
+{
+    if (tf[Content] <= 0x1fffff && tf[Title] <= 0x1f && tf[Aliases] <= 0x1f)
+        return {doc, tf[Content] | (tf[Title] << 21) | (tf[Aliases] << 26)};
+    quint32 slot = 0;
+    if (!m_freeOverflow.isEmpty()) {
+        slot = m_freeOverflow.takeLast();
+        m_overflow[slot] = tf;
+    } else {
+        slot = quint32(m_overflow.size());
+        m_overflow.append(tf);
+    }
+    return {doc, slot | OverflowBit};
+}
+
+void SearchIndex::releasePosting(Posting p)
+{
+    if (p.tf & OverflowBit)
+        m_freeOverflow.append(p.tf & ~OverflowBit);
+}
+
+quint32 SearchIndex::newTermId(Dictionary::iterator it)
+{
+    if (!m_freeTerms.isEmpty()) {
+        const quint32 id = m_freeTerms.takeLast();
+        m_terms[id] = it;
+        return id;
+    }
+    m_terms.append(it);
+    return quint32(m_terms.size() - 1);
+}
+
 void SearchIndex::touch()
 {
     static std::atomic<quint64> revisions{0};
@@ -119,14 +151,16 @@ void SearchIndex::set(const QString &id, Document document, quint64 contentKey)
 
     d.terms.reserve(document.terms.size());
     for (const auto &[term, tf] : std::as_const(document.terms)) {
-        const auto entry = m_postings.try_emplace(term).first;
-        PostingList &list = entry->second;
-        const Posting posting{doc, tf};
+        const auto [entry, added] = m_postings.try_emplace(term);
+        if (added)
+            entry->second.id = newTermId(entry);
+        PostingList &list = entry->second.postings;
+        const Posting posting = makePosting(doc, tf);
         if (list.isEmpty() || list.constLast().doc < doc)
             list.append(posting);
         else
             list.insert(std::ranges::lower_bound(list, doc, {}, &Posting::doc), posting);
-        d.terms.append(&entry->first);
+        d.terms.append(entry->second.id);
     }
     for (int f = 0; f < FieldCount; ++f)
         m_totalLength[f] += d.length[f];
@@ -142,16 +176,19 @@ void SearchIndex::remove(const QString &id)
     touch();
     m_byId.erase(found);
     Doc &d = m_docs[doc];
-    for (const QString *term : std::as_const(d.terms)) {
-        const auto it = m_postings.find(*term);
-        if (it == m_postings.end())
-            continue;
-        PostingList &list = it->second;
+    for (const quint32 termId : std::as_const(d.terms)) {
+        const Dictionary::iterator it = m_terms.at(termId);
+        PostingList &list = it->second.postings;
         const auto pos = std::ranges::lower_bound(list, doc, {}, &Posting::doc);
-        if (pos != list.end() && pos->doc == doc)
+        if (pos != list.end() && pos->doc == doc) {
+            releasePosting(*pos);
             list.erase(pos);
-        if (list.isEmpty())
+        }
+        if (list.isEmpty()) {
             m_postings.erase(it);
+            m_terms[termId] = Dictionary::iterator();
+            m_freeTerms.append(termId);
+        }
     }
     for (int f = 0; f < FieldCount; ++f)
         m_totalLength[f] -= std::min<quint64>(m_totalLength[f], d.length[f]);
@@ -163,6 +200,10 @@ void SearchIndex::clear()
 {
     touch();
     m_postings.clear();
+    m_terms.clear();
+    m_freeTerms.clear();
+    m_overflow.clear();
+    m_freeOverflow.clear();
     m_docs.clear();
     m_free.clear();
     m_byId.clear();
@@ -172,10 +213,11 @@ void SearchIndex::clear()
 void SearchIndex::squeeze()
 {
     touch();
-    for (PostingList &list : m_postings | std::views::values) {
-        if (list.capacity() > list.size())
-            list.squeeze();
+    for (Term &term : m_postings | std::views::values) {
+        if (term.postings.capacity() > term.postings.size())
+            term.postings.squeeze();
     }
+    m_terms.squeeze();
     m_docs.squeeze();
 }
 
@@ -183,7 +225,7 @@ QList<SearchIndex::Expansion> SearchIndex::expand(const QString &term, bool pref
 {
     QList<Expansion> out;
     QHash<const QString *, qsizetype> seen;
-    auto add = [&](const std::pair<const QString, PostingList> &entry, double weight, bool fuzzy) {
+    auto add = [&](const std::pair<const QString, Term> &entry, double weight, bool fuzzy) {
         if (const auto it = seen.constFind(&entry.first); it != seen.constEnd()) {
             Expansion &e = out[*it];
             e.weight = std::max(e.weight, weight);
@@ -191,7 +233,7 @@ QList<SearchIndex::Expansion> SearchIndex::expand(const QString &term, bool pref
             return;
         }
         seen.insert(&entry.first, out.size());
-        out.append(Expansion{&entry.first, &entry.second, weight, fuzzy});
+        out.append(Expansion{&entry.first, &entry.second.postings, weight, fuzzy});
     };
     const auto len = double(term.size());
     if (const auto exact = m_postings.find(term); exact != m_postings.end())
@@ -222,9 +264,10 @@ double SearchIndex::fieldScore(Posting posting, qsizetype df) const
     const double docs = double(m_byId.size());
     const double idf = std::log(1.0 + (docs - double(df) + 0.5) / (double(df) + 0.5));
     const Doc &d = m_docs[posting.doc];
+    const FieldCounts tfs = counts(posting);
     double score = 0;
     for (int f = 0; f < FieldCount; ++f) {
-        const double tf = posting.tf[f];
+        const double tf = tfs[f];
         if (tf <= 0)
             continue;
         const double avg = m_totalLength[f] > 0 ? double(m_totalLength[f]) / docs : 1.0;

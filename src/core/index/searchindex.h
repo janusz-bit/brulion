@@ -100,21 +100,43 @@ public:
 private:
     friend struct SearchIndexAccess; // the index cache's codec (indexcache.cpp)
 
+    /// A document's term frequencies, packed into 32 bits (postings of 8 bytes, not 16): content
+    /// in bits 0-20, title 21-25, aliases 26-30. Counts that do not fit (a word written over two
+    /// million times, a title repeating one 32 times) set bit 31; bits 0-30 then index m_overflow.
     struct Posting {
         int doc = 0;
-        FieldCounts tf{};
+        quint32 tf = 0;
     };
     using PostingList = QList<Posting>; ///< sorted by doc
+    struct Term {
+        PostingList postings;
+        quint32 id = 0; ///< index into m_terms
+    };
+    using Dictionary = std::map<QString, Term>; ///< ordered: prefix ranges via lower_bound
 
     struct Doc {
         QString id;
         FieldCounts length{};
-        /// Distinct terms of the document: keys of m_postings (a key lives while a posting list
-        /// of a document refers to it; nodes of a std::map never move).
-        QList<const QString *> terms;
+        /// Distinct terms of the document by id (m_terms: a term keeps its id while a posting
+        /// list of a document refers to it; nodes of a std::map never move).
+        QList<quint32> terms;
         quint64 contentKey = 0;
         bool used = false;
     };
+
+    static constexpr quint32 OverflowBit = 0x80000000u;
+    /// The counts of `tf` (packed, or an index into `overflow`).
+    static FieldCounts unpack(quint32 tf, const QList<FieldCounts> &overflow)
+    {
+        if (tf & OverflowBit)
+            return overflow.at(qsizetype(tf & ~OverflowBit));
+        return {(tf >> 21) & 0x1f, (tf >> 26) & 0x1f, tf & 0x1fffff};
+    }
+    FieldCounts counts(Posting p) const { return unpack(p.tf, m_overflow); }
+    Posting makePosting(int doc, const FieldCounts &tf);
+    void releasePosting(Posting p);
+    /// The id of the new term at `it`.
+    quint32 newTermId(Dictionary::iterator it);
 
     struct Expansion;
     QList<Expansion> expand(const QString &term, bool prefix) const;
@@ -122,7 +144,11 @@ private:
     /// A new revision().
     void touch();
 
-    std::map<QString, PostingList> m_postings; ///< ordered: prefix ranges via lower_bound
+    Dictionary m_postings;
+    QList<Dictionary::iterator> m_terms; ///< by Term::id (free ids: any value)
+    QList<quint32> m_freeTerms;
+    QList<FieldCounts> m_overflow; ///< counts that do not fit a Posting
+    QList<quint32> m_freeOverflow;
     QList<Doc> m_docs;
     QList<int> m_free;
     QHash<QString, int> m_byId;

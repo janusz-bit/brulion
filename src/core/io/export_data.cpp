@@ -182,7 +182,7 @@ private:
             bo.insert(u"id"_s, b.id);
             bo.insert(u"kind"_s, blockKindName(b.kind));
             bo.insert(u"line"_s, b.line);
-            bo.insert(u"text"_s, b.text);
+            bo.insert(u"text"_s, b.text.toString());
             blocks.append(bo);
         }
         o.insert(u"blocks"_s, blocks);

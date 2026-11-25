@@ -639,7 +639,7 @@ QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
                 out += u"<p>"_s + renderInline(paragraph.join(u'\n')) + u"</p>"_s;
             paragraph.clear();
         };
-        for (const QStringView line : qTokenize(b.text, u'\n')) {
+        for (const QStringView line : qTokenize(b.text.view(), u'\n')) {
             QStringView v = line.trimmed();
             while (v.startsWith(u'>'))
                 v = v.sliced(1).trimmed();

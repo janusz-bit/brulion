@@ -2,6 +2,7 @@
 // suggestBlocks); the background upkeep on a search worker (VaultIndex::setSearchWorker()) ends
 // where a synchronous rebuild does, whatever arrives while a job is out.
 #include "fixture.h"
+#include "index/indexcache_p.h"
 #include "indexcompare.h"
 
 #include <QCoreApplication>
@@ -14,6 +15,8 @@
 #include <QThreadPool>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <deque>
 #include <functional>
 #include <thread>
@@ -192,6 +195,67 @@ private Q_SLOTS:
                 QVERIFY(qFuzzyCompare(a[i].score, b[i].score));
             }
         }
+    }
+
+    // Postings pack their term frequencies into 32 bits (content < 2^21, title and aliases < 32);
+    // larger counts live beside them: scores stay exactly those of the counts, through
+    // replacements, removals (a freed slot is reused) and the index cache's codec.
+    void searchIndexLargeTermFrequencies_data()
+    {
+        QTest::addColumn<int>("title");
+        QTest::addColumn<int>("aliases");
+        QTest::addColumn<int>("content");
+        QTest::newRow("packed") << 31 << 31 << 1000;
+        QTest::newRow("title over") << 32 << 0 << 1;
+        QTest::newRow("aliases over") << 0 << 40 << 0;
+        QTest::newRow("both over") << 100 << 33 << 5;
+        QTest::newRow("content at the limit") << 1 << 0 << 2097151;
+        QTest::newRow("content over") << 0 << 0 << 2097152;
+    }
+    void searchIndexLargeTermFrequencies()
+    {
+        QFETCH(int, title);
+        QFETCH(int, aliases);
+        QFETCH(int, content);
+        const auto repeat = [](int n) {
+            QString out;
+            out.reserve(n * 5);
+            for (int i = 0; i < n; ++i)
+                out += u"żółw "_s;
+            return out;
+        };
+        // BM25+ of one document holding the term: df 1, every field at its average length.
+        const double idf = std::log(1.0 + 0.5 / 1.5);
+        const std::array<double, 3> boost{3.0, 2.0, 1.0};
+        double expected = 0;
+        for (const auto &[f, tf] : {std::pair{0, title}, std::pair{1, aliases}, std::pair{2, content}}) {
+            if (tf > 0)
+                expected += boost[f] * idf * (0.5 + tf * 2.2 / (tf + 1.2));
+        }
+        SearchIndex s;
+        s.set(u"inny.md"_s, u"Kot"_s, {}, u"kot"_s); // another document...
+        s.remove(u"inny.md"_s);                       // ...gone again: one document is left
+        s.set(u"a.md"_s, repeat(title), {repeat(aliases)}, repeat(content));
+        s.set(u"a.md"_s, repeat(title), {repeat(aliases)}, repeat(content)); // replaced: the slot is freed, reused
+        QList<SearchIndex::Hit> hits = s.search(u"żółw"_s, 10);
+        QCOMPARE(hits.size(), 1);
+        QVERIFY2(qFuzzyCompare(hits[0].score, expected), qPrintable(u"%1 != %2"_s.arg(hits[0].score).arg(expected)));
+        // Through the index cache's codec.
+        const std::optional<SearchIndex> decoded =
+                indexcache::detail::decodeSearch(indexcache::detail::encodeSearch(s));
+        QVERIFY(decoded);
+        hits = decoded->search(u"żółw"_s, 10);
+        QCOMPARE(hits.size(), 1);
+        QVERIFY(qFuzzyCompare(hits[0].score, expected));
+        QCOMPARE(indexcache::detail::encodeSearch(*decoded), indexcache::detail::encodeSearch(s));
+        // A second document with other large counts beside it, then the first one removed.
+        s.set(u"b.md"_s, repeat(40), {}, u"kot"_s);
+        s.remove(u"a.md"_s);
+        hits = s.search(u"żółw"_s, 10);
+        QCOMPARE(ids(hits), QStringList{u"b.md"_s});
+        const double titleOnly = 3.0 * idf * (0.5 + 40 * 2.2 / (40 + 1.2));
+        QVERIFY(qFuzzyCompare(hits[0].score, titleOnly));
+        QCOMPARE(ids(s.search(u"kot"_s, 10)), QStringList{u"b.md"_s});
     }
 
     void searchIndexBoostsTitleThenAliases()

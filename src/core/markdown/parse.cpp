@@ -24,6 +24,23 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
+/// Short strings that repeat across the notes of a notebook — tag keys, property keys, task
+/// markers: tens of thousands of occurrences, a few dozen values — as one shared QString per
+/// value on this thread (the index loader parses on its workers). A small bounded pool: a hash
+/// lookup per occurrence, no lock (docs/PERFORMANCE.md).
+QString interned(const QString &s)
+{
+    if (s.isEmpty() || s.size() > 48)
+        return s;
+    thread_local QSet<QString> pool;
+    if (const auto it = pool.constFind(s); it != pool.cend())
+        return *it;
+    if (pool.size() >= 1024)
+        pool.clear();
+    pool.insert(s);
+    return s;
+}
+
 /// How a block line is used after classification.
 enum class LineClass { Text, Property, Planning, Drawer, Code, Blank, Meta };
 
@@ -291,7 +308,7 @@ Task buildTask(const TaskMarker &marker, const QList<LineInfo> &infos, const QSt
 {
     Task task;
     task.status = marker.status;
-    task.marker = marker.marker;
+    task.marker = interned(marker.marker);
     task.text = text;
     task.line = line;
     Priority logseqPriority = Priority::None;
@@ -578,7 +595,7 @@ LineScan readLines(const Structure &st, const Node &node, QList<LineInfo> &infos
             ++lead;
         const auto pm = propertyCandidate ? matchPropertyLine(content.sliced(lead)) : std::nullopt;
         if (pm) {
-            const QString key = pm->key.toLower();
+            const QString key = interned(pm->key.toLower());
             const QStringView text = st.text(info.own->view);
             const qsizetype valueStart = begin + lead + pm->key.size() + 2;
             qsizetype valueEnd = text.size();
@@ -606,30 +623,67 @@ LineScan readLines(const Structure &st, const Node &node, QList<LineInfo> &infos
     return out;
 }
 
-struct BlockText {
+/// The block text `text` as a slice of the note's text where it is one piece of it: starting at
+/// document offset `hint`, or after the blanks there (docs/PERFORMANCE.md); else its own string.
+brulion::BlockText noteSlice(const Structure &st, qsizetype hint, QString text)
+{
+    if (text.isEmpty() || hint < 0)
+        return brulion::BlockText(std::move(text));
+    const QStringView doc(st.content);
+    qsizetype at = std::min(hint, doc.size());
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        if (text.size() <= doc.size() - at && doc.sliced(at, text.size()) == QStringView(text))
+            return brulion::BlockText(st.content, at, at + text.size());
+        const qsizetype before = at;
+        while (at < doc.size() && isSpaceOrTab(doc[at]))
+            ++at;
+        if (at == before)
+            break;
+    }
+    return brulion::BlockText(std::move(text));
+}
+
+/// The document offset where the first own line of `node` with `role` (or any, if none)
+/// starts its content; -1 when it has none.
+qsizetype firstLineOffset(const Node &node, std::optional<LineRole> role = std::nullopt)
+{
+    for (const OwnLine &l : node.own) {
+        if (!role || l.role == *role)
+            return l.view.offset;
+    }
+    return -1;
+}
+
+struct TextParts {
     QString text;
     QString first;
+    qsizetype hint = -1; ///< document offset of the first part (noteSlice())
 };
 
 /// Block text from its lines (a table's: tableText()); also the cleaned first line (task text).
-BlockText blockText(const Structure &st, const Node &node, const QList<LineInfo> &infos,
+TextParts blockText(const Structure &st, const Node &node, const QList<LineInfo> &infos,
                     const std::optional<TaskMarker> &marker)
 {
     if (node.kind == BlockKind::Table)
-        return {tableText(st, node), QString()};
+        return {tableText(st, node), QString(), firstLineOffset(node)};
     QStringList parts;
-    BlockText out;
+    TextParts out;
     for (qsizetype k = 0; k < infos.size(); ++k) {
         const LineInfo &info = infos[k];
         if (info.cls == LineClass::Blank) {
             parts.append(QString());
         } else if (info.cls == LineClass::Code) {
             if (node.kind == BlockKind::ListItem) {
+                if (out.hint < 0)
+                    out.hint = info.own->view.offset + std::min(info.own->start, info.own->view.length);
                 const QStringView t = st.text(info.own->view);
                 parts.append(t.sliced(std::min(info.own->start, t.size())).toString());
             }
         } else if (info.cls == LineClass::Text) {
-            QString line = cleanLine(st, info, k == 0 && marker ? marker->contentStart : info.own->start);
+            const qsizetype begin = k == 0 && marker ? marker->contentStart : info.own->start;
+            if (out.hint < 0)
+                out.hint = info.own->view.offset + std::min(begin, info.own->view.length);
+            QString line = cleanLine(st, info, begin);
             if (node.kind == BlockKind::Heading)
                 line = stripClosingHashes(line);
             if (parts.isEmpty()) {
@@ -656,7 +710,7 @@ QStringList uniqueTagKeys(const QStringList &names)
         if (k.isEmpty() || seen.contains(k))
             continue;
         seen.insert(k);
-        out.append(k);
+        out.append(interned(k));
     }
     return out;
 }
@@ -677,8 +731,8 @@ QString reminderRecurrence(const QList<LineInfo> &infos, const Block &block)
     return {};
 }
 
-/// Reminders of a block (any text line, including property lines).
-void blockReminders(const QList<LineInfo> &infos, Block &block, const Ctx &ctx)
+/// Reminders of a block (any text line, including property lines); `text` is the block's text.
+void blockReminders(const QList<LineInfo> &infos, Block &block, const QString &text, const Ctx &ctx)
 {
     std::optional<QString> recurrence; // looked up at the first reminder
     for (const LineInfo &info : infos) {
@@ -690,7 +744,7 @@ void blockReminders(const QList<LineInfo> &infos, Block &block, const Ctx &ctx)
             block.reminders.append(Reminder{.at = DateSpec{t.date, t.time.value_or(ctx.defaultTime)},
                                             .alarm = t.alarm,
                                             .recurrence = *recurrence,
-                                            .text = block.text,
+                                            .text = text,
                                             .line = info.own->view.line});
         }
     }
@@ -716,7 +770,8 @@ Block buildBlock(const Node &node, Ctx &ctx)
     const Structure &st = *ctx.st;
     Block block = blockShell(st, node);
     if (node.kind == BlockKind::Code || node.kind == BlockKind::Html) {
-        block.text = codeText(st, node);
+        block.text = noteSlice(st, firstLineOffset(node, node.kind == BlockKind::Code ? LineRole::Code : LineRole::Text),
+                               codeText(st, node));
         block.id = node.trailingId;
         return block;
     }
@@ -756,13 +811,14 @@ Block buildBlock(const Node &node, Ctx &ctx)
         block.tags = uniqueTagKeys(names);
     }
 
-    const BlockText text = blockText(st, node, infos, marker);
-    block.text = text.text;
+    const TextParts text = blockText(st, node, infos, marker);
+    block.text = noteSlice(st, text.hint, text.text);
     if (marker) {
-        block.task = buildTask(*marker, infos, text.first, node.line);
+        // A one-line task's text: one string with the block's (when that is not a slice).
+        block.task = buildTask(*marker, infos, text.first == text.text ? text.text : text.first, node.line);
         taskClockFromDrawers(st, infos, *block.task);
     }
-    blockReminders(infos, block, ctx);
+    blockReminders(infos, block, text.text, ctx);
     return block;
 }
 
@@ -843,9 +899,9 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, 
             }
         }
         if (block.kind == BlockKind::Heading && parent < 0 && block.headingLevel > 0)
-            note.headings.append(Heading{block.headingLevel, block.text, block.line});
+            note.headings.append(Heading{block.headingLevel, block.text.toString(), block.line});
         if (block.task)
-            note.tasks.append(*block.task);
+            note.tasks.append(block.task);
         note.reminders.append(block.reminders);
         if (!block.id.isEmpty() && !note.blockIds.contains(block.id))
             note.blockIds.insert(block.id, index);
@@ -880,6 +936,11 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, 
             b.reminders.squeeze();
     }
     return note;
+}
+
+QString internedString(const QString &s)
+{
+    return interned(s);
 }
 
 int blockAtLine(const ParsedNote &note, int line)
