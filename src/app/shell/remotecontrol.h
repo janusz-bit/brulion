@@ -37,6 +37,13 @@
 // webhooks' server (HookServer) passes each hook on as chatHook with a grant of its own
 // (hookGrant()), which calls nothing else and which nothing else may call.
 //
+// In process (dispatch(), no socket): an AI agent on another computer, whose tools there reach this
+// app through that computer's `brulion-cli acp serve` and the agent's stream (core acp/apptunnel.h,
+// WorkspaceAgents::setAppControl()) — with a grant of its own (localGrant(): which methods, its
+// name in the journal), the same checks as a socket's connection, the same journal, live indicator
+// and revert; never quit, and a screenshot comes back as the picture itself (no file of this
+// device). Android has no socket at all (Options::key ""): it answers such agents only so.
+//
 // main() creates it for the real app (not the dev tools) once the QML is loaded; it reports its
 // state to AppController::setRemoteControl() for the settings page.
 #pragma once
@@ -74,7 +81,9 @@ public:
     static constexpr auto SettingKey = "devtools/remoteControl";
 
     struct Options {
-        QString key;                       ///< the control socket: ipc::controlKeyFor(single-instance key)
+        /// The control socket: ipc::controlKeyFor(single-instance key); "" none (Android: only
+        /// in-process grants, dispatch()).
+        QString key;
         bool forced = false;               ///< --remote-control: on for this run whatever the setting
         std::function<QString()> language; ///< the UI language in use ("pl" | "en")
     };
@@ -98,6 +107,15 @@ public:
     QString hookGrant();
     /// Ends the grant of `token` (the agent stopped) and drops its connections.
     void revokeGrant(const QString &token);
+    /// A grant answered in process (dispatch(); the socket does not listen for it): an AI agent on
+    /// another computer, `client` its name in the journal ("Claude Code on raspberry-pi-4"),
+    /// `chatOnly` the chat's methods alone. Its token never leaves the app. revokeGrant() ends it.
+    QString localGrant(const QString &client, bool chatOnly);
+    /// Answers `method` with `params` as the client of the in-process grant `token`: checked as a
+    /// socket's request (the method, its parameters, the grant's scope), never quit, a screenshot as
+    /// `{png (base64), width, height, devicePixelRatio}` (no path: no file of this device).
+    void dispatch(const QString &token, const QString &method, const QJsonObject &params,
+                  const ipc::ControlReply &reply);
 
 private Q_SLOTS:
     void onToastShown(int toastId, const QString &text, const QString &kind);
@@ -124,6 +142,8 @@ private:
     void runCommand(const QJsonObject &params, const ipc::ControlReply &reply);
     void capture(const QJsonObject &params, const ipc::ControlReply &reply);
     void screenshot(const QJsonObject &params, const ipc::ControlReply &reply);
+    /// The window as a PNG in the answer (an in-process grant's screenshot).
+    void screenshotData(const ipc::ControlReply &reply);
     void find(const QJsonObject &params, const ipc::ControlReply &reply);
     void pointer(const QString &method, const QJsonObject &params, const ipc::ControlReply &reply);
     void drag(const QJsonObject &params, const ipc::ControlReply &reply);
@@ -220,6 +240,11 @@ private:
     ChatControl *m_chat = nullptr;
     Options m_options;
     ipc::ControlServer m_server;
+    struct LocalGrant {
+        QString client;
+        bool chatOnly = false;
+    };
+    QHash<QString, LocalGrant> m_localGrants; ///< in process (dispatch()), by token
 
     QHash<quint64, QPointer<QQuickItem>> m_items;
     QHash<QQuickItem *, quint64> m_handles;

@@ -24,6 +24,12 @@
 //   "… narzędzia …"   a tool call and no words
 //   "… model …"       "Model: <the model option now>"
 //   "… sesja …"       "Sesja: <the session's id>"
+//   "aplikacja <tool> <JSON arguments> [&& <tool> <JSON> …]"
+//                     starts the session's MCP server (its command, arguments and environment from
+//                     session/new — Brulion's, given by the app or by acp serve) and calls each tool
+//                     there: "Aplikacja: <the result's envelope> | …" (" [obraz]" after one with a
+//                     picture); the tool "lista" lists its brulion_app_* tools; no server:
+//                     "Aplikacja: brak serwera"
 //   anything else     a thought, then "Odpowiedź na: <the message>" in two chunks
 //
 // After each session/new it offers slash commands and says how much of its context is used.
@@ -39,6 +45,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLockFile>
+#include <QProcess>
 #include <QThread>
 
 #include <cstdio>
@@ -83,6 +90,96 @@ void ask(const QString &method, const QJsonObject &params, Then then)
     const QString id = u"req-%1"_s.arg(nextRequest++);
     waitingFor.insert(id, std::move(then));
     write({{u"id"_s, id}, {u"method"_s, method}, {u"params"_s, params}});
+}
+
+/// One line of the MCP server's answers (an object), waiting for it.
+QJsonObject readAnswer(QProcess &server, int id)
+{
+    QByteArray pending;
+    for (int i = 0; i < 600; ++i) {
+        while (server.canReadLine()) {
+            const QJsonObject o = QJsonDocument::fromJson(server.readLine()).object();
+            if (o.value(u"id"_s).toInt(-1) == id)
+                return o;
+        }
+        if (server.state() == QProcess::NotRunning && !server.canReadLine())
+            return {};
+        server.waitForReadyRead(200);
+    }
+    return {};
+}
+
+/// The calls "<tool> <JSON> && <tool> <JSON> …" of a session's MCP server `config` ({command, args,
+/// env: [{name, value}]}): what each one answered.
+QString callTools(const QJsonObject &config, const QString &calls)
+{
+    if (config.isEmpty())
+        return u"Aplikacja: brak serwera"_s;
+    QProcess server;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    for (const QJsonValue &v : config.value(u"env"_s).toArray())
+        env.insert(v.toObject().value(u"name"_s).toString(), v.toObject().value(u"value"_s).toString());
+    server.setProcessEnvironment(env);
+    QStringList args;
+    for (const QJsonValue &a : config.value(u"args"_s).toArray())
+        args << a.toString();
+    server.setProcessChannelMode(QProcess::ForwardedErrorChannel);
+    server.start(config.value(u"command"_s).toString(), args);
+    if (!server.waitForStarted(30000))
+        return u"Aplikacja: serwer nie wystartował"_s;
+    const auto send = [&server](const QJsonObject &m) {
+        server.write(QJsonDocument(m).toJson(QJsonDocument::Compact) + '\n');
+        server.waitForBytesWritten(5000);
+    };
+    send({{u"jsonrpc"_s, u"2.0"_s},
+          {u"id"_s, 1},
+          {u"method"_s, u"initialize"_s},
+          {u"params"_s, QJsonObject{{u"protocolVersion"_s, u"2025-06-18"_s},
+                                    {u"capabilities"_s, QJsonObject()},
+                                    {u"clientInfo"_s, QJsonObject{{u"name"_s, u"fake"_s}, {u"version"_s, u"1"_s}}}}}});
+    if (readAnswer(server, 1).isEmpty())
+        return u"Aplikacja: serwer nie odpowiada"_s;
+    send({{u"jsonrpc"_s, u"2.0"_s}, {u"method"_s, u"notifications/initialized"_s}});
+    QStringList said;
+    int id = 2;
+    for (const QString &part : calls.split(u"&&"_s, Qt::SkipEmptyParts)) {
+        const QString call = part.trimmed();
+        const QString tool = call.section(u' ', 0, 0);
+        if (tool == u"lista") {
+            send({{u"jsonrpc"_s, u"2.0"_s}, {u"id"_s, id}, {u"method"_s, u"tools/list"_s}});
+            QStringList names;
+            for (const QJsonValue &t :
+                 readAnswer(server, id++).value(u"result"_s).toObject().value(u"tools"_s).toArray()) {
+                if (const QString name = t.toObject().value(u"name"_s).toString(); name.startsWith(u"brulion_app_"_s))
+                    names << name;
+            }
+            said << names.join(u',');
+            continue;
+        }
+        const QJsonObject arguments = QJsonDocument::fromJson(call.section(u' ', 1).trimmed().toUtf8()).object();
+        send({{u"jsonrpc"_s, u"2.0"_s},
+              {u"id"_s, id},
+              {u"method"_s, u"tools/call"_s},
+              {u"params"_s, QJsonObject{{u"name"_s, tool}, {u"arguments"_s, arguments}}}});
+        const QJsonObject answer = readAnswer(server, id++);
+        const QJsonObject result = answer.value(u"result"_s).toObject();
+        if (result.isEmpty()) {
+            said << QString::fromUtf8(
+                    QJsonDocument(answer.value(u"error"_s).toObject()).toJson(QJsonDocument::Compact));
+            continue;
+        }
+        QString text = QString::fromUtf8(
+                QJsonDocument(result.value(u"structuredContent"_s).toObject()).toJson(QJsonDocument::Compact));
+        for (const QJsonValue &c : result.value(u"content"_s).toArray()) {
+            if (c.toObject().value(u"type"_s).toString() == u"image")
+                text += u" [obraz]"_s;
+        }
+        said << text;
+    }
+    server.closeWriteChannel();
+    if (!server.waitForFinished(10000))
+        server.kill();
+    return u"Aplikacja: "_s + said.join(u" | "_s);
 }
 
 } // namespace
@@ -135,6 +232,7 @@ int main(int argc, char **argv)
     QJsonValue waiting;      // the prompt that waits: for a cancel, or for the permission's answer
     QString waitingSession;
     QString cwd;
+    QHash<QString, QJsonObject> servers; // session → its first MCP server (session/new, /resume)
 
     std::string raw;
     while (std::getline(std::cin, raw)) {
@@ -200,6 +298,7 @@ int main(int argc, char **argv)
             }
             cwd = params.value(u"cwd"_s).toString();
             const QString session = u"s%1"_s.arg(++sessions);
+            servers.insert(session, params.value(u"mcpServers"_s).toArray().at(0).toObject());
             reply(id, sessionResult(session));
             afterSession(session);
         } else if (method == u"session/resume") {
@@ -209,6 +308,7 @@ int main(int argc, char **argv)
                 continue;
             }
             cwd = params.value(u"cwd"_s).toString();
+            servers.insert(session, params.value(u"mcpServers"_s).toArray().at(0).toObject());
             reply(id, sessionResult(QString()));
             afterSession(session);
         } else if (method == u"session/set_config_option") {
@@ -243,6 +343,15 @@ int main(int argc, char **argv)
                                  {u"cost"_s, QJsonObject{{u"amount"_s, 0.25}, {u"currency"_s, u"USD"_s}}}});
                 reply(id, QJsonObject{{u"stopReason"_s, u"end_turn"_s}});
             };
+            if (text.startsWith(u"aplikacja "_s)) {
+                update(session, {{u"sessionUpdate"_s, u"tool_call"_s},
+                                 {u"toolCallId"_s, u"a1"_s},
+                                 {u"title"_s, u"brulion (MCP)"_s},
+                                 {u"kind"_s, u"other"_s},
+                                 {u"status"_s, u"in_progress"_s}});
+                end(callTools(servers.value(session), text.mid(10)));
+                continue;
+            }
             if (text.contains(u"koniec"_s)) {
                 std::fputs("fake agent: koniec\n", stderr);
                 std::fflush(stderr);

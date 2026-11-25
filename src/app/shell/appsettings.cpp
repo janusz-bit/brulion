@@ -989,9 +989,9 @@ QList<AgentConfig> AppSettings::acpAgents() const
             if (!a.token.isEmpty())
                 logging::addSecret(a.token); // (masked in every log line from now on)
         }
-        // "Let it change the app": a program of this device only (one on another computer gets no
-        // grant of this app).
-        a.appAccess = a.url.isEmpty() && o.value(u"app"_s).toBool(false);
+        // "Let it change the app": a program of this device, or an agent on another computer whose
+        // tools there reach this app through that computer (a grant answered in process).
+        a.appAccess = o.value(u"app"_s).toBool(false);
         if (!validAgentId(a.id) || std::ranges::any_of(out, [&a](const AgentConfig &b) { return b.id == a.id; }))
             continue; // (malformed, or the same id twice: the first one)
         if (!WorkspaceAgents::runs(a))
@@ -1045,8 +1045,10 @@ QVariantList AppSettings::acpAgentRows() const
         if (!command.isEmpty() && a.tools && a.appAccess)
             summary += u" · "_s + tr("may change the app");
         if (a.isRemote())
-            summary = a.token.isEmpty() ? tr("On %1 — not paired: remove it and pair again").arg(a.host)
-                                        : tr("On %1 (%2) · %3").arg(a.host, a.url, tools);
+            summary = a.token.isEmpty()
+                              ? tr("On %1 — not paired: remove it and pair again").arg(a.host)
+                              : tr("On %1 (%2) · %3").arg(a.host, a.url, tools)
+                                        + (a.tools && a.appAccess ? u" · "_s + tr("may change the app") : QString());
         rows.append(QVariantMap{{u"id"_s, a.id},
                                 {u"name"_s, a.name},
                                 {u"command"_s, a.command},
@@ -1253,7 +1255,7 @@ void AppSettings::setAcpAgentApp(const QString &id, bool on)
     QList<AgentConfig> agents = acpAgents();
     for (AgentConfig &a : agents) {
         if (a.id == id)
-            a.appAccess = on && !a.isRemote();
+            a.appAccess = on;
     }
     storeAcpAgents(agents);
 }

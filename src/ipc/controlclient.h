@@ -35,6 +35,13 @@ public:
     /// A grant of the app's chat alone (an AI agent's conversation, docs/CLI.md "Conversations"):
     /// what `brulion-cli app chat …` shows, before BRULION_APP_TOKEN.
     static constexpr auto ChatTokenVariable = "BRULION_APP_CHAT_TOKEN";
+    /// The socket of `brulion-cli acp serve`'s tunnel (an AI agent on another computer than the
+    /// app: its tools reach the app on the device through that server, docs/CLI.md "Live changes"),
+    /// instead of the running app's own; and the device's name, for the words.
+    static constexpr auto SocketVariable = "BRULION_APP_SOCKET";
+    static constexpr auto DeviceVariable = "BRULION_APP_DEVICE";
+    /// The tunnel's socket from the environment ("" none: the app of this desktop).
+    static QString tunnelSocket();
     /// Who connect() says it is (default: the environment's); "" sends nothing of it.
     void setIdentity(const QString &token, const QString &client);
     QString token() const { return m_token; }

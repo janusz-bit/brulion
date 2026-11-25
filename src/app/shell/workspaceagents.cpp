@@ -47,6 +47,15 @@ struct WorkspaceAgents::Process
     QString errors;    // the end of what it wrote to its standard error
     bool lost = false; // its stream to another computer ended by itself (its turns are recovered)
     QString grant;     // the token of its grant of the running app (appAccess), "" none
+    /// An agent on another computer: the handles its sessions' requests name for the app's tools
+    /// (acp/apptunnel.h) — handle → its conversation, whether it may change the app, its chat grant.
+    struct AppHandle {
+        QString path;
+        bool control = false;
+        QString chatToken;
+    };
+    QHash<QString, AppHandle> handles;
+    QStringList handleOrder; // oldest first (at most MaxAppHandles)
 };
 
 /// A command an agent runs (terminal/create): its output as it comes, its end.
@@ -73,6 +82,8 @@ namespace {
 [[maybe_unused]] constexpr qint64 DefaultOutputLimit = 1024 * 1024;
 /// The terminals one agent may have at once.
 [[maybe_unused]] constexpr int MaxTerminals = 32;
+/// The handles one agent on another computer keeps for the app's tools (its sessions'; the oldest go).
+constexpr int MaxAppHandles = 64;
 /// The key of an agent's check (no conversation's path starts with it).
 const QString CheckKey = u"\x1f" "check"_s;
 const QString StoreKey = u"acp/sessions"_s;
@@ -209,7 +220,9 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
                 ++it;
                 continue;
             }
-            if (m_chatRevoke)
+            if (it->local && m_appControl.revoke)
+                m_appControl.revoke(it.key());
+            else if (!it->local && m_chatRevoke)
                 m_chatRevoke(it.key());
             it = m_chatGrants.erase(it);
         }
@@ -410,7 +423,7 @@ QStringList WorkspaceAgents::commandLine(const QString &command, bool onWindows,
 }
 
 QString WorkspaceAgents::context(const QString &root, const QString &conversation, const QString &page, bool tools,
-                                 bool app, bool chat)
+                                 bool app, bool chat, const QString &device)
 {
     QStringList lines;
     lines << u"You are answering in the AI chat of Brulion, the user's notes app. Their notebook is the folder "_s
@@ -419,7 +432,14 @@ QString WorkspaceAgents::context(const QString &root, const QString &conversatio
     if (tools)
         lines << u"The MCP server \"brulion\" has tools for this notebook (search, queries, tasks, journals, pages): "
                  u"use them to find and change notes rather than reading every file."_s;
-    if (tools && app)
+    if (tools && app && !device.isEmpty())
+        lines << u"Its brulion_app_* tools also let you see and change the Brulion app on the user's device \"%1\" "
+                 u"(where they talk with you, not the computer you run on) live while you work, over the network: "
+                 u"evaluate Luau (brulion_app_eval), load extensions for this run (brulion_app_load), set theme "
+                 u"tokens (brulion_app_theme) and settings (brulion_app_set), read and change the window's items "
+                 u"(brulion_app_inspect, brulion_app_set_property) — the app shows the user each change and they "
+                 u"can undo all of them."_s.arg(device);
+    if (tools && app && device.isEmpty())
         lines << u"Its brulion_app_* tools also let you see and change the running Brulion app live while you work: "
                  u"evaluate Luau (brulion_app_eval), load extensions for this run (brulion_app_load), set theme "
                  u"tokens (brulion_app_theme) and settings (brulion_app_set), read and change the window's items "
@@ -526,6 +546,19 @@ void WorkspaceAgents::setChatGrants(GrantFunction grant, RevokeFunction revoke)
     m_chatRevoke = std::move(revoke);
 }
 
+void WorkspaceAgents::setAppControl(AppControl control)
+{
+    m_appControl = std::move(control);
+}
+
+QString WorkspaceAgents::remoteClient(const AgentConfig &agent)
+{
+    const QString host = agent.host.isEmpty() ? QUrl(agent.url).host() : agent.host;
+    return host.isEmpty() ? agent.name
+                          : tr("%1 on %2", "an AI agent on its computer: “Claude Code on raspberry-pi-4”")
+                                    .arg(agent.name, host);
+}
+
 void WorkspaceAgents::setLineage(std::function<int(const QString &)> depth, std::function<bool(const QString &)> isChild)
 {
     m_depth = std::move(depth);
@@ -540,7 +573,9 @@ QString WorkspaceAgents::grantConversation(const QString &token) const
 
 QString WorkspaceAgents::chatGrantFor(const AgentConfig &config, const QString &path)
 {
-    if (!m_chatGrant || config.isRemote() || !config.tools || toolsProgram().isEmpty())
+    // (An agent on another computer: that computer's tools, this app answering in process.)
+    if (config.isRemote() ? !m_appControl.isSet() || !config.tools
+                          : !m_chatGrant || !config.tools || toolsProgram().isEmpty())
         return {};
     // (A conversation that deep starts no sub-conversations of its own.)
     if (m_depth && m_depth(path) >= ChatLineage::MaxDepth)
@@ -549,9 +584,9 @@ QString WorkspaceAgents::chatGrantFor(const AgentConfig &config, const QString &
         if (it->agent == config.id && it->conversation == path)
             return it.key();
     }
-    const QString token = m_chatGrant(config.name);
+    const QString token = config.isRemote() ? m_appControl.grant(remoteClient(config), true) : m_chatGrant(config.name);
     if (!token.isEmpty())
-        m_chatGrants.insert(token, ChatGrant{config.id, path});
+        m_chatGrants.insert(token, ChatGrant{config.id, path, config.isRemote()});
     return token;
 }
 
@@ -563,15 +598,76 @@ void WorkspaceAgents::releaseGrant(Process *p)
             ++it;
             continue;
         }
-        if (m_chatRevoke)
+        if (it->local && m_appControl.revoke)
+            m_appControl.revoke(it.key());
+        else if (!it->local && m_chatRevoke)
             m_chatRevoke(it.key());
         it = m_chatGrants.erase(it);
     }
+    p->handles.clear();
+    p->handleOrder.clear();
     if (p->grant.isEmpty())
         return;
-    if (m_revoke)
+    if (p->remote && m_appControl.revoke)
+        m_appControl.revoke(p->grant);
+    else if (!p->remote && m_revoke)
         m_revoke(p->grant);
     p->grant.clear();
+}
+
+QString WorkspaceAgents::appHandle(Process *p, const QString &path, bool control, const QString &chatToken)
+{
+    for (auto it = p->handles.begin(); it != p->handles.end(); ++it) {
+        if (it->path == path && it->control == control && it->chatToken == chatToken)
+            return it.key();
+    }
+    // Random, of this stream alone: no secret (the grants' tokens stay here).
+    const QString handle = u"h_"_s + QUuid::createUuid().toString(QUuid::Id128).left(24);
+    p->handles.insert(handle, Process::AppHandle{path, control, chatToken});
+    p->handleOrder.append(handle);
+    while (p->handleOrder.size() > MaxAppHandles)
+        p->handles.remove(p->handleOrder.takeFirst());
+    return handle;
+}
+
+void WorkspaceAgents::appCall(Process *p, const QJsonValue &id, const QString &method, const QJsonObject &params)
+{
+    const QPointer<acp::Client> client = p->client;
+    if (method != acp::AppMethod) {
+        client->respondError(id, acp::MethodNotFound, u"Method not found: %1"_s.arg(method));
+        return;
+    }
+    QString error;
+    const std::optional<acp::AppCall> call = acp::AppCall::fromMessage(
+            QJsonObject{{u"jsonrpc"_s, u"2.0"_s}, {u"id"_s, id}, {u"method"_s, method}, {u"params"_s, params}}, &error);
+    if (!call) {
+        client->respondError(id, acp::InvalidParams, error);
+        return;
+    }
+    // The answer goes back over the stream (nobody hears it once the agent is gone).
+    const auto answer = [client, id](const acp::AppAnswer &a) {
+        if (client)
+            client->respond(id, acp::appAnswerMessage(id, a).value(u"result"_s));
+    };
+    const auto h = p->handles.constFind(call->handle);
+    if (!m_appControl.isSet() || h == p->handles.cend()) {
+        answer(acp::AppAnswer::failure(
+                u"unauthorized"_s, u"This app gives the agent's session no tools of its own (no such grant here)"_s));
+        return;
+    }
+    const bool control = call->scope == acp::AppScopeControl;
+    const QString token = control ? (h->control ? p->grant : QString()) : h->chatToken;
+    if (token.isEmpty()) {
+        answer(acp::AppAnswer::failure(u"unauthorized"_s,
+                                       control ? u"The user did not let this agent change the app (Settings → "
+                                                 u"Extensions → AI agents → Edit… → Let it change the app while it "
+                                                 u"runs), or this is a sub-conversation's agent"_s
+                                               : u"This conversation's agent has no grant of the app's chat"_s));
+        return;
+    }
+    qCDebug(logging::lcApp, "AI agent %s on %s calls the app: %s", qUtf8Printable(p->config.name),
+            qUtf8Printable(p->config.host), qUtf8Printable(call->method));
+    m_appControl.call(token, call->method, call->params, answer, [client] { return !client.isNull(); });
 }
 
 void WorkspaceAgents::setAgents(const QList<AgentConfig> &agents)
@@ -642,6 +738,15 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
         p->client->setHandler([p](const QString &, const QJsonValue &id, const QString &method, const QJsonObject &) {
             p->client->respondError(id, acp::MethodNotFound, u"Method not found: %1"_s.arg(method));
         });
+        // Its tools there reach this app (acp/apptunnel.h): the stream says this app answers them,
+        // and with "Let it change the app" a grant of its own, answered in process.
+        if (m_appControl.isSet()) {
+            p->remote->setFeatures({QString(acp::AppFeature)});
+            p->client->setExtensionHandler([this, p](const QJsonValue &id, const QString &method,
+                                                     const QJsonObject &params) { appCall(p, id, method, params); });
+            if (config.tools && config.appAccess)
+                p->grant = m_appControl.grant(remoteClient(config), false);
+        }
     } else {
 #if QT_CONFIG(process)
         p->process = new QProcess(this);
@@ -1049,6 +1154,13 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     const bool child = m_isChild && m_isChild(path);
     const QString chatToken = chatGrantFor(*agent, path);
     acp::TurnInput input = baseInput(*agent, p, chatToken, child);
+    // An agent on another computer: what its session may do with this app, named in its request
+    // (that computer gives the session's tools grants of its own and calls back with the handle).
+    const bool remoteControl = agent->isRemote() && !p->grant.isEmpty() && !child;
+    if (agent->isRemote() && (remoteControl || !chatToken.isEmpty()))
+        input.sessionMeta = QJsonObject{{acp::AppMetaKey, acp::AppSession{appHandle(p, path, remoteControl, chatToken),
+                                                                          remoteControl, !chatToken.isEmpty()}
+                                                                  .toJson()}};
 
     // The user's newest message, its pictures as pictures (a link to the file where the agent
     // takes none — or where a picture cannot be read).
@@ -1090,8 +1202,14 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // (That computer's server gives each session Brulion's tools there, unless it was started
     // without them: its info said so at pairing.)
     const bool tools = agent->isRemote() ? agent->tools : !input.mcpServers.isEmpty();
-    input.firstPrompt << acp::Block::textBlock(context(root, conversation, pagePath.isEmpty() ? QString() : page,
-                                                       tools, !p->grant.isEmpty() && !child, !chatToken.isEmpty()));
+    // (A computer whose server tunnels nothing — an older one — gives its tools no app: not said.
+    // Before its stream started, it is not known yet.)
+    const bool tunnel = !agent->isRemote() || !p->remote || !p->remote->isStarted()
+                        || p->remote->hostFeatures().contains(QString(acp::AppFeature));
+    input.firstPrompt << acp::Block::textBlock(context(root, conversation, pagePath.isEmpty() ? QString() : page, tools,
+                                                       !p->grant.isEmpty() && !child && tunnel,
+                                                       !chatToken.isEmpty() && tunnel,
+                                                       agent->isRemote() ? deviceName() : QString()));
     if (!pagePath.isEmpty()) {
         bool ok = false;
         const QString text = markdown::isEncryptedNotePath(pagePath) ? QString() : m_workspace->read(pagePath, &ok);

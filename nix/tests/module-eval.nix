@@ -310,6 +310,8 @@ pkgs.runCommand "brulion-nixos-module"
     expectAcp 'StateDirectory=brulion-acp'
     expectAcp 'StateDirectory=brulion-acp/notebook'
     expectAcp 'KillMode=control-group'
+    expectAcp 'RuntimeDirectory=brulion-acp'
+    expectAcp 'XDG_RUNTIME_DIR=/run/brulion-acp'
     expectAcp 'ProtectSystem=strict'
     expectAcp 'NoNewPrivileges=true'
     ! grep -qF -- 'MemoryDenyWriteExecute' "$unit" || fail "brulion-acp.service: Node.js agents need W+X memory"

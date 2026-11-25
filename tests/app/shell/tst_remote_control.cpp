@@ -24,13 +24,18 @@
 // real ACP agent (fakeacpagent.cpp): its partners, a conversation started and waited for, listed
 // and read, busy while its turn runs, a wait that runs out, Stop, a sub-conversation shown as a
 // chip under its parent in the chat view, a scheduled conversation added, listed with its next
-// run, run now and shown in Settings. Without a private runtime folder the app still
+// run, run now and shown in Settings. An AI agent on another computer let change the app (brulion-cli
+// acp serve with the fake agent, whose tools are the real brulion-cli mcp there): a conversation's turn
+// sets a theme token of this app through that computer, answered in process — in the journal as
+// "<agent> on <computer>", undone with revert — and takes a screenshot that comes back as a picture
+// there. Without a private runtime folder the app still
 // starts, with neither socket in the shared temp folder. The app's log must hold no QML TypeError, ReferenceError or
 // binding loop.
 #include "controlclient.h"
 #include "controlprotocol.h"
 #include "singleinstance.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -1314,6 +1319,112 @@ private Q_SLOTS:
             QVERIFY2(right <= windowWidth + 0.5,
                      qPrintable(u"%1 ends at %2 in a window %3 wide"_s.arg(name).arg(right).arg(windowWidth)));
         }
+    }
+
+    void remoteAgentChangesTheApp()
+    {
+        // "Another computer": brulion-cli acp serve with its own copy of the notebook and this device
+        // paired already (its token's hash in the state file, the token in the app's secrets).
+        const QString hostVault = m_tmp.filePath(u"komputer-notatki"_s);
+        writeFile(hostVault + u"/Dom.md"_s, "- na komputerze\n");
+        const QString stateFile = m_tmp.filePath(u"komputer-stan/acp-remote.json"_s);
+        const QString token = u"bat_"_s + QString(43, u'Q');
+        const QString when = u"2026-11-24T10:00:00Z"_s;
+        writeFile(stateFile,
+                  QJsonDocument(
+                          QJsonObject{{u"format"_s, u"brulion-acp-host"_s},
+                                      {u"version"_s, 1},
+                                      {u"devices"_s,
+                                       QJsonArray{QJsonObject{
+                                               {u"id"_s, u"dev_TELEFON"_s},
+                                               {u"name"_s, u"Telefon testowy"_s},
+                                               {u"tokenHash"_s,
+                                                QString::fromLatin1(QCryptographicHash::hash(token.toUtf8(),
+                                                                                             QCryptographicHash::Sha256)
+                                                                            .toHex())},
+                                               {u"created"_s, when},
+                                               {u"lastUsed"_s, when}}}}})
+                          .toJson());
+        QProcess host;
+        host.setProcessEnvironment(environment());
+        host.setStandardErrorFile(m_tmp.filePath(u"komputer.log"_s));
+        host.start(QStringLiteral(BRULION_CLI),
+                                  {u"--vault"_s, hostVault, u"--state-dir"_s, m_tmp.filePath(u"komputer-urzadzenie"_s),
+                                   u"acp"_s, u"serve"_s, u"--agent"_s,
+                                   u"fake:Fałszywy=\"%1\""_s.arg(QStringLiteral(FAKE_ACP_AGENT)), u"--port"_s, u"0"_s,
+                                                                 u"--state-file"_s, stateFile});
+        QVERIFY(host.waitForStarted(kStartMs));
+        const auto stopHost = qScopeGuard([&host] {
+            host.kill();
+            host.waitForFinished(10000);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(host.canReadLine(), kStartMs);
+        const QJsonObject served = QJsonDocument::fromJson(host.readLine()).object().value(u"result"_s).toObject();
+        QVERIFY2(served.value(u"appTools"_s).toBool(), qPrintable(QString::fromUtf8(QJsonDocument(served).toJson())));
+        {
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.setValue(u"devtools/remoteControl"_s, true);
+            settings.setValue(u"ai/agents"_s,
+                              QString::fromUtf8(QJsonDocument(QJsonArray{QJsonObject{
+                                                                      {u"id"_s, u"pi-fake"_s},
+                                                                      {u"name"_s, u"Fałszywy"_s},
+                                                                      {u"command"_s, u""_s},
+                                                                      {u"tools"_s, true},
+                                                                      {u"url"_s, served.value(u"url"_s).toString()},
+                                                                      {u"remote"_s, u"fake"_s},
+                                                                      {u"host"_s, u"raspberry-pi-4"_s},
+                                                                      {u"root"_s, hostVault},
+                                                                      {u"app"_s, true}}})
+                                                        .toJson(QJsonDocument::Compact)));
+        }
+        writeFile(m_home + u"/data/Brulion/Brulion/secrets/acp-pi-fake"_s, token.toUtf8());
+        const auto cleanUp = qScopeGuard([this] {
+            stopApp();
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.remove(u"ai/agents"_s);
+            settings.setValue(u"devtools/remoteControl"_s, false);
+            QFile::remove(m_home + u"/data/Brulion/Brulion/secrets/acp-pi-fake"_s);
+        });
+        startApp(false);
+        Run r;
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [](const Run &x) { return x.code == 0 && x.result().value(u"ready"_s).toBool(); }, kStartMs,
+                         &r),
+                 qPrintable(r.describe()));
+        // The agent's tools on that computer change this app: a theme token, and a screenshot.
+        r = app({u"chat"_s, u"start"_s,
+                 u"aplikacja brulion_app_theme {\"tokens\": \"{\\\"accent\\\": \\\"#33aa77\\\"}\"} && "
+                 u"brulion_app_screenshot {} && brulion_app_quit {}"_s,
+                 u"--partner"_s, u"acp:pi-fake"_s, u"--wait"_s, u"--timeout"_s, QString::number(60000 * kSlowdown)});
+        QVERIFY2(r.code == 0,
+                 qPrintable(r.describe() + QString::fromUtf8(readFile(m_tmp.filePath(u"komputer.log"_s)))));
+        const QString answer = r.result().value(u"answer"_s).toObject().value(u"text"_s).toString();
+        QVERIFY2(answer.startsWith(u"Aplikacja: "_s), qPrintable(answer));
+        const QStringList parts = answer.mid(11).split(u" | "_s);
+        QCOMPARE(parts.size(), 3);
+        QVERIFY2(QJsonDocument::fromJson(parts.at(0).toUtf8()).object().value(u"ok"_s).toBool(),
+                 qPrintable(parts.at(0)));
+        QVERIFY2(parts.at(1).endsWith(u" [obraz]"_s), qPrintable(parts.at(1)));
+        // (Never quit by an agent elsewhere.)
+        QVERIFY2(parts.at(2).contains(u"refused"_s), qPrintable(parts.at(2)));
+        QCOMPARE(app({u"state"_s}).code, 0);
+        // In the journal as the agent on its computer ("Fałszywy na raspberry-pi-4" in the Polish
+        // interface), and undone.
+        r = app({u"changes"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QString who;
+        for (const QJsonValue &c : r.result().value(u"clients"_s).toArray()) {
+            const QString name = c.toObject().value(u"name"_s).toString();
+            if (name.startsWith(u"Fałszywy "_s) && name.endsWith(u" raspberry-pi-4"_s))
+                who = c.toObject().value(u"who"_s).toString();
+        }
+        QVERIFY2(!who.isEmpty(), qPrintable(r.describe()));
+        r = app({u"revert"_s, u"--who"_s, who});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QVERIFY(r.result().value(u"undone"_s).toInt() >= 1);
+        r = app({u"changes"_s});
+        QVERIFY(!QJsonDocument(r.result()).toJson().contains("raspberry-pi-4"));
     }
 
     // No private runtime folder ($XDG_RUNTIME_DIR unset, Qt's <temp>/runtime-<user> not to be

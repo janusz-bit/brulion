@@ -73,6 +73,14 @@
 #include <QPointer>
 #include <QThread>
 #endif
+#ifdef BRULION_APP_CONTROL
+// AI agents drive and change the running app (the desktop's socket; in process for an agent on
+// another computer, Android too).
+#include "remotecontrol.h"
+#include "workspaceagents.h"
+#include "workspacechats.h"
+#include <QPointer>
+#endif
 
 #ifdef Q_OS_ANDROID
 #include "android/androidbridge.h"
@@ -443,7 +451,7 @@ int main(int argc, char *argv[])
     devTools.attach(&engine); // --size, --screenshot
     brulion::ui::connectKeyboardSources(&keyboardInsets, &engine);
     brulion::ui::connectGestureSources(&gestureInsets, &engine);
-#ifdef BRULION_DESKTOP_INTEGRATION
+#ifdef BRULION_APP_CONTROL
     // After the engine: it drives the engine's window and goes before it.
     std::unique_ptr<brulion::shell::RemoteControl> remoteControl;
 #endif
@@ -632,20 +640,28 @@ int main(int argc, char *argv[])
         // A first-time user's walk through the app with a screenshot per step (shelljourney.h).
         if (const QString journey = argValue(args, u"--journey"_s); mainUi && !journey.isEmpty())
             brulion::shell::startShellJourney(&engine, controller.get(), journey);
-        // AI agents and scripts drive the running app over a socket of its own (remotecontrol.h):
-        // with --remote-control, or while the device setting is on (Settings → Application). It
-        // listens only then; it exists for the settings page also in --screenshot runs.
+#endif
+#ifdef BRULION_APP_CONTROL
+        // AI agents and scripts drive the running app (remotecontrol.h): over a socket of its own on
+        // the desktop — with --remote-control, or while the device setting is on (Settings →
+        // Application); it listens only then — and in process for an AI agent on another computer
+        // whose tools there reach this app through that computer (acp serve's tunnel; Android, which
+        // has no socket, so only). It exists for the settings page also in --screenshot runs.
         if (mainUi) {
             brulion::shell::RemoteControl::Options remote;
+#ifdef BRULION_DESKTOP_INTEGRATION
             remote.key = brulion::ipc::controlKeyFor(brulion::ipc::SingleInstance::keyFor(
                     QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
             remote.forced = args.contains(u"--remote-control"_s);
+#endif
             remote.language = [&devTools] { return devTools.language(); };
             remoteControl = std::make_unique<brulion::shell::RemoteControl>(&engine, controller.get(), remote);
+            const QPointer<brulion::shell::RemoteControl> control(remoteControl.get());
+            brulion::shell::WorkspaceAgents *agents = controller->workspace()->chats()->agents();
+#ifdef BRULION_DESKTOP_INTEGRATION
             // An AI agent the user let change the app (its "Let it change the app while it runs")
             // reaches this socket with a grant of its own while it runs (docs/CLI.md "Live changes").
-            const QPointer<brulion::shell::RemoteControl> control(remoteControl.get());
-            controller->workspace()->chats()->agents()->setAppGrants(
+            agents->setAppGrants(
                     [control](const QString &client) { return control ? control->grant(client) : QString(); },
                     [control](const QString &token) {
                         if (control)
@@ -653,7 +669,7 @@ int main(int argc, char *argv[])
                     });
             // Every agent with Brulion's tools may hand other partners of the chat a task (a
             // sub-conversation): a grant of the chat alone for each of its conversations.
-            controller->workspace()->chats()->agents()->setChatGrants(
+            agents->setChatGrants(
                     [control](const QString &client) { return control ? control->chatGrant(client) : QString(); },
                     [control](const QString &token) {
                         if (control)
@@ -667,6 +683,33 @@ int main(int argc, char *argv[])
                         if (control)
                             control->revokeGrant(token);
                     });
+#endif
+            // An agent on another computer: its grants answered here, in process (core acp/apptunnel.h).
+            brulion::shell::WorkspaceAgents::AppControl inProcess;
+            inProcess.grant = [control](const QString &client, bool chatOnly) {
+                return control ? control->localGrant(client, chatOnly) : QString();
+            };
+            inProcess.revoke = [control](const QString &token) {
+                if (control)
+                    control->revokeGrant(token);
+            };
+            inProcess.call = [control](const QString &token, const QString &method, const QJsonObject &params,
+                                       std::function<void(const brulion::acp::AppAnswer &)> done,
+                                       std::function<bool()> waiting) {
+                if (!control) {
+                    done(brulion::acp::AppAnswer::failure(u"not_ready"_s, u"The app is closing"_s));
+                    return;
+                }
+                const brulion::ipc::ControlReply reply(
+                        QJsonValue(),
+                        [done](const brulion::ipc::ControlReply::Answer &a) {
+                            done(a.ok ? brulion::acp::AppAnswer::success(a.result)
+                                      : brulion::acp::AppAnswer::failure(a.code, a.message, a.details));
+                        },
+                        std::move(waiting));
+                control->dispatch(token, method, params, reply);
+            };
+            agents->setAppControl(inProcess);
         }
 #endif
 #ifdef Q_OS_WASM

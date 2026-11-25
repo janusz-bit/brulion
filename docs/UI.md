@@ -1220,7 +1220,8 @@ extension's `b.app.set` — has changed the running app and not been undone
 (`AppScripting.liveClients`: [{who, name, changes}]), the top bar shows a **Live** chip
 (`ShellLiveIndicator.qml`, `topBarLive`) after the title, on phones too: an accent pill (`accentBg`,
 an `accent` hairline) with a bolt (`zap`) and "Live" — on narrow windows the bolt alone —, its
-tooltip "Changed live by Claude Code (3 changes)" (a long press on touch screens), its accessible
+tooltip "Changed live by Claude Code (3 changes)" — an agent on another computer by its name there,
+"Changed live by Claude Code on raspberry-pi-4" — (a long press on touch screens), its accessible
 name "Live changes" with the same description, a focus ring, a touch target. A click, a tap or
 Space opens its menu (`liveMenu`): a row per client for reading ("Claude Code — 3 changes",
 `liveClient`), "Undo changes of …" per client when there are two or more (`liveUndoClient`,
@@ -1831,9 +1832,10 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   gets Brulion's tools) with **Check** (`acpAgentCheck`: the agent started in the notebook's folder,
   a session made without a question — a toast says "Claude Code works (Claude Agent 0.109.0). Model:
   Sonnet 5.5 · Mode: Auto" or why not, and the chat learns its options), **Edit…** (`acpAgentEdit` →
-  `acpAgentDialog`: `acpAgentName`, `acpAgentCommand`, `acpAgentTools`, and for an agent of this
-  computer `acpAgentApp` — "Let it change the app while it runs", enabled with Brulion's tools: its
-  tools also get the live ones, below; the row then says "· may change the app") and Remove
+  `acpAgentDialog`: `acpAgentName`, `acpAgentCommand`, `acpAgentTools`, and `acpAgentApp` — "Let it
+  change the app while it runs", off by default and enabled with Brulion's tools: its tools also get
+  the live ones, below — for an agent on another computer its tools there, through that computer
+  (not in the browser); the row then says "· may change the app") and Remove
   (`acpAgentRemove`); **Add** (`acpAgentAdd` → `acpAgentAddMenu`: the presets Claude Code, Codex,
   Gemini CLI and OpenCode started with `npx -y …`, or "Another agent…", `acpAgentOwn`, which opens the
   dialog), and **An agent on another computer…** (`acpAgentRemote`, the one entry where no
@@ -1849,7 +1851,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   no toast). Each agent of that computer becomes a row (`raspberry-pi-4-claude`:
   the computer's name and the agent's id there) whose line says "On raspberry-pi-4
   (https://agent.example.com) · with Brulion's tools"; pairing again keeps its name and options.
-  Edit… changes only its name there. A `brulion://pair?url=…&code=…` address ("Automation" below:
+  Edit… changes its name and "Let it change the app while it runs" there (the computer's tools on
+  or off are that computer's). A `brulion://pair?url=…&code=…` address ("Automation" below:
   the QR code `acp pair` shows, opened by the phone's camera) opens this section with
   `acpHostDialog` filled in (the route's `pairUrl` and `pairCode`, taken once); the user pairs. On
   Android the section also has **Notifications** (`acpAgentNotifications`, the reminders' permission
@@ -2012,6 +2015,19 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   agent, the computer ends an older one of this device), its client offering no files or
   terminals (the computer serves them), the session's `cwd` and the context naming that computer's
   folder (`AgentConfig::root`, from its info), no MCP server from here (the computer gives its own).
+  Its tools there reach this app all the same (docs/CLI.md "The app's live tools", core
+  `acp/apptunnel.h`): the stream says this app answers them (`features: [app]`, where
+  `WorkspaceAgents::setAppControl()` is set — the desktop and Android, not the browser), and each
+  session's request names a handle of its grants and what it may do (`brulion/app` in its `_meta`):
+  with "Let it change the app" the live tools — a grant of its process, made in process
+  (`RemoteControl::localGrant()`, named "Claude Code on raspberry-pi-4") — and the chat's tools of
+  its conversation (a chat grant made so too; "Agents delegate" below); a sub-conversation's agent
+  never the live ones. A call comes over the stream (`_brulion/app`) and is answered in process
+  (`RemoteControl::dispatch()`: no socket — Android has none —; the same checks, journal, live
+  indicator and revert as a local agent's; never `quit`, a screenshot as the picture itself). The
+  context names the app as the one on this device ("the Brulion app on the user's device
+  “Pixel 9”"). While a turn runs on Android its foreground service keeps the app answering with the
+  screen off; once the app is gone the computer fails the calls at once ("not connected now").
   What the agent says waits there while the phone sleeps; while a turn of it runs (or one this
   device lost is fetched: below), Android runs a foreground service (`WorkspaceAgents::remoteWorking()`
   → `platform::setAgentWork()`, docs/ANDROID.md "An AI agent on another computer"), so the stream
@@ -2063,7 +2079,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   while the remote control's setting is off — and change it live (docs/CLI.md "Live changes"); the
   context says so, every change shows in the top bar's live indicator under the agent's name, and
   the grant ends when the process does. Every session also gets the chat's own grant for its
-  conversation ("Agents delegate" below). What it writes to its
+  conversation ("Agents delegate" below). (An agent on another computer: its grants are made in
+  process instead, its tools reach the app through that computer — "On another computer" above.) What it writes to its
   standard error goes to the log; when it ends, its turns fail with its last line ("stopped: it
   ended with code 1: …") and the next turn starts it again. A changed program or a removed agent
   stops; a notebook closed stops them all.
@@ -2211,6 +2228,8 @@ built-in assistant's tools do not change (docs/FINETUNE.md).
   conversation only, sends to and stops only its own sub-conversations, at most **three levels** deep
   (one that deep gets no chat grant) and **four** of one conversation running at once; a
   sub-conversation's agent never gets the live tools ("Let it change the app"), whatever its setting.
+  An agent on another computer delegates the same way: its chat grant is made in process and its
+  `brulion_app_chat_*` calls come over its stream ("On another computer" above).
 * The protocol's chat methods (`chats`, `chatRead`, `chatStart`, `chatSend`, `chatWait`, `chatStop`,
   `chatPartners`, `chatSchedule*`, `chatRequestSecret`) are `ChatControl`'s: GUI-free over `WorkspaceChats`
   (`send(…, partner, parent)`, `stateOf()`: idle, running, queued, asking, failed), the desktop's

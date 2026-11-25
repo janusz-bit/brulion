@@ -4,7 +4,10 @@
 // after a lost answer only from what the host lacks, messages received in order (none twice), the
 // agent's end, a device unpaired, a stream the host forgot, a host unreachable for too long, stop(),
 // and a stream deleted while a request is on its way; a turn the device lost read back with the
-// question that waits in it, and that question answered (or declined) there.
+// question that waits in it, and that question answered (or declined) there. The features a stream
+// asks for (the app's calls, acp/apptunnel.h) and what the host takes of them — none from an older
+// host, nothing it was not asked for —, the host's features in its info, and batches of big
+// messages kept within what the host takes in one request.
 #include "acp/remote.h"
 
 #include "acp/acp.h"
@@ -197,7 +200,56 @@ private Q_SLOTS:
         QCOMPARE(info->agents.at(0), (RemoteAgent{u"claude"_s, u"Claude Code"_s, u"claude-agent-acp"_s}));
         QCOMPARE(info->agents.at(1).name, u"bez-nazwy"_s);
         QVERIFY(info->sync.value(u"enabled"_s).toBool());
+        QVERIFY(info->features.isEmpty()); // (an older host names none)
         QVERIFY(!RemoteInfo::fromJson(QJsonObject{{u"root"_s, u"/x"_s}}));
+        // A newer host: its features, each once, none empty or absurdly long.
+        const std::optional<RemoteInfo> newer = RemoteInfo::fromJson(QJsonObject{
+                {u"protocol"_s, 1},
+                {u"features"_s, QJsonArray{u"app"_s, u"app"_s, u""_s, QString(500, u'x'), 7, u"przyszłość"_s}}});
+        QVERIFY(newer);
+        QCOMPARE(newer->features, (QStringList{u"app"_s, u"przyszłość"_s}));
+    }
+
+    void features()
+    {
+        // The device answers the app's calls: its stream's request says so, and the host takes it.
+        FakeHost host;
+        RemoteStream stream(&host, m_base, u"bat_token"_s, u"claude"_s);
+        stream.setFeatures({u"app"_s});
+        QSignalSpy started(&stream, &RemoteStream::started);
+        stream.start();
+        std::optional<FakeHost::Pending> open = host.take(u"streams"_s);
+        QVERIFY(open);
+        QCOMPARE(open->body().value(u"agent"_s).toString(), u"claude"_s);
+        QCOMPARE(open->body().value(u"features"_s).toArray(), QJsonArray{u"app"_s});
+        QVERIFY(stream.hostFeatures().isEmpty()); // (nothing known before the answer)
+        // (A host that names more than it was asked for: only what was asked counts.)
+        open->done(FakeHost::json(201, QJsonObject{{u"stream"_s, u"s_1"_s},
+                                                   {u"root"_s, u"/r"_s},
+                                                   {u"features"_s, QJsonArray{u"app"_s, u"inne"_s, u"app"_s}}}));
+        QCOMPARE(started.size(), 1);
+        QCOMPARE(stream.hostFeatures(), QStringList{u"app"_s});
+
+        // An older host answers without features: the device knows it tunnels nothing.
+        FakeHost old;
+        RemoteStream second(&old, m_base, u"bat_token"_s, u"claude"_s);
+        second.setFeatures({u"app"_s});
+        second.start();
+        old.take(u"streams"_s)->done(FakeHost::json(201, QJsonObject{{u"stream"_s, u"s_2"_s}, {u"root"_s, u"/r"_s}}));
+        QVERIFY(second.isStarted());
+        QVERIFY(second.hostFeatures().isEmpty());
+
+        // A device that asks for nothing names no features (as before).
+        FakeHost plain;
+        RemoteStream third(&plain, m_base, u"bat_token"_s, u"claude"_s);
+        third.start();
+        std::optional<FakeHost::Pending> request = plain.take(u"streams"_s);
+        QVERIFY(request);
+        QVERIFY(!request->body().contains(u"features"_s));
+        request->done(FakeHost::json(
+                201,
+                QJsonObject{{u"stream"_s, u"s_3"_s}, {u"root"_s, u"/r"_s}, {u"features"_s, QJsonArray{u"app"_s}}}));
+        QVERIFY(third.hostFeatures().isEmpty());
     }
 
     void errors()
@@ -472,6 +524,39 @@ private Q_SLOTS:
         QVERIFY(send);
         QCOMPARE(send->body().value(u"from"_s).toInt(), RemoteMaxBatch);
         QCOMPARE(send->body().value(u"messages"_s).toArray().size(), 5);
+    }
+
+    void bigMessagesInBatches()
+    {
+        // Messages of 1.5 MiB each (a screenshot's answer, a prompt's pictures): a request holds at
+        // most RemoteMaxBatchBytes of them — but always one, however big.
+        FakeHost host;
+        std::unique_ptr<RemoteStream> stream = started(host);
+        QVERIFY(stream);
+        for (int i = 0; i < 4; ++i) {
+            QJsonObject m = message(i, u"m"_s);
+            m.insert(u"params"_s, QJsonObject{{u"data"_s, QString(1536 * 1024, u'a')}});
+            stream->write(line(m));
+        }
+        QJsonObject huge = message(9, u"m"_s);
+        huge.insert(u"params"_s, QJsonObject{{u"data"_s, QString(int(RemoteMaxBatchBytes) + 10, u'b')}});
+        stream->write(line(huge));
+        QTRY_VERIFY(host.waiting(u"send"_s));
+        std::optional<FakeHost::Pending> send = host.take(u"send"_s);
+        QVERIFY(send);
+        QVERIFY(send->request.body.size() <= RemoteMaxBatchBytes + 4096);
+        const qsizetype first = send->body().value(u"messages"_s).toArray().size();
+        QCOMPARE(first, 2); // (two of 1.5 MiB fit in 4 MiB, a third would not)
+        send->done(FakeHost::json(200, QJsonObject{{u"received"_s, first}}));
+        send = host.take(u"send"_s);
+        QVERIFY(send);
+        QCOMPARE(send->body().value(u"from"_s).toInt(), 2);
+        QCOMPARE(send->body().value(u"messages"_s).toArray().size(), 2);
+        send->done(FakeHost::json(200, QJsonObject{{u"received"_s, 4}}));
+        send = host.take(u"send"_s);
+        QVERIFY(send);
+        QCOMPARE(send->body().value(u"messages"_s).toArray().size(), 1); // (alone: bigger than a batch)
+        QCOMPARE(send->body().value(u"messages"_s).toArray().at(0).toObject().value(u"id"_s).toInt(), 9);
     }
 
     void ends_data()

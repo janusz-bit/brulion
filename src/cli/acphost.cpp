@@ -3,8 +3,11 @@
 #include "acphost.h"
 
 #include "acptrust.h"
+#include "controlprotocol.h"
+#include "controlserver.h"
 
 #include "acp/acp.h"
+#include "acp/apptunnel.h"
 #include "acp/remote.h"
 #include "automation/uri.h"
 #include "commands_p.h"
@@ -66,6 +69,8 @@ constexpr qint64 kMaxAnswerBytes = 4 * 1024 * 1024;
 constexpr qsizetype kMaxErrorChars = 4000;
 /// Letters and digits of pairing codes and ids: none to mistake for another (no 0/O, 1/I/L).
 constexpr QLatin1StringView kCodeAlphabet{"ABCDEFGHJKMNPQRSTUVWXYZ23456789"};
+/// The tunnel's grants one stream keeps (a session's each; the oldest end first).
+constexpr int kMaxAppGrants = 64;
 
 void logLine(const QString &line)
 {
@@ -528,6 +533,16 @@ struct AcpHost::Stream {
     QList<QJsonObject> held;
     QTimer *holdTimer = nullptr;
     QHash<QString, Terminal *> terminals;
+    // The app's calls of the agent's tools (acp/apptunnel.h).
+    bool app = false; // its device answers them (POST streams {features: [app]})
+    struct AppPending {
+        ipc::ControlReply reply;
+        QTimer *timer = nullptr;
+        QString method;
+        QString path; // a screenshot's file here ("" the runtime folder)
+    };
+    QHash<QString, AppPending> appCalls; // by idKey() of the call's id
+    QStringList appGrants;               // the tunnel's tokens of its sessions, oldest first
 };
 
 AcpHost::AcpHost(Context &context, notebook::Notebook *notebook, AcpHostOptions options, QObject *parent)
@@ -537,6 +552,7 @@ AcpHost::AcpHost(Context &context, notebook::Notebook *notebook, AcpHostOptions 
 AcpHost::~AcpHost()
 {
     for (Stream *s : std::as_const(m_streams)) {
+        failAppCalls(s, QString::fromLatin1(ipc::ControlError::NotReady), u"acp serve stopped"_s);
         endTerminals(s);
         if (s->process) {
             s->process->disconnect(this);
@@ -707,6 +723,32 @@ bool AcpHost::start(QString *error)
 
     if (m_options.tools && !m_options.toolsProgram.isEmpty())
         m_mcpServers = QJsonArray{toolsServer(m_options.toolsProgram, m_root)};
+    // The tunnel for the app's calls of the agents' tools: a control socket of its own in the user's
+    // runtime folder, only for the grants it makes (acp/apptunnel.h). Without one, the devices'
+    // apps are not reached (said in the log and in info).
+    if (!m_mcpServers.isEmpty() && m_options.appTools) {
+        m_tunnelPrefix = randomString(8);
+        QString key = m_options.tunnelKey;
+        if (key.isEmpty()) {
+#ifdef Q_OS_WIN
+            const QString runtime = QDir::tempPath();
+#else
+            const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+#endif
+            const QString name = u"brulion-acp-"_s + randomString(12).toLower();
+            key = runtime.isEmpty() ? name : QDir(runtime).absoluteFilePath(name);
+        }
+        m_tunnel = std::make_unique<ipc::ControlServer>();
+        m_tunnel->setOpen(false);
+        m_tunnel->setHandler(
+                [this](const ipc::ControlRequest &request, ipc::ControlReply reply) { tunnelRequest(request, reply); });
+        if (m_tunnel->listen(key)) {
+            m_tunnelKey = key;
+        } else {
+            say(u"the agents' tools do not reach the devices' apps: %1"_s.arg(m_tunnel->errorString()));
+            m_tunnel.reset();
+        }
+    }
 
     m_store = std::make_unique<HostStateStore>(m_options.stateFile);
     QString stateError;
@@ -1054,13 +1096,15 @@ http::Response AcpHost::info() const
                              {u"host"_s, QSysInfo::machineHostName()},
                              {u"root"_s, m_root},
                              {u"tools"_s, !m_mcpServers.isEmpty()},
+                             {u"features"_s, m_tunnel ? QJsonArray{QString(acp::AppFeature)} : QJsonArray()},
                              {u"agents"_s, agents},
                              {u"sync"_s, m_sync ? m_sync->status() : QJsonObject{{u"enabled"_s, false}}}});
 }
 
 http::Response AcpHost::openStream(const PairedDevice &device, const http::Request &request)
 {
-    const QString id = QJsonDocument::fromJson(request.body).object().value(u"agent"_s).toString();
+    const QJsonObject body = QJsonDocument::fromJson(request.body).object();
+    const QString id = body.value(u"agent"_s).toString();
     const auto agent = std::ranges::find_if(m_options.agents, [&id](const HostAgent &a) { return a.id == id; });
     if (agent == m_options.agents.end())
         return apiError(404, u"unknown_agent"_s, u"This computer has no agent %1"_s.arg(id));
@@ -1085,10 +1129,16 @@ http::Response AcpHost::openStream(const PairedDevice &device, const http::Reque
     s->device = device.id;
     s->agent = *agent;
     s->lastSeen = now();
+    // The device answers the app's calls of the agent's tools, and they are tunnelled here.
+    s->app = m_tunnel && body.value(u"features"_s).toArray().contains(QString(acp::AppFeature));
     m_streams.insert(s->id, s);
-    say(u"%1 starts %2 for %3 (%4)"_s.arg(s->id, agent->name, device.name, device.id));
+    say(u"%1 starts %2 for %3 (%4)%5"_s.arg(s->id, agent->name, device.name, device.id,
+                                            s->app ? u", its app reached by the agent's tools"_s : QString()));
     startAgent(s);
-    return http::Response::json(201, QJsonObject{{u"stream"_s, s->id}, {u"root"_s, m_root}});
+    return http::Response::json(
+            201, QJsonObject{{u"stream"_s, s->id},
+                             {u"root"_s, m_root},
+                             {u"features"_s, s->app ? QJsonArray{QString(acp::AppFeature)} : QJsonArray()}});
 }
 
 http::Response AcpHost::send(Stream *s, const http::Request &request)
@@ -1179,6 +1229,9 @@ void AcpHost::closeStream(Stream *s, const QString &why)
         return;
     s->closed = true;
     s->why = why;
+    failAppCalls(s, QString::fromLatin1(ipc::ControlError::NotReady),
+                 u"The agent's connection to the app on the device ended (%1)"_s.arg(why));
+    revokeAppGrants(s);
     turnsFailed(s, why);
     s->prompts.clear();
     s->asked.clear();
@@ -1204,6 +1257,8 @@ void AcpHost::closeStream(Stream *s, const QString &why)
 
 void AcpHost::removeStream(Stream *s)
 {
+    failAppCalls(s, QString::fromLatin1(ipc::ControlError::NotReady), u"The agent's connection to the app ended"_s);
+    revokeAppGrants(s);
     answerWaiter(s);
     m_streams.remove(s->id);
     delete s->waitTimer;
@@ -1233,6 +1288,10 @@ void AcpHost::retire(Stream *s, const QString &why)
     s->retiredWhy = why;
     s->retiredAt = now();
     say(u"%1: %2; it ends after its turn"_s.arg(s->id, why));
+    // Nobody fetches the stream: the app's calls of its tools are answered by nobody now.
+    failAppCalls(s, QString::fromLatin1(ipc::ControlError::NotReady),
+                 u"The app on %1 is not connected now (it was closed, or it lost the network): its tools reach it "
+                 u"again in the next turn the app sends"_s.arg(pairedName(s->device)));
     // The questions its agent waits on wait for the device with their turns (or, without a wait,
     // nobody is there to answer them); what nobody will fetch goes.
     if (m_options.questionWaitMs <= 0) {
@@ -1620,6 +1679,263 @@ void AcpHost::maintain()
         say(u"TLS certificate not reloaded: %1"_s.arg(error));
 }
 
+// ---- The app's calls of the agents' tools (acp/apptunnel.h) -------------------------------------------
+
+QString AcpHost::tunnelSocket() const
+{
+    return m_tunnel ? m_tunnelKey : QString();
+}
+
+QString AcpHost::pairedName(const QString &device) const
+{
+    for (const PairedDevice &d : m_store->state().devices) {
+        if (d.id == device)
+            return d.name;
+    }
+    return {};
+}
+
+QJsonArray AcpHost::sessionServers(Stream *s, const std::optional<acp::AppSession> &asked)
+{
+    if (m_mcpServers.isEmpty() || !m_tunnel || !s->app || !asked || asked->isEmpty())
+        return m_mcpServers;
+    // Grants of the tunnel for this session's MCP server: its tokens only in the server's environment.
+    const auto grant = [this, s, &asked](ipc::GrantScope scope) {
+        const QString token = m_tunnel->addGrant(s->agent.name, scope);
+        m_tunnelGrants.insert(token, TunnelGrant{s->id, asked->handle,
+                                                 scope == ipc::GrantScope::Full ? QString(acp::AppScopeControl)
+                                                                                : QString(acp::AppScopeChat),
+                                                 s->agent.name});
+        s->appGrants.append(token);
+        return token;
+    };
+    QJsonObject server = toolsServer(m_options.toolsProgram, m_root);
+    QJsonArray args = server.value(u"args"_s).toArray();
+    args.append(asked->control ? u"--app-control"_s : u"--app-chat"_s);
+    const auto variable = [](const QString &name, const QString &value) {
+        return QJsonObject{{u"name"_s, name}, {u"value"_s, value}};
+    };
+    QJsonArray env{variable(u"BRULION_APP_SOCKET"_s, m_tunnelKey), variable(u"BRULION_APP_CLIENT"_s, s->agent.name),
+                   variable(u"BRULION_APP_DEVICE"_s, pairedName(s->device))};
+    if (asked->control)
+        env.append(variable(u"BRULION_APP_TOKEN"_s, grant(ipc::GrantScope::Full)));
+    if (asked->chat)
+        env.append(variable(u"BRULION_APP_CHAT_TOKEN"_s, grant(ipc::GrantScope::Chat)));
+    // (A stream's sessions come and go: the grants of the oldest end.)
+    while (s->appGrants.size() > kMaxAppGrants) {
+        const QString old = s->appGrants.takeFirst();
+        m_tunnelGrants.remove(old);
+        m_tunnel->revokeGrant(old);
+    }
+    server.insert(u"args"_s, args);
+    server.insert(u"env"_s, env);
+    say(u"%1: a session asks for the app on the device (%2)"_s.arg(s->id, asked->control && asked->chat
+                                                                                  ? u"its live tools and the chat's"_s
+                                                                          : asked->control ? u"its live tools"_s
+                                                                                           : u"the chat's tools"_s));
+    return QJsonArray{server};
+}
+
+void AcpHost::revokeAppGrants(Stream *s)
+{
+    for (const QString &token : std::exchange(s->appGrants, {})) {
+        m_tunnelGrants.remove(token);
+        if (m_tunnel)
+            m_tunnel->revokeGrant(token);
+    }
+}
+
+void AcpHost::toDevice(Stream *s, const QJsonObject &message)
+{
+    const qint64 size = compact(message).size();
+    s->out.append({s->nextSeq++, message});
+    s->outSizes.append(size);
+    s->outBytes += size;
+    answerWaiter(s);
+}
+
+namespace {
+
+/// How long the call `method` waits for the device: `base`, and the wait it asks for itself.
+int appCallTimeout(const QString &method, const QJsonObject &params, int base)
+{
+    if (method == u"waitFor")
+        return int(std::clamp<qint64>(params.value(u"ms"_s).toInteger(5000), 0, 120000)) + base;
+    if (method == u"events")
+        return int(std::clamp<qint64>(params.value(u"wait"_s).toInteger(0), 0, 30000)) + base;
+    if (method == u"chatWait")
+        return int(std::clamp<qint64>(params.value(u"ms"_s).toInteger(60000), 0, 600000)) + base;
+    if (method == u"eval" || method == u"load")
+        return 3 * base + 10000;
+    return base;
+}
+
+QString controlCode(const char *code)
+{
+    return QString::fromLatin1(code);
+}
+
+} // namespace
+
+void AcpHost::tunnelRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply)
+{
+    namespace E = ipc::ControlError;
+    const auto found = m_tunnelGrants.constFind(request.grant);
+    if (!request.granted || found == m_tunnelGrants.cend())
+        return reply.fail(controlCode(E::Unauthorized), u"The token is no grant of this server"_s);
+    const TunnelGrant grant = *found;
+    Stream *s = m_streams.value(grant.stream);
+    const QString device = s ? pairedName(s->device) : QString();
+    if (request.method == u"hello") {
+        // Answered here: the tools connect for every call.
+        QJsonArray methods;
+        for (const ipc::MethodSpec &m : ipc::controlMethods()) {
+            if ((m.chat || !request.chatOnly) && m.name != u"quit")
+                methods.append(m.name);
+        }
+        return reply.ok(QJsonObject{{u"protocol"_s, ipc::ControlProtocolVersion},
+                                    {u"app"_s, u"Brulion"_s},
+                                    {u"version"_s, QCoreApplication::applicationVersion()},
+                                    {u"platform"_s, u"acp-tunnel"_s},
+                                    {u"methods"_s, methods},
+                                    {u"client"_s, grant.client},
+                                    {u"granted"_s, true},
+                                    {u"device"_s, device}});
+    }
+    if (!s || s->closed)
+        return reply.fail(controlCode(E::NotReady), u"The agent's connection to the app on the device ended"_s,
+                          {{u"reason"_s, u"stream_ended"_s}});
+    if (s->retired)
+        return reply.fail(controlCode(E::NotReady),
+                          u"The app on %1 is not connected now (it was closed, or it lost the network): its tools "
+                          u"reach it again in the next turn the app sends"_s.arg(device),
+                          {{u"reason"_s, u"device_gone"_s}, {u"device"_s, device}});
+    if (request.method == u"quit")
+        return reply.fail(controlCode(E::Refused),
+                          u"An agent on another computer does not quit the app on the device"_s);
+    if (s->appCalls.size() >= m_options.maxAppCalls)
+        return reply.fail(controlCode(E::Busy),
+                          u"%1 calls of the app on %2 wait for its answer already: wait for them first"_s.arg(
+                                  QString::number(m_options.maxAppCalls), device));
+    QJsonObject params = request.params;
+    QString path;
+    if (request.method == u"screenshot") {
+        // The picture comes back from the device and is written here (never a file of the device).
+        path = params.take(u"path"_s).toString().trimmed();
+        if (!path.isEmpty()) {
+            if (!QDir::isAbsolutePath(path) || !path.endsWith(u".png"_s, Qt::CaseInsensitive))
+                return reply.fail(controlCode(E::BadParams), u"The path is an absolute .png path"_s,
+                                  {{u"param"_s, u"path"_s}});
+            if (!QFileInfo(QFileInfo(path).absolutePath()).isDir())
+                return reply.fail(controlCode(E::BadParams),
+                                  u"The folder %1 does not exist"_s.arg(QFileInfo(path).absolutePath()),
+                                  {{u"param"_s, u"path"_s}});
+        }
+    }
+    acp::AppCall call;
+    call.id = u"%1#%2-%3"_s.arg(acp::AppMethod, m_tunnelPrefix, QString::number(m_nextAppCall++));
+    call.handle = grant.handle;
+    call.scope = grant.scope;
+    call.method = request.method;
+    call.params = params;
+    const QString key = idKey(call.id);
+    auto *timer = new QTimer(this);
+    timer->setSingleShot(true);
+    const QString stream = s->id;
+    connect(timer, &QTimer::timeout, this, [this, stream, key] { appCallTimedOut(stream, key); });
+    timer->start(appCallTimeout(request.method, params, m_options.appCallTimeoutMs));
+    s->appCalls.insert(key, Stream::AppPending{reply, timer, request.method, path});
+    say(u"%1: the agent's tools call the app on %2: %3"_s.arg(s->id, device, request.method));
+    toDevice(s, call.toMessage());
+}
+
+void AcpHost::appCallTimedOut(const QString &stream, const QString &key)
+{
+    Stream *s = m_streams.value(stream);
+    if (!s)
+        return;
+    const auto it = s->appCalls.find(key);
+    if (it == s->appCalls.end())
+        return;
+    const Stream::AppPending pending = it.value();
+    s->appCalls.erase(it);
+    pending.timer->deleteLater();
+    const QString device = pairedName(s->device);
+    say(u"%1: the app on %2 did not answer %3 in time"_s.arg(s->id, device, pending.method));
+    pending.reply.fail(controlCode(ipc::ControlError::NotReady),
+                       u"The app on %1 did not answer in time: it may be in the background, asleep or offline — try "
+                       u"again, or ask the user to open the app"_s.arg(device),
+                       {{u"reason"_s, u"no_answer"_s}, {u"device"_s, device}});
+}
+
+void AcpHost::failAppCalls(Stream *s, const QString &code, const QString &why)
+{
+    for (const Stream::AppPending &pending : std::exchange(s->appCalls, {})) {
+        delete pending.timer;
+        pending.reply.fail(code, why);
+    }
+}
+
+bool AcpHost::appAnswered(Stream *s, const QJsonObject &message)
+{
+    const QJsonValue id = message.value(u"id"_s);
+    if (!message.value(u"method"_s).toString().isEmpty() || !id.isString() || m_tunnelPrefix.isEmpty()
+        || !id.toString().startsWith(u"%1#%2-"_s.arg(acp::AppMethod, m_tunnelPrefix)))
+        return false;
+    const auto it = s->appCalls.find(idKey(id));
+    if (it == s->appCalls.end()) {
+        // (An answer that came too late: its call failed already. Never the agent's.)
+        say(u"%1: a late answer of the app on the device dropped"_s.arg(s->id));
+        return true;
+    }
+    const Stream::AppPending pending = it.value();
+    s->appCalls.erase(it);
+    delete pending.timer;
+    acp::AppAnswer answer = acp::AppAnswer::fromResponse(message);
+    if (answer.ok && pending.method == u"screenshot") {
+        // The picture itself: written here, where the tool reads it (a PNG, its size bounded).
+        const QJsonObject r = answer.result.toObject();
+        const QByteArray png = QByteArray::fromBase64(r.value(u"png"_s).toString().toLatin1());
+        QString file = pending.path;
+        if (file.isEmpty()) {
+#ifdef Q_OS_WIN
+            const QString runtime = QDir::tempPath();
+#else
+            const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+#endif
+            if (!runtime.isEmpty()) {
+                const QString dir = QDir(runtime).filePath(u"brulion-screenshots"_s);
+                QDir().mkpath(dir);
+                QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+                file = QDir(dir).filePath(u"screenshot-%1-%2.png"_s.arg(
+                        QDateTime::currentDateTime().toString(u"yyyyMMdd-HHmmss-zzz"_s), s->id));
+            }
+        }
+        QSaveFile out(file);
+        if (png.size() > acp::MaxAppPngBytes || !png.startsWith(QByteArrayView("\x89PNG\r\n\x1a\n", 8)))
+            answer = acp::AppAnswer::failure(controlCode(ipc::ControlError::Failed),
+                                             u"The app on the device sent no picture"_s);
+        else if (file.isEmpty())
+            answer = acp::AppAnswer::failure(controlCode(ipc::ControlError::BadParams),
+                                             u"There is no private runtime folder ($XDG_RUNTIME_DIR): give a path"_s,
+                                             {{u"param"_s, u"path"_s}});
+        else if (!out.open(QIODevice::WriteOnly) || out.write(png) != png.size() || !out.commit())
+            answer = acp::AppAnswer::failure(controlCode(ipc::ControlError::Failed), u"Could not write %1"_s.arg(file),
+                                             {{u"path"_s, file}});
+        else
+            answer = acp::AppAnswer::success(QJsonObject{{u"path"_s, file},
+                                                         {u"width"_s, r.value(u"width"_s)},
+                                                         {u"height"_s, r.value(u"height"_s)},
+                                                         {u"devicePixelRatio"_s, r.value(u"devicePixelRatio"_s)},
+                                                         {u"device"_s, pairedName(s->device)}});
+    }
+    if (answer.ok)
+        pending.reply.ok(answer.result);
+    else
+        pending.reply.fail(answer.code, answer.message, answer.details);
+    return true;
+}
+
 // ---- The agent ----------------------------------------------------------------------------------------
 
 void AcpHost::startAgent(Stream *s)
@@ -1747,7 +2063,13 @@ void AcpHost::fromAgent(Stream *s, const QByteArray &line)
 
 void AcpHost::toAgent(Stream *s, const QJsonObject &message)
 {
-    const std::optional<QJsonObject> rewritten = rewriteForAgent(message, m_root, m_mcpServers);
+    // The device's answer to a call of the app (never the agent's business).
+    if (appAnswered(s, message))
+        return;
+    // What a session asks of the device's app: taken out, whatever the stream may do.
+    QJsonObject own = message;
+    const std::optional<acp::AppSession> appAsked = acp::takeAppSession(own);
+    const std::optional<QJsonObject> rewritten = rewriteForAgent(own, m_root, sessionServers(s, appAsked));
     if (!rewritten) {
         say(u"%1: a message of the device that is no JSON-RPC message dropped"_s.arg(s->id));
         return;
@@ -2318,6 +2640,9 @@ void addAcpHostCommands(QList<Command> &out)
                                       "reverse proxy)")),
              stateFileOption(),
              flag(u"noTools"_s, QT_TRANSLATE_NOOP("brulion::cli", "Sessions get no Brulion MCP server")),
+             flag(u"noAppTools"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "The agents' tools never reach the app on a device (its live tools and chat)")),
              option(u"questionWait"_s, ArgType::Int,
                     QT_TRANSLATE_NOOP("brulion::cli",
                                       "Seconds an agent's question waits for a device that is gone before it is "
@@ -2355,8 +2680,9 @@ void addAcpHostCommands(QList<Command> &out)
                                     "https://<tailnet name>, and pair the devices of the user Serve names without a "
                                     "code")),
              option(u"tailnetUser"_s, ArgType::String,
-                    QT_TRANSLATE_NOOP("brulion::cli",
-                                      "More tailnet users (logins, comma-separated) whose devices pair without a code")),
+                    QT_TRANSLATE_NOOP(
+                            "brulion::cli",
+                            "More tailnet users (logins, comma-separated) whose devices pair without a code")),
              flag(u"noTailnetTrust"_s,
                   QT_TRANSLATE_NOOP("brulion::cli", "In the tailnet too, every device pairs with a code")),
              flag(u"allowHttp"_s,
@@ -2441,6 +2767,7 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
     options.allowedHosts = listArgument(args, u"allowedHost"_s);
     options.allowedOrigins = listArgument(args, u"allowedOrigin"_s);
     options.tools = !args.value(u"noTools"_s).toBool();
+    options.appTools = !args.value(u"noAppTools"_s).toBool();
     options.toolsProgram = toolsProgram();
     if (const QJsonValue wait = args.value(u"questionWait"_s); !wait.isUndefined()) {
         bool waitOk = true;
@@ -2572,21 +2899,22 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
     QJsonArray agents;
     for (const HostAgent &a : std::as_const(options.agents))
         agents.append(QJsonObject{{u"id"_s, a.id}, {u"name"_s, a.name}, {u"command"_s, a.command}});
-    const QJsonObject started{{u"ok"_s, true},
-                              {u"command"_s, command.id},
-                              {u"vault"_s, context.vaultRoot()},
-                              {u"result"_s, QJsonObject{{u"url"_s, host.publicUrl()},
-                                                        {u"endpoint"_s, host.endpoint()},
-                                                        {u"port"_s, host.port()},
-                                                        {u"address"_s, options.address.toString()},
-                                                        {u"tls"_s, host.server()->tls()},
-                                                        {u"agents"_s, agents},
-                                                        {u"tools"_s, options.tools},
-                                                        {u"sync"_s, sync != nullptr},
-                                                        {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue()
-                                                                                             : QJsonValue(tailnetInfo)},
-                                                        {u"stateFile"_s, options.stateFile}}},
-                              {u"warnings"_s, QJsonArray()}};
+    const QJsonObject started{
+            {u"ok"_s, true},
+            {u"command"_s, command.id},
+            {u"vault"_s, context.vaultRoot()},
+            {u"result"_s, QJsonObject{{u"url"_s, host.publicUrl()},
+                                      {u"endpoint"_s, host.endpoint()},
+                                      {u"port"_s, host.port()},
+                                      {u"address"_s, options.address.toString()},
+                                      {u"tls"_s, host.server()->tls()},
+                                      {u"agents"_s, agents},
+                                      {u"tools"_s, options.tools},
+                                      {u"appTools"_s, !host.tunnelSocket().isEmpty()},
+                                      {u"sync"_s, sync != nullptr},
+                                      {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue() : QJsonValue(tailnetInfo)},
+                                      {u"stateFile"_s, options.stateFile}}},
+            {u"warnings"_s, QJsonArray()}};
     const QByteArray line = QJsonDocument(started).toJson(QJsonDocument::Compact) + '\n';
     std::fwrite(line.constData(), 1, size_t(line.size()), stdout);
     std::fflush(stdout);

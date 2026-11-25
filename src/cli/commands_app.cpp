@@ -21,6 +21,7 @@
 #include "singleinstance.h"
 #include "vault/vault.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -56,6 +57,29 @@ QString singleInstanceKey(const Call &call)
     return ipc::SingleInstance::keyFor(call.ctx.appDataDir());
 }
 
+/// The tools of an AI agent on another computer than the app: `acp serve`'s tunnel
+/// (BRULION_APP_SOCKET) hands every request to the app on the agent's device (docs/CLI.md "Live
+/// changes") — never to an app of this desktop.
+bool tunnelled()
+{
+    return !ipc::ControlClient::tunnelSocket().isEmpty();
+}
+
+/// The device of the tunnel, for the words ("the device" when unnamed).
+QString tunnelDevice()
+{
+    const QString name = qEnvironmentVariable(ipc::ControlClient::DeviceVariable).simplified().left(80);
+    return name.isEmpty()
+                   ? QCoreApplication::translate("brulion::cli", "the device", "after “on”: the app on the device")
+                   : name;
+}
+
+/// The control socket: the tunnel's, or the running app's on this desktop.
+QString controlKey(const Call &call)
+{
+    return tunnelled() ? ipc::ControlClient::tunnelSocket() : ipc::controlKeyFor(singleInstanceKey(call));
+}
+
 QString remoteControlHint()
 {
     // The Polish labels too: the app's interface is Polish unless chosen otherwise.
@@ -70,11 +94,20 @@ QString remoteControlHint()
 /// grant (BRULION_APP_CHAT_TOKEN) before its full one.
 std::unique_ptr<ipc::ControlClient> connectApp(Call &call, bool chat = false)
 {
-    auto client = std::make_unique<ipc::ControlClient>(ipc::controlKeyFor(singleInstanceKey(call)));
+    auto client = std::make_unique<ipc::ControlClient>(controlKey(call));
     if (const QString token = qEnvironmentVariable(ipc::ControlClient::ChatTokenVariable).trimmed();
         chat && !token.isEmpty())
         client->setIdentity(token, client->client());
     if (!client->connect()) {
+        if (tunnelled()) {
+            // (acp serve went away, or its tunnel is not this user's: nothing was sent.)
+            call.setError(ExitUnavailable, u"app_not_reached"_s,
+                          tr("The app on %1 cannot be reached: acp serve's tunnel to it is not there (%2)")
+                                  .arg(tunnelDevice(),
+                                       client->errorString().isEmpty() ? tr("nothing listens") : client->errorString()),
+                          {{u"reason"_s, u"no_tunnel"_s}});
+            return nullptr;
+        }
         if (!client->errorString().isEmpty()) {
             // Another user's socket at the app's name: nothing was sent to it.
             call.setError(ExitUnavailable, u"app_not_reached"_s,
@@ -280,11 +313,18 @@ Result openByMessage(Call &call, const QString &target)
 Result appOpen(Call &call)
 {
     const QString target = call.str(u"target"_s).trimmed();
-    if (target == u"capture")
-        return sendVerb(call, "capture");
-    ipc::ControlClient probe(ipc::controlKeyFor(singleInstanceKey(call)));
-    // No remote control: the single-instance message (the route resolved here).
-    if (!probe.connect(500))
+    if (target == u"capture") {
+        if (!tunnelled())
+            return sendVerb(call, "capture");
+        return call.fail(
+                ExitUsage, u"bad_params"_s,
+                tr("Give the text to capture: the app on %1 writes it into today's journal").arg(tunnelDevice()),
+                {{u"param"_s, u"text"_s}});
+    }
+    ipc::ControlClient probe(controlKey(call));
+    // No remote control: the single-instance message (the route resolved here) — never through a
+    // tunnel, whose app is on another device.
+    if (!tunnelled() && !probe.connect(500))
         return openByMessage(call, target);
     // The app resolves the ref in the notebook it shows (the same refs as here).
     QJsonObject params{{u"ref"_s, target.isEmpty() ? u"today"_s : target}};
@@ -293,8 +333,9 @@ Result appOpen(Call &call)
     copyGiven(call, params, {u"blockId"_s, u"heading"_s});
     if (call.flag(u"side"_s))
         params.insert(u"side"_s, true);
-    // A notebook named on the command line must be the one the app shows.
-    if (!call.ctx.globals.vault.isEmpty() || qEnvironmentVariableIsSet("BRULION_VAULT")) {
+    // A notebook named on the command line must be the one the app shows (on another device it
+    // is a synced copy of it, in a folder of its own).
+    if (!tunnelled() && (!call.ctx.globals.vault.isEmpty() || qEnvironmentVariableIsSet("BRULION_VAULT"))) {
         if (auto e = call.ctx.resolveVault())
             return failWith(*e);
         const auto state = askApp(call, u"state"_s, {});
@@ -316,7 +357,7 @@ Result appOpen(Call &call)
     if (!result) {
         // A notebook still opening: the message, which the app keeps until the notebook is ready
         // (also when the socket is there only for the agents the app started).
-        if (call.error
+        if (call.error && !tunnelled()
             && (call.error->code == QLatin1String(ipc::ControlError::NotReady)
                 || call.error->code == u"remote_control_off")) {
             call.error.reset();
@@ -332,6 +373,9 @@ Result appOpen(Call &call)
 
 Result appToday(Call &call)
 {
+    // (Through a tunnel: the app on the device opens it.)
+    if (tunnelled())
+        return appResult(call, u"open"_s, {{u"ref"_s, u"today"_s}});
     return sendVerb(call, "today");
 }
 
@@ -340,6 +384,12 @@ Result appCapture(Call &call)
     const QString text = call.text(u"text"_s);
     if (!text.trimmed().isEmpty())
         return appResult(call, u"capture"_s, {{u"text"_s, text}});
+    // (The quick capture's window waits for a person: on another device, give the text.)
+    if (tunnelled())
+        return call.fail(
+                ExitUsage, u"bad_params"_s,
+                tr("Give the text to capture: the app on %1 writes it into today's journal").arg(tunnelDevice()),
+                {{u"param"_s, u"text"_s}});
     if (call.dryRun())
         return call.ok(QJsonObject{{u"dryRun"_s, true}, {u"sent"_s, u"capture"_s}});
     return sendVerb(call, "capture");
@@ -875,6 +925,17 @@ Result appChatRequestSecret(Call &call)
     copyGiven(call, params, {u"reason"_s, u"placeholder"_s, u"url"_s, u"delivery"_s});
     if (call.has(u"conversation"_s))
         params.insert(u"path"_s, call.str(u"conversation"_s));
+    if (tunnelled()) {
+        // The app answers on the device through acp serve's tunnel: a file would be written there,
+        // where this computer's agent cannot read it — only the value itself can come back (the card
+        // then warns that it goes to the agent).
+        if (call.has(u"delivery"_s) && call.str(u"delivery"_s) == u"file"_s)
+            return call.fail(ExitUsage, u"no_file_here"_s,
+                             tr("The app runs on %1: a file of the secret would be written there; ask with "
+                                "--delivery value")
+                                     .arg(tunnelDevice()));
+        params.insert(u"delivery"_s, u"value"_s);
+    }
     if (call.dryRun())
         return call.ok(QJsonObject{{u"dryRun"_s, true}, {u"method"_s, u"chatRequestSecret"_s}, {u"params"_s, params}});
     const std::unique_ptr<ipc::ControlClient> client = connectApp(call, true);

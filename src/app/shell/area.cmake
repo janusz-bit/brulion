@@ -26,7 +26,9 @@
 # (--selftest-shell, run by ctest as tst_shell_qml), the user journey with screenshots
 # (--journey <dir>, shelljourney.h; ctest tst_shell_journey, tests/app/shell/journey.sh) and the
 # remote control of the running app for AI agents (--remote-control, remotecontrol.h; ctest
-# tst_remote_control_qml), all three on the UI driver (uidriver.h, library brulion_uidriver).
+# tst_remote_control_qml), all three on the UI driver (uidriver.h, library brulion_uidriver). The
+# remote control and the UI driver are built for Android too (BRULION_APP_CONTROL): no socket
+# there, but an AI agent on another computer whose tools reach the app is answered in process.
 # QML: qml/Main.qml (listed by src/app/CMakeLists.txt), qml/shell/*, and the views
 # (shell/views.cmake).
 
@@ -174,18 +176,24 @@ target_sources(brulion PRIVATE shell/shellqml.h)
 target_include_directories(brulion PRIVATE ${_brulion_shell_dir})
 target_link_libraries(brulion PRIVATE brulion_shell)
 
-if(BRULION_DESKTOP)
-    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+if(BRULION_DESKTOP OR ANDROID)
     # The UI driver (uidriver.h): real input and item finding for the self-test, the journey and
     # the remote control (tests/app/shell: tst_uidriver).
     qt_add_library(brulion_uidriver STATIC ${_brulion_shell_dir}/uidriver.h ${_brulion_shell_dir}/uidriver.cpp)
     target_include_directories(brulion_uidriver PUBLIC ${_brulion_shell_dir})
     target_link_libraries(brulion_uidriver PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
     brulion_set_warnings(brulion_uidriver)
+    # The remote control (remotecontrol.h): the desktop's socket, and in process for an AI agent on
+    # another computer — on Android only so (no socket there).
+    target_sources(brulion PRIVATE shell/remotecontrol.h shell/remotecontrol.cpp)
+    target_link_libraries(brulion PRIVATE brulion_ipc brulion_uidriver)
+    target_compile_definitions(brulion PRIVATE BRULION_APP_CONTROL=1)
+endif()
+if(BRULION_DESKTOP)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets)
     target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
         shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp
-        shell/onboardingselftest.h shell/onboardingselftest.cpp
-        shell/remotecontrol.h shell/remotecontrol.cpp)
+        shell/onboardingselftest.h shell/onboardingselftest.cpp)
     # One Brulion per session, the messages of brulion-cli and the remote control's socket
     # (src/ipc); `brulion cli …` runs the command line (src/cli) inside the app's binary (the
     # AppImage's one entry point).

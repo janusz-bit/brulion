@@ -840,7 +840,10 @@ QJsonObject Client::sessionParams(const TurnInput &input) const
                                    {u"args"_s, QJsonArray::fromStringList(m.args)},
                                    {u"env"_s, env}});
     }
-    return QJsonObject{{u"cwd"_s, input.cwd}, {u"mcpServers"_s, servers}};
+    QJsonObject params{{u"cwd"_s, input.cwd}, {u"mcpServers"_s, servers}};
+    if (!input.sessionMeta.isEmpty())
+        params.insert(u"_meta"_s, input.sessionMeta);
+    return params;
 }
 
 void Client::newSession(const QString &key, bool tryResume)
@@ -1255,6 +1258,14 @@ void Client::onRequest(const QJsonValue &id, const QString &method, const QJsonO
             return;
         }
         m_handler(key, id, method, params);
+        return;
+    }
+    if (method.startsWith(u'_')) {
+        // An extension method (a computer relaying the protocol asks the app: `_brulion/app`).
+        if (m_extensionHandler)
+            m_extensionHandler(id, method, params);
+        else
+            m_connection.respondError(id, MethodNotFound, u"Method not found: %1"_s.arg(method));
         return;
     }
     if (method != u"session/request_permission") {

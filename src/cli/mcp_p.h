@@ -21,6 +21,10 @@ struct McpPolicy {
     /// starts with Brulion's tools gets; --app-control has them too).
     bool appChat = false;
     bool remote = false;     ///< over the network: no app.* tools at all, no paths of this computer
+    /// The app tools reach the app on another device through `acp serve`'s tunnel
+    /// (BRULION_APP_SOCKET): its name ("" the app on this desktop).
+    QString appDevice{};
+    bool tunnelled = false;
 };
 
 /// JSON-RPC and MCP error codes.

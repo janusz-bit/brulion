@@ -11,3 +11,7 @@ brulion_add_test(tst_acp_remote SOURCES tst_acp_remote.cpp LIBS brulion_core_acp
 # A computer's agents offered in the notebook's config.json (hostoffer.h): only tailnet addresses,
 # names cut, odd ids dropped, the limits; the same computer replaced, the other keys kept.
 brulion_add_test(tst_acp_hostoffer SOURCES tst_acp_hostoffer.cpp LIBS brulion_core_acp)
+# The app's live tools for an agent on another computer (apptunnel.h): a session's request for them
+# in `_meta`, the calls to the device's app and its answers (malformed ones refused, sizes bounded),
+# extension methods handed to the client's handler.
+brulion_add_test(tst_acp_apptunnel SOURCES tst_acp_apptunnel.cpp LIBS brulion_core_acp)

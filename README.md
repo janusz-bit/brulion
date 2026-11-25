@@ -208,7 +208,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   your own computer as a custom connector, reading only or also writing as you allow (the desktop
   app runs that server for you: Settings → Extensions → claude.ai and ChatGPT);
   `brulion-cli acp serve` runs an AI agent of the computer (Claude Code with your subscription)
-  for the app on your phone, paired once with a code and reached in your own network; and
+  for the app on your phone, paired once with a code and reached in your own network — let it
+  change the app, and its tools there theme and script the app on the phone live; and
   `brulion-cli acp agent` brings Brulion's AI assistant into Zed and JetBrains IDEs; see
   [docs/CLI.md](docs/CLI.md). With remote control allowed (off by default: Settings → Application
   → For developers, or `brulion --remote-control`), agents can also drive the running desktop
@@ -580,7 +581,9 @@ przykładowym notatnikiem.
   dostają wtedy notatnik z Twojego komputera jako własny łącznik (aplikacja na komputerze sama
   uruchamia ten serwer: Ustawienia → Rozszerzenia → claude.ai i ChatGPT), `brulion-cli acp serve`
   uruchamia agenta AI komputera (Claude Code z Twoją subskrypcją) dla aplikacji na telefonie,
-  sparowanej raz kodem i łączącej się w Twojej własnej sieci, a `brulion-cli acp agent` daje
+  sparowanej raz kodem i łączącej się w Twojej własnej sieci (gdy pozwolisz mu zmieniać
+  aplikację, jego narzędzia na komputerze zmieniają na żywo motyw i skrypty aplikacji na
+  telefonie), a `brulion-cli acp agent` daje
   asystenta AI Brulionu w Zed i środowiskach JetBrains. Na komputerze agent może
   też — gdy mu na to pozwolisz w ustawieniach — sterować działającą aplikacją: zobaczyć, co
   pokazuje, kliknąć, pisać i zrobić zrzut ekranu. Więcej niżej i w [docs/CLI.md](docs/CLI.md).

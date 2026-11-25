@@ -502,7 +502,10 @@ are pinned by nixpkgs rather than fetched by `npx` when they start.
 The service: user `brulion-acp` (or `user`), its state in `/var/lib/brulion-acp` (the state file
 `acp-remote.json` — the paired devices with hashes of their tokens, the code waiting —, the
 notebook's device state, the agents' homes, and `notebook/`, the notebook's own copy when `vault`
-is not set), the Nextcloud password as a systemd credential, `KillMode=control-group` (the agents
+is not set), a private runtime folder `/run/brulion-acp` (`XDG_RUNTIME_DIR`: the socket through
+which the agents' tools reach the app on the phone — its live tools when the phone lets the agent
+change the app, [CLI.md](CLI.md#live-changes) — and the screenshots they take of it), the
+Nextcloud password as a systemd credential, `KillMode=control-group` (the agents
 and their commands end with it), and the hardening an agent leaves room for: `ProtectSystem=strict`,
 home directories hidden (`ProtectHome=tmpfs`) except a `vault` bound in, `NoNewPrivileges`,
 `PrivateTmp`, `PrivateDevices`, no capabilities — but no `MemoryDenyWriteExecute` (Node.js) and

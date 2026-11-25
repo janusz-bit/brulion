@@ -10,7 +10,10 @@
 // takes them, messages in the system's language (Polish or English; the machine's fields and MCP
 // English), `app open` against a stand-in app, and the MCP server (initialize, tools/list,
 // tools/call, errors, a request line over the 16 MiB limit, the warm index seeing a file written
-// meanwhile).
+// meanwhile). The tools of an agent on another computer than the app (`acp serve`'s tunnel,
+// BRULION_APP_SOCKET): every request to the tunnel's socket with its grant, never to the app of this
+// desktop (today and open through the tunnel, no notebook check against a copy elsewhere, capture
+// without text refused), the tunnel gone in words, and the MCP server's instructions naming the device.
 #include "appmessage.h"
 #include "attachments/manifest.h"
 #include "attachments/record.h"
@@ -67,6 +70,11 @@ struct Run {
     QByteArray err;
     QJsonObject result() const { return json.value(u"result"_s).toObject(); }
     QString errorCode() const { return json.value(u"error"_s).toObject().value(u"code"_s).toString(); }
+    /// What it said, for a failure's message.
+    QString describe() const
+    {
+        return u"exit %1: %2 %3"_s.arg(QString::number(code), QString::fromUtf8(out), QString::fromUtf8(err));
+    }
     QStringList warnings() const
     {
         QStringList codes;
@@ -125,6 +133,8 @@ class TestCliProcess : public QObject {
         env.remove(u"BRULION_APP_TOKEN"_s);
         env.remove(u"BRULION_APP_CHAT_TOKEN"_s);
         env.remove(u"BRULION_APP_CLIENT"_s);
+        env.remove(u"BRULION_APP_SOCKET"_s);
+        env.remove(u"BRULION_APP_DEVICE"_s);
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
         // Messages for people follow the system's language (docs/CLI.md "Language"): English here,
         // whatever the developer's session says.
@@ -2705,6 +2715,123 @@ private Q_SLOTS:
         QCOMPARE(r.errorCode(), u"unauthorized"_s);
         QVERIFY(control.revokeGrant(token));
         control.setOpen(true);
+    }
+
+    void appThroughATunnel()
+    {
+        const QString dir = vault({{u"Dom.md"_s, "- a\n"}});
+        // An app on this desktop too: nothing of the tunnel's goes to it.
+        const QString key = brulion::ipc::SingleInstance::keyFor(appDataDir());
+        brulion::ipc::SingleInstance desktop(key);
+        QVERIFY(desktop.listen());
+        QSignalSpy messages(&desktop, &brulion::ipc::SingleInstance::messageReceived);
+        brulion::ipc::ControlServer desktopControl;
+        int desktopRequests = 0;
+        desktopControl.setHandler(
+                [&desktopRequests](const brulion::ipc::ControlRequest &, brulion::ipc::ControlReply reply) {
+                    ++desktopRequests;
+                    reply.ok(QJsonObject());
+                });
+        QVERIFY(desktopControl.listen(brulion::ipc::controlKeyFor(key)));
+        // The tunnel of acp serve, a stand-in: only its grants.
+        brulion::ipc::ControlServer tunnel;
+        tunnel.setOpen(false);
+        QList<brulion::ipc::ControlRequest> requests;
+        tunnel.setHandler([&requests](const brulion::ipc::ControlRequest &request, brulion::ipc::ControlReply reply) {
+            requests.append(request);
+            if (request.method == u"hello")
+                return reply.ok(QJsonObject{{u"granted"_s, true}, {u"device"_s, u"Pixel 9"_s}});
+            if (request.method == u"state")
+                return reply.ok(
+                        QJsonObject{{u"ready"_s, true}, {u"vault"_s, QJsonObject{{u"path"_s, u"/data/Notatki"_s}}}});
+            reply.ok(QJsonObject{{u"method"_s, request.method}, {u"params"_s, request.params}});
+        });
+        const QString tunnelKey = m_home + u"/run/brulion-acp-test"_s;
+        QVERIFY(tunnel.listen(tunnelKey));
+        const QString token = tunnel.addGrant(u"Claude Code"_s);
+        QProcessEnvironment env = environment();
+        env.insert(u"BRULION_APP_SOCKET"_s, tunnelKey);
+        env.insert(u"BRULION_APP_TOKEN"_s, token);
+        env.insert(u"BRULION_APP_CLIENT"_s, u"Claude Code"_s);
+        env.insert(u"BRULION_APP_DEVICE"_s, u"Pixel 9"_s);
+
+        Run r = cliLive({u"app"_s, u"state"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"vault"_s).toObject().value(u"path"_s).toString(), u"/data/Notatki"_s);
+        QVERIFY(requests.at(requests.size() - 2).method == u"hello");
+        QCOMPARE(requests.last().method, u"state"_s);
+        QVERIFY(requests.last().granted);
+        QCOMPARE(requests.last().client, u"Claude Code"_s);
+        // Today and a page: opened by the app on the device; no notebook check against its copy.
+        r = cliLive({u"app"_s, u"today"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"open"_s);
+        QCOMPARE(requests.last().params.value(u"ref"_s).toString(), u"today"_s);
+        const qsizetype before = requests.size();
+        r = cliLive({u"--vault"_s, dir, u"app"_s, u"open"_s, u"Dom"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QStringList asked;
+        for (qsizetype i = before; i < requests.size(); ++i)
+            asked << requests.at(i).method;
+        QCOMPARE(asked, (QStringList{u"hello"_s, u"open"_s})); // (no state: its notebook is a copy elsewhere)
+        QCOMPARE(requests.last().params.value(u"ref"_s).toString(), u"Dom"_s);
+        // The quick capture's window is for a person: on another device, the text is needed.
+        r = cliLive({u"app"_s, u"capture"_s}, {}, env);
+        QCOMPARE(r.code, 2);
+        QVERIFY2(r.json.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"Pixel 9"_s),
+                 qPrintable(r.describe()));
+        r = cliLive({u"app"_s, u"capture"_s, u"Kupić mleko jutro o 9"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"capture"_s);
+        // A secret asked for on the device: only its value can come back (a file would be written
+        // there); a file asked for is refused before anything is sent.
+        r = cliLive({u"app"_s, u"chat"_s, u"request-secret"_s, u"Token GitHuba"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatRequestSecret"_s);
+        QCOMPARE(requests.last().params.value(u"delivery"_s).toString(), u"value"_s);
+        const qsizetype beforeFile = requests.size();
+        r = cliLive({u"app"_s, u"chat"_s, u"request-secret"_s, u"PIN"_s, u"--delivery"_s, u"file"_s}, {}, env);
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"no_file_here"_s);
+        QVERIFY(r.json.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"Pixel 9"_s));
+        QCOMPARE(requests.size(), beforeFile);
+        // Nothing reached the app of this desktop.
+        QTest::qWait(100);
+        QCOMPARE(messages.size(), 0);
+        QCOMPARE(desktopRequests, 0);
+        // The MCP server's instructions name the device.
+        {
+            QProcess p;
+            p.setProcessEnvironment(env);
+            p.start(QStringLiteral(BRULION_CLI), {u"--vault"_s, dir, u"mcp"_s, u"--app-control"_s});
+            QVERIFY(p.waitForStarted(kTimeoutMs));
+            p.write(R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}})"
+                    "\n");
+            QElapsedTimer t;
+            t.start();
+            while (!p.canReadLine() && t.elapsed() < kTimeoutMs)
+                p.waitForReadyRead(100);
+            const QString instructions = QJsonDocument::fromJson(p.readLine())
+                                                 .object()
+                                                 .value(u"result"_s)
+                                                 .toObject()
+                                                 .value(u"instructions"_s)
+                                                 .toString();
+            QVERIFY2(instructions.contains(u"device \"Pixel 9\""_s), qPrintable(instructions));
+            QVERIFY(instructions.contains(u"acp serve"_s));
+            QVERIFY(!instructions.contains(u"running on this desktop"_s));
+            p.closeWriteChannel();
+            QVERIFY(p.waitForFinished(kTimeoutMs));
+        }
+        // The tunnel gone (acp serve stopped): said so, nothing sent to this desktop's app.
+        tunnel.close();
+        r = cliLive({u"app"_s, u"state"_s}, {}, env);
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"app_not_reached"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"reason"_s).toString(),
+                 u"no_tunnel"_s);
+        QVERIFY(r.json.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"Pixel 9"_s));
+        QCOMPARE(desktopRequests, 0);
     }
 
     // `app chat …` against a stand-in remote control: what each command asks (start with --wait on one

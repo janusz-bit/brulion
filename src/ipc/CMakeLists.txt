@@ -3,7 +3,8 @@
 # the running app (appmessage.h) — and the remote control of the running app (controlprotocol.h:
 # JSON lines on a socket of its own; the app's ControlServer, brulion-cli's ControlClient) — and the
 # app's names they and the settings depend on (profile.h: BRULION_PROFILE). QtCore +
-# QtNetwork; not built for Android or the browser.
+# QtNetwork; not built for the browser. Android uses the remote control's protocol and its replies in
+# process (RemoteControl::dispatch(): an AI agent on another computer); nothing listens there.
 qt_add_library(brulion_ipc STATIC
     singleinstance.h singleinstance.cpp
     appmessage.h appmessage.cpp

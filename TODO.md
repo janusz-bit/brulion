@@ -38,14 +38,11 @@ done in the repository simply disappears from the list.
   /c`) and macOS; and a try of the other direction, Brulion's assistant as an ACP agent
   (`brulion-cli acp agent`, docs/CLI.md "The assistant in Zed and JetBrains"), in a real Zed and a
   JetBrains IDE.
-* **AI agents on another computer changing the app live** — an agent of this computer with "Let it
-  change the app while it runs" gets the live tools (`brulion-cli mcp --app-control` with a grant,
-  docs/CLI.md "Live changes"); one on another computer (`brulion-cli acp serve`, the phone's case)
-  does not: its tools there drive no app. Tunnel them: `acp serve` offers the session an MCP server
-  of its own whose `brulion_app_*` calls go back over the device's stream (a request the app
-  answers like the remote control's methods, with a grant the phone makes per stream and the
-  same journal and revert), so an agent on the home server can theme and script the app on the
-  phone; Android has no remote control socket, so the app answers them in process.
+* **AI agents on another computer changing the app live: on a real phone** — the tunnel is there
+  (`acp serve` hands the session's `brulion_app_*` calls to the device's stream, the app answers
+  them in process: docs/CLI.md "The app's live tools"), tested between two processes of a desktop;
+  untried with Android's app (the phone asleep or in the background while a call waits, a
+  screenshot of its window over a mobile network) and with `services.brulion-acp`.
 * **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
   from the camera app for a message (the activity recreated while the camera is in front loses the
   photo's path, kept only in memory) and dictation with Google's recognizer and with none

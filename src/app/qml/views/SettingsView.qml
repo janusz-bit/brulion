@@ -2587,8 +2587,8 @@ Item {
                         if (!agentDialog.remote) {
                             AppSettings.setAcpAgentCommand(agentDialog.agentId, agentCommandField.text)
                             AppSettings.setAcpAgentTools(agentDialog.agentId, agentToolsSwitch.checked)
-                            AppSettings.setAcpAgentApp(agentDialog.agentId, agentAppSwitch.checked)
                         }
+                        AppSettings.setAcpAgentApp(agentDialog.agentId, agentAppSwitch.checked)
                     }
                     BText {
                         Layout.fillWidth: true
@@ -2633,14 +2633,18 @@ Item {
                         description: qsTr("Its sessions get Brulion's MCP server (brulion-cli mcp): search, queries, tasks and journals of this notebook.")
                     }
                     // Live changes (docs/CLI.md "Live changes"): its tools get --app-control and a
-                    // grant of this running app, which ends when the agent stops.
+                    // grant of this running app, which ends when the agent stops — for an agent on
+                    // another computer its tools there, through that computer (acp serve's tunnel),
+                    // answered in process (none in the browser).
                     SettingSwitch {
                         id: agentAppSwitch
                         objectName: "acpAgentApp"
-                        visible: !agentDialog.remote
+                        visible: !agentDialog.remote || Qt.platform.os !== "wasm"
                         enabled: agentToolsSwitch.checked
                         text: qsTr("Let it change the app while it runs")
-                        description: qsTr("With Brulion's tools it may also change this running app live (Luau, extensions for this run, the theme, settings, the window's items); the top bar shows what it changed, and you can undo all of it.")
+                        description: agentDialog.remote
+                                     ? qsTr("Its tools on that computer may also change this app live while it answers (Luau, extensions for this run, the theme, settings, the window's items); the top bar shows what it changed, and you can undo all of it.")
+                                     : qsTr("With Brulion's tools it may also change this running app live (Luau, extensions for this run, the theme, settings, the window's items); the top bar shows what it changed, and you can undo all of it.")
                     }
                 }
             }

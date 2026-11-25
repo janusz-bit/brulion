@@ -32,6 +32,11 @@ ControlClient::ControlClient(const QString &key)
     , m_client(cleanClientName(qEnvironmentVariable(ClientVariable)))
 { }
 
+QString ControlClient::tunnelSocket()
+{
+    return qEnvironmentVariable(SocketVariable).trimmed();
+}
+
 void ControlClient::setIdentity(const QString &token, const QString &client)
 {
     m_token = token.trimmed();

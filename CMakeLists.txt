@@ -142,9 +142,13 @@ if(BRULION_SPEECH_ENABLED)
     add_subdirectory(3rdparty/whisper)
 endif()
 # The desktop (Linux, Windows): the single-instance socket and the command line for scripts and AI
-# agents (brulion-cli, docs/CLI.md); the app hands `brulion cli …` over to it.
-if(NOT ANDROID AND NOT EMSCRIPTEN)
+# agents (brulion-cli, docs/CLI.md); the app hands `brulion cli …` over to it. Android takes the
+# remote control's protocol from src/ipc too (no socket listens there: an AI agent on another
+# computer is answered in process).
+if(NOT EMSCRIPTEN)
     add_subdirectory(src/ipc)
+endif()
+if(NOT ANDROID AND NOT EMSCRIPTEN)
     add_subdirectory(src/cli)
 elseif(NOT BRULION_BUILD_APP)
     message(FATAL_ERROR "BRULION_BUILD_APP=OFF builds brulion-cli, which is for the desktop only")

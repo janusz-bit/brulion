@@ -52,7 +52,11 @@
 // an acp::RemoteStream to that computer (core acp/remote.h) — the protocol and everything above it
 // as for a program of this device, only the agent's files, terminals and Brulion's tools are that
 // computer's, so this side offers none and names that computer's notebook folder (AgentConfig::root)
-// to the agent.
+// to the agent. Its tools there reach this app all the same (setAppControl(): acp/apptunnel.h — the
+// stream names the feature, each session's request what it may do with the app): with "Let it change
+// the app" the live tools, and the chat's tools of its conversation, through grants answered in
+// process (RemoteControl::dispatch(): no socket — Android has none), noted as "<agent> on <computer>"
+// in the live changes' journal and undone like any other.
 //
 //   agents->setAgents({{u"claude"_s, u"Claude Code"_s, u"npx -y @agentclientprotocol/claude-agent-acp"_s}});
 //   agents->run(path, u"acp:claude"_s, history, u"Dom"_s);  // → answered / failed / status / partial
@@ -60,6 +64,7 @@
 // Single-threaded (the GUI thread).
 
 #include "acp/acp.h"
+#include "acp/apptunnel.h"
 #include "acp/remote.h"
 
 #include <QHash>
@@ -110,8 +115,9 @@ struct AgentConfig
     QString host{};
     QString root{};
     QString token{};
-    /// "Let it change the app while it runs" (settings row key `app`; a program of this device
-    /// with Brulion's tools only): its tools get `--app-control` and a grant of the app.
+    /// "Let it change the app while it runs" (settings row key `app`; with Brulion's tools only):
+    /// its tools get `--app-control` and a grant of the app — an agent on another computer's tools
+    /// there reach this app through that computer (a grant answered in process, setAppControl()).
     bool appAccess = false;
     friend bool operator==(const AgentConfig &, const AgentConfig &) = default;
     bool isRemote() const { return !url.isEmpty(); }
@@ -160,7 +166,7 @@ public:
     /// the conversation's page, the page it is about, whether Brulion's tools are there and (`app`)
     /// whether they may change the running app.
     static QString context(const QString &root, const QString &conversation, const QString &page, bool tools,
-                           bool app = false, bool chat = false);
+                           bool app = false, bool chat = false, const QString &device = QString());
     /// The conversation so far as one text for a new session ("" when there is none before the
     /// newest message): `history` as WorkspaceChats builds it ({role, content}).
     static QString transcript(const QVariantList &history);
@@ -182,6 +188,24 @@ public:
     /// methods), one per conversation of an agent with Brulion's tools — so its tools may hand
     /// another partner a task as a sub-conversation of that conversation. Unset: no chat tools.
     void setChatGrants(GrantFunction grant, RevokeFunction revoke);
+    /// The running app answered in process, for agents on another computer whose tools reach this
+    /// app through that computer's `acp serve` and the agent's stream (acp/apptunnel.h;
+    /// RemoteControl::localGrant() and ::dispatch(): the desktop and Android). `grant` makes one for
+    /// a client's name (`chatOnly`: the chat's methods alone) and gives its token ("" none),
+    /// `revoke` ends it, `call` answers a method of the remote control as the grant's client
+    /// (`waiting`: whether its asker still waits). Unset (tests, the browser): such an agent's tools
+    /// reach no app here.
+    struct AppControl {
+        std::function<QString(const QString &client, bool chatOnly)> grant;
+        std::function<void(const QString &token)> revoke;
+        std::function<void(const QString &token, const QString &method, const QJsonObject &params,
+                           std::function<void(const acp::AppAnswer &answer)> done, std::function<bool()> waiting)>
+                call;
+        bool isSet() const { return grant && revoke && call; }
+    };
+    void setAppControl(AppControl control);
+    /// The name an agent on another computer has in the live changes' journal: "Claude Code on nixos".
+    static QString remoteClient(const AgentConfig &agent);
     /// The conversation whose chat grant `token` is ("" none: no such grant, or a full one).
     QString grantConversation(const QString &token) const;
     /// How deep a conversation is among sub-conversations (ChatLineage::depth) and whether it is
@@ -389,6 +413,10 @@ private:
     /// The chat grant of the conversation `path` answered by `config`'s process (made when first
     /// asked); "" none (no grant provider, no tools, too deep).
     QString chatGrantFor(const AgentConfig &config, const QString &path);
+    /// A call of an agent on another computer's tools to this app (`_brulion/app`), answered.
+    void appCall(Process *p, const QJsonValue &id, const QString &method, const QJsonObject &params);
+    /// The handle of `p`'s session of `path` for the app's tools (made when first asked).
+    QString appHandle(Process *p, const QString &path, bool control, const QString &chatToken);
     void handle(Process *p, const QString &key, const QJsonValue &id, const QString &method, const QJsonObject &params);
     void readFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params);
     void writeFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params);
@@ -488,8 +516,10 @@ private:
     struct ChatGrant {
         QString agent;
         QString conversation;
+        bool local = false; ///< made in process (AppControl: an agent on another computer)
     };
     QHash<QString, ChatGrant> m_chatGrants;
+    AppControl m_appControl;
 };
 
 } // namespace brulion::shell

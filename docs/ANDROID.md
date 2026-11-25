@@ -1344,6 +1344,14 @@ kept the screen on, and an answer the app lost came only when Brulion ran again)
   its activity), the computer finishes the turn and keeps it: Brulion fetches it when it starts
   again, also a question the agent asked meanwhile, which waits there for your answer (an hour by
   default: `acp serve --question-wait`).
+* **The agent's tools on that computer change the app on the phone** when you let it ("Let it
+  change the app while it runs" in its Edit… dialog, off by default; docs/CLI.md "The app's live
+  tools"): Android has no remote control socket, so the app answers each call in process
+  (`RemoteControl::dispatch()`, built for Android without a socket) — the theme, settings, Luau,
+  live extensions, the window's items, screenshots as pictures —, while it runs: during a turn the
+  service above keeps it running with the screen off, and once Android ended it the computer fails
+  the calls at once. The top bar's Live chip shows what changed ("Claude Code on raspberry-pi-4") and
+  undoes it. Tried on the desktop and in CI; on a real phone it is still to be tried.
 * **Tested** by `scripts/android-emulator-test.sh` (the bridge self-test, last): the service in the
   foreground with type dataSync, its notification on the channel `agents`, the self-test's ticks
   going on while Qt says the app is suspended (sent home), **Zatrzymaj** reaching C++, the service

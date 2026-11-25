@@ -1248,6 +1248,9 @@ in
           XDG_CONFIG_HOME = "${acpStateDir}/config";
           XDG_DATA_HOME = "${acpStateDir}/data";
           XDG_CACHE_HOME = "/var/cache/brulion-acp";
+          # The tunnel of the agents' tools to the app on a device (its socket, the screenshots it
+          # writes): a private runtime folder of the service's own (docs/CLI.md "Live changes").
+          XDG_RUNTIME_DIR = "/run/brulion-acp";
           LANG = "C.UTF-8";
         };
         serviceConfig = {
@@ -1262,6 +1265,8 @@ in
           StateDirectory = [ "brulion-acp" ] ++ lib.optional acpOwnVault "brulion-acp/notebook";
           StateDirectoryMode = "0700";
           CacheDirectory = "brulion-acp";
+          RuntimeDirectory = "brulion-acp";
+          RuntimeDirectoryMode = "0700";
           WorkingDirectory = acpStateDir;
           Restart = "on-failure";
           RestartSec = 5;

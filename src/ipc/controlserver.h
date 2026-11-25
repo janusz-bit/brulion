@@ -45,11 +45,26 @@ class QLocalSocket;
 namespace brulion::ipc {
 
 /// The answer to one request: call ok() or fail() once (later calls and replies to a client that
-/// disconnected are dropped). Cheap to copy.
+/// disconnected are dropped). Cheap to copy. A socket's (ControlServer) writes the response line;
+/// one made with a function — a request answered in process (RemoteControl::dispatch(): an AI
+/// agent on another computer, whose calls come over its stream) — hands the function the answer.
 class ControlReply {
 public:
+    /// An answer as a function gets it: ok and the result, or the error's code, message, details.
+    struct Answer {
+        bool ok = false;
+        QJsonValue result;
+        QString code;
+        QString message;
+        QJsonObject details;
+    };
+    using Deliver = std::function<void(const Answer &answer)>;
+
     ControlReply() = default;
     ControlReply(QLocalSocket *socket, const QJsonValue &id);
+    /// In process: `deliver` gets the answer (once); `connected` says whether its asker still
+    /// waits for it (unset: always).
+    ControlReply(const QJsonValue &id, Deliver deliver, std::function<bool()> connected = {});
 
     QJsonValue id() const { return m_id; }
     void ok(const QJsonValue &result = QJsonObject()) const;
@@ -60,6 +75,8 @@ public:
 private:
     QPointer<QLocalSocket> m_socket;
     QJsonValue m_id;
+    Deliver m_deliver;
+    std::function<bool()> m_connected;
     std::shared_ptr<bool> m_sent = std::make_shared<bool>(false);
 };
 

@@ -88,6 +88,10 @@ std::optional<RemoteInfo> RemoteInfo::fromJson(const QJsonObject &o)
     info.host = o.value(u"host"_s).toString();
     info.root = o.value(u"root"_s).toString();
     info.tools = o.value(u"tools"_s).toBool();
+    for (const QJsonValue &v : o.value(u"features"_s).toArray()) {
+        if (const QString f = v.toString().trimmed(); !f.isEmpty() && f.size() <= 40 && !info.features.contains(f))
+            info.features.append(f);
+    }
     info.sync = o.value(u"sync"_s).toObject();
     for (const QJsonValue &v : o.value(u"agents"_s).toArray()) {
         const QJsonObject a = v.toObject();
@@ -330,7 +334,9 @@ void RemoteStream::start()
 void RemoteStream::open()
 {
     m_opening = true;
-    const QJsonObject body{{u"agent"_s, m_agent}};
+    QJsonObject body{{u"agent"_s, m_agent}};
+    if (!m_features.isEmpty())
+        body.insert(u"features"_s, QJsonArray::fromStringList(m_features));
     const std::weak_ptr<bool> alive = m_alive;
     m_transport->send(request("POST", u"streams"_s, &body), [this, alive](const sync::HttpResponse &response) {
         if (alive.expired() || m_ended)
@@ -354,6 +360,12 @@ void RemoteStream::open()
         m_failingSince = -1;
         m_id = o.value(u"stream"_s).toString();
         m_root = o.value(u"root"_s).toString();
+        // (Only what the device asked for: a host names nothing else into it.)
+        m_hostFeatures.clear();
+        for (const QJsonValue &v : o.value(u"features"_s).toArray()) {
+            if (m_features.contains(v.toString()) && !m_hostFeatures.contains(v.toString()))
+                m_hostFeatures.append(v.toString());
+        }
         if (m_id.isEmpty()) {
             end(End::Refused, u"no stream in the answer"_s);
             return;
@@ -390,7 +402,13 @@ void RemoteStream::flush()
         return;
     QJsonArray messages;
     const qsizetype count = std::min<qsizetype>(m_queue.size(), RemoteMaxBatch);
+    qsizetype bytes = 0;
     for (qsizetype i = 0; i < count; ++i) {
+        // (A batch of big messages — pictures of a prompt, a screenshot for the agent — stays within
+        // what the host takes in one request: the rest goes in the next.)
+        bytes += m_queue.at(i).size();
+        if (i > 0 && bytes > RemoteMaxBatchBytes)
+            break;
         const QJsonDocument doc = QJsonDocument::fromJson(m_queue.at(i));
         // (A line that is no JSON object goes as text: the host drops it and says so in its log.)
         messages.append(doc.isObject() ? QJsonValue(doc.object()) : QJsonValue(QString::fromUtf8(m_queue.at(i))));

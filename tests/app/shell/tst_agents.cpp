@@ -19,7 +19,12 @@
 // lost fetched from there afterwards — also one whose question waits there, answered from the app
 // started again —, unpaired there (the turn says so); the settings' remote
 // agents (their token in the app's secrets, never in the settings; paired again: the same agent);
-// the words for a stream's ends and a pairing's errors. "Let it change the app": its tools get
+// the words for a stream's ends and a pairing's errors. An agent on another computer let change the
+// app: its tools there (the real brulion-cli mcp the agent starts) reach this app through acp serve
+// and the stream, answered in process (setAppControl()) — a grant named "<agent> on <computer>" and
+// a chat grant of its conversation, each call with its own, the session's request naming a handle
+// and never a token; not let change it: the chat's tools alone; the grants end with its process. "Let it change the
+// app": its tools get
 // --app-control and a grant's token in their environment only (BRULION_APP_TOKEN, the agent's name
 // as BRULION_APP_CLIENT), one grant per process, the context says so; the grant ends when the
 // process stops (its settings changed, it died), and without a grant provider the tools are plain.
@@ -1901,6 +1906,157 @@ private Q_SLOTS:
         QCOMPARE(WorkspaceAgents::usageText({40000, 200000, -1, QString()}), u"20 % of the context"_s);
     }
 
+    void remoteAgentChangesTheApp()
+    {
+#ifndef BRULION_CLI
+        QSKIP("brulion-cli is not built here");
+#else
+        const QString computer = m_tmp.filePath(u"komputer-aplikacja"_s);
+        writeRaw(computer + u"/Dom.md"_s, "- na komputerze\n");
+        const QString stateFile = m_tmp.filePath(u"komputer-aplikacja-stan/acp-remote.json"_s);
+        auto ws = open({}); // (FAKE_ACP_LOG for the agent the computer starts)
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const char *name : {"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"})
+            env.insert(QString::fromLatin1(name),
+                       m_tmp.filePath(u"komputer-aplikacja-dom/"_s + QString::fromLatin1(name)));
+        const QString runtime = m_tmp.filePath(u"run-k"_s);
+        QDir().mkpath(runtime);
+        QFile::setPermissions(runtime, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        env.insert(u"XDG_RUNTIME_DIR"_s, runtime);
+        for (const char *name : {"BRULION_APP_TOKEN", "BRULION_APP_CHAT_TOKEN", "BRULION_APP_SOCKET"})
+            env.remove(QString::fromLatin1(name));
+        const QStringList common{u"--vault"_s, computer, u"--state-dir"_s,
+                                 m_tmp.filePath(u"komputer-aplikacja-urzadzenie"_s)};
+        QProcess host;
+        host.setProcessEnvironment(env);
+        host.setProcessChannelMode(QProcess::ForwardedErrorChannel);
+        host.start(QStringLiteral(BRULION_CLI), common
+                                                        + QStringList{u"acp"_s, u"serve"_s, u"--agent"_s,
+                                                                      u"fake:Fałszywy="_s + command(), u"--port"_s,
+                                                                      u"0"_s, u"--state-file"_s, stateFile});
+        QVERIFY(host.waitForStarted(10000));
+        const auto stopHost = qScopeGuard([&host] {
+            host.kill();
+            host.waitForFinished(10000);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(host.canReadLine(), 20000);
+        const QJsonObject started = QJsonDocument::fromJson(host.readLine()).object().value(u"result"_s).toObject();
+        QVERIFY2(started.value(u"appTools"_s).toBool(), qPrintable(QString::fromUtf8(QJsonDocument(started).toJson())));
+        QProcess pairing;
+        pairing.setProcessEnvironment(env);
+        pairing.start(QStringLiteral(BRULION_CLI),
+                                     common + QStringList{u"acp"_s, u"pair"_s, u"--state-file"_s, stateFile});
+        QVERIFY(pairing.waitForFinished(20000));
+        const QString code = QJsonDocument::fromJson(pairing.readAllStandardOutput())
+                                     .object()
+                                     .value(u"result"_s)
+                                     .toObject()
+                                     .value(u"code"_s)
+                                     .toString();
+
+        // This app, answering in process: what it was granted and asked.
+        struct Call {
+            QString token;
+            QString method;
+            QJsonObject params;
+        };
+        QHash<QString, std::pair<QString, bool>> grants; // token → client, chat only
+        QStringList revoked;
+        QList<Call> calls;
+        WorkspaceAgents::AppControl control;
+        control.grant = [&grants](const QString &client, bool chatOnly) {
+            const QString token = u"token-%1"_s.arg(grants.size() + 1);
+            grants.insert(token, {client, chatOnly});
+            return token;
+        };
+        control.revoke = [&revoked](const QString &token) { revoked << token; };
+        control.call = [&calls](const QString &token, const QString &method, const QJsonObject &params,
+                                std::function<void(const acp::AppAnswer &)> done, std::function<bool()> waiting) {
+            QVERIFY(waiting());
+            calls.append({token, method, params});
+            if (method == u"hello")
+                return done(acp::AppAnswer::success(QJsonObject{{u"granted"_s, true}}));
+            if (method == u"theme")
+                return done(acp::AppAnswer::success(
+                        QJsonObject{{u"live"_s, QJsonArray{QJsonObject{{u"who"_s, u"live:Fałszywy"_s},
+                                                                       {u"tokens"_s, params.value(u"tokens"_s)}}}}}));
+            done(acp::AppAnswer::success(QJsonObject{{u"method"_s, method}, {u"zażółć"_s, true}}));
+        };
+        WorkspaceChats *chats = ws->chats();
+        chats->agents()->setAppControl(control);
+        QList<AgentConfig> paired;
+        connect(chats, &WorkspaceChats::agentsPaired, this,
+                [&paired](const QList<AgentConfig> &agents) { paired = agents; });
+        chats->pairAgentHost(started.value(u"url"_s).toString(), code);
+        QTRY_COMPARE_WITH_TIMEOUT(paired.size(), 1, 20000);
+        AgentConfig agent = paired.first();
+        agent.id = u"komputer-aplikacja"_s;
+        agent.appAccess = true;
+        QVERIFY(agent.tools);
+        chats->setAgents({agent});
+
+        const QString path = chats->send(QString(),
+                                         u"aplikacja lista && brulion_app_state {} && brulion_app_theme {\"tokens\": "
+                                         u"\"{\\\"accent\\\": \\\"#33aa77\\\"}\"} && "
+                                         u"brulion_app_chat_partners {}"_s,
+                                         QString(), {}, u"acp:komputer-aplikacja"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 60000);
+        QCOMPARE(turn->failure(), QString());
+        const QString page = ws->read(path);
+        QVERIFY2(page.contains(u"Aplikacja: "_s), qPrintable(page));
+        QVERIFY2(page.contains(u"brulion_app_theme"_s) && page.contains(u"brulion_app_chat_start"_s), qPrintable(page));
+        QVERIFY2(page.contains(u"zażółć"_s), qPrintable(page));
+        // A grant of this app for the agent, named for its computer, and its conversation's chat grant.
+        const QString client = WorkspaceAgents::remoteClient(agent);
+        QCOMPARE(client, u"Fałszywy on %1"_s.arg(agent.host));
+        QString full, chat;
+        for (auto it = grants.cbegin(); it != grants.cend(); ++it)
+            (it->second ? chat : full) = it.key();
+        QCOMPARE(grants.size(), 2);
+        QCOMPARE(grants.value(full).first, client);
+        // Each call with its grant: the live tools with the agent's, the chat's with the conversation's.
+        QStringList methods;
+        for (const Call &c : std::as_const(calls))
+            methods << c.method;
+        QCOMPARE(methods, (QStringList{u"state"_s, u"theme"_s, u"chatPartners"_s}));
+        QCOMPARE(calls.at(0).token, full);
+        QCOMPARE(calls.at(1).params.value(u"tokens"_s).toObject().value(u"accent"_s).toString(), u"#33aa77"_s);
+        QCOMPARE(calls.at(2).token, chat);
+        QCOMPARE(chats->agents()->grantConversation(chat), path);
+        // The computer's agent got the tools in their tunnel mode; the request named a handle, no token.
+        const QJsonObject created = logged(u"session/new"_s).last();
+        QVERIFY(!created.value(u"params"_s).toObject().contains(u"_meta"_s));
+        QVERIFY(serverArgs(logged(u"session/new"_s).size() - 1).contains(u"--app-control"_s));
+        const QHash<QString, QString> serverVars = serverEnv(logged(u"session/new"_s).size() - 1);
+        QVERIFY(serverVars.value(u"BRULION_APP_SOCKET"_s).startsWith(runtime));
+        QVERIFY(serverVars.value(u"BRULION_APP_TOKEN"_s) != full); // (the computer's own grant, not this app's)
+        QCOMPARE(serverVars.value(u"BRULION_APP_DEVICE"_s), WorkspaceAgents::deviceName());
+        // The context tells the agent the app is the user's device's.
+        QVERIFY(promptOf(logged(u"session/prompt"_s).last())
+                        .at(0)
+                        .toObject()
+                        .value(u"text"_s)
+                        .toString()
+                        .contains(u"on the user's device"_s));
+
+        // Not let change the app: its process starts again, with the chat's tools alone.
+        agent.appAccess = false;
+        chats->setAgents({agent});
+        QTRY_VERIFY_WITH_TIMEOUT(revoked.contains(full) && revoked.contains(chat), 20000);
+        const QString second = chats->send(QString(), u"aplikacja lista"_s, QString(), {}, u"acp:komputer-aplikacja"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(second)->running(), 60000);
+        const QString listed = ws->read(second);
+        QVERIFY2(listed.contains(u"brulion_app_chat_start"_s), qPrintable(listed));
+        QVERIFY2(!listed.contains(u"brulion_app_theme"_s), qPrintable(listed));
+        QVERIFY(serverArgs(logged(u"session/new"_s).size() - 1).contains(u"--app-chat"_s));
+        QCOMPARE(grants.size(), 3);
+        // The agent stops: its grants end.
+        chats->setAgents({});
+        QTRY_VERIFY_WITH_TIMEOUT(revoked.size() == 3, 20000);
+#endif
+    }
+
     void remoteParts()
     {
         using End = acp::RemoteStream::End;
@@ -1988,6 +2144,14 @@ private Q_SLOTS:
         QVERIFY(row.value(u"remote"_s).toBool());
         QCOMPARE(row.value(u"summary"_s).toString(),
                  u"On raspberry-pi-4 (https://agent.example.pl) · with Brulion's tools"_s);
+        // "Let it change the app while it runs": off at pairing; on, its tools there reach this app
+        // (the row says so), and it stays when paired again.
+        QVERIFY(!agents.at(0).appAccess);
+        QVERIFY(!row.value(u"app"_s).toBool());
+        settings.setAcpAgentApp(u"raspberry-pi-4-claude"_s, true);
+        QVERIFY(settings.acpAgents().at(0).appAccess);
+        QCOMPARE(settings.acpAgentRows().at(0).toMap().value(u"summary"_s).toString(),
+                 u"On raspberry-pi-4 (https://agent.example.pl) · with Brulion's tools · may change the app"_s);
         // Paired again: the same agent, a new token; its own name stays.
         settings.setAcpAgentName(u"raspberry-pi-4-claude"_s, u"Claude na Pi"_s);
         r.token = u"bat_nowy-token"_s;
@@ -1996,6 +2160,9 @@ private Q_SLOTS:
         QCOMPARE(agents.size(), 1);
         QCOMPARE(agents.at(0).name, u"Claude na Pi"_s);
         QCOMPARE(agents.at(0).token, u"bat_nowy-token"_s);
+        QVERIFY(agents.at(0).appAccess);
+        settings.setAcpAgentApp(u"raspberry-pi-4-claude"_s, false);
+        QVERIFY(!settings.acpAgents().at(0).appAccess);
         // Another computer of the same name: an agent of its own.
         AgentConfig other = r;
         other.url = u"https://laptop.example.pl"_s;

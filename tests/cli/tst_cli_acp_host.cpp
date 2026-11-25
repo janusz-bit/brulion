@@ -10,6 +10,15 @@
 // The turns kept for a device that lost its stream: their answers, and the agent's questions that
 // wait for the device there (answered from the turn, asked after the device was gone, answered
 // "cancelled" once nobody fetched them for --question-wait, or at once with 0).
+// The app's live tools for the agent (acp/apptunnel.h): a device that answers them gets them in a
+// session that asks — the real brulion-cli mcp started by the agent, its brulion_app_* tools
+// (state, a screenshot written here as a PNG, the chat's partners, a refusal) answered by the
+// device over its stream, the session's grants only in the server's environment, the request's
+// `_meta` never reaching the agent —; the tunnel's socket itself: a chat grant's methods only,
+// tokens that are no grant, quit refused, a call the device does not answer failing in time, the
+// calls in flight bounded, a late answer dropped, malformed answers and pictures, a path that is
+// none, the grants ended with the stream; an older device (no feature: plain tools) and a server
+// without the tunnel (--no-app-tools).
 #include "acphost.h"
 #include "cli_p.h"
 #include "hostsync.h"
@@ -22,12 +31,17 @@
 #include "qr/qrcode.h"
 #include "sync/http.h"
 
+#include "controlprotocol.h"
+
+#include "acp/apptunnel.h"
+
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocalSocket>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QSignalSpy>
@@ -65,6 +79,56 @@ void writeFile(const QString &path, const QByteArray &bytes)
     QVERIFY(f.open(QIODevice::WriteOnly));
     f.write(bytes);
 }
+
+/// The device's app as it answers the calls of the agent's tools (acp/apptunnel.h): what it heard,
+/// how it answers (nullopt: not yet — held), or a raw answer of its own (true: answered so).
+struct AppDevice {
+    QList<acp::AppCall> calls;
+    std::function<std::optional<acp::AppAnswer>(const acp::AppCall &call)> answer;
+    std::function<bool(const acp::AppCall &call, acp::Client *client, const QJsonValue &id)> raw;
+    QList<QJsonValue> held;
+};
+
+/// A client of the tunnel's socket, as the tools' MCP server is (asynchronous: the host runs here).
+struct TunnelClient {
+    QLocalSocket socket;
+    QHash<int, QJsonObject> answers;
+    int next = 1;
+    bool connect(const QString &key)
+    {
+        socket.connectToServer(key);
+        return socket.waitForConnected(5000);
+    }
+    int send(const QString &method, const QJsonObject &params = {})
+    {
+        const int id = next++;
+        socket.write(brulion::ipc::encodeRequest(id, method, params) + '\n');
+        socket.flush();
+        return id;
+    }
+    /// The answer to `id` ({} none in time).
+    QJsonObject answer(int id, int timeoutMs)
+    {
+        (void)QTest::qWaitFor(
+                [&] {
+                    while (socket.canReadLine()) {
+                        const QJsonObject o = QJsonDocument::fromJson(socket.readLine()).object();
+                        answers.insert(o.value(u"id"_s).toInt(-1), o);
+                    }
+                    return answers.contains(id) || socket.state() != QLocalSocket::ConnectedState;
+                },
+                timeoutMs);
+        return answers.value(id);
+    }
+    static QString errorCode(const QJsonObject &answer)
+    {
+        return answer.value(u"error"_s).toObject().value(u"code"_s).toString();
+    }
+};
+
+/// A 1×1 PNG, base64.
+constexpr auto kTinyPng =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 /// A conversation of the app with an agent on the host: the app's client over a stream.
 struct Talk {
@@ -227,15 +291,41 @@ class TestCliAcpHost : public QObject {
         return session;
     }
 
-    std::unique_ptr<Talk> talk(const QString &token, const QString &agent = u"fake"_s)
+    /// `app`: the device answers the calls of the agent's tools (its stream asks for them).
+    std::unique_ptr<Talk> talk(const QString &token, const QString &agent = u"fake"_s, AppDevice *app = nullptr)
     {
         auto t = std::make_unique<Talk>();
         t->stream = std::make_unique<acp::RemoteStream>(m_transport.get(), QUrl(m_base), token, agent);
         t->stream->setRetryDelays({50});
+        if (app)
+            t->stream->setFeatures({QString(acp::AppFeature)});
         Talk *raw = t.get();
         acp::RemoteStream *stream = t->stream.get();
         t->client = std::make_unique<acp::Client>([stream](const QByteArray &line) { stream->write(line); }, u"test"_s);
         acp::Client *client = t->client.get();
+        if (app) {
+            client->setExtensionHandler([client, app](const QJsonValue &id, const QString &method,
+                                                      const QJsonObject &params) {
+                QString error;
+                const std::optional<acp::AppCall> call = acp::AppCall::fromMessage(
+                        QJsonObject{
+                                {u"jsonrpc"_s, u"2.0"_s}, {u"id"_s, id}, {u"method"_s, method}, {u"params"_s, params}},
+                        &error);
+                if (!call) {
+                    client->respondError(id, acp::InvalidParams, error);
+                    return;
+                }
+                app->calls.append(*call);
+                if (app->raw && app->raw(*call, client, id))
+                    return;
+                const std::optional<acp::AppAnswer> answer = app->answer ? app->answer(*call) : std::nullopt;
+                if (!answer) {
+                    app->held.append(id);
+                    return;
+                }
+                client->respond(id, acp::appAnswerMessage(id, *answer).value(u"result"_s));
+            });
+        }
         connect(stream, &acp::RemoteStream::started, this, [raw](const QString &root) { raw->root = root; });
         connect(stream, &acp::RemoteStream::received, client, &acp::Client::received);
         connect(stream, &acp::RemoteStream::ended, this,
@@ -265,15 +355,50 @@ class TestCliAcpHost : public QObject {
         return input;
     }
 
-    QString ask(Talk &t, const QString &key, const QString &text)
+    /// A turn whose session asks for the app's tools (`app`: its handle and what it may do).
+    static acp::TurnInput appTurn(const QString &text, const acp::AppSession &app)
+    {
+        acp::TurnInput input = turn(text);
+        input.sessionMeta = QJsonObject{{acp::AppMetaKey, app.toJson()}};
+        return input;
+    }
+
+    QString ask(Talk &t, const QString &key, const QString &text, const std::optional<acp::AppSession> &app = {})
     {
         t.answers.remove(key);
         t.failures.remove(key);
-        if (!t.client->prompt(key, turn(text)))
+        if (!t.client->prompt(key, app ? appTurn(text, *app) : turn(text)))
             return u"(not started)"_s;
         if (!QTest::qWaitFor([&] { return t.answers.contains(key) || t.failures.contains(key); }, kTimeoutMs))
             return u"(no answer)"_s;
         return t.answers.contains(key) ? t.answers.value(key) : u"(failed) "_s + t.failures.value(key);
+    }
+
+    /// The environment of the MCP server of the agent's last session/new ({name → value}), its
+    /// arguments.
+    QHash<QString, QString> lastServerEnv() const
+    {
+        QHash<QString, QString> out;
+        const QList<QJsonObject> sessions = agentRead(u"session/new"_s);
+        if (sessions.isEmpty())
+            return out;
+        const QJsonObject server =
+                sessions.last().value(u"params"_s).toObject().value(u"mcpServers"_s).toArray().at(0).toObject();
+        for (const QJsonValue &e : server.value(u"env"_s).toArray())
+            out.insert(e.toObject().value(u"name"_s).toString(), e.toObject().value(u"value"_s).toString());
+        return out;
+    }
+    QStringList lastServerArgs() const
+    {
+        QStringList out;
+        const QList<QJsonObject> sessions = agentRead(u"session/new"_s);
+        if (sessions.isEmpty())
+            return out;
+        const QJsonObject server =
+                sessions.last().value(u"params"_s).toObject().value(u"mcpServers"_s).toArray().at(0).toObject();
+        for (const QJsonValue &a : server.value(u"args"_s).toArray())
+            out << a.toString();
+        return out;
     }
 
     /// The messages the agent read, of `method`.
@@ -1067,6 +1192,257 @@ private Q_SLOTS:
         QCOMPARE(ask(*t, u"AI/Sync.md"_s, u"zapisz"_s), u"Zapisano przez klienta; poza notatnikiem: -32602"_s);
         QTRY_COMPARE_WITH_TIMEOUT(cloud.text(u"Brulion/Od agenta.md"_s).value_or(QString()), u"- od agenta\n"_s,
                                   kTimeoutMs);
+        t.reset();
+        m_host.reset();
+    }
+
+    // The agent's tools reach the app on the device: the real MCP server (brulion-cli mcp), started by
+    // the agent with what the session got, calls the tunnel; the device answers over its stream.
+    void appToolsThroughTheDevice()
+    {
+        QFile::remove(m_agentLog);
+        AcpHostOptions o = options();
+        o.toolsProgram = QString::fromUtf8(BRULION_CLI);
+        o.tunnelKey = m_tmp.filePath(u"tunel-1"_s);
+        startHost(*m_ctx, o);
+        QCOMPARE(m_host->tunnelSocket(), o.tunnelKey);
+        const QString token = pair(u"Pixel 9 Pro Jana"_s);
+        QCOMPARE(http("GET", u"info"_s, {}, bearer(token)).json.value(u"features"_s).toArray(), QJsonArray{u"app"_s});
+
+        AppDevice device;
+        device.answer = [](const acp::AppCall &c) -> std::optional<acp::AppAnswer> {
+            if (c.method == u"state")
+                return acp::AppAnswer::success(
+                        QJsonObject{{u"ready"_s, true}, {u"currentRoute"_s, QJsonObject{{u"view"_s, u"journal"_s}}}});
+            if (c.method == u"screenshot")
+                return acp::AppAnswer::success(QJsonObject{{u"png"_s, QString::fromLatin1(kTinyPng)},
+                                                           {u"width"_s, 1},
+                                                           {u"height"_s, 1},
+                                                           {u"devicePixelRatio"_s, 2}});
+            if (c.method == u"chatPartners")
+                return acp::AppAnswer::success(QJsonObject{
+                        {u"partners"_s, QJsonArray{QJsonObject{{u"id"_s, u"acp:codex"_s}, {u"name"_s, u"Codex"_s}}}}});
+            return acp::AppAnswer::failure(u"bad_params"_s, u"Nie ma tokenu „żółtość”"_s, {{u"param"_s, u"tokens"_s}});
+        };
+        std::unique_ptr<Talk> t = talk(token, u"fake"_s, &device);
+        QTRY_VERIFY_WITH_TIMEOUT(!t->root.isEmpty(), kTimeoutMs);
+        QCOMPARE(t->stream->hostFeatures(), QStringList{u"app"_s});
+
+        const QString shot = m_tmp.filePath(u"zrzut ekranu.png"_s);
+        const acp::AppSession session{u"h_rozmowa-1"_s, true, true};
+        const QString answer =
+                ask(*t, u"AI/Aplikacja.md"_s,
+                    u"aplikacja lista && brulion_app_state {} && brulion_app_screenshot {\"path\": \"%1\"} && "
+                    u"brulion_app_chat_partners {} && brulion_app_theme {\"catalog\": true}"_s.arg(shot),
+                    session);
+        QVERIFY2(answer.startsWith(u"Aplikacja: "_s), qPrintable(answer));
+        const QStringList parts = answer.mid(11).split(u" | "_s);
+        QCOMPARE(parts.size(), 5);
+        // The live tools and the chat's are there (quit is not among the tunnel's methods, but a tool).
+        for (const QString &tool : {u"brulion_app_state"_s, u"brulion_app_eval"_s, u"brulion_app_theme"_s,
+                                    u"brulion_app_revert"_s, u"brulion_app_chat_start"_s})
+            QVERIFY2(parts.at(0).split(u',').contains(tool), qPrintable(parts.at(0)));
+        const QJsonObject state = QJsonDocument::fromJson(parts.at(1).toUtf8()).object();
+        QVERIFY2(state.value(u"ok"_s).toBool(), qPrintable(parts.at(1)));
+        QCOMPARE(state.value(u"result"_s).toObject().value(u"currentRoute"_s).toObject().value(u"view"_s).toString(),
+                 u"journal"_s);
+        // The screenshot: a PNG written here where asked, handed to the agent as a picture.
+        QVERIFY2(parts.at(2).endsWith(u" [obraz]"_s), qPrintable(parts.at(2)));
+        const QJsonObject picture = QJsonDocument::fromJson(parts.at(2).chopped(8).toUtf8()).object();
+        QCOMPARE(picture.value(u"result"_s).toObject().value(u"path"_s).toString(), shot);
+        QCOMPARE(picture.value(u"result"_s).toObject().value(u"device"_s).toString(), u"Pixel 9 Pro Jana"_s);
+        QFile file(shot);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(file.readAll().startsWith("\x89PNG"));
+        // The chat's partners: through the conversation's chat grant.
+        QVERIFY2(parts.at(3).contains(u"acp:codex"_s), qPrintable(parts.at(3)));
+        // A refusal of the device's app reaches the agent with its code and words.
+        const QJsonObject refused = QJsonDocument::fromJson(parts.at(4).toUtf8()).object();
+        QVERIFY(!refused.value(u"ok"_s).toBool());
+        QCOMPARE(refused.value(u"error"_s).toObject().value(u"code"_s).toString(), u"bad_params"_s);
+        QVERIFY(refused.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"żółtość"_s));
+
+        // What the device heard: the session's handle, the scope of each grant, no path of its own.
+        QCOMPARE(device.calls.size(), 4);
+        QCOMPARE(device.calls.at(0).method, u"state"_s);
+        QCOMPARE(device.calls.at(0).handle, u"h_rozmowa-1"_s);
+        QCOMPARE(device.calls.at(0).scope, u"control"_s);
+        QCOMPARE(device.calls.at(1).method, u"screenshot"_s);
+        QVERIFY(!device.calls.at(1).params.contains(u"path"_s));
+        QCOMPARE(device.calls.at(2).method, u"chatPartners"_s);
+        QCOMPARE(device.calls.at(2).scope, u"chat"_s);
+        QCOMPARE(device.calls.at(3).method, u"theme"_s);
+        // What the agent got: the tools in their tunnel mode, the grants only in their environment,
+        // nothing of the request's `_meta`.
+        const QJsonObject created = agentRead(u"session/new"_s).last();
+        QVERIFY(!created.value(u"params"_s).toObject().value(u"_meta"_s).toObject().contains(acp::AppMetaKey));
+        QVERIFY(lastServerArgs().contains(u"--app-control"_s));
+        const QHash<QString, QString> env = lastServerEnv();
+        QCOMPARE(env.value(u"BRULION_APP_SOCKET"_s), o.tunnelKey);
+        QCOMPARE(env.value(u"BRULION_APP_DEVICE"_s), u"Pixel 9 Pro Jana"_s);
+        QCOMPARE(env.value(u"BRULION_APP_CLIENT"_s), u"Udawany agent"_s);
+        QCOMPARE(env.value(u"BRULION_APP_TOKEN"_s).size(), 64);
+        QCOMPARE(env.value(u"BRULION_APP_CHAT_TOKEN"_s).size(), 64);
+        for (const QString &arg : lastServerArgs())
+            QVERIFY(!arg.contains(env.value(u"BRULION_APP_TOKEN"_s)));
+        t.reset();
+        m_host.reset();
+    }
+
+    void appToolsRefusals()
+    {
+        QFile::remove(m_agentLog);
+        AcpHostOptions o = options();
+        o.tunnelKey = m_tmp.filePath(u"tunel-2"_s);
+        o.appCallTimeoutMs = 500 * BRULION_TEST_SLOWDOWN;
+        o.maxAppCalls = 2;
+        startHost(*m_ctx, o);
+        const QString token = pair(u"Telefon"_s);
+        AppDevice device;
+        device.answer = [](const acp::AppCall &c) -> std::optional<acp::AppAnswer> {
+            if (c.method == u"find")
+                return std::nullopt; // (held: the app does not answer)
+            if (c.method == u"screenshot")
+                return acp::AppAnswer::success(QJsonObject{{u"png"_s, u"bmllIG9icmF6"_s}});
+            return acp::AppAnswer::success(QJsonObject{{u"method"_s, c.method}});
+        };
+        device.raw = [](const acp::AppCall &c, acp::Client *client, const QJsonValue &id) {
+            if (c.method != u"extensions")
+                return false;
+            client->respond(id, QJsonObject{{u"coś"_s, 1}}); // (an answer that is none)
+            return true;
+        };
+        std::unique_ptr<Talk> t = talk(token, u"fake"_s, &device);
+        // A conversation with the chat's tools alone.
+        QCOMPARE(ask(*t, u"AI/Czat.md"_s, u"Cześć"_s, acp::AppSession{u"h_czat"_s, false, true}),
+                 u"Odpowiedź na: Cześć"_s);
+        QVERIFY(lastServerArgs().contains(u"--app-chat"_s));
+        QVERIFY(!lastServerArgs().contains(u"--app-control"_s));
+        const QString chatToken = lastServerEnv().value(u"BRULION_APP_CHAT_TOKEN"_s);
+        QVERIFY(!chatToken.isEmpty());
+        QVERIFY(!lastServerEnv().contains(u"BRULION_APP_TOKEN"_s));
+
+        TunnelClient chat;
+        QVERIFY(chat.connect(o.tunnelKey));
+        QJsonObject a = chat.answer(chat.send(u"hello"_s, {{u"token"_s, chatToken}}), kTimeoutMs);
+        QVERIFY2(a.value(u"ok"_s).toBool(), qPrintable(QString::fromUtf8(QJsonDocument(a).toJson())));
+        const QJsonArray methods = a.value(u"result"_s).toObject().value(u"methods"_s).toArray();
+        QVERIFY(methods.contains(u"chatStart"_s));
+        QVERIFY(!methods.contains(u"state"_s));
+        QCOMPARE(a.value(u"result"_s).toObject().value(u"device"_s).toString(), u"Telefon"_s);
+        // The chat's methods only.
+        QCOMPARE(TunnelClient::errorCode(chat.answer(chat.send(u"state"_s), kTimeoutMs)), u"unauthorized"_s);
+        a = chat.answer(chat.send(u"chatPartners"_s), kTimeoutMs);
+        QVERIFY(a.value(u"ok"_s).toBool());
+        QCOMPARE(device.calls.last().scope, u"chat"_s);
+        QCOMPARE(device.calls.last().handle, u"h_czat"_s);
+
+        // A token that is no grant, and none at all.
+        TunnelClient stranger;
+        QVERIFY(stranger.connect(o.tunnelKey));
+        QCOMPARE(TunnelClient::errorCode(stranger.answer(stranger.send(u"state"_s), kTimeoutMs)), u"unauthorized"_s);
+        QCOMPARE(TunnelClient::errorCode(
+                         stranger.answer(stranger.send(u"hello"_s, {{u"token"_s, QString(64, u'a')}}), kTimeoutMs)),
+                 u"unauthorized"_s);
+
+        // A conversation with the live tools.
+        QCOMPARE(ask(*t, u"AI/Na żywo.md"_s, u"Zmień motyw"_s, acp::AppSession{u"h_zywo"_s, true, false}),
+                 u"Odpowiedź na: Zmień motyw"_s);
+        const QString liveToken = lastServerEnv().value(u"BRULION_APP_TOKEN"_s);
+        QVERIFY(!liveToken.isEmpty());
+        TunnelClient live;
+        QVERIFY(live.connect(o.tunnelKey));
+        a = live.answer(live.send(u"hello"_s, {{u"token"_s, liveToken}}), kTimeoutMs);
+        QVERIFY(a.value(u"result"_s).toObject().value(u"methods"_s).toArray().contains(u"theme"_s));
+        QVERIFY(!a.value(u"result"_s).toObject().value(u"methods"_s).toArray().contains(u"quit"_s));
+        a = live.answer(live.send(u"theme"_s, {{u"tokens"_s, QJsonObject{{u"accent"_s, u"#33aa77"_s}}}}), kTimeoutMs);
+        QVERIFY(a.value(u"ok"_s).toBool());
+        QCOMPARE(device.calls.last().scope, u"control"_s);
+        QCOMPARE(device.calls.last().params.value(u"tokens"_s).toObject().value(u"accent"_s).toString(), u"#33aa77"_s);
+        // Never quit; bad parameters refused before the device hears of them.
+        QCOMPARE(TunnelClient::errorCode(live.answer(live.send(u"quit"_s), kTimeoutMs)), u"refused"_s);
+        const qsizetype heard = device.calls.size();
+        QCOMPARE(TunnelClient::errorCode(live.answer(live.send(u"theme"_s, {{u"żółw"_s, 1}}), kTimeoutMs)),
+                 u"bad_params"_s);
+        QCOMPARE(TunnelClient::errorCode(
+                         live.answer(live.send(u"screenshot"_s, {{u"path"_s, u"względna/ścieżka.png"_s}}), kTimeoutMs)),
+                 u"bad_params"_s);
+        QCOMPARE(device.calls.size(), heard);
+        // A picture that is none; an answer that is none.
+        a = live.answer(live.send(u"screenshot"_s), kTimeoutMs);
+        QCOMPARE(TunnelClient::errorCode(a), u"failed"_s);
+        a = live.answer(live.send(u"extensions"_s), kTimeoutMs);
+        QCOMPARE(TunnelClient::errorCode(a), u"failed"_s);
+
+        // Calls the device does not answer: two wait at most, then the third is busy; they fail in time.
+        QElapsedTimer waited;
+        waited.start();
+        const int first = live.send(u"find"_s, {{u"text"_s, u"Zakupy"_s}});
+        const int second = live.send(u"find"_s, {{u"text"_s, u"Dom"_s}});
+        QTRY_COMPARE_WITH_TIMEOUT(device.held.size(), 2, kTimeoutMs);
+        QCOMPARE(TunnelClient::errorCode(live.answer(live.send(u"state"_s), kTimeoutMs)), u"busy"_s);
+        a = live.answer(first, kTimeoutMs);
+        QCOMPARE(TunnelClient::errorCode(a), u"not_ready"_s);
+        QCOMPARE(a.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"reason"_s).toString(),
+                 u"no_answer"_s);
+        QVERIFY2(a.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"Telefon"_s),
+                 qPrintable(QString::fromUtf8(QJsonDocument(a).toJson())));
+        // (A coarse timer may fire up to 5 % early: 600 ms of 12.5 s under the sanitizers' slowdown.)
+        QVERIFY2(waited.elapsed() >= o.appCallTimeoutMs * 9 / 10, qPrintable(QString::number(waited.elapsed())));
+        QCOMPARE(TunnelClient::errorCode(live.answer(second, kTimeoutMs)), u"not_ready"_s);
+        // Their answers come late: dropped (the agent never hears them), and the next call is fine.
+        const qsizetype agentLines = fileText(m_agentLog).size();
+        for (const QJsonValue &id : std::as_const(device.held))
+            t->client->respond(id, acp::AppAnswer::success(QJsonObject()).toJson());
+        a = live.answer(live.send(u"state"_s), kTimeoutMs);
+        QVERIFY(a.value(u"ok"_s).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(
+                std::ranges::any_of(m_log, [](const QString &l) { return l.contains(u"late answer"_s); }), kTimeoutMs);
+        QVERIFY(!fileText(m_agentLog).mid(agentLines).contains(u"_brulion/app"_s));
+
+        // The stream ends (the app closed the agent): the grants with it.
+        device.held.clear();
+        t->stream->stop();
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->streamCount(), 0, kTimeoutMs);
+        TunnelClient after;
+        QVERIFY(after.connect(o.tunnelKey));
+        QCOMPARE(TunnelClient::errorCode(after.answer(after.send(u"hello"_s, {{u"token"_s, liveToken}}), kTimeoutMs)),
+                 u"unauthorized"_s);
+        t.reset();
+        m_host.reset();
+    }
+
+    void appToolsOldDeviceAndOff()
+    {
+        // An older device: no feature in its stream's request — the session gets the plain tools,
+        // even when its request asks (and the agent never sees what it asked).
+        QFile::remove(m_agentLog);
+        AcpHostOptions o = options();
+        o.tunnelKey = m_tmp.filePath(u"tunel-3"_s);
+        startHost(*m_ctx, o);
+        std::unique_ptr<Talk> t = talk(pair());
+        QTRY_VERIFY_WITH_TIMEOUT(!t->root.isEmpty(), kTimeoutMs);
+        QVERIFY(t->stream->hostFeatures().isEmpty());
+        QCOMPARE(ask(*t, u"AI/Stary.md"_s, u"Cześć"_s, acp::AppSession{u"h_stary"_s, true, true}),
+                 u"Odpowiedź na: Cześć"_s);
+        QCOMPARE(lastServerArgs(), (QStringList{u"mcp"_s, u"--vault"_s, QDir::cleanPath(m_vault)}));
+        QVERIFY(lastServerEnv().isEmpty());
+        QVERIFY(!agentRead(u"session/new"_s).last().value(u"params"_s).toObject().contains(u"_meta"_s));
+        t.reset();
+
+        // A server without the tunnel (--no-app-tools): no feature in info, none for a stream.
+        o.appTools = false;
+        startHost(*m_ctx, o);
+        QVERIFY(m_host->tunnelSocket().isEmpty());
+        const QString token = pair();
+        QVERIFY(http("GET", u"info"_s, {}, bearer(token)).json.value(u"features"_s).toArray().isEmpty());
+        AppDevice device;
+        t = talk(token, u"fake"_s, &device);
+        QTRY_VERIFY_WITH_TIMEOUT(!t->root.isEmpty(), kTimeoutMs);
+        QVERIFY(t->stream->hostFeatures().isEmpty());
+        QCOMPARE(ask(*t, u"AI/Bez.md"_s, u"Cześć"_s, acp::AppSession{u"h_bez"_s, true, true}),
+                 u"Odpowiedź na: Cześć"_s);
+        QVERIFY(!lastServerArgs().contains(u"--app-control"_s));
         t.reset();
         m_host.reset();
     }

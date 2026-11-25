@@ -467,7 +467,8 @@ public:
     Q_INVOKABLE void setAcpAgentName(const QString &id, const QString &name);
     Q_INVOKABLE void setAcpAgentCommand(const QString &id, const QString &command);
     Q_INVOKABLE void setAcpAgentTools(const QString &id, bool on);
-    /// "Let it change the app while it runs" (AgentConfig::appAccess; agents of this device only).
+    /// "Let it change the app while it runs" (AgentConfig::appAccess; an agent on another computer
+    /// reaches this app through that computer's tools).
     Q_INVOKABLE void setAcpAgentApp(const QString &id, bool on);
     Q_INVOKABLE void removeAcpAgent(const QString &id);
     /// What the chat learnt of agent `id`: the options chosen for its sessions and the options its

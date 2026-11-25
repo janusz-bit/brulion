@@ -23,20 +23,34 @@ void writeLine(QLocalSocket *socket, const QByteArray &line)
 
 ControlReply::ControlReply(QLocalSocket *socket, const QJsonValue &id) : m_socket(socket), m_id(id) { }
 
+ControlReply::ControlReply(const QJsonValue &id, Deliver deliver, std::function<bool()> connected)
+    : m_id(id), m_deliver(std::move(deliver)), m_connected(std::move(connected))
+{ }
+
 void ControlReply::ok(const QJsonValue &result) const
 {
-    if (!std::exchange(*m_sent, true) && connected())
+    if (std::exchange(*m_sent, true) || !connected())
+        return;
+    if (m_deliver)
+        m_deliver(Answer{true, result, {}, {}, {}});
+    else
         writeLine(m_socket, encodeResult(m_id, result));
 }
 
 void ControlReply::fail(const QString &code, const QString &message, const QJsonObject &details) const
 {
-    if (!std::exchange(*m_sent, true) && connected())
+    if (std::exchange(*m_sent, true) || !connected())
+        return;
+    if (m_deliver)
+        m_deliver(Answer{false, {}, code, message, details});
+    else
         writeLine(m_socket, encodeError(m_id, code, message, details));
 }
 
 bool ControlReply::connected() const
 {
+    if (m_deliver)
+        return !m_connected || m_connected();
     return m_socket && m_socket->state() == QLocalSocket::ConnectedState;
 }
 

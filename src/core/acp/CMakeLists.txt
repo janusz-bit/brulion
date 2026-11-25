@@ -6,9 +6,12 @@
 # another computer, relayed by `brulion-cli acp serve` there (pairing, the host's info, a stream of
 # lines over HTTPS through sync::HttpTransport). hostoffer.h: a computer's agents offered to the
 # notebook's other devices in its synced .brulion/config.json (an address of a tailnet and names).
+# apptunnel.h: the app's live tools for an agent on another computer — its calls tunnelled over the
+# device's stream to the app, which answers them in process.
 brulion_add_core_module(acp
     SOURCES
         acp.h acp.cpp
         remote.h remote.cpp
         hostoffer.h hostoffer.cpp
+        apptunnel.h apptunnel.cpp
     DEPS sync tailscale)

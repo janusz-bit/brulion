@@ -17,6 +17,8 @@
 
 #include "extensions/appapi.h"
 
+#include "acp/apptunnel.h"
+
 #include "dates/local.h"
 #include "dates/natural.h"
 #include "index/vaultindex.h"
@@ -26,6 +28,7 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QBuffer>
 #include <QColor>
 #include <QCoreApplication>
 #include <QDir>
@@ -41,6 +44,7 @@
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -279,7 +283,8 @@ void RemoteControl::apply()
     const bool setting = m_app->settings()->value(QString::fromLatin1(SettingKey), false).toBool();
     const bool wanted = m_options.forced || setting;
     // An agent the app started with a grant reaches the socket also while the setting is off.
-    const bool serve = wanted || m_server.grantCount() > 0;
+    // (No socket at all — Android —: only the in-process grants, dispatch().)
+    const bool serve = !m_options.key.isEmpty() && (wanted || m_server.grantCount() > 0);
     // (Turned off with grants: the connections without one end now.)
     m_server.setOpen(wanted);
     QString error;
@@ -293,14 +298,16 @@ void RemoteControl::apply()
         }
     } else if (!serve && m_server.isListening()) {
         m_server.close(); // its connections too: waits and gestures answer nobody
-        m_waits.clear();
-        m_waitTimer.stop();
-        m_eventWaits.clear();
-        m_events.clear();
-        m_lastRoute = QJsonValue();
+        if (m_localGrants.isEmpty()) {
+            m_waits.clear();
+            m_waitTimer.stop();
+            m_eventWaits.clear();
+            m_events.clear();
+            m_lastRoute = QJsonValue();
+        }
         qCInfo(lcApp) << "Remote control off";
     }
-    m_app->setRemoteControl({{u"available"_s, true},
+    m_app->setRemoteControl({{u"available"_s, !m_options.key.isEmpty()},
                              {u"setting"_s, setting},
                              {u"active"_s, isActive()},
                              {u"forced"_s, m_options.forced},
@@ -335,8 +342,70 @@ QString RemoteControl::grant(const QString &client)
 
 void RemoteControl::revokeGrant(const QString &token)
 {
+    if (m_localGrants.remove(token)) {
+        qCDebug(lcApp) << "Remote control: an in-process grant ended";
+        if (m_localGrants.isEmpty() && !m_server.isListening()) {
+            // (Nobody to tell any more: what was kept for them goes.)
+            m_eventWaits.clear();
+            m_events.clear();
+            m_lastRoute = QJsonValue();
+        }
+        return;
+    }
     if (m_server.revokeGrant(token))
         apply();
+}
+
+QString RemoteControl::localGrant(const QString &client, bool chatOnly)
+{
+    quint32 words[8];
+    QRandomGenerator::system()->fillRange(words);
+    QString token;
+    for (const quint32 w : words)
+        token += u"%1"_s.arg(w, 8, 16, u'0');
+    m_localGrants.insert(token, LocalGrant{ipc::cleanClientName(client), chatOnly});
+    qCInfo(lcApp).noquote() << (chatOnly ? u"Remote control: a chat grant in process for %1"_s
+                                         : u"Remote control: a grant in process for %1"_s)
+                                       .arg(ipc::cleanClientName(client));
+    return token;
+}
+
+void RemoteControl::dispatch(const QString &token, const QString &method, const QJsonObject &params,
+                             const ipc::ControlReply &reply)
+{
+    const auto grant = m_localGrants.constFind(token);
+    if (grant == m_localGrants.cend())
+        return reply.fail(code(E::Unauthorized), u"The grant ended: its agent stopped"_s);
+    ipc::ControlRequest request;
+    request.id = reply.id();
+    request.method = method;
+    request.params = params;
+    request.client = grant->client;
+    request.granted = true;
+    request.grant = token;
+    request.chatOnly = grant->chatOnly;
+    // The checks a socket's connection gets: the method, its parameters, the grant's scope.
+    if (const std::optional<ipc::ControlFailure> problem = ipc::checkRequest(request))
+        return reply.fail(problem->code, problem->message, problem->details);
+    if (grant->chatOnly && method != u"hello") {
+        const ipc::MethodSpec *spec = ipc::findControlMethod(method);
+        if (!spec || !spec->chat)
+            return reply.fail(
+                    code(E::Unauthorized),
+                    u"This grant covers the AI chat's methods only (chats, chatStart, chatWait …), not %1"_s.arg(
+                            method));
+    }
+    // An agent elsewhere never ends the app, nor names a file of this device.
+    if (method == u"quit")
+        return reply.fail(code(E::Refused), u"An agent on another computer does not quit the app"_s);
+    if (method == u"screenshot") {
+        if (params.contains(u"path"_s))
+            return reply.fail(code(E::BadParams), u"The picture comes back in the answer: no path on this device"_s,
+                              {{u"param"_s, u"path"_s}});
+        qCDebug(lcApp).noquote() << u"Remote control (%1, in process): screenshot"_s.arg(grant->client);
+        return screenshotData(reply);
+    }
+    handle(request, reply);
 }
 
 QQuickWindow *RemoteControl::window() const
@@ -835,6 +904,34 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
                           {u"width"_s, image.width()},
                           {u"height"_s, image.height()},
                           {u"devicePixelRatio"_s, image.devicePixelRatio()}});
+    });
+}
+
+void RemoteControl::screenshotData(const ipc::ControlReply &reply)
+{
+    enqueueInput(reply, [this](const Input &in) {
+        QQuickWindow *w = window();
+        QImage image = w ? w->grabWindow() : QImage();
+        if (image.isNull())
+            return in.fail(code(E::Failed), u"The window could not be captured"_s);
+        const qreal ratio = image.devicePixelRatio();
+        QByteArray png;
+        // (A picture too big for the answer: smaller, as the agent sees it anyway.)
+        for (int tries = 0; tries < 4; ++tries) {
+            png.clear();
+            QBuffer buffer(&png);
+            if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
+                return in.fail(code(E::Failed), u"The window could not be captured"_s);
+            if (png.size() <= acp::MaxAppPngBytes)
+                break;
+            image = image.scaled(image.size() / 2, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        if (png.size() > acp::MaxAppPngBytes)
+            return in.fail(code(E::Failed), u"The window's picture is too large to send"_s);
+        in.ok(QJsonObject{{u"png"_s, QString::fromLatin1(png.toBase64())},
+                          {u"width"_s, image.width()},
+                          {u"height"_s, image.height()},
+                          {u"devicePixelRatio"_s, ratio}});
     });
 }
 
@@ -1916,7 +2013,7 @@ void RemoteControl::watchEvents()
 
 void RemoteControl::noteExtensionsChanged()
 {
-    if (m_extensionsEventDue || !m_server.isListening())
+    if (m_extensionsEventDue || (!m_server.isListening() && m_localGrants.isEmpty()))
         return;
     m_extensionsEventDue = true;
     QTimer::singleShot(0, this, [this] {
@@ -1928,7 +2025,7 @@ void RemoteControl::noteExtensionsChanged()
 
 void RemoteControl::noteEvent(const QString &type, QJsonObject data)
 {
-    if (!m_server.isListening())
+    if (!m_server.isListening() && m_localGrants.isEmpty())
         return; // (nobody to tell: nothing kept)
     const qint64 id = m_nextEvent++;
     data.insert(u"id"_s, id);

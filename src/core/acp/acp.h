@@ -45,7 +45,8 @@
 //   the same conversation waits for the agent to end the cancelled one. Each conversation has one
 //   turn at a time; several conversations answer at once.
 //
-// Requests of the agent the client does not offer are answered "method not found". A line longer
+// Requests of the agent the client does not offer are answered "method not found" — extension
+// methods ("_…") go to setExtensionHandler() when it is set. A line longer
 // than MaxLineBytes is dropped. Everything here is pure protocol over a `send` function and
 // received() bytes (tests play the agent); the app's side starts the process, serves files and
 // terminals and words the failures for the user.
@@ -142,6 +143,10 @@ struct TurnInput
     /// relaying the protocol (`brulion-cli acp serve`) names the turn it kept by it
     /// (acp/remote.h RemoteTurn::id).
     QString turnId;
+    /// The `_meta` of the session's request when the turn makes one (session/new, /load, /resume;
+    /// {} none): what a computer relaying the protocol takes out for itself — the app's tools the
+    /// session asks for (acp/apptunnel.h AppSession).
+    QJsonObject sessionMeta{};
 };
 
 /// A way to sign in that the agent offers (initialize's authMethods).
@@ -400,6 +405,12 @@ public:
     using Handler = std::function<void(const QString &key, const QJsonValue &id, const QString &method,
                                        const QJsonObject &params)>;
     void setHandler(Handler handler) { m_handler = std::move(handler); }
+    /// The requests of extension methods (a name starting with "_": `_brulion/app`, a computer
+    /// relaying the protocol asking the app, acp/apptunnel.h): (the request's id, its method, its
+    /// params), answered with respond() / respondError(). Unset: "method not found".
+    using ExtensionHandler =
+            std::function<void(const QJsonValue &id, const QString &method, const QJsonObject &params)>;
+    void setExtensionHandler(ExtensionHandler handler) { m_extensionHandler = std::move(handler); }
     void respond(const QJsonValue &id, const QJsonValue &result) { m_connection.respond(id, result); }
     void respondError(const QJsonValue &id, int code, const QString &message)
     {
@@ -526,6 +537,7 @@ private:
     QString m_version;
     Capabilities m_capabilities;
     Handler m_handler;
+    ExtensionHandler m_extensionHandler;
     enum class Phase { None, Starting, Ready, Failed };
     Phase m_phase = Phase::None;
     std::optional<Failure> m_startFailure;

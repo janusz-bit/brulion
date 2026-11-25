@@ -31,6 +31,16 @@
 //
 // * Pairing without a code (setPairTrust(); acptrust.h): in a tailnet (--tailscale) a device of the
 //   computer's own user pairs with nothing typed, tailscaled vouching for who it is.
+// * The app's live tools for the agent (acp/apptunnel.h; unless --no-app-tools or --no-tools): a
+//   device whose stream asks for them (POST streams {features: [app]}) names, in a session's
+//   request, what that session may do with the app on the device — its live tools, its chat —
+//   and the session's Brulion MCP server gets `--app-control` (or `--app-chat`) with grants of
+//   this server's tunnel: a control socket of its own (ipc::ControlServer, owner-only, in the
+//   runtime folder; BRULION_APP_SOCKET and the grants' tokens only in the server's environment).
+//   Each call of those tools becomes a request on the device's stream (`_brulion/app`), and the
+//   device's answer — the app's, answered in process — goes back to the tool; a screenshot's
+//   picture is written here, where the tool reads it. A call the device does not answer in time
+//   fails with why; a few calls of a stream wait at once at most; a device gone fails them at once.
 //
 // Plain HTTP on 127.0.0.1 behind a reverse proxy that adds HTTPS (in the user's own network, a
 // tailnet — the agents can run commands here), plain HTTP on this computer's tailnet address
@@ -40,6 +50,8 @@
 #pragma once
 
 #include "http.h"
+
+#include "acp/apptunnel.h"
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -65,6 +77,11 @@ class QTimer;
 namespace brulion::notebook {
 class Notebook;
 }
+namespace brulion::ipc {
+class ControlServer;
+class ControlReply;
+struct ControlRequest;
+} // namespace brulion::ipc
 
 namespace brulion::cli {
 
@@ -211,6 +228,16 @@ struct AcpHostOptions {
     QList<HostAgent> agents;
     bool tools = true;    ///< sessions get Brulion's MCP server
     QString toolsProgram; ///< brulion-cli (default: this program)
+    /// A device that answers the app's calls gets them from its sessions' tools (the tunnel,
+    /// acp/apptunnel.h; --no-app-tools: never).
+    bool appTools = true;
+    /// The tunnel's socket ("" a name of its own in the user's runtime folder).
+    QString tunnelKey;
+    /// How long a call of the app waits for the device's answer (more for waitFor, events,
+    /// chatWait by their own wait, eval and load three times as long and 10 s), and the calls of
+    /// one stream that wait at once at most.
+    int appCallTimeoutMs = 15000;
+    int maxAppCalls = 4;
     QString tlsCertificate;
     QString tlsKey;
     QStringList allowedHosts;
@@ -260,6 +287,9 @@ public:
     int streamCount() const { return int(m_streams.size()); }
     /// The turn kept of `device`'s session `session` (nullptr none).
     const HostTurn *turn(const QString &device, const QString &session) const;
+    /// The tunnel's socket ("" when the app's calls are not tunnelled: --no-app-tools, no tools,
+    /// no private runtime folder).
+    QString tunnelSocket() const;
     std::function<void(const QString &line)> log;
 
     /// Tests: the time now (default the system's).
@@ -321,6 +351,23 @@ private:
     bool originAllowed(const QByteArray &origin) const;
     http::Headers corsHeaders(const QByteArray &origin) const;
 
+    // The app's calls of the agent's tools (acp/apptunnel.h).
+    /// The MCP servers of a session of `s` that asked for `asked` (the tunnel's grants made).
+    QJsonArray sessionServers(Stream *s, const std::optional<acp::AppSession> &asked);
+    /// A request on the tunnel's socket: a call of the app's tools, handed to the device.
+    void tunnelRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply);
+    /// The device's answer to a call of `s` (true: it was one, now answered).
+    bool appAnswered(Stream *s, const QJsonObject &message);
+    /// The call `key` of the stream `stream` waited too long.
+    void appCallTimedOut(const QString &stream, const QString &key);
+    /// Every call of `s` waiting fails (`code`, `why`).
+    void failAppCalls(Stream *s, const QString &code, const QString &why);
+    void revokeAppGrants(Stream *s);
+    /// A message of this server for the device, among the agent's.
+    void toDevice(Stream *s, const QJsonObject &message);
+    /// The name `device` (dev_…) was paired by ("" none).
+    QString pairedName(const QString &device) const;
+
     void startAgent(Stream *s);
     void fromAgent(Stream *s, const QByteArray &line);
     void toAgent(Stream *s, const QJsonObject &message);
@@ -357,6 +404,18 @@ private:
     };
     QList<TurnWaiter> m_turnWaiters;
     QStringList m_origins; ///< allowed Origin values (--allowed-origin)
+    std::unique_ptr<ipc::ControlServer> m_tunnel; ///< the app's calls of the agents' tools
+    QString m_tunnelKey;
+    QString m_tunnelPrefix; ///< of the calls' ids (random: an agent's ids never take one)
+    qint64 m_nextAppCall = 1;
+    /// The tunnel's grants: token → the stream, the device's handle of the session, the scope.
+    struct TunnelGrant {
+        QString stream;
+        QString handle;
+        QString scope;
+        QString client;
+    };
+    QHash<QString, TunnelGrant> m_tunnelGrants;
     QTimer *m_maintenance = nullptr;
     QDateTime m_certModified;
     QDateTime m_keyModified;

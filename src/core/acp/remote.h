@@ -10,9 +10,11 @@
 // The host's API, JSON over HTTP (RemoteApiPrefix):
 //
 //   POST   pair {code, device}                → {token, device: {id, name}}   (no token: a pairing code)
-//   GET    info                               → {protocol, version, host, root, tools,
+//   GET    info                               → {protocol, version, host, root, tools, features,
 //                                                agents: [{id, name, command}], sync}
-//   POST   streams {agent}                    → {stream, root} — the agent's process started for this device
+//   POST   streams {agent, features}          → {stream, root, features} — the agent's process started for
+//          this device; `features` what the device does besides the protocol ("app": it answers the app's
+//          calls of the agent's tools, acp/apptunnel.h) and what of it the host takes (an older one: none)
 //   POST   streams/<id>/send {from, messages} → {received} — messages to the agent; `from` is the number
 //          of the first one among all this stream sent, so a batch sent again (its answer lost) is not
 //          delivered twice
@@ -58,8 +60,10 @@ inline constexpr int RemoteProtocol = 1;
 inline constexpr QLatin1StringView RemoteApiPrefix{"acp/v1/"};
 /// The longest a receive waits on the host for something to say (seconds).
 inline constexpr int RemoteWaitSeconds = 25;
-/// The messages sent in one request at most.
+/// The messages sent in one request at most, and their bytes (more than one message only within
+/// it: the host takes 16 MiB at most).
 inline constexpr int RemoteMaxBatch = 64;
+inline constexpr qsizetype RemoteMaxBatchBytes = 4 * 1024 * 1024;
 
 /// The address of `endpoint` ("info", "streams/s_1/send") under the host's address `base` (its path
 /// kept: "https://example.com/brulion" → https://example.com/brulion/acp/v1/info).
@@ -87,6 +91,9 @@ struct RemoteInfo {
     QString host;       ///< the computer's name
     QString root;       ///< the host's notebook folder (absolute, the agent's cwd)
     bool tools = false; ///< sessions get Brulion's MCP server there
+    /// What the host does besides relaying ("app": the agent's tools reach the device's app,
+    /// acp/apptunnel.h); an older host names none.
+    QStringList features;
     QList<RemoteAgent> agents;
     /// The host's sync with Nextcloud: {enabled, running, last (ISO time), ok, error}.
     QJsonObject sync;
@@ -193,6 +200,12 @@ public:
                  QObject *parent = nullptr);
     ~RemoteStream() override;
 
+    /// What the device does besides the protocol, named in the stream's request (before start():
+    /// acp::AppFeature when the app answers the calls of the agent's tools, acp/apptunnel.h).
+    void setFeatures(const QStringList &features) { m_features = features; }
+    /// Of those, what the host takes for this stream (its answer; none before started(), and none
+    /// from an older host).
+    QStringList hostFeatures() const { return m_hostFeatures; }
     /// Starts the agent on the host (POST streams), then receives from it.
     void start();
     /// A line of the protocol to the agent (a JSON-RPC message, its "\n" or not): sent in order,
@@ -242,6 +255,8 @@ private:
     QString m_agent;
     QString m_id;
     QString m_root;
+    QStringList m_features;
+    QStringList m_hostFeatures;
     bool m_ended = false;
     bool m_opening = false;
     // Sending: every line written, those the host has (m_sent) dropped from the front.

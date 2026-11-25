@@ -631,7 +631,12 @@ line on standard input and output (the stdio transport), tools only. Both eras o
   "Conversations" below; `--app-control` has them too): what every agent the app starts with
   Brulion's tools gets, with its conversation's chat grant — `brulion_app_chat_request_secret` among
   them (a secret in a private card of the app, never asked in the chat; the instructions say so).
-  `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
+  `brulion_app_screenshot` returns the picture too (an `image` content item, PNG). With
+  `BRULION_APP_SOCKET` in its environment (the tools of an agent `acp serve` started for a device:
+  "The app's live tools" below) the app tools reach the app on that device through that server's
+  tunnel instead of an app of this desktop (the instructions name the device, `BRULION_APP_DEVICE`;
+  `app today` and `app open` go there too, `app capture` needs its text, a notebook named here is
+  not checked against the device's copy).
   Meta commands (help, schema, completion, `mcp` and its `serve`, `password`, `clients`, `revoke`,
   init) and the `task done`… aliases are no tools.
 * The notebook stays open, watched and indexed: calls after the first are fast. The first one
@@ -912,8 +917,8 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   (served here), whatever the device offered; `session/new`, `session/load` and `session/resume`
   get this notebook's folder as `cwd` and, unless `--no-tools`, Brulion's MCP server
   (`brulion-cli mcp --vault <notebook>`, the program itself or one next to it) instead of any
-  server the device names (so never the app's live tools: "Live changes" above — the phone's app
-  makes no grant for an agent there). The agent's `fs/read_text_file` and `fs/write_text_file` are answered
+  server the device names — for a device that answers them, in a mode whose app tools reach the
+  app on that device ("The app's live tools" below). The agent's `fs/read_text_file` and `fs/write_text_file` are answered
   here: only files of the notebook (not `.brulion/`, `.trash/` or a link out of it), written as the
   command line writes — the replaced text in the version history ("Replaced from the command line
   (agent)") — and never an encrypted page. Its `terminal/*` run here: in the notebook's folder by
@@ -1030,8 +1035,8 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | Request | Body / query | Answer |
 |---|---|---|
 | `POST pair` | `{code, device}` (no token; without `code`: by the device's tailnet identity) | `{token, device: {id, name}}`; 403 `no_code`, `bad_code`, `code_needed`, `too_many_devices`; 429 `too_many_tries` |
-| `GET info` | | `{protocol: 1, version, host, root, tools, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` |
-| `POST streams` | `{agent}` | 201 `{stream, root}`; 404 `unknown_agent`, 429 `too_many_streams` |
+| `GET info` | | `{protocol: 1, version, host, root, tools, features, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` — `features: ["app"]` when the app's live tools are tunnelled (an older server names none) |
+| `POST streams` | `{agent, features}` | 201 `{stream, root, features}`; 404 `unknown_agent`, 429 `too_many_streams` — `features` what the device does besides the protocol (`["app"]`: it answers the app's calls of the agent's tools) and, in the answer, what of it this stream gets |
 | `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
 | `GET streams/<id>/receive` | `?after=N&wait=S` (S ≤ 30) | `{messages [{seq, message}], closed, why}` — the messages after `N` (those up to `N` are dropped here), at once or within S seconds; at most 4 MiB at a time |
 | `DELETE streams/<id>` | | 204: the agent's process ends |
@@ -1047,6 +1052,52 @@ and was given up, is 404 `no_stream`.
 brulion-cli --vault ~/Notatki acp pair
 brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agent.example.com
 ```
+
+### The app's live tools
+
+An agent here may also drive and change **the app on the device** while it answers — theme and
+script the app on the phone from the home server, as an agent of a desktop does with its own app
+("Live changes" below) —, and give its other AI partners a task (its `brulion_app_chat_*` tools,
+"Conversations"): the device lets it (its "Let it change the app while it runs", off by default,
+and the conversation's chat), this server carries the calls (`src/core/acp/apptunnel.h`;
+`--no-app-tools` turns it off, as does `--no-tools`):
+
+* **Who answers them**: a device whose stream names the feature (`POST streams {features:
+  ["app"]}`: the app on Android and the desktop, which answer such calls in process; not the
+  browser) — this server answers `features: ["app"]` when it tunnels them (`GET info` says so too;
+  an older server names none, and an older device never asks).
+* **A session's tools**: the device names in a session's request (`session/new`, `/load`,
+  `/resume`: `params._meta["brulion/app"] = {handle, control, chat}`) what that session may do — the
+  live tools (`control`: never a sub-conversation's agent) and the chat's (`chat`) — and a handle of
+  its grants there (random, of that stream alone; no secret). This server takes it out (the agent
+  never sees it) and gives the session Brulion's MCP server with `--app-control` (or `--app-chat`)
+  and grants of its own tunnel in the server's environment only: `BRULION_APP_SOCKET` (a control
+  socket of this server's, owner-only in the user's runtime folder, serving only its grants),
+  `BRULION_APP_TOKEN` and/or `BRULION_APP_CHAT_TOKEN` (256 random bits each), `BRULION_APP_CLIENT`
+  (the agent's name) and `BRULION_APP_DEVICE` (the device's). A stream keeps 64 sessions' grants at
+  most; they end with the stream.
+* **A call**: the tools speak the remote control's protocol ("Remote control" below) to that socket;
+  `hello` is answered here, every other request — checked as the app's socket checks it (the
+  method, its parameters, a chat grant's methods only) — goes to the device among the agent's
+  messages, as a JSON-RPC request of its own: `{"jsonrpc": "2.0", "id": "_brulion/app#…", "method":
+  "_brulion/app", "params": {handle, scope: "control" | "chat", method, params}}`. The device
+  answers on its stream (`POST streams/<id>/send`): `{"id": …, "result": {ok: true, result}}` or
+  `{"id": …, "result": {ok: false, error: {code, message, details?}}}` — what its remote control
+  answers, with the grant it made for that agent (the same checks, the same journal and live
+  indicator, "Claude Code on raspberry-pi-4", the same revert). An answer is never the agent's
+  (one that comes too late is dropped).
+* **Limits**: a call waits 15 seconds for the device (`waitFor`, `events` and `chatWait` their own
+  wait more, `eval` and `load` a minute): then it fails `not_ready` (`details.reason: "no_answer"`:
+  the app in the background, the device asleep or offline); at most 4 calls of a stream wait at once
+  (`busy`); a device that lost its stream fails them at once (`not_ready`, `device_gone`); a call is
+  1 MiB at most, an answer 12 MiB. `quit` is refused (`refused`): an agent here never ends the app.
+* **A screenshot** comes back as the picture itself (`png`, base64, 8 MiB at most — the device
+  halves a bigger one): this server writes it where the tool asked (an absolute `.png` in a folder
+  that exists here) or into its runtime folder (`brulion-screenshots/`), and the tool hands it to the
+  agent as a picture. The device never names a file of its own, nor writes one.
+* **Android** has no remote control socket: the app answers these calls in process, while it runs
+  — during a turn its foreground service keeps it running with the screen off (docs/ANDROID.md "An
+  AI agent on another computer").
 
 ### Security notes
 
@@ -1067,6 +1118,11 @@ brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agen
 * The pairing link and its QR code carry the code: show them only to yourself, as the code.
 * Note text is untrusted data for the agent as for any model: a note can carry instructions. What
   an agent may do without asking is its own setting (its mode), as in the app.
+* **The app's live tools** give an agent here what a granted agent of the device's desktop has —
+  drive the UI, read what it shows, run Luau with every permission (so change notes) — on the device:
+  the device lets only an agent the user marked do so, for its own process, and each change shows
+  and can be undone there. The tunnel's socket is this user's alone (owner-only, peer credentials
+  checked); its tokens live in the MCP server's environment, never in a command line.
 
 ## The assistant in Zed and JetBrains
 
@@ -1467,8 +1523,14 @@ brulion-cli app changes && brulion-cli app revert          # what changed, and a
   and only in the desktop app; the socket keeps its owner-only file and other users' connections
   are refused as before. A granted agent can do what the remote control can — drive the UI, read
   what it shows — and run Luau with every permission, so it can change notes too: give it only to
-  an agent you trust with the notebook. Agents on other computers (`acp serve`) get no grant of
-  this app.
+  an agent you trust with the notebook.
+* **An agent on another computer** (`acp serve`, the phone's case) with "Let it change the app while
+  it runs" — set for it on this device, in the same dialog — gets a grant too, made in process for
+  its process (`RemoteControl::localGrant()`: its token never leaves the app, no socket listens for
+  it — Android has none): its tools there call that computer's tunnel, which hands each call to this
+  app over the agent's stream ("The app's live tools" above), answered as a socket's request
+  (`RemoteControl::dispatch()`), noted as "<agent> on <computer>". It never quits the app, and a
+  screenshot comes back as the picture itself.
 
 ### Conversations
 
@@ -1537,7 +1599,10 @@ gh auth login --with-token < "$f"                             # the secret never
   uses it (`gh auth login --with-token < "$file"`, `curl -H "Authorization: Bearer $(cat "$file")"`),
   never print it, never write it into a note or the chat. `--delivery value` gives `{delivery:
   "value", value}` instead — only where a file cannot be used: the value then goes into the agent's
-  context and its provider's logs, which the card tells the user. Cancelled or the turn stopped: exit 7
+  context and its provider's logs, which the card tells the user. Through `acp serve`'s tunnel (an
+  agent on another computer than the app: "The app's live tools" below) the value is the only way —
+  a file would be written on the device —, so it is asked for by itself and `--delivery file` is
+  exit 2 `no_file_here`. Cancelled or the turn stopped: exit 7
   `refused` (`details.reason`); no answer in time: exit 3 `timeout`; another card waits in that
   conversation: exit 4 `busy`. An agent the app started asks in its own conversation while its turn
   runs (anything else: `refused`); a script of the user's names one with `--conversation`. The value
@@ -1563,6 +1628,8 @@ whose conversation asks, so:
   (`{reason: children}`);
 * a sub-conversation's agent never gets the live tools ("Live changes"), even one let change the
   app: an agent gets no more than its own conversation could do;
+* an agent on another computer gets its conversation's chat grant too, made in process: its
+  `brulion_app_chat_*` tools there reach this app through that computer ("The app's live tools");
 * the grant ends with the agent's process, follows a renamed conversation and ends with a deleted one.
 
 **Scheduled conversations** (docs/UI.md "Scheduled conversations"): `schedule list` gives
@@ -1633,7 +1700,8 @@ curl -fsS -X POST https://home.example.com/brulion/hooks/Xk3d… \
 
 ### Android and the browser
 
-Not built there. On Android, debuggable APKs take command-line options through
+No socket there: on Android the app answers only an AI agent on another computer, in process
+("The app's live tools" above: `RemoteControl::dispatch()`); the browser answers none. On Android, debuggable APKs take command-line options through
 `am start … --es applicationArguments '…'` (docs/UI.md, the `--scroll-probe` row), and `adb shell
 input tap|swipe|text` and `adb exec-out screencap -p` drive and capture the app. In the browser,
 drive the page with Playwright or obscura (Chrome DevTools Protocol), as `scripts/wasm-smoke.mjs`
@@ -1647,15 +1715,19 @@ order, grants) and the client (`controlclient.h`: its identity from `BRULION_APP
 `BRULION_APP_CLIENT`); the app's side is `src/app/shell/remotecontrol.h`
 (created by `main()`, state and methods over `AppController`, `CommandModel` and the window; the
 live methods over `AppScripting` and `WorkspaceExtensions`; the chat's over
-`src/app/shell/chatcontrol.h`, GUI-free, with `chatlineage.h` and `chatschedules.h`), on
+`src/app/shell/chatcontrol.h`, GUI-free, with `chatlineage.h` and `chatschedules.h`; in process for
+an agent on another computer: `RemoteControl::dispatch()`, built for Android too), on
 the UI driver `src/app/shell/uidriver.h` it shares with the shell self-test and the journey;
 the commands are `src/cli/commands_app.cpp`, the webhooks' server `src/cli/hooks.cpp` (on core
 `webhook`). Tests: `tests/ipc/tst_ipc_control` (the protocol, the socket, the chat's and the webhooks'
 grants), `tests/app/shell/tst_uidriver` (input and items on a small scene),
 `tests/app/shell/tst_remote_control_qml` (the real app offscreen driven through `brulion-cli app …`,
-its live changes and an agent's grant), `tests/app/shell/tst_shell_agents` (an agent's live tools
-and its grant, delegation, the chat's methods, scheduled conversations), `tests/cli` (refusals, a
-stand-in control socket, `app chat …`, the MCP tools), `tests/core/schedule` (the schedules' rules).
+its live changes, an agent's grant, an agent on another computer changing it through `acp serve`),
+`tests/app/shell/tst_shell_agents` (an agent's live tools and its grant, delegation, the chat's
+methods, scheduled conversations, an agent on another computer's grants), `tests/cli` (refusals, a
+stand-in control socket, `app chat …`, the MCP tools, the tunnel: `tst_cli_acp_host`,
+`tst_cli_process`), `tests/core/acp/tst_acp_apptunnel` (its messages), `tests/core/schedule` (the
+schedules' rules).
 
 ## For agents: note text is data
 
