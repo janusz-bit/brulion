@@ -29,9 +29,10 @@
 //   BENCH_REST_MS    pictures: the wait at home after each round (default 3000; 35000 lets Qt's
 //                    pixmap cache expire: 30 s)
 //   BENCH_SETTLE_MS  memory: the wait after the start has settled, for what the app builds ahead
-//                    (default 9000)
-//   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 100000 lets what
-//                    goes by itself when it is not used go — the spell checker's dictionaries)
+//                    and for what only the start needed to go (the spell checker's dictionaries,
+//                    8 s after the first page's words; default 15000)
+//   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 100000 with
+//                    BRULION_HIDDEN_VIEW_MS=20000 lets the hidden views go by themselves)
 //   BENCH_AWAY       0: memory: without the steps of an app that is away (mem:away, away_hidden, back)
 //   BENCH_AWAY_VIEWS 1: memory: those steps for every view of the tour too (back_picture:<view>)
 //   BENCH_PICTURES_DIR memory: where the window's pictures before it was away and back again go
@@ -855,7 +856,7 @@ public:
         m_pictures = readLines(qgetenv("BENCH_PICTURES"));
         m_cycles = std::max(1, envOr("BENCH_CYCLES", "2").toInt());
         m_restMs = std::max(0, envOr("BENCH_REST_MS", "3000").toInt());
-        m_settleMs = std::max(0, envOr("BENCH_SETTLE_MS", "9000").toInt());
+        m_settleMs = std::max(0, envOr("BENCH_SETTLE_MS", "15000").toInt());
         m_longRestMs = std::max(0, envOr("BENCH_LONG_REST_MS", "0").toInt());
         m_memoryDetail = m_scenario == u"memory";
         m_viewportObservers = envOr("BENCH_VIEWPORT_OBSERVERS", "0") == "1";
@@ -2667,8 +2668,8 @@ private:
         wait(m_restMs);
         mem(u"home"_s, true);
         // BENCH_LONG_REST_MS: the same view for a while longer — what goes by itself when it is
-        // not used (the spell checker's dictionaries after 90 s, the hidden views after
-        // MemoryPolicy.hiddenViewMs: BRULION_HIDDEN_VIEW_MS shortens that for a measurement).
+        // not used (the hidden views after MemoryPolicy.hiddenViewMs: BRULION_HIDDEN_VIEW_MS
+        // shortens that for a measurement).
         if (m_longRestMs > 0) {
             wait(m_longRestMs);
             mem(u"rested"_s, true);
@@ -2799,7 +2800,7 @@ private:
     QStringList m_pages, m_pictures;
     int m_cycles = 2;
     int m_restMs = 3000;
-    int m_settleMs = 9000;
+    int m_settleMs = 15000;
     int m_longRestMs = 0;
     bool m_memoryDetail = false;
     QStringList m_moduleFiles; ///< the QML files of the module Brulion (loadedQmlTypes())

@@ -3569,10 +3569,13 @@ documentation notebook.
   only the lines waiting for it are highlighted again when the answer comes (`checked(changed)`).
   Verdicts are cached (20 000 words), so retyping asks nothing.
 * **Only while it is used:** the worker and its dictionaries (Hunspell's Polish and English ones
-  hold about 20 MB) go once no word was asked about for 90 s (`SpellCheck.idleMs`) and when the app
-  is away (`unload()`: "Navigation", Away). The verdicts stay, so nothing is underlined anew and
-  nothing asked again; the next word not seen before brings the worker back with the same settings
-  and personal words (its verdict comes after the dictionaries are read again).
+  hold about 23 MB) go once no word was asked about for a while — 30 s after a word of the edited
+  text (`SpellCheck.idleMs`: typing asks again soon), 8 s after the words of rendered text
+  (`readIdleMs`, `wrongWords()`: a page was opened and is read now) — and when the app is away
+  (`unload()`: "Navigation", Away). The verdicts stay, so nothing is underlined anew and nothing
+  asked again; the next word not seen before brings the worker back with the same settings and
+  personal words (its verdict comes after the dictionaries are read again: the Polish one takes
+  0.08 s of a laptop's processor, on the worker).
 * **Menu:** a right-click on a marked word (`BlockEditor.openTextMenu`, `InlineEditor.misspelledAt`)
   puts its corrections (up to 6, asked from the worker: "Looking for corrections…" until they come, "No
   corrections") at the top of Cut / Copy / Paste, then **Add “…” to dictionary** and **Ignore**.

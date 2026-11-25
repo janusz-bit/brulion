@@ -3,10 +3,12 @@
 // the checker (spell::SpellChecker over the platform's backends, src/platform/spellbackends.h)
 // runs on a worker thread of its own, made when the first word is asked about; the UI thread
 // only reads verdicts it already has. The worker goes again, with its dictionaries (Hunspell's
-// Polish and English ones hold about 20 MB), once nothing was asked for `idleMs` or the app is
-// away (unload(), docs/PERFORMANCE.md "Memory: only what is in use"): the verdicts stay, and the
-// next unknown word brings the worker back (the dictionaries are read again: its verdict comes a
-// moment later).
+// Polish and English ones hold about 23 MB), once nothing was asked for a while — `idleMs` after
+// a word of the edited text (typing: the next word comes soon), `readIdleMs` after the words of
+// rendered text (wrongWords(): a page was opened, and is read now) — or the app is away
+// (unload(), docs/PERFORMANCE.md "Memory: only what is in use"): the verdicts stay, and the next
+// unknown word brings the worker back (the dictionaries are read again, the Polish one in 0.1 s
+// of a desktop's processor: its verdict comes a moment later).
 //
 //   SpellCheck::Verdict v = spell->verdict(u"zażółć"_s);   // Pending the first time: queued
 //   // … checked(changed) — the verdicts of queued words are in: re-highlight what was pending
@@ -87,8 +89,10 @@ public:
     static constexpr int MaxSuggestions = 6;
     /// Texts whose misspelled words wrongWords() keeps; more and the cache starts again.
     static constexpr int MaxCachedTexts = 2000;
-    /// The worker and its dictionaries go when nothing was asked for this long.
-    static constexpr int DefaultIdleMs = 90 * 1000;
+    /// The worker and its dictionaries go when no word of the edited text was asked for this long …
+    static constexpr int DefaultIdleMs = 30 * 1000;
+    /// … and this long after the words of rendered text, when nothing was typed meanwhile.
+    static constexpr int DefaultReadIdleMs = 8 * 1000;
 
     /// `available`: the languages backends can be made for; `factory` makes them (on the worker
     /// thread).
@@ -152,6 +156,10 @@ public:
     /// The worker and its dictionaries go when nothing was asked for this long (0: never).
     int idleMs() const { return m_idleMs; }
     void setIdleMs(int ms);
+    /// … and this long after words of rendered text only (wrongWords(); never longer than
+    /// `idleMs`, 0: as `idleMs`).
+    int readIdleMs() const { return m_readIdleMs; }
+    void setReadIdleMs(int ms) { m_readIdleMs = ms; }
     /// The worker exists: its dictionaries are in memory.
     bool loaded() const { return m_thread != nullptr; }
     /// Let the worker and its dictionaries go now, unless words are on their way (the verdicts
@@ -199,7 +207,8 @@ private:
     void ensureWorker();
     void sendSettings();
     void stopWorker();
-    void used();
+    /// The worker was asked something; `typed`: about the edited text (or for suggestions).
+    void used(bool typed);
     void configure(bool forget);
     void flush();
     void onChecked(int generation, const QStringList &words, const QList<bool> &right);
@@ -230,6 +239,9 @@ private:
     QTimer m_flushTimer;
     QTimer m_idleTimer; ///< unload() when it fires
     int m_idleMs = DefaultIdleMs;
+    int m_readIdleMs = DefaultReadIdleMs;
+    bool m_reading = false;     ///< inside wrongWords(): the words queued are rendered text's
+    bool m_typedQueued = false; ///< a word of the edited text is among those to send
     std::unique_ptr<QThread> m_thread;
     SpellWorker *m_worker = nullptr; ///< deleted on m_thread when it finishes
 };

@@ -311,6 +311,56 @@ private Q_SLOTS:
         QCOMPARE(unloaded.size(), 0);
     }
 
+    void renderedTextLetsThemGoSooner()
+    {
+        // A page that was opened asks about its words once, and is read then: the dictionaries go
+        // sooner than after a typed word.
+        QVERIFY(SpellCheck::DefaultReadIdleMs < SpellCheck::DefaultIdleMs);
+        std::atomic<int> made = 0;
+        SpellCheck spell({u"pl"_s}, wordLists(&made));
+        QCOMPARE(spell.readIdleMs(), SpellCheck::DefaultReadIdleMs);
+        spell.setIdleMs(60 * 1000);
+        spell.setReadIdleMs(150 * BRULION_TEST_SLOWDOWN);
+        spell.setUiLanguage(u"pl"_s);
+        QSignalSpy unloaded(&spell, &SpellCheck::unloaded);
+        bool pending = false;
+        QVERIFY(spell.wrongWords(u"kot zażułć"_s, &pending).isEmpty());
+        QVERIFY(pending);
+        QVERIFY(spell.waitUntilIdle());
+        QVERIFY(spell.loaded());
+        QCOMPARE(spell.wrongWords(u"kot zażułć"_s).size(), 1);
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        QVERIFY(!spell.loaded());
+        QCOMPARE(spell.wrongWords(u"kot zażułć"_s).size(), 1); // (known: nothing asked again)
+        QVERIFY(!spell.loaded());
+        // A typed word keeps them for the long time, whatever is read meanwhile.
+        QCOMPARE(settled(spell, u"pies"_s), SpellCheck::Verdict::Correct);
+        QVERIFY(spell.loaded());
+        (void)spell.wrongWords(u"gęślom jaźń"_s, &pending);
+        QVERIFY(pending);
+        QVERIFY(spell.waitUntilIdle());
+        QTest::qWait(600 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(spell.loaded());
+        QCOMPARE(unloaded.size(), 1);
+        QCOMPARE(made.load(), 2);
+        // readIdleMs 0: rendered text waits as long as typing.
+        QVERIFY(spell.unload());
+        spell.setReadIdleMs(0);
+        (void)spell.wrongWords(u"ala ma kota"_s, &pending);
+        QVERIFY(pending);
+        QVERIFY(spell.waitUntilIdle());
+        QTest::qWait(600 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(spell.loaded());
+        // Never longer than the time after typing.
+        spell.setReadIdleMs(120 * 1000);
+        spell.setIdleMs(150 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        (void)spell.wrongWords(u"pies ma kotta"_s, &pending);
+        QVERIFY(pending);
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        QVERIFY(!spell.loaded());
+    }
+
     void unloadOnRequest()
     {
         // The app is away (main.cpp: MemoryPolicy's letGo()): now, unless words are on their way.
