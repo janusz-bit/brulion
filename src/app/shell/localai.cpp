@@ -1,6 +1,7 @@
 #include "localai.h"
 
 #include "log/slowscope.h"
+#include "memorypolicy.h"
 
 #include "ai/gguf.h"
 
@@ -255,6 +256,14 @@ public:
         return reply;
     }
 
+    /// Lets the open model go when nothing is being asked of it (the app is away: what it read
+    /// of the conversation is on the disk, the next request opens it again).
+    void closeIdle()
+    {
+        if (m_idle.isActive())
+            close(QString());
+    }
+
     /// Lets the model `id` go ("": whichever is open).
     void close(const QString &id)
     {
@@ -334,6 +343,15 @@ LocalAi::LocalAi(const Options &options, QObject *parent)
         m_worker->moveToThread(&m_thread);
         m_thread.setObjectName(u"brulion-local-ai"_s);
         m_thread.start();
+        // Away — another program in front for a while, no window shown —, an open model that is
+        // not answering leaves memory at once instead of after its idle time (gigabytes;
+        // docs/PERFORMANCE.md "Memory: only what is in use").
+        if (ui::MemoryPolicy *policy = ui::MemoryPolicy::instance()) {
+            connect(policy, &ui::MemoryPolicy::letGo, this, [this] {
+                LocalAiWorker *worker = m_worker;
+                QMetaObject::invokeMethod(worker, [worker] { worker->closeIdle(); }, Qt::QueuedConnection);
+            });
+        }
     }
 }
 

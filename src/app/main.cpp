@@ -9,6 +9,7 @@
 #include "ui/keyboardinsets.h" // the on-screen keyboard's height (KeyboardInsets)
 #include "ui/keyboardsources.h"
 #include "ui/memorykeeper.h" // freed memory goes back to the system once the app is quiet (MemoryKeeper)
+#include "ui/memorypolicy.h" // what is kept for speed, and let go of while the app is away (MemoryPolicy)
 #include "ui/qmlshutdown.h" // the QML gone before the engine and the application object at quit
 #include "ui/smoothscroll.h" // the wheel and the scroll bars scroll like a web browser (SmoothScroll)
 #include "ui/uifonts.h" // the bundled text fonts (Inter, Literata, JetBrains Mono)
@@ -169,6 +170,17 @@ int main(int argc, char *argv[])
     // (docs/UI.md "The QML engine's garbage collector").
     if (!qEnvironmentVariableIsSet("QV4_GC_TIMELIMIT"))
         qputenv("QV4_GC_TIMELIMIT", "0");
+    // Qt Quick's texture atlas — the one texture icons and other small pictures share — is as
+    // large as the window rounded up to powers of two whatever goes into it: 2048 × 1024 texels
+    // (8 MB) for a 1280 × 800 window, 16 MB for a full-HD one, 2048 × 4096 (32 MB) on a phone's
+    // screen. 1024 × 1024 (4 MB) holds a few hundred icons at a phone's density; a picture that
+    // does not fit, or is more than half as wide or as tall as the atlas, gets a texture of its
+    // own as any large one does (docs/PERFORMANCE.md "Memory: only what is in use"). Read when
+    // the first window's scene graph starts; the user's own values win.
+    if (!qEnvironmentVariableIsSet("QSG_ATLAS_WIDTH") && !qEnvironmentVariableIsSet("QSG_ATLAS_HEIGHT")) {
+        qputenv("QSG_ATLAS_WIDTH", "1024");
+        qputenv("QSG_ATLAS_HEIGHT", "1024");
+    }
 #ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
 #else
@@ -409,6 +421,20 @@ int main(int argc, char *argv[])
     // Memory the app frees — a page left, pictures out of reach of the view, the index built —
     // goes back to the system once it is quiet (memorykeeper.h).
     brulion::ui::MemoryKeeper *memoryKeeper = brulion::ui::MemoryKeeper::instance();
+    // What the app keeps for speed — hidden views, popups built ahead, the spell checker's
+    // dictionaries, a hidden window's graphics — goes while it is away (memorypolicy.h).
+    brulion::ui::MemoryPolicy *memoryPolicy = brulion::ui::MemoryPolicy::instance();
+#ifdef Q_OS_ANDROID
+    // The home screen: the system counts what a background app holds against it, and stops the
+    // app's timers a few seconds later (a glance at another app and back stays under it).
+    memoryPolicy->setHiddenMs(5000);
+#endif
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    // A hidden window (the tray, minimised) gives up its scene graph and its graphics context too:
+    // tried on X11 and Wayland with Mesa (docs/PERFORMANCE.md "Memory: only what is in use");
+    // elsewhere only with BRULION_RELEASE_GRAPHICS=1 until it was tried there.
+    memoryPolicy->setReleasesGraphics(true);
+#endif
     // Qt Quick opens file: URLs itself: a URL property naming a file of another machine (on Windows
     // a connection to it) is emptied, unless it is the open notebook's (localnetwork.h). Installed
     // in the app's one QML engine (every window and self-test lives in it); before the controller,
@@ -428,6 +454,7 @@ int main(int argc, char *argv[])
     engine.setNetworkAccessManagerFactory(&networkFactory);
 #endif
     engine.addUrlInterceptor(&fileUrlGuard);
+    memoryPolicy->setEngine(&engine);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     // image://drawing/…: the previews of drawings in the light or the dark theme (Workspace::drawingUrl).
@@ -477,6 +504,8 @@ int main(int argc, char *argv[])
                          &brulion::ui::MemoryKeeper::released);
         QObject::connect(workspace, &brulion::shell::Workspace::openChanged, memoryKeeper,
                          &brulion::ui::MemoryKeeper::released);
+        QObject::connect(workspace, &brulion::shell::Workspace::memoryFreed, memoryKeeper,
+                         &brulion::ui::MemoryKeeper::released);
         if (fixedNow.isValid()) {
             controller->setClock([fixedNow] { return fixedNow; });
             logs.setClock([fixedNow] { return fixedNow; });
@@ -524,6 +553,11 @@ int main(int argc, char *argv[])
                          [spell, settings] { spell->setPersonalWords(settings->spellingWords()); });
         QObject::connect(spell, &brulion::editor::SpellCheck::personalWordsEdited, settings,
                          [spell, settings] { settings->setSpellingWords(spell->personalWords()); });
+        // Its dictionaries go while the app is away (and by themselves when nothing was checked
+        // for a while); what they held goes back to the system.
+        QObject::connect(memoryPolicy, &brulion::ui::MemoryPolicy::letGo, spell, [spell] { spell->unload(); });
+        QObject::connect(spell, &brulion::editor::SpellCheck::unloaded, memoryKeeper,
+                         &brulion::ui::MemoryKeeper::released);
         QObject::connect(controller.get(), &AppController::quitRequested, &app, &QCoreApplication::quit,
                          Qt::QueuedConnection);
 #ifdef BRULION_DESKTOP_INTEGRATION

@@ -703,7 +703,7 @@ ApplicationWindow {
     // Typed reads of the editor's parts: a property of another component's property is read
     // through a function of this file (docs/UI.md "Compiled QML").
     function suggestionModel(): SuggestionModel {
-        return editor.suggestions.model
+        return (editor.suggestions as SuggestionPopup).model
     }
     /// window.suggestionModel().get(row)[key] (undefined without it).
     function suggestionAt(row: int, key: string): var {
@@ -909,7 +909,7 @@ ApplicationWindow {
             e.insert(e.length, " [[Remo")
         }
         if (window.at()) {
-            const popup = editor.suggestions
+            const popup = editor.suggestions as SuggestionPopup
             const list = findItem(popup.contentItem, "suggestionList") as ListView
             check(popup.visible && window.suggestionAt(0, "kind") === "create" && window.suggestionAt(0, "title") === "Remo"
                   && window.suggestionModel().count > 1 && popup.currentIndex === 1 && window.suggestionAt(1, "kind") === "page"
@@ -918,7 +918,7 @@ ApplicationWindow {
                   + Js.stringify(window.suggestionModel().get(0)))
         }
         if (window.at()) { key(Qt.Key_Up, Qt.NoModifier) }
-        if (window.at()) check(editor.suggestions.currentIndex === 0, "Up reaches Create page: " + editor.suggestions.currentIndex)
+        if (window.at()) check((editor.suggestions as SuggestionPopup).currentIndex === 0, "Up reaches Create page: " + (editor.suggestions as SuggestionPopup).currentIndex)
         if (window.at()) { key(Qt.Key_Return, Qt.NoModifier) }
         if (window.at()) check(Js.indexOf(editor.activeEditor.text, "[[Remont kuchni]] [[Remo]]") > 0 && !editor.suggestions.opened,
                     "Up + Enter links the new page: " + editor.activeEditor.text)
@@ -933,7 +933,7 @@ ApplicationWindow {
             e.cursorPosition = e.length
             e.insert(e.length, " #remont")
         }
-        if (window.at()) check(editor.suggestions.visible && DevTest.valueAt(editor.suggestions.trigger, "mode") === "tags"
+        if (window.at()) check(editor.suggestions.visible && DevTest.valueAt((editor.suggestions as SuggestionPopup).trigger, "mode") === "tags"
                     && window.suggestionModel().count > 0 && window.suggestionAt(0, "icon") === "file-text",
                     "# offers pages next to the tags: " + Js.stringify(window.suggestionModel().get(0)))
         if (window.at()) { key(Qt.Key_Return, Qt.NoModifier) }
@@ -1822,7 +1822,7 @@ ApplicationWindow {
             if (save)
                 save.triggered()
             else if (editor.webPictureMenu)
-                editor.webPictureMenu.chosen("download")
+                (editor.webPictureMenu as WebPictureMenu).chosen("download")
             if (editor.webPictureMenu)
                 editor.webPictureMenu.close()
         }
@@ -2743,7 +2743,7 @@ ApplicationWindow {
     }
     /// The status menu of a TaskBox (null without one).
     function statusMenuOf(box: TaskBox): TaskStatusMenu {
-        return box ? box.statusMenu : null
+        return box ? box.statusMenu as TaskStatusMenu : null
     }
     /// The status menu of the result whose text starts with `prefix` is open.
     function resultMenuOpen(prefix: string): bool {
@@ -3068,7 +3068,7 @@ ApplicationWindow {
         // wait for the menu — new rows would take it away — and the status goes to the task
         // where it is now, not to its old line.
         if (window.at()) {
-            window.ownMenu = resultTaskBox("Mleko").statusMenu
+            window.ownMenu = resultTaskBox("Mleko").statusMenu as TaskStatusMenu
             check(queryResults().held, "the open menu holds the results")
             host.externalWrite("Zakupy.md", "- [ ] Jajka #zakupy\n" + host.file("Zakupy.md"))
         }
@@ -3107,7 +3107,7 @@ ApplicationWindow {
         // The section changes elsewhere while the menu is open: the embed waits, the status
         // goes to the task's line now.
         if (window.at()) {
-            window.ownMenu = embedTaskBox().statusMenu
+            window.ownMenu = embedTaskBox().statusMenu as TaskStatusMenu
             host.externalWrite("Budżet domowy.md", Js.replace(host.file("Budżet domowy.md"), "- [ ] Opłacić czynsz", "- Prąd: 250 zł\n- [ ] Opłacić czynsz"))
         }
         if (window.at()) window.waitStep(embedView() !== null && Js.indexOf(Js.stringify(embedView().transclusions), "Prąd") >= 0, "the block's embeds follow the file")
@@ -3164,7 +3164,7 @@ ApplicationWindow {
     }
     /// The task dependency picker's tasks.
     function dependencyItems(): var {
-        return editor.dependencyDialog.items
+        return (editor.dependencyDialog as TaskDependencyDialog).items
     }
     function fileLinkBox(): FilePicker {
         return window.dialogs().fileLinkDialog
@@ -3247,7 +3247,7 @@ ApplicationWindow {
     }
     /// The edited table's raw text of cell (r, c).
     function cellText(r: int, c: int): string {
-        return editor.editingTable.rawText(r, c)
+        return (editor.editingTable as TableBlockView).rawText(r, c)
     }
     /// The rendered text of `row` with its no-break spaces as spaces (chips use them).
     function rowHtml(row: int): string {
@@ -3306,7 +3306,8 @@ ApplicationWindow {
             check(DevTest.lengthAt(window.dependencyItems(), "") === 1
                   && DevTest.valueAt(window.dependencyItems(), "0.text") === "Skuć stare płytki",
                   "a search without diacritics finds the task: " + Js.stringify(window.dependencyItems()))
-            editor.dependencyDialog.tryAccept()
+            const picker = editor.dependencyDialog as TaskDependencyDialog
+            picker.tryAccept()
         }
         if (window.at() && !window.waiting(window.dependencyWritten()))
             window.checkWait("choosing it writes 🆔 and ⛔: " + fileLineOf(pageText(), "Wywieźć gruz"))
@@ -3541,7 +3542,7 @@ ApplicationWindow {
                 check(text !== null, "the heading shows its text")
                 rightClick(text, text.width / 4, text.height / 2)
             }
-            if (window.at()) window.waitStep(blockMenuOpen() && editor.blockMenu.heading, "a right-click on a heading's text opens the block menu")
+            if (window.at()) window.waitStep(blockMenuOpen() && (editor.blockMenu as BlockMenu).heading, "a right-click on a heading's text opens the block menu")
             if (window.at()) check(DevTest.property(menuItemNamed(editor.blockMenu, "blockMenuZoom"), "shown") === false, "a document has no zoom in the menu")
             copySteps("copyHeadingLink", "“Link to heading” copies [[Page#Heading]]", "[[" + doc + "#Plan]]")
             if (window.at()) check(pageText() === window.textBefore, "a heading's link changes nothing in the page")
@@ -3554,7 +3555,7 @@ ApplicationWindow {
                 const text = renderedOf(window.targetRow)
                 rightClick(text, text.width / 2, text.height / 2)
             }
-            if (window.at()) window.waitStep(blockMenuOpen() && !editor.blockMenu.heading, "a right-click on a paragraph opens the block menu")
+            if (window.at()) window.waitStep(blockMenuOpen() && !(editor.blockMenu as BlockMenu).heading, "a right-click on a paragraph opens the block menu")
             if (window.at()) check(DevTest.property(menuItemNamed(copySubmenu(), "copyHeadingLink"), "shown") === false, "no heading link for a paragraph")
             copySteps("copyBlockRef", "“Block reference” copies ((id))", "((" + info(window.targetRow).blockId + "))")
             if (window.at()) {
@@ -3702,7 +3703,7 @@ ApplicationWindow {
             const buttonTop = window.windowY(button, 0, 0)
             check(menuBottom <= buttonTop + 1, "the menu is above the toolbar: " + menuBottom + " ≤ " + buttonTop)
             check(menuTop(menu) >= 48 + 8 - 1, "and below the status bar: " + menuTop(menu) + " ≥ 56")
-            check(editor.blockMenu.listItem && !editor.blockMenu.heading, "it is the edited block's menu")
+            check((editor.blockMenu as BlockMenu).listItem && !(editor.blockMenu as BlockMenu).heading, "it is the edited block's menu")
             window.menuGapBefore = menuGap()
             window.menuTopBefore = menuTop(menu)
             // A finger already on it: it stays where it is when the keyboard goes.
@@ -3781,7 +3782,7 @@ ApplicationWindow {
         if (window.at()) tapItem(findShown(findItem(editor, "editToolbarSlot"), "toolbarCellMore"))
         if (window.at()) window.waitStep(blockMenuOpen(), "“More” on the cell toolbar opens the block menu")
         if (window.at()) {
-            check(editor.blockMenu.row() === window.targetRow && !editor.blockMenu.listItem, "it is the table's menu")
+            check((editor.blockMenu as BlockMenu).row() === window.targetRow && !(editor.blockMenu as BlockMenu).listItem, "it is the table's menu")
             check(editor.editingTable === null && page.selectedRow === window.targetRow,
                   "the cell's editing ended, the table is selected")
         }
@@ -3848,7 +3849,7 @@ ApplicationWindow {
                 if (text)
                     rightClick(text, text.width / 4, text.height / 2)
             }
-            if (window.at()) window.waitStep(blockMenuOpen() && editor.blockMenu.heading && editor.blockMenu.row() === page.titleRow, "a right-click on that title opens the title's block menu")
+            if (window.at()) window.waitStep(blockMenuOpen() && (editor.blockMenu as BlockMenu).heading && (editor.blockMenu as BlockMenu).row() === page.titleRow, "a right-click on that title opens the title's block menu")
             if (window.at()) taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1)
             // Gone, its closing transition too: a menu the next click opened would be visible at once.
             if (window.at()) window.waitStep(!editor.blockMenu.visible, "Escape closes it")
@@ -3861,7 +3862,7 @@ ApplicationWindow {
     }
     // The editor's dialogs (EditorDialogs), read through functions of this file.
     function dialogs(): EditorDialogs {
-        return editor.dialogs as EditorDialogs
+        return editor.dialogsNow() as EditorDialogs
     }
     function reminderBox(): BReminderDialog {
         return window.dialogs().reminderDialog
@@ -3940,7 +3941,7 @@ ApplicationWindow {
     /// A caret's rectangle (read through a typed property).
     property rect cursorRect
     function cellInput(): T.TextField {
-        return editor.editingTable ? editor.editingTable.cellInput : null
+        return editor.editingTable ? (editor.editingTable as TableBlockView).cellInput : null
     }
     function cellBottom(): real {
         const input = window.cellInput()
@@ -3955,7 +3956,7 @@ ApplicationWindow {
     }
     /// Cell (r, c) is being edited, with the cell tools on the keyboard.
     function cellEdited(r: int, c: int): bool {
-        const table = editor.editingTable
+        const table = editor.editingTable as TableBlockView
         return editor.toolbarMode === "cell" && table !== null && table.editRow === r && table.editColumn === c
                && window.cellInput() !== null && window.cellInput().activeFocus && dockedOn(320)
                && toolbarButton("toolbarCellTools") !== null
@@ -4132,8 +4133,8 @@ ApplicationWindow {
         if (window.at() && !window.waiting(cellBottom() <= slotTop()))
             window.checkWait("the cell being edited is above the toolbar: " + cellBottom() + " ≤ " + slotTop())
         if (window.at()) {
-            window.baseRow = editor.editingTable.editRow
-            window.pasteRow = editor.editingTable.editColumn
+            window.baseRow = (editor.editingTable as TableBlockView).editRow
+            window.pasteRow = (editor.editingTable as TableBlockView).editColumn
         }
         // A word the keyboard is still composing (Android) goes into the cell left with the
         // toolbar's next cell.
@@ -4142,7 +4143,7 @@ ApplicationWindow {
         if (window.at()) tapItem(toolbarButton("toolbarNextCell"))
         if (window.at()) window.waitStep(editor.editingTable !== null && window.cellInput() !== null
                        && window.cellInput().activeFocus
-                       && (editor.editingTable.editRow !== window.baseRow || editor.editingTable.editColumn !== window.pasteRow), "the toolbar's next cell moves to the next cell")
+                       && ((editor.editingTable as TableBlockView).editRow !== window.baseRow || (editor.editingTable as TableBlockView).editColumn !== window.pasteRow), "the toolbar's next cell moves to the next cell")
     }
     function keyboardStepsPart4(lh: int): void {
         if (window.at()) {
@@ -4151,7 +4152,7 @@ ApplicationWindow {
         }
         // Undo and redo keep the cell edited (the toolbar and the keyboard stay).
         if (window.at()) {
-            const table = editor.editingTable
+            const table = editor.editingTable as TableBlockView
             window.baseRow = table.editRow
             window.pasteRow = table.editColumn
             window.textBefore = table.rawText(table.editRow, table.editColumn)

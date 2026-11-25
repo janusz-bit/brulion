@@ -197,7 +197,7 @@ FocusScope {
                 root.openFind(false)
                 break
             case "export":
-                exportDialog.openFor(page.path, false)
+                root.openExport(false)
                 break
             default: // a side panel section: a panel made now unfolds it, one shown already too
                 AppSettings.setValue("ui/sidePanel/tab", action)
@@ -312,7 +312,12 @@ FocusScope {
                                       && !root.converting
     /// The view swipes sideways from the left edge itself: a PDF zoomed past the view's width pans
     /// (the drawer's edge strip yields to it, ShellRouteView.viewEdgeSwipe).
-    readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && (pdfLoader.item as ContentPdfView).pannedSideways
+    readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && pdfPanned.flag
+    QmlValue {
+        id: pdfPanned
+        object: pdfLoader.item
+        name: "pannedSideways"
+    }
     property string _revealed: ""
     property string _opened: ""
     property bool _openedMissing: false
@@ -394,57 +399,66 @@ FocusScope {
     }
 
     /// "Encrypt page…" / "Change password…" (ContentEncryptionDialog), "Decrypt permanently…".
-    property ContentEncryptionDialog encryptionDialog: null
+    property T.Popup encryptionDialog: null
     function openEncryptionDialog(kind: string): void {
         if (!page.exists || editor.readOnlyRefuses())
             return
         page.save()
-        if (!encryptionDialog)
-            encryptionDialog = encryptionDialogComponent.createObject(T.Overlay.overlay) as ContentEncryptionDialog
-        encryptionDialog.openFor(kind, page.path)
-    }
-    Component {
-        id: encryptionDialogComponent
-        ContentEncryptionDialog {
-            // The editor lets the page go while it is encrypted (written over, renamed).
-            onStarting: (mode) => {
-                if (mode !== "encrypt")
-                    return
-                // At once, before the file is written over: the editor must not take the encrypted
-                // file in as an outside change of its page.
-                root.converting = true
-                root._revealed = ""
-                root._foldsFor = ""
-                page.path = ""
-            }
-            onFailed: root.converting = false
-            onDone: (path) => {
-                // The new route first: the editor then loads the encrypted page, not the old name.
-                if (path !== root.routePath)
-                    AppController.replaceRoute({ view: "page", path: path })
-                root.converting = false
-                AppController.toast(qsTr("“%1” is encrypted").arg(Workspace.encryption.pageName(path)), "success")
-            }
-            onClosed: root.converting = false
+        if (!encryptionDialog) {
+            root._viewValues = {}
+            encryptionDialog = root.makeDialog("../content/ContentEncryptionDialog.qml")
+            QmlCall.connect(encryptionDialog, "starting", root, "encryptionStarting")
+            QmlCall.connect(encryptionDialog, "failed", root, "encryptionEnded")
+            QmlCall.connect(encryptionDialog, "done", root, "encryptionDone")
+            QmlCall.connect(encryptionDialog, "closed", root, "encryptionEnded")
         }
+        const path = page.path
+        QmlCall.call2(encryptionDialog, "openFor", kind, path)
+    }
+    // The editor lets the page go while it is encrypted (written over, renamed).
+    function encryptionStarting(mode: string): void {
+        if (mode !== "encrypt")
+            return
+        // At once, before the file is written over: the editor must not take the encrypted
+        // file in as an outside change of its page.
+        root.converting = true
+        root._revealed = ""
+        root._foldsFor = ""
+        page.path = ""
+    }
+    function encryptionEnded(): void { root.converting = false }
+    function encryptionDone(path: string): void {
+        // The new route first: the editor then loads the encrypted page, not the old name.
+        if (path !== root.routePath)
+            AppController.replaceRoute({ view: "page", path: path })
+        root.converting = false
+        AppController.toast(qsTr("“%1” is encrypted").arg(Workspace.encryption.pageName(path)), "success")
     }
     function decryptPermanently(): void {
         if (!root.encryptedRoute || !root.encryptedUnlocked || editor.readOnlyRefuses())
             return
-        decryptConfirm.open()
+        root.decryptConfirmNow().open()
     }
     property int decryptRequest: -1
-    BConfirmDialog {
-        id: decryptConfirm
-        title: qsTr("Decrypt permanently?")
-        subject: Workspace.encryption.pageName(root.routePath)
-        message: qsTr("The page becomes an ordinary Markdown page that everyone who can read the notebook can read — other devices, sync servers, backups.")
-        confirmText: qsTr("Decrypt")
-        destructive: true
-        onAccepted: {
-            page.save()
-            root.decryptRequest = Workspace.encryption.decryptPage(root.routePath)
+    /// "Decrypt permanently?" (BConfirmDialog), made when first asked.
+    property T.Popup decryptConfirm: null
+    function decryptConfirmNow(): T.Popup {
+        if (!decryptConfirm) {
+            root._viewValues = {
+                title: qsTr("Decrypt permanently?"),
+                message: qsTr("The page becomes an ordinary Markdown page that everyone who can read the notebook can read — other devices, sync servers, backups."),
+                confirmText: qsTr("Decrypt"),
+                destructive: true
+            }
+            decryptConfirm = root.makeDialog("../components/BConfirmDialog.qml")
+            QmlCall.connect(decryptConfirm, "accepted", root, "decryptAccepted")
         }
+        QmlCall.set(decryptConfirm, "subject", Workspace.encryption.pageName(root.routePath))
+        return decryptConfirm
+    }
+    function decryptAccepted(): void {
+        page.save()
+        root.decryptRequest = Workspace.encryption.decryptPage(root.routePath)
     }
     Connections {
         target: Workspace.encryption
@@ -475,6 +489,16 @@ FocusScope {
             coverDialog.destroy()
         if (encryptionDialog)
             encryptionDialog.destroy()
+        if (decryptConfirm)
+            decryptConfirm.destroy()
+        if (noteOptionsDialog)
+            noteOptionsDialog.destroy()
+        if (renameDialog)
+            renameDialog.destroy()
+        if (exportDialog)
+            exportDialog.destroy()
+        if (deleteDialog)
+            deleteDialog.destroy()
     }
     /// False once the view is being destroyed: a route change queued just before (the shell
     /// switching to another view) does nothing then.
@@ -628,13 +652,15 @@ FocusScope {
         page.save()
         // { links, tags, … }
         renameImpact.map = Workspace.renameImpact(page.path, newTitle, false)
-        renameDialog.openFor(page.path, newTitle, renameImpact.map, false)
+        const dialog = root.renameDialogNow()
+        const path = page.path
+        QmlCall.call4(dialog, "openFor", path, newTitle, renameImpact.map, false)
         const links = renameImpact.map.links !== undefined ? renameImpact.map.links : 0
         const tags = renameImpact.map.tags !== undefined ? renameImpact.map.tags : 0
         if (links + tags > 0)
-            renameDialog.open()
+            dialog.open()
         else
-            renameDialog.rename()
+            QmlCall.call(dialog, "rename")
     }
 
     /// Switch between document and outline (the header's toggle, the menu, the palette).
@@ -685,13 +711,13 @@ FocusScope {
             root.findOpen = true
         }
         // (The bar's Loader made it just now.)
-        const bar = findBarLoader.item as FindBar
+        const bar = findBarLoader.item
         if (!bar)
             return
         if (withReplace)
-            bar.openReplace()
+            QmlCall.call(bar, "openReplace")
         else
-            bar.focusField()
+            QmlCall.call(bar, "focusField")
     }
     function closeFind(): void {
         root.findOpen = false
@@ -711,10 +737,11 @@ FocusScope {
         anchors.right: parent.right
         active: root.findOpen
         height: active && item !== null ? (item as Item).implicitHeight : 0
-        sourceComponent: FindBar {
-            find: noteFind
-            editor: editor
-            onCloseRequested: root.closeFind()
+        onActiveChanged: {
+            root._viewValues = { find: noteFind, editor: editor }
+            root.loadInto(findBarLoader, "../editor/FindBar.qml")
+            if (findBarLoader.item !== null)
+                QmlCall.connect(findBarLoader.item, "closeRequested", root, "closeFind")
         }
     }
     // (The shortcuts of the views' commands can be changed: ShortcutMap.)
@@ -1284,43 +1311,61 @@ FocusScope {
 
     // An encrypted page while locked: its lock (the editor behind it stays unloaded and hidden).
     Loader {
+        id: encryptedPageLoader
         objectName: "encryptedPageLoader"
         anchors.fill: parent
         active: root.encryptedRoute && !root.encryptedUnlocked && !root.converting
-        sourceComponent: ContentEncryptedPage {
-            path: root.routePath
-            onUnlocked: root.refreshEncrypted()
-        }
+        onActiveChanged: root.loadEncryptedPage()
+        Component.onCompleted: root.loadEncryptedPage()
     }
+    function loadEncryptedPage(): void {
+        root._viewValues = { path: root.routePath }
+        root.loadInto(encryptedPageLoader, "../content/ContentEncryptedPage.qml")
+        if (encryptedPageLoader.item !== null)
+            QmlCall.connect(encryptedPageLoader.item, "unlocked", root, "refreshEncrypted")
+    }
+    Binding { target: encryptedPageLoader.item; property: "path"; value: root.routePath; restoreMode: Binding.RestoreNone }
 
     // A picture attachment: the picture itself or its text, read-only (the editor behind it
     // stays unloaded — page.path "" — and hidden). Created for pictures only.
     Loader {
+        id: pictureLoader
         anchors.fill: parent
         active: root.pictureRoute || root.fileRoute
-        sourceComponent: ContentPictureView {
-            path: root.routePath
-            route: root.route
-            // Another file than a picture: only its text, read-only.
-            textOnly: root.fileRoute
-            asText: root.pictureAsText || root.fileRoute
-            rendererPalette: editor.rendererPalette
-            onTextToggleRequested: root.togglePictureText()
-        }
+        onActiveChanged: root.loadPictureView()
+        Component.onCompleted: root.loadPictureView()
     }
+    function loadPictureView(): void {
+        // Another file than a picture: only its text, read-only.
+        root._viewValues = { path: root.routePath, route: root.route, textOnly: root.fileRoute,
+                             asText: root.pictureAsText || root.fileRoute, rendererPalette: editor.rendererPalette }
+        root.loadInto(pictureLoader, "../content/ContentPictureView.qml")
+        if (pictureLoader.item !== null)
+            QmlCall.connect(pictureLoader.item, "textToggleRequested", root, "togglePictureText")
+    }
+    Binding { target: pictureLoader.item; property: "path"; value: root.routePath; restoreMode: Binding.RestoreNone }
+    Binding { target: pictureLoader.item; property: "route"; value: root.route; restoreMode: Binding.RestoreNone }
+    Binding { target: pictureLoader.item; property: "textOnly"; value: root.fileRoute; restoreMode: Binding.RestoreNone }
+    Binding { target: pictureLoader.item; property: "asText"; value: root.pictureAsText || root.fileRoute; restoreMode: Binding.RestoreNone }
+    Binding { target: pictureLoader.item; property: "rendererPalette"; value: editor.rendererPalette; restoreMode: Binding.RestoreNone }
 
     // A base: its views (the editor behind it stays unloaded and hidden). Created for bases only.
     Loader {
+        id: baseLoader
         objectName: "baseLoader"
         anchors.fill: parent
         active: root.baseRoute && !root.pictureAsText
-        sourceComponent: ContentBaseView {
-            path: root.routePath
-            controller: page
-            viewName: AppController.routeText(root.route, "view") !== "" ? AppController.routeText(root.route, "view")
-                                                                          : AppController.routeText(root.route, "heading")
-        }
+        onActiveChanged: root.loadBaseView()
+        Component.onCompleted: root.loadBaseView()
     }
+    readonly property string baseViewName: AppController.routeText(root.route, "view") !== "" ? AppController.routeText(root.route, "view")
+                                                                                            : AppController.routeText(root.route, "heading")
+    function loadBaseView(): void {
+        root._viewValues = { path: root.routePath, controller: page, viewName: root.baseViewName }
+        root.loadInto(baseLoader, "../content/ContentBaseView.qml")
+    }
+    Binding { target: baseLoader.item; property: "path"; value: root.routePath; restoreMode: Binding.RestoreNone }
+    Binding { target: baseLoader.item; property: "viewName"; value: root.baseViewName; restoreMode: Binding.RestoreNone }
 
     // A sound or a video: the player view (the editor behind it stays unloaded and hidden).
     Loader {
@@ -1329,16 +1374,20 @@ FocusScope {
         anchors.fill: parent
         active: root.mediaRoute
         focus: root.mediaRoute
-        sourceComponent: ContentMediaView {
-            path: root.routePath
-            route: root.route
-            rendererPalette: editor.rendererPalette
-        }
+        onActiveChanged: root.loadMediaView()
+        Component.onCompleted: root.loadMediaView()
         // The player takes the keys (Space, ←, →…) when it opens in the main pane — as the PDF
         // viewer, after its creation (taken inside it, the focus of the views around it was left
         // to the item being made).
         onLoaded: if (!root.inSidePanel) mediaFocusLater.restart()
     }
+    function loadMediaView(): void {
+        root._viewValues = { path: root.routePath, route: root.route, rendererPalette: editor.rendererPalette }
+        root.loadInto(mediaLoader, "../content/ContentMediaView.qml")
+    }
+    Binding { target: mediaLoader.item; property: "path"; value: root.routePath; restoreMode: Binding.RestoreNone }
+    Binding { target: mediaLoader.item; property: "route"; value: root.route; restoreMode: Binding.RestoreNone }
+    Binding { target: mediaLoader.item; property: "rendererPalette"; value: editor.rendererPalette; restoreMode: Binding.RestoreNone }
     Later {
         id: mediaFocusLater
         onTriggered: if (mediaLoader.item !== null) (mediaLoader.item as Item).forceActiveFocus()
@@ -1351,17 +1400,23 @@ FocusScope {
         anchors.fill: parent
         active: root.pdfRoute
         focus: root.pdfRoute
-        sourceComponent: ContentPdfView {
-            path: root.routePath
-            route: root.route
-            inSidePanel: root.inSidePanel
-            paneActive: root.paneActive
-            rendererPalette: editor.rendererPalette
-            refsInSidePanel: root.refsInSidePanel
-        }
+        onActiveChanged: root.loadPdfView()
+        Component.onCompleted: root.loadPdfView()
         // The viewer takes the keys (PageDown, Ctrl+F, Esc…) when it opens in the main pane.
         onLoaded: if (!root.inSidePanel) pdfFocusLater.restart()
     }
+    function loadPdfView(): void {
+        root._viewValues = { path: root.routePath, route: root.route, inSidePanel: root.inSidePanel,
+                             paneActive: root.paneActive, rendererPalette: editor.rendererPalette,
+                             refsInSidePanel: root.refsInSidePanel }
+        root.loadInto(pdfLoader, "../content/ContentPdfView.qml")
+    }
+    Binding { target: pdfLoader.item; property: "path"; value: root.routePath; restoreMode: Binding.RestoreNone }
+    Binding { target: pdfLoader.item; property: "route"; value: root.route; restoreMode: Binding.RestoreNone }
+    Binding { target: pdfLoader.item; property: "inSidePanel"; value: root.inSidePanel; restoreMode: Binding.RestoreNone }
+    Binding { target: pdfLoader.item; property: "paneActive"; value: root.paneActive; restoreMode: Binding.RestoreNone }
+    Binding { target: pdfLoader.item; property: "rendererPalette"; value: editor.rendererPalette; restoreMode: Binding.RestoreNone }
+    Binding { target: pdfLoader.item; property: "refsInSidePanel"; value: root.refsInSidePanel; restoreMode: Binding.RestoreNone }
     Later {
         id: pdfFocusLater
         onTriggered: if (pdfLoader.item !== null) (pdfLoader.item as Item).forceActiveFocus()
@@ -1457,7 +1512,7 @@ FocusScope {
             text: qsTr("Export page…")
             iconName: "share"
             enabled: page.exists
-            onTriggered: exportDialog.openFor(page.path, false)
+            onTriggered: root.openExport(false)
         }
         BMenuItem {
             // The page on the web (docs/UI.md "Publishing"): added to a publishing target.
@@ -1477,7 +1532,7 @@ FocusScope {
             iconName: "printer"
             shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.print"] || ""
             enabled: page.exists
-            onTriggered: exportDialog.openFor(page.path, true)
+            onTriggered: root.openExport(true)
         }
         BMenuItem {
             // The note as QR codes another phone's camera reads (docs/UI.md "QR code").
@@ -1647,108 +1702,157 @@ FocusScope {
             iconName: "trash-2"
             danger: true
             enabled: page.exists
-            onTriggered: deleteDialog.open()
+            onTriggered: root.openDeleteDialog()
         }
     }
 
     // Made when first opened.
-    property ContentPageIconDialog iconDialog: null
-    property ContentPageCoverDialog coverDialog: null
-    property ContentNoteOptionsDialog noteOptionsDialog: null
+    property T.Popup iconDialog: null
+    property T.Popup coverDialog: null
+    property T.Popup noteOptionsDialog: null
     function openIconDialog(): void {
         if (!page.loaded || editor.readOnlyRefuses())
             return
-        if (!iconDialog)
-            iconDialog = iconDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageIconDialog
+        if (!iconDialog) {
+            root._viewValues = { objectName: "pageIconDialog", controller: page, editor: editor }
+            iconDialog = root.makeDialog("../content/ContentPageIconDialog.qml")
+        }
         iconDialog.open()
     }
     function openNoteOptionsDialog(): void {
         if (!page.loaded || editor.readOnlyRefuses())
             return
-        if (!noteOptionsDialog)
-            noteOptionsDialog = noteOptionsDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentNoteOptionsDialog
+        if (!noteOptionsDialog) {
+            root._viewValues = { objectName: "noteOptionsDialog", controller: page, editor: editor }
+            noteOptionsDialog = root.makeDialog("../content/ContentNoteOptionsDialog.qml")
+        }
         noteOptionsDialog.open()
     }
     function openCoverDialog(): void {
         if (!page.loaded || editor.readOnlyRefuses())
             return
-        if (!coverDialog)
-            coverDialog = coverDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageCoverDialog
+        if (!coverDialog) {
+            root._viewValues = { objectName: "pageCoverDialog", controller: page, editor: editor }
+            coverDialog = root.makeDialog("../content/ContentPageCoverDialog.qml")
+        }
         coverDialog.open()
     }
-    Component {
-        id: iconDialogComponent
-        ContentPageIconDialog { objectName: "pageIconDialog" }
+    /// The page's rename, export and delete dialogs, made when first asked.
+    property T.Popup renameDialog: null
+    function renameDialogNow(): T.Popup {
+        if (!renameDialog) {
+            root._viewValues = { objectName: "pageRenameDialog" }
+            renameDialog = root.makeDialog("../content/ContentRenameDialog.qml")
+        }
+        return renameDialog
     }
-    Component {
-        id: coverDialogComponent
-        ContentPageCoverDialog { objectName: "pageCoverDialog" }
+    property T.Popup exportDialog: null
+    /// "Export…" / "Print…" of the page (`print`).
+    function openExport(print: bool): void {
+        if (!exportDialog) {
+            root._viewValues = { tools: tools }
+            exportDialog = root.makeDialog("../content/ContentExportDialog.qml")
+        }
+        const path = page.path
+        QmlCall.call2(exportDialog, "openFor", path, print)
     }
-    Component {
-        id: noteOptionsDialogComponent
-        ContentNoteOptionsDialog { objectName: "noteOptionsDialog" }
-    }
-    ContentRenameDialog {
-        id: renameDialog
-        objectName: "pageRenameDialog"
-        parent: T.Overlay.overlay
-    }
-    ContentExportDialog {
-        id: exportDialog
-        parent: T.Overlay.overlay
-        tools: tools
-    }
-    BConfirmDialog {
-        id: deleteDialog
-        parent: T.Overlay.overlay
-        title: qsTr("Move to trash?")
-        subject: root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title
-        subjectIcon: root.journalDate !== "" ? "calendar-days" : "file-text"
-        message: qsTr("It will be moved to the trash. You can restore it from there.")
-        confirmText: qsTr("Move to trash")
-        destructive: true
-        onAccepted: {
-            page.save()
-            const trashPath = Workspace.deletePage(page.path)
-            if (trashPath !== "") {
-                // Restored by the controller: the toast outlives this view (the page closes when deleted).
-                AppController.toastRestorePage(qsTr("Moved to trash"), qsTr("Undo"), trashPath)
+    property T.Popup deleteDialog: null
+    function openDeleteDialog(): void {
+        if (!deleteDialog) {
+            root._viewValues = {
+                title: qsTr("Move to trash?"),
+                message: qsTr("It will be moved to the trash. You can restore it from there."),
+                confirmText: qsTr("Move to trash"),
+                destructive: true
             }
+            deleteDialog = root.makeDialog("../components/BConfirmDialog.qml")
+            QmlCall.connect(deleteDialog, "accepted", root, "deleteAccepted")
+        }
+        QmlCall.set(deleteDialog, "subject", root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title)
+        QmlCall.set(deleteDialog, "subjectIcon", root.journalDate !== "" ? "calendar-days" : "file-text")
+        deleteDialog.open()
+    }
+    function deleteAccepted(): void {
+        page.save()
+        const trashPath = Workspace.deletePage(page.path)
+        if (trashPath !== "") {
+            // Restored by the controller: the toast outlives this view (the page closes when deleted).
+            AppController.toastRestorePage(qsTr("Moved to trash"), qsTr("Undo"), trashPath)
         }
     }
 
     Component {
         id: sidePanelComponent
-        ContentSidePanel {
+        // (ContentSidePanel, loaded from its file when the panel is shown: docs/PERFORMANCE.md "QML
+        // files loaded when first used".)
+        Loader {
             id: contextPanel
+            Component.onCompleted: {
+                root._panelValues = { path: root.noteRoute ? page.path : root.routePath, attachment: !root.noteRoute,
+                                      controller: page, editor: editor }
+                contextPanel.setSource(root._panelSource, root._panelValues)
+            }
             // A picture's references (the index knows the notes that embed it; nothing loads it).
-            path: root.noteRoute ? page.path : root.routePath
-            attachment: !root.noteRoute
-            controller: page
-            editor: editor
+            Binding { target: contextPanel.item; property: "path"; value: root.noteRoute ? page.path : root.routePath; restoreMode: Binding.RestoreNone }
+            Binding { target: contextPanel.item; property: "attachment"; value: !root.noteRoute; restoreMode: Binding.RestoreNone }
+            Binding { target: contextPanel.item; property: "editor"; value: editor; restoreMode: Binding.RestoreNone }
             Connections {
                 target: root
                 function onSidePanelRequested(section: string) {
                     AppSettings.setValue("ui/sidePanel/tab", "")
-                    contextPanel.reveal(section)
+                    QmlCall.call1(contextPanel.item, "reveal", section)
                 }
             }
             // Its tab, for refsInSidePanel (made again with the remembered tab each time the side
             // panel shows it).
-            onCurrentTabChanged: root.sidePanelTab = contextPanel.currentTab
-            Component.onCompleted: root.sidePanelTab = contextPanel.currentTab
+            QmlValue {
+                id: panelTab
+                object: contextPanel.item
+                name: "currentTab"
+                // (Not when the panel goes: the tab it had stays, as before.)
+                onValueChanged: if (panelTab.object !== null) root.sidePanelTab = panelTab.text
+            }
         }
     }
 
     // Dev: `--editor-script <state>` puts this editor into a state for screenshots of the real
     // app (qml/dev/PageScript.qml, tests/app/shell/screenshots.sh "page-*" shots).
+    // Loaded from its file, never named here (a file named is loaded with this one, in every run),
+    // only in builds with the developer QML (BRULION_DEV_QML).
     Loader {
+        id: pageScript
         active: DevTools.editorScript !== "" && !DevTools.editor && !root.inSidePanel
-        sourceComponent: PageScript {
-            editor: editor
-            controller: page
+        Component.onCompleted: {
+            if (!pageScript.active)
+                return
+            root._scriptValues = { editor: editor, controller: page }
+            pageScript.setSource(root._scriptSource, root._scriptValues)
         }
     }
+    readonly property url _scriptSource: Qt.resolvedUrl("../dev/PageScript.qml")
+    // ---- What this view loads from files when first used ---------------------------------------
+    // The viewers of other files, the find bar and the dialogs are not named here (docs/PERFORMANCE.md
+    // "QML files loaded when first used": a QML file named in another one is loaded with it): each
+    // is made from its file (loadInto(), makeDialog()) with its first values in `_viewValues`, its
+    // members then reached by name (QmlCall) and followed by Bindings.
+    property var _viewValues: ({})
+    property url _viewSource
+    /// `loader` gets `file` (relative to this one) with `_viewValues`, unless it is inactive or
+    /// has its item.
+    function loadInto(loader: Loader, file: string): void {
+        if (!loader.active || loader.item !== null)
+            return
+        root._viewSource = Qt.resolvedUrl(file)
+        loader.setSource(root._viewSource, root._viewValues)
+    }
+    /// A dialog of `file` in the overlay with `_viewValues` (it goes with the view).
+    function makeDialog(file: string): T.Popup {
+        const component = Qt.createComponent(Qt.resolvedUrl(file))
+        return component.createObject(T.Overlay.overlay, root._viewValues) as T.Popup
+    }
+    readonly property url _panelSource: Qt.resolvedUrl("../content/ContentSidePanel.qml")
+    property var _panelValues: ({})
+    property var _scriptValues: ({})
 
     // Command palette / page menu: "Markdown source".
     Connections {
@@ -1786,7 +1890,7 @@ FocusScope {
             else if (action === "taskDependency" && editor.visible)
                 editor.openCurrentDependencyPicker()
             else if ((action === "exportPage" || action === "printPage") && page.exists && root.noteRoute && !root.encryptedRoute)
-                exportDialog.openFor(page.path, action === "printPage")
+                root.openExport(action === "printPage")
             else if (action === "qrCode" && root.noteRoute && page.loaded && !root.encryptedRoute)
                 root.showQrCode()
             else if (action === "encryptSelection" && editor.visible)

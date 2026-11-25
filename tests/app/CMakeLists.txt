@@ -18,6 +18,11 @@ brulion_add_test(tst_jshelper
 brulion_add_test(tst_later
     SOURCES tst_later.cpp
     LIBS brulion_ui_helpers)
+# QmlCall and QmlValue (brulion_ui_qmlcall): a QML object's typed functions called and its
+# properties read, written and followed by name — the files made when first used.
+brulion_add_test(tst_qmlcall
+    SOURCES tst_qmlcall.cpp
+    LIBS brulion_ui_qmlcall Qt6::Qml)
 # KeyboardInsets (brulion_ui_helpers): the on-screen keyboard's overlap of the window and the
 # choice between a simulated keyboard, the platform's report and Qt's input method.
 brulion_add_test(tst_keyboardinsets

@@ -127,6 +127,44 @@ private Q_SLOTS:
     void init() { make(); }
     void cleanup() { m_player.reset(); }
 
+    void noEngineUntilSomethingIsPlayed()
+    {
+        // The app's player starts without the build's engine and prober (Qt Multimedia's bring
+        // their backend and its libraries): asking what it is doing, setting the speed and the
+        // volume, pausing and stopping make none.
+        MediaPlayback player;
+        player.setPosterFolder(QString());
+        QVERIFY(!player.engineMade());
+        QCOMPARE(player.available(), brulion::media::mediaSupported());
+        QCOMPARE(player.path(), QString());
+        QVERIFY(!player.playing());
+        QVERIFY(!player.loading());
+        QVERIFY(!player.hasVideo());
+        QCOMPARE(player.position(), 0.0);
+        QCOMPARE(player.duration(), -1.0);
+        QCOMPARE(player.error(), QString());
+        QCOMPARE(player.positionOf(u"assets/Wykład żółwia.mp3"_s), 0.0);
+        player.setRate(1.5);
+        player.setVolume(0.4);
+        player.setMuted(true);
+        QCOMPARE(player.rate(), 1.5);
+        QCOMPARE(player.volume(), 0.4);
+        QVERIFY(player.muted());
+        player.pause();
+        player.stop();
+        player.seek(5000);
+        player.skip(1000);
+        player.addView(u"assets/Wykład żółwia.mp3"_s);
+        player.removeView(u"assets/Wykład żółwia.mp3"_s);
+        QObject surface;
+        player.attachVideo(u"assets/film.mp4"_s, &surface);
+        player.detachVideo(&surface);
+        // A file never asked about, and one without an address: nothing to read.
+        QCOMPARE(player.info(QString(), QUrl()).value(u"state"_s).toString(), u"unknown"_s);
+        QCOMPARE(player.info(u"assets/film.mp4"_s, QUrl()).value(u"state"_s).toString(), u"unknown"_s);
+        QVERIFY(!player.engineMade());
+    }
+
     void oneAtATime()
     {
         const QString a = u"assets/Wykład żółwia.mp3"_s;

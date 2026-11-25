@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQml.Models
+import QtQuick.Templates as T
 import Brulion
 
 // TasksView — route "tasks" ({query?}): every task of the vault (TaskListModel over
@@ -80,11 +81,36 @@ FocusScope {
     }
     /// "Add dependency…": the picker of the task it will wait for.
     function openDependencyPicker(path: string, line: int, text: string): void {
-        dependencyDialog.hasTask = true
-        dependencyDialog.taskPath = path
-        dependencyDialog.taskLine = line
-        dependencyDialog.taskText = text
-        dependencyDialog.open()
+        root.dependencyHasTask = true
+        root.dependencyPath = path
+        root.dependencyLine = line
+        root.dependencyText = text
+        if (!root.dependencyDialog) {
+            // (TaskDependencyDialog, loaded from its file when first opened: docs/PERFORMANCE.md "QML
+            // files loaded when first used".)
+            const component = Qt.createComponent(Qt.resolvedUrl("../editor/TaskDependencyDialog.qml"))
+            root.dependencyDialog = component.createObject(root) as T.Popup
+            QmlCall.connect(root.dependencyDialog, "searchRequested", root, "dependencySearch")
+            QmlCall.connect(root.dependencyDialog, "chosen", root, "dependencyChosen")
+        }
+        root.dependencyDialog.open()
+    }
+    /// The dependency picker and the task that will wait (dependencyHasTask false: none).
+    property T.Popup dependencyDialog: null
+    property bool dependencyHasTask: false
+    property string dependencyPath
+    property int dependencyLine
+    property string dependencyText
+    readonly property list<var> noDependencies: []
+    function dependencySearch(text: string): void {
+        if (root.dependencyHasTask)
+            QmlCall.set(root.dependencyDialog, "items", planningActions.dependencyCandidates(root.dependencyPath, root.dependencyLine, text))
+        else
+            QmlCall.set(root.dependencyDialog, "items", root.noDependencies)
+    }
+    function dependencyChosen(path: string, line: int): void {
+        if (root.dependencyHasTask && planningActions.addDependency(root.dependencyPath, root.dependencyLine, root.dependencyText, path, line))
+            root.undoToast(qsTr("Dependency added"), "success")
     }
     /// The menu of a task's chip: its token in the task's file (PlanningTokenMenu). `value`: the
     /// token's value as the model gives it.
@@ -375,24 +401,6 @@ FocusScope {
         id: timeDialog
         tasks: taskModel
         onTaskOpened: (path, line) => AppController.openPage(path, line)
-    }
-    TaskDependencyDialog {
-        id: dependencyDialog
-        // The task that will wait (hasTask false: none).
-        property bool hasTask: false
-        property string taskPath
-        property int taskLine
-        property string taskText
-        onSearchRequested: (text) => {
-            if (hasTask)
-                items = planningActions.dependencyCandidates(taskPath, taskLine, text)
-            else
-                items = []
-        }
-        onChosen: (path, line) => {
-            if (hasTask && planningActions.addDependency(taskPath, taskLine, taskText, path, line))
-                root.undoToast(qsTr("Dependency added"), "success")
-        }
     }
     TasksQueryDialog {
         id: queryDialog

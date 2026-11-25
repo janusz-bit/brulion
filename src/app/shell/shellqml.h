@@ -35,6 +35,7 @@
 //   ShortcutMap      singleton — the commands' keyboard shortcuts (custom ones too)
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
 //   ViewTraits       creatable — ViewTraits { view: loader.item } (ShellRouteView)
+//   ViewKeeper       creatable — ViewKeeper { limit: MemoryPolicy.keptViews } (ShellRouteView's hidden views)
 //   CleanupSelection creatable — CleanupView's shown and ticked files
 //   WebClipperSetup  singleton — Settings' "Browser extension (Web Clipper)" (the host manifests)
 #pragma once
@@ -60,6 +61,7 @@
 #include "replacesession.h"
 #include "shortcutmap.h"
 #include "themepages.h"
+#include "viewkeeper.h"
 #include "viewtraits.h"
 #include "webclippersetup.h"
 #include "workspace.h"
@@ -431,6 +433,12 @@ struct FolderTreeModelForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::FolderTreeModel)
     QML_NAMED_ELEMENT(FolderTreeModel)
+};
+
+struct ViewKeeperForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ViewKeeper)
+    QML_NAMED_ELEMENT(ViewKeeper)
 };
 
 struct ViewTraitsForeign {

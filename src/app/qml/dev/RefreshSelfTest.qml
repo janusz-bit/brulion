@@ -50,7 +50,7 @@ QtObject {
     function namedAt(item: Item, name: string, index: int): Item { return window.namedAt(item, name, index) }
     function findItem(item: Item, name: string): Item { return window.findItem(item, name) }
     function list(): ListView { return editor.listView }
-    function dialogs(): EditorDialogs { return editor.dialogs as EditorDialogs }
+    function dialogs(): EditorDialogs { return editor.dialogsNow() as EditorDialogs }
 
     // ---- The query's results -------------------------------------------------------------------
     readonly property string longTask: "Kupić fugę epoksydową w kolorze piaskowym, dwa opakowania po pięć kilogramów, "

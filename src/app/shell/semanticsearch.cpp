@@ -1,5 +1,7 @@
 #include "semanticsearch.h"
 
+#include "memorypolicy.h"
+
 #include "index/vaultindex.h"
 #include "semantic/models.h"
 #include "semantic/notes.h"
@@ -265,6 +267,18 @@ SemanticSearch::SemanticSearch(QObject *parent)
         if (m_runner && m_runner->release())
             qCInfo(lcSemantic) << "the embedding model left memory";
     });
+    // Away, the model leaves memory at once when it has no work (not after its idle time): the
+    // next note or query loads it again (docs/PERFORMANCE.md "Memory: only what is in use").
+    if (ui::MemoryPolicy *policy = ui::MemoryPolicy::instance()) {
+        connect(policy, &ui::MemoryPolicy::letGo, this, [this] {
+            if (!m_inFlight.isEmpty() || !m_asked.isEmpty())
+                return;
+            if (m_runner && m_runner->release()) {
+                m_idleTimer.stop();
+                qCInfo(lcSemantic) << "the embedding model left memory (the app is away)";
+            }
+        });
+    }
     m_contentTimer.setSingleShot(true);
     connect(&m_contentTimer, &QTimer::timeout, this, &SemanticSearch::contentChanged);
 }

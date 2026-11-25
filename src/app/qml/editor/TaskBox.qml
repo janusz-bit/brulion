@@ -42,7 +42,9 @@ T.AbstractButton {
     onClicked: toggled()
     onPressAndHold: openMenu()
 
-    property TaskStatusMenu statusMenu: null
+    /// Its TaskStatusMenu, loaded from its file when first opened (docs/PERFORMANCE.md "QML files
+    /// loaded when first used": every task's box would load it with the page).
+    property BMenu statusMenu: null
     /// Its own status menu is shown (from popup() until it has closed).
     readonly property bool menuOpen: statusMenu !== null && statusMenu.visible
 
@@ -52,9 +54,12 @@ T.AbstractButton {
             menuRequested()
             return
         }
-        if (!statusMenu)
-            statusMenu = menuComponent.createObject(control) as TaskStatusMenu
-        statusMenu.status = control.status
+        if (!statusMenu) {
+            const component = Qt.createComponent(Qt.resolvedUrl("TaskStatusMenu.qml"))
+            statusMenu = component.createObject(control) as BMenu
+            QmlCall.connect(statusMenu, "statusChosen", control, "statusChosen")
+        }
+        QmlCall.set(statusMenu, "status", control.status)
         statusMenu.popup(control, 0, control.height)
     }
 
@@ -69,17 +74,11 @@ T.AbstractButton {
         onTapped: control.openMenu()
     }
 
-    Component {
-        id: menuComponent
-        TaskStatusMenu {
-            onStatusChosen: (status) => control.statusChosen(status)
-        }
-    }
-
     contentItem: Item {
         Rectangle {
             id: box
-            anchors.centerIn: parent
+            x: Math.round(parent.width / 2) - Math.round(width / 2)
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             width: control.boxSize
             height: control.boxSize
             radius: Theme.radiusXs + 1
@@ -94,11 +93,13 @@ T.AbstractButton {
 
             // Icons only for the states that show one (an icon is an image to load: a box is
             // created with every task row and block, also while lists scroll).
+            // (One icon for both states: a check when done, a chevron when deferred.)
             BIcon {
-                anchors.centerIn: parent
-                name: control.status === "done" ? "check" : ""
+                x: Math.round(parent.width / 2) - Math.round(width / 2)
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
+                name: control.status === "done" ? "check" : control.status === "deferred" ? "chevron-right" : ""
                 size: control.boxSize - 4
-                color: Theme.dark ? Theme.bg : "#ffffff"
+                color: control.status === "done" ? (Theme.dark ? Theme.bg : "#ffffff") : Theme.fgMuted
             }
             // Doing: the lower half filled.
             Rectangle {
@@ -113,16 +114,11 @@ T.AbstractButton {
             }
             Rectangle {
                 visible: control.status === "cancelled"
-                anchors.centerIn: parent
+                x: Math.round(parent.width / 2) - Math.round(width / 2)
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 width: parent.width - 6
                 height: 1.5
                 color: Theme.fgFaint
-            }
-            BIcon {
-                anchors.centerIn: parent
-                name: control.status === "deferred" ? "chevron-right" : ""
-                size: control.boxSize - 4
-                color: Theme.fgMuted
             }
         }
     }

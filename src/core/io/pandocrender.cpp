@@ -640,7 +640,7 @@ QString PandocRenderer::renderBlock(const ParsedNote &note, int index) const
             return withId(embedded);
         // Footnote definitions, one per line that starts with "[^label]:".
         static const QRegularExpression footnote(u"^\\[\\^([^\\]\\s]+)\\]:[ \\t]*"_s);
-        if (footnote.match(b.text).hasMatch()) {
+        if (footnote.match(b.text.toString()).hasMatch()) {
             QStringList notes;
             QString label;
             QStringList lines;

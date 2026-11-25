@@ -155,16 +155,19 @@ T.ItemDelegate {
             id: marker
             width: Theme.touchUi ? Theme.touchTarget : 24
             height: width
-            TaskBox {
-                objectName: "planningTaskBox"
+            // (Made for a task only: the day panel and the agenda list reminders and events too.)
+            Loader {
                 anchors.centerIn: parent
-                visible: control.isTask
-                status: control.taskStatus
-                Accessible.name: qsTr("Done: %1").arg(control.entryTitle)
-                onToggled: control.taskToggled()
-                onStatusChosen: (status) => {
-                    if (status !== control.taskStatus)
-                        control.statusRequested(status)
+                active: control.isTask
+                sourceComponent: TaskBox {
+                    objectName: "planningTaskBox"
+                    status: control.taskStatus
+                    Accessible.name: qsTr("Done: %1").arg(control.entryTitle)
+                    onToggled: control.taskToggled()
+                    onStatusChosen: (status) => {
+                        if (status !== control.taskStatus)
+                            control.statusRequested(status)
+                    }
                 }
             }
             Rectangle {

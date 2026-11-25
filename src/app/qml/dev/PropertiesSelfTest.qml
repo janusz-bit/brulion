@@ -81,7 +81,7 @@ QtObject {
     function delegateAt(r: int): BlockDelegate { return window.delegateAt(r) }
     function findItem(item: Item, name: string): Item { return window.findItem(item, name) }
     function list(): ListView { return editor.listView }
-    function dialogs(): EditorDialogs { return editor.dialogs as EditorDialogs }
+    function dialogs(): EditorDialogs { return editor.dialogsNow() as EditorDialogs }
     function dateDialog(): BDialog { return dialogs().dateDialog }
     function datePicker(): BDatePicker { return DevTest.objectProperty(dateDialog(), "picker") as BDatePicker }
     function view(): FrontmatterView { return findItem(delegateAt(0), "frontmatterView") as FrontmatterView }

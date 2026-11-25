@@ -1,7 +1,7 @@
 // The parsed model's compact types (types.h, docs/PERFORMANCE.md L8): Boxed (Block::task),
-// BlockIdMap (ParsedNote::blockIds), Properties, BlockSource (Block::raw) — and the golden digest
-// of parseNote()'s output over a frozen corpus (tests/common/notecorpus.h), which proves that the
-// memory diet changed no value and later guards markdown::ParserVersion (the index cache).
+// BlockIdMap (ParsedNote::blockIds), Properties, BlockSource (Block::raw), TaskList (ParsedNote::tasks), BlockText
+// (Block::text) — and the golden digest of parseNote()'s output over a frozen corpus (tests/common/notecorpus.h), which
+// proves that the memory diet changed no value and later guards markdown::ParserVersion (the index cache).
 #include "markdown/parse.h"
 
 #include "notecorpus.h"
@@ -142,6 +142,142 @@ private Q_SLOTS:
         QCOMPARE(own.to(), 5);
     }
 
+    // ---- BlockText (Block::text) ----------------------------------------------------------------
+
+    void blockTextSlices_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("block");
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<bool>("slice");
+        QTest::newRow("list item") << u"- Zażółć gęślą jaźń\n"_s << 0 << u"Zażółć gęślą jaźń"_s << true;
+        QTest::newRow("paragraph lines") << u"Pierwsza linia\ndruga linia\n"_s << 0 << u"Pierwsza linia\ndruga linia"_s
+                                         << true;
+        QTest::newRow("heading closing hashes") << u"## Łódź ##\n"_s << 0 << u"Łódź"_s << true;
+        QTest::newRow("task trailing tokens")
+                << u"- [ ] Kupić farbę 📅 2026-11-25\n"_s << 0 << u"Kupić farbę"_s << true;
+        QTest::newRow("Logseq marker") << u"- TODO żółw\n"_s << 0 << u"żółw"_s << true;
+        QTest::newRow("token inside") << u"- jeden 📅 2026-11-25 dwa\n"_s << 0 << u"jeden dwa"_s << false;
+        QTest::newRow("indented continuation")
+                << u"- rodzic\n  ciąg dalszy\n"_s << 0 << u"rodzic\nciąg dalszy"_s << false;
+        QTest::newRow("CRLF one line") << u"- ąć\r\n- ęł\r\n"_s << 1 << u"ęł"_s << true;
+        QTest::newRow("CRLF two lines") << u"Akapit\r\ndalej\r\n"_s << 0 << u"Akapit\ndalej"_s << false;
+        QTest::newRow("block id") << u"- tekst ^abc123\n"_s << 0 << u"tekst"_s << true;
+        QTest::newRow("comment inside") << u"- przed %%uwaga%% po\n"_s << 0 << u"przed po"_s << false;
+        QTest::newRow("code fence") << u"```calc\n2 + 2\nx = 3\n```\n"_s << 0 << u"2 + 2\nx = 3"_s << true;
+        QTest::newRow("quote") << u"> cytat\n"_s << 0 << u"cytat"_s << true;
+        QTest::newRow("table") << u"| a | b |\n|---|---|\n| 1 | 2 |\n"_s << 0 << u"| a | b |\n|---|---|\n| 1 | 2 |"_s
+                               << true;
+        QTest::newRow("BOM heading") << u"﻿# Tytuł\n"_s << 0 << u"Tytuł"_s << true;
+        QTest::newRow("empty item") << u"- \n"_s << 0 << QString() << false;
+        QTest::newRow("tabs before") << u"-\tpo tabulatorze\n"_s << 0 << u"po tabulatorze"_s << true;
+    }
+    void blockTextSlices()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, block);
+        QFETCH(QString, text);
+        QFETCH(bool, slice);
+        const ParsedNote note = markdown::parseNote(u"Notatka.md"_s, content);
+        QVERIFY(block < note.blocks.size());
+        const BlockText &t = note.blocks[block].text;
+        QCOMPARE(t.toString(), text);
+        QCOMPARE(QString(t), text);
+        QCOMPARE(t.view(), QStringView(text));
+        QCOMPARE(t.size(), text.size());
+        QCOMPARE(t.isEmpty(), text.isEmpty());
+        QCOMPARE(t.isSlice(), slice);
+        if (slice) {
+            // The slice shares the caller's text: no copy.
+            QCOMPARE(t.buffer().constData(), content.constData());
+            QCOMPARE(QStringView(content).sliced(t.from(), t.to() - t.from()), QStringView(text));
+        }
+        QVERIFY(t == text);
+        QVERIFY(text == t);
+        QVERIFY(t == QStringView(text));
+        QVERIFY(t == BlockText(text));
+    }
+
+    void blockTextReadsLikeAString()
+    {
+        const QString doc = u"- Zażółć gęślą jaźń\n"_s;
+        const BlockText t(doc, 2, doc.size() - 1);
+        QVERIFY(t.isSlice());
+        QVERIFY(!t.isNull());
+        QCOMPARE(t.at(0), u'Z');
+        QCOMPARE(t[t.size() - 1], u'ń');
+        QCOMPARE(t.front(), u'Z');
+        QCOMPARE(t.back(), u'ń');
+        QVERIFY(t.contains(u"gęślą"));
+        QVERIFY(t.contains(u'ż'));
+        QVERIFY(t.contains(u"GĘŚLĄ"_s, Qt::CaseInsensitive));
+        QVERIFY(t.startsWith(u"Zażółć"));
+        QVERIFY(t.endsWith(u'ń'));
+        QCOMPARE(t.indexOf(u"gęślą"), 7);
+        QCOMPARE(t.lastIndexOf(u'ź'), t.size() - 2);
+        QCOMPARE(t.count(u'ż'), 1);
+        QCOMPARE(t.left(6), u"Zażółć"_s);
+        QCOMPARE(t.right(4), u"jaźń"_s);
+        QCOMPARE(t.mid(7, 5), u"gęślą"_s);
+        QCOMPARE(t.first(3), u"Zaż"_s);
+        QCOMPARE(t.last(2), u"źń"_s);
+        QCOMPARE(t.sliced(13), u"jaźń"_s);
+        QCOMPARE(t.chopped(5), u"Zażółć gęślą"_s);
+        QCOMPARE(t.toLower(), u"zażółć gęślą jaźń"_s);
+        QCOMPARE(t.toUpper(), u"ZAŻÓŁĆ GĘŚLĄ JAŹŃ"_s);
+        QCOMPARE(t.split(u' '), (QStringList{u"Zażółć"_s, u"gęślą"_s, u"jaźń"_s}));
+        QCOMPARE(t.section(u' ', 1, 1), u"gęślą"_s);
+        QCOMPARE(t.toUtf8(), u"Zażółć gęślą jaźń"_s.toUtf8());
+        QCOMPARE(t.trimmed(), u"Zażółć gęślą jaźń"_s);
+        QCOMPARE(BlockText(doc, 0, doc.size()).trimmed(), u"- Zażółć gęślą jaźń"_s);
+        QString joined;
+        for (const QChar c : t)
+            joined.append(c);
+        QCOMPARE(joined, t.toString());
+        // QStringBuilder concatenation, both sides.
+        const QString a = u"[" + t + u"]";
+        QCOMPARE(a, u"[Zażółć gęślą jaźń]"_s);
+        const QString b = u"x"_s + t;
+        QCOMPARE(b, u"xZażółć gęślą jaźń"_s);
+        // Ordering and comparisons.
+        QVERIFY(t < u"Zb"_s);
+        QVERIFY(u"Za"_s < t);
+        QVERIFY(t == u"Zażółć gęślą jaźń");
+        QVERIFY(t != u"Zażółć"_s);
+        QVERIFY(t == QLatin1StringView("x") == false);
+        QCOMPARE(t.compare(u"zażółć gęślą jaźń", Qt::CaseInsensitive), 0);
+        // A copy of the slice shares the document; assigning a string makes it its own.
+        BlockText copy = t;
+        QCOMPARE(copy.buffer().constData(), doc.constData());
+        copy = u"własny"_s;
+        QVERIFY(!copy.isSlice());
+        QCOMPARE(copy.toString(), u"własny"_s);
+        QCOMPARE(t.toString(), u"Zażółć gęślą jaźń"_s);
+        // A ternary with a QString stays a QString.
+        const QString chosen = copy.isEmpty() ? u"pusty"_s : t;
+        QCOMPARE(chosen, u"Zażółć gęślą jaźń"_s);
+    }
+
+    void blockTextEmptyAndNull()
+    {
+        const BlockText none;
+        QVERIFY(none.isNull());
+        QVERIFY(none.isEmpty());
+        QVERIFY(none.toString().isNull());
+        const BlockText empty{QString(u""_s)};
+        QVERIFY(!empty.isNull());
+        QVERIFY(empty.isEmpty());
+        // An empty range is no slice (it would keep the whole note alive for nothing).
+        const QString doc = u"abc"_s;
+        const BlockText emptyRange(doc, 1, 1);
+        QVERIFY(!emptyRange.isSlice());
+        QVERIFY(emptyRange.isEmpty());
+        QVERIFY(!emptyRange.isNull());
+        QVERIFY(emptyRange.buffer().constData() != doc.constData());
+        QVERIFY(none == QString());
+        QVERIFY(empty == QString());
+    }
+
     // ---- Boxed<Task> --------------------------------------------------------------------------
 
     void boxedTask()
@@ -203,6 +339,103 @@ private Q_SLOTS:
         QVERIFY(copy.task.isSharedWith(block.task));
         block.task->status = TaskStatus::Done;
         QCOMPARE(copy.task->status, TaskStatus::Doing);
+    }
+
+    // ---- TaskList (ParsedNote::tasks) --------------------------------------------------------------
+
+    void taskListSharesTheBlocksTasks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("texts");
+        QTest::addColumn<QList<bool>>("sameAsBlockText");
+        QTest::newRow("none") << u"# Nagłówek\nAkapit\n"_s << QStringList() << QList<bool>();
+        QTest::newRow("one line") << u"- [ ] Zapłacić czynsz\n"_s << QStringList{u"Zapłacić czynsz"_s}
+                                  << QList<bool>{true};
+        QTest::newRow("tokens") << u"- [x] Kupić farbę 📅 2026-11-25 ✅ 2026-11-24\n"_s << QStringList{u"Kupić farbę"_s}
+                                << QList<bool>{true};
+        QTest::newRow("Logseq marker") << u"- TODO żółw\n- DONE łódź\n"_s << QStringList{u"żółw"_s, u"łódź"_s}
+                                       << QList<bool>{true, true};
+        // A task's text is its first line; the block's holds every line.
+        QTest::newRow("two lines") << u"- [ ] pierwsza\n  druga linia\n"_s << QStringList{u"pierwsza"_s}
+                                   << QList<bool>{false};
+        QTest::newRow("nested") << u"- [ ] rodzic\n  - [/] dziecko ⏳ 2026-12-01\n"_s
+                                << QStringList{u"rodzic"_s, u"dziecko"_s} << QList<bool>{true, true};
+        QTest::newRow("CRLF") << u"- [ ] ąć\r\n- [-] ęł\r\n"_s << QStringList{u"ąć"_s, u"ęł"_s}
+                              << QList<bool>{true, true};
+        QTest::newRow("empty task") << u"- [ ] \n"_s << QStringList{QString()} << QList<bool>{true};
+    }
+    void taskListSharesTheBlocksTasks()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, texts);
+        QFETCH(QList<bool>, sameAsBlockText);
+        const ParsedNote note = markdown::parseNote(u"Zadania.md"_s, content);
+        QCOMPARE(note.tasks.size(), texts.size());
+        QCOMPARE(note.tasks.isEmpty(), texts.isEmpty());
+        qsizetype t = 0;
+        for (const Block &b : note.blocks) {
+            if (!b.task)
+                continue;
+            QVERIFY(t < note.tasks.size());
+            QVERIFY(note.tasks.isSharedWith(t, b.task)); // the block's object, not a copy
+            QCOMPARE(&note.tasks.at(t), &*b.task);
+            QCOMPARE(note.tasks[t].text, texts.at(t));
+            // A one-line task's text is its block's: one string when the block's is no slice of
+            // the note (a slice shares the note's text, the task has its own string).
+            if (sameAsBlockText.at(t) && !b.text.isEmpty() && !b.text.isSlice())
+                QVERIFY(b.task->text.isSharedWith(b.text.buffer()));
+            if (!sameAsBlockText.at(t))
+                QVERIFY(b.task->text != b.text);
+            ++t;
+        }
+        QCOMPARE(t, note.tasks.size());
+        // It reads like a QList<Task>.
+        QStringList seen;
+        for (const Task &task : note.tasks)
+            seen.append(task.text);
+        QCOMPARE(seen, texts);
+        QCOMPARE(note.tasks.toList().size(), texts.size());
+        if (!texts.isEmpty()) {
+            QCOMPARE(note.tasks.first().text, texts.first());
+            QCOMPARE(note.tasks.last().text, texts.last());
+            const auto found = std::ranges::find(note.tasks, note.tasks.last().line, &Task::line);
+            QVERIFY(found != note.tasks.cend());
+            QCOMPARE(found - note.tasks.cbegin(), note.tasks.size() - 1);
+            QCOMPARE(found->text, texts.last());
+            QVERIFY(std::ranges::all_of(note.tasks, [](const Task &x) { return x.line >= 0; }));
+        }
+        // A copy of the note shares the tasks too.
+        const ParsedNote copy = note;
+        for (qsizetype i = 0; i < copy.tasks.size(); ++i)
+            QCOMPARE(&copy.tasks.at(i), &note.tasks.at(i));
+    }
+
+    void taskListOwnTasks()
+    {
+        TaskList list;
+        QVERIFY(list.isEmpty());
+        QCOMPARE(list.begin(), list.end());
+        list.append(Boxed<Task>()); // a block without a task adds nothing
+        QVERIFY(list.isEmpty());
+        list.append(sampleTask(u"własne"_s));
+        Boxed<Task> boxed = sampleTask(u"wspólne"_s);
+        list.append(boxed);
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list.at(0).text, u"własne"_s);
+        QVERIFY(list.isSharedWith(1, boxed));
+        QVERIFY(!list.isSharedWith(0, boxed));
+        auto it = list.begin();
+        QCOMPARE(it->text, u"własne"_s);
+        ++it;
+        QCOMPARE((*it).text, u"wspólne"_s);
+        QCOMPARE(list.end() - list.begin(), 2);
+        QCOMPARE(list.begin()[1].text, u"wspólne"_s);
+        QVERIFY(list.begin() < list.end());
+        list.squeeze();
+        list.clear();
+        QVERIFY(list.isEmpty());
+        static_assert(std::random_access_iterator<TaskList::const_iterator>);
+        static_assert(std::ranges::random_access_range<const TaskList>);
     }
 
     // Copies made on other threads while the original is read: the reference count is atomic

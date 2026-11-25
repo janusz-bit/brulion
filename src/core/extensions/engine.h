@@ -61,12 +61,22 @@ struct Limits
     qint64 memoryBytes = 64ll << 20; ///< the VM's heap; <= 0: no limit
 };
 
+/// A value of Extension::data that is a file (a resource): read when b.data() first asks for it —
+/// a ".json" file parsed, any other as its text — and kept by the engine until dropData(). A
+/// catalog nobody opens (the gym's 880 exercises with their instructions: 5 MB once parsed) then
+/// costs nothing.
+struct DataFile {
+    QString path;
+};
+/// `stored` itself, or what its DataFile holds (read and parsed now; nothing is kept).
+QVariant resolvedData(const QVariant &stored);
+
 struct Extension
 {
     QString id; ///< "silownia"
     QString source; ///< Luau source
     QStringList permissions; ///< "write" lets it change notes (reading is always allowed)
-    QVariantMap data; ///< b.data(name): read-only data bundled with it (parsed JSON)
+    QVariantMap data;        ///< b.data(name): read-only data bundled with it (parsed JSON, or a DataFile)
     QString name; ///< the name in error messages ("Licznik słów:14: …"); "" = the id
 };
 
@@ -200,6 +210,11 @@ public:
     Result load(const Extension &extension);
     void unload(const QString &id);
     QStringList extensions() const;
+    /// Forgets the data files b.data() read (Extension::data's DataFile values): read again when
+    /// asked for next. The app calls it while it is away.
+    void dropData() { m_dataFiles.clear(); }
+    /// The data files held now (tests).
+    int heldDataFiles() const { return int(m_dataFiles.size()); }
 
     QList<CommandInfo> commands() const; ///< sorted by extension, then name
     QList<ViewInfo> views() const;
@@ -504,6 +519,7 @@ private:
     qint64 m_deadlineNs = 0;
     int m_uiRef = 0;
     QHash<QString, Loaded> m_loaded;
+    QHash<QString, QVariant> m_dataFiles; ///< DataFile path → what it holds, until dropData()
     QHash<QString, Handler> m_commands; // "extension/name"
     QHash<QString, Handler> m_views;
     QMap<int, Hook> m_hooks;
@@ -540,3 +556,5 @@ private:
 };
 
 } // namespace brulion::extensions
+
+Q_DECLARE_METATYPE(brulion::extensions::DataFile)

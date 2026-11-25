@@ -570,11 +570,13 @@ private Q_SLOTS:
     // the other — written in Polish (diacritics), none left empty.
     void polishInstructionsMatchTheEnglish()
     {
+        // (Files, read when asked for: resolvedData() is what b.data() gives.)
         const QVariantMap data = builtinExtension(u"silownia"_s).data;
-        const QVariantMap polish = data.value(u"instructions-pl"_s).toMap();
-        const QVariantMap english = data.value(u"instructions"_s).toMap();
+        const QVariantMap polish = resolvedData(data.value(u"instructions-pl"_s)).toMap();
+        const QVariantMap english = resolvedData(data.value(u"instructions"_s)).toMap();
         QSet<QString> ids;
-        for (const QVariant &e : data.value(u"exercises"_s).toMap().value(u"exercises"_s).toList())
+        const QVariantMap catalog = resolvedData(data.value(u"exercises"_s)).toMap();
+        for (const QVariant &e : catalog.value(u"exercises"_s).toList())
             ids.insert(e.toMap().value(u"id"_s).toString());
         QVERIFY2(polish.size() >= 120, qPrintable(QString::number(polish.size())));
         int withDiacritics = 0;
@@ -602,8 +604,9 @@ private Q_SLOTS:
     // English to an English one.
     void polishInstructionsAreShown()
     {
-        const QVariantMap polish = builtinExtension(u"silownia"_s).data.value(u"instructions-pl"_s).toMap();
-        const QVariantMap english = builtinExtension(u"silownia"_s).data.value(u"instructions"_s).toMap();
+        const QVariantMap polish =
+                resolvedData(builtinExtension(u"silownia"_s).data.value(u"instructions-pl"_s)).toMap();
+        const QVariantMap english = resolvedData(builtinExtension(u"silownia"_s).data.value(u"instructions"_s)).toMap();
         QVERIFY(polish.contains(u"back-squat"_s) && !polish.contains(u"zottman-curl"_s));
         const QString firstPolish = polish.value(u"back-squat"_s).toList().constFirst().toString();
         const QString firstEnglish = english.value(u"back-squat"_s).toList().constFirst().toString();

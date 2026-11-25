@@ -574,7 +574,7 @@ public:
         if (key == u"fullycompleted")
             return Value::boolean(fullyCompleted());
         if (key == u"text" || key == u"visual")
-            return Value::string(t ? t->text : b.text);
+            return Value::string(t ? t->text : b.text.toString());
         if (key == u"line")
             return Value::number(b.line);
         if (key == u"linecount")

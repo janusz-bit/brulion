@@ -99,14 +99,8 @@ BMenu {
         menu.tableRows = inCell ? cellRows : 0
         menu.tableColumns = inCell ? cellColumns : 0
         menu.cellAlign = inCell ? cellAlign : ""
-        const picked = inCell ? editor.tableAt(row) : null
-        if (picked !== null && picked.inSelection(cellRow, cellColumn)) {
-            menu.pickedRows = picked.selectedRows()
-            menu.pickedFirst = picked.selectionLeft()
-            menu.pickedLast = picked.selectionRight()
-        } else {
-            menu.pickedRows = noRows
-        }
+        // (The table's members by name: TableBlockView is loaded from its file for a page with a table.)
+        menu.readPicked(inCell ? editor.tableAt(row) : null, cellRow, cellColumn)
         info.map = controller.blocks.get(row)
         table = info.map.view === "table"
         listItem = info.map.kind === "listItem"
@@ -121,6 +115,16 @@ BMenu {
         uncuttable = inSelection && span ? editor.spanReason : ""
     }
     readonly property list<int> noRows: []
+    /// The cells picked in `table` when the menu is of one of them (else none).
+    function readPicked(table: Item, cellRow: int, cellColumn: int): void {
+        if (table !== null && QmlCall.isTrue(QmlCall.call2(table, "inSelection", cellRow, cellColumn))) {
+            QmlCall.set(menu, "pickedRows", QmlCall.call(table, "selectedRows"))
+            menu.pickedFirst = QmlCall.integer(QmlCall.call(table, "selectionLeft"))
+            menu.pickedLast = QmlCall.integer(QmlCall.call(table, "selectionRight"))
+        } else {
+            menu.pickedRows = menu.noRows
+        }
+    }
     function clearPicked(r: int): void {
         const picked = menu.pickedRows
         const first = menu.pickedFirst
@@ -397,7 +401,7 @@ BMenu {
         onTriggered: {
             const r = menu.row()
             if (r >= 0)
-                menu.editor.dialogs.saveTableCsv(r)
+                QmlCall.call1(menu.editor.dialogsNow(), "saveTableCsv", r)
         }
     }
     OptionalItem {
@@ -613,7 +617,7 @@ BMenu {
         onTriggered: {
             const r = menu.row()
             if (r >= 0)
-                menu.editor.dialogs.pickImage(r, -1)
+                QmlCall.call2(menu.editor.dialogsNow(), "pickImage", r, -1)
         }
     }
     OptionalItem {
@@ -635,7 +639,7 @@ BMenu {
         onTriggered: {
             const r = menu.row()
             if (r >= 0)
-                menu.editor.dialogs.pickDrawingBackdrop(r, -1)
+                QmlCall.call2(menu.editor.dialogsNow(), "pickDrawingBackdrop", r, -1)
         }
     }
     // The extensions' items (b.app.contribute("blockMenu", …): their commands get ctx.block), not

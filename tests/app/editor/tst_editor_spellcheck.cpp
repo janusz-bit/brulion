@@ -216,11 +216,179 @@ private Q_SLOTS:
         std::atomic<bool> offMain = false;
         SpellCheck spell({u"pl"_s}, wordLists(&made, &offMain));
         spell.setUiLanguage(u"pl"_s);
-        // Made once, on the worker, as soon as its language is known (so a check that none is made
-        // yet would race the worker's thread).
+        // Made once, on the worker, for the first word asked about.
         QCOMPARE(settled(spell, u"kot"_s), SpellCheck::Verdict::Correct);
         QCOMPARE(made.load(), 1);
         QVERIFY(offMain.load());
+    }
+
+    void workerOnlyWhenAWordIsAsked()
+    {
+        // Settings alone make no worker and read no dictionary: a notebook nobody types in, spell
+        // checking of the edited block only, never pays for them.
+        std::atomic<int> made = 0;
+        SpellCheck spell({u"pl"_s, u"en"_s}, wordLists(&made));
+        spell.setSystemLanguage(u"pl_PL"_s);
+        spell.setUiLanguage(u"pl"_s);
+        spell.setLanguageSetting(u"pl,en"_s);
+        spell.setPersonalWords({u"brulion"_s});
+        spell.setEnabled(false);
+        spell.setEnabled(true);
+        QCoreApplication::processEvents();
+        QVERIFY(!spell.loaded());
+        QCOMPARE(made.load(), 0);
+        // The first word brings it, with the settings of now.
+        QCOMPARE(settled(spell, u"brulion"_s), SpellCheck::Verdict::Correct);
+        QVERIFY(spell.loaded());
+        QCOMPARE(made.load(), 2);
+        QCOMPARE(settled(spell, u"meeting"_s), SpellCheck::Verdict::Correct);
+        QCOMPARE(settled(spell, u"zażułć"_s), SpellCheck::Verdict::Wrong);
+        QCOMPARE(made.load(), 2);
+    }
+
+    void dictionariesGoWhenIdle()
+    {
+        std::atomic<int> made = 0;
+        SpellCheck spell({u"pl"_s}, wordLists(&made));
+        QCOMPARE(spell.idleMs(), SpellCheck::DefaultIdleMs);
+        spell.setIdleMs(150 * BRULION_TEST_SLOWDOWN);
+        spell.setUiLanguage(u"pl"_s);
+        spell.setPersonalWords({u"brulion"_s});
+        spell.ignore(u"qwerty"_s);
+        QSignalSpy unloaded(&spell, &SpellCheck::unloaded);
+        QSignalSpy invalidated(&spell, &SpellCheck::invalidated);
+        QCOMPARE(settled(spell, u"kot"_s), SpellCheck::Verdict::Correct);
+        QCOMPARE(settled(spell, u"zażułć"_s), SpellCheck::Verdict::Wrong);
+        QVERIFY(spell.loaded());
+        const int revision = spell.revision();
+        // Nothing asked for a while: the worker and its dictionaries go.
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        QVERIFY(!spell.loaded());
+        // What is known stays known — nothing is underlined anew, nothing asked again.
+        QCOMPARE(spell.knownVerdict(u"kot"_s), SpellCheck::Verdict::Correct);
+        QCOMPARE(spell.knownVerdict(u"zażułć"_s), SpellCheck::Verdict::Wrong);
+        QCOMPARE(spell.verdict(u"kot"_s), SpellCheck::Verdict::Correct);
+        QCOMPARE(spell.pendingCount(), 0);
+        QCOMPARE(spell.revision(), revision);
+        QCOMPARE(invalidated.size(), 0);
+        QVERIFY(!spell.loaded());
+        QCOMPARE(made.load(), 1);
+        // A word not known yet brings the worker back, with the personal and the ignored words.
+        QCOMPARE(spell.verdict(u"pies"_s), SpellCheck::Verdict::Pending);
+        QCOMPARE(settled(spell, u"pies"_s), SpellCheck::Verdict::Correct);
+        QVERIFY(spell.loaded());
+        QCOMPARE(made.load(), 2);
+        QCOMPARE(settled(spell, u"brulion"_s), SpellCheck::Verdict::Correct);
+        QCOMPARE(settled(spell, u"qwerty"_s), SpellCheck::Verdict::Correct);
+        QCOMPARE(settled(spell, u"gęślom"_s), SpellCheck::Verdict::Wrong);
+        // So do suggestions.
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        QSignalSpy ready(&spell, &SpellCheck::suggestionsReady);
+        spell.requestSuggestions(u"kott"_s);
+        QVERIFY(spell.loaded());
+        QVERIFY(ready.wait(5000 * BRULION_TEST_SLOWDOWN));
+        QCOMPARE(made.load(), 3);
+    }
+
+    void typingKeepsTheDictionaries()
+    {
+        std::atomic<int> made = 0;
+        SpellCheck spell({u"pl"_s}, wordLists(&made));
+        spell.setIdleMs(200 * BRULION_TEST_SLOWDOWN);
+        spell.setUiLanguage(u"pl"_s);
+        QSignalSpy unloaded(&spell, &SpellCheck::unloaded);
+        // A new word every now and then, sooner than the idle time: never unloaded in between.
+        for (int i = 0; i < 6; ++i) {
+            QCOMPARE(settled(spell, u"słowo"_s + QString::number(i)), SpellCheck::Verdict::Wrong);
+            QTest::qWait(60 * BRULION_TEST_SLOWDOWN);
+        }
+        QCOMPARE(unloaded.size(), 0);
+        QCOMPARE(made.load(), 1);
+        // Never: idleMs 0.
+        spell.setIdleMs(0);
+        QTest::qWait(400 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(spell.loaded());
+        QCOMPARE(unloaded.size(), 0);
+    }
+
+    void renderedTextLetsThemGoSooner()
+    {
+        // A page that was opened asks about its words once, and is read then: the dictionaries go
+        // sooner than after a typed word.
+        QVERIFY(SpellCheck::DefaultReadIdleMs < SpellCheck::DefaultIdleMs);
+        std::atomic<int> made = 0;
+        SpellCheck spell({u"pl"_s}, wordLists(&made));
+        QCOMPARE(spell.readIdleMs(), SpellCheck::DefaultReadIdleMs);
+        spell.setIdleMs(60 * 1000);
+        spell.setReadIdleMs(150 * BRULION_TEST_SLOWDOWN);
+        spell.setUiLanguage(u"pl"_s);
+        QSignalSpy unloaded(&spell, &SpellCheck::unloaded);
+        bool pending = false;
+        QVERIFY(spell.wrongWords(u"kot zażułć"_s, &pending).isEmpty());
+        QVERIFY(pending);
+        QVERIFY(spell.waitUntilIdle());
+        QVERIFY(spell.loaded());
+        QCOMPARE(spell.wrongWords(u"kot zażułć"_s).size(), 1);
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        QVERIFY(!spell.loaded());
+        QCOMPARE(spell.wrongWords(u"kot zażułć"_s).size(), 1); // (known: nothing asked again)
+        QVERIFY(!spell.loaded());
+        // A typed word keeps them for the long time, whatever is read meanwhile.
+        QCOMPARE(settled(spell, u"pies"_s), SpellCheck::Verdict::Correct);
+        QVERIFY(spell.loaded());
+        (void)spell.wrongWords(u"gęślom jaźń"_s, &pending);
+        QVERIFY(pending);
+        QVERIFY(spell.waitUntilIdle());
+        QTest::qWait(600 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(spell.loaded());
+        QCOMPARE(unloaded.size(), 1);
+        QCOMPARE(made.load(), 2);
+        // readIdleMs 0: rendered text waits as long as typing.
+        QVERIFY(spell.unload());
+        spell.setReadIdleMs(0);
+        (void)spell.wrongWords(u"ala ma kota"_s, &pending);
+        QVERIFY(pending);
+        QVERIFY(spell.waitUntilIdle());
+        QTest::qWait(600 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(spell.loaded());
+        // Never longer than the time after typing.
+        spell.setReadIdleMs(120 * 1000);
+        spell.setIdleMs(150 * BRULION_TEST_SLOWDOWN);
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        (void)spell.wrongWords(u"pies ma kotta"_s, &pending);
+        QVERIFY(pending);
+        QVERIFY(unloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
+        QVERIFY(!spell.loaded());
+    }
+
+    void unloadOnRequest()
+    {
+        // The app is away (main.cpp: MemoryPolicy's letGo()): now, unless words are on their way.
+        QSemaphore gate;
+        SpellCheck spell({u"pl"_s}, [&gate](const QString &) -> std::unique_ptr<spell::SpellBackend> {
+            (void)gate.tryAcquire(1, brulion::test::kRoomyMs);
+            return std::make_unique<spell::WordListBackend>(u"pl"_s, Polish);
+        });
+        const auto open = qScopeGuard([&gate] { gate.release(2); }); // also when a check fails
+        spell.setIdleMs(0);
+        spell.setUiLanguage(u"pl"_s);
+        QSignalSpy unloaded(&spell, &SpellCheck::unloaded);
+        QVERIFY(!spell.unload()); // (nothing loaded: nothing to do)
+        QCOMPARE(spell.verdict(u"kot"_s), SpellCheck::Verdict::Pending);
+        QVERIFY(!spell.unload()); // queued
+        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();
+        QVERIFY(spell.loaded());
+        QVERIFY(!spell.unload()); // on its way: the worker is still reading its dictionary
+        QCOMPARE(unloaded.size(), 0);
+        gate.release();
+        QVERIFY(spell.waitUntilIdle());
+        QVERIFY(spell.unload());
+        QVERIFY(!spell.loaded());
+        QCOMPARE(unloaded.size(), 1);
+        QCOMPARE(spell.verdict(u"kot"_s), SpellCheck::Verdict::Correct);
+        gate.release();
+        QCOMPARE(settled(spell, u"pies"_s), SpellCheck::Verdict::Correct);
     }
 
     void manyWordsInBatches()

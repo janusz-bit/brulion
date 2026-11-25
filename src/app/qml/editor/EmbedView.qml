@@ -105,6 +105,10 @@ Column {
         return h
     }
 
+    readonly property url baseSource: Qt.resolvedUrl("DatabaseView.qml")
+    readonly property url pdfSource: Qt.resolvedUrl("PdfEmbedTile.qml")
+    readonly property url mediaSource: Qt.resolvedUrl("../media/MediaEmbedTile.qml")
+
     component MutedText: Text {
         textFormat: Text.PlainText
         font.family: Theme.fontUi
@@ -171,23 +175,46 @@ Column {
             width: root.width
             height: embed.base ? baseLoader.height : embed.media ? mediaLoader.height : embed.pdfTile ? pdfLoader.height : image ? picture.height : chip.height
 
+            // The views of a base, a PDF's thumbnail and a player are loaded from their files for the
+            // embeds that have them (docs/PERFORMANCE.md "QML files loaded when first used").
             Loader {
                 id: baseLoader
                 active: embed.base
                 width: embed.width
                 height: baseLoader.implicitHeight
-                sourceComponent: DatabaseView {
-                    id: baseView
-                    width: baseLoader.width
-                    controller: root.controller
-                    editor: root.editor
-                    language: "base"
-                    basePath: "" + (embed.rec.map.path || "")
-                    viewName: "" + (embed.rec.map.view || "")
-                    thisPath: root.controller !== null ? root.controller.path : ""
-                    onToastRequested: (text, kind, undo) => root.viewToast(text, kind, undo, baseView.results)
+                // (Bindings of its own, made only for a base.)
+                sourceComponent: Item {
+                    implicitHeight: baseView.implicitHeight
+                    Loader {
+                        id: baseView
+                        width: parent.width
+                        height: baseView.implicitHeight
+                        Component.onCompleted: {
+                            embed.loadValues = { controller: root.controller, editor: root.editor, language: "base",
+                                                 basePath: "" + (embed.rec.map.path || ""), viewName: "" + (embed.rec.map.view || ""),
+                                                 thisPath: root.controller !== null ? root.controller.path : "" }
+                            baseView.setSource(root.baseSource, embed.loadValues)
+                        }
+                    }
+                    Binding { target: baseView.item; property: "controller"; value: root.controller; restoreMode: Binding.RestoreNone }
+                    Binding { target: baseView.item; property: "editor"; value: root.editor; restoreMode: Binding.RestoreNone }
+                    Binding {
+                        target: baseView.item
+                        property: "thisPath"
+                        value: root.controller !== null ? root.controller.path : ""
+                        restoreMode: Binding.RestoreNone
+                    }
+                    Connections {
+                        target: baseView.item
+                        function onToastRequested(text: string, kind: string, undo: bool): void {
+                            const results = QmlCall.object(baseView.item, "results") as ViewResultModel
+                            root.viewToast(text, kind, undo, results)
+                        }
+                    }
                 }
             }
+            /// The next setSource()'s first values (read from a property, as compiled QML wants).
+            property var loadValues: ({})
 
             // Beside the picture / chip: a click there edits the block (an embed-only paragraph of
             // a document has no text line to click).
@@ -488,11 +515,23 @@ Column {
                 active: embed.pdfTile
                 visible: active
                 // (No size of its own: it takes the tile's, which sizes itself by its page.)
-                sourceComponent: PdfEmbedTile {
-                    entry: embed.modelData
-                    columnWidth: root.width
-                    onClicked: (path, page) => root.pdfClicked(path, page)
-                }
+                onActiveChanged: embed.loadPdf()
+                Component.onCompleted: embed.loadPdf()
+            }
+            function loadPdf(): void {
+                if (!pdfLoader.active || pdfLoader.item !== null)
+                    return
+                embed.loadValues = { entry: embed.modelData, columnWidth: root.width }
+                pdfLoader.setSource(root.pdfSource, embed.loadValues)
+                QmlCall.connect(pdfLoader.item, "clicked", root, "pdfClicked")
+                // (Its column's width followed without an object of its own.)
+                QmlCall.connect(root, "widthChanged", embed, "followWidth")
+            }
+            function followWidth(): void {
+                if (pdfLoader.item !== null)
+                    QmlCall.set(pdfLoader.item, "columnWidth", root.width)
+                if (mediaLoader.item !== null)
+                    QmlCall.set(mediaLoader.item, "columnWidth", root.width)
             }
 
             // A sound or a video: its player.
@@ -500,12 +539,17 @@ Column {
                 id: mediaLoader
                 active: embed.media
                 visible: active
-                sourceComponent: MediaEmbedTile {
-                    entry: embed.modelData
-                    columnWidth: root.width
-                    onTranscribeRequested: (path, target) => root.transcribeRequested(path, target)
-                    onCopyRequested: (text) => root.copyRequested(text)
-                }
+                onActiveChanged: embed.loadMedia()
+                Component.onCompleted: embed.loadMedia()
+            }
+            function loadMedia(): void {
+                if (!mediaLoader.active || mediaLoader.item !== null)
+                    return
+                embed.loadValues = { entry: embed.modelData, columnWidth: root.width }
+                mediaLoader.setSource(root.mediaSource, embed.loadValues)
+                QmlCall.connect(mediaLoader.item, "transcribeRequested", root, "transcribeRequested")
+                QmlCall.connect(mediaLoader.item, "copyRequested", root, "copyRequested")
+                QmlCall.connect(root, "widthChanged", embed, "followWidth")
             }
 
             BChip {

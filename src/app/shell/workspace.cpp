@@ -621,6 +621,9 @@ void Workspace::indexingFinished()
         connect(m_cacheKeeper.get(), &notebook::IndexCacheKeeper::saved, this,
                 [] { platform::reportIndexCacheSaved(); });
 #endif
+        // The snapshot and the encoded file (as large as the notebook) are free again.
+        connect(m_cacheKeeper.get(), &notebook::IndexCacheKeeper::saved, this, &Workspace::memoryFreed);
+        connect(m_cacheKeeper.get(), &notebook::IndexCacheKeeper::saveFailed, this, &Workspace::memoryFreed);
         m_cacheKeeper->loaded(m_loader->stats());
     }
     // Every note is known now: reminders may fire and missed ones be recorded (a half-built

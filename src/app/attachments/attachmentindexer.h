@@ -156,11 +156,35 @@ public:
 
     bool pdfTextAvailable() const;
     static bool documentTextAvailable();
-    bool ocrAvailable() const { return m_ocrAvailable; }
-    QString ocrUnavailableReason() const { return m_ocrReason; }
-    QString ocrEngineName() const { return m_ocrEngine; }
-    QStringList ocrInstalledLanguages() const { return m_ocrInstalled; }
-    QString ocrUserDataDir() const { return m_ocrUserDir; }
+    // What this device's OCR is: looked for when first asked (or when OCR is turned on), in the
+    // background — "probing" and nothing available until engineChanged() says otherwise.
+    bool ocrAvailable() const
+    {
+        probeEngine();
+        return m_ocrAvailable;
+    }
+    QString ocrUnavailableReason() const
+    {
+        probeEngine();
+        return m_ocrReason;
+    }
+    QString ocrEngineName() const
+    {
+        probeEngine();
+        return m_ocrEngine;
+    }
+    QStringList ocrInstalledLanguages() const
+    {
+        probeEngine();
+        return m_ocrInstalled;
+    }
+    QString ocrUserDataDir() const
+    {
+        probeEngine();
+        return m_ocrUserDir;
+    }
+    /// The OCR library was looked for, or is being (tests: not before anybody asked).
+    bool engineAsked() const { return m_probeAsked; }
 
     QString state() const;
     int filesTotal() const { return m_filesTotal; }
@@ -271,6 +295,9 @@ private:
     std::atomic_bool m_paused = false;
     qint64 m_cacheCap = DefaultCacheBytes;
 
+    /// Looks for the OCR library on a pool thread, once (applyEngine() gets the answer).
+    void probeEngine() const;
+    mutable bool m_probeAsked = false;
     bool m_ocrAvailable = false;
     QString m_ocrReason = QStringLiteral("probing");
     QString m_ocrEngine;

@@ -132,14 +132,27 @@ private Q_SLOTS:
         const std::optional<ParsedNote> decoded = indexcache::detail::decodeNote(*body, path, content, VaultConfig());
         QVERIFY(decoded.has_value());
         QCOMPARE(dumpNote(*decoded), dumpNote(parsed));
-        // Shared as parseNote() shares them: reminder texts with their block's, slices with the note.
-        for (const Block &b : decoded->blocks) {
+        // Shared as parseNote() shares them: a block's reminders one text (its own block text's
+        // when that is no slice), slices with the note — the same slices.
+        for (qsizetype i = 0; i < decoded->blocks.size(); ++i) {
+            const Block &b = decoded->blocks[i];
             for (const Reminder &r : b.reminders) {
-                if (r.text == b.text && !b.text.isEmpty())
-                    QCOMPARE(r.text.constData(), b.text.constData());
+                if (r.text == b.text && !b.text.isEmpty()) {
+                    QCOMPARE(r.text.constData(), b.reminders.first().text.constData());
+                    if (!b.text.isSlice())
+                        QCOMPARE(r.text.constData(), b.text.buffer().constData());
+                }
             }
             if (b.raw.isSlice())
                 QCOMPARE(b.raw.buffer().constData(), content.constData());
+            // The parse's slices within the raw lines come back as the same slices (the cache finds a
+            // few more: a text equal to a piece of the raw lines elsewhere).
+            if (parsed.blocks[i].text.isSlice() && b.raw.isSlice()) {
+                QVERIFY(b.text.isSlice());
+                QCOMPARE(b.text.from(), parsed.blocks[i].text.from());
+            }
+            if (b.text.isSlice())
+                QCOMPARE(b.text.buffer().constData(), content.constData());
         }
         // Not one byte more is accepted.
         QVERIFY(!indexcache::detail::decodeNote(QByteArray(*body + '\0'), path, content, VaultConfig()));

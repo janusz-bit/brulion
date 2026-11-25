@@ -438,21 +438,81 @@ FocusScope {
                 }
 
                 contentItem: Item {
-                    // Wide: one row of columns.
-                    Row {
-                        visible: root.wide
+                    // Wide: one row of columns. (Each layout made only while it is the one shown.)
+                    Loader {
                         anchors.fill: parent
-                        Item {
-                            width: parent.width - columns.fixed
-                            height: parent.height
+                        active: root.wide
+                        sourceComponent: Row {
+                            Item {
+                                width: parent.width - columns.fixed
+                                height: parent.height
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: Theme.space2
+                                    anchors.rightMargin: Theme.space3
+                                    spacing: Theme.space2
+                                    BPageIcon {
+                                        icon: row.pageIcon
+                                        fallback: row.journalDate !== "" ? "calendar-days" : "file-text"
+                                        size: Theme.iconSizeSm
+                                        color: Theme.fgFaint
+                                    }
+                                    ContentHighlightText {
+                                        Layout.fillWidth: true
+                                        source: row.shownTitle
+                                        positions: row.journalDate !== "" ? root.noMatches : row.titleMatches
+                                        font.weight: Theme.weightMedium
+                                    }
+                                }
+                            }
+                            BText {
+                                width: columns.folder
+                                anchors.verticalCenter: parent.verticalCenter
+                                rightPadding: Theme.space3
+                                text: row.folder
+                                variant: "muted"
+                                elide: Text.ElideMiddle
+                            }
+                            BText {
+                                width: columns.modified
+                                anchors.verticalCenter: parent.verticalCenter
+                                rightPadding: Theme.space3
+                                text: row.modifiedLabel
+                                variant: "muted"
+                                elide: Text.ElideRight
+                            }
+                            BText {
+                                width: columns.backlinks
+                                anchors.verticalCenter: parent.verticalCenter
+                                rightPadding: Theme.space4
+                                horizontalAlignment: Text.AlignRight
+                                text: row.backlinks > 0 ? "" + row.backlinks : "–"
+                                variant: row.backlinks > 0 ? "body" : "faint"
+                            }
+                            BText {
+                                width: columns.tags
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.tagsText(row.tags)
+                                variant: "small"
+                                color: Theme.tagFg
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    // Narrow: title + one line of details.
+                    Loader {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width
+                        active: !root.wide
+                        sourceComponent: ColumnLayout {
+                            spacing: 2
                             RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.space2
-                                anchors.rightMargin: Theme.space3
+                                Layout.fillWidth: true
                                 spacing: Theme.space2
                                 BPageIcon {
+                                    visible: width > 0
                                     icon: row.pageIcon
-                                    fallback: row.journalDate !== "" ? "calendar-days" : "file-text"
                                     size: Theme.iconSizeSm
                                     color: Theme.fgFaint
                                 }
@@ -461,75 +521,19 @@ FocusScope {
                                     source: row.shownTitle
                                     positions: row.journalDate !== "" ? root.noMatches : row.titleMatches
                                     font.weight: Theme.weightMedium
+                                    font.pixelSize: Theme.textMd
                                 }
                             }
-                        }
-                        BText {
-                            width: columns.folder
-                            anchors.verticalCenter: parent.verticalCenter
-                            rightPadding: Theme.space3
-                            text: row.folder
-                            variant: "muted"
-                            elide: Text.ElideMiddle
-                        }
-                        BText {
-                            width: columns.modified
-                            anchors.verticalCenter: parent.verticalCenter
-                            rightPadding: Theme.space3
-                            text: row.modifiedLabel
-                            variant: "muted"
-                            elide: Text.ElideRight
-                        }
-                        BText {
-                            width: columns.backlinks
-                            anchors.verticalCenter: parent.verticalCenter
-                            rightPadding: Theme.space4
-                            horizontalAlignment: Text.AlignRight
-                            text: row.backlinks > 0 ? "" + row.backlinks : "–"
-                            variant: row.backlinks > 0 ? "body" : "faint"
-                        }
-                        BText {
-                            width: columns.tags
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.tagsText(row.tags)
-                            variant: "small"
-                            color: Theme.tagFg
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    // Narrow: title + one line of details.
-                    ColumnLayout {
-                        visible: !root.wide
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width
-                        spacing: 2
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Theme.space2
-                            BPageIcon {
-                                visible: width > 0
-                                icon: row.pageIcon
-                                size: Theme.iconSizeSm
-                                color: Theme.fgFaint
-                            }
-                            ContentHighlightText {
+                            BText {
                                 Layout.fillWidth: true
-                                source: row.shownTitle
-                                positions: row.journalDate !== "" ? root.noMatches : row.titleMatches
-                                font.weight: Theme.weightMedium
-                                font.pixelSize: Theme.textMd
+                                text: root.nonEmpty([row.folder,
+                                                     row.modifiedLabel,
+                                                     row.backlinks > 0 ? qsTr("%n link(s)", "", row.backlinks) : "",
+                                                     root.tagsText(row.tags)]).join(" · ")
+                                variant: "small"
+                                color: Theme.fgMuted
+                                elide: Text.ElideRight
                             }
-                        }
-                        BText {
-                            Layout.fillWidth: true
-                            text: root.nonEmpty([row.folder,
-                                                 row.modifiedLabel,
-                                                 row.backlinks > 0 ? qsTr("%n link(s)", "", row.backlinks) : "",
-                                                 root.tagsText(row.tags)]).join(" · ")
-                            variant: "small"
-                            color: Theme.fgMuted
-                            elide: Text.ElideRight
                         }
                     }
                 }

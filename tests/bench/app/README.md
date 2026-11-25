@@ -14,11 +14,11 @@ GUI thread's time goes" below).
 
 | File | What |
 |---|---|
-| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `source-typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `page-scroll`, `page-resize`, `switch-pages`, `idle`, `idle-edit`, `workload`, `pictures`; see the header) |
+| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `source-typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `page-scroll`, `page-resize`, `switch-pages`, `idle`, `idle-edit`, `workload`, `pictures`, `memory`; see the header) |
 | `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`; Qt's CorePrivate and GuiPrivate headers) |
 | `make-bench-vault.py <dir>` | a deterministic synthetic notebook: 10 000 notes (≈ 650 journal days over two years + pages in 40 folders, links, tags, tasks with dates and reminders, a few queries), `Bench/Konspekt 5000.md` (5000-block outline), `Bench/Dokument 5000.md` (5000-block document), `Bench/Mała strona.md`; `<dir>.pages.txt` lists 50 pages for page switching |
 | `make-picture-vault.py <dir>` | a notebook of photos (ImageMagick: `nix shell nixpkgs#imagemagick -c …`): 60 JPEG photos of 12 MP (every fifth upright, every seventh turned by its EXIF orientation) and 10 PNG screenshots in `assets/`, `Album.md` (40 photos on one page), 30 pages of four photos each, 30 pages of text and 30 journal days (twenty with two photos); `<dir>.pictures.txt`, `<dir>.pages.txt` and `<dir>.album.txt` list them for the `pictures` scenario |
-| `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; Xvfb or offscreen); writes one JSONL per run |
+| `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; `--platform xvfb` — Mesa's llvmpipe, every texture in the process —, `offscreen`, or `weston`: a headless Weston with its GL renderer and the app on the machine's GPU, `nix shell nixpkgs#weston`, `WESTON_GPU=pci-0000_00_02_0` where there are several); writes one JSONL per run |
 | `bench-matrix.sh` | the whole matrix for several labelled builds (`BINS="base=… cur=…"`; `ENVS="cur=VAR=value"`: one label's environment, e.g. the same binary with `BRULION_PAGE_ITEM=1`), group by group (`startup-big-short`: first + warm starts only, for slow machines; `page-scroll`, `page-resize`: the 300-block and 5000-block pages) |
 | `analyze.py <dir>…` | metrics per run → median / min / max / p25 / p75 per metric and label (`--csv`, `--json`) |
 | `timeline.py run.jsonl` | one run's events in time order (marks, input, stalls with their CPU, model signals, signal spans ≥ `--span-ms`, the GUI thread's file system calls, frame gaps) |
@@ -71,7 +71,12 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   `<mark>_objects_alive` / `_objects_created`: the QObjects alive / created since then (QtCore's
   AddQObject / RemoveQObject hooks). `--env BENCH_OBJECT_TYPES=1` adds an `objects` record at
   content and settled: the live objects by class and by their named ancestors under `AppShell`
-  (`BENCH_OBJECT_DEPTH`, default 4) — what the shell creates (docs/PERFORMANCE.md "L10").
+  (`BENCH_OBJECT_DEPTH`, default 4) — what the shell creates (docs/PERFORMANCE.md "L10") —, by
+  the place a QML file declares them (`bySite`: `QQuickText @ BChip.qml:123`; `^1 BChip.qml:168`
+  for an object the one declared there made, as a Rectangle's pen; `+anchors` / `+layer` /
+  `+palette @ …` for the helpers an item made on first use) and by file (`byFile`). The dump makes
+  a QQmlContext for every context whose ids it names (a few thousand objects that the marks after
+  it count): compare object counts of runs without `BENCH_OBJECT_TYPES`.
   `--start first` = a fresh XDG home (first start), `warm` = the same home again, `cold` = also
   the page cache of the binary, every mapped library / font and the vault dropped.
   Index cache (docs/PERFORMANCE.md, L2): a `first` start has no device state, so its index is
@@ -168,6 +173,41 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   `--env BENCH_VIEWPORT_OBSERVERS=1` (any scenario) adds to every memory mark the items that
   observe the viewport, by class — while a scrolled view has one below it, every scroll step walks
   the item tree down to it (docs/PERFORMANCE.md "Pitfalls").
+* `memory` (any notebook; docs/PERFORMANCE.md "Memory: only what is in use"): what the app holds
+  at each step of a session — `mem:ready`, `mem:settled`, `mem:start` (`BENCH_SETTLE_MS`, 15 s,
+  after the start has settled: with whatever the app builds ahead, without what only the start
+  needed — the spell checker's dictionaries go 8 s after the first page's words), a tour of the views
+  (`mem:view:page` with `BENCH_PAGE`, `tasks`, `calendar`, `allPages`, `search`, `graph`, `tags`,
+  `settings`), back at the journal (`mem:home`), after `BENCH_LONG_REST_MS` more in that view
+  (`mem:rested`: what goes by itself — the program's own pages 12 s after the last thing done,
+  `MemoryPolicy.idleMs`; the hidden views after `MemoryPolicy.hiddenViewMs`, which
+  `--env BRULION_HIDDEN_VIEW_MS=20000` shortens),
+  then away as with another program in front (`mem:away`), the window hidden (`mem:away_hidden`)
+  and shown again, in use (`mem:back`; `MemoryPolicy.setAway()`: trees without it only hide the
+  window). Every mark after a garbage collection, with the kernel's own count of the process
+  (`/proc/self/smaps_rollup`: `pss_mb:`, `dirty_mb:` — private dirty pages, what only the app
+  holds and nothing can drop —, `private_mb:`), malloc's over every arena (`heap_mb:` in use,
+  `heap_free_mb:`, `arenas:`; `mallinfo2()` counts the main arena only), `rss_mb:`, `anon_mb:`,
+  `file_mb:`, `items:`, `objects:` (QObjects alive), `threads:` and `qml_types:` — the app's QML
+  files the engine has loaded (`--env BENCH_QML_TYPES=1` lists them at every mark: diff two marks
+  to see what a step loaded). `back_picture` compares the window before it was away with the
+  window back from hidden: `back_differing_pixels` (any difference: glyphs land elsewhere in
+  their atlas, a few thousand edge pixels) and `back_changed_pixels` (a channel off by more than
+  a quarter: something not drawn as before — the title's glyphs, a few hundred; an item that did
+  not come back is thousands in one box, `changedBox`); `--env BENCH_AWAY_VIEWS=1` runs the away
+  steps in every view of the tour (`back_picture:<view>`), `--env BENCH_PICTURES_DIR=<dir>` saves
+  the pictures. `--env BENCH_OBJECT_TYPES=1` adds the live objects by class at `start`, `home` and
+  `rested`; `--env BENCH_UNLOAD=1` unloads the hidden kept views and the popups built ahead one
+  by one after `start` and marks what each gave back (`mem:unload:<loader>`); `--env BENCH_AWAY=0`
+  leaves the away steps out; `--env BRULION_MEMORY_POLICY=0` runs the app as before the policy
+  (everything built ahead and kept).
+
+  ```sh
+  nix develop -c nix shell nixpkgs#weston -c env WESTON_GPU=pci-0000_00_02_0 tests/bench/app/run-bench.py \
+    --bin build-rel/src/app/brulion --probe /tmp/probe/libbenchprobe.so --vault /tmp/vaults/big10k \
+    --scenario memory --platform weston --start first --runs 3 --label cur --out /tmp/results/memory \
+    --env "BENCH_PAGE=Bench/Konspekt 5000.md" --timeout 600
+  ```
 
   ```sh
   nix shell nixpkgs#imagemagick -c tests/bench/app/make-picture-vault.py /tmp/vaults/photos
@@ -214,7 +254,9 @@ end + 1.7 s fits unless a save takes over 300 ms) the probe records, on the GUI 
   exist: ShellRouteView's KeptLoaders — Tasks, Calendar, Journal, All pages, Search — with an
   item), `of` and `loading`: views built ahead 1.2 s after `ready`, one every 0.4 s, may or may not
   exist during the first burst. `BENCH_WAIT_KEPT=1` waits (at most 30 s, mark `kept_ready`) until
-  all of them exist and the app has settled before typing (and before `journal-scroll`'s scroll).
+  all of them exist — or, since MemoryPolicy builds ahead only the view the user went to last, until
+  the pane says it built what it meant to (`ShellRouteView._preloaded`) — and the app has settled
+  before typing (and before `journal-scroll`'s scroll).
 
 What the callbacks see (checked with Qt 6.12 on a test object): `signal_begin` / `signal_end` wrap
 every **direct** connection of an emission — string-based (`SIGNAL`/`SLOT`), pointer-to-member and

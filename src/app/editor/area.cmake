@@ -11,6 +11,31 @@ qt_target_qml_sources(brulion
     QML_FILES
         qml/editor/BlockEditor.qml
         qml/editor/BlockDelegate.qml
+        qml/editor/BlockPartBullet.qml
+        qml/editor/BlockPartCalc.qml
+        qml/editor/BlockPartCallout.qml
+        qml/editor/BlockPartChart.qml
+        qml/editor/BlockPartCode.qml
+        qml/editor/BlockPartDateButton.qml
+        qml/editor/BlockPartEmbeds.qml
+        qml/editor/BlockPartFlash.qml
+        qml/editor/BlockPartFoldArrow.qml
+        qml/editor/BlockPartFrontmatter.qml
+        qml/editor/BlockPartMath.qml
+        qml/editor/BlockPartMermaid.qml
+        qml/editor/BlockPartNumber.qml
+        qml/editor/BlockPartQuery.qml
+        qml/editor/BlockPartRule.qml
+        qml/editor/BlockPartSelectionBand.qml
+        qml/editor/BlockPartTable.qml
+        qml/editor/BlockPartTagTint.qml
+        qml/editor/BlockPartTaskBox.qml
+        qml/editor/BlockPartTransclusions.qml
+        qml/editor/BlockPartView.qml
+        qml/editor/BlockMenuTap.qml
+        qml/editor/BlockSelectionGrip.qml
+        qml/editor/BlockPartGripStart.qml
+        qml/editor/BlockPartGripEnd.qml
         qml/editor/BlockMenu.qml
         qml/editor/BlockText.qml
         qml/editor/EditorToastAction.qml
@@ -43,6 +68,7 @@ qt_target_qml_sources(brulion
         qml/editor/TransclusionView.qml
         qml/editor/SuggestionPopup.qml
         qml/editor/EditorDialogs.qml
+        qml/editor/EditorMergeDialog.qml
         qml/editor/EncryptedTextDialog.qml
         qml/editor/MobileEditToolbar.qml
         qml/editor/SourceEditor.qml
@@ -53,12 +79,11 @@ qt_target_qml_sources(brulion
         qml/editor/WritingDialog.qml
         qml/editor/PageItemView.qml
 )
-# Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads a PageScript either way.
+# Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads PageScript from its file
+# when `--editor-script` asks for it.
 if(BRULION_DEV_QML_ENABLED)
     qt_target_qml_sources(brulion QML_FILES qml/dev/EditorPlayground.qml qml/dev/PageScript.qml
         qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml qml/dev/DateChipSelfTest.qml
         qml/dev/PropertiesSelfTest.qml qml/dev/LinkPartsSelfTest.qml qml/dev/ReadingSelfTest.qml qml/dev/TableSelfTest.qml
         qml/dev/SpellingSelfTest.qml)
-else()
-    qt_target_qml_sources(brulion QML_FILES qml/stubs/PageScript.qml)
 endif()

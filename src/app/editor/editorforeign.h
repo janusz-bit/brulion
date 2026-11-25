@@ -222,6 +222,16 @@ struct BlockViewsForeign {
     QML_SINGLETON
 };
 
+// The components of a block's optional parts (blockviews.h), one per engine.
+struct BlockPartsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::BlockParts)
+    QML_NAMED_ELEMENT(BlockParts)
+    QML_SINGLETON
+public:
+    static BlockParts *create(QQmlEngine *engine, QJSEngine *) { return new BlockParts(engine); }
+};
+
 struct ChipFlowForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::ChipFlow)

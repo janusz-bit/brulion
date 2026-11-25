@@ -72,6 +72,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/replacesession.h ${_brulion_shell_dir}/replacesession.cpp
     ${_brulion_shell_dir}/shortcutmap.h ${_brulion_shell_dir}/shortcutmap.cpp
     ${_brulion_shell_dir}/traypopup.h ${_brulion_shell_dir}/traypopup.cpp
+    ${_brulion_shell_dir}/viewkeeper.h ${_brulion_shell_dir}/viewkeeper.cpp
     ${_brulion_shell_dir}/viewtraits.h ${_brulion_shell_dir}/viewtraits.cpp
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
     ${_brulion_shell_dir}/workspacequery.cpp
@@ -138,6 +139,7 @@ target_link_libraries(brulion_shell
             brulion_core_github brulion_core_caldav brulion_core_clipper brulion_core_gitcli
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
+            brulion_ui_memory # viewkeeper.cpp: MemoryPolicy's letGo()
             brulion_ui_scale) # appsettings.cpp, appcontroller.cpp: the interface scale
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
@@ -183,7 +185,7 @@ if(BRULION_DESKTOP OR ANDROID)
     # the remote control (tests/app/shell: tst_uidriver).
     qt_add_library(brulion_uidriver STATIC ${_brulion_shell_dir}/uidriver.h ${_brulion_shell_dir}/uidriver.cpp)
     target_include_directories(brulion_uidriver PUBLIC ${_brulion_shell_dir})
-    target_link_libraries(brulion_uidriver PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
+    target_link_libraries(brulion_uidriver PUBLIC Qt6::Core Qt6::Gui Qt6::Quick PRIVATE brulion_ui_qmlcall)
     brulion_set_warnings(brulion_uidriver)
     # The remote control (remotecontrol.h): the desktop's socket, and in process for an AI agent on
     # another computer — on Android only so (no socket there).
@@ -208,6 +210,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellAboutDialog.qml
     qml/shell/ShellAiReportDialog.qml
     qml/shell/ShellAutomationDialog.qml
+    qml/shell/ShellDeleteDialog.qml
     qml/shell/ShellAutomationSettings.qml
     qml/shell/ShellBackupSettings.qml
     qml/shell/ShellBottomNav.qml

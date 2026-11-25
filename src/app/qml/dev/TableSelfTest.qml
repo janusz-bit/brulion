@@ -63,7 +63,7 @@ QtObject {
     function header(): list<string> { return test.view().header }
     function aligns(): list<string> { return test.view().aligns }
     function shown(): list<int> { return test.view().shownRows }
-    function menu(): BlockMenu { return test.editor.blockMenu }
+    function menu(): BlockMenu { return test.editor.blockMenu as BlockMenu }
     function menuOpen(): bool { return test.menu() !== null && test.menu().opened }
     /// The item of the block menu that opens its submenu `name`.
     function subItem(name: string): T.MenuItem {

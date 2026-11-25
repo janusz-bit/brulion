@@ -65,7 +65,8 @@ Rectangle {
     Text {
         id: labelText
         visible: !badge.dot
-        anchors.centerIn: parent
+        x: Math.round(parent.width / 2) - Math.round(width / 2)
+        y: Math.round(parent.height / 2) - Math.round(height / 2)
         text: badge.label
         textFormat: Text.PlainText
         // On solid fills: the accent's own text colour (white, dark ink on the dark mode's

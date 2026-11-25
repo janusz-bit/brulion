@@ -27,9 +27,31 @@ const QList<double> kRates{0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
 
 MediaPlayback::MediaPlayback(std::unique_ptr<MediaEngine> engine, std::unique_ptr<MediaProber> prober, QObject *parent)
     : QObject(parent)
-    , m_engine(engine ? std::move(engine) : createMediaEngine())
-    , m_prober(prober ? std::move(prober) : createMediaProber())
 {
+    // Given (tests): used from the start. The build's own are made when something is first played
+    // or looked at (engine(), prober()): Qt Multimedia's bring its FFmpeg backend with dozens of
+    // libraries and a connection to the system's sound server, which a start without any audio or
+    // video must not pay for (docs/PERFORMANCE.md "Memory: only what is in use").
+    if (engine)
+        adopt(std::move(engine));
+    if (prober)
+        adopt(std::move(prober));
+    const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (!cache.isEmpty())
+        m_posterFolder = cache + u"/media-posters"_s;
+}
+
+MediaPlayback::~MediaPlayback()
+{
+    if (g_instance == this)
+        g_instance = nullptr;
+    if (m_engine)
+        m_engine->setVideoOutput(nullptr);
+}
+
+void MediaPlayback::adopt(std::unique_ptr<MediaEngine> engine)
+{
+    m_engine = std::move(engine);
     m_engine->setParent(nullptr);
     connect(m_engine.get(), &MediaEngine::positionChanged, this, &MediaPlayback::onPosition);
     connect(m_engine.get(), &MediaEngine::durationChanged, this, &MediaPlayback::durationChanged);
@@ -41,17 +63,33 @@ MediaPlayback::MediaPlayback(std::unique_ptr<MediaEngine> engine, std::unique_pt
         m_positions.remove(m_path);
         Q_EMIT ended(m_path);
     });
-    connect(m_prober.get(), &MediaProber::probed, this, &MediaPlayback::onProbed);
-    const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-    if (!cache.isEmpty())
-        m_posterFolder = cache + u"/media-posters"_s;
 }
 
-MediaPlayback::~MediaPlayback()
+void MediaPlayback::adopt(std::unique_ptr<MediaProber> prober)
 {
-    if (g_instance == this)
-        g_instance = nullptr;
-    m_engine->setVideoOutput(nullptr);
+    m_prober = std::move(prober);
+    connect(m_prober.get(), &MediaProber::probed, this, &MediaPlayback::onProbed);
+}
+
+MediaEngine *MediaPlayback::engine()
+{
+    if (!m_engine) {
+        adopt(createMediaEngine());
+        m_engine->setRate(m_rate);
+        m_engine->setVolume(m_volume);
+        m_engine->setMuted(m_muted);
+        // The build plays, this system does not (no backend Qt could load): said once it is known.
+        if (!m_engine->available())
+            QMetaObject::invokeMethod(this, &MediaPlayback::availableChanged, Qt::QueuedConnection);
+    }
+    return m_engine.get();
+}
+
+MediaProber *MediaPlayback::prober()
+{
+    if (!m_prober)
+        adopt(createMediaProber());
+    return m_prober.get();
 }
 
 MediaPlayback *MediaPlayback::instance()
@@ -74,7 +112,8 @@ MediaPlayback *MediaPlayback::create(QQmlEngine *, QJSEngine *)
 
 bool MediaPlayback::available() const
 {
-    return m_engine->available();
+    // (Before anything was played: what the build can do — the engine says more once it exists.)
+    return m_engine ? m_engine->available() : mediaSupported();
 }
 
 QString MediaPlayback::title() const
@@ -84,24 +123,24 @@ QString MediaPlayback::title() const
 
 bool MediaPlayback::playing() const
 {
-    return !m_path.isEmpty() && m_engine->playing();
+    return m_engine && !m_path.isEmpty() && m_engine->playing();
 }
 
 bool MediaPlayback::loading() const
 {
-    return !m_path.isEmpty() && m_engine->loading();
+    return m_engine && !m_path.isEmpty() && m_engine->loading();
 }
 
 double MediaPlayback::position() const
 {
-    return m_path.isEmpty() ? 0.0 : double(m_engine->position());
+    return !m_engine || m_path.isEmpty() ? 0.0 : double(m_engine->position());
 }
 
 double MediaPlayback::duration() const
 {
     if (m_path.isEmpty())
         return -1;
-    if (m_engine->duration() > 0)
+    if (m_engine && m_engine->duration() > 0)
         return double(m_engine->duration());
     const auto it = m_info.constFind(m_path);
     return it != m_info.cend() && it->media.durationMs > 0 ? double(it->media.durationMs) : -1.0;
@@ -109,7 +148,7 @@ double MediaPlayback::duration() const
 
 bool MediaPlayback::hasVideo() const
 {
-    return !m_path.isEmpty() && m_engine->hasVideo();
+    return m_engine && !m_path.isEmpty() && m_engine->hasVideo();
 }
 
 void MediaPlayback::setRate(double rate)
@@ -118,7 +157,8 @@ void MediaPlayback::setRate(double rate)
     if (qFuzzyCompare(rate, m_rate))
         return;
     m_rate = rate;
-    m_engine->setRate(rate);
+    if (m_engine)
+        m_engine->setRate(rate);
     Q_EMIT rateChanged();
 }
 
@@ -128,11 +168,13 @@ void MediaPlayback::setVolume(double volume)
     if (qFuzzyCompare(volume + 1, m_volume + 1))
         return;
     m_volume = volume;
-    m_engine->setVolume(volume);
+    if (m_engine)
+        m_engine->setVolume(volume);
     // Turned up from silence: heard again.
     if (m_muted && volume > 0) {
         m_muted = false;
-        m_engine->setMuted(false);
+        if (m_engine)
+            m_engine->setMuted(false);
     }
     Q_EMIT volumeChanged();
 }
@@ -142,18 +184,19 @@ void MediaPlayback::setMuted(bool muted)
     if (muted == m_muted)
         return;
     m_muted = muted;
-    m_engine->setMuted(muted);
+    if (m_engine)
+        m_engine->setMuted(muted);
     Q_EMIT volumeChanged();
 }
 
 QString MediaPlayback::error() const
 {
-    return m_path.isEmpty() ? QString() : m_engine->error();
+    return !m_engine || m_path.isEmpty() ? QString() : m_engine->error();
 }
 
 void MediaPlayback::remember()
 {
-    if (m_path.isEmpty())
+    if (m_path.isEmpty() || !m_engine)
         return;
     const qint64 at = m_engine->position();
     const qint64 total = m_engine->duration();
@@ -167,7 +210,7 @@ void MediaPlayback::remember()
 void MediaPlayback::load(const QString &path, const QUrl &url)
 {
     remember();
-    m_engine->pause();
+    engine()->pause();
     m_path = path;
     m_url = url;
     m_atEnd = false;
@@ -191,7 +234,8 @@ void MediaPlayback::load(const QString &path, const QUrl &url)
 
 void MediaPlayback::play(const QString &path, const QUrl &url, double startMs, double endMs)
 {
-    if (path.isEmpty() || !available())
+    // (The engine is made here at the latest: whether this system can play is known then.)
+    if (path.isEmpty() || !available() || !engine()->available())
         return;
     const qint64 start = startMs >= 0 ? qint64(startMs) : -1;
     const qint64 end = endMs >= 0 && endMs > startMs ? qint64(endMs) : -1;
@@ -248,13 +292,15 @@ void MediaPlayback::toggle(const QString &path, const QUrl &url, double startMs,
 
 void MediaPlayback::pause()
 {
+    if (!m_engine)
+        return;
     m_engine->pause();
     remember();
 }
 
 void MediaPlayback::stop()
 {
-    if (m_path.isEmpty())
+    if (m_path.isEmpty() || !m_engine)
         return;
     remember();
     m_engine->stop();
@@ -279,7 +325,7 @@ void MediaPlayback::stop()
 
 void MediaPlayback::seek(double ms)
 {
-    if (m_path.isEmpty())
+    if (m_path.isEmpty() || !m_engine)
         return;
     qint64 at = std::max<qint64>(0, qint64(ms));
     if (m_engine->duration() > 0)
@@ -391,7 +437,9 @@ void MediaPlayback::updateVideoOutput()
     if (top == m_videoOutput.data())
         return;
     m_videoOutput = top;
-    m_engine->setVideoOutput(top);
+    // (A surface shows only the loaded file's picture: with a file loaded there is an engine.)
+    if (m_engine)
+        m_engine->setVideoOutput(top);
 }
 
 void MediaPlayback::attachVideo(const QString &path, QObject *output)
@@ -413,7 +461,7 @@ void MediaPlayback::detachVideo(QObject *output)
         return;
     updateVideoOutput();
     // A video plays only where it is seen.
-    if (!m_videoOutput && !m_path.isEmpty() && m_engine->hasVideo() && m_engine->playing())
+    if (!m_videoOutput && !m_path.isEmpty() && m_engine && m_engine->hasVideo() && m_engine->playing())
         pause();
 }
 
@@ -434,7 +482,7 @@ QVariantMap MediaPlayback::info(const QString &path, const QUrl &url)
             fresh.poster = QUrl::fromLocalFile(cached).toString();
         it = m_info.insert(path, fresh);
         m_probing.insert(url, path);
-        m_prober->probe(url);
+        prober()->probe(url);
     }
     const Info &i = it.value();
     return {{u"state"_s, i.state},

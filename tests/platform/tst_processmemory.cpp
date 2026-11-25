@@ -2,9 +2,13 @@
 // sanitizer, which brings its own allocator): what freed blocks leave behind in the heap — small
 // ones, and large ones once glibc has moved its mmap threshold over them — stays with the process
 // until releaseFreeMemory(), measured by the process's resident size. Elsewhere the calls say
-// that there is nothing to do.
+// that there is nothing to do. And releaseProgramPages(): the pages of the program and its
+// libraries leave the process, which goes on as if nothing had happened.
 #include "processmemory.h"
 
+#include <QCryptographicHash>
+#include <QFile>
+#include <QRegularExpression>
 #include <QTest>
 
 #include <algorithm>
@@ -45,6 +49,38 @@ constexpr bool Glibc = true;
 #else
 constexpr bool Glibc = false;
 #endif
+
+/// The process's resident pages of files (RssFile of /proc/self/status), in bytes; -1 elsewhere.
+qint64 residentFileBytes()
+{
+    QFile status(QStringLiteral("/proc/self/status"));
+    if (!status.open(QIODevice::ReadOnly))
+        return -1;
+    for (const QByteArray &line : status.readAll().split('\n')) {
+        if (line.startsWith("RssFile:"))
+            return line.mid(8).trimmed().split(' ').first().toLongLong() * 1024;
+    }
+    return -1;
+}
+
+/// Something that runs code and reads tables of several libraries, with a result to compare.
+QByteArray work()
+{
+    QByteArray out;
+    const QRegularExpression word(QStringLiteral("(\\p{L}+)ść"), QRegularExpression::UseUnicodePropertiesOption);
+    const QString text = QStringLiteral("Zażółć gęślą jaźń — miłość, radość i złość; ĄĆĘŁŃÓŚŹŻ.");
+    auto it = word.globalMatch(text);
+    while (it.hasNext())
+        out += it.next().captured(1).toUpper().toUtf8() + ' ';
+    out += QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha256).toHex();
+    out += QByteArray::number(text.toCaseFolded().localeAwareCompare(QStringLiteral("zażółć")));
+    return out;
+}
+
+// (Data of the test's own: a table the loader relocated, and one that is only read.)
+const char *const g_names[] = {"zażółć", "gęślą", "jaźń"};
+const unsigned char g_bytes[4096 * 4] = {1, 2, 3};
+int g_counter = 41;
 
 long pageSize()
 {
@@ -142,6 +178,43 @@ private Q_SLOTS:
                  megabytes("64 blocks of 1 MB freed", sizes.held, sizes.freed).constData());
         QVERIFY2(sizes.freed - sizes.released > 48 * MiB,
                  megabytes("given back", sizes.freed, sizes.released).constData());
+    }
+
+    /// The program's own pages: let go of, they are no longer the process's — and everything is
+    /// where it was when it is touched again.
+    void programPages()
+    {
+        if (!platform::canReleaseProgramPages()) {
+            QCOMPARE(platform::releaseProgramPages(), qint64(0));
+            return;
+        }
+        const QByteArray before = work();
+        ++g_counter;
+        const qint64 fileBefore = residentFileBytes();
+        QVERIFY(fileBefore > 0);
+        const qint64 released = platform::releaseProgramPages();
+        const qint64 fileAfter = residentFileBytes();
+        // The libraries of a Qt test are 20–40 MB resident; most of it goes (what this very
+        // function and the call run on comes straight back).
+        QVERIFY2(released > 8 * MiB, megabytes("released", released, 0).constData());
+        QVERIFY2(fileBefore - fileAfter > 8 * MiB, megabytes("pages of files", fileBefore, fileAfter).constData());
+        // Code, constants, relocated tables and the test's own variable: all as before.
+        QCOMPARE(work(), before);
+        QCOMPARE(QByteArray(g_names[2]), QByteArray("jaźń"));
+        QCOMPARE(int(g_bytes[2]), 3);
+        QCOMPARE(int(g_bytes[sizeof g_bytes - 1]), 0);
+        QCOMPARE(g_counter, 42);
+        // Again and again: nothing to add up, nothing that breaks.
+        for (int i = 0; i < 5; ++i) {
+            QVERIFY(platform::releaseProgramPages() >= 0);
+            QCOMPARE(work(), before);
+        }
+        // Blocks of the allocator are none of its business.
+        void *memory = block(std::size_t(4 * MiB));
+        QVERIFY(memory);
+        (void)platform::releaseProgramPages();
+        QCOMPARE(int(static_cast<unsigned char *>(memory)[4 * MiB - 1]), 0x5a);
+        std::free(memory);
     }
 
     /// Other allocators: the call is there and harmless.
