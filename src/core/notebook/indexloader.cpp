@@ -61,7 +61,10 @@ struct LoaderShared {
     std::condition_variable ownerCv;   ///< a result, the search builder's end
     std::condition_variable searchCv;  ///< search jobs, closing, cancellation
 
-    QList<Item> items; ///< notes in merge order; never changed after start()
+    /// Notes in merge order; never changed after start() but dropped once every note is merged
+    /// (their absolute paths are a few MB in a large notebook): read `itemCount` instead of its size.
+    QList<Item> items;
+    qsizetype itemCount = 0; ///< items.size() as start() set it
     std::atomic<qsizetype> next{0};
 
     std::deque<Result> results;
@@ -125,7 +128,7 @@ struct IndexLoader::Private {
     { }
 
     bool threaded() const { return !pool.isInline(); }
-    qsizetype noteCount() const { return s->items.size(); }
+    qsizetype noteCount() const { return s->itemCount; }
 
     // ---- jobs (any thread; touch only `shared` and the values they captured) -------------------
 
@@ -239,7 +242,7 @@ struct IndexLoader::Private {
         LoaderShared &s = *shared;
         for (;;) {
             const qsizetype i = s.next.fetch_add(1);
-            if (i >= s.items.size())
+            if (i >= s.itemCount)
                 break;
             VaultConfig config;
             {
@@ -483,6 +486,8 @@ struct IndexLoader::Private {
             stats.recordsRejected = s->recordsRejected;
             stats.searchFromCache = s->searchFromCache;
             s->cache.reset(); // its bytes are not needed any more (a search builder holds its own copy)
+            // Every note is merged: no job reads an item any more (workers stop at itemCount).
+            s->items = QList<Item>();
         }
         closeSearchIfDone();
         adoptSearchIfReady();
@@ -546,6 +551,7 @@ void IndexLoader::start(const QList<FileStat> &files)
     }
     std::ranges::reverse(firstItems);
     d->s->items = firstItems + rest;
+    d->s->itemCount = d->s->items.size();
     d->s->config = d->index.config();
     d->s->cachePath = d->options.cachePath;
     d->s->cacheConfig = d->index.config();
