@@ -14,8 +14,8 @@
 //     AppShell's closed popups, SpellCheck's dictionaries), and a moment later the policy itself
 //     has the QML engine collect its garbage and drop the types nothing uses, every window drop
 //     its cached graphics — a window that is not shown its whole scene graph and graphics
-//     context, rebuilt when it is shown again — and MemoryKeeper hand the freed pages back.
-//     Active again, the app is in use at once (and builds ahead again).
+//     context (`releasesGraphics`), rebuilt when it is shown again — and MemoryKeeper hand the
+//     freed pages back. Active again, the app is in use at once (and builds ahead again).
 //
 // An app whose window is shown but was never in front (a test under an X server without a
 // window manager) stays in use; one that never showed a window (a start into the tray) is away
@@ -24,6 +24,8 @@
 //   BRULION_MEMORY_POLICY=0   the old behaviour for A/B measurements: every view kept, everything
 //                             built ahead, nothing let go
 //   BRULION_AWAY_MS=<ms>      both delays (tests, measurements)
+//   BRULION_RELEASE_GRAPHICS=1 / 0   a hidden window's scene graph and graphics context released
+//                             or not, whatever the platform's default (`releasesGraphics`)
 //
 //   ui::MemoryPolicy *policy = ui::MemoryPolicy::instance();
 //   policy->setEngine(&engine);
@@ -80,6 +82,12 @@ public:
 
     /// The engine whose garbage and unused types go when the app is away (main() sets it).
     void setEngine(QQmlEngine *engine);
+    /// A window that is not shown gives up its scene graph and its graphics context when the app
+    /// is away, and builds them again when it is shown (false, the default: it only drops what it
+    /// cached). main() turns it on where it was tried — Linux, X11 and Wayland —;
+    /// BRULION_RELEASE_GRAPHICS=1 / 0 in the environment decides elsewhere, or against it.
+    bool releasesGraphics() const { return m_releasesGraphics; }
+    void setReleasesGraphics(bool on);
 
     /// How many times the app let go (tests).
     int runs() const { return m_runs; }
@@ -123,6 +131,7 @@ private:
     int m_startMs = 20 * 1000;
     int m_runs = 0;
     bool m_follows = true;
+    bool m_releasesGraphics = false;
     bool m_active = false;
     bool m_shown = true;
     bool m_everActive = false; ///< the app was in front at least once

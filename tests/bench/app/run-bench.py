@@ -16,7 +16,11 @@ XDG home carry over between runs, as for a user who starts the app again:
                   (posix_fadvise DONTNEED after sync; pages other processes map stay resident)
 Output: <out>/<name>-<label>-NN.jsonl per run (probe events) and <name>-<label>.runs.json.
 Platform: xvfb starts one Xvfb (1920x1200x24, GLX → Mesa llvmpipe) for the batch; offscreen uses
-QT_QPA_PLATFORM=offscreen + QT_QUICK_BACKEND=software (no X server; the Pi).
+QT_QPA_PLATFORM=offscreen + QT_QUICK_BACKEND=software (no X server; the Pi); weston starts one
+headless Weston with its GL renderer (`nix shell nixpkgs#weston`) and runs the app as its Wayland
+client on Mesa's driver of the machine's GPU — textures and the driver's own memory as on a
+desktop with a GPU, where llvmpipe keeps every texture in the process (memory measurements).
+WESTON_GPU names the GPU for Mesa where there are several (DRI_PRIME's form: pci-0000_00_02_0).
 """
 import argparse
 import json
@@ -48,6 +52,42 @@ def start_xvfb():
             time.sleep(0.05)
         p.kill()
     sys.exit("run-bench: could not start Xvfb")
+
+
+def start_weston():
+    """A headless Weston with the GL renderer on its own socket: (process, socket name)."""
+    weston = shutil.which("weston")
+    if not weston:
+        sys.exit("run-bench: weston not found (nix shell nixpkgs#weston)")
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime:
+        sys.exit("run-bench: XDG_RUNTIME_DIR is not set (the Wayland socket lives there)")
+    sock = "wl-brulion-bench-%d" % os.getpid()
+    env = dict(os.environ)
+    env.pop("DISPLAY", None)
+    env.update(weston_env())
+    p = subprocess.Popen([weston, "--backend=headless", "--renderer=gl", "--socket=" + sock, "--width=1920",
+                          "--height=1200", "--idle-time=0"], env=env, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+    for _ in range(200):
+        if os.path.exists(os.path.join(runtime, sock)):
+            return p, sock
+        if p.poll() is not None:
+            break
+        time.sleep(0.05)
+    p.kill()
+    sys.exit("run-bench: could not start weston")
+
+
+def weston_env():
+    """Mesa's EGL (not another vendor's) for the compositor and the app, on the GPU asked for."""
+    env = {}
+    mesa = "/run/opengl-driver/share/glvnd/egl_vendor.d/50_mesa.json"
+    if os.path.exists(mesa) and "__EGL_VENDOR_LIBRARY_FILENAMES" not in os.environ:
+        env["__EGL_VENDOR_LIBRARY_FILENAMES"] = mesa
+    if os.environ.get("WESTON_GPU"):
+        env["DRI_PRIME"] = os.environ["WESTON_GPU"]
+    return env
 
 
 def evict(paths):
@@ -102,7 +142,7 @@ def main():
     ap.add_argument("--name", default=None)
     ap.add_argument("--out", required=True)
     ap.add_argument("--start", choices=["first", "warm", "cold"], default="warm")
-    ap.add_argument("--platform", choices=["xvfb", "offscreen"], default="xvfb")
+    ap.add_argument("--platform", choices=["xvfb", "offscreen", "weston"], default="xvfb")
     ap.add_argument("--size", default="1280x800")
     ap.add_argument("--route", default=None)
     ap.add_argument("--env", action="append", default=[])
@@ -134,6 +174,8 @@ def main():
     display = None
     if args.platform == "xvfb":
         xvfb, display = start_xvfb()
+    elif args.platform == "weston":
+        xvfb, display = start_weston() # (the compositor in Xvfb's place: stopped the same way)
     mapped = set()
     results = []
     try:
@@ -167,6 +209,11 @@ def main():
                 env["DISPLAY"] = display
                 env.pop("WAYLAND_DISPLAY", None)
                 env["QT_QPA_PLATFORM"] = "xcb"
+            elif args.platform == "weston":
+                env.pop("DISPLAY", None)
+                env["WAYLAND_DISPLAY"] = display
+                env["QT_QPA_PLATFORM"] = "wayland"
+                env.update(weston_env())
             else:
                 env["QT_QPA_PLATFORM"] = "offscreen"
                 env["QT_QUICK_BACKEND"] = "software"

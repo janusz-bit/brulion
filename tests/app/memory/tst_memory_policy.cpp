@@ -243,6 +243,9 @@ private Q_SLOTS:
 
         Policy p;
         p.policy.setEngine(&engine);
+        QVERIFY(!p.policy.releasesGraphics()); // off unless main() turns it on (Linux)
+        p.policy.setReleasesGraphics(true);
+        QVERIFY(p.policy.releasesGraphics());
         window->hide();
         QTRY_VERIFY_WITH_TIMEOUT(!window->isExposed(), 2000 * Slowdown);
         p.policy.letGoNow(true);

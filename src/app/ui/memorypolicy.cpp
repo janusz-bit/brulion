@@ -75,6 +75,7 @@ MemoryPolicy::MemoryPolicy(QObject *parent) : QObject(parent)
     m_releaseTimer.setSingleShot(true);
     m_releaseTimer.setTimerType(Qt::CoarseTimer);
     connect(&m_releaseTimer, &QTimer::timeout, this, &MemoryPolicy::release);
+    setReleasesGraphics(false); // (BRULION_RELEASE_GRAPHICS=1 turns it on by itself)
     bool ok = false;
     const int ms = qEnvironmentVariableIntValue("BRULION_AWAY_MS", &ok);
     if (ok && ms >= 0) {
@@ -111,6 +112,13 @@ void MemoryPolicy::setHiddenViewMs(int ms)
 void MemoryPolicy::setEngine(QQmlEngine *engine)
 {
     m_engine = engine;
+}
+
+void MemoryPolicy::setReleasesGraphics(bool on)
+{
+    // (The environment has the last word: to try it where it is off, to rule it out where it is on.)
+    const QString asked = qEnvironmentVariable("BRULION_RELEASE_GRAPHICS");
+    m_releasesGraphics = asked == QLatin1String("1") || (on && asked != QLatin1String("0"));
 }
 
 void MemoryPolicy::follow()
@@ -256,7 +264,7 @@ void MemoryPolicy::release()
         // A window nobody sees gives up its scene graph and its graphics context (textures, glyph
         // caches, the renderer's buffers): Qt Quick builds them again when it is shown. One that
         // is shown only drops what it cached.
-        const bool unseen = hidden && !quick->isExposed();
+        const bool unseen = hidden && m_releasesGraphics && !quick->isExposed();
         const bool persistentSceneGraph = quick->isPersistentSceneGraph();
         const bool persistentGraphics = quick->isPersistentGraphics();
         if (unseen) {

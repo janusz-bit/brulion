@@ -417,8 +417,15 @@ int main(int argc, char *argv[])
     // dictionaries, a hidden window's graphics — goes while it is away (memorypolicy.h).
     brulion::ui::MemoryPolicy *memoryPolicy = brulion::ui::MemoryPolicy::instance();
 #ifdef Q_OS_ANDROID
-    // The home screen: the system counts what a background app holds against it at once.
-    memoryPolicy->setHiddenMs(2000);
+    // The home screen: the system counts what a background app holds against it, and stops the
+    // app's timers a few seconds later (a glance at another app and back stays under it).
+    memoryPolicy->setHiddenMs(5000);
+#endif
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    // A hidden window (the tray, minimised) gives up its scene graph and its graphics context too:
+    // tried on X11 and Wayland with Mesa (docs/PERFORMANCE.md "Memory: only what is in use");
+    // elsewhere only with BRULION_RELEASE_GRAPHICS=1 until it was tried there.
+    memoryPolicy->setReleasesGraphics(true);
 #endif
     // Qt Quick opens file: URLs itself: a URL property naming a file of another machine (on Windows
     // a connection to it) is emptied, unless it is the open notebook's (localnetwork.h). Installed
