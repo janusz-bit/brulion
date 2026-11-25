@@ -662,8 +662,13 @@ FocusScope {
                         width: Math.max(120, Math.min(maxWidth, list.width - 2 * pad)) - arrow
                         spacing: Theme.space3
 
-                        ContentMissedBanner {
+                        // The missed reminders (ContentMissedBanner), loaded from its file only
+                        // while there are some (docs/PERFORMANCE.md "QML files loaded when first used").
+                        Loader {
                             Layout.fillWidth: true
+                            active: Workspace.reminders !== null && Workspace.reminders.missedCount > 0
+                            visible: active
+                            source: Qt.resolvedUrl("../content/ContentMissedBanner.qml")
                         }
                         RowLayout {
                             Layout.fillWidth: true

@@ -908,20 +908,37 @@ FocusScope {
         shell.letGoLoader(switcherLoader)
         shell.letGoLoader(captureLoader)
         topBar.letGoMoreMenu()
-        shell.letGoDialog(newPageLoader)
-        shell.letGoDialog(renameLoader)
-        shell.letGoDialog(moveLoader)
+        if (shell.newPage !== null && shell.closedPopup(shell.newPage)) {
+            shell.newPage.destroy()
+            shell.newPage = null
+        }
+        if (shell.rename !== null && shell.closedPopup(shell.rename)) {
+            shell.rename.destroy()
+            shell.rename = null
+        }
+        if (shell.moveDialog !== null && shell.closedPopup(shell.moveDialog)) {
+            shell.moveDialog.destroy()
+            shell.moveDialog = null
+        }
         shell.letGoDialogs()
     }
     function letGoDialogs(): void {
-        shell.letGoDialog(aboutLoader)
-        shell.letGoDialog(deleteLoader)
-        shell.letGoDialog(extensionSettingsLoader)
-        shell.letGoDialog(extensionCopyLoader)
-        shell.letGoDialog(automationLoader)
-        shell.letGoDialog(macroLoader)
-        shell.letGoDialog(extensionApprovalLoader)
-        shell.letGoDialog(newEncryptedLoader)
+        if (shell.about !== null && shell.closedPopup(shell.about)) {
+            shell.about.destroy()
+            shell.about = null
+        }
+        if (shell.deleteDialog !== null && shell.closedPopup(shell.deleteDialog)) {
+            shell.deleteDialog.destroy()
+            shell.deleteDialog = null
+        }
+        if (shell.extensionSettings !== null && shell.closedPopup(shell.extensionSettings)) {
+            shell.extensionSettings.destroy()
+            shell.extensionSettings = null
+        }
+        if (shell.extensionCopy !== null && shell.closedPopup(shell.extensionCopy)) {
+            shell.extensionCopy.destroy()
+            shell.extensionCopy = null
+        }
     }
     /// Starts building the next popup used most, in pieces over several frames (an asynchronous
     /// Loader; opened before it is ready, the rest is made at once).
@@ -997,7 +1014,11 @@ FocusScope {
             AppController.toast(qsTr("This version of Brulion cannot record."), "info")
             return
         }
-        const dialog = shell.dialogNow(voiceLoader, "../media/VoiceRecorderDialog.qml", "shellVoiceRecorder")
+        if (voiceLoader.item === null) {
+            shell._dialogValues = { objectName: "shellVoiceRecorder" }
+            voiceLoader.setSource(shell._voiceSource, shell._dialogValues)
+        }
+        const dialog = voiceLoader.item as T.Popup
         if (dialog)
             dialog.open()
     }
@@ -1014,7 +1035,9 @@ FocusScope {
             AppController.speech.transcribe(path, page, target, -1)
     }
     MapHolder { id: journalVoice }
+    // (VoiceRecorderDialog, loaded from its file when first opened.)
     Loader { id: voiceLoader }
+    readonly property url _voiceSource: Qt.resolvedUrl("../media/VoiceRecorderDialog.qml")
     Connections {
         target: voiceLoader.item
         function onRecorded(file: string): void { shell.storeVoiceNote(file) }
@@ -1051,50 +1074,47 @@ FocusScope {
 
     // ---- Dialogs loaded from their files when first opened -------------------------------------
     // Not named here (docs/PERFORMANCE.md "QML files loaded when first used"): a QML file named in
-    // another one is loaded with it, and none of these is on the first screen. Each has a Loader
-    // that gets its file the first time the dialog opens (dialogNow()) and lets go of it while the
-    // app is away (letGoDialog()); the dialog is reached as a T.Popup, its own functions by name
-    // (QmlCall), its signals through Connections.
-    /// The next setSource()'s arguments (compiled QML wants a call's arguments read from properties).
-    property url _dialogSource
+    // another one is loaded with it, and none of these is on the first screen. Each is made from its
+    // file the first time it opens (makeDialog(), a child of the shell as before) and goes while the
+    // app is away (letGoDialogs()); it is reached as a T.Popup, its own functions by name (QmlCall),
+    // its signals through Connections.
+    /// The next dialog's first values (compiled QML wants a call's arguments read from properties).
     property var _dialogValues: ({})
-    /// The dialog of `loader`, loaded from `file` (relative to this one) — with the objectName
-    /// `name` unless it is "" — the first time it is asked for.
-    function dialogNow(loader: Loader, file: string, name: string): T.Popup {
-        if (loader.item === null) {
-            shell._dialogSource = Qt.resolvedUrl(file)
-            if (name !== "")
-                shell._dialogValues = { objectName: name }
-            else
-                shell._dialogValues = {}
-            loader.setSource(shell._dialogSource, shell._dialogValues)
-        }
-        return loader.item as T.Popup
+    /// A dialog of `file` (relative to this one), a child of `owner`, with the objectName `name`
+    /// unless it is "" (the file's own then).
+    function makeDialogIn(file: string, name: string, owner: QtObject): T.Popup {
+        if (name !== "")
+            shell._dialogValues = { objectName: name }
+        else
+            shell._dialogValues = {}
+        const component = Qt.createComponent(Qt.resolvedUrl(file))
+        return component.createObject(owner, shell._dialogValues) as T.Popup
     }
-    /// Lets go of the dialog of `loader` unless it is open (loaded again when it next opens).
-    function letGoDialog(loader: Loader): void {
-        if (loader.item !== null && shell.closedPopup(loader.item as T.Popup))
-            loader.source = ""
+    function makeDialog(file: string, name: string): T.Popup {
+        return shell.makeDialogIn(file, name, shell)
     }
 
-    Loader { id: automationLoader }
+    property T.Popup automationDialog: null
     function automationDialogNow(): T.Popup {
-        return shell.dialogNow(automationLoader, "ShellAutomationDialog.qml", "shellAutomation")
+        if (!shell.automationDialog)
+            shell.automationDialog = shell.makeDialog("ShellAutomationDialog.qml", "shellAutomation")
+        return shell.automationDialog
     }
 
-    Loader { id: shareLoader }
+    property T.Popup shareDialog: null
     function shareDialogNow(): T.Popup {
-        return shell.dialogNow(shareLoader, "ShellShareDialog.qml", "shellShare")
+        if (!shell.shareDialog)
+            shell.shareDialog = shell.makeDialog("ShellShareDialog.qml", "shellShare")
+        return shell.shareDialog
     }
 
     // The question an extension's command waits on (the gym: which plan, a set's weight and reps):
     // the dialog is made with the first question and follows the next ones itself.
-    Loader { id: extensionQuestionLoader }
-    readonly property T.Popup extensionQuestion: extensionQuestionLoader.item as T.Popup
-    /// The question is shown as a bottom sheet (phones): the shell keeps its content above it.
+    property T.Popup extensionQuestion: null
+    /// The question is shown as a bottom sheet (phones): the toasts go to the top meanwhile.
     QmlValue {
         id: questionSheet
-        object: extensionQuestionLoader.item
+        object: shell.extensionQuestion
         name: "sheet"
     }
     Connections {
@@ -1103,17 +1123,17 @@ FocusScope {
         function onQuestionChanged() {
             if (Workspace.extensions.questionKind === "")
                 return
-            const dialog = shell.dialogNow(extensionQuestionLoader, "ShellExtensionQuestion.qml", "")
+            shell.extensionQuestion = shell.makeDialog("ShellExtensionQuestion.qml", "")
             // (Made in this signal's handler: its own Connections hear the next one.)
-            if (dialog)
-                QmlCall.call(dialog, "questionChanged")
+            if (shell.extensionQuestion)
+                QmlCall.call(shell.extensionQuestion, "questionChanged")
         }
     }
 
     // A macro's placeholder clicked in the editor (Workspace.extensions.showMacro), a view block's
     // "Run…": run, switch on or open its extension. Code waiting for approval is read first — the
     // approval with its code (ShellExtensionApproval), as "Read and run" on its page.
-    Loader { id: macroLoader }
+    property T.Popup macroDialog: null
     Connections {
         target: Workspace.extensions
         function onMacroHelpRequested(extension: string, macro: string) {
@@ -1122,61 +1142,75 @@ FocusScope {
                 shell.openExtensionApproval(waiting)
                 return
             }
-            const dialog = shell.dialogNow(macroLoader, "ShellMacroDialog.qml", "")
-            if (dialog)
-                QmlCall.call2(dialog, "show", extension, macro)
+            if (!shell.macroDialog)
+                shell.macroDialog = shell.makeDialog("ShellMacroDialog.qml", "")
+            if (shell.macroDialog)
+                QmlCall.call2(shell.macroDialog, "show", extension, macro)
         }
     }
-    Loader { id: extensionApprovalLoader }
+    property T.Popup extensionApproval: null
     function openExtensionApproval(path: string): void {
-        const dialog = shell.dialogNow(extensionApprovalLoader, "ShellExtensionApproval.qml", "")
-        if (dialog)
-            QmlCall.call1(dialog, "show", path)
+        if (!shell.extensionApproval)
+            shell.extensionApproval = shell.makeDialog("ShellExtensionApproval.qml", "")
+        if (shell.extensionApproval)
+            QmlCall.call1(shell.extensionApproval, "show", path)
     }
-    Loader { id: extensionSettingsLoader }
+    property T.Popup extensionSettings: null
     function openExtensionSettings(extension: string): void {
-        const dialog = shell.dialogNow(extensionSettingsLoader, "ShellExtensionSettings.qml", "")
-        if (dialog)
-            QmlCall.call1(dialog, "show", extension)
+        if (!shell.extensionSettings)
+            shell.extensionSettings = shell.makeDialog("ShellExtensionSettings.qml", "")
+        if (shell.extensionSettings)
+            QmlCall.call1(shell.extensionSettings, "show", extension)
     }
-    Loader { id: extensionCopyLoader }
+    property T.Popup extensionCopy: null
     function openExtensionCopy(path: string): void {
-        const dialog = shell.dialogNow(extensionCopyLoader, "ShellExtensionCopy.qml", "")
-        if (dialog)
-            QmlCall.call1(dialog, "show", path)
+        if (!shell.extensionCopy)
+            shell.extensionCopy = shell.makeDialog("ShellExtensionCopy.qml", "")
+        if (shell.extensionCopy)
+            QmlCall.call1(shell.extensionCopy, "show", path)
     }
 
-    Loader { id: newPageLoader }
+    property T.Popup newPage: null
     function newPageNow(): T.Popup {
-        return shell.dialogNow(newPageLoader, "ShellNewPageDialog.qml", "shellNewPage")
+        if (!shell.newPage)
+            shell.newPage = shell.makeDialog("ShellNewPageDialog.qml", "shellNewPage")
+        return shell.newPage
     }
 
-    Loader { id: renameLoader }
+    property T.Popup rename: null
     function renameNow(): T.Popup {
-        return shell.dialogNow(renameLoader, "ShellRenameDialog.qml", "shellRename")
+        if (!shell.rename)
+            shell.rename = shell.makeDialog("ShellRenameDialog.qml", "shellRename")
+        return shell.rename
     }
 
-    Loader { id: moveLoader }
+    property T.Popup moveDialog: null
     function moveDialogNow(): T.Popup {
-        return shell.dialogNow(moveLoader, "ShellMoveDialog.qml", "")
+        if (!shell.moveDialog)
+            shell.moveDialog = shell.makeDialog("ShellMoveDialog.qml", "")
+        return shell.moveDialog
     }
     Connections {
-        target: moveLoader.item
+        target: shell.moveDialog
         function onMoveRequested(path: string, folder: string, create: bool): void {
             shell.performMove(path, folder, create)
         }
     }
     ShellMoveWords { id: moveWords }
 
-    Loader { id: aboutLoader }
+    property T.Popup about: null
     function aboutNow(): T.Popup {
-        return shell.dialogNow(aboutLoader, "ShellAboutDialog.qml", "")
+        if (!shell.about)
+            shell.about = shell.makeDialog("ShellAboutDialog.qml", "")
+        return shell.about
     }
 
     /// "Move to trash?" for a page, an attachment or a folder (ShellDeleteDialog).
-    Loader { id: deleteLoader }
+    property T.Popup deleteDialog: null
     function deleteDialogNow(): T.Popup {
-        return shell.dialogNow(deleteLoader, "ShellDeleteDialog.qml", "shellDeleteDialog")
+        if (!shell.deleteDialog)
+            shell.deleteDialog = shell.makeDialog("ShellDeleteDialog.qml", "shellDeleteDialog")
+        return shell.deleteDialog
     }
 
     Connections {
@@ -1200,13 +1234,14 @@ FocusScope {
 
     // "New encrypted page…" (docs/UI.md "Encrypted notes"): the palette, a folder's menu in the
     // sidebar. Made when first opened; the new page opens unlocked.
-    Loader { id: newEncryptedLoader }
+    property T.Popup newEncryptedDialog: null
     function openNewEncryptedPage(folder: string): void {
-        const dialog = shell.dialogNow(newEncryptedLoader, "../content/ContentEncryptionDialog.qml", "")
-        QmlCall.call2(dialog, "openFor", "new", folder)
+        if (!shell.newEncryptedDialog)
+            shell.newEncryptedDialog = shell.makeDialogIn("../content/ContentEncryptionDialog.qml", "", T.Overlay.overlay)
+        QmlCall.call2(shell.newEncryptedDialog, "openFor", "new", folder)
     }
     Connections {
-        target: newEncryptedLoader.item
+        target: shell.newEncryptedDialog
         function onDone(path: string): void { AppController.openPage(path) }
     }
 
