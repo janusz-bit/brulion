@@ -19,6 +19,7 @@
 #include "uidriver.h"
 #include "voicerecorder.h"
 #include "workspace.h"
+#include "workspaceagents.h"
 #include "workspacechats.h"
 #include "workspaceextensions.h"
 #include "workspacesync.h"
@@ -57,6 +58,7 @@
 #include <QInputDevice>
 #include <QInputMethodEvent>
 #include <QJSValue>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLocale>
@@ -75,6 +77,7 @@
 #include <QRegularExpression>
 #include <QScopeGuard>
 #include <QScreen>
+#include <QStandardPaths>
 #include <QStyleHints>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -7339,6 +7342,144 @@ void checkExtensionMacros(QQuickWindow *window, AppController *app, const Check 
     settle(300);
 }
 
+/// What an agent used (docs/UI.md "AI agents (ACP)", "Its usage"): Claude Code's preset added with
+/// its session logs in a folder of the test's own (synthetic lines, one in this notebook and one in
+/// another project; its limits find no sign-in there, so nothing is sent anywhere): the agent's row
+/// in Settings → Extensions shows Usage… and the line of what it used today; Usage… opens the dialog
+/// with a bar per day of 30, 7 after the period is changed, the totals of this notebook only apart
+/// from all projects', and the sentence about the API's prices; Close closes it.
+void checkAgentUsage(QQuickWindow *window, AppController *app, const Check &check)
+{
+    if (!WorkspaceAgents::available())
+        return; // (no programs run: Android, the browser)
+    // (A button of Settings takes the keyboard and goes with the view, the journal's editor takes
+    // it then: the focus is given back after, as the steps after expect it.)
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    WorkspaceChats *chats = app->workspace()->chats();
+    AgentUsage *usage = chats->usage();
+    QTemporaryDir dir;
+    check(dir.isValid(), "a folder for the agent's session logs");
+    const QString config = dir.filePath(u"claude"_s);
+    const QString projects = config + u"/projects/-samotest-zuzycie"_s;
+    QDir().mkpath(projects);
+    const QString notebook = QDir(app->workspace()->rootPath()).absolutePath();
+    const auto line = [](const QString &id, const QString &cwd, qint64 input, qint64 output) {
+        const QJsonObject o{
+                {u"type"_s, u"assistant"_s},
+                {u"timestamp"_s, QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+                {u"cwd"_s, cwd},
+                {u"requestId"_s, QString(u"req_"_s + id)},
+                {u"message"_s, QJsonObject{{u"id"_s, QString(u"msg_"_s + id)},
+                                           {u"model"_s, u"claude-opus-5-5"_s},
+                                           {u"usage"_s, QJsonObject{{u"input_tokens"_s, double(input)},
+                                                                    {u"output_tokens"_s, double(output)}}}}}};
+        return QJsonDocument(o).toJson(QJsonDocument::Compact) + '\n';
+    };
+    {
+        QFile f(projects + u"/sesja-zażółć.jsonl"_s);
+        check(f.open(QIODevice::WriteOnly), "a synthetic session log is written");
+        f.write(line(u"1"_s, notebook, 1'000'000, 10'000));
+        f.write(line(u"1"_s, notebook, 1'000'000, 10'000)); // (logged twice while it streamed: once)
+        f.write(line(u"2"_s, u"/inny/projekt"_s, 2'000'000, 20'000));
+    }
+    const QHash<QString, QString> environment{{u"CLAUDE_CONFIG_DIR"_s, config}};
+    usage->setEnvironment(environment, dir.filePath(u"home"_s));
+    usage->setCacheDir(dir.filePath(u"cache"_s));
+    chats->limits()->setEnvironment(environment, dir.filePath(u"home"_s));
+    const auto restore = qScopeGuard([&] {
+        QHash<QString, QString> own;
+        for (const char *name : {"CLAUDE_CONFIG_DIR", "CODEX_HOME"}) {
+            if (qEnvironmentVariableIsSet(name))
+                own.insert(QString::fromLatin1(name), qEnvironmentVariable(name));
+        }
+        usage->setEnvironment(own, QDir::homePath());
+        usage->setCacheDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+        chats->limits()->setEnvironment(own, QDir::homePath());
+    });
+    AppSettings *settings = app->settings();
+    const QString id = settings->addAcpAgent(u"claude"_s);
+    check(!id.isEmpty(), "Claude Code's preset is added");
+    const auto removeAgent = qScopeGuard([&] {
+        if (!id.isEmpty())
+            settings->removeAcpAgent(id);
+    });
+    const QString partner = u"acp:"_s + id;
+    check(usage->applies(partner), "its usage applies (a command of this computer)");
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"extensions"_s}});
+    const auto button = [&]() -> QQuickItem * {
+        for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
+            if (item->objectName() == u"acpAgentUsage" && item->isVisible()
+                && item->property("partner").toString() == partner)
+                return item;
+        }
+        return nullptr;
+    };
+    QQuickItem *usageButton = nullptr;
+    check(waitFor([&] { return (usageButton = button()) != nullptr; }, 10000),
+          "the agent's row in Settings → Extensions has Usage…");
+    QString summary;
+    check(waitFor(
+                  [&] {
+                      usageButton = button();
+                      summary = usageButton ? usageButton->property("summary").toString() : QString();
+                      return !summary.isEmpty();
+                  },
+                  15000),
+          "its logs are read: the row tells what it used");
+    check(summary.contains(u"3"_s) && summary.contains(u"USD"_s),
+          qPrintable(u"the row's line has today's tokens and their cost (%1)"_s.arg(summary)));
+    // Usage…: the dialog.
+    if (usageButton)
+        uidriver::scrollIntoView(window, usageButton);
+    mouseMove(window, QPointF(1, 1)); // (away: no tooltip opens)
+    QPointF at;
+    if (steadyItem(window, button, &at))
+        tapOrClick(window, at, touch);
+    QObject *dialog = nullptr;
+    check(waitFor([&] {
+              for (QObject *d : window->findChildren<QObject *>(u"agentUsageDialog"_s)) {
+                  if (d->property("opened").toBool())
+                      dialog = d;
+              }
+              return dialog != nullptr;
+          }),
+          "Usage… opens the agent's usage dialog");
+    if (!dialog)
+        return;
+    const auto bars = [&] {
+        int n = 0;
+        for (QQuickItem *item : uidriver::allItems(window->contentItem()))
+            n += item->objectName() == u"agentUsageBar" && item->isVisible();
+        return n;
+    };
+    check(waitFor([&] { return bars() == 30; }), qPrintable(u"a bar for each of 30 days (%1)"_s.arg(bars())));
+    QQuickItem *total = nullptr;
+    check(waitFor([&] { return (total = named(u"agentUsageTotal"_s)) != nullptr; }), "the period's total");
+    const QString all = total ? total->property("text").toString() : QString();
+    check(named(u"agentUsageModel"_s) != nullptr, "a row for the model");
+    QQuickItem *note = named(u"agentUsageNote"_s);
+    check(note && !note->property("text").toString().isEmpty(), "the sentence about the API's prices");
+    dialog->setProperty("days", 7);
+    check(waitFor([&] { return bars() == 7; }), qPrintable(u"7 days: 7 bars (%1)"_s.arg(bars())));
+    dialog->setProperty("notebookOnly", true);
+    check(waitFor([&] {
+              total = named(u"agentUsageTotal"_s);
+              return total && !total->property("text").toString().isEmpty()
+                     && total->property("text").toString() != all;
+          }),
+          qPrintable(u"this notebook only: its own total (%1 of %2)"_s.arg(
+                  total ? total->property("text").toString() : QString(), all)));
+    QMetaObject::invokeMethod(dialog, "close");
+    check(waitFor([&] { return !dialog->property("visible").toBool(); }), "the dialog closes");
+    closeToolTipsWaitingForDeletion(window);
+    app->goHome();
+    settle(300);
+    if (focused)
+        focused->forceActiveFocus();
+}
+
 /// The page menu's "Ignore tasks on this page" (PageView.toggleTasksIgnored): the page gets
 /// `zadania: ignoruj` (`tasks: ignore` in English), its task leaves type:tasks (the Tasks view's query) and the menu
 /// offers to show it again; the second time the property goes and the task is back (docs/SYNTAX.md §5).
@@ -12625,6 +12766,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ai-secret. A secret an agent asks for: its private card, Show, Send as a file, Cancel.
     checkChatSecret(window, app, check);
+    closeMenus(window);
+    // 3h-ai-use. What an agent used, from its session logs: the row's line, the Usage… dialog.
+    checkAgentUsage(window, app, check);
     closeMenus(window);
     // 3h-ign. A page's tasks ignored from its menu, and back.
     checkIgnoreTasks(window, app, check);

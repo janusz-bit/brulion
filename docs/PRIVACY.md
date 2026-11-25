@@ -38,7 +38,10 @@ version.
   sync with that folder, on the device — nothing leaves the device for this. The app from GitHub
   and F-Droid can also use a folder on the shared storage, with the "All files access"
   permission.
-* **On a computer**, the notebook is a folder you choose.
+* **On a computer**, the notebook is a folder you choose. If you add Claude Code or Codex as an AI
+  agent there, Brulion reads their own session logs on that computer to show how many tokens they
+  used and what that would cost on the provider's API; nothing of these logs leaves the computer,
+  and the totals are kept in Brulion's cache folder.
 * **In the browser version**, notes are kept in your browser's storage on that device. The page
   itself is served by GitHub Pages, which sees your IP address when it is loaded (GitHub's privacy
   statement applies to that).
@@ -189,7 +192,10 @@ przeglądarce.
   prywatnej i synchronizuje ją z tym folderem na urządzeniu — nic przy tym nie opuszcza
   urządzenia. Aplikacja z GitHuba i F-Droid może też używać folderu w pamięci współdzielonej, z
   uprawnieniem „Dostęp do wszystkich plików”.
-* **Na komputerze** notatnik jest folderem, który wybierasz.
+* **Na komputerze** notatnik jest folderem, który wybierasz. Jeśli dodasz tam Claude Code lub
+  Codex jako agenta AI, Brulion czyta ich własne logi sesji na tym komputerze, by pokazać, ile
+  tokenów zużyły i ile kosztowałoby to w API dostawcy; nic z tych logów nie opuszcza komputera, a
+  sumy są trzymane w folderze pamięci podręcznej Brulionu.
 * **W wersji w przeglądarce** notatki są w pamięci przeglądarki na tym urządzeniu. Samą stronę
   udostępnia GitHub Pages, który przy jej wczytaniu widzi Twój adres IP (dotyczy tego oświadczenie
   o prywatności GitHuba).

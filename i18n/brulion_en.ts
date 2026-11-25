@@ -2652,6 +2652,30 @@
     </message>
 </context>
 <context>
+    <name>brulion::shell::AgentUsage</name>
+    <message numerus="yes">
+        <source>%n tokens</source>
+        <translation>
+            <numerusform>%n token</numerusform>
+            <numerusform>%n tokens</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%1 · %2 · %n requests</source>
+        <translation>
+            <numerusform>%1 · %2 · %n request</numerusform>
+            <numerusform>%1 · %2 · %n requests</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n requests</source>
+        <translation>
+            <numerusform>%n request</numerusform>
+            <numerusform>%n requests</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>brulion::shell::AppController</name>
     <message numerus="yes">
         <location filename="../src/app/shell/appshare.cpp" line="415"/>

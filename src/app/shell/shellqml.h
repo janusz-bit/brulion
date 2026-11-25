@@ -17,6 +17,7 @@
 //   ChatTurn         uncreatable — Workspace.chats.turn(path): one conversation's turn
 //   AgentShare       uncreatable — Workspace.chats.share ("Share agents with the phone")
 //   AgentLimits      uncreatable — Workspace.chats.limits (Claude Code's and Codex's subscription limits)
+//   AgentUsage       uncreatable — Workspace.chats.usage (what they used, from their session logs)
 //   ChatLineage, ChatSchedules uncreatable — Workspace.chats.lineage / .schedules (sub-conversations,
 //                    scheduled conversations)
 //   ChatSecrets, HookServer uncreatable — Workspace.chats.secrets / .hooks (a secret an agent asks
@@ -306,6 +307,13 @@ struct AgentLimitsForeign {
     QML_FOREIGN(brulion::shell::AgentLimits)
     QML_NAMED_ELEMENT(AgentLimits)
     QML_UNCREATABLE("Use Workspace.chats.limits")
+};
+
+struct AgentUsageForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AgentUsage)
+    QML_NAMED_ELEMENT(AgentUsage)
+    QML_UNCREATABLE("Use Workspace.chats.usage")
 };
 
 struct ChatLineageForeign {

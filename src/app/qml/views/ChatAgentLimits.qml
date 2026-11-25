@@ -12,7 +12,9 @@ import Brulion
 // again"), what to do in its tooltip. Read when shown — at most every five minutes per account —,
 // again every five minutes while it stays shown. Hidden for any other partner (and where no
 // programs run). Beside the session's usage in ChatAgentOptions, and on the agent's row in
-// Settings → Extensions → AI agents.
+// Settings → Extensions → AI agents. The tooltip ends with what the agent used today, from its own
+// session logs (Workspace.chats.usage, shell/agentusage.h: "Used today: 1.2 M tokens · ≈ 4.10 USD at
+// API prices"), read when the pill is.
 T.AbstractButton {
     id: chip
 
@@ -26,7 +28,11 @@ T.AbstractButton {
     readonly property string failure: AppController.routeText(chip.info, "failure")
     readonly property string failureShort: AppController.routeText(chip.info, "failureShort")
     readonly property string level: AppController.routeText(chip.info, "level")
-    readonly property string tooltip: AppController.routeText(chip.info, "tooltip")
+    readonly property string limitsTooltip: AppController.routeText(chip.info, "tooltip")
+    readonly property AgentUsage usage: Workspace.chats.usage
+    readonly property string usedToday: AppController.routeText(chip.usage.state(chip.partner, chip.usage.serial), "today")
+    readonly property string tooltip: chip.usedToday === "" ? chip.limitsTooltip
+                                    : chip.limitsTooltip === "" ? chip.usedToday : chip.limitsTooltip + "\n" + chip.usedToday
     readonly property bool busy: AppController.routeFlag(chip.info, "busy")
     readonly property list<var> windows: AppController.routeList(chip.info, "windows")
     readonly property color fgColor: chip.level === "danger" ? Theme.dangerText
@@ -35,8 +41,10 @@ T.AbstractButton {
     readonly property int visualHeight: Theme.touchUi ? 24 : 20
 
     function look(): void {
-        if (chip.visible && chip.partner !== "")
+        if (chip.visible && chip.partner !== "") {
             chip.limits.show(chip.partner)
+            chip.usage.show(chip.partner)
+        }
     }
     // (After the bindings that showed it: a reading changes `serial`, which they read.)
     Later {
@@ -166,7 +174,10 @@ T.AbstractButton {
             text: qsTr("Refresh")
             iconName: "refresh-cw"
             enabled: !chip.busy
-            onTriggered: chip.limits.refresh(chip.partner)
+            onTriggered: {
+                chip.limits.refresh(chip.partner)
+                chip.usage.refresh(chip.partner)
+            }
         }
     }
 }

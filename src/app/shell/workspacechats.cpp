@@ -122,6 +122,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     , m_agents(new WorkspaceAgents(workspace, this))
     , m_share(new AgentShare(workspace, m_agents, this))
     , m_limits(new AgentLimits(m_agents, this))
+    , m_usage(new AgentUsage(workspace, m_agents, this))
     , m_lineage(new ChatLineage(workspace, this, this))
     , m_schedules(new ChatSchedules(workspace, this, this))
     , m_secrets(new ChatSecrets(workspace, this, this))
@@ -329,6 +330,7 @@ void WorkspaceChats::setAgents(const QList<AgentConfig> &agents)
     m_agents->setAgents(agents);
     m_share->agentsChanged();
     m_limits->agentsChanged();
+    m_usage->agentsChanged();
     Q_EMIT partnersChanged();
     recoverAgentTurns();
 }

@@ -29,6 +29,7 @@
 
 #include "agentlimits.h"
 #include "agentshare.h"
+#include "agentusage.h"
 #include "chatlineage.h"
 #include "chatschedules.h"
 #include "chatsecrets.h"
@@ -205,6 +206,8 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(brulion::shell::AgentShare *share READ share CONSTANT FINAL)
     /// The subscription limits of the agents that are Claude Code or Codex (agentlimits.h).
     Q_PROPERTY(brulion::shell::AgentLimits *limits READ limits CONSTANT FINAL)
+    /// What the agents that are Claude Code or Codex used, from their own session logs (agentusage.h).
+    Q_PROPERTY(brulion::shell::AgentUsage *usage READ usage CONSTANT FINAL)
     /// Which conversations AI agents started from which (sub-conversations: chatlineage.h).
     Q_PROPERTY(brulion::shell::ChatLineage *lineage READ lineage CONSTANT FINAL)
     /// Scheduled conversations (chatschedules.h).
@@ -363,6 +366,7 @@ public:
     Q_INVOKABLE void addOfferedAgent(const QString &address, const QString &agent);
     AgentShare *share() const { return m_share; }
     AgentLimits *limits() const { return m_limits; }
+    AgentUsage *usage() const { return m_usage; }
     ChatLineage *lineage() const { return m_lineage; }
     ChatSchedules *schedules() const { return m_schedules; }
     ChatSecrets *secrets() const { return m_secrets; }
@@ -625,6 +629,7 @@ private:
     bool m_agentPairing = false;
     AgentShare *m_share = nullptr;
     AgentLimits *m_limits = nullptr;
+    AgentUsage *m_usage = nullptr;
     ChatLineage *m_lineage = nullptr;
     ChatSchedules *m_schedules = nullptr;
     ChatSecrets *m_secrets = nullptr;

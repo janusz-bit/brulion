@@ -2065,11 +2065,19 @@ Item {
                         objectName: "acpAgentRow"
                         Layout.fillWidth: true
                         title: AppController.routeText(agentRow.modelData, "name")
+                        // (With what Claude Code or Codex used: "Today 1.2 M tokens · ≈ 4.10 USD · 30 days ≈ 61 USD".)
                         description: AppController.routeText(agentRow.modelData, "summary")
+                                     + (usageButton.summary !== "" ? "\n" + usageButton.summary : "")
                         // Claude Code's and Codex's subscription limits.
                         ChatAgentLimits {
                             objectName: "acpAgentLimits"
                             partner: agentRow.remote ? "" : "acp:" + agentRow.agentId
+                        }
+                        // What they used, from their own session logs: the dialog.
+                        AgentUsageButton {
+                            id: usageButton
+                            partner: agentRow.remote ? "" : "acp:" + agentRow.agentId
+                            onOpenRequested: (partner) => usageDialog.openFor(partner, agentRow.title)
                         }
                         BButton {
                             objectName: "acpAgentCheck"
@@ -2097,6 +2105,10 @@ Item {
                             onClicked: AppSettings.removeAcpAgent(agentRow.agentId)
                         }
                     }
+                }
+                // What an agent of this computer used (AgentUsageButton's Usage…).
+                AgentUsageDialog {
+                    id: usageDialog
                 }
                 // (Android: the notification of a foreground service while an agent on another
                 // computer answers — docs/ANDROID.md "An AI agent on another computer".)

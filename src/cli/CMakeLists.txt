@@ -13,6 +13,7 @@ qt_add_library(brulion_cli STATIC
     cli.h cli_p.h commands_p.h mcp_p.h
     acpagent.h acpagent.cpp
     acphost.h acphost.cpp
+    acpusage.cpp
     acptrust.h acptrust.cpp
     args.cpp
     authserver.h authserver.cpp
@@ -53,7 +54,7 @@ target_link_libraries(brulion_cli
     PUBLIC Qt6::Core brulion_core_notebook brulion_core_calc brulion_core_reminders brulion_core_index
            brulion_core_markdown brulion_core_dates brulion_core_vault brulion_core_text brulion_core_util
            brulion_core_extensions
-    PRIVATE brulion_core_acp brulion_core_ai brulion_core_chat brulion_core_tailscale brulion_core_qr brulion_core_attachments brulion_core_sync brulion_core_automation brulion_core_clipper brulion_core_publish brulion_core_caldav
+    PRIVATE brulion_core_acp brulion_core_agentusage brulion_core_ai brulion_core_chat brulion_core_tailscale brulion_core_qr brulion_core_attachments brulion_core_sync brulion_core_automation brulion_core_clipper brulion_core_publish brulion_core_caldav
             brulion_core_io brulion_core_cloudimport brulion_core_semantic brulion_core_webhook brulion_ipc Qt6::Network)
 target_compile_definitions(brulion_cli PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 # `search --semantic` (commands_index.cpp): the plugin of search by meaning where the app has it —

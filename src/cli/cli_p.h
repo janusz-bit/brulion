@@ -165,6 +165,8 @@ void addRemoteMcpCommands(QList<Command> &out);
 void addAcpHostCommands(QList<Command> &out);
 /// `acp agent` (acpagent.cpp; after the acp serve commands).
 void addAcpAgentCommands(QList<Command> &out);
+/// `acp usage` (acpusage.cpp; after acp agent): what Claude Code and Codex used, from their logs.
+void addAcpUsageCommands(QList<Command> &out);
 
 /// Options for the whole run (docs/CLI.md "Global options").
 struct Globals {

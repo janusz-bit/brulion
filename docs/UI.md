@@ -1877,6 +1877,65 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   renewed by using the agent once; asked too often, try again in a few minutes. Not for an agent on
   another computer (its sign-in is that computer's) nor where no programs run. Tests: `tst_agentlimits`
   (recorded answers, malformed ones, the requests, the reader's rhythm), `tst_shell_agentlimits`.
+* **Its usage** (`Workspace.chats.usage`, `src/app/shell/agentusage.h`; core `agentusage/`; T3 Code's
+  usage history, ccusage's sources): for an agent **of this computer** that is Claude Code or Codex
+  (known as for its limits), what it used — tokens by kind (input, output, cache writes for five
+  minutes and an hour, cache reads, reasoning as part of the output), requests and what the same
+  tokens would cost **on the API** — read from the agent's own session logs on this computer, never
+  sent anywhere: Claude Code's `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<folder>/*.jsonl` (and
+  `~/.config/claude/projects` without the variable; the subagents' files below a session too: an
+  assistant line's `message.usage`, `message.model`, `cwd`, `costUSD` when the log has one, `speed`
+  "fast"), each message once by `message.id` + `requestId` (it is logged again while it streams and
+  when a session is resumed into a file of its own); Codex's `${CODEX_HOME:-~/.codex}/sessions/YYYY/MM/DD/rollout-*.jsonl`
+  and `archived_sessions` (a rollout once by its name: `session_meta`'s `cwd`, `turn_context`'s
+  `model`; since Codex 0.154 a `token_usage_record` per API response, counted once by its
+  `response_id` — a fork's copies too —, and then the rollout's `token_count` events not: they
+  leave out the responses of a turn's own agents; before, `token_count`'s `last_token_usage` — or
+  the difference of the cumulative `total_token_usage` — where its totals moved: a repeat with the
+  same totals counts nothing, a fork's copied counts once by their totals; `cached_input_tokens` is
+  part of `input_tokens`, the priority tier of `thread_settings_applied` is fast mode) — the folders as the agent's command
+  sets them, else the app's environment, as for the limits. The cost comes from a price table in
+  one place (`src/core/agentusage/prices.cpp`, dated `PricesAsOf`: Anthropic's and OpenAI's prices
+  per million tokens, the long-context tiers above 200 K / 272 K prompt tokens, fast mode's factor;
+  a `costUSD` in the log wins; a model the table does not know counts its tokens and its cost "not
+  known"; Claude Code's `<synthetic>` messages cost nothing). Per day in local time, per model, per
+  project folder (the session's `cwd`). Shown on the agent's row in Settings → Extensions → AI
+  agents — its line under the command, "Today 1.2 M tokens · ≈ 4.10 USD · 30 days ≈ 61 USD" ("Today
+  nothing · 30 days ≈ 61 USD", "No usage yet" without logs), and **Usage…** (`acpAgentUsage`,
+  `AgentUsageButton.qml`) opening `agentUsageDialog` (`AgentUsageDialog.qml`): "Usage of Claude
+  Code", where the logs are, the period (`agentUsagePeriod`: 7 / 30 / 90 days), what the bars show
+  (`agentUsageMeasure`: tokens or cost), which projects (`agentUsageScope`: all projects or this
+  notebook only — its folder and below), the totals (`agentUsageTotal`: "12 M tokens · ≈ 61 USD · 340
+  requests"; "≥ 61 USD" when a model has no price), when they were read (`agentUsageChecked`: "Read
+  at 14:30"), a bar per day (`agentUsageChart`, `agentUsageBar`: today's in the accent colour, a
+  date under every 7th — every 14th in 90 days, each day in 7 —, the day's use on hover and for
+  screen readers: "Tue 24 Nov: 1.2 M tokens · ≈ 4.10 USD"), a row per model (`agentUsageModel`: its
+  cost, "input 1.2 M · output 300 K · cache write 50 K · cache read 4 M · reasoning 20 K · 120
+  requests"), the models without a price (`agentUsageUnpriced`) and the sentence that the cost is
+  the API's price of the same tokens — a subscription pays nothing more for them
+  (`agentUsageNote`); **Refresh** (`agentUsageRefresh`). The chat's limits pill ends its tooltip with
+  today's use ("Used today: 1.2 M tokens · ≈ 4.10 USD at API prices"). Read when shown and every
+  five minutes while shown, **at most every five minutes per log source** (`agentusage::UsageReader`:
+  a source is a provider and its folders, so two agents of one account share a reading), Refresh
+  at once, always on the reader's own thread (one reading at a time, cancelled when the app
+  quits). The logs are read line by line, at most 4 MiB a line (a longer one — a picture in a tool
+  result — is skipped), only lines that can carry usage parsed, a last line still being written
+  left for the next reading, malformed lines skipped and counted, no symlink followed out of the
+  folders. An incremental cache in the app's cache folder (`agent-usage/<provider>-<hash>.json`,
+  JSON, versioned with the price table's date, written atomically for the owner only, rebuilt when
+  malformed): per file its size, time, the bytes read, its first 4 KiB's hash (a file that shrank
+  or whose start changed is read again from the beginning), a Codex rollout's state, the keys of
+  the messages counted and its use per quarter of an hour (UTC quarters: every time zone's day is
+  whole quarters, so the days follow the computer's zone, DST too). A log that is gone keeps its
+  use in the cache — Claude Code deletes sessions after 30 days; the history keeps 400 —, so the
+  history outlives the agent's own clean-up. Not for an agent on another computer (its logs are
+  that computer's) nor where no programs run. `brulion-cli acp usage` reads the same (docs/CLI.md
+  "What the agents used"). Tests: `tst_agentusage` (synthetic logs of both agents: a streamed
+  message, a resumed session, cumulative Codex totals, Codex's response records, a fork, a truncated last line, malformed and
+  huge lines, an unknown model, the cache reading only what was appended, a file that shrank or
+  was rewritten, a gone file, days across DST and in a +05:45 zone, the reader's rhythm),
+  `tst_shell_agentusage`, `tst_cli_acp_usage`, the shell self-test's `checkAgentUsage` (Claude
+  Code's preset with synthetic logs: the row's line, Usage…, 30 and 7 bars, this notebook only).
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that
   match are chips above it (`chatCommands`, `chatCommand`: `available_commands_update` of the
   session, or of the agent's last one); a tap writes "/name " — the agent reads it as it is.

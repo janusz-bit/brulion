@@ -389,6 +389,7 @@ Never compute a hash yourself.
 | `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
 | `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
 | `acp agent` | | Brulion's AI assistant as an agent of the Agent Client Protocol on standard input and output, for an editor (Zed, JetBrains; "The assistant in Zed and JetBrains" below) | |
+| `acp usage` | `[--agent claude\|codex] [--days N] [--notebook \| --all]` | what Claude Code and Codex used on this computer, from their own session logs: `{days, from, to, folder, pricesAsOf, note, agents [{agent, name, folders, found, files, skippedLines, total, days [{date, …}], models [{model, priced, …}], projects [{folder, …}]}]}`, each total `{input, output, cacheWrite5m, cacheWrite1h, cacheRead, reasoning, tokens, requests, costUsd, costKnown, unpricedRequests, unpricedTokens}` ("What the agents used" below) | |
 <!-- /commands -->
 
 The `habit` commands are run by the app's built-in habits extension (`nawyki.luau`, its commands
@@ -1143,6 +1144,38 @@ anything (`src/cli/acpagent.h`).
 An AppImage: `"command": "/home/ala/Apps/Brulion.AppImage", "args": ["cli", "acp", "agent", …]`.
 A separate profile of the app (its settings and key): `"args": ["--profile", "praca", "acp",
 "agent"]`.
+
+## What the agents used
+
+`brulion-cli acp usage` counts what Claude Code and Codex used on this computer — tokens by kind,
+requests and an estimate of what the same tokens would cost on the API, per day (local time), model
+and project folder — from the agents' own session logs, as the app's Settings → Extensions → AI
+agents shows it (docs/UI.md "AI agents (ACP)", "Its usage"; core `agentusage/`):
+
+```sh
+brulion-cli acp usage                          # both agents, the last 30 days, every project
+brulion-cli acp usage --agent codex --days 7   # Codex, today and the six days before
+brulion-cli --vault ~/Notatki acp usage --notebook --format text
+```
+
+* **Where**: Claude Code's `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/*/…/*.jsonl` (also
+  `~/.config/claude/projects` without the variable), Codex's `${CODEX_HOME:-~/.codex}/sessions` and
+  `archived_sessions` (`rollout-*.jsonl`) — the variables as this command's environment has them.
+  `found: false` when an agent has no such folder.
+* **What counts**: a Claude Code message once (it is logged again while it streams and in a resumed
+  session: `message.id` + `requestId`), Codex's turns where its cumulative totals moved (a fork's
+  copied turns once). `--days` is 1 … 366 (default 30, today included); `--notebook` keeps the
+  notebook's folder and the folders below it (the notebook as `--vault`, `BRULION_VAULT` or the
+  app's), `--all` every folder (the default).
+* **The cost** is the API's price of the same tokens (`pricesAsOf`: the date of the price table,
+  `src/core/agentusage/prices.cpp`), or the log's own `costUSD`; a subscription pays nothing more for
+  them. A model the table does not know: its tokens count, `costKnown: false` with
+  `unpricedRequests` / `unpricedTokens`, and `priced: false` on its row.
+* **The cache** is the app's (`<cache>/agent-usage/`, for the owner only): a run reads only what was
+  appended to the logs since the last one, the app's or the command line's, and keeps the use of
+  logs the agent has since deleted (for 400 days).
+* Only local files are read and nothing is sent. Not an MCP tool: the folders of every project are
+  the user's, not an agent's to list. Exit 2 `bad_days`, `bad_scope` (`--notebook` with `--all`).
 
 ## The running app
 

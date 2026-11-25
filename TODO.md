@@ -14,12 +14,14 @@ done in the repository simply disappears from the list.
   documents) — also as the desktop app runs it (Settings → Extensions → claude.ai and ChatGPT) —.
 * **T3 Code's features in the AI chat: what is still missing** — the queue and Send now, Edit from
   here, forks, quotes, @-named pages, drafts, approvals, plans to approve, a turn's changed files
-  with Undo, delegation between partners, scheduled conversations, subscription limits, dictation
-  on the desktop, prompt links, drawings in answers, tool calls in words, the list's pins, archive,
-  search, badges and notifications are there (docs/UI.md "AI chat", "AI agents (ACP)"). Not yet:
-  side chats (`/btw`: a fork shown only inside its conversation); a delegated conversation that
-  wakes its parent when it ends (today an agent starts and waits); a usage history with costs (T3
-  reads the agents' own session logs); all of it tried with a real Claude Code and Codex.
+  with Undo, delegation between partners, scheduled conversations, subscription limits, the usage
+  history with API-equivalent costs from the agents' own session logs, dictation on the desktop,
+  prompt links, drawings in answers, tool calls in words, the list's pins, archive, search, badges
+  and notifications are there (docs/UI.md "AI chat", "AI agents (ACP)"). Not yet: side chats
+  (`/btw`: a fork shown only inside its conversation); a delegated conversation that wakes its
+  parent when it ends (today an agent starts and waits); the usage history read from Codex's
+  compressed rollouts (`rollout-*.jsonl.zst`: skipped) and of `codex-auto-review`'s turns (the log
+  names no model: tokens without a cost); all of it tried with a real Claude Code and Codex.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the

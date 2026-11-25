@@ -85,3 +85,12 @@ target_compile_definitions(tst_cli_acp_trust PRIVATE BRULION_CLI="$<TARGET_FILE:
 add_dependencies(tst_cli_acp_trust brulion-cli)
 math(EXPR _acp_trust_timeout "120 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_cli_acp_trust PROPERTIES TIMEOUT ${_acp_trust_timeout})
+
+# `acp usage` as a process with a private home: Claude Code's and Codex's synthetic session logs
+# (CLAUDE_CONFIG_DIR, CODEX_HOME) read into totals per day, model and project, one agent, this
+# notebook only, the text for people, the app's cache written and used again, the refusals.
+brulion_add_test(tst_cli_acp_usage SOURCES tst_cli_acp_usage.cpp LIBS Qt6::Core)
+target_compile_definitions(tst_cli_acp_usage PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
+add_dependencies(tst_cli_acp_usage brulion-cli)
+math(EXPR _cli_usage_timeout "120 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_cli_acp_usage PROPERTIES TIMEOUT ${_cli_usage_timeout})
