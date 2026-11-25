@@ -8,23 +8,34 @@ Steps (all by default, in this order; -Steps picks some):
   build    CMake (Ninja, Release) + MSVC 2022 against Qt 6.12.0 msvc2022_64; spell checking's
            Hunspell (compiled in from its release, BRULION_HUNSPELL_SOURCE_DIR) and the Polish and
            English dictionaries of LibreOffice are downloaded first (pinned SHA-256) into
-           <BuildDir>\deps
+           <BuildDir>\deps, and so are the releases of llama.cpp and whisper.cpp pinned in
+           3rdparty\llama\pin.json and 3rdparty\whisper\pin.json (their SHA-256 there): the model
+           on the device, search by meaning and transcripts (docs/EXTENSIONS.md "AI"), their DLLs
+           built next to the programs
   test     ctest offscreen (the tests that run on Windows: the CMake files leave out the bash ones)
   package  windeployqt (Qt libraries, plugins, the QML modules src/app/qml imports), the MSVC
-           runtime and the dictionaries (dictionaries\) next to brulion.exe and brulion-cli.exe, then
+           runtime, the dictionaries (dictionaries\) and the plugins over llama.cpp with llama.cpp's
+           DLLs (the list <BuildDir>\brulion-local-ai.txt) next to brulion.exe and brulion-cli.exe, then
              dist-windows\brulion-<version>-windows-x86_64.zip          (portable)
              dist-windows\Brulion-<version>-windows-x86_64-setup.exe    (Inno Setup,
                                                                           packaging\windows\brulion.iss)
   check    the packages on this machine, without Qt on PATH: the ZIP unpacked into a fresh folder
            and the installer installed silently for the current user (with the task "autostart":
            the Run value must start the installed brulion.exe --hidden), each started headless
-           (brulion-cli --version, the shell self-test of the real app in a separate profile,
-           which registers its AppUserModelID for the toasts with the icon next to the program);
+           (brulion-cli --version; brulion-cli version --plugins, which loads the plugins of the
+           model on the device, search by meaning and speech recognition without a model; a start
+           of brulion.exe that loads none of them; the shell self-test of the real app in a separate
+           profile, which registers its AppUserModelID for the toasts with the icon next to the program);
            the installer offers Brulion in "Open with" for .md, .markdown and .txt (the ZIP
            registers nothing) without changing their default program; then installed again as a
            silent update with the Run value removed (it must stay removed), then uninstalled
            silently — the profile's settings and notes must still be there, the Run value and the
-           "Open with" registration must be gone.
+           "Open with" registration must be gone, and so must llama.cpp's DLLs.
+
+Environment (optional): BRULION_LOCAL_AI=OFF builds without the model on the device, search by
+meaning and transcripts (no llama.cpp, no whisper.cpp); BRULION_LLAMA_SOURCE_DIR and
+BRULION_WHISPER_SOURCE_DIR name sources of the pinned releases already unpacked (else they are
+downloaded into <BuildDir>\deps).
 
 CI: .github/workflows/windows.yml (windows-2022, Qt from aqt through jurplel/install-qt-action,
 MSVC from ilammy/msvc-dev-cmd). Locally, in PowerShell from the repository root, with Visual Studio
@@ -143,6 +154,10 @@ $SpellDownloads = @(
 $SpellDeps = Join-Path $BuildDir 'deps'
 $HunspellSource = Join-Path $SpellDeps "hunspell-$HunspellVersion"
 $Dictionaries = Join-Path $SpellDeps 'dictionaries'
+# The model on the device (cmake/BrulionLocalAi.cmake, cmake/BrulionSpeech.cmake): on unless
+# BRULION_LOCAL_AI says OFF.
+$LocalAi = -not ($env:BRULION_LOCAL_AI -and $env:BRULION_LOCAL_AI -match '^(off|0|false|no)$')
+$LocalAiList = Join-Path $BuildDir 'brulion-local-ai.txt'
 
 function Get-SpellSources {
     foreach ($d in $SpellDownloads) {
@@ -164,6 +179,42 @@ function Get-SpellSources {
     }
 }
 
+# --- llama.cpp's and whisper.cpp's sources ----------------------------------------------------
+
+# The release of 3rdparty\<name>\pin.json (scripts/llama-source.sh does the same for the other
+# builds): its archive downloaded into <BuildDir>\deps, its SHA-256 checked, unpacked into a short
+# folder (llama.cpp's deepest file is some 170 characters below its top: Windows' 260 are near).
+# Returns the folder. A source folder given in `$Given` (the environment) is taken as it is.
+function Get-PinnedSource([string] $Name, [string] $Header, [string] $Given) {
+    if ($Given) {
+        if (-not (Test-Path (Join-Path $Given $Header))) { Fail "$Given has no $Header" }
+        return $Given
+    }
+    $pin = Get-Content -Raw (Join-Path $Root "3rdparty\$Name\pin.json") | ConvertFrom-Json
+    if (-not $pin.tag -or -not $pin.url -or $pin.sha256.Length -ne 64) { Fail "3rdparty\$Name\pin.json: no tag, url and sha256" }
+    $archive = Join-Path $SpellDeps "$($pin.repo)-$($pin.tag).tar.gz"
+    $dir = Join-Path $SpellDeps "$Name-$($pin.tag)"
+    $marker = Join-Path $dir '.brulion-sha256'
+    if ((Test-Path (Join-Path $dir $Header)) -and (Test-Path $marker) -and ((Get-Content -Raw $marker).Trim() -eq $pin.sha256)) {
+        return $dir
+    }
+    New-Item -ItemType Directory -Force -Path $SpellDeps | Out-Null
+    if (-not (Test-Path $archive) -or (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower() -ne $pin.sha256) {
+        Info "Downloading $($pin.repo) $($pin.tag): $($pin.url)"
+        Invoke-WebRequest -UseBasicParsing -Uri $pin.url -OutFile "$archive.part"
+        Move-Item -Force "$archive.part" $archive
+    }
+    $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+    if ($hash -ne $pin.sha256) { Remove-Item -Force $archive; Fail "$archive`: SHA-256 $hash, 3rdparty\$Name\pin.json says $($pin.sha256)" }
+    if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Exec tar @('-xzf', $archive, '-C', $dir, '--strip-components=1') | Out-Null
+    if (-not (Test-Path (Join-Path $dir $Header))) { Fail "$archive has no $Header" }
+    Set-Content -NoNewline -Path $marker -Value $pin.sha256
+    Write-Host "$($pin.repo) $($pin.tag): $dir"
+    return $dir
+}
+
 # --- build ---------------------------------------------------------------------------------------
 
 if ($Steps -contains 'build') {
@@ -177,6 +228,17 @@ if ($Steps -contains 'build') {
     $configure = @('-S', $Root, '-B', $BuildDir, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
         "-DCMAKE_PREFIX_PATH=$QtDir", '-DBUILD_TESTING=ON', '-DBRULION_SPELL_BACKEND=hunspell',
         "-DBRULION_HUNSPELL_SOURCE_DIR=$($HunspellSource -replace '\\', '/')")
+    # The model on the device, search by meaning and transcripts: required (ON), so that a missing
+    # piece fails the build instead of leaving it out.
+    if ($LocalAi) {
+        $llama = Get-PinnedSource 'llama' 'include\llama.h' $env:BRULION_LLAMA_SOURCE_DIR
+        $whisper = Get-PinnedSource 'whisper' 'include\whisper.h' $env:BRULION_WHISPER_SOURCE_DIR
+        $configure += @('-DBRULION_LOCAL_AI=ON', "-DBRULION_LLAMA_SOURCE_DIR=$($llama -replace '\\', '/')",
+            '-DBRULION_SPEECH=ON', "-DBRULION_WHISPER_SOURCE_DIR=$($whisper -replace '\\', '/')")
+    } else {
+        Write-Host 'BRULION_LOCAL_AI=OFF: no model on the device, no search by meaning, no transcripts'
+        $configure += @('-DBRULION_LOCAL_AI=OFF')
+    }
     # ccache (4.6 or newer knows cl.exe; Release has no /Zi, whose PDBs it cannot cache) when it is
     # on PATH: CI restores its cache, a rebuild of the same sources takes minutes instead of 15.
     $ccache = Get-Command ccache -ErrorAction SilentlyContinue
@@ -228,6 +290,18 @@ if ($Steps -contains 'package') {
     # <exe dir>\dictionaries).
     if (-not (Test-Path (Join-Path $Dictionaries 'pl_PL.dic'))) { Get-SpellSources }
     Copy-Item -Recurse $Dictionaries (Join-Path $Stage 'dictionaries')
+    # The model on the device, search by meaning and speech recognition (src/app/CMakeLists.txt):
+    # their plugins, llama.cpp's DLLs and its processor plugins next to brulion.exe, where Windows
+    # finds a DLL's own DLLs and the runner its processor plugins (built there, 3rdparty/llama).
+    if ($LocalAi) {
+        if (-not (Test-Path $LocalAiList)) { Fail "$LocalAiList missing: a build without the model on the device (BRULION_LOCAL_AI=OFF packages without)" }
+        $files = @(Get-Content $LocalAiList | Where-Object { $_.Trim() })
+        foreach ($file in $files) {
+            if (-not (Test-Path $file)) { Fail "$file (in $LocalAiList) not built" }
+            Copy-Item $file $Stage
+        }
+        Write-Host "The model on the device: $(($files | ForEach-Object { Split-Path -Leaf $_ }) -join ', ')"
+    }
     $skill = Join-Path $Stage 'agent-skills\brulion'
     New-Item -ItemType Directory -Force -Path $skill | Out-Null
     Copy-Item (Join-Path $Root 'packaging\agent\brulion\SKILL.md') $skill
@@ -283,6 +357,11 @@ if ($Steps -contains 'package') {
 # nothing of Qt on PATH or in Qt's search variables: whatever is missing from the package fails it.
 $CheckProfile = 'package-check'
 $ProfileDirs = @((Join-Path $env:APPDATA "Brulion-$CheckProfile"), (Join-Path $env:LOCALAPPDATA "Brulion-$CheckProfile"))
+# The plugins over llama.cpp and llama.cpp's DLLs a package with the model on the device has next to
+# brulion.exe (3rdparty/llama/CMakeLists.txt: MSVC's processor plugins, the best first).
+$LocalAiDlls = @('brulion_localai.dll', 'brulion_semantic.dll', 'brulion_speech.dll', 'llama.dll', 'mtmd.dll',
+    'ggml.dll', 'ggml-base.dll', 'ggml-cpu-icelake.dll', 'ggml-cpu-skylakex.dll', 'ggml-cpu-alderlake.dll',
+    'ggml-cpu-haswell.dll')
 # The profile's AppUserModelID (src/platform/appidentity.h) and the start at sign-in (autostart.h).
 $AumidKey = "HKCU:\Software\Classes\AppUserModelId\JanuszBit.Brulion.$CheckProfile"
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
@@ -389,6 +468,47 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
         Write-Host $out.Trim()
         if ($LASTEXITCODE -ne 0) { Fail "$Label`: brulion-cli --version exited with $LASTEXITCODE" }
         if ($out -notmatch [regex]::Escape($Version)) { Fail "$Label`: brulion-cli --version does not say $Version" }
+
+        if ($LocalAi) {
+            # The plugins of the model on the device, search by meaning and speech recognition load
+            # from the package without a model (docs/CLI.md: version --plugins) — each with
+            # llama.cpp's DLLs and a processor plugin this runner's processor runs.
+            Info "$Label`: brulion-cli version --plugins"
+            foreach ($dll in $LocalAiDlls) { if (-not (Test-Path (Join-Path $Dir $dll))) { Fail "$Label`: $dll missing" } }
+            $ErrorActionPreference = 'Continue'
+            # (Standard error apart: a warning there is no JSON.)
+            $out = & $cli --compact version --plugins 2>&1 | ForEach-Object {
+                if ($_ -is [Management.Automation.ErrorRecord]) { Write-Host "stderr: $_" } else { $_ }
+            } | Out-String
+            $code = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            Write-Host $out.Trim()
+            if ($code -ne 0) { Fail "$Label`: brulion-cli version --plugins exited with $code (a plugin over llama.cpp does not load)" }
+            $plugins = ($out | ConvertFrom-Json).result.plugins
+            foreach ($name in 'model', 'semantic', 'speech') {
+                if (-not $plugins.$name.found -or -not $plugins.$name.loaded) { Fail "$Label`: the plugin '$name' was not found or not loaded" }
+            }
+
+            # … and the app's start loads none of them: they wait for the first question to a model,
+            # a search by meaning, a transcript.
+            Info "$Label`: brulion.exe starts without llama.cpp"
+            foreach ($old in $ProfileDirs) { if (Test-Path $old) { Remove-Item -Recurse -Force $old } }
+            $start = [Diagnostics.ProcessStartInfo]::new($exe)
+            $start.Arguments = '--demo --no-single-instance'
+            $start.WorkingDirectory = $Dir
+            $start.UseShellExecute = $false
+            $start.CreateNoWindow = $true
+            $process = [Diagnostics.Process]::Start($start)
+            Start-Sleep -Seconds 20
+            if ($process.HasExited) { Fail "$Label`: brulion.exe exited within 20 s of its start (code $($process.ExitCode))" }
+            $process.Refresh()
+            $modules = @($process.Modules | ForEach-Object { $_.ModuleName })
+            $process.Kill()
+            $process.WaitForExit()
+            $early = @($modules | Where-Object { $_ -match '^(brulion_(localai|semantic|speech)|llama|mtmd|ggml.*)\.dll$' })
+            if ($early) { Fail "$Label`: brulion.exe loaded at its start what is for the first use: $($early -join ', ')" }
+            Write-Host "$Label`: $($modules.Count) modules after 20 s, none of llama.cpp's"
+        }
 
         Info "$Label`: brulion.exe --selftest-shell (offscreen)"
         # (Not $dir: PowerShell names are case-insensitive, that is the parameter $Dir.)
@@ -500,6 +620,8 @@ if ($Steps -contains 'check') {
     $deadline = (Get-Date).AddMinutes(2)
     while ((Test-Path (Join-Path $installDir 'brulion.exe')) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
     if (Test-Path (Join-Path $installDir 'brulion.exe')) { Fail "The uninstaller left $installDir\brulion.exe" }
+    $left = @($LocalAiDlls | Where-Object { Test-Path (Join-Path $installDir $_) })
+    if ($left) { Fail "The uninstaller left llama.cpp's DLLs: $($left -join ', ')" }
     if (Test-Path $shortcut) { Fail "The uninstaller left the Start menu shortcut" }
     if (Get-RunValue) { Fail "The uninstaller left the start at sign-in entry: $(Get-RunValue)" }
     Assert-NoOpenWith 'Uninstalled'

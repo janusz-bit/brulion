@@ -46,6 +46,12 @@ private Q_SLOTS:
         options.modelPath = u"/nonexistent/model.gguf"_s;
         QVERIFY(!ai::loadLocalRunner({dir}, options, &error));
         QVERIFY2(error.contains(u"/nonexistent/model.gguf") || error.contains(u"too old"), qPrintable(error));
+        // No model at all: only the check that the plugin and llama.cpp load here (brulion-cli
+        // version --plugins) — nothing opened, no error.
+        options.modelPath.clear();
+        error = u"(not cleared)"_s;
+        QVERIFY(!ai::loadLocalRunner({dir}, options, &error));
+        QVERIFY2(error.isEmpty() || error.contains(u"too old"), qPrintable(error));
 
         const QString model = qEnvironmentVariable("BRULION_LOCAL_MODEL");
         if (model.isEmpty())

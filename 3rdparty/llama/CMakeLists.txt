@@ -104,6 +104,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$" AND ANDROID)
     # AVX2, and what every x86-64 Android has (SSE4.2): the emulator's processor has no AVX2
     # whatever the host's, nor has a Chromebook's Celeron.
     set(_wanted haswell sse42)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$" AND MSVC)
+    # The same with MSVC (Windows), which builds no variant with BF16 (zen4) — its intrinsics need
+    # /arch:AVX10.1: AVX-512 with VBMI and VNNI (Ice Lake, also what Zen 4 and Sapphire Rapids run)
+    # in its place.
+    set(_wanted icelake skylakex alderlake haswell)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
     # AVX-512 with VNNI/VBMI/BF16 (Zen 4, Sapphire Rapids), AVX-512 (Skylake-X, Ice Lake),
     # AVX2 with VNNI (Alder Lake and later), AVX2 (2013 and later). Nothing older: too slow.
@@ -126,7 +131,9 @@ endif()
 # llama.cpp's ggml depends on every variant it defines (14 on x86-64, 7 for Android on ARM), so all
 # of them were compiled while only the ones above are packaged and loaded: each of the others is
 # compiled from an empty file instead, into a folder of its own that nothing loads (x86-64: 10 of
-# 14 variants, 40 sources each — some 450 s of compile time in every clean build).
+# 14 variants, 40 sources each — some 450 s of compile time in every clean build). Without their
+# instruction sets too (-march=armv9.2-a+sme …): a compiler older than llama.cpp's newest variants
+# (the AppImage's on aarch64) need not know them.
 set(_unused_dir ${CMAKE_CURRENT_BINARY_DIR}/unused-cpu-variants)
 set(_dirs ${CMAKE_CURRENT_BINARY_DIR}/llama.cpp)
 while(_dirs)
@@ -137,6 +144,8 @@ while(_dirs)
         if(_type STREQUAL "MODULE_LIBRARY" AND _t MATCHES "^ggml-cpu-" AND NOT _t IN_LIST _variants)
             set_property(TARGET ${_t} PROPERTY SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/unused-variant.cpp)
             set_property(TARGET ${_t} PROPERTY LINK_LIBRARIES "")
+            set_property(TARGET ${_t} PROPERTY COMPILE_OPTIONS "")
+            set_property(TARGET ${_t} PROPERTY COMPILE_DEFINITIONS "")
             set_target_properties(${_t} PROPERTIES
                 LIBRARY_OUTPUT_DIRECTORY ${_unused_dir}
                 RUNTIME_OUTPUT_DIRECTORY ${_unused_dir})
@@ -151,7 +160,20 @@ set(BRULION_LLAMA_CPU_VARIANTS ${_variants} CACHE INTERNAL "llama.cpp's processo
 
 # One folder for all of them in the build tree, as when installed (<lib>/brulion): each finds
 # the others next to itself ($ORIGIN), with or without CMake's build-tree run paths (Nix: off).
-set(BRULION_LOCAL_AI_OUTPUT_DIR ${CMAKE_BINARY_DIR}/lib/brulion CACHE INTERNAL "Where the model runner's libraries are built")
+# Windows looks for a DLL's own DLLs next to the program, not next to the DLL (and has no run
+# paths): there they are built where the programs are — the build tree's top, where
+# qt_standard_project_setup() puts every executable, the tests too — and packaged next to
+# brulion.exe (scripts/windows-build.ps1).
+if(WIN32)
+    if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+        set(_output_dir ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    else()
+        set(_output_dir ${CMAKE_BINARY_DIR})
+    endif()
+else()
+    set(_output_dir ${CMAKE_BINARY_DIR}/lib/brulion)
+endif()
+set(BRULION_LOCAL_AI_OUTPUT_DIR ${_output_dir} CACHE INTERNAL "Where the model runner's libraries are built")
 set_target_properties(${BRULION_LLAMA_LIBRARIES} ${BRULION_LLAMA_CPU_VARIANTS} PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
     RUNTIME_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
@@ -162,7 +184,19 @@ message(STATUS "Brulion: llama.cpp ${_tag} processor plugins: ${_variants}")
 # Brulion's runner and plugin (src/core/ai/CMakeLists.txt, defined before this directory): the
 # plugin is built into the same folder and loads the libraries from next to itself; the runner
 # knows the processor plugins by their file names, the best first, and the release (a model's
-# state it keeps on disk holds only for the llama.cpp that computed it).
+# state it keeps on disk holds only for the llama.cpp that computed it). Brulion's plugins also
+# link Qt, which a package that bundles it has one folder up, in <lib> (the AppImage's usr/lib):
+# there a plugin finds it by itself too ($ORIGIN/..), not only as the library the app loaded.
+set(BRULION_PLUGIN_RPATH "$ORIGIN;$ORIGIN/.." CACHE INTERNAL "The run path of Brulion's plugins over llama.cpp")
+# In the build tree a plugin finds its Qt by CMake's build run path (the folders of what it links:
+# aqt's Qt outside the system's folders — the AppImage's tests), and the installed one is written
+# at install. With no build run paths (CMAKE_SKIP_BUILD_RPATH: Nix) and on Android (the APK takes
+# the built files) the build tree has the installed one already.
+if(UNIX AND NOT ANDROID AND NOT CMAKE_SKIP_BUILD_RPATH)
+    set(BRULION_PLUGIN_BUILD_WITH_INSTALL_RPATH OFF CACHE INTERNAL "")
+else()
+    set(BRULION_PLUGIN_BUILD_WITH_INSTALL_RPATH ON CACHE INTERNAL "")
+endif()
 set(_variant_files "")
 foreach(_v IN LISTS BRULION_LLAMA_CPU_VARIANTS)
     string(APPEND _variant_files "$<TARGET_FILE_NAME:${_v}>|")
@@ -173,8 +207,8 @@ add_dependencies(brulion_ai_llama ${BRULION_LLAMA_CPU_VARIANTS})
 set_target_properties(brulion_localai PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
     RUNTIME_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
-    BUILD_WITH_INSTALL_RPATH ON
-    INSTALL_RPATH "$ORIGIN")
+    BUILD_WITH_INSTALL_RPATH ${BRULION_PLUGIN_BUILD_WITH_INSTALL_RPATH}
+    INSTALL_RPATH "${BRULION_PLUGIN_RPATH}")
 
 # The embedding model's runner and plugin for search by meaning (src/core/semantic: brulion_semantic),
 # the same way: next to llama.cpp's libraries, the processor plugins known by their file names.
@@ -184,6 +218,6 @@ if(TARGET brulion_semantic_llama)
     set_target_properties(brulion_semantic PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
         RUNTIME_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}
-        BUILD_WITH_INSTALL_RPATH ON
-        INSTALL_RPATH "$ORIGIN")
+        BUILD_WITH_INSTALL_RPATH ${BRULION_PLUGIN_BUILD_WITH_INSTALL_RPATH}
+        INSTALL_RPATH "${BRULION_PLUGIN_RPATH}")
 endif()

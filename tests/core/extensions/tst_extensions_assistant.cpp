@@ -1809,20 +1809,30 @@ private Q_SLOTS:
     }
 
     // The app's tools never reach a model on the device, whatever ctx.appTools says (the app sets it
-    // only for a provider on the network): the trained one gets its twelve, a small one its twelve too (eight only with its setting);
-    // a provider on the network that b.aiModel() names gets them with the notes' tools.
+    // only for a provider on the network): the trained one gets its twelve, a small one its twelve
+    // too (eight only with its setting); a provider on the network that b.aiModel() names gets them
+    // with the notes' tools.
     void theAppsToolsNeverOnTheDevice_data()
     {
         QTest::addColumn<QVariantMap>("model");
         QTest::addColumn<int>("tools");
-        QTest::newRow("Claude") << QVariantMap{{u"provider"_s, u"anthropic"_s}, {u"model"_s, u"claude-opus-5-5"_s},
-                                               {u"onDevice"_s, false}, {u"small"_s, false}, {u"trained"_s, false}}
+        QTest::newRow("Claude") << QVariantMap{{u"provider"_s, u"anthropic"_s},
+                                               {u"model"_s, u"claude-opus-5-5"_s},
+                                               {u"onDevice"_s, false},
+                                               {u"small"_s, false},
+                                               {u"trained"_s, false}}
                                 << 18;
-        QTest::newRow("trained") << QVariantMap{{u"provider"_s, u"local"_s}, {u"model"_s, u"brulion-assistant-1.7b"_s},
-                                                {u"onDevice"_s, true}, {u"small"_s, true}, {u"trained"_s, true}}
+        QTest::newRow("trained") << QVariantMap{{u"provider"_s, u"local"_s},
+                                                {u"model"_s, u"brulion-assistant-1.7b"_s},
+                                                {u"onDevice"_s, true},
+                                                {u"small"_s, true},
+                                                {u"trained"_s, true}}
                                  << 12;
-        QTest::newRow("small") << QVariantMap{{u"provider"_s, u"local"_s}, {u"model"_s, u"lfm3-1.7b"_s},
-                                              {u"onDevice"_s, true}, {u"small"_s, true}, {u"trained"_s, false}}
+        QTest::newRow("small") << QVariantMap{{u"provider"_s, u"local"_s},
+                                              {u"model"_s, u"lfm3-1.7b"_s},
+                                              {u"onDevice"_s, true},
+                                              {u"small"_s, true},
+                                              {u"trained"_s, false}}
                                << 12;
     }
     void theAppsToolsNeverOnTheDevice()

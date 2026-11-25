@@ -7,7 +7,13 @@
 # platform plugins; the QML modules that src/app/qml imports) and pack the AppImage. Spell checking:
 # the system's Hunspell (libhunspell-dev, bundled by linuxdeploy) with the Polish and English
 # dictionaries of hunspell-pl and hunspell-en-us in usr/share/hunspell (docs/UI.md "Spell checking").
-# Idempotent: re-running reuses the build directory, Qt and the downloaded tools.
+# The model on the device, search by meaning and speech recognition (docs/EXTENSIONS.md "AI"): the
+# pinned llama.cpp and whisper.cpp (3rdparty/llama, 3rdparty/whisper; scripts/llama-source.sh
+# downloads and checks them) compiled in, their plugins and libraries in usr/lib/brulion, which
+# linuxdeploy leaves as it is (none of them copied into usr/lib); the check below loads them from
+# the packed AppImage (`brulion cli version --plugins`) and sees that the app's start loads none.
+# Idempotent: re-running reuses the build directory, Qt and the downloaded tools; ccache, when it
+# is on PATH, compiles what did not change from its cache.
 #
 # An AppImage runs on distributions whose glibc is at least as new as the build machine's, so
 # build on an old distribution: x86_64 in an ubuntu:22.04 container (glibc 2.35; Qt 6.11's
@@ -36,6 +42,13 @@
 #   LDAI_UPDATE_INFORMATION AppImage update information (e.g. gh-releases-zsync|owner|repo|latest|
 #                           Brulion-*-x86_64.AppImage.zsync); also writes the .zsync file (needs
 #                           zsyncmake, from the zsync package)
+#   BRULION_LOCAL_AI        OFF = an AppImage without the model on the device, search by meaning
+#                           and transcripts (no llama.cpp, no whisper.cpp; default: with them)
+#   BRULION_LLAMA_SOURCE_DIR, BRULION_WHISPER_SOURCE_DIR
+#                           the sources of llama.cpp and whisper.cpp, the releases pinned in
+#                           3rdparty/llama/pin.json and 3rdparty/whisper/pin.json (default:
+#                           scripts/llama-source.sh downloads them into BRULION_LLAMA_DIR,
+#                           ~/.cache/brulion-llama)
 #
 # Output: dist-appimage/Brulion-<version>-<arch>.AppImage, with update information also
 # dist-appimage/Brulion-<version>-<arch>.AppImage.zsync (publish both in the same release).
@@ -87,8 +100,9 @@ install_deps() {
   export DEBIAN_FRONTEND=noninteractive
   "${sudo[@]}" apt-get update -q
   local packages=(
-    # build tools (python3-venv: aqtinstall, and CMake >= 3.24 on Ubuntu 22.04)
-    build-essential git curl ca-certificates file zstd zsync xz-utils python3 python3-venv ninja-build
+    # build tools (python3-venv: aqtinstall, and CMake >= 3.24 on Ubuntu 22.04; ccache: a rebuild
+    # compiles only what changed — CI keeps its cache)
+    build-essential git curl ca-certificates file zstd zsync xz-utils python3 python3-venv ninja-build ccache
     # time zone database: the tests pin TZ=Europe/Warsaw (minimal containers ship without it)
     tzdata
     # needed to compile against Qt Gui
@@ -317,19 +331,57 @@ for tool in "linuxdeploy-$ARCH.AppImage" "linuxdeploy-plugin-qt-$ARCH.AppImage";
   runnable_copy "$LINUXDEPLOY_DIR/$tool" "$TOOLS_DIR/$tool"
 done
 
+# --- llama.cpp and whisper.cpp ------------------------------------------------------------------
+
+# The model on the device, search by meaning and transcripts (cmake/BrulionLocalAi.cmake,
+# cmake/BrulionSpeech.cmake): their pinned sources, required (ON) so that a missing piece fails
+# the build instead of leaving it out.
+LOCAL_AI=on
+case ${BRULION_LOCAL_AI:-auto} in
+  OFF | off | 0 | false) LOCAL_AI=off ;;
+esac
+local_ai_args=()
+if [[ $LOCAL_AI == on ]]; then
+  if [[ -z ${BRULION_LLAMA_SOURCE_DIR:-} ]]; then
+    info "llama.cpp for the model on the device (scripts/llama-source.sh)"
+    BRULION_LLAMA_SOURCE_DIR=$("$ROOT/scripts/llama-source.sh") || die "no llama.cpp sources (BRULION_LOCAL_AI=OFF builds without)"
+  fi
+  [[ -f $BRULION_LLAMA_SOURCE_DIR/include/llama.h ]] || die "BRULION_LLAMA_SOURCE_DIR=$BRULION_LLAMA_SOURCE_DIR has no include/llama.h"
+  if [[ -z ${BRULION_WHISPER_SOURCE_DIR:-} ]]; then
+    BRULION_WHISPER_SOURCE_DIR=$("$ROOT/scripts/llama-source.sh" --whisper) || die "no whisper.cpp sources"
+  fi
+  [[ -f $BRULION_WHISPER_SOURCE_DIR/include/whisper.h ]] || die "BRULION_WHISPER_SOURCE_DIR=$BRULION_WHISPER_SOURCE_DIR has no include/whisper.h"
+  echo "llama.cpp: $BRULION_LLAMA_SOURCE_DIR"
+  echo "whisper.cpp: $BRULION_WHISPER_SOURCE_DIR"
+  local_ai_args=(-DBRULION_LOCAL_AI=ON -DBRULION_LLAMA_SOURCE_DIR="$BRULION_LLAMA_SOURCE_DIR"
+    -DBRULION_SPEECH=ON -DBRULION_WHISPER_SOURCE_DIR="$BRULION_WHISPER_SOURCE_DIR")
+else
+  local_ai_args=(-DBRULION_LOCAL_AI=OFF)
+fi
+launcher_args=()
+if command -v ccache >/dev/null; then
+  launcher_args=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+  echo "ccache: $(ccache --version | head -n 1) (${CCACHE_DIR:-default folder})"
+fi
+
 # --- build + test --------------------------------------------------------------------------------
 
 info "Configuring ($BUILD_DIR)"
+# CMAKE_INSTALL_LIBDIR=lib: usr/lib as linuxdeploy bundles into it, not Debian's multiarch
+# usr/lib/<arch>-linux-gnu — the model runner's folder is usr/lib/brulion, Qt one up.
 cmake -S "$ROOT" -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH="$QT_DIR" \
   -DCMAKE_INSTALL_PREFIX=/usr \
+  -DCMAKE_INSTALL_LIBDIR=lib \
   -DBUILD_TESTING="$([[ ${BRULION_APPIMAGE_TESTS:-1} == 1 ]] && echo ON || echo OFF)" \
   -DBRULION_WERROR="${BRULION_WERROR:-ON}" \
-  -DBRULION_SPELL_BACKEND=hunspell
+  -DBRULION_SPELL_BACKEND=hunspell \
+  "${local_ai_args[@]}" "${launcher_args[@]}"
 
 info "Building (-j$JOBS)"
 cmake --build "$BUILD_DIR" --parallel "$JOBS"
+if command -v ccache >/dev/null; then ccache --show-stats | head -n 12 || true; fi
 
 if [[ ${BRULION_APPIMAGE_TESTS:-1} == 1 ]]; then
   info "Unit tests"
@@ -348,6 +400,12 @@ DESTDIR=$(cd -- "$BUILD_DIR" && pwd)/AppDir cmake --install "$BUILD_DIR" --strip
 # The command line is reached through the app's binary (`Brulion.AppImage cli …`, docs/CLI.md):
 # the AppImage has one entry point, so the separate brulion-cli stays out.
 rm -f -- "$APPDIR/usr/bin/brulion-cli"
+# The model on the device (src/app/CMakeLists.txt): its plugin, search by meaning's and speech
+# recognition's, llama.cpp's libraries and processor plugins, all in usr/lib/brulion.
+if [[ $LOCAL_AI == on ]]; then
+  [[ -f $APPDIR/usr/lib/brulion/libbrulion_localai.so ]] ||
+    die "cmake --install did not install usr/lib/brulion/libbrulion_localai.so (the model on the device)"
+fi
 # Spell checking's dictionaries (hunspell-pl, hunspell-en-us; their licences next to them): the app
 # looks in <usr/bin>/../share/hunspell (src/platform/spelldictionaries.h).
 SPELL_DICTS=${SPELL_DICTS:-/usr/share/hunspell}
@@ -431,6 +489,10 @@ fi
   export EXTRA_PLATFORM_PLUGINS="libqwayland.so;libqoffscreen.so"
   export EXTRA_QT_MODULES="waylandcompositor"
   export LDAI_OUTPUT=$appimage LINUXDEPLOY_OUTPUT_VERSION=$VERSION LDAI_NO_APPSTREAM=1
+  # usr/lib/brulion as cmake --install left it: linuxdeploy deploys the dependencies of every
+  # library under usr/lib, and would copy llama.cpp's libraries (the plugins' dependencies, found
+  # next to them) into usr/lib — a second copy nothing loads. Its run paths stay ($ORIGIN kept).
+  export LINUXDEPLOY_EXCLUDED_LIBRARIES='libllama.so*;libmtmd.so*;libggml*.so*'
   # The plugin finds linuxdeploy-plugin-qt next to linuxdeploy or on PATH.
   export PATH="$TOOLS_DIR:$PATH"
   "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" \
@@ -494,6 +556,26 @@ runnable_copy "$appimage" "$check_dir/brulion.AppImage"
 missing=$(find "$check_dir/squashfs-root/usr" -type f \( -name '*.so*' -o -path '*/bin/brulion' \) -print0 |
   xargs -0 ldd 2>/dev/null | grep 'not found' | sort -u || true)
 [[ -z $missing ]] || die "unresolved libraries in the AppImage:"$'\n'"$missing"
+# The model on the device, search by meaning and speech recognition (src/app/CMakeLists.txt): the
+# three plugins, llama.cpp's libraries and this architecture's processor plugins
+# (3rdparty/llama/CMakeLists.txt) in usr/lib/brulion, none of them a second time in usr/lib.
+if [[ $LOCAL_AI == on ]]; then
+  brulion_lib=$check_dir/squashfs-root/usr/lib/brulion
+  case $ARCH in
+    x86_64) cpus=(zen4 skylakex alderlake haswell) ;;
+    aarch64) cpus=(armv8.6_1 armv8.2_2 armv8.2_1 armv8.0_1) ;;
+  esac
+  for lib in libbrulion_localai.so libbrulion_semantic.so libbrulion_speech.so libllama.so libmtmd.so libggml.so \
+    libggml-base.so "${cpus[@]/#/libggml-cpu-}"; do
+    [[ $lib == libggml-cpu-* ]] && lib+=.so
+    compgen -G "$brulion_lib/$lib*" >/dev/null || die "usr/lib/brulion/$lib missing from the AppImage (the model on the device)"
+  done
+  twice=$(find "$check_dir/squashfs-root/usr/lib" -maxdepth 1 \( -name 'libllama.so*' -o -name 'libmtmd.so*' \
+    -o -name 'libggml*.so*' -o -name 'libbrulion_*.so*' \) -printf '%f\n')
+  [[ -z $twice ]] || die "llama.cpp's libraries also in usr/lib (linuxdeploy copied them out of usr/lib/brulion): $twice"
+  printf 'the model on the device: usr/lib/brulion %s (%s)\n' "$(du -sh "$brulion_lib" | cut -f1)" \
+    "$(cd "$brulion_lib" && echo *.so*)"
+fi
 # platformthemes/libqxdgdesktopportal.so: the desktop's own file pickers through xdg-desktop-portal
 # (main.cpp selects it inside the AppImage; FilePicker, docs/UI.md "File pickers").
 # multimedia/libffmpegmediaplugin.so: Qt Multimedia's FFmpeg backend (audio and video in notes,
@@ -534,15 +616,37 @@ grep -qx 'MimeType=x-scheme-handler/brulion;' "$entry" || die "the AppImage's de
 [[ $(grep -c '^MimeType=' "$entry") == 1 ]] || die "the AppImage's desktop entry declares file types (it would become the default program on desktops without one)"
 grep -qx 'StartupNotify=true' "$entry" || die "the AppImage's desktop entry has no StartupNotify=true"
 (cd "$check_dir/squashfs-root/usr/plugins" && printf 'plugins: %s\n' "$(echo *)")
-# Start it headless: it must still be running after 10 s, without QML or plugin errors.
+# Start it headless: it must still be running after 10 s, without QML or plugin errors — and
+# without loading any of the model runner's libraries (the dynamic loader's own log, LD_DEBUG):
+# they wait for the first question to a model, a search by meaning or a transcript.
 set +e
-log=$(cd "$check_dir" && QT_QPA_PLATFORM=offscreen HOME=$PWD timeout 10 ./squashfs-root/AppRun 2>&1)
+log=$(cd "$check_dir" && LD_DEBUG=files LD_DEBUG_OUTPUT=$PWD/ld-debug QT_QPA_PLATFORM=offscreen HOME=$PWD \
+  timeout 10 ./squashfs-root/AppRun 2>&1)
 status=$?
 set -e
 printf '%s\n' "$log" | head -n 40
 ((status == 124)) || die "Brulion exited with status $status within 10 s"
 if grep -E -i 'is not installed|module .* not found|cannot load library|could not load the qt platform plugin|failed to load' <<<"$log"; then
   die "Qt or QML errors at startup"
+fi
+compgen -G "$check_dir/ld-debug.*" >/dev/null || die "LD_DEBUG wrote nothing: cannot tell what the start loaded"
+at_start=$(cat "$check_dir"/ld-debug.* | grep -oE 'file=[^ ]*(libbrulion_(localai|semantic|speech)|libllama|libmtmd|libggml)[^ ]*' |
+  sort -u || true)
+[[ -z $at_start ]] || die "the app's start loaded the model runner's libraries (they are for its first use):"$'\n'"$at_start"
+# … and each of them loads from the AppImage when asked: the plugins, llama.cpp's libraries, a
+# processor plugin this runner's processor runs (`brulion cli version --plugins`, docs/CLI.md).
+if [[ $LOCAL_AI == on ]]; then
+  mkdir -p "$check_dir/home-cli"
+  set +e
+  plugins=$(cd "$check_dir" && HOME=$PWD/home-cli timeout 120 ./squashfs-root/AppRun cli --compact version --plugins 2>&1)
+  status=$?
+  set -e
+  printf 'version --plugins: %s\n' "$plugins"
+  ((status == 0)) || die "the plugins over llama.cpp do not load from the AppImage (brulion cli version --plugins: status $status)"
+  for name in model semantic speech; do
+    grep -qF "\"$name\":{\"found\":true,\"loaded\":true}" <<<"$plugins" ||
+      die "the plugin \"$name\" was not found or not loaded from the AppImage (brulion cli version --plugins)"
+  done
 fi
 # The file pickers on GNOME: no AppRun hook may choose the platform theme, and Qt's first try is
 # the XDG portal (main.cpp; APPIMAGE as the AppImage runtime sets it).

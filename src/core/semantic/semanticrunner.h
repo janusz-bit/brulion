@@ -58,8 +58,10 @@ bool hasSemanticRunner(const QStringList &pluginDirs);
 
 /// Loads the plugin from the first of `pluginDirs` that has it (a "": by its name) and opens a
 /// model with it; nullptr with `error` when there is no plugin, it cannot be loaded, or the model
-/// cannot be opened. `options.backendDir` is set to the plugin's folder when it is empty. The
-/// plugin stays loaded until the process ends.
+/// cannot be opened. An empty `options.modelPath` opens nothing: nullptr with `error` empty when
+/// the plugin and llama.cpp's processor plugin loaded (`brulion-cli version --plugins`).
+/// `options.backendDir` is set to the plugin's folder when it is empty. The plugin stays loaded
+/// until the process ends.
 std::unique_ptr<SemanticRunner> loadSemanticRunner(const QStringList &pluginDirs, SemanticRunner::Options options,
                                                    QString *error);
 

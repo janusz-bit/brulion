@@ -455,8 +455,11 @@ install(TARGETS brulion
 # runner (src/core/ai: brulion_localai), llama.cpp's libraries and its processor plugins
 # (3rdparty/llama) are built with the app and packaged beside it — the app links none of them and
 # loads the plugin on first use (shell/localai.h):
-#   Linux    <lib>/brulion/        (the app looks in ../<lib>/brulion from its program)
-#   Windows  next to brulion.exe
+#   Linux    <lib>/brulion/        (the app looks in ../<lib>/brulion from its program; the
+#                                   AppImage keeps it as it is: scripts/appimage-build.sh)
+#   Windows  next to brulion.exe   (built there too, 3rdparty/llama: Windows finds a DLL's own DLLs
+#                                   in the program's folder; scripts/windows-build.ps1 packages
+#                                   the files <build>/brulion-local-ai.txt lists)
 #   Android  lib/<abi>/ of the APK (found by name)
 if(BRULION_LOCAL_AI_ENABLED)
     set(_brulion_local_ai brulion_localai ${BRULION_LLAMA_LIBRARIES} ${BRULION_LLAMA_CPU_VARIANTS})
@@ -486,6 +489,19 @@ if(BRULION_LOCAL_AI_ENABLED)
         endforeach()
         add_custom_target(brulion_local_ai_apk DEPENDS ${_apk_libs})
         add_dependencies(brulion brulion_local_ai_apk)
+    elseif(WIN32)
+        # The plugins (MODULE libraries: LIBRARY artifacts even on Windows) and llama.cpp's DLLs
+        # next to the program.
+        install(TARGETS ${_brulion_local_ai}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+        # What the package takes next to brulion.exe, one built file per line: scripts/windows-build.ps1
+        # copies them and checks the package has them.
+        set(_local_ai_files "")
+        foreach(_lib IN LISTS _brulion_local_ai)
+            string(APPEND _local_ai_files "$<TARGET_FILE:${_lib}>\n")
+        endforeach()
+        file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/brulion-local-ai.txt CONTENT "${_local_ai_files}")
     else()
         install(TARGETS ${_brulion_local_ai}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/brulion NAMELINK_SKIP

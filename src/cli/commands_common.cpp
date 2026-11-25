@@ -10,12 +10,32 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
+
+QStringList pluginDirs()
+{
+    QStringList dirs;
+    if (const QString dir = qEnvironmentVariable("BRULION_LOCALAI_DIR"); !dir.isEmpty())
+        dirs << dir;
+#ifdef BRULION_LOCAL_AI
+#ifdef BRULION_LOCALAI_BUILD_DIR
+    dirs << QString::fromUtf8(BRULION_LOCALAI_BUILD_DIR);
+#endif
+    const QString bin = QCoreApplication::applicationDirPath();
+#ifdef BRULION_LOCALAI_RELATIVE_DIR
+    dirs << QDir::cleanPath(bin + u'/' + QString::fromUtf8(BRULION_LOCALAI_RELATIVE_DIR));
+#endif
+    dirs << bin;
+#endif
+    return dirs;
+}
 
 Arg option(const QString &name, ArgType type, const char *help, bool required)
 {

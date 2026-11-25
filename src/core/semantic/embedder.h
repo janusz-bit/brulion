@@ -47,7 +47,8 @@ public:
         QString backendDir;
     };
 
-    /// Load the model; nullptr with `*error` set on failure.
+    /// Load the model; nullptr with `*error` set on failure. An empty `ggufPath` loads only
+    /// llama.cpp's processor plugin: nullptr, `*error` empty when it loaded.
     static std::unique_ptr<Embedder> open(const QString &ggufPath, const Options &options, QString *error = nullptr);
     static std::unique_ptr<Embedder> open(const QString &ggufPath) { return open(ggufPath, Options{}); }
     ~Embedder() override;

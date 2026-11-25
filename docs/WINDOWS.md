@@ -7,7 +7,7 @@ in two forms:
 | File | What it is |
 |---|---|
 | `Brulion-<version>-windows-x86_64-setup.exe` | installer (Inno Setup) — installs for the current user, without administrator rights |
-| `brulion-<version>-windows-x86_64.zip` | portable version — a `Brulion` folder with `brulion.exe`, `brulion-cli.exe`, the Qt libraries and the MSVC runtime |
+| `brulion-<version>-windows-x86_64.zip` | portable version — a `Brulion` folder with `brulion.exe`, `brulion-cli.exe`, the Qt libraries, the MSVC runtime and llama.cpp's DLLs (the model on the device) |
 
 "Test version" means: it builds and passes the tests in CI, but it has not yet been used day to day for long,
 the files are not signed, and it has the limitations described below. Since version 0.5.0 reminders and alarms are
@@ -273,6 +273,16 @@ Application → Check for new versions** turns it off.
   own text is searched either way (Qt PDF). Not yet checked on real Windows: loading UB Mannheim's
   MinGW-built DLL into the MSVC program (only its C functions are used, so it should work).
 * Symbolic links and junctions in a notebook are not tested on Windows.
+* **The model on the device, search by meaning and transcripts of voice notes** (docs/EXTENSIONS.md
+  "AI", docs/SEMANTIC.md, docs/UI.md "Voice notes") are in the package: llama.cpp and whisper.cpp
+  built with MSVC, their plugins (`brulion_localai.dll`, `brulion_semantic.dll`,
+  `brulion_speech.dll`), llama.cpp's DLLs (`llama.dll`, `mtmd.dll`, `ggml.dll`, `ggml-base.dll`) and
+  its processor plugins (`ggml-cpu-icelake.dll`, `-skylakex`, `-alderlake`, `-haswell`: AVX-512 with
+  VNNI, AVX-512, AVX2 with VNNI, AVX2 — a processor without AVX2 runs no model) next to
+  `brulion.exe`, loaded the first time a model answers, a note is read by meaning or a recording
+  is transcribed. CI loads them from both packages without a model (`brulion-cli version
+  --plugins`); a model answering on real Windows hardware (its speed with MSVC's code, a user
+  folder with Polish letters in its path) is not checked yet.
 * x86_64 only (no Windows on ARM) and only Windows 10/11.
 * The tray calendar does not replace the Windows clock calendar (above, "Tray calendar").
   Its position next to the icon (taskbar on any side, several monitors) and disappearing after a click
@@ -288,9 +298,15 @@ Application → Check for new versions** turns it off.
 qtpdf`, a Qt repository extension: PDF thumbnails, the PDF viewer with search, and PDF pages
 as a drawing backdrop, `src/platform/pdfpages_qtpdf.cpp`; `windeployqt` adds `Qt6Pdf.dll`, about
 5 MB — the `QtQuick.Pdf` QML module is not used), MSVC from `ilammy/msvc-dev-cmd`, ccache
-from Chocolatey (compilation cache in the Actions cache, saved right after the build), CMake +
+from Chocolatey (compilation cache in the Actions cache, saved right after the build), the
+release archives of llama.cpp and whisper.cpp in the Actions cache (keyed by their pins), CMake +
 Ninja, Release, then `scripts/windows-build.ps1` step by step: build, tests, packages, package
-check → artifact `brulion-windows` (ZIP + installer). It runs like `appimage.yml`: manually
+check → artifact `brulion-windows` (ZIP + installer). With a warm compiler cache the job takes some
+40 minutes (38 on 2026-11-25: the build 10, the unit tests 14, the packages 1, their checks 11 —
+before llama.cpp 35); the first build with llama.cpp and whisper.cpp, their 200 sources compiled
+by MSVC from no cache and the rest from it, took the build step 15 minutes. With a cold cache
+(the Actions cache, over GitHub's 10 GB for the repository, had dropped it) the job took 1 h 55 min,
+the build 86 minutes of it (the job's limit: 150 minutes). It runs like `appimage.yml`: manually
 (`gh workflow run windows.yml --ref main`), on a push to `main` with the `[ci]` marker (when it changes
 `src/`, `tests/`, `packaging/windows/`…) and from `release.yml`, which attaches both files to the release
 (and to `SHA256SUMS.txt`) — the release is published only when Windows passes too.
@@ -315,7 +331,15 @@ Without an MSVC environment (no `cl.exe` in `PATH`) the script loads it by itsel
 `ccache` in `PATH` (4.6 or newer) is used automatically.
 Steps:
 
-1. **build** — `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release` in `build-windows`. MSVC gets
+1. **build** — first the sources: Hunspell and the dictionaries (above, "Spell checking") and the
+   releases of llama.cpp and whisper.cpp pinned in `3rdparty/llama/pin.json` and
+   `3rdparty/whisper/pin.json`, downloaded into `build-windows\deps`, checked against the pins'
+   SHA-256 and unpacked (`BRULION_LOCAL_AI=OFF` in the environment builds without them: no model on
+   the device, no search by meaning, no transcripts; `BRULION_LLAMA_SOURCE_DIR` /
+   `BRULION_WHISPER_SOURCE_DIR` name sources unpacked elsewhere). Then
+   `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBRULION_LOCAL_AI=ON -DBRULION_SPEECH=ON` in
+   `build-windows`; llama.cpp's DLLs are built where the programs are (Windows looks for a DLL's
+   own DLLs in the program's folder; the tests run there too). MSVC gets
    `/utf-8` (Polish strings in the code), `/permissive-`, `/Zc:__cplusplus`, `/bigobj` and
    `/W4` warnings without `/WX` (CMakeLists.txt, `cmake/BrulionWarnings.cmake`); `brulion.exe`
    and `brulion-cli.exe` have the `packaging/windows/brulion.ico` icon and a version in their resources
@@ -328,20 +352,26 @@ Steps:
    plugins — platforms, image formats with SVG, TLS through Schannel without OpenSSL — and QML modules), plus
    `platforms\qoffscreen.dll` (runs without a screen: package check, screenshots) and
    the MSVC libraries (`Microsoft.VC143.CRT`, next to the program — without installing the Visual C++
-   Redistributable). From this folder: `dist-windows\brulion-<version>-windows-x86_64.zip` and
+   Redistributable), and the plugins over llama.cpp with llama.cpp's DLLs — the files CMake lists in
+   `build-windows\brulion-local-ai.txt`. The installer removes an older version's
+   `ggml-cpu-*.dll` before it copies the new ones, and the uninstaller removes them with the rest.
+   From this folder: `dist-windows\brulion-<version>-windows-x86_64.zip` and
    the installer from `packaging/windows/brulion.iss` →
    `dist-windows\Brulion-<version>-windows-x86_64-setup.exe`.
 4. **check** — without Qt in `PATH` and without Qt variables: the ZIP unpacked into a new folder, then
    the installer installed silently for the current user with the `autostart` task (the value
    `Run\Brulion` must start the installed `brulion.exe --hidden`); from both, `brulion-cli.exe
-   --version` and the shell self-test of the real app (`brulion.exe --demo --route journals
+   --version`, `brulion-cli.exe version --plugins` (the model on the device's, search by meaning's and
+   speech recognition's plugins each loaded without a model, with llama.cpp's DLLs and a processor
+   plugin the runner's processor runs), a start of `brulion.exe` that after 20 s has loaded none of
+   them (its modules) and the shell self-test of the real app (`brulion.exe --demo --route journals
    --selftest-shell --no-single-instance …`, offscreen, profile `BRULION_PROFILE=package-check`) —
    a missing library or QML module fails it; every run must register the profile's notification
    identifier (`AppUserModelId\JanuszBit.Brulion.package-check`, icon next to the program),
    and the portable version in a separate profile must not add autostart; then the same installer
    once more, silently, as an update, after autostart was turned off — it must not turn it back on;
-   finally a silent uninstall, after which the profile's settings must remain and the autostart entry must
-   be gone.
+   finally a silent uninstall, after which the profile's settings must remain and the autostart entry and
+   llama.cpp's DLLs must be gone.
 
 The installer's `AppId` (`{5E3B8C1A-7F42-4D6B-9A0E-2C8D4B6F1E37}`) is fixed — Windows recognizes
 the installed Brulion by it; do not change it.

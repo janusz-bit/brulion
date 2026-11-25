@@ -1360,7 +1360,9 @@ end, { label = "Ask my notes (AI)" })
   the notebook); the model; the address; **Check** ("Say OK."). In the browser the key is in the
   site's storage, and Anthropic's API is told the request comes from a page.
 * **On this device**: a small model that runs inside the app — no key, no account, no network once
-  its files are there, nothing sent anywhere. Three models, chosen in the settings: **Brulion
+  its files are there, nothing sent anywhere. The app has it on Linux (the Nix package, the
+  AppImage for x86_64 and aarch64), on Windows (x86_64; the processor plugins of MSVC) and on
+  Android (64-bit) — wherever it is built with llama.cpp, the browser version never. Three models, chosen in the settings: **Brulion
   Assistant 1.7B** (the default; `brulion-assistant-1.7b`, `janusz-bit/brulion-assistant-1.7b` on
   Hugging Face): LFM3 1.7B trained further for the built-in assistant (docs/FINETUNE.md), the best
   of the three at working through the notebook with it — it answers at once, without thinking,

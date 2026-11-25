@@ -19,6 +19,14 @@ Arg choice(const QString &name, const QStringList &values, const char *help, boo
 /// `arg` that `--stdin` can provide.
 Arg stdinable(Arg arg);
 
+// ---- The plugins over llama.cpp
+/// Where the plugins of the model on the device, search by meaning and speech recognition may be
+/// (ai/localrunner.h, semantic/semanticrunner.h, speech/speechrunner.h): as the app looks for them
+/// (shell/appcontroller.cpp localAiPluginDirs) — BRULION_LOCALAI_DIR, the build folder of a debug
+/// build, <lib>/brulion of the installed app, next to the program (Windows); only
+/// BRULION_LOCALAI_DIR in a build without them.
+QStringList pluginDirs();
+
 // ---- Results
 /// A page / folder operation's problem as an error (codes: not_found, name_required, into_itself,
 /// hidden_name, not_a_folder, target_exists, io_error).

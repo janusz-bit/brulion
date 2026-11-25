@@ -1,5 +1,7 @@
 #include "ai/localrunner.h"
 
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
@@ -39,6 +41,16 @@ QString pluginName(const QString &file)
     if (dot > 0)
         name.truncate(dot);
     return name.size() > 3 && name.startsWith(u"lib") ? name.mid(3) : name;
+}
+
+QByteArray backendPluginPath(const QString &dir, const QString &file)
+{
+    if (dir.isEmpty())
+        return QFile::encodeName(file);
+    const QString path = QDir::toNativeSeparators(dir + u'/' + file);
+    const QByteArray encoded = QFile::encodeName(path);
+    // (Characters the encoding lacks come back as something else.)
+    return QFile::decodeName(encoded) == path ? encoded : QFile::encodeName(file);
 }
 
 Reply answerLocally(LocalRunner *runner, const LocalModel &model, Request request, const std::atomic<bool> *cancel,

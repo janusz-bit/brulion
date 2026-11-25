@@ -143,8 +143,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 * **AI in extensions**, also on the phone: `b.ai` asks Claude, any OpenAI-compatible API, a
   server of your own (Ollama) or a small model that runs **on the device itself** (Liquid AI's
   LFM3-VL and LFM3, Brulion's own model trained for the assistant, or a GGUF file of your own —
-  Qwen, Llama, Gemma, Phi …: no key, no internet, nothing sent anywhere; Linux with Nix
-  and Android, where it goes on with the screen off), with the key kept on the device, and may give the model tools the script runs
+  Qwen, Llama, Gemma, Phi …: no key, no internet, nothing sent anywhere; Linux — Nix and the
+  AppImage —, Windows and Android, where it goes on with the screen off), with the key kept on the device, and may give the model tools the script runs
   and pictures of the notebook to look at; the built-in **AI assistant** is a **chat**, as in a
   messenger: it searches and reads the whole notebook to answer, looks at its pictures, changes
   notes only with your yes (asked in the conversation), and keeps every conversation as a page
@@ -263,7 +263,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   plays on when you scroll away (a small bar shows it). **Voice notes** (`/Voice note`, the
   microphone on the phone's toolbar, quick capture) record with a level meter into an M4A
   attachment, and **on-device speech recognition** (OpenAI's Whisper through whisper.cpp — Polish
-  too, no sound leaves the device; the NixOS package and Android) shows the words while you speak
+  too, no sound leaves the device; the NixOS package, the AppImage, Windows
+  and Android) shows the words while you speak
   and writes the text right under the recording — a longer one as paragraphs that each start
   with a link to their moment (`[[lecture.m4a#t=83|1:23]]`, a click plays it from there).
 * **Search in PDFs, documents and pictures.** The whole-notebook search finds words in the
@@ -396,8 +397,8 @@ przykładowym notatnikiem.
   Claude'a, dowolne API zgodne z OpenAI, własny serwer (Ollama) albo mały model działający
   **na samym urządzeniu** (LFM3-VL i LFM3 firmy Liquid AI, własny model Bruliona wytrenowany
   dla asystenta albo Twój własny plik GGUF — Qwen, Llama, Gemma, Phi …: bez klucza, bez
-  internetu, nic nigdzie nie jest wysyłane; Linux z Nixem i Android, gdzie pracuje też przy
-  wygaszonym ekranie), klucz zostaje na urządzeniu,
+  internetu, nic nigdzie nie jest wysyłane; Linux — Nix i AppImage —, Windows i Android, gdzie
+  pracuje też przy wygaszonym ekranie), klucz zostaje na urządzeniu,
   a model może dostać narzędzia, które wykonuje skrypt, i obrazki z notatnika do obejrzenia;
   wbudowany **Asystent AI** to **czat** jak w komunikatorze: przeszukuje i czyta cały notatnik,
   żeby odpowiedzieć, ogląda jego obrazki, zmienia notatki tylko za Twoją zgodą (pyta w rozmowie)
@@ -522,8 +523,8 @@ przykładowym notatnikiem.
   naraz, a dźwięk gra dalej po przewinięciu strony (pokazuje go mały pasek). **Notatki głosowe**
   (`/Notatka głosowa`, mikrofon na pasku w telefonie, szybka notatka) nagrywają się ze wskaźnikiem
   głośności do załącznika M4A, a **rozpoznawanie mowy na urządzeniu** (Whisper od OpenAI przez
-  whisper.cpp — także po polsku, żaden dźwięk nie opuszcza urządzenia; pakiet dla NixOS i
-  Android) pokazuje słowa już podczas mówienia i wpisuje tekst tuż pod nagraniem — dłuższe jako
+  whisper.cpp — także po polsku, żaden dźwięk nie opuszcza urządzenia; pakiet dla NixOS,
+  AppImage, Windows i Android) pokazuje słowa już podczas mówienia i wpisuje tekst tuż pod nagraniem — dłuższe jako
   akapity zaczynające się od linku do swojej chwili (`[[wykład.m4a#t=83|1:23]]`, kliknięcie
   odtwarza od tego miejsca).
 * **Szukanie w PDF-ach, dokumentach i obrazach.** Wyszukiwanie w całym notatniku znajduje słowa

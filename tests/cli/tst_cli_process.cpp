@@ -287,6 +287,25 @@ private Q_SLOTS:
         QVERIFY(!r.result().value(u"version"_s).toString().isEmpty());
         QCOMPARE(r.result().value(u"mcpProtocol"_s).toString(), u"2026-07-28"_s);
         QVERIFY(r.result().value(u"mcpProtocols"_s).toArray().contains(u"2025-06-18"_s));
+        // The plugins over llama.cpp this build has (found where the app looks; nothing loaded) …
+        const QStringList plugins{u"model"_s, u"semantic"_s, u"speech"_s};
+        for (const QString &name : plugins) {
+            const QJsonObject plugin = r.result().value(u"plugins"_s).toObject().value(name).toObject();
+            QVERIFY2(plugin.value(u"found"_s).isBool(), qPrintable(name));
+            QVERIFY2(!plugin.contains(u"loaded"_s), qPrintable(name));
+        }
+        // … and with --plugins each one found loaded without a model (a Windows build tree has them
+        // next to brulion-cli.exe, a debug build where they were built; a build without has none).
+        r = cli({u"version"_s, u"--plugins"_s});
+        QVERIFY2(r.code == 0, r.out.constData());
+        for (const QString &name : plugins) {
+            const QJsonObject plugin = r.result().value(u"plugins"_s).toObject().value(name).toObject();
+            QCOMPARE(plugin.value(u"loaded"_s).toBool(), plugin.value(u"found"_s).toBool());
+            QVERIFY2(!plugin.contains(u"error"_s), qPrintable(plugin.value(u"error"_s).toString()));
+        }
+        r = cli({u"--format"_s, u"text"_s, u"version"_s, u"--plugins"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY2(r.out.startsWith("brulion-cli ") && r.out.contains("search by meaning: "), r.out.constData());
         r = cli({u"--help"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(r.out.contains("page read"));
@@ -3061,9 +3080,9 @@ private Q_SLOTS:
             }
             // (Its wake: the parent woken instead of a wait.)
             QCOMPARE(startProperties.contains(u"wake"_s), !readOnly);
-            for (const char *tool : {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
-                                     "brulion_app_chat_partners", "brulion_app_chat_schedule_list",
-                                     "brulion_app_chat_request_secret"})
+            for (const char *tool :
+                 {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
+                  "brulion_app_chat_partners", "brulion_app_chat_schedule_list", "brulion_app_chat_request_secret"})
                 QVERIFY2(tools.contains(QLatin1String(tool)), tool);
             // (The webhooks' server is no tool.)
             QVERIFY(!tools.contains(u"brulion_app_hooks_serve"_s));

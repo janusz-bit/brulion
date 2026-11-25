@@ -1,6 +1,7 @@
 #include "speech/whisperrunner.h"
 
 #include "ai/cpus.h"
+#include "ai/localrunner.h"
 #include "speech/load.h"
 
 #include <QElapsedTimer>
@@ -75,8 +76,7 @@ const Backend &backend(const QString &dir)
         }
         const QStringList files = QString::fromLatin1(BRULION_LLAMA_CPU_VARIANTS).split(u'|', Qt::SkipEmptyParts);
         for (const QString &file : files) {
-            const QString path = dir.isEmpty() ? file : dir + u'/' + file;
-            if (ggml_backend_load(path.toUtf8().constData())) {
+            if (ggml_backend_load(ai::backendPluginPath(dir, file).constData())) {
                 loaded.name = pluginBaseName(file);
                 loaded.ok = true;
                 return;
@@ -84,7 +84,7 @@ const Backend &backend(const QString &dir)
         }
         loaded.error = files.isEmpty() ? u"this build has no processor plugin of ggml"_s
                                        : u"this device's processor is too old to recognize speech (it lacks the "
-                                         "instructions ggml is built for here)"_s;
+                                         u"instructions ggml is built for here)"_s;
     });
     return loaded;
 }
@@ -254,9 +254,9 @@ private:
 std::unique_ptr<SpeechRunner> openWhisperRunner(const SpeechRunner::Options &options, QString *error)
 {
     const Backend &b = backend(options.backendDir);
-    if (!b.ok) {
+    if (!b.ok || options.modelPath.isEmpty()) {
         if (error)
-            *error = b.error;
+            *error = b.error; // (no model: only the check that ggml loads, speechrunner.h)
         return nullptr;
     }
     if (!QFileInfo(options.modelPath).isFile()) {
@@ -268,7 +268,9 @@ std::unique_ptr<SpeechRunner> openWhisperRunner(const SpeechRunner::Options &opt
     cp.use_gpu = false;
     cp.flash_attn = true;
     std::unique_ptr<whisper_context, ContextFree> ctx(
-            whisper_init_from_file_with_params(QFile::encodeName(options.modelPath).constData(), cp));
+            // UTF-8 everywhere: whisper.cpp widens it itself on Windows (an ANSI code page's
+            // bytes there are no UTF-8 — its converter throws on them).
+            whisper_init_from_file_with_params(options.modelPath.toUtf8().constData(), cp));
     if (!ctx) {
         if (error)
             *error = u"the speech model cannot be read (%1)"_s.arg(QFileInfo(options.modelPath).fileName());

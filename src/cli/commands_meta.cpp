@@ -2,6 +2,10 @@
 // commands_app.cpp).
 #include "commands_p.h"
 
+#include "ai/localrunner.h"
+#include "semantic/semanticrunner.h"
+#include "speech/speechrunner.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -27,13 +31,74 @@ QString argTypeName(ArgType type)
     return {};
 }
 
+// The plugins over llama.cpp, each loaded without a model (only the plugin, its libraries and the
+// processor plugin): true when they loaded (`error` empty), else false with `error` saying why.
+bool loadsModelRunner(const QStringList &dirs, QString *error)
+{
+    return !ai::loadLocalRunner(dirs, ai::LocalRunner::Options(), error) && error->isEmpty();
+}
+
+bool loadsSemanticRunner(const QStringList &dirs, QString *error)
+{
+    return !semantic::loadSemanticRunner(dirs, semantic::SemanticRunner::Options(), error) && error->isEmpty();
+}
+
+bool loadsSpeechRunner(const QStringList &dirs, QString *error)
+{
+    return !speech::loadSpeechRunner(dirs, speech::SpeechRunner::Options(), error) && error->isEmpty();
+}
+
+/// One of the plugins over llama.cpp in version's `plugins`: {found} — this build has it where the
+/// app looks (pluginDirs()) —, with `load` also {loaded, error?} (`loads` loads it). `text` gets
+/// its line of the text output, `failed` its line when it does not load.
+QJsonObject pluginReport(const QStringList &dirs, bool found, bool load, bool (*loads)(const QStringList &, QString *),
+                         const QString &name, QString *text, QStringList *failed)
+{
+    QJsonObject o{{u"found"_s, found}};
+    if (!load)
+        return o;
+    if (!found) {
+        *text += u'\n' + tr("%1: not in this build").arg(name);
+        return o;
+    }
+    QString error;
+    const bool loaded = loads(dirs, &error);
+    o.insert(u"loaded"_s, loaded);
+    if (loaded) {
+        *text += u'\n' + tr("%1: loaded").arg(name);
+    } else {
+        o.insert(u"error"_s, error);
+        *text += u'\n' + tr("%1: cannot be loaded (%2)").arg(name, error);
+        failed->append(u"%1 (%2)"_s.arg(name, error));
+    }
+    return o;
+}
+
 Result version(Call &call)
 {
-    return call.ok(QJsonObject{{u"version"_s, QCoreApplication::applicationVersion()},
-                               {u"qt"_s, QString::fromLatin1(qVersion())},
-                               {u"mcpProtocol"_s, mcpProtocolVersion()},
-                               {u"mcpProtocols"_s, QJsonArray::fromStringList(mcpProtocolVersions())}},
-                   u"brulion-cli "_s + QCoreApplication::applicationVersion());
+    // The plugins of the model on the device, search by meaning and speech recognition (built
+    // with llama.cpp: cmake/BrulionLocalAi.cmake); --plugins loads each without a model — the
+    // check that this build's (a package's) work on this machine.
+    const QStringList dirs = pluginDirs();
+    const bool load = call.flag(u"plugins"_s);
+    QString text = u"brulion-cli "_s + QCoreApplication::applicationVersion();
+    QStringList failed;
+    QJsonObject plugins;
+    plugins.insert(u"model"_s, pluginReport(dirs, ai::hasLocalRunner(dirs), load, loadsModelRunner,
+                                            tr("the model on the device"), &text, &failed));
+    plugins.insert(u"semantic"_s, pluginReport(dirs, semantic::hasSemanticRunner(dirs), load, loadsSemanticRunner,
+                                               tr("search by meaning"), &text, &failed));
+    plugins.insert(u"speech"_s, pluginReport(dirs, speech::hasSpeechRunner(dirs), load, loadsSpeechRunner,
+                                             tr("speech recognition"), &text, &failed));
+    const QJsonObject result{{u"version"_s, QCoreApplication::applicationVersion()},
+                             {u"qt"_s, QString::fromLatin1(qVersion())},
+                             {u"mcpProtocol"_s, mcpProtocolVersion()},
+                             {u"mcpProtocols"_s, QJsonArray::fromStringList(mcpProtocolVersions())},
+                             {u"plugins"_s, plugins}};
+    if (!failed.isEmpty())
+        return call.fail(ExitUnavailable, u"plugin_not_loaded"_s,
+                         tr("A plugin of this build cannot be loaded here: %1").arg(failed.join(u"; "_s)), result);
+    return call.ok(result, text);
 }
 
 Result help(Call &call)
@@ -159,8 +224,12 @@ void addMetaCommands(QList<Command> &out)
     c.writes = true;
     out.append(c);
     c = make(u"version"_s,
-             QT_TRANSLATE_NOOP("brulion::cli", "The version of brulion-cli (and of Qt, the MCP protocol)"), version,
-             {});
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The version of brulion-cli (and of Qt, the MCP protocol, the plugins over llama.cpp)"),
+             version,
+             {flag(u"plugins"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli", "Load the plugins of the model on the device, search by meaning "
+                                                     "and speech recognition without a model: do they work here?"))});
     c.mcp = true; // the only one of them that is an MCP tool
     out.append(c);
     c = make(u"help"_s,

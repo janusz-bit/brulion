@@ -52,7 +52,7 @@ A short note becomes one paragraph. A longer recording — a lecture, a meeting 
 **Text while recording** (on by default, in the same settings) shows the words under the recorder while you speak, and in the AI chat's field while you dictate. It is a quick preview: once you save, the whole recording is heard again, more carefully, and that is the text that goes into the note. If the device cannot keep up with you — the words come more than ten seconds late — it stops for that recording and stays off with that model until you tap **Try again** in the settings; a smaller model may keep up.
 
 > [!tip] Where it works
-> Players work on the computer (Linux, Windows) and on Android; in the browser a recording or a video opens in a new tab, where the browser plays it. Turning speech into text works where the model on the device does: the NixOS package and Android (not yet in the AppImage, on Windows or in the browser).
+> Players work on the computer (Linux, Windows) and on Android; in the browser a recording or a video opens in a new tab, where the browser plays it. Turning speech into text works where the model on the device does: the NixOS package, the AppImage, Windows and Android (not in the browser).
 
 ## In the file
 ```markdown

@@ -1,8 +1,13 @@
 # Linux AppImages (artifacts "brulion-appimage-x86_64" and "brulion-appimage-aarch64": the
 # AppImage and its .zsync update file) built with scripts/appimage-build.sh: Qt 6.12.0 from aqt,
+# the pinned llama.cpp and whisper.cpp (the model on the device, search by meaning, transcripts),
 # Release build, unit tests, linuxdeploy + linuxdeploy-plugin-qt, a headless start of the packed
-# app. Runs by hand, for a push to main with "[ci]" in a commit message (and changes in the paths
-# below; see the job's `if`), and from release.yml — there without the unit tests (input `tests`):
+# app and its plugins over llama.cpp loaded from it. ccache's cache is kept between runs: with most
+# compiles from it (66 % on x86_64, 84 % on aarch64) the job took 29 and 24 min on 2026-11-25,
+# with only llama.cpp's and whisper.cpp's 31–43, with nothing cached some 51 (before llama.cpp,
+# without ccache: 42 and 43.5); the unit tests are some 14 of them. Runs by hand, for a push to
+# main with "[ci]" in a commit message (and changes in the paths below; see the job's `if`), and
+# from release.yml — there without the unit tests (input `tests`):
 # the release's Tests job (ci.yml) runs the same suite on Linux with the same Qt, and with a full
 # ctest in every build a timing-dependent failure in any one of them stopped the release (v0.16.4).
 # The headless start of the packed app runs always.
@@ -23,6 +28,7 @@ on:
       - cmake/**
       - CMakeLists.txt
       - scripts/appimage-build.sh
+      - scripts/llama-source.sh
       - .github/workflows/appimage.yml
   workflow_dispatch:
   workflow_call:
@@ -52,7 +58,7 @@ jobs:
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.image }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     outputs:
       version: ${{ steps.build.outputs.version }}
     strategy:
@@ -70,6 +76,15 @@ jobs:
     env:
       # AppImageUpdate and desktop integrations update from the latest release's .zsync file.
       LDAI_UPDATE_INFORMATION: gh-releases-zsync|${{ github.repository_owner }}|${{ github.event.repository.name }}|latest|Brulion-*-${{ matrix.arch }}.AppImage.zsync
+      # (CCACHE_DIR and CCACHE_BASEDIR are set in the build step: inside the container the
+      # checkout is not where github.workspace says, the runner's own folder.)
+      # 1000M held llama.cpp's compiles but not a whole build with its precompiled headers (on
+      # aarch64 655 cleanups in one run); the size ci.yml and windows.yml keep.
+      CCACHE_MAXSIZE: 1500M
+      # Ubuntu 22.04's ccache (4.5) caches the compiles with a precompiled header (Clang's, without
+      # its timestamp: cmake/BrulionPch.cmake) only with this sloppiness, which 4.8 takes from CMake.
+      CCACHE_SLOPPINESS: pch_defines,time_macros
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v7
 
@@ -86,13 +101,40 @@ jobs:
           restore-keys: |
             appimage-${{ matrix.arch }}-qt-${{ env.QT_VERSION }}-
 
+      # The release archives of llama.cpp and whisper.cpp that scripts/llama-source.sh downloads
+      # and checks (their SHA-256 in the pins), kept until a pin changes.
+      - name: Cache the sources of llama.cpp and whisper.cpp
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/brulion-llama/*.tar.gz
+          key: llama-sources-${{ hashFiles('3rdparty/llama/pin.json', '3rdparty/whisper/pin.json') }}
+
+      # As in windows.yml: the newest cache of an earlier run (a tag's run sees main's caches);
+      # saved again right after the build, so a failing test does not lose it.
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-appimage-${{ matrix.arch }}-qt-${{ env.QT_VERSION }}-${{ github.sha }}
+          restore-keys: ccache-appimage-${{ matrix.arch }}-qt-${{ env.QT_VERSION }}-
+
       - id: build
         name: Build, test and pack the AppImage
         env:
           # A push or a run by hand has no inputs: tests on. (Not `inputs.tests == false`: the loose
           # comparison makes the missing input, null, equal to false.)
           BRULION_APPIMAGE_TESTS: ${{ format('{0}', inputs.tests) == 'false' && '0' || '1' }}
-        run: scripts/appimage-build.sh
+        run: |
+          export CCACHE_DIR="$PWD/.ccache" CCACHE_BASEDIR="$PWD"
+          ccache -z
+          scripts/appimage-build.sh
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-appimage-${{ matrix.arch }}-qt-${{ env.QT_VERSION }}-${{ github.sha }}
 
       - name: Summary
         run: |

@@ -30,7 +30,10 @@ namespace brulion::ai {
 class LocalRunner {
 public:
     struct Options {
-        QString modelPath;     ///< the model's file (GGUF)
+        /// The model's file (GGUF). "": no model is opened — only the plugin and llama.cpp's processor
+        /// plugin are loaded (nullptr with `error` empty when both did): a check that this build's
+        /// runner works on this machine (`brulion-cli version --plugins`).
+        QString modelPath;
         QString adapterPath;   ///< a LoRA adapter over its weights (GGUF; "": the model as it is)
         QString projectorPath; ///< what lets it see pictures (GGUF; "": it reads text only)
         /// The tokens it holds at once — the prompt and the answer together; memory grows with it.
@@ -112,6 +115,15 @@ public:
 /// dots kept — "libggml-cpu-android_armv8.6_1.so" is "ggml-cpu-android_armv8.6_1".
 QString pluginName(const QString &file);
 
+/// The path of llama.cpp's processor plugin `file` in `dir` ("": by its name alone) as
+/// ggml_backend_load() takes it — in the 8-bit encoding of the system's own file functions
+/// (QFile::encodeName: UTF-8, on Windows the ANSI code page, which is how std::filesystem reads
+/// ggml's narrow path there) with the system's separators. A folder that encoding cannot spell (on
+/// Windows, a user's name in another script than the code page's) gives the file's name alone: the
+/// system looks for it next to the program first, where the Windows package has it. Shared by the
+/// three runners over ggml (the model on the device, search by meaning, speech recognition).
+QByteArray backendPluginPath(const QString &dir, const QString &file);
+
 /// Answers `request` with the model `model` open in `runner`: writes its prompt, cuts the request
 /// (local::shorten) for as long as the runner finds it too long for its context, lets the model
 /// write and reads the answer. A model that does not see refuses a request with pictures; no
@@ -139,8 +151,9 @@ bool hasLocalRunner(const QStringList &pluginDirs);
 
 /// Loads the plugin from the first of `pluginDirs` that has it (a "": by its name) and opens a
 /// model with it; nullptr with `error` when there is no plugin, it cannot be loaded, or the model
-/// cannot be opened. `options.backendDir` is set to the plugin's folder when it is empty. The
-/// plugin stays loaded until the app ends.
+/// cannot be opened (an empty `options.modelPath`: nullptr with `error` empty when the plugin and
+/// llama.cpp's processor plugin loaded). `options.backendDir` is set to the plugin's folder when
+/// it is empty. The plugin stays loaded until the app ends.
 std::unique_ptr<LocalRunner> loadLocalRunner(const QStringList &pluginDirs, LocalRunner::Options options,
                                              QString *error);
 

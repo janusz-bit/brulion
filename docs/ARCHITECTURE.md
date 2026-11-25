@@ -953,7 +953,8 @@ What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §1
   QtQuick.Dialogs that linuxdeploy-plugin-qt copies with `qml/QtQuick` are removed before packing,
   and so is its AppRun hook, which set `QT_QPA_PLATFORMTHEME=gtk2` on GNOME and XFCE; the XDG
   portal's platform theme is kept for the file pickers, and the check asks Qt which theme it tries
-  first under GNOME) → AppImage x86_64 +
+  first under GNOME; llama.cpp and whisper.cpp from their pins with `usr/lib/brulion` kept as
+  `cmake --install` left it, its plugins loaded from the packed AppImage) → AppImage x86_64 +
   aarch64, each with a `.zsync` file for AppImageUpdate (checked before publishing by
   `scripts/appimage-update-check.sh`); desktop entry and metainfo in `packaging/`.
 * Android: `scripts/android-build.sh` — Qt 6.12.0 for Android from aqt with host tools of the
@@ -972,33 +973,52 @@ What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §1
   `3rdparty/llama`): llama.cpp is not vendored — one release (`3rdparty/llama/pin.json`: tag, Nix
   hash, the archive's SHA-256; LFM3 needs v0.8.0 or newer) is compiled from sources given as
   `BRULION_LLAMA_SOURCE_DIR`: the Nix package, the Android APK of `nix/android.nix` and the dev
-  shell fetch them by the pin, `scripts/android-build.sh` downloads and checks them
-  (`scripts/llama-source.sh`). `BRULION_LOCAL_AI=auto` (the default) builds it whenever the
-  sources are given, for the app, 64-bit, not for the browser; the AppImage and Windows builds
-  pass none yet and have no "On this device" (TODO.md). Built as llama.cpp ships itself: shared
+  shell fetch them by the pin, `scripts/android-build.sh` and `scripts/appimage-build.sh`
+  download and check them (`scripts/llama-source.sh`), `scripts/windows-build.ps1` does the same
+  in PowerShell (the pin's SHA-256; CI keeps the archives in a cache keyed by the pins).
+  `BRULION_LOCAL_AI=auto` (the default) builds it whenever the sources are given, for the app,
+  64-bit, not for the browser; the build scripts ask for it (`ON`) unless `BRULION_LOCAL_AI=OFF`
+  (a package without it). Built as llama.cpp ships itself: shared
   libraries `llama`, `mtmd` (pictures), `ggml`, `ggml-base`, and the processor code as plugins
   `ggml-cpu-<variant>`, one per instruction set — x86-64: `haswell` (AVX2), `alderlake`
-  (AVX2 + VNNI), `skylakex` (AVX-512), `zen4`; Android arm64: `android_armv8.2_2` (dot product,
+  (AVX2 + VNNI), `skylakex` (AVX-512), `zen4` (with MSVC, which builds no variant with BF16,
+  `icelake` — AVX-512 with VBMI and VNNI — in its place); Android arm64: `android_armv8.2_2` (dot product,
   half floats), `android_armv8.6_1` (int8 matrix multiply); Android x86-64: `haswell` and `sse42`
   (the emulator's processor has no AVX2); Linux arm64: `armv8.0_1` … `armv8.6_1` —
   of which the runner loads the best one the processor can run (each refuses to load on one
-  that lacks its instructions; none loads: "this device's processor is too old"). Not one static
+  that lacks its instructions; none loads: "this device's processor is too old"). The variants
+  nobody packages are compiled from an empty file without their instruction sets, so a compiler
+  older than llama.cpp's newest variants (`-march=armv9.2-a+sme`) builds them too. Not one static
   library: code compiled for AVX2 or ARMv8.2 then stays inside its plugin, where linked statically
   the linker could pick such a copy of a shared template for the whole program. The app links
   none of it: `brulion_localai` (`src/core/ai/localplugin.cpp`) is loaded the first time a model
-  is asked, from `<lib>/brulion` next to the program (Android: `lib/<abi>/` of the APK, by name —
+  is asked, from `<lib>/brulion` next to the program (the AppImage's `usr/lib/brulion`, which
+  linuxdeploy leaves as it is — none of llama.cpp's libraries copied into `usr/lib`; Brulion's
+  plugins find the bundled Qt one folder up, `$ORIGIN/..`; in a build tree outside Nix CMake's
+  own run path, which finds aqt's Qt for the tests), on Windows next to `brulion.exe`
+  (built there too: Windows looks for a DLL's own DLLs in the program's folder, not the DLL's;
+  the package takes the files CMake lists in `<build>/brulion-local-ai.txt`), Android:
+  `lib/<abi>/` of the APK, by name —
   copied there by the build, not given to Qt as `QT_ANDROID_EXTRA_LIBS`, which its loader loads
   at every start; docs/ANDROID.md "A model on the phone"),
-  so startup and an app that never asks a model are as before. 16 MB installed on x86-64
+  so startup and an app that never asks a model are as before. A processor plugin's path goes to
+  ggml in the encoding of the system's narrow file names (`ai::backendPluginPath`: Windows'
+  ANSI code page, which `std::filesystem` reads `ggml_backend_load()`'s path in; the file's name
+  alone, found next to the program, for a folder that code page cannot spell); the models' paths
+  go as UTF-8, which llama.cpp and whisper.cpp widen themselves on Windows. 16 MB installed on x86-64
   (llama.cpp knows some 170 model architectures; four processor plugins), 9.2 MB in the arm64 APK. The Linux CI job, the
   browser and brulion-cli builds are without it; `tst_ai_localplugin` loads the plugin as the app
-  does in every build that has it, `tst_ai_llama` runs a real model when `BRULION_LOCAL_MODEL`
-  names one, `tst_ai_llama_formats` checks the chat formats of a model of the user's own against
-  llama.cpp's templates and their grammars against its GBNF parser (and runs one, Qwen3 0.6B,
-  when `BRULION_OWN_MODEL` names it).
+  does in every build that has it (the Nix check, the AppImage's and Windows' unit tests),
+  `tst_ai_llama` runs a real model when `BRULION_LOCAL_MODEL` names one, `tst_ai_llama_formats`
+  checks the chat formats of a model of the user's own against llama.cpp's templates and their
+  grammars against its GBNF parser (and runs one, Qwen3 0.6B, when `BRULION_OWN_MODEL` names it),
+  and the AppImage's and the Windows packages' checks load the three plugins from the package
+  without a model (`brulion-cli version --plugins`, docs/CLI.md) and see that the app's start
+  loads none of them.
 * **Search by meaning** (docs/SEMANTIC.md): the embedding model's runner (`src/core/semantic/embedder.h`)
   is compiled with the model on the device, over the same llama.cpp, into the plugin
-  `brulion_semantic` (the same folder: `<lib>/brulion`, the APK's `lib/<abi>/`), loaded the first
+  `brulion_semantic` (the same folder: `<lib>/brulion`, Windows' program folder, the APK's
+  `lib/<abi>/`), loaded the first
   time a note or a query is embedded — by the app (`shell/semanticsearch.h`) and by `brulion-cli
   search --semantic`. `tst_semantic_plugin` loads it as the app does; with `BRULION_SEMANTIC_MODEL`
   it embeds.
@@ -1010,8 +1030,9 @@ What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §1
   whisper.cpp's own ggml copy: whisper.cpp 1.9.5 bundles ggml 0.26.0, llama.cpp v0.9.0 has 0.29.0,
   and whisper.cpp reaches the processor code only through ggml's backend registry, so it compiles
   and runs against the newer one unchanged. `BRULION_SPEECH=auto` builds it with the model on the
-  device when the sources are given; the plugin goes into the same folder (`<lib>/brulion`, the
-  APK's `lib/<abi>/`), loads the processor plugin the language models loaded or the best one itself.
+  device when the sources are given; the plugin goes into the same folder (`<lib>/brulion`,
+  Windows' program folder, the APK's `lib/<abi>/`), loads the processor plugin the language models
+  loaded or the best one itself.
   0.9 MB on x86-64. `tst_speech_plugin` loads it as the app does; with `BRULION_SPEECH_MODEL` it hears
   a recording.
 * **Audio and video** (docs/UI.md "Audio and video"; `cmake/BrulionMultimedia.cmake`):

@@ -1128,7 +1128,7 @@ Multimedia, and it brings a media framework with it. What each package got, and 
 Speech recognition (whisper.cpp over llama.cpp's ggml, the plugin `brulion_speech`) adds 0.9 MB
 (x86-64, stripped) beside llama.cpp's libraries, which it shares — no second ggml; the models are
 downloaded on request (78–547 MB). It runs only where the model on the device is built (the Nix
-package, Android's 64-bit APKs).
+package, the AppImages, Windows, Android's 64-bit APKs).
 
 **Speed of speech recognition** (Whisper Base 8-bit, 6 s of Polish speech made by espeak-ng, 16
 threads' machine, `tst_speech_plugin`): 0.6 s on an idle machine. On the same machine running 60–70
@@ -1738,6 +1738,25 @@ tasks, the unpaid invoices: no list of pages to fall back on). So the setting "F
 small models" is off by default; the shorter results stay for every model on the device that was
 not trained on the assistant. A tiny model of one's own (Qwen3 0.6B) did 0 and 1 of six such tasks:
 it mostly answers without calling a tool.
+
+**In the AppImages and on Windows** (2026-11-25, `appimage.yml` and `windows.yml` on the branch
+against v0.29.0's runs the day before, which had no model on the device; the packages also differ
+by v0.29.1's other changes): llama.cpp's libraries, this architecture's four
+processor plugins and the three plugins over them —
+
+| Package | Before | With the model on the device | Change | The files themselves |
+|---|---:|---:|---:|---|
+| AppImage x86_64 | 95 390 200 B | 100 592 120 B | +5.20 MB (+5.5 %) | `usr/lib/brulion` 16 MB (zen4, skylakex, alderlake, haswell) |
+| AppImage aarch64 | 97 131 016 B | 101 419 528 B | +4.29 MB (+4.4 %) | `usr/lib/brulion` 12 MB (armv8.6_1, armv8.2_2, armv8.2_1, armv8.0_1) |
+| Windows ZIP / installer | 89.6 / 60.8 MB | 93.9 / 63.0 MB | +4.3 / +2.2 MB | 12.3 MB of DLLs next to `brulion.exe`: `llama.dll` 3.2, `mtmd.dll` 3.2, the four `ggml-cpu-*.dll` (icelake, skylakex, alderlake, haswell) 1.1–1.2 each, `ggml-base.dll` 0.7, `brulion_speech.dll` 0.4, `brulion_localai.dll` 0.14, `brulion_semantic.dll` 0.07, `ggml.dll` 0.06 |
+
+None of them is loaded before its first use: the packages' checks see the app's start without them
+(the AppImage: the dynamic loader's log, `LD_DEBUG=files`; Windows: `brulion.exe`'s modules after
+20 s, 139–140 of them) and `brulion-cli version --plugins` loads all three (on the Windows runner in 0.07 s). What the builds
+cost on GitHub's runners: the AppImage job with most compiles from ccache 29 min (x86_64, 66 %
+hits) and 24 (aarch64, 84 %), with only llama.cpp's and whisper.cpp's 31–43, with nothing cached
+some 51 (before, without ccache: 42 and 43.5); Windows with a warm cache 38 min (35 before), of
+which the build 10 (7), with a cold one 1 h 55 min (the build 86).
 
 **NFC in linear time.** `QString::normalized(NormalizationForm_C)` sorts combining marks with an
 insertion sort and decomposes in place: 16 000 marks above a letter followed by 16 000 below

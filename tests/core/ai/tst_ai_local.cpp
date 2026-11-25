@@ -7,6 +7,7 @@
 #include "ai/local.h"
 #include "ai/localrunner.h"
 
+#include <QDir>
 #include <QFile>
 #include <QHash>
 #include <QJsonArray>
@@ -1002,6 +1003,42 @@ private Q_SLOTS:
         QFETCH(QString, file);
         QFETCH(QString, name);
         QCOMPARE(ai::pluginName(file), name);
+    }
+
+    // The path ggml_backend_load() gets for a processor plugin (ai::backendPluginPath): the folder
+    // and the file in the system's 8-bit file-name encoding with its separators; the file's name
+    // alone when the folder cannot be said in it (Windows' ANSI code page: the plugin is then found
+    // next to the program).
+    void aProcessorPluginsPathForGgml_data()
+    {
+        QTest::addColumn<QString>("dir");
+        QTest::addColumn<QString>("file");
+        QTest::addColumn<bool>("whole"); ///< the folder kept, wherever the encoding can say it
+        const QString cpu = u"ggml-cpu-haswell.dll"_s;
+        QTest::newRow("installed") << u"/usr/lib/brulion"_s << u"libggml-cpu-haswell.so"_s << true;
+        QTest::newRow("windows") << u"C:/Program Files/Brulion"_s << cpu << true;
+        QTest::newRow("a user's name") << u"C:/Users/Michał Żółć/AppData/Local/Programs/Brulion"_s << cpu << true;
+        QTest::newRow("another script") << u"C:/Users/Дмитро/AppData/Local/Programs/Brulion"_s << cpu << true;
+        // Half a character (a lone surrogate) no encoding can carry.
+        QTest::newRow("broken name") << QString(u"/home/x"_s + QChar(0xd800) + u"y"_s) << cpu << false;
+        QTest::newRow("by name (Android)") << QString() << u"libggml-cpu-android_armv8.6_1.so"_s << false;
+    }
+
+    void aProcessorPluginsPathForGgml()
+    {
+        QFETCH(QString, dir);
+        QFETCH(QString, file);
+        QFETCH(bool, whole);
+        const QByteArray path = ai::backendPluginPath(dir, file);
+        const QString native = QDir::toNativeSeparators(dir + u'/' + file);
+        // Whole where the system's encoding spells the folder (UTF-8 everywhere but Windows).
+        if (whole && QFile::decodeName(QFile::encodeName(native)) == native) {
+            QCOMPARE(path, QFile::encodeName(native));
+            QCOMPARE(QFile::decodeName(path), native);
+        } else {
+            QCOMPARE(path, QFile::encodeName(file));
+        }
+        QVERIFY(QFile::decodeName(path).endsWith(file));
     }
 
     void aLongRequestIsCutUntilItFits()

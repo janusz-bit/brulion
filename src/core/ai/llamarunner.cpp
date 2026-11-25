@@ -116,8 +116,7 @@ const Backend &backend(const QString &dir)
         mtmd_helper_log_set(logCallback, nullptr);
         const QStringList files = QString::fromLatin1(BRULION_LLAMA_CPU_VARIANTS).split(u'|', Qt::SkipEmptyParts);
         for (const QString &file : files) {
-            const QString path = dir.isEmpty() ? file : dir + u'/' + file;
-            if (ggml_backend_load(path.toUtf8().constData())) {
+            if (ggml_backend_load(backendPluginPath(dir, file).constData())) {
                 loaded.name = pluginName(file);
                 break;
             }
@@ -125,7 +124,7 @@ const Backend &backend(const QString &dir)
         if (loaded.name.isEmpty()) {
             loaded.error = files.isEmpty() ? u"this build has no processor plugin of llama.cpp"_s
                                            : u"this device's processor is too old to run a model (it lacks the "
-                                             "instructions llama.cpp is built for here)"_s;
+                                             u"instructions llama.cpp is built for here)"_s;
             return;
         }
         llama_backend_init();
@@ -328,6 +327,8 @@ bool LlamaRunner::open(const Options &options, QString *error)
     if (!b.ok)
         return fail(b.error);
     m_backend = b.name;
+    if (options.modelPath.isEmpty())
+        return fail(QString()); // only the check that llama.cpp loads (localrunner.h)
 
     // The processor only (an empty list of devices: llama.cpp sets up nothing else).
     ggml_backend_dev_t devices[1] = {nullptr};

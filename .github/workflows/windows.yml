@@ -1,11 +1,14 @@
 # Windows x86_64, the test version (artifact "brulion-windows": the portable ZIP and the Inno Setup
-# installer) built with scripts/windows-build.ps1: Qt 6.12.0 for MSVC 2022 from aqt, a CMake +
+# installer) built with scripts/windows-build.ps1: Qt 6.12.0 for MSVC 2022 from aqt, the pinned
+# llama.cpp and whisper.cpp (the model on the device, search by meaning, transcripts), a CMake +
 # Ninja Release build, the unit tests and the QML self-tests offscreen, windeployqt, the packages,
 # then both checked on the runner without Qt on PATH (the ZIP unpacked into a fresh folder, the
-# installer installed and uninstalled silently for the current user; brulion-cli --version and the
-# shell self-test of the packaged app). docs/WINDOWS.md. Runs by hand, for a push to main with
-# "[ci]" in a commit message (and changes in the paths below; see the job's `if`), and from
-# release.yml.
+# installer installed and uninstalled silently for the current user; brulion-cli --version, the
+# plugins over llama.cpp loaded from the package, and the shell self-test of the packaged app).
+# docs/WINDOWS.md. With a warm compiler cache the job takes some 40 minutes (38 on 2026-11-25:
+# build 10, unit tests 14, packages 1, their checks 11); with a cold one 1 h 55 min (the build 86
+# minutes: the Actions cache, over GitHub's 10 GB, had dropped it). Runs by hand, for a push to main with "[ci]" in a commit message (and changes
+# in the paths below; see the job's `if`), and from release.yml.
 name: Windows
 
 on:
@@ -44,7 +47,7 @@ jobs:
     name: Windows (x86_64, MSVC 2022)
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: windows-2022
-    timeout-minutes: 120
+    timeout-minutes: 150
     outputs:
       version: ${{ steps.package.outputs.version }}
     env:
@@ -95,6 +98,16 @@ jobs:
           ninja --version
           ccache --version | Select-Object -First 1
           cl 2>&1 | Select-Object -First 1
+
+      # The release archives of llama.cpp and whisper.cpp the build step downloads and checks
+      # (their SHA-256 in the pins), kept until a pin changes.
+      - name: Cache the sources of llama.cpp and whisper.cpp
+        uses: actions/cache@v6
+        with:
+          path: |
+            build-windows/deps/llama.cpp-*.tar.gz
+            build-windows/deps/whisper.cpp-*.tar.gz
+          key: llama-sources-windows-${{ hashFiles('3rdparty/llama/pin.json', '3rdparty/whisper/pin.json') }}
 
       # The newest cache of an earlier run (a tag's run sees main's caches); saved again right
       # after the build, so a failing test does not lose it.

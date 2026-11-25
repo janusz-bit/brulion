@@ -1,8 +1,14 @@
 ﻿; Brulion for Windows - the Inno Setup 6 installer (docs/WINDOWS.md). Built by
 ; scripts/windows-build.ps1 (step "package"), which passes:
 ;   /DAppVersion=<x.y.z>     the project version (CMakeLists.txt)
-;   /DSourceDir=<folder>     the deployed app (brulion.exe, brulion-cli.exe, Qt, the MSVC runtime)
+;   /DSourceDir=<folder>     the deployed app (brulion.exe, brulion-cli.exe, Qt, the MSVC runtime,
+;                            the plugins over llama.cpp with llama.cpp's DLLs)
 ;   /DOutputDir=<folder>     where Brulion-<version>-windows-x86_64-setup.exe goes
+;
+; The model on the device, search by meaning and transcripts (docs/WINDOWS.md): their plugins
+; (brulion_localai.dll, brulion_semantic.dll, brulion_speech.dll), llama.cpp's DLLs and its
+; processor plugins (ggml-cpu-*.dll) are files of the app next to brulion.exe like Qt's, installed
+; and uninstalled with it.
 ;
 ; Per user, without administrator rights: into %LOCALAPPDATA%\Programs\Brulion ({autopf} in the
 ; non-administrative install mode), a Start menu shortcut, a desktop icon on request, Polish and
@@ -95,6 +101,8 @@ Name: "autostart"; Description: "{cm:AutostartTask}"; Check: not IsUpdate
 [InstallDelete]
 ; An update brings its own Qt Quick modules: no files of the previous version's are left among them.
 Type: filesandordirs; Name: "{app}\qml"
+; … and its own processor plugins of llama.cpp: none of an older version's is left next to them.
+Type: files; Name: "{app}\ggml-cpu-*.dll"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

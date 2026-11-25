@@ -195,8 +195,8 @@ QByteArray qwenFile(const QByteArray &type = "model", const QByteArray &architec
     g.u32(architecture + ".embedding_length", 2560);
     g.u32(architecture + ".attention.head_count", 32);
     g.u32(architecture + ".attention.head_count_kv", 8);
-    g.strings("tokenizer.ggml.tokens", {"!", "<|im_start|>", "<|im_end|>", "<tool_call>", "</tool_call>", "<think>",
-                                        "</think>"});
+    g.strings("tokenizer.ggml.tokens",
+              {"!", "<|im_start|>", "<|im_end|>", "<tool_call>", "</tool_call>", "<think>", "</think>"});
     g.text("tokenizer.chat_template", "{{- '<|im_start|>' + message.role }}<tool_call>{{- '<think>\\n' }}");
     g.tensor("token_embd.weight", {2560, 151936}, 12);
     g.tensor("blk.0.attn_norm.weight", {2560}, 0, 1024);
@@ -840,7 +840,8 @@ private Q_SLOTS:
         QCOMPARE(row.value(u"path"_s).toString(), path);
         QVERIFY(row.value(u"here"_s).toBool());
         const QString details = row.value(u"details"_s).toString();
-        QVERIFY2(details.startsWith(u"Qwen3 4B · Q4_K_M · "_s) && details.endsWith(u" · ChatML"_s), qPrintable(details));
+        QVERIFY2(details.startsWith(u"Qwen3 4B · Q4_K_M · "_s) && details.endsWith(u" · ChatML"_s),
+                 qPrintable(details));
         QVERIFY(details.contains(u"32"_s));
 
         local->setChosen(id);
@@ -976,8 +977,8 @@ private Q_SLOTS:
         QTest::newRow("a LoRA adapter") << qwenFile("adapter") << qint64(0) << true << u"adapter"_s;
         QTest::newRow("a projector") << projectorFile() << qint64(0) << true << u"projector"_s;
         QTest::newRow("too big for the memory") << qwenFile() << qint64(1024) * 1024 * 1024 << true << u"memory"_s;
-        QTest::newRow("llama.cpp cannot load it") << qwenFile() << qint64(0) << false
-                                                  << u"unknown model architecture"_s;
+        QTest::newRow("llama.cpp cannot load it")
+                << qwenFile() << qint64(0) << false << u"unknown model architecture"_s;
     }
     void filesThatAreRefused()
     {

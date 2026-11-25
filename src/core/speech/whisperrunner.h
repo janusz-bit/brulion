@@ -11,7 +11,8 @@
 namespace brulion::speech {
 
 /// Opens the model `options.modelPath`; nullptr with `error` when it cannot be read or no processor
-/// plugin of ggml runs on this processor.
+/// plugin of ggml runs on this processor. Without a model (`options.modelPath` ""): nullptr,
+/// `error` empty once the processor plugin loaded.
 std::unique_ptr<SpeechRunner> openWhisperRunner(const SpeechRunner::Options &options, QString *error);
 
 } // namespace brulion::speech

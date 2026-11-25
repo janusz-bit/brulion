@@ -1603,8 +1603,8 @@ void addAppCommands(QList<Command> &out)
             "404 for an unknown token or one that is off; 429 more than once a minute or while its conversation still "
             "answers; 400 / 413 for a body not UTF-8 or over 1 MiB). The body goes into the run's message as untrusted "
             "data, cut at 16 KiB. Needs the app's grant (BRULION_APP_HOOK_TOKEN): the app starts it while Settings → "
-            "Extensions → Scheduled conversations → Webhooks is on. Prints one JSON line when it listens, logs one line per request "
-            "on standard error (tokens masked) and serves until stopped."));
+            "Extensions → Scheduled conversations → Webhooks is on. Prints one JSON line when it listens, logs one "
+            "line per request on standard error (tokens masked) and serves until stopped."));
     out.append(c);
 }
 

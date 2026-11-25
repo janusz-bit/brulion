@@ -56,12 +56,11 @@ done in the repository simply disappears from the list.
   sub-conversation's wake with a real Claude Code and Codex.
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
-  the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",
-  docs/ARCHITECTURE.md "The model on the device"). Missing:
-  * the AppImage and the Windows builds (their scripts pass no llama.cpp sources yet: on Windows
-    the libraries go next to `brulion.exe` and nothing was built or tried there; the AppImage's
-    older aarch64 compilers do not know the newest ARM variants llama.cpp builds, and linuxdeploy
-    has to keep `usr/lib/brulion` as it is);
+  the app through llama.cpp on Linux (the Nix package, the AppImage), Windows and Android
+  (docs/EXTENSIONS.md "AI", docs/ARCHITECTURE.md "The model on the device"). Missing:
+  * a try on real Windows hardware: CI loads the plugins from the packages without a model; a
+    model answering there (MSVC's processor plugins, their speed against the Linux build's Clang),
+    a transcript and search by meaning, and a user folder with Polish letters in its path;
   * measurements on a mid-range phone with other cores (the Pixel 9 Pro is measured:
     docs/PERFORMANCE.md "The model on the device"), of the system text and tools read back from
     the disk on a phone, and an Adreno GPU through llama.cpp's OpenCL backend (Mali's Vulkan was
@@ -297,10 +296,9 @@ done in the repository simply disappears from the list.
   the system's MediaRecorder writing a voice note, the microphone's permission) and of the
   AppImage's and Windows' packages with Qt Multimedia (built by CI only); players inside the
   browser version (Qt Multimedia's WebAssembly backend over the notebook's files — today a new tab)
-  and recording there; transcripts in the AppImage and on Windows (with the model on the device,
-  above); text while recording on Android, whose system recorder (Qt's Android backend) passes no
-  samples through the app — it needs the FFmpeg backend's buffer input or a recorder of its own
-  over QAudioSource (docs/UI.md "Voice notes" → Text while recording); ggml's barrier between two
+  and recording there; text while recording on Android, whose system recorder (Qt's Android
+  backend) passes no samples through the app — it needs the FFmpeg backend's buffer input or a
+  recorder of its own over QAudioSource (docs/UI.md "Voice notes" → Text while recording); ggml's barrier between two
   steps of a computation still spins — Whisper now computes with fewer threads on a busy processor
   (docs/PERFORMANCE.md "Speech recognition on a busy processor"), a barrier that sleeps would need a
   change to ggml itself.

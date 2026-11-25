@@ -53,6 +53,12 @@ private Q_SLOTS:
         options.modelPath = u"/nonexistent/e5.gguf"_s;
         QVERIFY(!semantic::loadSemanticRunner({dir}, options, &error));
         QVERIFY2(error.contains(u"cannot load") || error.contains(u"too old"), qPrintable(error));
+        // No model at all: only the check that the plugin and llama.cpp load (brulion-cli version
+        // --plugins) — nothing opened, no error.
+        options.modelPath.clear();
+        error = u"(not cleared)"_s;
+        QVERIFY(!semantic::loadSemanticRunner({dir}, options, &error));
+        QVERIFY2(error.isEmpty() || error.contains(u"too old"), qPrintable(error));
 
         QTemporaryDir tmp;
         const QString broken = tmp.filePath(u"zły model ąę.gguf"_s);

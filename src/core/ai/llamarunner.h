@@ -9,7 +9,8 @@ namespace brulion::ai {
 
 /// Opens the model of `options` (with its adapter and projector) with llama.cpp on the processor; nullptr with
 /// `error` when the processor is too old for the processor plugins this build has, or a file
-/// cannot be loaded.
+/// cannot be loaded. Without a model (`options.modelPath` ""): nullptr, `error` empty once the
+/// processor plugin loaded.
 std::unique_ptr<LocalRunner> openLlamaRunner(const LocalRunner::Options &options, QString *error);
 
 /// Can this llama.cpp load the model at `path` — its architecture known, its vocabulary whole —?

@@ -52,7 +52,7 @@ Krótka notatka staje się jednym akapitem. Dłuższe nagranie — wykład, spot
 **Tekst w trakcie nagrywania** (domyślnie włączony, w tych samych ustawieniach) pokazuje słowa pod nagrywarką, gdy mówisz, i w polu czatu AI, gdy dyktujesz. To szybki podgląd: po zapisaniu całe nagranie jest słuchane jeszcze raz, staranniej, i to ten tekst trafia do notatki. Jeśli urządzenie nie nadąża — słowa przychodzą ponad dziesięć sekund za późno — przestaje dla tego nagrania i z tym modelem zostaje wyłączony, dopóki nie stukniesz **Spróbuj ponownie** w ustawieniach; mniejszy model może nadążyć.
 
 > [!tip] Gdzie to działa
-> Odtwarzacze działają na komputerze (Linux, Windows) i w Androidzie; w przeglądarce nagranie albo film otwiera się w nowej karcie, gdzie odtwarza je przeglądarka. Zamiana mowy na tekst działa tam, gdzie model na urządzeniu: w pakiecie dla NixOS i w Androidzie (jeszcze nie w AppImage, w Windows ani w przeglądarce).
+> Odtwarzacze działają na komputerze (Linux, Windows) i w Androidzie; w przeglądarce nagranie albo film otwiera się w nowej karcie, gdzie odtwarza je przeglądarka. Zamiana mowy na tekst działa tam, gdzie model na urządzeniu: w pakiecie dla NixOS, w AppImage, w Windows i w Androidzie (nie w przeglądarce).
 
 ## W pliku
 ```markdown

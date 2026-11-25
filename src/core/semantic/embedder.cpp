@@ -1,6 +1,7 @@
 #include "semantic/embedder.h"
 
 #include "ai/cpus.h"
+#include "ai/localrunner.h"
 
 #include <QFileInfo>
 #include <QLoggingCategory>
@@ -81,8 +82,7 @@ const Backend &backend(const QString &dir)
             const QStringList files =
                     QString::fromLatin1(BRULION_LLAMA_CPU_VARIANTS).split(u'|', Qt::SkipEmptyParts);
             for (const QString &file : files) {
-                const QString path = from.isEmpty() ? file : from + u'/' + file;
-                if (ggml_backend_load(path.toUtf8().constData())) {
+                if (ggml_backend_load(ai::backendPluginPath(from, file).constData())) {
                     loaded.name = pluginBaseName(file);
                     break;
                 }
@@ -99,7 +99,7 @@ const Backend &backend(const QString &dir)
             if (loaded.name.isEmpty()) {
                 loaded.error = files.isEmpty() ? u"this build has no processor plugin of llama.cpp"_s
                                                : u"this device's processor is too old to search by meaning (it "
-                                                 "lacks the instructions llama.cpp is built for here)"_s;
+                                                 u"lacks the instructions llama.cpp is built for here)"_s;
                 return;
             }
         }
@@ -258,9 +258,9 @@ Embedder::~Embedder() = default;
 std::unique_ptr<Embedder> Embedder::open(const QString &ggufPath, const Options &options, QString *error)
 {
     const Backend &b = backend(options.backendDir);
-    if (!b.ok) {
+    if (!b.ok || ggufPath.isEmpty()) {
         if (error)
-            *error = b.error;
+            *error = b.error; // (no model: only the check that llama.cpp loads, semanticrunner.h)
         return nullptr;
     }
     auto d = std::make_unique<Impl>();

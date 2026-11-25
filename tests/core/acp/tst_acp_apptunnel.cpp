@@ -162,8 +162,7 @@ private Q_SLOTS:
         QJsonObject noParams = request(method, {});
         noParams.remove(u"params"_s);
         QTest::newRow("no params") << noParams << u"no params"_s;
-        QTest::newRow("no handle") << request(method, callParams({}, {u"handle"_s}))
-                                   << u"handle"_s;
+        QTest::newRow("no handle") << request(method, callParams({}, {u"handle"_s})) << u"handle"_s;
         QTest::newRow("a bad handle") << request(method, callParams({{u"handle"_s, u"h/../x"_s}})) << u"handle"_s;
         QTest::newRow("another scope") << request(method, callParams({{u"scope"_s, u"admin"_s}})) << u"scope"_s;
         QTest::newRow("no scope") << request(method, callParams({}, {u"scope"_s})) << u"scope"_s;

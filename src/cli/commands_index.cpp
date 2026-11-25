@@ -268,27 +268,6 @@ QJsonArray attachmentHits(Call &call, const QString &text, int limit, attachment
     return hits;
 }
 
-/// Where the plugin of search by meaning may be (semantic/semanticrunner.h): as the app looks for it
-/// (shell/appcontroller.cpp localAiPluginDirs) — BRULION_LOCALAI_DIR, the build folder of a debug
-/// build, <lib>/brulion of the installed app, next to the program.
-QStringList semanticPluginDirs()
-{
-    QStringList dirs;
-    if (const QString dir = qEnvironmentVariable("BRULION_LOCALAI_DIR"); !dir.isEmpty())
-        dirs << dir;
-#ifdef BRULION_LOCAL_AI
-#ifdef BRULION_LOCALAI_BUILD_DIR
-    dirs << QString::fromUtf8(BRULION_LOCALAI_BUILD_DIR);
-#endif
-    const QString bin = QCoreApplication::applicationDirPath();
-#ifdef BRULION_LOCALAI_RELATIVE_DIR
-    dirs << QDir::cleanPath(bin + u'/' + QString::fromUtf8(BRULION_LOCALAI_RELATIVE_DIR));
-#endif
-    dirs << bin;
-#endif
-    return dirs;
-}
-
 /// A hit of search, found by its words or (search --semantic) by meaning alone.
 struct FoundNote {
     SearchHit hit;
@@ -313,7 +292,7 @@ QList<FoundNote> byMeaning(Call &call, const VaultIndex &index, const QString &t
         return words;
     };
     const ai::LocalModel *model = semantic::semanticModel(QString());
-    const QStringList dirs = semanticPluginDirs();
+    const QStringList dirs = pluginDirs();
     if (!model || !semantic::hasSemanticRunner(dirs))
         return unavailable(u"semantic_unavailable"_s, tr("This build searches by words only: it has no search by meaning."));
     const ai::LocalModelFiles files(QDir(call.ctx.appDataDir()).filePath(u"models/semantic"_s));

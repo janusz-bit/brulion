@@ -375,7 +375,7 @@ Never compute a hash yourself.
 | `app chat request-secret <label>` | `[--reason T] [--placeholder T] [--url U] [--delivery file\|value] [--conversation C] [--timeout MS]` | ask the user for a secret in a private card of the app (never in the chat): `{delivery: file, file, note, expiresInMs}` — an owner-only file holding it — or `{delivery: value, value}`; exit 7 `refused` (cancelled, stopped), 3 `timeout`, 4 `busy` ("Conversations" below) | |
 | `app hooks serve` | `[--listen A] [--port N] [--public-url U] [--stop-on-eof]` | the webhooks of the app's scheduled conversations over HTTP, with the app's grant (`BRULION_APP_HOOK_TOKEN`: the app starts it; "Webhooks" below) | |
 | `init <path>` | | create a notebook folder | yes |
-| `version` | | `{version, qt, mcpProtocol, mcpProtocols}` (the newest MCP version and all of them) | |
+| `version` | `[--plugins]` | `{version, qt, mcpProtocol, mcpProtocols, plugins}` (the newest MCP version and all of them; `plugins`: `{model, semantic, speech}`, the plugins over llama.cpp of the model on the device, search by meaning and speech recognition, each `{found}` where the app looks for it — `<lib>/brulion`, on Windows next to the program). `--plugins` loads each one found without a model — the plugin, llama.cpp's libraries, a processor plugin this processor runs — as `{found, loaded, error?}`, and fails with `plugin_not_loaded` (exit 5) when one does not load here: the AppImage's and the Windows packages' check | |
 | `help [<command>]` | `[--json]` | help | |
 | `schema [<command>]` | | JSON Schema (draft 2020-12) of the arguments | |
 | `completion <shell>` | bash, fish, zsh | a completion script (`brulion-cli completion bash > ~/.local/share/bash-completion/completions/brulion-cli`) | |

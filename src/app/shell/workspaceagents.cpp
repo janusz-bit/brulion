@@ -451,8 +451,8 @@ QString WorkspaceAgents::context(const QString &root, const QString &conversatio
                  u"and brulion_app_chat_wait returns its answer — for a second opinion or a subtask. With wake true "
                  u"you need not wait: end your turn, and its end comes back as a message of this conversation that "
                  u"starts with \"↩\" (from the app, not the user). When you need a token, a password, a PIN or a key "
-                 u"only the user can give, ask with brulion_app_chat_request_secret (a private card in the app) — never "
-                 u"in the chat, where it would be kept in the conversation's note."_s;
+                 u"only the user can give, ask with brulion_app_chat_request_secret (a private card in the app) — "
+                 u"never in the chat, where it would be kept in the conversation's note."_s;
     lines << u"This conversation is kept in the note \"%1\" and the app writes your answers into it: never change "
              u"that note yourself."_s.arg(conversation);
     if (!page.isEmpty())
@@ -1206,10 +1206,9 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // Before its stream started, it is not known yet.)
     const bool tunnel = !agent->isRemote() || !p->remote || !p->remote->isStarted()
                         || p->remote->hostFeatures().contains(QString(acp::AppFeature));
-    input.firstPrompt << acp::Block::textBlock(context(root, conversation, pagePath.isEmpty() ? QString() : page, tools,
-                                                       !p->grant.isEmpty() && !child && tunnel,
-                                                       !chatToken.isEmpty() && tunnel,
-                                                       agent->isRemote() ? deviceName() : QString()));
+    input.firstPrompt << acp::Block::textBlock(context(
+            root, conversation, pagePath.isEmpty() ? QString() : page, tools, !p->grant.isEmpty() && !child && tunnel,
+            !chatToken.isEmpty() && tunnel, agent->isRemote() ? deviceName() : QString()));
     if (!pagePath.isEmpty()) {
         bool ok = false;
         const QString text = markdown::isEncryptedNotePath(pagePath) ? QString() : m_workspace->read(pagePath, &ok);
