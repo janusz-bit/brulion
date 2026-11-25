@@ -42,7 +42,9 @@ T.AbstractButton {
     onClicked: toggled()
     onPressAndHold: openMenu()
 
-    property TaskStatusMenu statusMenu: null
+    /// Its TaskStatusMenu, loaded from its file when first opened (docs/PERFORMANCE.md "QML files
+    /// loaded when first used": every task's box would load it with the page).
+    property BMenu statusMenu: null
     /// Its own status menu is shown (from popup() until it has closed).
     readonly property bool menuOpen: statusMenu !== null && statusMenu.visible
 
@@ -52,9 +54,12 @@ T.AbstractButton {
             menuRequested()
             return
         }
-        if (!statusMenu)
-            statusMenu = menuComponent.createObject(control) as TaskStatusMenu
-        statusMenu.status = control.status
+        if (!statusMenu) {
+            const component = Qt.createComponent(Qt.resolvedUrl("TaskStatusMenu.qml"))
+            statusMenu = component.createObject(control) as BMenu
+            QmlCall.connect(statusMenu, "statusChosen", control, "statusChosen")
+        }
+        QmlCall.set(statusMenu, "status", control.status)
         statusMenu.popup(control, 0, control.height)
     }
 
@@ -67,13 +72,6 @@ T.AbstractButton {
         acceptedButtons: Qt.RightButton
         gesturePolicy: TapHandler.WithinBounds
         onTapped: control.openMenu()
-    }
-
-    Component {
-        id: menuComponent
-        TaskStatusMenu {
-            onStatusChosen: (status) => control.statusChosen(status)
-        }
     }
 
     contentItem: Item {

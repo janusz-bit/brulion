@@ -86,7 +86,7 @@ Item {
         script.editor.ensureRowVisible(row)
         script.dialogs().createReminder(row, false)
     }
-    function dialogs(): EditorDialogs { return script.editor.dialogs as EditorDialogs }
+    function dialogs(): EditorDialogs { return script.editor.dialogsNow() as EditorDialogs }
     function list(): ListView { return script.editor.listView }
     function edit(): InlineEditor { return script.editor.activeEditor }
     /// The block the scenario works on (the second half of "toolbar-menu").

@@ -167,13 +167,13 @@ Item {
                                      && view !== "rule" && view !== "frontmatter"
     readonly property real contentHeight: noTextLine ? 0 : textView ? textContent.height : content.height
     readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !onlyEmbeds ? Theme.space2 : 0)
-    readonly property real transclusionsY: (hasEmbeds ? embedsY + embedView.height : topPad + contentHeight)
+    readonly property real transclusionsY: (hasEmbeds ? embedsY + embedLoader.height : topPad + contentHeight)
                                            + (contentHeight > 0 || hasEmbeds ? Theme.space2 : 0)
-    readonly property real bodyBottom: hasTransclusions ? transclusionsY + transclusionView.height
-                                     : hasEmbeds ? embedsY + embedView.height : topPad + contentHeight
+    readonly property real bodyBottom: hasTransclusions ? transclusionsY + transclusionLoader.height
+                                     : hasEmbeds ? embedsY + embedLoader.height : topPad + contentHeight
 
     /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
-    readonly property real firstLineCenter: topPad + (onlyTransclusions ? transclusionView.firstLineCenter
+    readonly property real firstLineCenter: topPad + (onlyTransclusions ? transclusionLineCenter
                                                       : textView ? textContent.firstLineCenter
                                                       : contentFirstLineCenter)
 
@@ -193,14 +193,16 @@ Item {
 
     /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
     readonly property Item contentItem: textView ? textContent : content.item as Item
-    readonly property alias transclusionView: transclusionView
-    readonly property alias embedView: embedView
+    /// The embedded pages / sections / blocks (TransclusionView) and the pictures and files
+    /// (EmbedView) under the block's text, null while it has none: loaded from their files then
+    /// (docs/PERFORMANCE.md "QML files loaded when first used").
+    readonly property Item transclusionView: transclusionLoader.item as Item
+    readonly property Item embedView: embedLoader.item as Item
 
     /// Give the keyboard to the block content (tables: the first cell).
     function focusContent(): void {
-        const table = content.item as TableBlockView
-        if (table !== null)
-            table.focusFirstCell()
+        if (block.view === "table" && content.item !== null)
+            QmlCall.call(content.item, "focusFirstCell")
     }
     /// The first line's centre in the view loaded for the block's content (not a text view).
     readonly property real contentFirstLineCenter: {
@@ -210,14 +212,15 @@ Item {
             return fallback
         switch (view) {
         case "code": { const v = item as CodeBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "calc": { const v = item as CalcBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "query": { const v = item as QueryBlockView; return v !== null ? v.firstLineCenter : fallback }
         case "math": { const v = item as MathBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "mermaid": { const v = item as MermaidBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "chart": { const v = item as ChartBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "view": { const v = item as ViewBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "table": { const v = item as TableBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "frontmatter": { const v = item as FrontmatterView; return v !== null ? v.firstLineCenter : fallback }
+        // (Loaded from their files, their first line followed by name: loadedLineCenter.)
+        case "table":
+        case "calc":
+        case "query":
+        case "mermaid":
+        case "chart":
+        case "view":
+        case "frontmatter": return content.status === Loader.Ready ? block.loadedLineCenter : fallback
         // (The quote / callout frame and the rule below are untyped components: computed here.)
         case "quote":
         case "callout": return (view === "callout" ? Theme.space3 : 0) + editor.firstLineCenter(shownHeadingLevel)
@@ -580,57 +583,121 @@ Item {
         width: Math.max(40, block.contentRight - x)
         active: block.shown && !block.textView
         visible: !block.noTextLine
-        sourceComponent: {
-            switch (block.view) {
-            case "code": return codeComponent
-            case "calc": return calcComponent
-            case "query": return queryComponent
-            case "math": return mathComponent
-            case "mermaid": return mermaidComponent
-            case "chart": return chartComponent
-            case "view": return viewComponent
-            case "table": return tableComponent
-            case "quote":
-            case "callout": return calloutComponent
-            case "rule": return ruleComponent
-            case "frontmatter": return frontmatterComponent
-            default: return null
-            }
+        onActiveChanged: block.loadContent()
+        onLoaded: block.contentLoaded()
+    }
+    onViewChanged: block.loadContent()
+    Component.onCompleted: block.loadContent()
+    /// The view of a block of `view` that is loaded from its file (docs/PERFORMANCE.md "QML files
+    /// loaded when first used": the kinds a page may well not have — a QML file named here is
+    /// loaded with the editor), "" for one made here.
+    function contentFile(kind: string): string {
+        switch (kind) {
+        case "table": return "TableBlockView.qml"
+        case "calc": return "CalcBlockView.qml"
+        case "query": return "QueryBlockView.qml"
+        case "mermaid": return "MermaidBlockView.qml"
+        case "chart": return "ChartBlockView.qml"
+        case "view": return "ViewBlockView.qml"
+        case "frontmatter": return "FrontmatterView.qml"
         }
+        return ""
+    }
+    /// The content Loader gets the view of the block's kind (once active: an inactive one keeps
+    /// what it has for when it is active again).
+    function loadContent(): void {
+        if (!content.active)
+            return
+        const file = block.contentFile(block.view)
+        if (file === "") {
+            content.sourceComponent = block.contentComponent(block.view)
+            return
+        }
+        block._contentSource = Qt.resolvedUrl(file)
+        if (content.source === block._contentSource && content.item !== null)
+            return
+        block._contentValues = { blockItem: block }
+        content.setSource(block._contentSource, block._contentValues)
+    }
+    function contentComponent(kind: string): Component {
+        switch (kind) {
+        case "code": return codeComponent
+        case "math": return mathComponent
+        case "quote":
+        case "callout": return calloutComponent
+        case "rule": return ruleComponent
+        }
+        return null
+    }
+    /// What the next setSource() loads (read from properties: compiled QML wants a call's
+    /// arguments so).
+    property url _contentSource
+    property var _contentValues: ({})
+    /// The first line's centre of a view loaded from its file (its `firstLineCenter`, followed).
+    property real loadedLineCenter: 0
+    function contentLoaded(): void {
+        if (block.contentFile(block.view) === "")
+            return
+        QmlCall.connect(content.item, "firstLineCenterChanged", block, "readLineCenter")
+        block.readLineCenter()
+    }
+    function readLineCenter(): void {
+        block.loadedLineCenter = QmlCall.number(QmlCall.get(content.item, "firstLineCenter"))
     }
 
-    EmbedView {
-        id: embedView
+    // The pictures and files under the text (EmbedView, BlockEmbeds.qml) and the embedded pages /
+    // sections / blocks (TransclusionView): loaded from their files for a block that has them.
+    Loader {
+        id: embedLoader
         visible: block.hasEmbeds
+        active: block.hasEmbeds
         x: block.contentLeft
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
-        embeds: block.hasEmbeds ? block.embeds : block.noItems
-        controller: block.controller
-        editor: block.editor
-        readOnly: block.editor.readOnly
-        onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
-        onDrawingClicked: (path) => block.controller.openDrawing(path)
-        onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)
-        onBackgroundClicked: block.editOnTap(-1)
-        onBackgroundLongPressed: block.editor.longPressText(block.index)
-        onShowWeb: (url) => block.controller.showWebPicture(url)
-        onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
-        onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
-        onWebOpen: (picture) => block.editor.openWebPictureViewer(block.index, picture)
-        onViewToast: (text, kind, undo, model) => block.editor.notice(text, kind, undo ? block.editor.viewUndoAction(model) : null)
-        onTranscribeRequested: (path, target) => block.editor.transcribeRecording(block.index, path, target)
-        onCopyRequested: (text) => block.editor.copyPlainText(text)
+        onActiveChanged: block.loadEmbeds()
+        Component.onCompleted: block.loadEmbeds()
     }
+    function loadEmbeds(): void {
+        if (!embedLoader.active || embedLoader.item !== null)
+            return
+        block._embedValues = { blockItem: block }
+        embedLoader.setSource(block._embedSource, block._embedValues)
+    }
+    readonly property url _embedSource: Qt.resolvedUrl("BlockEmbeds.qml")
+    property var _embedValues: ({})
 
-    TransclusionView {
-        id: transclusionView
+    Loader {
+        id: transclusionLoader
         visible: block.hasTransclusions
+        active: block.hasTransclusions
         x: block.contentLeft
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
-        blockItem: block
-        transclusions: block.hasTransclusions ? block.transclusions : block.noItems
+        onActiveChanged: block.loadTransclusions()
+        Component.onCompleted: block.loadTransclusions()
+        onLoaded: {
+            QmlCall.connect(transclusionLoader.item, "firstLineCenterChanged", block, "readTransclusionLine")
+            block.readTransclusionLine()
+        }
+    }
+    function loadTransclusions(): void {
+        if (!transclusionLoader.active || transclusionLoader.item !== null)
+            return
+        block._transclusionValues = { blockItem: block, transclusions: block.transclusions }
+        transclusionLoader.setSource(block._transclusionSource, block._transclusionValues)
+    }
+    readonly property url _transclusionSource: Qt.resolvedUrl("TransclusionView.qml")
+    property var _transclusionValues: ({})
+    Binding {
+        target: transclusionLoader.item
+        property: "transclusions"
+        value: block.hasTransclusions ? block.transclusions : block.noItems
+        restoreMode: Binding.RestoreNone
+    }
+    /// The embeds' first line (TransclusionView.firstLineCenter, followed).
+    property real transclusionLineCenter: 0
+    function readTransclusionLine(): void {
+        block.transclusionLineCenter = QmlCall.number(QmlCall.get(transclusionLoader.item, "firstLineCenter"))
     }
 
     Component {
@@ -679,36 +746,8 @@ Item {
         CodeBlockView { blockItem: block }
     }
     Component {
-        id: calcComponent
-        CalcBlockView { blockItem: block }
-    }
-    Component {
-        id: queryComponent
-        QueryBlockView { blockItem: block }
-    }
-    Component {
         id: mathComponent
         MathBlockView { blockItem: block }
-    }
-    Component {
-        id: mermaidComponent
-        MermaidBlockView { blockItem: block }
-    }
-    Component {
-        id: chartComponent
-        ChartBlockView { blockItem: block }
-    }
-    Component {
-        id: viewComponent
-        ViewBlockView { blockItem: block }
-    }
-    Component {
-        id: tableComponent
-        TableBlockView { blockItem: block }
-    }
-    Component {
-        id: frontmatterComponent
-        FrontmatterView { blockItem: block }
     }
     Component {
         id: ruleComponent

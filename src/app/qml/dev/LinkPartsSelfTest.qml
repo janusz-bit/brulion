@@ -75,7 +75,7 @@ QtObject {
     function check(ok: bool, what: string): void { window.check(ok, what) }
     function info(r: int): DevBlock { return window.info(r) }
     function list(): ListView { return editor.listView }
-    function linkMenu(): LinkMenu { return editor.linkMenu }
+    function linkMenu(): LinkMenu { return editor.linkMenu as LinkMenu }
     function navigated(): bool { return navigations > navigationsBefore }
     function linkMenuOpen(): bool { return linkMenu() !== null && linkMenu().opened }
     function linkItem(name: string): T.MenuItem { return window.menuItemNamed(linkMenu(), name) }

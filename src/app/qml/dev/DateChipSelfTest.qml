@@ -51,12 +51,12 @@ QtObject {
     function info(r: int): DevBlock { return window.info(r) }
     function line(prefix: string): string { return window.fileLineOf(window.pageText(), prefix) }
     function text(): Item { return window.renderedIn(window.delegateAt(row)) }
-    function menu(): DateChipMenu { return editor.dateMenu }
+    function menu(): DateChipMenu { return editor.dateMenu as DateChipMenu }
     function menuOpen(): bool { return menu() !== null && menu().opened }
-    function blockMenu(): BlockMenu { return editor.blockMenu }
+    function blockMenu(): BlockMenu { return editor.blockMenu as BlockMenu }
     function blockMenuOpen(): bool { return blockMenu() !== null && blockMenu().opened }
     function list(): ListView { return editor.listView }
-    function dialogs(): EditorDialogs { return editor.dialogs as EditorDialogs }
+    function dialogs(): EditorDialogs { return editor.dialogsNow() as EditorDialogs }
     function item(name: string): T.MenuItem { return window.menuItemNamed(menu(), name) }
     /// The menu's "remove" item looks as it should: with `danger` red with the trash (a date, a
     /// reminder), else a choice like the ones above it (🔁's "Don't repeat", a priority's "No
@@ -66,7 +66,7 @@ QtObject {
         return remove !== null && remove.visible && remove.danger === danger && (remove.iconName === "trash-2") === danger
                && remove.checkable === !danger && !remove.checked
     }
-    function linkMenu(): LinkMenu { return editor.linkMenu }
+    function linkMenu(): LinkMenu { return editor.linkMenu as LinkMenu }
     function linkMenuOpen(): bool { return linkMenu() !== null && linkMenu().opened }
     function linkItem(name: string): T.MenuItem { return window.menuItemNamed(linkMenu(), name) }
     function dateDialog(): BDialog { return dialogs().dateDialog }
@@ -87,7 +87,7 @@ QtObject {
     function delegateAt(r: int): BlockDelegate { return window.delegateAt(r) }
     /// The "Add date" button of block `r` (BlockDelegate), null when it is not shown.
     function dateButton(r: int): Item { return DevTest.findShown(delegateAt(r), "taskDateButton") }
-    function quickMenu(): QuickDateMenu { return editor.quickDateMenu }
+    function quickMenu(): QuickDateMenu { return editor.quickDateMenu as QuickDateMenu }
     function quickMenuOpen(): bool { return quickMenu() !== null && quickMenu().opened }
     function quickItem(name: string): BMenuItem { return window.menuItemNamed(quickMenu(), name) as BMenuItem }
     /// The date the quick menu's item `name` shows ("" when there is no such item).
