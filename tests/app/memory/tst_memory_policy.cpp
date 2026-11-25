@@ -219,7 +219,7 @@ private Q_SLOTS:
         QSignalSpy idle(&p.policy, &MemoryPolicy::idle);
         p.policy.setIdleMs(150 * Slowdown);
         QTest::qWait(300 * Slowdown);
-        QCOMPARE(idle.size(), 0); // (no window shown yet: nothing was started)
+        QCOMPARE(idle.size(), 0);      // (no window shown yet: nothing was started)
         p.policy.setState(true, true); // the first window: the start is the first thing done
         QTRY_COMPARE_WITH_TIMEOUT(idle.size(), 1, 3000 * Slowdown);
         QVERIFY(p.policy.inUse());

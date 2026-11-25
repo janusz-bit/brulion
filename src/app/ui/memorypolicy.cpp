@@ -167,8 +167,7 @@ bool MemoryPolicy::eventFilter(QObject *watched, QEvent *event)
         if (watched->isWindowType())
             used();
         break;
-    default:
-        break;
+    default: break;
     }
     return false;
 }

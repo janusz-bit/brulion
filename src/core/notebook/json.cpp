@@ -219,9 +219,12 @@ QJsonObject reminderJson(const Reminder &reminder)
 
 QJsonObject blockJson(const Block &block)
 {
-    QJsonObject o{{u"line"_s, block.line},   {u"endLine"_s, block.endLine},
-                  {u"depth"_s, block.depth}, {u"kind"_s, blockKindName(block.kind)},
-                  {u"text"_s, block.text.toString()}, {u"raw"_s, block.raw.toString()}};
+    QJsonObject o{{u"line"_s, block.line},
+                  {u"endLine"_s, block.endLine},
+                  {u"depth"_s, block.depth},
+                  {u"kind"_s, blockKindName(block.kind)},
+                  {u"text"_s, block.text.toString()},
+                  {u"raw"_s, block.raw.toString()}};
     insertIf(o, u"blockId"_s, block.id);
     if (block.headingLevel > 0)
         o.insert(u"headingLevel"_s, block.headingLevel);

@@ -536,8 +536,9 @@ void writeText(Out &o, const BlockText &text, const BlockSource &raw, const QStr
         // A slice of this very text within the raw lines: its offsets (no search).
         const bool within = text.isSlice() && text.buffer().constData() == content.constData()
                             && text.from() >= raw.from() && text.to() <= raw.to();
-        const qsizetype at = within ? text.from() - raw.from()
-                                    : QStringView(content).sliced(raw.from(), raw.to() - raw.from()).indexOf(text.view());
+        const qsizetype at =
+                within ? text.from() - raw.from()
+                       : QStringView(content).sliced(raw.from(), raw.to() - raw.from()).indexOf(text.view());
         if (at >= 0) {
             o.u8(1);
             o.varint(quint64(at));

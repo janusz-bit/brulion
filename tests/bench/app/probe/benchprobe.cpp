@@ -1190,8 +1190,7 @@ private:
     /// over; trees without the policy have nothing to tell).
     void userDid()
     {
-        if (QObject *policy = singleton("MemoryPolicy");
-            policy && policy->metaObject()->indexOfMethod("used()") >= 0)
+        if (QObject *policy = singleton("MemoryPolicy"); policy && policy->metaObject()->indexOfMethod("used()") >= 0)
             QMetaObject::invokeMethod(policy, "used");
     }
     void navigate(const QVariantMap &route)

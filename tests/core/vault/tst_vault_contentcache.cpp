@@ -78,10 +78,20 @@ private Q_SLOTS:
         QTest::newRow("one letter") << polish << u"- Zażółć gęślą jaźn\r\n"_s.toUtf8() << false;
         QTest::newRow("other size") << polish << polish + 'x' << false;
         QTest::newRow("bom added") << "abc"_ba << "\xEF\xBB\xBF"_ba << false;
-        QTest::newRow("same with bom") << "\xEF\xBB\xBF" "abc"_ba << "\xEF\xBB\xBF" "abc"_ba << true;
-        QTest::newRow("bom dropped") << "\xEF\xBB\xBF" "abc"_ba << "abcdef"_ba << false;
+        QTest::newRow("same with bom") << "\xEF\xBB\xBF"
+                                          "abc"_ba
+                                       << "\xEF\xBB\xBF"
+                                          "abc"_ba
+                                       << true;
+        QTest::newRow("bom dropped") << "\xEF\xBB\xBF"
+                                        "abc"_ba
+                                     << "abcdef"_ba << false;
         // Invalid UTF-8 of the same size that decodes to the same text is other bytes.
-        QTest::newRow("same text, invalid bytes") << "\xEF\xBF\xBD" "bc"_ba << "\xF0\x9F\x98" "bc"_ba << false;
+        QTest::newRow("same text, invalid bytes") << "\xEF\xBF\xBD"
+                                                     "bc"_ba
+                                                  << "\xF0\x9F\x98"
+                                                     "bc"_ba
+                                                  << false;
         QTest::newRow("empty") << QByteArray() << QByteArray() << true;
     }
     void holdsComparesTheBytes()

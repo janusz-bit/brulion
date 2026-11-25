@@ -208,12 +208,38 @@ public:
         reference operator*() const { return **m_it; }
         pointer operator->() const { return &**m_it; }
         reference operator[](difference_type n) const { return *m_it[n]; }
-        const_iterator &operator++() { ++m_it; return *this; }
-        const_iterator operator++(int) { const_iterator t = *this; ++m_it; return t; }
-        const_iterator &operator--() { --m_it; return *this; }
-        const_iterator operator--(int) { const_iterator t = *this; --m_it; return t; }
-        const_iterator &operator+=(difference_type n) { m_it += n; return *this; }
-        const_iterator &operator-=(difference_type n) { m_it -= n; return *this; }
+        const_iterator &operator++()
+        {
+            ++m_it;
+            return *this;
+        }
+        const_iterator operator++(int)
+        {
+            const_iterator t = *this;
+            ++m_it;
+            return t;
+        }
+        const_iterator &operator--()
+        {
+            --m_it;
+            return *this;
+        }
+        const_iterator operator--(int)
+        {
+            const_iterator t = *this;
+            --m_it;
+            return t;
+        }
+        const_iterator &operator+=(difference_type n)
+        {
+            m_it += n;
+            return *this;
+        }
+        const_iterator &operator-=(difference_type n)
+        {
+            m_it -= n;
+            return *this;
+        }
         friend const_iterator operator+(const_iterator a, difference_type n) { return a += n; }
         friend const_iterator operator+(difference_type n, const_iterator a) { return a += n; }
         friend const_iterator operator-(const_iterator a, difference_type n) { return a -= n; }
@@ -509,7 +535,7 @@ struct ParsedNote {
     QList<Block> blocks;          ///< all blocks in document order (pre-order); tree via parent/children
     QList<Link> links;
     QList<Heading> headings;
-    TaskList tasks;               ///< the blocks' tasks (shared with Block::task), document order
+    TaskList tasks; ///< the blocks' tasks (shared with Block::task), document order
     QList<Reminder> reminders;
     /// Block id -> index into blocks. A QMap: most notes have one or two ids, and a QHash
     /// allocates ~1.8 KB on its first insert (docs/PERFORMANCE.md, L8).
@@ -586,4 +612,3 @@ struct QConcatenable<brulion::BlockText> : private QAbstractConcatenable {
         out += v.size();
     }
 };
-

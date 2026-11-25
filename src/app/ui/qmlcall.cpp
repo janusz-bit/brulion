@@ -8,10 +8,7 @@
 
 namespace brulion::ui {
 
-QmlCall::QmlCall(QObject *parent)
-    : QObject(parent)
-{
-}
+QmlCall::QmlCall(QObject *parent) : QObject(parent) { }
 
 bool QmlCall::invoke(QObject *object, const QByteArray &name, const QVariantList &args, QVariant *result)
 {
@@ -108,24 +105,24 @@ QVariant QmlCall::call3(QObject *object, const QString &name, const QVariant &a,
     return result;
 }
 
-QVariant QmlCall::call4(QObject *object, const QString &name, const QVariant &a, const QVariant &b,
-                        const QVariant &c, const QVariant &d) const
+QVariant QmlCall::call4(QObject *object, const QString &name, const QVariant &a, const QVariant &b, const QVariant &c,
+                        const QVariant &d) const
 {
     QVariant result;
     invoke(object, name.toUtf8(), {a, b, c, d}, &result);
     return result;
 }
 
-QVariant QmlCall::call5(QObject *object, const QString &name, const QVariant &a, const QVariant &b,
-                        const QVariant &c, const QVariant &d, const QVariant &e) const
+QVariant QmlCall::call5(QObject *object, const QString &name, const QVariant &a, const QVariant &b, const QVariant &c,
+                        const QVariant &d, const QVariant &e) const
 {
     QVariant result;
     invoke(object, name.toUtf8(), {a, b, c, d, e}, &result);
     return result;
 }
 
-QVariant QmlCall::call6(QObject *object, const QString &name, const QVariant &a, const QVariant &b,
-                        const QVariant &c, const QVariant &d, const QVariant &e, const QVariant &f) const
+QVariant QmlCall::call6(QObject *object, const QString &name, const QVariant &a, const QVariant &b, const QVariant &c,
+                        const QVariant &d, const QVariant &e, const QVariant &f) const
 {
     QVariant result;
     invoke(object, name.toUtf8(), {a, b, c, d, e, f}, &result);
@@ -247,10 +244,7 @@ bool QmlCall::set(QObject *object, const QString &name, const QVariant &value) c
     return object->metaObject()->property(index).write(object, value);
 }
 
-QmlValue::QmlValue(QObject *parent)
-    : QObject(parent)
-{
-}
+QmlValue::QmlValue(QObject *parent) : QObject(parent) { }
 
 void QmlValue::setObject(QObject *object)
 {

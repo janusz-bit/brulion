@@ -234,7 +234,7 @@ private Q_SLOTS:
         }
         SearchIndex s;
         s.set(u"inny.md"_s, u"Kot"_s, {}, u"kot"_s); // another document...
-        s.remove(u"inny.md"_s);                       // ...gone again: one document is left
+        s.remove(u"inny.md"_s);                      // ...gone again: one document is left
         s.set(u"a.md"_s, repeat(title), {repeat(aliases)}, repeat(content));
         s.set(u"a.md"_s, repeat(title), {repeat(aliases)}, repeat(content)); // replaced: the slot is freed, reused
         QList<SearchIndex::Hit> hits = s.search(u"żółw"_s, 10);

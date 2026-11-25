@@ -79,7 +79,7 @@ private Q_SLOTS:
         QCOMPARE(object->property("seen").toString(), u"x file"_s);
         QCOMPARE(call.call6(object.get(), u"six"_s, 1, 2, 3, 4, 5, 6).toInt(), 21);
         QCOMPARE(call.call5(object.get(), u"five"_s, u"ą"_s, u"b"_s, u"c"_s, u"d"_s, true).toString(), u"ąbcd!"_s);
-        QCOMPARE(call.callNumber(object.get(), u"backStep"_s), 1.0); // (true as a number, as in JavaScript)
+        QCOMPARE(call.callNumber(object.get(), u"backStep"_s), 1.0);          // (true as a number, as in JavaScript)
         QCOMPARE(call.integer(call.call1(object.get(), u"twice"_s, 2.6)), 6); // (2.6 to the parameter's int: 3)
         QCOMPARE(call.integer(u"x"_s), 0);
         QVERIFY(call.isTrue(call.call(object.get(), u"backStep"_s)));

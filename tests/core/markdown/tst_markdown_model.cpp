@@ -1,7 +1,7 @@
 // The parsed model's compact types (types.h, docs/PERFORMANCE.md L8): Boxed (Block::task),
-// BlockIdMap (ParsedNote::blockIds), Properties, BlockSource (Block::raw), TaskList (ParsedNote::tasks), BlockText (Block::text) — and the golden digest
-// of parseNote()'s output over a frozen corpus (tests/common/notecorpus.h), which proves that the
-// memory diet changed no value and later guards markdown::ParserVersion (the index cache).
+// BlockIdMap (ParsedNote::blockIds), Properties, BlockSource (Block::raw), TaskList (ParsedNote::tasks), BlockText
+// (Block::text) — and the golden digest of parseNote()'s output over a frozen corpus (tests/common/notecorpus.h), which
+// proves that the memory diet changed no value and later guards markdown::ParserVersion (the index cache).
 #include "markdown/parse.h"
 
 #include "notecorpus.h"
@@ -154,12 +154,12 @@ private Q_SLOTS:
         QTest::newRow("paragraph lines") << u"Pierwsza linia\ndruga linia\n"_s << 0 << u"Pierwsza linia\ndruga linia"_s
                                          << true;
         QTest::newRow("heading closing hashes") << u"## Łódź ##\n"_s << 0 << u"Łódź"_s << true;
-        QTest::newRow("task trailing tokens") << u"- [ ] Kupić farbę 📅 2026-11-25\n"_s << 0 << u"Kupić farbę"_s
-                                              << true;
+        QTest::newRow("task trailing tokens")
+                << u"- [ ] Kupić farbę 📅 2026-11-25\n"_s << 0 << u"Kupić farbę"_s << true;
         QTest::newRow("Logseq marker") << u"- TODO żółw\n"_s << 0 << u"żółw"_s << true;
         QTest::newRow("token inside") << u"- jeden 📅 2026-11-25 dwa\n"_s << 0 << u"jeden dwa"_s << false;
-        QTest::newRow("indented continuation") << u"- rodzic\n  ciąg dalszy\n"_s << 0 << u"rodzic\nciąg dalszy"_s
-                                               << false;
+        QTest::newRow("indented continuation")
+                << u"- rodzic\n  ciąg dalszy\n"_s << 0 << u"rodzic\nciąg dalszy"_s << false;
         QTest::newRow("CRLF one line") << u"- ąć\r\n- ęł\r\n"_s << 1 << u"ęł"_s << true;
         QTest::newRow("CRLF two lines") << u"Akapit\r\ndalej\r\n"_s << 0 << u"Akapit\ndalej"_s << false;
         QTest::newRow("block id") << u"- tekst ^abc123\n"_s << 0 << u"tekst"_s << true;
@@ -351,8 +351,8 @@ private Q_SLOTS:
         QTest::newRow("none") << u"# Nagłówek\nAkapit\n"_s << QStringList() << QList<bool>();
         QTest::newRow("one line") << u"- [ ] Zapłacić czynsz\n"_s << QStringList{u"Zapłacić czynsz"_s}
                                   << QList<bool>{true};
-        QTest::newRow("tokens") << u"- [x] Kupić farbę 📅 2026-11-25 ✅ 2026-11-24\n"_s
-                                << QStringList{u"Kupić farbę"_s} << QList<bool>{true};
+        QTest::newRow("tokens") << u"- [x] Kupić farbę 📅 2026-11-25 ✅ 2026-11-24\n"_s << QStringList{u"Kupić farbę"_s}
+                                << QList<bool>{true};
         QTest::newRow("Logseq marker") << u"- TODO żółw\n- DONE łódź\n"_s << QStringList{u"żółw"_s, u"łódź"_s}
                                        << QList<bool>{true, true};
         // A task's text is its first line; the block's holds every line.

@@ -770,8 +770,9 @@ Block buildBlock(const Node &node, Ctx &ctx)
     const Structure &st = *ctx.st;
     Block block = blockShell(st, node);
     if (node.kind == BlockKind::Code || node.kind == BlockKind::Html) {
-        block.text = noteSlice(st, firstLineOffset(node, node.kind == BlockKind::Code ? LineRole::Code : LineRole::Text),
-                               codeText(st, node));
+        block.text =
+                noteSlice(st, firstLineOffset(node, node.kind == BlockKind::Code ? LineRole::Code : LineRole::Text),
+                          codeText(st, node));
         block.id = node.trailingId;
         return block;
     }
