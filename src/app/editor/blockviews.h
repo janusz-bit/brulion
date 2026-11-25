@@ -46,6 +46,13 @@ class BlockViews : public QObject {
 public:
     explicit BlockViews(QObject *parent = nullptr);
 
+    // --- Parts of a block (BlockDelegate's Loaders, their components shared by the editor) ----
+    /// The item `levels` parents up from `item` (null when there are fewer). Read without a
+    /// binding's dependency: a part that one of a block's Loaders made finds its block once, when
+    /// it is made (the Loader has set itself as the part's parent by then), and keeps it when the
+    /// Loader lets it go (its parent null, the part deleted later).
+    Q_INVOKABLE QQuickItem *ancestor(QQuickItem *item, int levels) const;
+
     // --- Tables (TableBlockView: BlockListModel's `tableData`) ----------------------------------
     /// The rows shown, in order: those passing the filters (`shown`), and row `editRow`.
     Q_INVOKABLE QList<int> tableShownRows(const QVariantMap &table, int editRow) const;

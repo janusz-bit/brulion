@@ -20,6 +20,13 @@ namespace brulion::editor {
 
 BlockViews::BlockViews(QObject *parent) : QObject(parent) { }
 
+QQuickItem *BlockViews::ancestor(QQuickItem *item, int levels) const
+{
+    for (int i = 0; item && i < levels; ++i)
+        item = item->parentItem();
+    return item;
+}
+
 namespace {
 
 /// `shown[row] !== false` of a table's `shown` flags (a row past them is shown).

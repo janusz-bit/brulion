@@ -131,7 +131,7 @@ T.MenuItem {
             Loader {
                 y: Math.round(parent.height / 2) - Math.round(height / 2)
                 active: control.shortcut !== "" && !Theme.touchUi
-                visible: item !== null && item.visible
+                visible: item !== null && (item as Item).visible
                 sourceComponent: BKbd {
                     sequence: control.shortcut
                     small: true

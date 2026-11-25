@@ -306,6 +306,342 @@ FocusScope {
             editorItem: editor
         }
     }
+    // The parts of a block that only some blocks have (BlockDelegate's Loaders: a styled tag's
+    // tint, the selection band, the flash, a guide line, the fold arrow, the bullet, the number,
+    // the task box, "Add date", the embeds, the embedded blocks, a callout's frame, a rule): one
+    // component each per editor, not per block — a component declared in the delegate is an object
+    // of every row. Each finds its block once, when it is made (BlockViews.ancestor(): the Loader,
+    // then the block; a guide line's parent is the block itself). Their texts keep BlockDelegate's
+    // translation context.
+    readonly property Component tagTintPart: Component {
+        Rectangle {
+            id: tintFrame
+            final property BlockDelegate block: BlockViews.ancestor(tintFrame, 2) as BlockDelegate
+            objectName: "tagTint"
+            readonly property int mode: tintFrame.block.rowData.tagTintMode
+            /// The colour of `tint`: the strong one (the bar) or the soft one (the background) — the
+            /// theme's own pair for its names, a translucent shade of a "#rrggbb" in both themes.
+            function tagTintColor(tint: string, strong: bool): color {
+                switch (tint) {
+                case "accent": return strong ? Theme.accent : Theme.accentBg
+                case "success": return strong ? Theme.success : Theme.successBg
+                case "danger": return strong ? Theme.danger : Theme.dangerBg
+                case "warning": return strong ? Theme.warning : Theme.warningBg
+                case "info": return strong ? Theme.info : Theme.infoBg
+                case "neutral": return strong ? Theme.borderStrong : Theme.bgSunken
+                }
+                return strong ? tagTintHex : tagTintHex.alpha(Theme.dark ? 0.2 : 0.13)
+            }
+            /// The tint as a colour when it is one ("#rrggbb").
+            readonly property string tint: tintFrame.block.tagTint
+            readonly property color tagTintHex: Js.startsWith(tint, "#") ? tint : "transparent"
+            radius: Theme.radiusSm
+            color: (mode & 1) !== 0 ? tintFrame.tagTintColor(tintFrame.tint, false) : "transparent"
+            Rectangle {
+                objectName: "tagTintBar"
+                visible: (tintFrame.mode & 2) !== 0
+                width: 3
+                height: tintFrame.height
+                radius: 1.5
+                color: tintFrame.tagTintColor(tintFrame.tint, true)
+            }
+        }
+    }
+    readonly property Component selectionBandPart: Component {
+        Rectangle {
+            id: bandPart
+            final property BlockDelegate block: BlockViews.ancestor(bandPart, 2) as BlockDelegate
+            objectName: "selectionBand"
+            topLeftRadius: bandPart.block.bandStart ? Theme.radiusSm : 0
+            topRightRadius: bandPart.block.bandStart ? Theme.radiusSm : 0
+            bottomLeftRadius: bandPart.block.bandEnd ? Theme.radiusSm : 0
+            bottomRightRadius: bandPart.block.bandEnd ? Theme.radiusSm : 0
+            color: Theme.bgSelected
+            border.width: bandPart.block.bandEdge === "single" ? 1 : 0
+            border.color: Theme.focusRing.alpha(0.35)
+            // A range: a line down its left edge marks the band as one.
+            Rectangle {
+                visible: bandPart.block.bandEdge !== "single"
+                width: 2
+                height: parent.height
+                color: Theme.focusRing.alpha(0.6)
+            }
+        }
+    }
+    readonly property Component flashPart: Component {
+        Rectangle {
+            id: flashFrame
+            final property BlockDelegate block: BlockViews.ancestor(flashFrame, 2) as BlockDelegate
+            objectName: "blockFlash"
+            radius: Theme.radiusSm
+            color: Theme.mark
+            SequentialAnimation on opacity {
+                NumberAnimation { from: 0; to: 1; duration: Theme.reducedMotion ? 0 : 150; easing.type: Theme.easing }
+                PauseAnimation { duration: 700 }
+                NumberAnimation { to: 0; duration: Theme.reducedMotion ? 0 : 350; easing.type: Theme.easing }
+                // (Not a ScriptAction: its script is not compiled, and qmlcachegen skipped the
+                // rest of the file after it.)
+                onFinished: flashFrame.block.flashing = false
+            }
+        }
+    }
+    readonly property Component guideLinePart: Component {
+        Rectangle {
+            id: guideLine
+            final property BlockDelegate block: BlockViews.ancestor(guideLine, 1) as BlockDelegate
+            required property int index
+            objectName: "guideLine"
+            x: Math.round(guideLine.block.markerX(index))
+            width: 1
+            height: guideLine.block.height
+            color: Theme.guide
+        }
+    }
+    readonly property Component foldArrowPart: Component {
+        Item {
+            id: foldArrow
+            final property BlockDelegate block: BlockViews.ancestor(foldArrow, 2) as BlockDelegate
+            visible: foldArrow.block.collapsed || foldArrow.block.hovered || Theme.touchUi || arrowTap.pressed
+            opacity: foldArrow.block.collapsed ? 0.9 : 0.6
+            Accessible.role: Accessible.Button
+            Accessible.name: foldArrow.block.collapsed ? qsTranslate("BlockDelegate", "Expand") : qsTranslate("BlockDelegate", "Collapse")
+
+            BIcon {
+                anchors.centerIn: parent
+                name: "chevron-right"
+                size: Theme.iconSizeSm
+                color: arrowHover.hovered ? Theme.fg : Theme.fgMuted
+                rotation: foldArrow.block.collapsed ? 0 : 90
+                Behavior on rotation { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
+            }
+            // Touch: a 44 px hit area around the small arrow (the bullet, stacked above, keeps the
+            // part that overlaps it).
+            Item {
+                anchors.centerIn: parent
+                width: Theme.touchUi ? Theme.touchTarget : parent.width
+                height: Theme.touchUi ? Theme.touchTarget : parent.height
+                HoverHandler { id: arrowHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    id: arrowTap
+                    onTapped: foldArrow.block.controller.toggleFold(foldArrow.block.index)
+                }
+            }
+        }
+    }
+    readonly property Component bulletPart: Component {
+        Item {
+            id: bullet
+            final property BlockDelegate block: BlockViews.ancestor(bullet, 2) as BlockDelegate
+            /// The bullet's centre in the hit area.
+            readonly property real dotX: bullet.block.bulletX - (bullet.parent ? bullet.parent.x : 0)
+            Accessible.role: bullet.block.doc ? Accessible.Graphic : Accessible.Button
+            Accessible.name: bullet.block.doc ? qsTranslate("BlockDelegate", "List item") : qsTranslate("BlockDelegate", "Zoom into block")
+
+            // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
+            Rectangle {
+                x: bullet.dotX - width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                width: 16
+                height: 16
+                radius: 8
+                color: bullet.block.collapsed ? Theme.bgPressed : Theme.bgHover
+                visible: !bullet.block.doc && (bullet.block.collapsed || bulletHover.hovered)
+            }
+            Rectangle {
+                // The same round bullet at every depth (a document too: nesting shows in the indent).
+                x: bullet.dotX - width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                width: 6
+                height: width
+                radius: width / 2
+                color: bullet.block.closedTask ? Theme.fgFaint : bulletHover.hovered && !bullet.block.doc ? Theme.fg : Theme.fgMuted
+            }
+            HoverHandler {
+                id: bulletHover
+                cursorShape: bullet.block.doc ? Qt.ArrowCursor : Qt.PointingHandCursor
+                enabled: !Theme.touchUi
+            }
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                // A document has no zoom: the bullet is part of the text, a click edits the item.
+                // (The touch selection mode: a tap moves the selection's end here.)
+                onTapped: {
+                    if (bullet.block.editor.blockTapped(bullet.block.index))
+                        return
+                    if (bullet.block.doc)
+                        bullet.block.editor.startEditing(bullet.block.index, 0)
+                    else
+                        bullet.block.controller.zoomInto(bullet.block.index)
+                }
+                onLongPressed: bullet.block.openMenu(bullet, bullet.dotX, bullet.height)
+            }
+            BlockDelegate.MenuTap { onTapped: bullet.block.openMenu(bullet, bullet.dotX, bullet.height) }
+        }
+    }
+    readonly property Component numberPart: Component {
+        Text {
+            id: number
+            final property BlockDelegate block: BlockViews.ancestor(number, 2) as BlockDelegate
+            readonly property real gap: Math.round(number.block.editor.listIndent * 0.25)
+            // Rich text like the item's own rendered text: the same line layout, the same baseline.
+            text: TextHelper.escapeHtml(number.block.listMarker)
+            textFormat: Text.RichText
+            font.family: Theme.fontEditor
+            font.pixelSize: number.block.editor.fontSize
+            font.features: { "tnum": 1 }
+            lineHeightMode: Text.FixedHeight
+            lineHeight: number.block.editor.lineHeight
+            color: number.block.closedTask ? Theme.fgFaint : Theme.fgMuted
+            Accessible.ignored: true
+            // The hit area, as the bullet's: a touch target (24 px with a mouse) around the number,
+            // its right edge at the text column (with no room left of it, under the first
+            // letters, which edit the item as well).
+            Item {
+                readonly property real size: Theme.touchUi ? Theme.touchTarget : 24
+                readonly property real textEdge: number.width + number.gap
+                width: Math.max(size, textEdge)
+                height: Math.max(size, number.height)
+                x: Math.max(-(number.parent ? number.parent.x : 0), textEdge - width)
+                y: (number.height - height) / 2
+                TapHandler {
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: number.block.editOnTap(0)
+                    onLongPressed: number.block.openMenu(number, 0, number.height)
+                }
+                BlockDelegate.MenuTap { onTapped: number.block.openMenu(number, 0, number.height) }
+            }
+        }
+    }
+    readonly property Component taskBoxPart: Component {
+        TaskBox {
+            id: box
+            final property BlockDelegate block: BlockViews.ancestor(box, 2) as BlockDelegate
+            objectName: "taskBox"
+            status: box.block.taskStatus
+            onToggled: box.block.controller.toggleTask(box.block.index)
+            // The editor's status menu (it follows the block while it is open).
+            ownMenu: false
+            onMenuRequested: box.block.editor.openTaskStatusMenu(box.block.index, box, 0, box.height)
+        }
+    }
+    readonly property Component dateButtonPart: Component {
+        BIconButton {
+            id: dateButton
+            final property BlockDelegate block: BlockViews.ancestor(dateButton, 2) as BlockDelegate
+            objectName: "taskDateButton"
+            label: dateButton.block.addable ? qsTranslate("BlockDelegate", "Add a reminder or an alarm") : qsTranslate("BlockDelegate", "Add date")
+            iconName: "calendar-plus"
+            size: "small"
+            // The edited text keeps the keyboard (the menu takes it while it is open).
+            focusPolicy: Qt.NoFocus
+            onClicked: {
+                if (dateButton.block.addable)
+                    dateButton.block.editor.addDateTo(dateButton.block.index)
+                else
+                    dateButton.block.editor.openQuickDateMenu(dateButton.block.index, dateButton)
+            }
+        }
+    }
+    readonly property Component embedsPart: Component {
+        EmbedView {
+            id: embedPart
+            final property BlockDelegate block: BlockViews.ancestor(embedPart, 2) as BlockDelegate
+            embeds: embedPart.block.hasEmbeds ? embedPart.block.embeds : embedPart.block.noItems
+            controller: embedPart.block.controller
+            editor: embedPart.block.editor
+            readOnly: embedPart.block.editor.readOnly
+            onClicked: (target) => {
+                // (The arguments first: compiled code reads nothing again after a call.)
+                const link = "page:" + Js.encodeURIComponent(target)
+                embedPart.block.controller.activateLink(embedPart.block.index, link, false)
+            }
+            onDrawingClicked: (path) => embedPart.block.controller.openDrawing(path)
+            onPdfClicked: (path, page) => embedPart.block.controller.openPdf(embedPart.block.index, path, page)
+            onBackgroundClicked: embedPart.block.editOnTap(-1)
+            onBackgroundLongPressed: embedPart.block.editor.longPressText(embedPart.block.index)
+            onShowWeb: (url) => embedPart.block.controller.showWebPicture(url)
+            onDownloadWeb: (url) => embedPart.block.editor.downloadWebPictures(url)
+            onWebMenu: (url, host, item, x, y) => embedPart.block.editor.openWebPictureMenu(embedPart.block.index, url, host, item, x, y)
+            onWebOpen: (picture) => embedPart.block.editor.openWebPictureViewer(embedPart.block.index, picture)
+            onViewToast: (text, kind, undo, model) => embedPart.block.editor.notice(text, kind, undo ? embedPart.block.editor.viewUndoAction(model) : null)
+            onTranscribeRequested: (path, target) => embedPart.block.editor.transcribeRecording(embedPart.block.index, path, target)
+            onCopyRequested: (text) => embedPart.block.editor.copyPlainText(text)
+        }
+    }
+    readonly property Component transclusionsPart: Component {
+        TransclusionView {
+            id: transclusionPart
+            // (Its own `block` is its blockItem's.)
+            blockItem: BlockViews.ancestor(transclusionPart, 2)
+            transclusions: transclusionPart.block.hasTransclusions ? transclusionPart.block.transclusions : transclusionPart.block.noItems
+        }
+    }
+    readonly property Component calloutPart: Component {
+        Rectangle {
+            id: frame
+            final property BlockDelegate block: BlockViews.ancestor(frame, 2) as BlockDelegate
+            readonly property bool callout: frame.block.view === "callout"
+            readonly property string type: frame.block.rowData.calloutType
+            readonly property color tint: {
+                switch (type) {
+                case "tip": case "success": case "check": case "done": return Theme.success
+                case "warning": case "caution": case "attention": return Theme.warning
+                case "danger": case "error": case "bug": case "failure": return Theme.marginRed // whatever the accent
+                case "todo": case "info": return Theme.info
+                case "quote": case "cite": return Theme.fgFaint
+                default: return Theme.info
+                }
+            }
+            implicitHeight: inner.implicitHeight + (callout ? 2 * Theme.space3 : 0)
+            height: implicitHeight
+            radius: callout ? Theme.radius : 0
+            color: callout ? tint.alpha(Theme.dark ? 0.12 : 0.10) : "transparent"
+            Rectangle {
+                width: 3
+                height: parent.height
+                radius: 1.5
+                color: frame.callout ? frame.tint : Theme.borderStrong
+            }
+            Item {
+                id: inner
+                x: Theme.space4
+                y: frame.callout ? Theme.space3 : 0
+                width: parent.width - x - (frame.callout ? Theme.space3 : 0)
+                implicitHeight: text.implicitHeight
+                BlockText {
+                    id: text
+                    width: parent.width
+                    blockItem: frame.block
+                    quoted: !frame.callout
+                }
+            }
+        }
+    }
+    readonly property Component rulePart: Component {
+        Item {
+            id: rulePart
+            final property BlockDelegate block: BlockViews.ancestor(rulePart, 2) as BlockDelegate
+            implicitHeight: rulePart.block.editing ? ruleText.implicitHeight : rulePart.block.editor.lineHeight
+            height: implicitHeight
+            Rectangle {
+                visible: !rulePart.block.editing
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                height: 1
+                color: Theme.border
+            }
+            TapHandler {
+                enabled: !rulePart.block.editing
+                onTapped: rulePart.block.editOnTap(-1)
+            }
+            BlockText {
+                id: ruleText
+                visible: rulePart.block.editing
+                width: parent.width
+                blockItem: rulePart.block
+            }
+        }
+    }
     // The views of the blocks that are not text (BlockDelegate's `content` Loader): one component
     // each per editor, not per block — a component declared in the delegate is an object of every
     // row, nine of them in each (docs/PERFORMANCE.md). The view's block is its Loader's parent.

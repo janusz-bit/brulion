@@ -249,21 +249,6 @@ Item {
     // ---- Style by tag (an extension's b.app.tagStyle: docs/UI.md "Styles of blocks by tag") -------
     /// The tint of the block's styled tag ("" none): a colour of the theme by name, or "#rrggbb".
     readonly property string tagTint: shown ? rowData.tagTint : ""
-    /// The colour of `tint`: the strong one (the bar) or the soft one (the background) — the
-    /// theme's own pair for its names, a translucent shade of a "#rrggbb" in both themes.
-    function tagTintColor(tint: string, strong: bool): color {
-        switch (tint) {
-        case "accent": return strong ? Theme.accent : Theme.accentBg
-        case "success": return strong ? Theme.success : Theme.successBg
-        case "danger": return strong ? Theme.danger : Theme.dangerBg
-        case "warning": return strong ? Theme.warning : Theme.warningBg
-        case "info": return strong ? Theme.info : Theme.infoBg
-        case "neutral": return strong ? Theme.borderStrong : Theme.bgSunken
-        }
-        return strong ? tagTintHex : tagTintHex.alpha(Theme.dark ? 0.2 : 0.13)
-    }
-    /// The tint as a colour when it is one ("#rrggbb").
-    readonly property color tagTintHex: Js.startsWith(tagTint, "#") ? tagTint : "transparent"
     // Made only for blocks with a styled tag (none unless an extension declared a style).
     Loader {
         active: block.tagTint !== ""
@@ -271,21 +256,7 @@ Item {
         y: 1
         width: block.bandRight - x
         height: Math.max(0, block.height - 2)
-        sourceComponent: Rectangle {
-            id: tintFrame
-            objectName: "tagTint"
-            readonly property int mode: block.rowData.tagTintMode
-            radius: Theme.radiusSm
-            color: (mode & 1) !== 0 ? block.tagTintColor(block.tagTint, false) : "transparent"
-            Rectangle {
-                objectName: "tagTintBar"
-                visible: (tintFrame.mode & 2) !== 0
-                width: 3
-                height: tintFrame.height
-                radius: 1.5
-                color: block.tagTintColor(block.tagTint, true)
-            }
-        }
+        sourceComponent: block.editor.tagTintPart
     }
 
     // Made only for selected blocks (most blocks never are).
@@ -295,23 +266,7 @@ Item {
         y: block.bandTop
         width: block.bandRight - x
         height: Math.max(0, block.bandBottom - block.bandTop)
-        sourceComponent: Rectangle {
-            objectName: "selectionBand"
-            topLeftRadius: block.bandStart ? Theme.radiusSm : 0
-            topRightRadius: block.bandStart ? Theme.radiusSm : 0
-            bottomLeftRadius: block.bandEnd ? Theme.radiusSm : 0
-            bottomRightRadius: block.bandEnd ? Theme.radiusSm : 0
-            color: Theme.bgSelected
-            border.width: block.bandEdge === "single" ? 1 : 0
-            border.color: Theme.focusRing.alpha(0.35)
-            // A range: a line down its left edge marks the band as one.
-            Rectangle {
-                visible: block.bandEdge !== "single"
-                width: 2
-                height: parent.height
-                color: Theme.focusRing.alpha(0.6)
-            }
-        }
+        sourceComponent: block.editor.selectionBandPart
     }
 
     // ---- Flash (a link to the block was followed) ------------------------------------------------
@@ -327,19 +282,7 @@ Item {
         y: 1
         width: block.bandRight - x
         height: Math.max(0, block.height - 2)
-        sourceComponent: Rectangle {
-            objectName: "blockFlash"
-            radius: Theme.radiusSm
-            color: Theme.mark
-            SequentialAnimation on opacity {
-                NumberAnimation { from: 0; to: 1; duration: Theme.reducedMotion ? 0 : 150; easing.type: Theme.easing }
-                PauseAnimation { duration: 700 }
-                NumberAnimation { to: 0; duration: Theme.reducedMotion ? 0 : 350; easing.type: Theme.easing }
-                // (Not a ScriptAction: its script is not compiled, and qmlcachegen skipped the
-                // rest of the file after it.)
-                onFinished: block.flashing = false
-            }
-        }
+        sourceComponent: block.editor.flashPart
     }
 
     // ---- Guide lines -------------------------------------------------------------------------
@@ -349,14 +292,7 @@ Item {
     // own marker.
     Repeater {
         model: !block.shown ? 0 : !block.doc || block.listItem ? block.depth : 0
-        delegate: Rectangle {
-            required property int index
-            objectName: "guideLine"
-            x: Math.round(block.markerX(index))
-            width: 1
-            height: block.height
-            color: Theme.guide
-        }
+        delegate: block.editor.guideLinePart
     }
     // From this bullet (a document's marker: bullet, number or checkbox) down to its (visible)
     // children.
@@ -386,33 +322,7 @@ Item {
         // Left of the bullet's hit area (with a mouse 24 px wide, a little wider than its column).
         x: (Theme.touchUi ? block.bulletX - block.editor.bulletColumn / 2 : block.levelX - bulletBox.width) - width + 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: Item {
-            visible: block.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed
-            opacity: block.collapsed ? 0.9 : 0.6
-            Accessible.role: Accessible.Button
-            Accessible.name: block.collapsed ? qsTr("Expand") : qsTr("Collapse")
-
-            BIcon {
-                anchors.centerIn: parent
-                name: "chevron-right"
-                size: Theme.iconSizeSm
-                color: arrowHover.hovered ? Theme.fg : Theme.fgMuted
-                rotation: block.collapsed ? 0 : 90
-                Behavior on rotation { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
-            }
-            // Touch: a 44 px hit area around the small arrow (the bullet, stacked above, keeps the
-            // part that overlaps it).
-            Item {
-                anchors.centerIn: parent
-                width: Theme.touchUi ? Theme.touchTarget : parent.width
-                height: Theme.touchUi ? Theme.touchTarget : parent.height
-                HoverHandler { id: arrowHover; cursorShape: Qt.PointingHandCursor }
-                TapHandler {
-                    id: arrowTap
-                    onTapped: block.controller.toggleFold(block.index)
-                }
-            }
-        }
+        sourceComponent: block.editor.foldArrowPart
     }
 
     // ---- Bullet --------------------------------------------------------------------------------
@@ -433,53 +343,7 @@ Item {
         x: Theme.touchUi && besideArrow ? block.bulletX - width / 2
                                         : block.doc ? Math.max(0, block.levelX - width) : block.levelX - width
         y: block.firstLineCenter - height / 2
-        sourceComponent: Item {
-            id: bullet
-            /// The bullet's centre in the hit area.
-            readonly property real dotX: block.bulletX - bulletBox.x
-            Accessible.role: block.doc ? Accessible.Graphic : Accessible.Button
-            Accessible.name: block.doc ? qsTr("List item") : qsTr("Zoom into block")
-
-            // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
-            Rectangle {
-                x: bullet.dotX - width / 2
-                anchors.verticalCenter: parent.verticalCenter
-                width: 16
-                height: 16
-                radius: 8
-                color: block.collapsed ? Theme.bgPressed : Theme.bgHover
-                visible: !block.doc && (block.collapsed || bulletHover.hovered)
-            }
-            Rectangle {
-                // The same round bullet at every depth (a document too: nesting shows in the indent).
-                x: bullet.dotX - width / 2
-                anchors.verticalCenter: parent.verticalCenter
-                width: 6
-                height: width
-                radius: width / 2
-                color: block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
-            }
-            HoverHandler {
-                id: bulletHover
-                cursorShape: block.doc ? Qt.ArrowCursor : Qt.PointingHandCursor
-                enabled: !Theme.touchUi
-            }
-            TapHandler {
-                acceptedButtons: Qt.LeftButton
-                // A document has no zoom: the bullet is part of the text, a click edits the item.
-                // (The touch selection mode: a tap moves the selection's end here.)
-                onTapped: {
-                    if (block.editor.blockTapped(block.index))
-                        return
-                    if (block.doc)
-                        block.editor.startEditing(block.index, 0)
-                    else
-                        block.controller.zoomInto(block.index)
-                }
-                onLongPressed: block.openMenu(bullet, bullet.dotX, bullet.height)
-            }
-            MenuTap { onTapped: block.openMenu(bullet, bullet.dotX, bullet.height) }
-        }
+        sourceComponent: block.editor.bulletPart
     }
 
     // ---- Number of an ordered list item (document mode) -----------------------------------------
@@ -490,36 +354,7 @@ Item {
         // Right-aligned in the marker column, on the first line's baseline (body font).
         x: block.levelX - width - gap
         y: block.firstLineCenter - block.editor.firstLineCenter(0)
-        sourceComponent: Text {
-            id: number
-            // Rich text like the item's own rendered text: the same line layout, the same baseline.
-            text: TextHelper.escapeHtml(block.listMarker)
-            textFormat: Text.RichText
-            font.family: Theme.fontEditor
-            font.pixelSize: block.editor.fontSize
-            font.features: { "tnum": 1 }
-            lineHeightMode: Text.FixedHeight
-            lineHeight: block.editor.lineHeight
-            color: block.closedTask ? Theme.fgFaint : Theme.fgMuted
-            Accessible.ignored: true
-            // The hit area, as the bullet's: a touch target (24 px with a mouse) around the number,
-            // its right edge at the text column (with no room left of it, under the first
-            // letters, which edit the item as well).
-            Item {
-                readonly property real size: Theme.touchUi ? Theme.touchTarget : 24
-                readonly property real textEdge: number.width + numberBox.gap
-                width: Math.max(size, textEdge)
-                height: Math.max(size, number.height)
-                x: Math.max(-numberBox.x, textEdge - width)
-                y: (number.height - height) / 2
-                TapHandler {
-                    acceptedButtons: Qt.LeftButton
-                    onTapped: block.editOnTap(0)
-                    onLongPressed: block.openMenu(number, 0, number.height)
-                }
-                MenuTap { onTapped: block.openMenu(number, 0, number.height) }
-            }
-        }
+        sourceComponent: block.editor.numberPart
     }
 
     // ---- Task checkbox ---------------------------------------------------------------------------
@@ -530,15 +365,7 @@ Item {
         x: block.doc ? block.bulletX - width / 2
                      : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: TaskBox {
-            id: box
-            objectName: "taskBox"
-            status: block.taskStatus
-            onToggled: block.controller.toggleTask(block.index)
-            // The editor's status menu (it follows the block while it is open).
-            ownMenu: false
-            onMenuRequested: block.editor.openTaskStatusMenu(block.index, box, 0, box.height)
-        }
+        sourceComponent: block.editor.taskBoxPart
     }
 
     // ---- "Add date" (an open task without a date; with one, "+" adds another) ---------------------
@@ -547,21 +374,7 @@ Item {
                 && (block.hovered || block.editing || block.editor.quickDateRow === block.index)
         x: block.contentRight - block.dateButtonRoom + (block.dateButtonRoom - width) / 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: BIconButton {
-            id: dateButton
-            objectName: "taskDateButton"
-            label: block.addable ? qsTr("Add a reminder or an alarm") : qsTr("Add date")
-            iconName: "calendar-plus"
-            size: "small"
-            // The edited text keeps the keyboard (the menu takes it while it is open).
-            focusPolicy: Qt.NoFocus
-            onClicked: {
-                if (block.addable)
-                    block.editor.addDateTo(block.index)
-                else
-                    block.editor.openQuickDateMenu(block.index, dateButton)
-            }
-        }
+        sourceComponent: block.editor.dateButtonPart
     }
 
     // ---- Content ---------------------------------------------------------------------------
@@ -592,8 +405,8 @@ Item {
             case "view": return block.editor.viewView
             case "table": return block.editor.tableView
             case "quote":
-            case "callout": return calloutComponent
-            case "rule": return ruleComponent
+            case "callout": return block.editor.calloutPart
+            case "rule": return block.editor.rulePart
             case "frontmatter": return block.editor.frontmatterView
             default: return null
             }
@@ -614,24 +427,7 @@ Item {
         x: block.contentLeft
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
-        sourceComponent: EmbedView {
-            embeds: block.hasEmbeds ? block.embeds : block.noItems
-            controller: block.controller
-            editor: block.editor
-            readOnly: block.editor.readOnly
-            onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
-            onDrawingClicked: (path) => block.controller.openDrawing(path)
-            onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)
-            onBackgroundClicked: block.editOnTap(-1)
-            onBackgroundLongPressed: block.editor.longPressText(block.index)
-            onShowWeb: (url) => block.controller.showWebPicture(url)
-            onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
-            onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
-            onWebOpen: (picture) => block.editor.openWebPictureViewer(block.index, picture)
-            onViewToast: (text, kind, undo, model) => block.editor.notice(text, kind, undo ? block.editor.viewUndoAction(model) : null)
-            onTranscribeRequested: (path, target) => block.editor.transcribeRecording(block.index, path, target)
-            onCopyRequested: (text) => block.editor.copyPlainText(text)
-        }
+        sourceComponent: block.editor.embedsPart
     }
 
     Loader {
@@ -641,77 +437,9 @@ Item {
         x: block.contentLeft
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
-        sourceComponent: TransclusionView {
-            blockItem: block
-            transclusions: block.hasTransclusions ? block.transclusions : block.noItems
-        }
+        sourceComponent: block.editor.transclusionsPart
     }
 
-    Component {
-        id: calloutComponent
-        Rectangle {
-            id: frame
-            readonly property bool callout: block.view === "callout"
-            readonly property string type: block.rowData.calloutType
-            readonly property color tint: {
-                switch (type) {
-                case "tip": case "success": case "check": case "done": return Theme.success
-                case "warning": case "caution": case "attention": return Theme.warning
-                case "danger": case "error": case "bug": case "failure": return Theme.marginRed // whatever the accent
-                case "todo": case "info": return Theme.info
-                case "quote": case "cite": return Theme.fgFaint
-                default: return Theme.info
-                }
-            }
-            implicitHeight: inner.implicitHeight + (callout ? 2 * Theme.space3 : 0)
-            height: implicitHeight
-            radius: callout ? Theme.radius : 0
-            color: callout ? tint.alpha(Theme.dark ? 0.12 : 0.10) : "transparent"
-            Rectangle {
-                width: 3
-                height: parent.height
-                radius: 1.5
-                color: frame.callout ? frame.tint : Theme.borderStrong
-            }
-            Item {
-                id: inner
-                x: Theme.space4
-                y: frame.callout ? Theme.space3 : 0
-                width: parent.width - x - (frame.callout ? Theme.space3 : 0)
-                implicitHeight: text.implicitHeight
-                BlockText {
-                    id: text
-                    width: parent.width
-                    blockItem: block
-                    quoted: !frame.callout
-                }
-            }
-        }
-    }
-    Component {
-        id: ruleComponent
-        Item {
-            implicitHeight: block.editing ? ruleText.implicitHeight : block.editor.lineHeight
-            height: implicitHeight
-            Rectangle {
-                visible: !block.editing
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width
-                height: 1
-                color: Theme.border
-            }
-            TapHandler {
-                enabled: !block.editing
-                onTapped: block.editOnTap(-1)
-            }
-            BlockText {
-                id: ruleText
-                visible: block.editing
-                width: parent.width
-                blockItem: block
-            }
-        }
-    }
 
     // ---- The selection's grips (touch selection mode) -----------------------------------------------
     // A round grip at the band's start (top left) and end (bottom right), 44 px to hold: the finger
