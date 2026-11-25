@@ -433,6 +433,9 @@ if(EMSCRIPTEN)
     target_link_options(brulion PRIVATE "SHELL:-s ENVIRONMENT=web")
 endif()
 
+# The functions a start runs laid out first (cmake/BrulionSize.cmake, cmake/startup-order.txt).
+brulion_order_startup(brulion)
+
 target_compile_definitions(brulion PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(brulion PRIVATE brulion_core brulion_platform Qt6::Quick Qt6::QuickControls2 Qt6::Svg)
 brulion_set_warnings(brulion)

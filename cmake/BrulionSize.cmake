@@ -13,8 +13,18 @@
 #                (RELR: -z pack-relative-relocs, a twentieth of the app's file); glibc 2.36 or newer
 #                at run time, so off by default: the Nix package turns it on (the AppImage's glibc
 #                is older; Android has its own: src/app/CMakeLists.txt)
+#   brulion_order_startup(<target>)   Linux with lld: the functions a start, a tour of the views
+#                and some typing run laid out first, and the compiled QML units of their files
+#                (cmake/startup-order.txt, written by scripts/startup-order.py; --symbol-ordering-file).
+#                A start runs a ninth of the program's code, spread all over it, and pages are read
+#                and mapped whole: 32 MB of the 72 were resident after a start, 9 MB are
+#                (docs/PERFORMANCE.md "Memory: only what is in use"). A name the program no longer
+#                has is skipped: a stale file orders less. BRULION_STARTUP_ORDER=OFF: the linker's
+#                own order
 option(BRULION_PACK_RELOCATIONS
     "Pack the relative relocations (RELR; Linux, needs glibc 2.36 or newer at run time)" OFF)
+option(BRULION_STARTUP_ORDER
+    "Lay out the functions a start runs first (cmake/startup-order.txt; Linux with lld)" ON)
 
 include(CheckCXXCompilerFlag)
 include(CheckLinkerFlag)
@@ -51,4 +61,18 @@ function(brulion_enable_size_options)
         endif()
         add_link_options("$<${_optimised}:LINKER:-z,pack-relative-relocs>")
     endif()
+endfunction()
+
+function(brulion_order_startup target)
+    set(_order "${PROJECT_SOURCE_DIR}/cmake/startup-order.txt")
+    if(NOT BRULION_STARTUP_ORDER OR NOT CMAKE_SYSTEM_NAME STREQUAL "Linux"
+            OR NOT CMAKE_CXX_COMPILER_LINKER_ID STREQUAL "LLD" OR NOT EXISTS "${_order}")
+        return()
+    endif()
+    # (Only where every function has a section of its own: brulion_enable_size_options().)
+    set(_optimised "$<CONFIG:Release,MinSizeRel,RelWithDebInfo>")
+    target_link_options(${target} PRIVATE
+        "$<${_optimised}:LINKER:--symbol-ordering-file=${_order}>"
+        "$<${_optimised}:LINKER:--no-warn-symbol-ordering>")
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${_order}")
 endfunction()
