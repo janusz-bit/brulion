@@ -38,12 +38,9 @@ qt_target_qml_sources(brulion
         qml/content/ContentNoteModeChoice.qml
         qml/content/ContentHighlightText.qml
 )
-# Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); JournalsView loads the self-test type
-# either way.
+# Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); JournalsView loads them from their files
+# when `--editor-script` asks for one.
 if(BRULION_DEV_QML_ENABLED)
     qt_target_qml_sources(brulion QML_FILES qml/content/ContentJournalsSelfTest.qml
         qml/content/ContentJournalsSpanSelfTest.qml)
-else()
-    qt_target_qml_sources(brulion QML_FILES qml/stubs/ContentJournalsSelfTest.qml
-        qml/stubs/ContentJournalsSpanSelfTest.qml)
 endif()

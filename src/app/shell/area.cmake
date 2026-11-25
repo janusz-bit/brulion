@@ -177,7 +177,7 @@ if(BRULION_DESKTOP)
     # the remote control (tests/app/shell: tst_uidriver).
     qt_add_library(brulion_uidriver STATIC ${_brulion_shell_dir}/uidriver.h ${_brulion_shell_dir}/uidriver.cpp)
     target_include_directories(brulion_uidriver PUBLIC ${_brulion_shell_dir})
-    target_link_libraries(brulion_uidriver PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
+    target_link_libraries(brulion_uidriver PUBLIC Qt6::Core Qt6::Gui Qt6::Quick PRIVATE brulion_ui_qmlcall)
     brulion_set_warnings(brulion_uidriver)
     target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
         shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp
@@ -195,6 +195,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellAboutDialog.qml
     qml/shell/ShellAiReportDialog.qml
     qml/shell/ShellAutomationDialog.qml
+    qml/shell/ShellDeleteDialog.qml
     qml/shell/ShellAutomationSettings.qml
     qml/shell/ShellBackupSettings.qml
     qml/shell/ShellBottomNav.qml

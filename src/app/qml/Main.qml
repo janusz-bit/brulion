@@ -110,6 +110,9 @@ ApplicationWindow {
     }
 
     // ---- Content by status ---------------------------------------------------------------
+    // The intro and the onboarding are loaded from their files (showStage()), not named here: a QML
+    // file named in another one is loaded with it, and they are shown only without a notebook
+    // (docs/PERFORMANCE.md "QML files loaded when first used").
     Loader {
         id: stage
         anchors.fill: parent
@@ -117,19 +120,34 @@ ApplicationWindow {
         // The app lock (docs/UI.md "App lock"): nothing of the notebook is drawn, read by a screen
         // reader or reached with the keyboard while it is locked.
         visible: !AppLock.locked
-        sourceComponent: {
-            switch (AppController.status) {
-            case "ready": return shellComponent
-            case "onboarding": return AppController.introPending ? introComponent : onboardingComponent
-            case "error": return errorComponent
-            default: return splashComponent
-            }
+    }
+    /// The file the stage shows ("": a component of this file).
+    property url _stageSource
+    /// The stage shows what AppController.status asks for. (Imperative: a Loader with both its
+    /// source and its sourceComponent bound clears what the other one just loaded.)
+    function showStage(): void {
+        switch (AppController.status) {
+        case "ready": stage.sourceComponent = shellComponent; return
+        case "error": stage.sourceComponent = errorComponent; return
+        case "onboarding":
+            window._stageSource = AppController.introPending ? Qt.resolvedUrl("views/IntroView.qml")
+                                                             : Qt.resolvedUrl("views/OnboardingView.qml")
+            stage.source = window._stageSource
+            return
+        default: stage.sourceComponent = splashComponent
         }
     }
+    Component.onCompleted: window.showStage()
+    Connections {
+        target: AppController
+        function onStatusChanged(): void { window.showStage() }
+        function onIntroPendingChanged(): void { window.showStage() }
+    }
+    /// The intro is shown (Android's back key takes its steps first).
+    readonly property bool introShown: AppController.status === "onboarding" && AppController.introPending
+                                       && stage.item !== null
 
     Component { id: shellComponent; AppShell { toasts: toastHost } }
-    Component { id: introComponent; IntroView {} }
-    Component { id: onboardingComponent; OnboardingView {} }
     Component { id: splashComponent; ShellSplash {} }
     Component {
         id: errorComponent
@@ -151,14 +169,14 @@ ApplicationWindow {
 
     readonly property AppShell shell: stage.item as AppShell
 
-    // The tray calendar (desktop): its own window, created on first use; never on Android or in
-    // the browser (no tray asks for it there).
+    // The tray calendar (desktop): its own window, loaded from its file on first use; never on
+    // Android or in the browser (no tray asks for it there).
     Loader {
         id: trayCalendar
         active: false
-        sourceComponent: ShellTrayCalendar {}
     }
-    readonly property ShellTrayCalendar trayCalendarWindow: trayCalendar.item as ShellTrayCalendar
+    /// The calendar's window (an ApplicationWindow; null until first used).
+    readonly property Window trayCalendarWindow: trayCalendar.item as Window
 
     function hideTrayCalendar(): void {
         if (window.trayCalendarWindow && window.trayCalendarWindow.visible)
@@ -174,7 +192,10 @@ ApplicationWindow {
             window.showAndRaise()
             return
         }
-        trayCalendar.active = true
+        if (!trayCalendar.active) {
+            trayCalendar.source = Qt.resolvedUrl("shell/ShellTrayCalendar.qml")
+            trayCalendar.active = true
+        }
         const popup = window.trayCalendarWindow
         if (!popup)
             return
@@ -182,17 +203,17 @@ ApplicationWindow {
         if (popup.visible && toggle)
             popup.hide()
         else if (popup.visible || !toggle || reopen)
-            popup.open()
+            QmlCall.call(popup, "open")
     }
 
     // The app lock's screen (ShellLockScreen: a modal popup above every other one and the toasts),
     // made once the lock is on.
     Loader {
+        id: lockScreen
         active: AppLock.enabled || AppLock.locked
-        sourceComponent: ShellLockScreen {
-            visible: AppLock.locked
-        }
+        source: active ? Qt.resolvedUrl("shell/ShellLockScreen.qml") : ""
     }
+    Binding { target: lockScreen.item; property: "visible"; value: AppLock.locked }
 
     // The focused form field (settings, onboarding, dialogs) above the on-screen keyboard.
     BKeyboardFocusKeeper { window: window }
@@ -288,8 +309,7 @@ ApplicationWindow {
         if (AppController.isAndroid && !AppController.quitting) {
             close.accepted = false
             // The intro: a step back first; the shell's view: its own step (a zoomed block).
-            const intro = stage.item as IntroView
-            if (intro && intro.backStep())
+            if (window.introShown && QmlCall.callFlag(stage.item, "backStep"))
                 return
             if (window.shell && window.shell.viewStepBack())
                 return

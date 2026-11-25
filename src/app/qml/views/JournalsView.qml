@@ -41,13 +41,12 @@ FocusScope {
     /// — its PageView's; the stream — { date (the day at the top), offset (px into it) }.
     function viewState(): var {
         if (root.single)
-            return root.pageView ? root.pageView.viewState() : {}
+            return pageTraits.viewState()
         return root.streamList ? root.streamViewState() : {}
     }
     function restoreViewState(state: var): void {
         if (root.single) {
-            if (root.pageView)
-                root.pageView.restoreViewState(state)
+            pageTraits.restoreViewState(state)
         } else if (root.streamList) {
             root.restoreStreamState(state)
         }
@@ -144,7 +143,8 @@ FocusScope {
 
     readonly property bool single: AppController.routeText(route, "view") === "journal"
     readonly property string date: AppController.routeText(route, "date") !== "" ? AppController.routeText(route, "date") : DatesHelper.today
-    readonly property PageView pageView: singleLoader.item as PageView
+    /// The day shown as a page (PageView; null in the stream).
+    readonly property Item pageView: singleLoader.item as Item
     /// The parameters of a "journal" route its PageView gets.
     readonly property list<string> pageRouteKeys: ["line", "blockId", "heading", "source", "open"]
     /// The day whose editor had the caret last (side panel context, editing state).
@@ -157,46 +157,44 @@ FocusScope {
     readonly property PageController activeController: activeDay !== null ? activeDay.controller : null
     /// Vim's mode of the day written in, the command typed or the command line (the status bar's
     /// left part; docs/UI.md "Vim mode"). One day shown: its page's.
-    readonly property string statusVim: single ? (pageView !== null ? pageView.statusVim : "")
+    readonly property string statusVim: single ? pageTraits.statusVim
                                         : activeEditor !== null && activeEditor.vimSession.enabled
                                           && (activeEditor.activeFocus || activeEditor.vimSession.commandLine !== "")
                                           ? activeEditor.vimSession.status : ""
 
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
-    readonly property bool editing: single ? (pageView !== null && pageView.editing)
+    readonly property bool editing: single ? pageTraits.editing
                                            : (activeDay !== null && activeDay.editing)
     /// A touch toolbar is docked at the bottom (the shell keeps the content above it).
-    readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
+    readonly property bool toolbarDocked: single ? pageTraits.toolbarDocked
                                                  : (activeEditor !== null && activeEditor.toolbarVisible)
     /// The shell's quick capture from the bottom navigation: the editing of the day written in
     /// ends first.
     function endEditing(): void {
         if (single) {
-            if (pageView)
-                pageView.endEditing()
+            pageTraits.endEditing()
         } else if (activeEditor) {
             activeEditor.endTouchEditing()
         }
     }
     /// Back's own step before the history (the shell's Back key): the zoom of the day written in
     /// goes one level out (ContentJournalDay makes a day zoomed into the active one).
-    readonly property bool canStepBack: single ? (pageView !== null && pageView.canStepBack)
+    readonly property bool canStepBack: single ? pageTraits.canStepBack
                                                : (activeEditor !== null && activeEditor.canStepBack)
     function stepBack(): void {
         if (single) {
-            if (pageView)
-                pageView.stepBack()
+            pageTraits.stepBack()
         } else if (activeEditor) {
             activeEditor.stepBack()
         }
     }
     /// One day as a page in source mode (the stream opens a day as a page for that).
-    readonly property bool sourceMode: single && pageView !== null && pageView.sourceMode
+    readonly property bool sourceMode: single && pageTraits.sourceMode
     /// The mode of the day being written in ("document" | "outline"; "" with none): the one the
     /// "toggleNoteMode" action switches.
-    readonly property string noteMode: single ? (pageView !== null ? pageView.noteMode : "")
+    readonly property string noteMode: single ? pageTraits.noteMode
                                        : activeController !== null ? (activeController.documentMode ? "document" : "outline") : ""
-    readonly property Component sidePanel: inSidePanel ? null : single ? (pageView ? pageView.sidePanel : null) : journalsPanel
+    readonly property Component sidePanel: inSidePanel ? null : single ? pageTraits.sidePanel : journalsPanel
 
     focus: true
 
@@ -292,13 +290,13 @@ FocusScope {
             noteFind.setOriginHere(-1)
             root.findOpen = true
         }
-        const bar = findBarLoader.item as FindBar
+        const bar = findBarLoader.item
         if (!bar)
             return
         if (withReplace)
-            bar.openReplace()
+            QmlCall.call(bar, "openReplace")
         else
-            bar.focusField()
+            QmlCall.call(bar, "focusField")
     }
     function closeFind(): void {
         root.findOpen = false
@@ -320,6 +318,8 @@ FocusScope {
         // Another day has the next match: there it goes (the list scrolls, the day is written in).
         onDayRequested: (row, path) => root.activateDay(row)
     }
+    // Loaded from its file when the bar first opens (docs/PERFORMANCE.md "QML files loaded when
+    // first used"), with its properties.
     Loader {
         id: findBarLoader
         anchors.top: parent.top
@@ -328,13 +328,25 @@ FocusScope {
         active: root.findOpen && !root.single
         height: active && item !== null ? (item as Item).implicitHeight : 0
         z: 2
-        sourceComponent: FindBar {
-            find: noteFind
-            stream: streamFind
-            editor: root.activeEditor
-            placeholder: qsTr("Find in the journal")
-            onCloseRequested: root.closeFind()
+        onActiveChanged: {
+            // (Closed: its file and values go too, so that it opens anew with the current ones.)
+            if (!findBarLoader.active) {
+                findBarLoader.source = ""
+                return
+            }
+            if (findBarLoader.item !== null)
+                return
+            root._findBarValues = { find: noteFind, stream: streamFind, editor: root.activeEditor,
+                                    placeholder: qsTr("Find in the journal") }
+            findBarLoader.setSource(root._findBarSource, root._findBarValues)
         }
+    }
+    readonly property url _findBarSource: Qt.resolvedUrl("../editor/FindBar.qml")
+    property var _findBarValues: ({})
+    Binding { target: findBarLoader.item; property: "editor"; value: root.activeEditor; restoreMode: Binding.RestoreNone }
+    Connections {
+        target: findBarLoader.item
+        function onCloseRequested(): void { root.closeFind() }
     }
     Shortcut {
         sequence: ShortcutMap.sequences["page.find"] || ""
@@ -348,19 +360,43 @@ FocusScope {
     }
 
     // ---- One day ---------------------------------------------------------------------------------
+    // (PageView loaded from its file when a day is first shown as a page, not named here: a QML
+    // file named in another one is loaded with it — docs/PERFORMANCE.md "QML files loaded when
+    // first used". Its optional members through ViewTraits, as the shell reads a view's.)
     Loader {
         id: singleLoader
         anchors.fill: parent
         active: root.single
         focus: root.single
-        sourceComponent: PageView {
-            inSidePanel: root.inSidePanel
-            paneActive: root.paneActive
-            focus: true
-            route: AppController.routeWith({ view: "page", path: AppController.routeText(root.route, "path") !== ""
-                                                                  ? AppController.routeText(root.route, "path") : tools.journalPathFor(root.date) },
-                                            root.route, root.pageRouteKeys)
+        onActiveChanged: root.loadSingle()
+        Component.onCompleted: root.loadSingle()
+        onLoaded: pageTraits.applyPendingState()
+    }
+    /// The route of the day shown as a page.
+    readonly property var singleRoute: AppController.routeWith({ view: "page", path: AppController.routeText(root.route, "path") !== ""
+                                                                     ? AppController.routeText(root.route, "path") : tools.journalPathFor(root.date) },
+                                                               root.route, root.pageRouteKeys)
+    readonly property url _pageSource: Qt.resolvedUrl("PageView.qml")
+    readonly property url _panelSource: Qt.resolvedUrl("../content/ContentSidePanel.qml")
+    property var _panelValues: ({})
+    property var _pageValues: ({})
+    function loadSingle(): void {
+        // (Back to the stream: the file and its first values go, a day shown again starts anew.)
+        if (!singleLoader.active) {
+            singleLoader.source = ""
+            return
         }
+        if (singleLoader.item !== null)
+            return
+        root._pageValues = { route: root.singleRoute, inSidePanel: root.inSidePanel, paneActive: root.paneActive, focus: true }
+        singleLoader.setSource(root._pageSource, root._pageValues)
+    }
+    Binding { target: singleLoader.item; property: "route"; value: root.singleRoute; restoreMode: Binding.RestoreNone }
+    Binding { target: singleLoader.item; property: "inSidePanel"; value: root.inSidePanel; restoreMode: Binding.RestoreNone }
+    Binding { target: singleLoader.item; property: "paneActive"; value: root.paneActive; restoreMode: Binding.RestoreNone }
+    ViewTraits {
+        id: pageTraits
+        view: singleLoader.item
     }
 
     // ---- The journal list ------------------------------------------------------------------------
@@ -741,68 +777,43 @@ FocusScope {
 
             // Dev: the journal stream's data-safety self-test (tests/app/content, ctest
             // tst_content_journals_qml).
-            Loader {
-                active: DevTools.editorScript === "journals-selftest"
-                sourceComponent: ContentJournalsSelfTest {
-                    list: list
-                    days: days
-                    stream: stream
-                }
-            }
             // Dev: selecting blocks across several days (ctest tst_content_journals_span_qml*).
+            // Both loaded from their files (never named here: a file named is loaded with this one,
+            // in every run), only in builds with the developer QML (BRULION_DEV_QML).
             Loader {
-                active: DevTools.editorScript === "journals-span-selftest"
-                sourceComponent: ContentJournalsSpanSelfTest {
-                    list: list
-                    days: days
-                    stream: stream
+                id: selfTestLoader
+                readonly property bool span: DevTools.editorScript === "journals-span-selftest"
+                active: DevTools.editorScript === "journals-selftest" || span
+                Component.onCompleted: {
+                    if (!selfTestLoader.active)
+                        return
+                    journals.selfTestValues = { list: list, days: days, stream: stream }
+                    journals.selfTestSource = selfTestLoader.span ? Qt.resolvedUrl("../content/ContentJournalsSpanSelfTest.qml")
+                                                                  : Qt.resolvedUrl("../content/ContentJournalsSelfTest.qml")
+                    selfTestLoader.setSource(journals.selfTestSource, journals.selfTestValues)
                 }
             }
+            // (setSource()'s arguments read from properties: compiled QML wants them so.)
+            property url selfTestSource
+            property var selfTestValues: ({})
 
-            // "Go to day": made the first time it opens (docs/PERFORMANCE.md "L10": its month grid is
-            // not on the first screen).
-            property BDialog jumpDialogPopup: null
+            // "Go to day": loaded from its file the first time it opens (docs/PERFORMANCE.md "L10": its
+            // month grid is not on the first screen; "QML files loaded when first used").
+            Loader { id: jumpLoader }
             function openJumpDialog(): void {
-                if (!journals.jumpDialogPopup)
-                    journals.jumpDialogPopup = jumpDialogComponent.createObject(journals) as BDialog
-                journals.jumpDialogPopup.open()
+                if (jumpLoader.item === null)
+                    jumpLoader.source = Qt.resolvedUrl("JournalsJumpDialog.qml")
+                const dialog = jumpLoader.item as T.Popup
+                if (dialog)
+                    dialog.open()
             }
-            Component {
-                id: jumpDialogComponent
-                BDialog {
-                    id: jumpDialog
-                    parent: T.Overlay.overlay
-                    title: qsTr("Go to day")
-                    iconName: "calendar-days"
-                    showFooter: false
-                    preferredWidth: Theme.dialogWidthSm
-
-                    // The days with a journal: only while the dialog is open, following the names
-                    // (journals created or deleted; read for real: a bare `void Workspace.namesRevision`
-                    // is compiled away with the dependency).
-                    readonly property var marks: jumpDialog.visible && Workspace.namesRevision >= 0
-                                                 ? Workspace.journalMarks(jumpPicker.cells) : ({})
-
-                    BDatePicker {
-                        id: jumpPicker
-                        Layout.fillWidth: true
-                        selectedDate: DatesHelper.today
-                        marks: jumpDialog.marks
-                        onPicked: (value) => {
-                            const d = "" + Js.slice(value, 0, 10)
-                            jumpDialog.close()
-                            if (days.exactRowOfDate(d) >= 0)
-                                root.scrollToDate(d)
-                            else
-                                AppController.navigate({ view: "journal", date: d })
-                        }
-                    }
-                    BText {
-                        Layout.fillWidth: true
-                        text: qsTr("Days with a dot have a journal. Type a date like “Tuesday” or “October 12”.")
-                        variant: "muted"
-                        wrapMode: Text.Wrap
-                    }
+            Connections {
+                target: jumpLoader.item
+                function onDayPicked(day: string): void {
+                    if (days.exactRowOfDate(day) >= 0)
+                        root.scrollToDate(day)
+                    else
+                        AppController.navigate({ view: "journal", date: day })
                 }
             }
         }
@@ -810,10 +821,18 @@ FocusScope {
 
     Component {
         id: journalsPanel
-        ContentSidePanel {
-            path: root.activeDay ? root.activeDay.path : tools.journalPathFor(DatesHelper.today)
-            controller: root.activeController
-            editor: root.activeEditor
+        // (ContentSidePanel, loaded from its file when the panel is shown: docs/PERFORMANCE.md "QML
+        // files loaded when first used".)
+        Loader {
+            id: journalsPanelLoader
+            readonly property string path: root.activeDay ? root.activeDay.path : tools.journalPathFor(DatesHelper.today)
+            Component.onCompleted: {
+                root._panelValues = { path: journalsPanelLoader.path, controller: root.activeController, editor: root.activeEditor }
+                journalsPanelLoader.setSource(root._panelSource, root._panelValues)
+            }
+            Binding { target: journalsPanelLoader.item; property: "path"; value: journalsPanelLoader.path; restoreMode: Binding.RestoreNone }
+            Binding { target: journalsPanelLoader.item; property: "controller"; value: root.activeController; restoreMode: Binding.RestoreNone }
+            Binding { target: journalsPanelLoader.item; property: "editor"; value: root.activeEditor; restoreMode: Binding.RestoreNone }
         }
     }
 }
