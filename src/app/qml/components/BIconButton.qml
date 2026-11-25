@@ -64,7 +64,8 @@ T.Button {
 
     contentItem: Item {
         BIcon {
-            anchors.centerIn: parent
+            x: Math.round(parent.width / 2) - Math.round(width / 2)
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             name: control.iconName
             size: control.size === "small" ? Theme.iconSizeSm : control.size === "large" ? Theme.iconSizeLg : Theme.iconSize
             color: control.iconColor
@@ -95,7 +96,9 @@ T.Button {
 
         // The state tint of an outlined button (its own colour is the fixed elevated one).
         Rectangle {
-            anchors.fill: parent
+            // (Its size bound, not anchored: no QQuickAnchors object for each of hundreds.)
+            width: parent.width
+            height: parent.height
             radius: Theme.radius
             visible: control.variant === "secondary" && (control.checked || control.down || control.hovered)
             color: control.checked ? Theme.bgSelected : control.down ? Theme.bgPressed : Theme.bgHover

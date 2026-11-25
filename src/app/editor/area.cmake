@@ -11,6 +11,31 @@ qt_target_qml_sources(brulion
     QML_FILES
         qml/editor/BlockEditor.qml
         qml/editor/BlockDelegate.qml
+        qml/editor/BlockPartBullet.qml
+        qml/editor/BlockPartCalc.qml
+        qml/editor/BlockPartCallout.qml
+        qml/editor/BlockPartChart.qml
+        qml/editor/BlockPartCode.qml
+        qml/editor/BlockPartDateButton.qml
+        qml/editor/BlockPartEmbeds.qml
+        qml/editor/BlockPartFlash.qml
+        qml/editor/BlockPartFoldArrow.qml
+        qml/editor/BlockPartFrontmatter.qml
+        qml/editor/BlockPartMath.qml
+        qml/editor/BlockPartMermaid.qml
+        qml/editor/BlockPartNumber.qml
+        qml/editor/BlockPartQuery.qml
+        qml/editor/BlockPartRule.qml
+        qml/editor/BlockPartSelectionBand.qml
+        qml/editor/BlockPartTable.qml
+        qml/editor/BlockPartTagTint.qml
+        qml/editor/BlockPartTaskBox.qml
+        qml/editor/BlockPartTransclusions.qml
+        qml/editor/BlockPartView.qml
+        qml/editor/BlockMenuTap.qml
+        qml/editor/BlockSelectionGrip.qml
+        qml/editor/BlockPartGripStart.qml
+        qml/editor/BlockPartGripEnd.qml
         qml/editor/BlockMenu.qml
         qml/editor/BlockText.qml
         qml/editor/EditorToastAction.qml

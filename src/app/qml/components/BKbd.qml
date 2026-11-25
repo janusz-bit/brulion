@@ -45,8 +45,8 @@ Row {
 
             Text {
                 id: keyLabel
-                anchors.centerIn: parent
-                anchors.verticalCenterOffset: kbd.inverse ? 0 : -0.5
+                x: Math.round(parent.width / 2) - Math.round(width / 2)
+                y: Math.round(parent.height / 2) - Math.round(height / 2) + (kbd.inverse ? 0 : -0.5)
                 textFormat: Text.PlainText
                 text: cap.modelData
                 color: kbd.inverse ? Theme.fgInverse : Theme.fgMuted

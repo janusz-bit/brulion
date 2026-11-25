@@ -52,11 +52,11 @@ T.AbstractButton {
 
         Row {
             id: row
-            anchors.verticalCenter: parent.verticalCenter
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             spacing: 6
             Text {
                 id: title
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 textFormat: Text.PlainText
                 text: Js.toUpperCase(control.text)
                 font.family: Theme.fontUi
@@ -66,7 +66,7 @@ T.AbstractButton {
                 color: control.hovered ? Theme.fg : Theme.fgMuted
             }
             Text {
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 visible: control.count >= 0
                 textFormat: Text.PlainText
                 text: control.count
@@ -75,7 +75,7 @@ T.AbstractButton {
                 color: Theme.fgFaint
             }
             BIcon {
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 name: control.collapsible ? "chevron-down" : ""
                 size: 12
                 color: Theme.fgFaint

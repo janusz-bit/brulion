@@ -402,106 +402,132 @@ T.ItemDelegate {
                     return total + line
                 }
 
-                TaskChip {
-                    visible: control.statusLabel !== ""
-                    variant: control.status === "doing" ? "reminder" : "neutral"
-                    iconName: control.status === "doing" ? "clock" : control.status === "deferred" ? "hourglass" : "x"
-                    text: control.statusLabel
+                ChipSlot {
+                    active: control.statusLabel !== ""
+                    sourceComponent: TaskChip {
+                        variant: control.status === "doing" ? "reminder" : "neutral"
+                        iconName: control.status === "doing" ? "clock" : control.status === "deferred" ? "hourglass" : "x"
+                        text: control.statusLabel
+                    }
                 }
-                TaskChip {
-                    id: addDateChip
+                ChipSlot {
                     objectName: "taskAddDateChip"
-                    visible: !control.closed && control.due === "" && control.scheduled === ""
-                    variant: "neutral"
-                    iconName: "calendar-plus"
-                    interactive: true
-                    text: qsTr("Add date")
-                    opacity: hovered || visualFocus || control.hovered || Theme.touchUi ? 1 : 0.6
-                    onClicked: control.dateMenuRequested(addDateChip)
+                    active: !control.closed && control.due === "" && control.scheduled === ""
+                    sourceComponent: TaskChip {
+                        id: addDateChip
+                        variant: "neutral"
+                        iconName: "calendar-plus"
+                        interactive: true
+                        text: qsTr("Add date")
+                        opacity: hovered || visualFocus || control.hovered || Theme.touchUi ? 1 : 0.6
+                        onClicked: control.dateMenuRequested(addDateChip)
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskChip_due" // (its token menu: openMenuAt())
-                    visible: control.dueLabel !== ""
-                    variant: control.closed ? "done" : control.overdue ? "overdue" : "due"
-                    text: control.overdue ? qsTr("%1, overdue").arg(control.dueLabel) : control.dueLabel
+                    active: control.dueLabel !== ""
+                    sourceComponent: TaskChip {
+                        variant: control.closed ? "done" : control.overdue ? "overdue" : "due"
+                        text: control.overdue ? qsTr("%1, overdue").arg(control.dueLabel) : control.dueLabel
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskChip_scheduled" // (its token menu: openMenuAt())
-                    visible: control.scheduledLabel !== ""
-                    variant: control.closed ? "done" : "scheduled"
-                    text: control.scheduledLabel
+                    active: control.scheduledLabel !== ""
+                    sourceComponent: TaskChip {
+                        variant: control.closed ? "done" : "scheduled"
+                        text: control.scheduledLabel
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskChip_start" // (its token menu: openMenuAt())
-                    visible: control.startLabel !== ""
-                    variant: "neutral"
-                    iconName: "calendar-clock"
-                    text: qsTr("from %1").arg(control.startLabel)
+                    active: control.startLabel !== ""
+                    sourceComponent: TaskChip {
+                        variant: "neutral"
+                        iconName: "calendar-clock"
+                        text: qsTr("from %1").arg(control.startLabel)
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskChip_reminder" // (its token menu: openMenuAt())
-                    visible: control.reminderLabel !== "" && !control.closed
-                    variant: control.reminderAlarm ? "alarm" : "reminder"
-                    text: control.reminderLabel
+                    active: control.reminderLabel !== "" && !control.closed
+                    sourceComponent: TaskChip {
+                        variant: control.reminderAlarm ? "alarm" : "reminder"
+                        text: control.reminderLabel
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskChip_recurrence" // (its token menu: openMenuAt())
-                    visible: control.recurrenceLabel !== ""
-                    variant: "recurrence"
-                    text: control.recurrenceLabel
+                    active: control.recurrenceLabel !== ""
+                    sourceComponent: TaskChip {
+                        variant: "recurrence"
+                        text: control.recurrenceLabel
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskBlockedChip"
-                    visible: control.blocked && !control.closed
-                    variant: "overdue"
-                    iconName: "lock"
-                    interactive: true
-                    outlined: false
-                    text: qsTr("Waits for: %1").arg(control.blockedBy)
-                    width: Math.min(implicitWidth, control.availableWidth - 40)
-                    onClicked: control.linkActivated("taskdep:" + control.blockedById)
+                    active: control.blocked && !control.closed
+                    sourceComponent: TaskChip {
+                        variant: "overdue"
+                        iconName: "lock"
+                        interactive: true
+                        outlined: false
+                        text: qsTr("Waits for: %1").arg(control.blockedBy)
+                        width: Math.min(implicitWidth, control.availableWidth - 40)
+                        onClicked: control.linkActivated("taskdep:" + control.blockedById)
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskDependencyProblemChip"
-                    visible: control.dependencyProblem !== ""
-                    variant: "neutral"
-                    iconName: "triangle-alert"
-                    text: control.dependencyProblem === "cycle" ? qsTr("Dependency cycle") : qsTr("Missing dependency")
+                    active: control.dependencyProblem !== ""
+                    sourceComponent: TaskChip {
+                        variant: "neutral"
+                        iconName: "triangle-alert"
+                        text: control.dependencyProblem === "cycle" ? qsTr("Dependency cycle") : qsTr("Missing dependency")
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskBlockingChip"
-                    visible: control.blockingCount > 0 && !control.closed
-                    variant: "neutral"
-                    iconName: "link"
-                    text: qsTr("Blocks %n task(s)", "", control.blockingCount)
+                    active: control.blockingCount > 0 && !control.closed
+                    sourceComponent: TaskChip {
+                        variant: "neutral"
+                        iconName: "link"
+                        text: qsTr("Blocks %n task(s)", "", control.blockingCount)
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskProgressChip"
-                    // With subtasks listed under it: the button that folds them.
-                    readonly property bool folds: control.subtaskCount > 0
-                    visible: control.progress !== "" || folds
-                    variant: control.progressComplete ? "done" : "neutral"
-                    iconName: !folds ? "list-checks" : control.folded ? "chevron-right" : "chevron-down"
-                    text: control.progress !== "" ? control.progress : qsTr("%n subtask(s)", "", control.subtaskCount)
-                    interactive: folds
-                    outlined: false
-                    Accessible.name: !folds ? text
-                                     : control.folded ? qsTr("Show subtasks, %1").arg(text) : qsTr("Hide subtasks, %1").arg(text)
-                    onClicked: control.foldToggled()
+                    active: control.progress !== "" || control.subtaskCount > 0
+                    sourceComponent: TaskChip {
+                        // With subtasks listed under it: the button that folds them.
+                        readonly property bool folds: control.subtaskCount > 0
+                        variant: control.progressComplete ? "done" : "neutral"
+                        iconName: !folds ? "list-checks" : control.folded ? "chevron-right" : "chevron-down"
+                        text: control.progress !== "" ? control.progress : qsTr("%n subtask(s)", "", control.subtaskCount)
+                        interactive: folds
+                        outlined: false
+                        Accessible.name: !folds ? text
+                                         : control.folded ? qsTr("Show subtasks, %1").arg(text) : qsTr("Hide subtasks, %1").arg(text)
+                        onClicked: control.foldToggled()
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskTimeChip"
-                    visible: control.timeLabel !== ""
-                    variant: control.clockRunning ? "reminder" : "neutral"
-                    iconName: "clock"
-                    text: control.timeLabel
+                    active: control.timeLabel !== ""
+                    sourceComponent: TaskChip {
+                        variant: control.clockRunning ? "reminder" : "neutral"
+                        iconName: "clock"
+                        text: control.timeLabel
+                    }
                 }
-                TaskChip {
+                ChipSlot {
                     objectName: "taskChip_priority" // (its token menu: openMenuAt())
-                    visible: control.priorityLabel !== ""
-                    variant: control.priority >= 4 && !control.closed ? "overdue" : "neutral"
-                    iconName: control.priority >= 3 ? "arrow-up" : "arrow-down"
-                    text: control.priorityLabel
+                    active: control.priorityLabel !== ""
+                    sourceComponent: TaskChip {
+                        variant: control.priority >= 4 && !control.closed ? "overdue" : "neutral"
+                        iconName: control.priority >= 3 ? "arrow-up" : "arrow-down"
+                        text: control.priorityLabel
+                    }
                 }
                 Text {
                     visible: control.depth === 0 // a subtask's page is its task's, shown above
@@ -523,6 +549,14 @@ T.ItemDelegate {
     /// A chip of the row.
     component TaskChip: BChip {
         size: "small"
+    }
+    /// Where a chip of the row goes: the chip exists only while the task has what it shows (a row
+    /// has 13 possible chips and shows two or three: made all, they were most of the row's objects
+    /// and bindings, docs/PERFORMANCE.md). The slot has the chip's size and its objectName (what
+    /// openMenuAt() and openDateDialogAt() find under the pointer); hidden while empty, so the Flow
+    /// and its height below skip it.
+    component ChipSlot: Loader {
+        visible: active
     }
 
     background: Rectangle {

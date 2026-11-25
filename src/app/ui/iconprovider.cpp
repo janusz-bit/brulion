@@ -3,6 +3,7 @@
 #include <QImageReader>
 #include <QMutexLocker>
 #include <QPainter>
+#include <QQmlComponent>
 #include <QQmlEngine>
 #include <QRgba64>
 
@@ -118,14 +119,24 @@ QImage IconImageProvider::requestImage(const QString &id, QSize *size, const QSi
 
 Icons::Icons(QObject *parent) : QObject(parent) { }
 
-Icons *Icons::forEngine(QQmlEngine *engine)
+void Icons::addProvider(QQmlEngine *engine)
 {
     if (engine && !engine->imageProvider(IconImageProvider::providerId()))
         engine->addImageProvider(IconImageProvider::providerId(), new IconImageProvider);
+}
+
+Icons *Icons::forEngine(QQmlEngine *engine)
+{
+    addProvider(engine);
     return new Icons;
 }
 
 QUrl Icons::source(const QString &name, const QColor &color) const
+{
+    return sourceUrl(name, color);
+}
+
+QUrl Icons::sourceUrl(const QString &name, const QColor &color)
 {
     if (!IconImageProvider::validName(name))
         return {};
@@ -134,3 +145,201 @@ QUrl Icons::source(const QString &name, const QColor &color) const
 }
 
 } // namespace brulion::ui
+
+// ---- BIcon ----------------------------------------------------------------------------------------
+
+namespace {
+
+/// What every icon of an engine shares: the component of Qt Quick's Image, the theme singleton
+/// (its iconSize and fg: the defaults).
+struct IconEngineData {
+    QQmlComponent *image = nullptr;
+    QPointer<QObject> theme;
+    bool themeLooked = false;
+};
+
+IconEngineData &engineData(QQmlEngine *engine)
+{
+    static QHash<QQmlEngine *, IconEngineData> data;
+    auto it = data.find(engine);
+    if (it != data.end())
+        return *it;
+    QObject::connect(engine, &QObject::destroyed, [key = engine] { data.remove(key); });
+    IconEngineData d;
+    brulion::ui::Icons::addProvider(engine);
+    d.image = new QQmlComponent(engine, engine);
+    d.image->setData("import QtQuick\nImage {}\n", QUrl(u"qrc:/brulion/BIconImage.qml"_s));
+    if (d.image->isError())
+        qWarning("BIcon: %s", qPrintable(d.image->errorString()));
+    return *data.insert(engine, d);
+}
+
+QObject *themeOf(QQmlEngine *engine)
+{
+    IconEngineData &d = engineData(engine);
+    if (!d.themeLooked) {
+        d.themeLooked = true;
+        d.theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+    }
+    return d.theme;
+}
+
+} // namespace
+
+using brulion::ui::Icons;
+
+BIcon::BIcon(QQuickItem *parent) : QQuickItem(parent) { }
+
+void BIcon::setName(const QString &name)
+{
+    if (name == m_name)
+        return;
+    m_name = name;
+    if (isComponentComplete()) {
+        updateImplicitSize();
+        updateImage();
+    }
+    Q_EMIT nameChanged();
+}
+
+void BIcon::setIconSize(qreal size)
+{
+    m_sizeSet = true;
+    if (qFuzzyCompare(size, m_size))
+        return;
+    m_size = size;
+    if (isComponentComplete()) {
+        updateImplicitSize();
+        updateImage();
+    }
+    Q_EMIT sizeChanged();
+}
+
+void BIcon::setColor(const QColor &color)
+{
+    m_colorSet = true;
+    if (color == m_color)
+        return;
+    m_color = color;
+    if (isComponentComplete())
+        updateImage();
+    Q_EMIT colorChanged();
+}
+
+void BIcon::setCollapseWhenEmpty(bool collapse)
+{
+    if (collapse == m_collapseWhenEmpty)
+        return;
+    m_collapseWhenEmpty = collapse;
+    if (isComponentComplete())
+        updateImplicitSize();
+    Q_EMIT collapseWhenEmptyChanged();
+}
+
+void BIcon::componentComplete()
+{
+    QQuickItem::componentComplete();
+    if (!m_sizeSet || !m_colorSet) {
+        if (QQmlEngine *engine = qmlEngine(this))
+            m_theme = themeOf(engine);
+        if (m_theme) {
+            const QMetaObject *mo = m_theme->metaObject();
+            const int slot = staticMetaObject.indexOfSlot("followTheme()");
+            for (const char *name : {"iconSize", "fg"}) {
+                if ((name[0] == 'i' && m_sizeSet) || (name[0] == 'f' && m_colorSet))
+                    continue;
+                const QMetaProperty p = mo->property(mo->indexOfProperty(name));
+                if (p.hasNotifySignal())
+                    QMetaObject::connect(m_theme, p.notifySignalIndex(), this, slot);
+            }
+            const bool sizeSet = m_sizeSet, colorSet = m_colorSet;
+            followTheme();
+            m_sizeSet = sizeSet; // (followTheme() sets them through the setters)
+            m_colorSet = colorSet;
+        }
+    }
+    updateImplicitSize();
+    updateImage();
+}
+
+void BIcon::followTheme()
+{
+    if (!m_theme)
+        return;
+    const bool sizeSet = m_sizeSet, colorSet = m_colorSet;
+    if (!sizeSet)
+        setIconSize(m_theme->property("iconSize").toReal());
+    if (!colorSet)
+        setColor(m_theme->property("fg").value<QColor>());
+    m_sizeSet = sizeSet;
+    m_colorSet = colorSet;
+}
+
+void BIcon::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
+{
+    QQuickItem::geometryChange(newGeometry, oldGeometry);
+    if (newGeometry.size() == oldGeometry.size())
+        return;
+    // An explicit width or height: the implicit size follows it (BIcon.qml's `implicitWidth: width`).
+    // Without one the size is the implicit size already.
+    setImplicitSize(newGeometry.width(), newGeometry.height());
+    if (m_image) {
+        m_image->setSize(newGeometry.size());
+        updateFillMode();
+    }
+}
+
+void BIcon::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    QQuickItem::itemChange(change, value);
+    if (change == ItemVisibleHasChanged && value.boolValue && !m_image && isComponentComplete())
+        updateImage();
+}
+
+void BIcon::updateImplicitSize()
+{
+    const qreal side = m_name.isEmpty() && m_collapseWhenEmpty ? 0 : m_size;
+    // (A width that does not follow is an explicit one, which the implicit size keeps following.)
+    setImplicitSize(side, side);
+    if (width() != side || height() != side)
+        setImplicitSize(width(), height());
+}
+
+void BIcon::updateImage()
+{
+    if (!m_image) {
+        QQmlEngine *engine = qmlEngine(this);
+        if (m_name.isEmpty() || !engine || !isVisible())
+            return;
+        QQmlComponent *component = engineData(engine).image;
+        QObject *object = component->beginCreate(qmlContext(this) ? qmlContext(this) : engine->rootContext());
+        m_image = qobject_cast<QQuickItem *>(object);
+        if (!m_image) {
+            delete object;
+            return;
+        }
+        m_image->setParent(this); // (deleted with the icon: a parent item does not delete its children)
+        m_image->setParentItem(this);
+        m_image->setSize(QQuickItem::size());
+        m_image->setProperty("sourceSize", QSizeF(m_size, m_size).toSize());
+        updateFillMode();
+        m_image->setProperty("source", Icons::sourceUrl(m_name, m_color));
+        component->completeCreate();
+        return;
+    }
+    m_image->setProperty("sourceSize", QSizeF(m_size, m_size).toSize());
+    updateFillMode();
+    m_image->setProperty("source", Icons::sourceUrl(m_name, m_color));
+}
+
+void BIcon::updateFillMode()
+{
+    // (Image.PreserveAspectFit 1, Image.Pad 6: QQuickImage::FillMode.)
+    constexpr int PreserveAspectFit = 1;
+    constexpr int Pad = 6;
+    if (!m_image)
+        return;
+    const int side = qRound(m_size);
+    m_image->setProperty("fillMode", width() < side || height() < side ? PreserveAspectFit : Pad);
+}
+

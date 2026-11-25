@@ -91,14 +91,15 @@ T.ItemDelegate {
 
         BIcon {
             id: icon
-            anchors.verticalCenter: parent.verticalCenter
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             name: control.iconEmoji !== "" ? "" : control.iconName
             collapseWhenEmpty: control.iconEmoji === ""
             size: Theme.iconSize
             color: control.iconColor
             // A page's emoji (made only where there is one).
             Loader {
-                anchors.centerIn: parent
+                x: Math.round(parent.width / 2) - Math.round(width / 2)
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 active: control.iconEmoji !== ""
                 sourceComponent: Text {
                     text: control.iconEmoji
@@ -164,13 +165,17 @@ T.ItemDelegate {
             /// What the slot takes of the row (with the gap before it).
             readonly property real room: width > 0 ? width + 8 : 0
 
-            BBadge {
+            // (Made for an item with a count only.)
+            Loader {
                 id: countBadge
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                visible: control.count > 0 && !control.trailing
-                count: control.count
-                variant: control.selected ? "accent" : "neutral"
+                active: control.count > 0 && !control.trailing
+                visible: active
+                sourceComponent: BBadge {
+                    count: control.count
+                    variant: control.selected ? "accent" : "neutral"
+                }
             }
         }
     }

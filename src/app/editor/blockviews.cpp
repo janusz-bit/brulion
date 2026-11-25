@@ -5,6 +5,8 @@
 #include <QFontInfo>
 #include <QFontMetricsF>
 #include <QLocale>
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QRegularExpression>
 #include <QTextBlock>
 #include <QTextLayout>
@@ -18,7 +20,32 @@ namespace brulion::editor {
 
 // ---- BlockViews -------------------------------------------------------------------------------
 
+BlockParts::BlockParts(QQmlEngine *engine, QObject *parent) : QObject(parent), m_engine(engine) { }
+
+QQmlComponent *BlockParts::part(const QString &name)
+{
+    if (QQmlComponent *c = m_parts.value(name))
+        return c;
+    if (!m_engine)
+        return nullptr;
+    auto *c = new QQmlComponent(m_engine, QStringLiteral("Brulion"), QStringLiteral("BlockPart") + name, this);
+    if (c->isError()) {
+        qWarning("BlockParts: %s", qPrintable(c->errorString()));
+        delete c;
+        return nullptr;
+    }
+    m_parts.insert(name, c);
+    return c;
+}
+
 BlockViews::BlockViews(QObject *parent) : QObject(parent) { }
+
+QQuickItem *BlockViews::ancestor(QQuickItem *item, int levels) const
+{
+    for (int i = 0; item && i < levels; ++i)
+        item = item->parentItem();
+    return item;
+}
 
 namespace {
 
