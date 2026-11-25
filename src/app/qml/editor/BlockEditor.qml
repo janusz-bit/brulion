@@ -306,6 +306,36 @@ FocusScope {
             editorItem: editor
         }
     }
+    // The views of the blocks that are not text (BlockDelegate's `content` Loader): one component
+    // each per editor, not per block — a component declared in the delegate is an object of every
+    // row, nine of them in each (docs/PERFORMANCE.md). The view's block is its Loader's parent.
+    readonly property Component codeView: Component {
+        CodeBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component calcView: Component {
+        CalcBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component queryView: Component {
+        QueryBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component mathView: Component {
+        MathBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component mermaidView: Component {
+        MermaidBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component chartView: Component {
+        ChartBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component viewView: Component {
+        ViewBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component tableView: Component {
+        TableBlockView { blockItem: parent ? parent.parent : null }
+    }
+    readonly property Component frontmatterView: Component {
+        FrontmatterView { blockItem: parent ? parent.parent : null }
+    }
     /// `ctl` is still this editor's controller, on the page `path`.
     function samePage(ctl: PageController, path: string): bool {
         return controller === ctl && ctl !== null && ctl.path === path

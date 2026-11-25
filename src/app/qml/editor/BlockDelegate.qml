@@ -167,13 +167,13 @@ Item {
                                      && view !== "rule" && view !== "frontmatter"
     readonly property real contentHeight: noTextLine ? 0 : textView ? textContent.height : content.height
     readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !onlyEmbeds ? Theme.space2 : 0)
-    readonly property real transclusionsY: (hasEmbeds ? embedsY + embedView.height : topPad + contentHeight)
+    readonly property real transclusionsY: (hasEmbeds ? embedsY + embedLoader.height : topPad + contentHeight)
                                            + (contentHeight > 0 || hasEmbeds ? Theme.space2 : 0)
-    readonly property real bodyBottom: hasTransclusions ? transclusionsY + transclusionView.height
-                                     : hasEmbeds ? embedsY + embedView.height : topPad + contentHeight
+    readonly property real bodyBottom: hasTransclusions ? transclusionsY + transclusionLoader.height
+                                     : hasEmbeds ? embedsY + embedLoader.height : topPad + contentHeight
 
     /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
-    readonly property real firstLineCenter: topPad + (onlyTransclusions ? transclusionView.firstLineCenter
+    readonly property real firstLineCenter: topPad + (onlyTransclusions && transclusionView !== null ? transclusionView.firstLineCenter
                                                       : textView ? textContent.firstLineCenter
                                                       : contentFirstLineCenter)
 
@@ -193,8 +193,9 @@ Item {
 
     /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
     readonly property Item contentItem: textView ? textContent : content.item as Item
-    readonly property alias transclusionView: transclusionView
-    readonly property alias embedView: embedView
+    /// The views of the block's embedded blocks and of its pictures and files (null until it has some).
+    readonly property TransclusionView transclusionView: transclusionLoader.item as TransclusionView
+    readonly property EmbedView embedView: embedLoader.item as EmbedView
 
     /// Give the keyboard to the block content (tables: the first cell).
     function focusContent(): void {
@@ -582,55 +583,68 @@ Item {
         visible: !block.noTextLine
         sourceComponent: {
             switch (block.view) {
-            case "code": return codeComponent
-            case "calc": return calcComponent
-            case "query": return queryComponent
-            case "math": return mathComponent
-            case "mermaid": return mermaidComponent
-            case "chart": return chartComponent
-            case "view": return viewComponent
-            case "table": return tableComponent
+            case "code": return block.editor.codeView
+            case "calc": return block.editor.calcView
+            case "query": return block.editor.queryView
+            case "math": return block.editor.mathView
+            case "mermaid": return block.editor.mermaidView
+            case "chart": return block.editor.chartView
+            case "view": return block.editor.viewView
+            case "table": return block.editor.tableView
             case "quote":
             case "callout": return calloutComponent
             case "rule": return ruleComponent
-            case "frontmatter": return frontmatterComponent
+            case "frontmatter": return block.editor.frontmatterView
             default: return null
             }
         }
     }
 
-    EmbedView {
-        id: embedView
+    // A block's pictures and files, and its embedded blocks: made the first time it has some
+    // (most blocks have neither: the views with their Repeaters were a tenth of a block's objects)
+    // and kept, also while a menu of theirs is still open when they go.
+    property bool embedsMade: hasEmbeds
+    onHasEmbedsChanged: if (hasEmbeds) embedsMade = true
+    property bool transclusionsMade: hasTransclusions
+    onHasTransclusionsChanged: if (hasTransclusions) transclusionsMade = true
+    Loader {
+        id: embedLoader
+        active: block.embedsMade
         visible: block.hasEmbeds
         x: block.contentLeft
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
-        embeds: block.hasEmbeds ? block.embeds : block.noItems
-        controller: block.controller
-        editor: block.editor
-        readOnly: block.editor.readOnly
-        onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
-        onDrawingClicked: (path) => block.controller.openDrawing(path)
-        onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)
-        onBackgroundClicked: block.editOnTap(-1)
-        onBackgroundLongPressed: block.editor.longPressText(block.index)
-        onShowWeb: (url) => block.controller.showWebPicture(url)
-        onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
-        onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
-        onWebOpen: (picture) => block.editor.openWebPictureViewer(block.index, picture)
-        onViewToast: (text, kind, undo, model) => block.editor.notice(text, kind, undo ? block.editor.viewUndoAction(model) : null)
-        onTranscribeRequested: (path, target) => block.editor.transcribeRecording(block.index, path, target)
-        onCopyRequested: (text) => block.editor.copyPlainText(text)
+        sourceComponent: EmbedView {
+            embeds: block.hasEmbeds ? block.embeds : block.noItems
+            controller: block.controller
+            editor: block.editor
+            readOnly: block.editor.readOnly
+            onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
+            onDrawingClicked: (path) => block.controller.openDrawing(path)
+            onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)
+            onBackgroundClicked: block.editOnTap(-1)
+            onBackgroundLongPressed: block.editor.longPressText(block.index)
+            onShowWeb: (url) => block.controller.showWebPicture(url)
+            onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
+            onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
+            onWebOpen: (picture) => block.editor.openWebPictureViewer(block.index, picture)
+            onViewToast: (text, kind, undo, model) => block.editor.notice(text, kind, undo ? block.editor.viewUndoAction(model) : null)
+            onTranscribeRequested: (path, target) => block.editor.transcribeRecording(block.index, path, target)
+            onCopyRequested: (text) => block.editor.copyPlainText(text)
+        }
     }
 
-    TransclusionView {
-        id: transclusionView
+    Loader {
+        id: transclusionLoader
+        active: block.transclusionsMade
         visible: block.hasTransclusions
         x: block.contentLeft
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
-        blockItem: block
-        transclusions: block.hasTransclusions ? block.transclusions : block.noItems
+        sourceComponent: TransclusionView {
+            blockItem: block
+            transclusions: block.hasTransclusions ? block.transclusions : block.noItems
+        }
     }
 
     Component {
@@ -673,42 +687,6 @@ Item {
                 }
             }
         }
-    }
-    Component {
-        id: codeComponent
-        CodeBlockView { blockItem: block }
-    }
-    Component {
-        id: calcComponent
-        CalcBlockView { blockItem: block }
-    }
-    Component {
-        id: queryComponent
-        QueryBlockView { blockItem: block }
-    }
-    Component {
-        id: mathComponent
-        MathBlockView { blockItem: block }
-    }
-    Component {
-        id: mermaidComponent
-        MermaidBlockView { blockItem: block }
-    }
-    Component {
-        id: chartComponent
-        ChartBlockView { blockItem: block }
-    }
-    Component {
-        id: viewComponent
-        ViewBlockView { blockItem: block }
-    }
-    Component {
-        id: tableComponent
-        TableBlockView { blockItem: block }
-    }
-    Component {
-        id: frontmatterComponent
-        FrontmatterView { blockItem: block }
     }
     Component {
         id: ruleComponent

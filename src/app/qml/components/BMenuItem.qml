@@ -72,14 +72,14 @@ T.MenuItem {
         implicitHeight: Math.max(menuIcon.height, menuLabel.implicitHeight)
 
         Row {
-            anchors.verticalCenter: parent.verticalCenter
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             spacing: control.spacing
             width: parent.width - (trailing.width > 0 ? trailing.width + 16 : 0)
 
             // Check mark column (only when the item is checkable) or the icon.
             BIcon {
                 id: menuIcon
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 // A submenu's item: the submenu's icon (BMenu.iconName).
                 name: control.swatch.a > 0 ? ""
                     : control.checkable ? (control.checked ? "check" : "")
@@ -90,7 +90,8 @@ T.MenuItem {
                 color: control.danger ? Theme.dangerText : control.checkable ? Theme.link : Theme.fgMuted
                 Rectangle {
                     visible: control.swatch.a > 0
-                    anchors.centerIn: parent
+                    x: Math.round(parent.width / 2) - Math.round(width / 2)
+                    y: Math.round(parent.height / 2) - Math.round(height / 2)
                     width: Math.round(parent.width * 0.8)
                     height: width
                     radius: Theme.radiusXs
@@ -101,7 +102,7 @@ T.MenuItem {
             }
             Text {
                 id: menuLabel
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 width: Math.min(implicitWidth, Math.max(0, parent.width - x))
                 text: control.text
                 textFormat: Text.PlainText
@@ -117,7 +118,7 @@ T.MenuItem {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
             Text {
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 visible: control.hint !== ""
                 text: control.hint
                 textFormat: Text.PlainText
@@ -125,13 +126,19 @@ T.MenuItem {
                 font.pixelSize: Theme.textSm
                 color: Theme.fgMuted
             }
-            BKbd {
-                anchors.verticalCenter: parent.verticalCenter
-                sequence: control.shortcut
-                small: true
+            // (Made for an item with a shortcut only: most have none. Hidden with the key caps —
+            // touch UIs —, so that the Row gives it no room.)
+            Loader {
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
+                active: control.shortcut !== "" && !Theme.touchUi
+                visible: item !== null && item.visible
+                sourceComponent: BKbd {
+                    sequence: control.shortcut
+                    small: true
+                }
             }
             BIcon {
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 name: control.subMenu ? "chevron-right" : ""
                 size: Theme.iconSizeSm
                 color: Theme.fgMuted
