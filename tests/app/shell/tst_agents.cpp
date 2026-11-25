@@ -2029,7 +2029,11 @@ private Q_SLOTS:
         QVERIFY(!created.value(u"params"_s).toObject().contains(u"_meta"_s));
         QVERIFY(serverArgs(logged(u"session/new"_s).size() - 1).contains(u"--app-control"_s));
         const QHash<QString, QString> serverVars = serverEnv(logged(u"session/new"_s).size() - 1);
+        // (Its own socket in the runtime folder; on Windows a pipe named after the temporary one.)
+        QVERIFY(QFileInfo(serverVars.value(u"BRULION_APP_SOCKET"_s)).fileName().startsWith(u"brulion-acp-"_s));
+#ifndef Q_OS_WIN
         QVERIFY(serverVars.value(u"BRULION_APP_SOCKET"_s).startsWith(runtime));
+#endif
         QVERIFY(serverVars.value(u"BRULION_APP_TOKEN"_s) != full); // (the computer's own grant, not this app's)
         QCOMPARE(serverVars.value(u"BRULION_APP_DEVICE"_s), WorkspaceAgents::deviceName());
         // The context tells the agent the app is the user's device's.

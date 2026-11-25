@@ -10,7 +10,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCoreApplication>
 #include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -78,6 +80,15 @@ class TestCliAcpUsage : public QObject {
     QString m_home;
     QString m_notebook;
 
+    // The app's cache folder for this test: the private home's XDG one, on Windows the profile's
+    // (src/ipc/profile.h), whose path this process gets from Qt under the profile's names.
+#ifdef Q_OS_WIN
+    static QString profile() { return u"test-acp-usage-%1"_s.arg(QCoreApplication::applicationPid()); }
+    QString cacheDir() const { return QStandardPaths::writableLocation(QStandardPaths::CacheLocation); }
+#else
+    QString cacheDir() const { return m_home + u"/cache"_s; }
+#endif
+
     Run run(const QStringList &args, const QString &language = u"en"_s)
     {
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -92,6 +103,9 @@ class TestCliAcpUsage : public QObject {
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
         env.insert(u"LANGUAGE"_s, language);
         env.insert(u"TZ"_s, u"Europe/Warsaw"_s);
+#ifdef Q_OS_WIN
+        env.insert(u"BRULION_PROFILE"_s, profile());
+#endif
         QProcess p;
         p.setProcessEnvironment(env);
         p.start(QStringLiteral(BRULION_CLI), QStringList{u"--now"_s, u"2026-11-24 12:00"_s} + args);
@@ -106,6 +120,9 @@ class TestCliAcpUsage : public QObject {
     }
 
 private Q_SLOTS:
+#ifdef Q_OS_WIN
+    void cleanupTestCase() { QDir(cacheDir()).removeRecursively(); }
+#endif
     void initTestCase()
     {
         QVERIFY(m_tmp.isValid());
@@ -113,6 +130,12 @@ private Q_SLOTS:
         m_notebook = m_tmp.filePath(u"Notatki Żółwia"_s);
         QVERIFY(QDir().mkpath(m_notebook));
         QVERIFY(QDir().mkpath(m_home));
+#ifdef Q_OS_WIN
+        // The profile's names, as brulion-cli sets them for BRULION_PROFILE.
+        QCoreApplication::setOrganizationName(u"Brulion-"_s + profile());
+        QCoreApplication::setApplicationName(u"Brulion"_s);
+        QDir(cacheDir()).removeRecursively();
+#endif
         const QString claude = m_home + u"/konfiguracja claude/projects/-x-Notatki"_s;
         // Today twice in the notebook (one message logged twice while it streamed), yesterday
         // elsewhere, ten days ago (outside a week).
@@ -168,7 +191,7 @@ private Q_SLOTS:
         QCOMPARE(codexTotal.value(u"output"_s).toInt(), 300);
         // The app's cache: written, and used by the next run.
         bool cached = false;
-        for (QDirIterator it(m_home + u"/cache"_s, {u"*.json"_s}, QDir::Files, QDirIterator::Subdirectories);
+        for (QDirIterator it(cacheDir(), {u"*.json"_s}, QDir::Files, QDirIterator::Subdirectories);
              it.hasNext();)
             cached = it.next().contains(u"/agent-usage/"_s) || cached; // (next() first: the loop moves on)
         QVERIFY(cached);

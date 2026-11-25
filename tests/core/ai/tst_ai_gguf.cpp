@@ -11,6 +11,7 @@
 
 #include <QBuffer>
 #include <QFile>
+#include <QDir>
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTest>
@@ -254,7 +255,8 @@ private Q_SLOTS:
 
         const ai::LocalModel model = ai::localModelOf(*own);
         QVERIFY(model.own);
-        QCOMPARE(model.file.path, u"/home/ja/Modele/Qwen3-4B-Q4_K_M.gguf"_s);
+        // (The path made absolute: on Windows with the current drive in front.)
+        QCOMPARE(model.file.path, QDir::cleanPath(QFileInfo(u"/home/ja/Modele/Qwen3-4B-Q4_K_M.gguf"_s).absoluteFilePath()));
         QCOMPARE(model.file.name, u"Qwen3-4B-Q4_K_M.gguf"_s);
         QVERIFY(model.thinks);
         QVERIFY(!model.trained);

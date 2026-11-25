@@ -784,7 +784,9 @@ void TestAgentUsage::incrementalCache()
     QCOMPARE(stats.filesRead, 2);
     QCOMPARE(totalOf(h).tokens.requests, 2);
     QVERIFY(QFile::exists(cache));
+#ifndef Q_OS_WIN // (Windows: the profile's ACLs keep it the user's; Qt reports no such bits there)
     QVERIFY(!(QFile::permissions(cache) & (QFileDevice::ReadOther | QFileDevice::ReadGroup)));
+#endif
 
     // Nothing changed: no file opened.
     h = readHistory(claudeSource(dir.path()), options(cache), &stats);
@@ -990,6 +992,9 @@ void TestAgentUsage::symlinkOutOfFolder()
     if (!QFile::link(dir.filePath(u"elsewhere/secret.jsonl"_s), dir.filePath(u"projects/q/link.jsonl"_s))
         || !QFile::link(dir.filePath(u"elsewhere"_s), dir.filePath(u"projects/linkdir"_s)))
         QSKIP("No symlinks here");
+    // (Windows: QFile::link makes a shortcut, a file of its own that is no link.)
+    if (!QFileInfo(dir.filePath(u"projects/q/link.jsonl"_s)).isSymbolicLink())
+        QSKIP("QFile::link makes no symbolic links here");
     const History h = readHistory(claudeSource(dir.path()), options(QString()));
     QCOMPARE(totalOf(h).tokens.requests, 0);
     QCOMPARE(h.files, 1);
