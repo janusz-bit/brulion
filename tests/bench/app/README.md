@@ -71,7 +71,12 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   `<mark>_objects_alive` / `_objects_created`: the QObjects alive / created since then (QtCore's
   AddQObject / RemoveQObject hooks). `--env BENCH_OBJECT_TYPES=1` adds an `objects` record at
   content and settled: the live objects by class and by their named ancestors under `AppShell`
-  (`BENCH_OBJECT_DEPTH`, default 4) — what the shell creates (docs/PERFORMANCE.md "L10").
+  (`BENCH_OBJECT_DEPTH`, default 4) — what the shell creates (docs/PERFORMANCE.md "L10") —, by
+  the place a QML file declares them (`bySite`: `QQuickText @ BChip.qml:123`; `^1 BChip.qml:168`
+  for an object the one declared there made, as a Rectangle's pen; `+anchors` / `+layer` /
+  `+palette @ …` for the helpers an item made on first use) and by file (`byFile`). The dump makes
+  a QQmlContext for every context whose ids it names (a few thousand objects that the marks after
+  it count): compare object counts of runs without `BENCH_OBJECT_TYPES`.
   `--start first` = a fresh XDG home (first start), `warm` = the same home again, `cold` = also
   the page cache of the binary, every mapped library / font and the vault dropped.
   Index cache (docs/PERFORMANCE.md, L2): a `first` start has no device state, so its index is
