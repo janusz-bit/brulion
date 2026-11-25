@@ -793,7 +793,56 @@ def m_pictures(run):
     return out
 
 
+def m_memory(run):
+    """Memory per step of the `memory` scenario (every `mem:<step>` mark; MB): resident, its
+    anonymous part, the kernel's proportional share and the private pages (dirty: what only the
+    app holds and nothing can drop; private = dirty + clean), malloc in use over every arena and
+    what its arenas keep free, items and QObjects alive, threads; the peak (VmHWM) at the end."""
+    mk = run["marks"]
+    out = {}
+    last = None
+    for m in run["marklist"]:
+        name = m["name"]
+        if not name.startswith("mem:"):
+            continue
+        step = name[4:]
+        last = m
+        out["rss_mb:" + step] = m["VmRSS"] / 1024.0
+        out["anon_mb:" + step] = m["RssAnon"] / 1024.0
+        out["file_mb:" + step] = m.get("RssFile", 0) / 1024.0
+        sm = m.get("smaps") or {}
+        if sm:
+            out["pss_mb:" + step] = sm.get("Pss", 0) / 1024.0
+            out["dirty_mb:" + step] = sm.get("Private_Dirty", 0) / 1024.0
+            out["private_mb:" + step] = (sm.get("Private_Dirty", 0) + sm.get("Private_Clean", 0)) / 1024.0
+        ma = m.get("malloc") or {}
+        if ma:
+            out["heap_mb:" + step] = ma.get("arenasInUseKB", 0) / 1024.0
+            out["heap_free_mb:" + step] = ma.get("arenasFreeKB", 0) / 1024.0
+            out["arenas:" + step] = ma.get("arenas", 0)
+        else:
+            out["heap_mb:" + step] = (m["mallocInUseKB"] + m.get("mallocMmapKB", 0)) / 1024.0
+        out["items:" + step] = m.get("items", 0)
+        if "objAlive" in m:
+            out["objects:" + step] = m["objAlive"]
+        out["threads:" + step] = m.get("Threads", 0)
+        if "qmlTypes" in m:
+            out["qml_types:" + step] = m["qmlTypes"]
+    if last:
+        out["peak_rss_mb"] = last["VmHWM"] / 1024.0
+    for name, back in mk.items():
+        if not name.startswith("back_picture"):
+            continue
+        # The window after it was away and hidden: the pixels that differ from before (-1: no
+        # picture), and those off by more than a quarter of a channel's range — not drawn as before.
+        step = name[len("back_picture"):]
+        out["back_differing_pixels" + step] = back.get("differingPixels", -1)
+        out["back_changed_pixels" + step] = back.get("changedPixels", -1)
+    return out
+
+
 SCENARIOS = {
+    "memory": m_memory,
     "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "source-typing": m_typing,
     "select-copy": m_select_copy, "search": m_search,
     "switcher": m_switcher, "views": m_views, "graph": m_graph, "journal-scroll": m_journal_scroll,

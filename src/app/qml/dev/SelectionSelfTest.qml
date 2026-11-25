@@ -171,7 +171,7 @@ QtObject {
                && Js.endsWith(clip(), "\n- Ekipa może zacząć 20 października, cena ==do negocjacji==")
     }
     function textMenu(): BMenu { return editor.textMenu }
-    function blockMenu(): BlockMenu { return editor.blockMenu }
+    function blockMenu(): BlockMenu { return editor.blockMenu as BlockMenu }
     function highlightMenu(): BMenu { return editor.highlightMenu }
     function scrollBar(): T.ScrollBar { return editor.scrollBar }
     function toolbar(): Item { return window.findItem(editor, "editToolbarSlot") }

@@ -91,11 +91,11 @@ QStringList VaultPrivate::releaseWatches(const QString &absoluteDir)
 void VaultPrivate::moveFileState(const VaultPath &from, const FileStat &to)
 {
     const QString hash = hashes.value(from);
-    const std::optional<QByteArray> content = contents.take(from);
     const bool bom = bomPaths.contains(from);
     const bool stale = staleContent.contains(from);
     const std::optional<qint64> unsettledAt =
             unsettled.contains(from) ? std::optional<qint64>(unsettled.value(from)) : std::nullopt;
+    std::optional<ContentCache::Item> content = contents.take(from); // (as it is: text or bytes)
     untrackFile(from);
     moveFileWatch(from, to.path);
     if (history && !history->rename(from, to.path))
@@ -106,7 +106,7 @@ void VaultPrivate::moveFileState(const VaultPath &from, const FileStat &to)
     if (!hash.isEmpty())
         hashes.insert(to.path, hash);
     if (content)
-        contents.put(to.path, *content);
+        contents.restore(to.path, std::move(*content));
     if (bom)
         bomPaths.insert(to.path);
     if (stale) {

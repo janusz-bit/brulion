@@ -252,7 +252,7 @@ QString linkText(const Link &link, QStringView source, const VaultIndex *index)
                 if (note && ref->blockIndex >= 0 && ref->blockIndex < note->blocks.size()) {
                     // One level only, and a title's worth: many references to a huge block must
                     // not multiply its text.
-                    const QStringView text = note->blocks.at(ref->blockIndex).text;
+                    const QStringView text = note->blocks.at(ref->blockIndex).text.view();
                     return elide(plainText(text.first(std::min(text.size(), MaxRefSource))),
                                  ScheduledNotification::MaxTitleLength);
                 }

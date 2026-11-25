@@ -190,7 +190,7 @@ void noteSummary(QVariantMap &out, const ParsedNote &note, const VaultIndex *idx
     int count = 0;
     static const QRegularExpression word(u"[\\p{L}\\p{N}]+"_s);
     for (const Block &b : note.blocks) {
-        auto it = word.globalMatch(b.text);
+        auto it = word.globalMatch(b.text.toString());
         while (it.hasNext()) {
             it.next();
             ++count;

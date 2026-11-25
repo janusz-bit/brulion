@@ -6,7 +6,7 @@ qt_add_executable(brulion WIN32 MACOSX_BUNDLE
 # in-app scripts and self-tests (`--editor-script`: qml/dev/PageScript.qml,
 # qml/content/ContentJournalsSelfTest.qml), about 0.7 MB of compiled QML. Left out of the
 # Android and browser builds that are shipped (Release, MinSizeRel), where these options then
-# load nothing; PageView and JournalsView get the stand-ins from qml/stubs/. Desktop builds and
+# load nothing (PageView and JournalsView load them from their files, only when asked). Desktop builds and
 # the other build types have them (the ctest QML self-tests need them).
 # BRULION_DEV_QML=AUTO (the default) decides by platform and CMAKE_BUILD_TYPE on every configure,
 # so a build dir reused for another build type follows it; ON or OFF force it. The result is
@@ -51,9 +51,8 @@ set(BRULION_UI_QML
     qml/components/BDialog.qml
     qml/components/BDiffView.qml
     qml/components/BEmptyState.qml
-    qml/components/BFocusRing.qml
+    qml/components/BFocusRingShape.qml
     qml/components/BFontPickerDialog.qml
-    qml/components/BIcon.qml
     qml/components/BIconButton.qml
     qml/components/BKbd.qml
     qml/components/BKeyboardFocusKeeper.qml
@@ -129,6 +128,7 @@ set(BRULION_UI_SOURCES
     ui/devtesting.h ui/devtesting.cpp
     ui/scrollprobe.h ${_brulion_scroll_probe_sources}
     ui/deviceinfo.h ui/deviceinfo.cpp
+    ui/focusring.h ui/focusring.cpp
     ui/keyboardsources.h ui/keyboardsources.cpp
 )
 set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml qml/components/OpenIn.qml
@@ -136,7 +136,8 @@ set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml 
 # The generated QML type registration includes the helper headers by file name.
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_smoothscroll brulion_ui_scroll brulion_ui_icons brulion_ui_network brulion_ui_fonts
-    brulion_ui_files brulion_ui_layoutdump brulion_ui_scale brulion_ui_shutdown brulion_ui_memory)
+    brulion_ui_files brulion_ui_layoutdump brulion_ui_scale brulion_ui_shutdown brulion_ui_memory
+    brulion_ui_qmlcall)
 # Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon (through
 # image://bicon/…, ui/iconprovider.h); the logo as
 # :/images/logo.svg.
@@ -432,6 +433,9 @@ if(EMSCRIPTEN)
     # Browser-only output: no Node.js/worker glue in brulion.js.
     target_link_options(brulion PRIVATE "SHELL:-s ENVIRONMENT=web")
 endif()
+
+# The functions a start runs laid out first (cmake/BrulionSize.cmake, cmake/startup-order.txt).
+brulion_order_startup(brulion)
 
 target_compile_definitions(brulion PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(brulion PRIVATE brulion_core brulion_platform Qt6::Quick Qt6::QuickControls2 Qt6::Svg)

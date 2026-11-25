@@ -400,7 +400,8 @@ components — no Material/Fusion look, so all targets look identical.
   "L10"): the four used most — the switcher, the palette, the top bar's More menu and quick
   capture — are built ahead in the background 3 s after the notebook is ready, one every 0.4 s,
   each by an asynchronous `Loader` (in pieces over several frames; opened before it is ready, the
-  rest is made at once: `AppShell.prebuildNext()`); the others are made the first time they open
+  rest is made at once: `AppShell.prebuildNext()`) — while the app is in use: away, the closed
+  ones go, and they are built ahead again when it is back ("Navigation": Away); the others are made the first time they open
   (`newPageNow()`, `renameNow()`, … — the extension question with the first question, through a
   `Connections` of the shell) and kept. Before that a popup's property (`commandPalette`,
   `newPage`, …) is null and its objectName is not found. The other menus of the top bar, the rail,
@@ -2708,20 +2709,69 @@ layout).
 `AppController` keeps the route history of every tab (`navigation.h`: `RouteHistory`, routes are
 `QVariantMap`s `{view, path?, line?, blockId?, date?, tag?, query?, section?, …}`; the tabs:
 `tabs.h`, "Tabs, split view and windows" below); `ShellRouteView` shows the view for a route — a
-tab's in its pane (`ShellTabPane`), and the side panel's route. A pane keeps the views of the
+tab's in its pane (`ShellTabPane`), and the side panel's route. Every view is loaded from its QML
+file when it is first shown (`ShellRouteView.viewSource()`, `Loader.setSource()` with the view's
+first properties — its route, and of the pane what it takes: `inSidePanel`, `paneActive`,
+`covered` —, `Binding`s afterwards): `ShellRouteView` names none of them as a type, since a QML
+file named in another one is loaded with it (docs/PERFORMANCE.md "Memory: only what is in use").
+A pane keeps the views of the
 phone's bottom navigation — Journal, All pages, Search, Tasks, Calendar — once it has shown them
 (`ShellRouteView.keepViews`): hidden while another view is shown, each with the route it was last
 shown with, and shown again at once, where it was scrolled, instead of being built anew (on a phone
 building one took 0.5–1 s); a view hidden this way ends its editing first (`endEditing()`, the
-touch keyboard goes). The main window's main pane also builds them ahead, in the background
-(`ShellRouteView.preloadViews`): a moment after the notebook is ready and indexed, one at a time —
-Tasks, Calendar, Journal, All pages, Search —, each by an asynchronous `Loader` over several frames,
-hidden, with its plain route; so even the first switch to one is instant (opening one still being
-built finishes it at once). A view built hidden leaves the keyboard alone: it takes it in its
+touch keyboard goes). Kept while they are in use, not for good (`ViewKeeper`,
+`src/app/shell/viewkeeper.h`; the limits are `MemoryPolicy`'s, `src/app/ui/memorypolicy.h`): a
+pane holds the three hidden views shown most recently (`MemoryPolicy.keptViews`: a rotation
+through the four views of a phone's bottom navigation never rebuilds one; with a page or another
+view in between, the one shown longest ago is), lets go of all of them once no view was
+switched for five minutes (`hiddenViewMs`), and when the app is away (below); a view let go is
+made again when it is shown next, with its route — not where it was scrolled. The main window's
+main pane also builds one of them ahead, in the background
+(`ShellRouteView.preloadViews`): a moment after the notebook is ready and indexed, the view the
+user went to last on this device (`ui/recentView`; none on a first start), by an asynchronous
+`Loader` over several frames, hidden, with its plain route; so the first switch to it is instant
+(opening one still being built finishes it at once). A view built hidden leaves the keyboard
+alone: it takes it in its
 `takeFocus()` when first shown (docs/PERFORMANCE.md "Switching views"); a hidden view given the
 focus passes it to the view shown ("Keyboard shortcuts (desktop)" above). Other views (a page,
 Graph, Settings, …) are made for their route and deleted when another view is shown; the side
 panel keeps none.
+
+**Away.** `MemoryPolicy` (a QML singleton; the app's instance follows the application's state and
+its windows) says when the app is not in use: another program in front for a minute, or no window
+shown — minimised, in the tray, a phone's home screen — for eight seconds (five on a phone;
+twenty right after a start into the tray). It emits `letGo(hidden)` then and everything hidden
+goes: the panes' kept views, the shell's closed popups and dialogs (`AppShell.letGoPopups()`: the
+four built ahead and the ones made when first opened that keep nothing between two openings —
+new page, rename, move, about, delete, an extension's settings and copy), the spell checker's
+dictionaries, the catalogs the built-in extensions read. A quarter of a second later (the
+deletions have run) the policy has the QML engine collect its garbage and drop the QML files
+nothing uses any more (`trimComponentCache()`), every window drop what it cached, and — where
+`releasesGraphics` is on: Linux — a window that is not shown give up its scene graph and its
+graphics context, which Qt Quick builds again when the window is shown; `MemoryKeeper` then hands
+the freed pages back to the system, and lets go of the program's own pages (below). Qt Quick's `Shape` does not survive that by itself (Qt 6.12:
+it keeps pointers to the nodes it made and makes a path's nodes only when the path changes — the
+notebook's round mark came back without its fill): the policy makes every `Shape` of the window
+start over (another renderer asked for, polished, its own again). In front again, the app is in
+use at once, and the popups are built ahead again. An app whose window is shown but was never in
+front (a test's X server without a window manager) counts as in use. `BRULION_MEMORY_POLICY=0`
+keeps and builds ahead everything as before (A/B measurements), `BRULION_AWAY_MS` sets the
+delays, `BRULION_HIDDEN_VIEW_MS` the kept views' time, `BRULION_RELEASE_GRAPHICS=1` / `0` the
+release of a hidden window's graphics whatever the platform. Tests: `tst_memory_policy`,
+`tst_shell_viewkeeper`, the shell self-test's "0b" (kept views, the three most recent, the one
+built ahead) and "0d" (away).
+
+**Not used for a while.** The program is memory too: every page of its code and of its
+libraries' that was touched once stays mapped — 160–190 MB after a start, most of it read by the
+start alone. Twelve seconds after the last key, click, touch or turn of the wheel
+(`MemoryPolicy.idleMs`; the first window shown counts as the first thing done), and whenever the
+app is away, `MemoryKeeper.releaseAll()` lets go of those pages (`platform::releaseProgramPages()`,
+Linux: the segments of the program and its libraries that are not writable and hold no page of the
+process's own; the libraries OpenGL calls go through are left alone). They stay in the system's
+page cache, and what the app uses next is mapped again as it is touched: opening a 5000-block
+page right after takes as long as before. Nothing shown or kept goes (`idle()`, not `letGo()`).
+`BRULION_IDLE_MS` sets the time (0: only when away), `BRULION_PROGRAM_PAGES=0` keeps the pages.
+Tests: `tst_memory_policy` (`notUsedForAWhile`), `tst_processmemory` (`programPages`).
 
 | Route `view` | View | Parameters |
 |---|---|---|
@@ -3776,11 +3826,19 @@ documentation notebook.
   wavy `SpellCheckUnderline`). The word ending right at the caret (`spellCaret`) is not marked while
   it is typed; it is once the caret leaves it.
 * **Never blocking:** `SpellCheck` (`src/app/editor/spellcheck.h`) keeps a verdict per word and runs
-  `spell::SpellChecker` on a worker thread of its own, made at first use; loading a dictionary
-  (Hunspell's Polish one: a few hundred ms) and Android's checker (IPC) happen there. A word seen
+  `spell::SpellChecker` on a worker thread of its own, made for the first word asked about; loading
+  a dictionary (Hunspell's Polish one: a few hundred ms) and Android's checker (IPC) happen there. A word seen
   for the first time is Pending: queued, sent in batches of 200 after the highlighting pass, and
   only the lines waiting for it are highlighted again when the answer comes (`checked(changed)`).
   Verdicts are cached (20 000 words), so retyping asks nothing.
+* **Only while it is used:** the worker and its dictionaries (Hunspell's Polish and English ones
+  hold about 23 MB) go once no word was asked about for a while — 30 s after a word of the edited
+  text (`SpellCheck.idleMs`: typing asks again soon), 8 s after the words of rendered text
+  (`readIdleMs`, `wrongWords()`: a page was opened and is read now) — and when the app is away
+  (`unload()`: "Navigation", Away). The verdicts stay, so nothing is underlined anew and nothing
+  asked again; the next word not seen before brings the worker back with the same settings and
+  personal words (its verdict comes after the dictionaries are read again: the Polish one takes
+  0.08 s of a laptop's processor, on the worker).
 * **Menu:** a right-click on a marked word (`BlockEditor.openTextMenu`, `InlineEditor.misspelledAt`)
   puts its corrections (up to 6, asked from the worker: "Looking for corrections…" until they come, "No
   corrections") at the top of Cut / Copy / Paste, then **Add “…” to dictionary** and **Ignore**.
@@ -5904,7 +5962,9 @@ screen are created at once, as on any page, and the others in the background —
 asynchronous cache, one row per incubation slice — and scrolling creates no rows and releases
 none. The page stays whole until it has a quarter more rows than the threshold (no rows dropped
 and created again while rows are typed or pasted at it); a longer page keeps a cache of about two
-screens (1600 px). The price, measured on 2026-11-06 (docs/PERFORMANCE.md "Scrolling pages:
+screens (1600 px). Whole only while the app is in use (`MemoryPolicy.inUse`, "Navigation" → Away):
+away, the page keeps the rows near the view as a longer page does, and the others are made
+again, in the background, when it is back. The price, measured on 2026-11-06 (docs/PERFORMANCE.md "Scrolling pages:
 cheaper rows, pages created whole"): about 0.1–0.2 MB a row (a 1100-row outline 200 MB more), a
 new width — the window, the side panel, a phone turned — lays every row out again (36 → 337 ms on
 that outline), and the background filling makes some frames of 25–45 ms just after a page opens.
@@ -6045,8 +6105,17 @@ have, or what is used only now and then, is created when needed: block and task 
 open, the block editor's dialogs, autocomplete popup, merge dialog, drop hint and touch toolbar on
 first use, a block's fold arrow / bullet / number / checkbox only when it has one, a text block's
 text without a Loader, a table cell's tooltip when it shows, a table's buttons when they show, a
-task box's icon for "done" / "deferred" only; `BIcon` creates no image without a name (an
-`Image` without a source; Qt's `IconImage` without one searched the icon theme on disk). The shell
+task box's icon for "done" / "deferred" only; `BIcon` creates no image without a name or before
+it is first visible (Qt's `IconImage` without a source searched the icon theme on disk);
+`BFocusRing` (`src/app/ui/focusring.h`) makes its ring (`BFocusRingShape.qml`) the first time it
+shows; a button's spinner exists while it is busy. A block's optional parts and the views of its
+non-text blocks are files of their own, `qml/editor/BlockPart<name>.qml`, whose components the
+C++ singleton `BlockParts` (`blockviews.h`) makes once per engine (`sourceComponent:
+BlockParts.part("Bullet")`): a component declared in the delegate is an object of every block.
+Made in C++, they have no creation context, so the Loader creates the part in the block's own
+context and its bindings end with the block; a part finds its block once,
+`BlockViews.ancestor(part, 2)` (the Loader, then the block), and its texts keep BlockDelegate's
+translation context (`qsTranslate`). The shell
 does the same (docs/PERFORMANCE.md "L10"): its dialogs and menus, the journal's "Go to day", the
 side panel and the update banner are made the first time they open or show — the four popups
 used most are built ahead in the background after the notebook is ready —, a phone's drawer
@@ -6491,6 +6560,13 @@ keep that down (numbers: docs/PERFORMANCE.md "Pictures and memory"):
   pages back by itself). Without it glibc kept what was freed: the process stayed as large as at
   its peak for as long as it ran (docs/ARCHITECTURE.md "Process memory").
   `BRULION_MEMORY_KEEPER=0` switches the giving back off (A/B).
+* **`MemoryPolicy`** (`src/app/ui/memorypolicy.h`; a QML singleton, `main()` makes the app's) says
+  what is kept for speed and when the app is away — the kept views' limits (`keptViews`,
+  `hiddenViewMs`), `buildAhead` / `inUse`, `letGo(hidden)`: "Navigation" → Away. What follows it:
+  `ViewKeeper` (the panes' hidden views), `AppShell.letGoPopups()`, `BlockEditor.wholePage` (a
+  page created whole keeps only the rows near the view while the app is away), `SpellCheck`
+  (`unload()`), the extensions' catalogs (`Engine::dropData()`), the on-device models (`LocalAi`,
+  `SemanticSearch`: an idle one leaves memory at once).
 
 For contributors:
 
@@ -7578,10 +7654,12 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   wheel and the scroll bars' paging scroll like a web browser in every Flickable ("Scrolling
   performance" → "Wheel and scroll bar"); `SmoothScroll.scrollBy(flickable, dx, dy)` scrolls the
   same way from QML. Static library `brulion_ui_smoothscroll`, tested by `tests/app/smoothscroll`.
-* **`NearView`** (attached, `NearView.near`), **`PictureDecode`** (singleton) and `MemoryKeeper`:
-  pictures hold their pixels only near the window's view, decoded for the place that shows them,
-  and freed memory goes back to the system ("Scrolling performance" → "Pictures hold their pixels
-  only near the view"). Static library `brulion_ui_memory`, tested by `tests/app/memory`.
+* **`NearView`** (attached, `NearView.near`), **`PictureDecode`** (singleton), `MemoryKeeper` and
+  **`MemoryPolicy`** (singleton): pictures hold their pixels only near the window's view, decoded
+  for the place that shows them, freed memory goes back to the system ("Scrolling performance" →
+  "Pictures hold their pixels only near the view"), and what the app keeps for speed goes while
+  it is away ("Navigation" → Away). Static library `brulion_ui_memory`, tested by
+  `tests/app/memory`.
 * **`TouchFlick`** (attached, `TouchFlick.enabled: true` on a Flickable / ListView): touch flicks
   at the finger's speed on Android ("Scrolling performance"); static library `brulion_ui_touch`
   (Qt Quick, no private Qt headers), tested by `tests/app/touch`. As an attached type it carries
@@ -7598,9 +7676,13 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   New icons: copy from `lucide-static`, normalise like the others, re-run CMake. They render
   everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
   on the CPU, no shader effect).
-  `BIcon` is an `Item` with one `Image` (no Loader, no `IconImage`; not an `Image` itself, whose
-  implicit size is read-only and its picture's): the image's source is `Icons.source(name, color)`,
-  "image://bicon/<colour>/<name>" (`src/app/ui/iconprovider.h`, library `brulion_ui_icons`), whose
+  `BIcon` is a C++ item (`src/app/ui/iconprovider.h`, library `brulion_ui_icons`; until 2026-11
+  `BIcon.qml`, an `Item` with an `Image` and nine bindings) that makes one Qt Quick `Image` as its
+  child the first time it is visible with a name, and sets its properties itself — no bindings, no
+  `Accessible` attached object (icons are decorative: not accessible items), no QML context of its
+  own; its `size` and `color` are `Theme.iconSize` and `Theme.fg` until set. Not an `Image`
+  itself, whose implicit size is read-only and its picture's: the image's source is
+  `Icons.sourceUrl(name, color)`, "image://bicon/<colour>/<name>", whose
   provider rasterises the SVG at the requested size (size × the device pixel ratio) and fills it
   with the colour in `SourceIn` — exactly what Qt's `IconImage` drew; Qt Quick's pixmap cache then
   shares one image and one texture among every icon of that name, size and colour (an
@@ -7912,6 +7994,44 @@ The children of an item (`item.children[i]`) do not compile: `readonly property 
 ref.children` for a property, else a property of the child (`AppController.propertyOf(item,
 "day") as ContentJournalDay`).
 
+**Files loaded when first used.** A QML file named as a type in another one — a child element, an
+inline `Component { X {} }`, a `Loader.sourceComponent: X {}`, a property, parameter or return
+type, an `as X` cast — is loaded together with it, and the engine keeps its compiled unit (rebuilt
+on the heap), property caches and binding tables (docs/PERFORMANCE.md "QML files loaded when first
+used"). What the first screen (the shell, the journal with ordinary blocks) does not show is never
+named by what it shows: the views (ShellRouteView), the start screens (`Main.qml`), a day as a page
+(JournalsView), the shell's and the editor's dialogs, menus and popups (`AppShell.dialogNow()`,
+`BlockEditor.makePopup()`, `dialogsNow()`), the touch toolbar and the selection's tools, source mode,
+the block kinds a page may not have (tables, calculations, queries, diagrams, charts, views,
+properties) and a block's embeds and transclusions (their `BlockPart*.qml` made through `BlockParts`;
+BlockDelegate reads their first line by name), a base's, a PDF's and a player's tile, the viewers of other files and the page's dialogs (PageView), the side
+panel's content, the extensions' views in the sidebar, the self-tests and dev scripts. They are made
+from their files: `Loader.setSource(url, values)` (the URL from `Qt.resolvedUrl()`, also in releases
+without the QML source text — the compiled unit is found by its URL; the arguments read from
+properties, "Side effects" above), or `Qt.createComponent(url).createObject(parent, values)` for an
+object kept in a property. Their users reach them through a type that is loaded anyway (`Item`,
+`T.Popup`, `BMenu`, `Window`), and:
+
+* call their own functions and set their properties by name — `QmlCall.call2(dialog, "openFor", path,
+  isDir)` (up to `call6`; `callFlag`, `callNumber`, `isTrue()`, `integer()`, `text()` type a result),
+  `QmlCall.set(menu, "kind", kind)`, `QmlCall.get()` / `object()` (`src/app/ui/qmlcall.h`: each
+  argument converted to the type its parameter declares, as `uidriver::callQml()` does);
+* follow a property for a binding — `QmlValue { object: loader.item; name: "sheet" }`, `.flag` /
+  `.number` / `.text`; or, without an object of their own per instance, `QmlCall.connect(item,
+  "firstLineCenterChanged", block, "readLineCenter")`;
+* take their signals with `Connections { target: loader.item; function onDone(path: string) … }` or
+  `QmlCall.connect(sender, "signal", receiver, "function or signal")` — what a handler written in the
+  inline component did moves into a typed function of the user;
+* set what follows the user's state with `Binding { target: loader.item; property: …; restoreMode:
+  Binding.RestoreNone }` (one object each: where many instances would each need one — a block's
+  embeds — `QmlCall.set()` from a change handler instead).
+
+A file that only moved out of another one (`ShellDeleteDialog.qml`, `JournalsJumpDialog.qml`,
+`EditorMergeDialog.qml`) keeps its texts' translation context with `qsTranslate("<old file>", …)`. Dev
+and self-test QML (loaded only when asked) may name anything: they cast what they read (`editor.blockMenu
+as BlockMenu`). The memory scenario of the app bench (`tests/bench/app`, `BENCH_QML_TYPES=1`) lists the
+files loaded at every step.
+
 **Other.** `"\r"` inside a compiled string literal breaks the generated C++ (qmlcachegen writes a
 raw CR): keep it in a property (`readonly property string crlf: "\r\n"`). `Qt.inputMethod` →
 `DeviceInfo.inputMethodVisible` / `hideInputMethod()`. A font in a `?:` → a `Binding` element. A typed
@@ -7988,8 +8108,9 @@ use the separate command line `brulion-cli` instead (docs/CLI.md: JSON output, a
 unless the CMake option `BRULION_DEV_QML` (`AUTO`, `ON`, `OFF`) turns it off. `AUTO`, the
 default, leaves it out of the shipped Android and browser builds (Release / MinSizeRel, about
 0.7 MB less) and is decided again on every configure, so a build dir reused for another
-`CMAKE_BUILD_TYPE` follows it. Without it `--editor-script` does nothing (stand-ins from
-`qml/stubs/`) and `--gallery` / `--editor` end at once (exit code 1); the QML tests that need it
+`CMAKE_BUILD_TYPE` follows it. Without it `--editor-script` does nothing (PageView and JournalsView
+load the scripts and self-tests from their files only when asked, and find none) and `--gallery` /
+`--editor` end at once (exit code 1); the QML tests that need it
 (`tst_editor_qml`, `tst_content_journals_qml`) are left out.
 
 | Option | Effect |

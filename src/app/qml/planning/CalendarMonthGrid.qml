@@ -218,6 +218,30 @@ FocusScope {
                 color: Theme.borderSubtle
             }
 
+            // Grid lines: the cells' right edges (but the last column's) and their bottom edges,
+            // one line per column and per week rather than two per cell — the same pixels.
+            Repeater {
+                model: 6
+                delegate: Rectangle {
+                    required property int index
+                    x: root.weekColumn + index * root.cellWidth + (root.cellWidth - 1)
+                    width: 1
+                    height: root.cellHeight * 6
+                    color: Theme.borderSubtle
+                }
+            }
+            Repeater {
+                model: 6
+                delegate: Rectangle {
+                    required property int index
+                    x: root.weekColumn
+                    y: index * root.cellHeight + (root.cellHeight - 1)
+                    width: root.cellWidth * 7
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+            }
+
             Repeater {
                 model: root.calendar
                 delegate: Item {
@@ -265,21 +289,6 @@ FocusScope {
                     }
                     Accessible.selected: isSelected
 
-                    // Grid lines (right and bottom edges).
-                    Rectangle {
-                        anchors.right: parent.right
-                        width: 1
-                        height: parent.height
-                        color: Theme.borderSubtle
-                        visible: cell.column < 6
-                    }
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: 1
-                        color: Theme.borderSubtle
-                    }
-
                     // Day number: today on a red disc, the selected day on a dark one (only the red
                     // one when today is selected), another month's day faint.
                     Rectangle {
@@ -291,7 +300,8 @@ FocusScope {
                         radius: width / 2
                         color: cell.isToday ? Theme.accentSolid : cell.isSelected ? Theme.primary : "transparent"
                         Text {
-                            anchors.centerIn: parent
+                            x: Math.round(parent.width / 2) - Math.round(width / 2)
+                            y: Math.round(parent.height / 2) - Math.round(height / 2)
                             textFormat: Text.PlainText
                             text: "" + cell.day
                             font.family: Theme.fontUi
@@ -312,103 +322,106 @@ FocusScope {
                         color: Theme.fgFaint
                     }
 
-                    // Entries as pills (wide cells).
-                    Column {
-                        visible: !root.dots
+                    // Entries as pills (wide cells; made for a day that has entries).
+                    Loader {
                         x: 4
                         y: root.pillsTop
                         width: parent.width - 9
-                        spacing: 2
-                        Repeater {
-                            model: cell.shownPills
-                            delegate: Rectangle {
-                                id: pill
-                                required property int index
-                                readonly property var entry: cell.orderedItems[index]
-                                readonly property string variant: AppController.routeText(entry, "variant")
-                                readonly property string status: AppController.routeText(entry, "status")
-                                readonly property string time: AppController.routeText(entry, "time")
-                                readonly property bool closed: AppController.routeFlag(entry, "closed")
-                                readonly property bool recurring: AppController.routeFlag(entry, "recurring")
-                                // An alarm in the reminder's tint: its alarm clock tells it apart (a
-                                // solid amber pill was the loudest thing on the month).
-                                readonly property string tint: variant === "alarm" ? "reminder" : variant
-                                // An event of another calendar: in its calendar's colour.
-                                readonly property bool isEvent: variant === "event"
-                                readonly property string eventColorText: isEvent ? AppController.routeText(entry, "color") : "transparent"
-                                readonly property color eventColor: eventColorText
-                                readonly property color fgColor: isEvent ? Theme.fg : Theme.chipFg(tint)
-                                readonly property string title: AppController.routeText(entry, "title")
-                                width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
-                                height: root.pillHeight
-                                radius: Theme.radiusSm
-                                Accessible.role: Accessible.Button
-                                Accessible.name: root.entryName(closed, status, title, time)
-                                // (Done and cancelled entries: the "done" chip's colours at full
-                                // opacity — readable text, AA —, with a check, or struck out with
-                                // an x when cancelled, as in Tasks.)
-                                color: pill.isEvent ? pill.eventColor.alpha(Theme.dark ? 0.32 : 0.2) : Theme.chipBg(pill.tint)
-                                Rectangle {
-                                    visible: pill.isEvent
-                                    width: 3
-                                    height: parent.height
-                                    radius: 1.5
-                                    color: pill.eventColor
-                                }
-                                Row {
-                                    id: pillRow
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    x: 5
-                                    width: parent.width - 8
-                                    spacing: 3
-                                    BIcon {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        visible: pill.closed || pill.variant === "alarm" || pill.recurring
-                                        name: pill.closed ? (pill.status === "cancelled" ? "x" : "check")
-                                            : pill.variant === "alarm" ? "alarm-clock" : "repeat"
-                                        size: 10
-                                        color: pill.fgColor
+                        active: !root.dots && cell.orderedItems.length > 0
+                        visible: active
+                        sourceComponent: Column {
+                            spacing: 2
+                            Repeater {
+                                model: cell.shownPills
+                                delegate: Rectangle {
+                                    id: pill
+                                    required property int index
+                                    readonly property var entry: cell.orderedItems[index]
+                                    readonly property string variant: AppController.routeText(entry, "variant")
+                                    readonly property string status: AppController.routeText(entry, "status")
+                                    readonly property string time: AppController.routeText(entry, "time")
+                                    readonly property bool closed: AppController.routeFlag(entry, "closed")
+                                    readonly property bool recurring: AppController.routeFlag(entry, "recurring")
+                                    // An alarm in the reminder's tint: its alarm clock tells it apart (a
+                                    // solid amber pill was the loudest thing on the month).
+                                    readonly property string tint: variant === "alarm" ? "reminder" : variant
+                                    // An event of another calendar: in its calendar's colour.
+                                    readonly property bool isEvent: variant === "event"
+                                    readonly property string eventColorText: isEvent ? AppController.routeText(entry, "color") : "transparent"
+                                    readonly property color eventColor: eventColorText
+                                    readonly property color fgColor: isEvent ? Theme.fg : Theme.chipFg(tint)
+                                    readonly property string title: AppController.routeText(entry, "title")
+                                    width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
+                                    height: root.pillHeight
+                                    radius: Theme.radiusSm
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: root.entryName(closed, status, title, time)
+                                    // (Done and cancelled entries: the "done" chip's colours at full
+                                    // opacity — readable text, AA —, with a check, or struck out with
+                                    // an x when cancelled, as in Tasks.)
+                                    color: pill.isEvent ? pill.eventColor.alpha(Theme.dark ? 0.32 : 0.2) : Theme.chipBg(pill.tint)
+                                    Rectangle {
+                                        visible: pill.isEvent
+                                        width: 3
+                                        height: parent.height
+                                        radius: 1.5
+                                        color: pill.eventColor
                                     }
-                                    Text {
-                                        id: pillText
+                                    Row {
+                                        id: pillRow
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: parent.width - (x > 0 ? 13 : 0)
-                                        text: (pill.time !== "" && root.pillTimes ? "<b>" + pill.time + "</b> " : "")
-                                              + TextHelper.escapeHtml(pill.title)
-                                        textFormat: Text.StyledText
-                                        font.family: Theme.fontUi
-                                        font.pixelSize: Theme.textXs
-                                        font.strikeout: pill.status === "cancelled"
-                                        color: pill.fgColor
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
+                                        x: 5
+                                        width: parent.width - 8
+                                        spacing: 3
+                                        BIcon {
+                                            y: Math.round(parent.height / 2) - Math.round(height / 2)
+                                            visible: pill.closed || pill.variant === "alarm" || pill.recurring
+                                            name: pill.closed ? (pill.status === "cancelled" ? "x" : "check")
+                                                : pill.variant === "alarm" ? "alarm-clock" : "repeat"
+                                            size: 10
+                                            color: pill.fgColor
+                                        }
+                                        Text {
+                                            id: pillText
+                                            y: Math.round(parent.height / 2) - Math.round(height / 2)
+                                            width: parent.width - (x > 0 ? 13 : 0)
+                                            text: (pill.time !== "" && root.pillTimes ? "<b>" + pill.time + "</b> " : "")
+                                                  + TextHelper.escapeHtml(pill.title)
+                                            textFormat: Text.StyledText
+                                            font.family: Theme.fontUi
+                                            font.pixelSize: Theme.textXs
+                                            font.strikeout: pill.status === "cancelled"
+                                            color: pill.fgColor
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
                                     }
-                                }
-                                // What the pill leaves out — its time, the end of its title —
-                                // when the mouse rests on it (created then).
-                                HoverHandler {
-                                    id: pillHover
-                                    enabled: !Theme.touchUi
-                                }
-                                Loader {
-                                    active: pillHover.hovered && (pillText.truncated || (pill.time !== "" && !root.pillTimes))
-                                    sourceComponent: BToolTip {
-                                        parent: pill
-                                        text: root.entryName(pill.closed, pill.status, pill.title, pill.time)
-                                        visible: true
+                                    // What the pill leaves out — its time, the end of its title —
+                                    // when the mouse rests on it (created then).
+                                    HoverHandler {
+                                        id: pillHover
+                                        enabled: !Theme.touchUi
+                                    }
+                                    Loader {
+                                        active: pillHover.hovered && (pillText.truncated || (pill.time !== "" && !root.pillTimes))
+                                        sourceComponent: BToolTip {
+                                            parent: pill
+                                            text: root.entryName(pill.closed, pill.status, pill.title, pill.time)
+                                            visible: true
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Text {
-                            visible: cell.overflow
-                            leftPadding: 5
-                            textFormat: Text.PlainText
-                            text: qsTr("+%n more", "", cell.orderedItems.length - cell.shownPills)
-                            font.family: Theme.fontUi
-                            font.pixelSize: Theme.textXs
-                            font.weight: Theme.weightMedium
-                            color: Theme.fgMuted
+                            Text {
+                                visible: cell.overflow
+                                leftPadding: 5
+                                textFormat: Text.PlainText
+                                text: qsTr("+%n more", "", cell.orderedItems.length - cell.shownPills)
+                                font.family: Theme.fontUi
+                                font.pixelSize: Theme.textXs
+                                font.weight: Theme.weightMedium
+                                color: Theme.fgMuted
+                            }
                         }
                     }
 
@@ -428,18 +441,21 @@ FocusScope {
                     // Open entries as small icons in their colours (narrow cells): one per kind,
                     // the most urgent first (markIcon()) — a shape, not only a colour, to tell
                     // them apart.
-                    Row {
-                        visible: root.dots && cell.openKinds.length > 0
+                    Loader {
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: journalMark.y + journalMark.height + 4
-                        spacing: 2
-                        Repeater {
-                            model: cell.openKinds
-                            delegate: BIcon {
-                                required property string modelData
-                                name: root.markIcon(modelData)
-                                size: 14
-                                color: Theme.markColor(modelData)
+                        active: root.dots && cell.openKinds.length > 0
+                        visible: active
+                        sourceComponent: Row {
+                            spacing: 2
+                            Repeater {
+                                model: cell.openKinds
+                                delegate: BIcon {
+                                    required property string modelData
+                                    name: root.markIcon(modelData)
+                                    size: 14
+                                    color: Theme.markColor(modelData)
+                                }
                             }
                         }
                     }

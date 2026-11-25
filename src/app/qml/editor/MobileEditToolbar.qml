@@ -47,7 +47,9 @@ Rectangle {
     /// Source mode: its text editor (insertions, its own undo).
     readonly property TextEdit sourceEdit: editor && mode === "source" ? editor.sourceTextEdit : null
     /// The table whose cell is being edited.
-    readonly property TableBlockView table: editor && mode === "cell" ? editor.editingTable : null
+    /// The table whose cell is edited (TableBlockView, its members reached by name: it is loaded
+    /// from its file for a page with a table — docs/PERFORMANCE.md "QML files loaded when first used").
+    readonly property Item table: editor && mode === "cell" ? editor.editingTable : null
     readonly property bool documentMode: editor !== null && editor.documentMode
     /// The edited block is a list item (the document mode indents only those).
     readonly property bool listItem: edit !== null && edit.block !== null && edit.block.listItem
@@ -118,11 +120,12 @@ Rectangle {
             bar.editor.stopEditing(false)
         } else if (bar.mode === "cell") {
             // The composed word first: hiding the keyboard may drop it.
-            if (bar.table && bar.table.cellInput)
-                EditorInput.commitPreedit(bar.table.cellInput)
+            const cell = bar.table ? QmlCall.object(bar.table, "cellInput") as Item : null
+            if (cell)
+                EditorInput.commitPreedit(cell)
             DeviceInfo.hideInputMethod()
             if (bar.table)
-                bar.table.closeCell()
+                QmlCall.call(bar.table, "closeCell")
         } else if (bar.mode === "source") {
             if (bar.sourceEdit)
                 EditorInput.commitPreedit(bar.sourceEdit)
@@ -300,19 +303,19 @@ Rectangle {
             ToolButton {
                 iconName: "calendar"
                 label: qsTr("Due date")
-                onClicked: { bar.commitComposition(); bar.editor.dialogs.pickDate(bar.row, "due") }
+                onClicked: { bar.commitComposition(); QmlCall.call2(bar.editor.dialogsNow(), "pickDate", bar.row, "due") }
             }
             ToolButton {
                 iconName: "bell"
                 label: qsTr("Reminder")
-                onClicked: { bar.commitComposition(); bar.editor.dialogs.createReminder(bar.row, false) }
+                onClicked: { bar.commitComposition(); QmlCall.call2(bar.editor.dialogsNow(), "createReminder", bar.row, false) }
             }
             ToolButton {
                 iconName: "image"
                 label: qsTr("Insert picture")
                 onClicked: {
                     bar.commitComposition()
-                    bar.editor.dialogs.pickImage(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                    QmlCall.call2(bar.editor.dialogsNow(), "pickImage", bar.row, bar.edit ? bar.edit.cursorPosition : -1)
                 }
             }
             ToolButton {
@@ -411,14 +414,14 @@ Rectangle {
                 iconName: "undo-2"
                 label: qsTr("Undo")
                 enabled: bar.table !== null && bar.controller !== null && bar.controller.canUndo
-                onClicked: bar.table.undoInCell()
+                onClicked: QmlCall.call(bar.table, "undoInCell")
             }
             ToolButton {
                 objectName: "toolbarCellRedo"
                 iconName: "redo-2"
                 label: qsTr("Redo")
                 enabled: bar.table !== null && bar.controller !== null && bar.controller.canRedo
-                onClicked: bar.table.redoInCell()
+                onClicked: QmlCall.call(bar.table, "redoInCell")
             }
             Separator {}
             ToolButton {
@@ -426,7 +429,7 @@ Rectangle {
                 iconName: "arrow-right"
                 label: qsTr("Next cell")
                 enabled: bar.table !== null
-                onClicked: bar.table.nextCell()
+                onClicked: QmlCall.call(bar.table, "nextCell")
             }
             Separator {}
             ToolButton {

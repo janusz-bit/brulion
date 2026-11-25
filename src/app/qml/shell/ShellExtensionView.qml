@@ -260,6 +260,10 @@ ListView {
     }
     BRowScrollBar { list: list; visible: !list.embedded }
     Accessible.role: Accessible.List
+    /// The name a screen reader says (set by those that load this file instead of naming it:
+    /// docs/PERFORMANCE.md "QML files loaded when first used").
+    property string accessibleName
+    Accessible.name: list.accessibleName
 
     /// A link-like text (an exercise's page, another view).
     component LinkText: BText {

@@ -675,6 +675,7 @@ private:
     QStringList m_enabled;
     std::unique_ptr<extensions::NotebookHost> m_host;
     std::unique_ptr<extensions::Engine> m_engine;
+    bool m_dropsData = false; ///< the engine's data files go while the app is away (ensureEngine())
     extensions::Limits m_limits;
     QString m_questionKind, m_questionTitle;
     QStringList m_questionOptions;

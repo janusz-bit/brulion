@@ -9,6 +9,7 @@
 #include <QElapsedTimer>
 #include <QLocale>
 #include <QPointer>
+#include <QScopedValueRollback>
 #include <QThread>
 
 #include <algorithm>
@@ -87,6 +88,12 @@ SpellCheck::SpellCheck(const QStringList &availableLanguages, BackendFactory fac
     m_flushTimer.setSingleShot(true);
     m_flushTimer.setInterval(0);
     connect(&m_flushTimer, &QTimer::timeout, this, &SpellCheck::flush);
+    m_idleTimer.setSingleShot(true);
+    connect(&m_idleTimer, &QTimer::timeout, this, [this] {
+        // (Words still on their way: a slow backend. Later.)
+        if (!unload() && m_thread)
+            used(false);
+    });
     // Every verdict gone, or spell checking switched on or off: what wrongWords() found is stale.
     connect(this, &SpellCheck::invalidated, this, [this] { verdictsChanged(true); });
     connect(this, &SpellCheck::activeChanged, this, [this] { verdictsChanged(true); });
@@ -116,8 +123,45 @@ SpellCheck::~SpellCheck()
     stopWorker();
 }
 
+void SpellCheck::setIdleMs(int ms)
+{
+    m_idleMs = ms;
+    // (The new time counts from now, whatever was left of the old one.)
+    m_idleTimer.stop();
+    if (m_thread)
+        used(true);
+}
+
+void SpellCheck::used(bool typed)
+{
+    if (m_idleMs <= 0)
+        return;
+    // Typing asks about a new word every few seconds; a page that was opened asks once, and is
+    // read then.
+    const int ms = !typed && m_readIdleMs > 0 ? std::min(m_idleMs, m_readIdleMs) : m_idleMs;
+    // (Reading while typing: the longer wait stays.)
+    if (m_idleTimer.isActive() && m_idleTimer.remainingTime() > ms)
+        return;
+    // (Whole seconds are precise enough for the real time, and wake the processor least.)
+    m_idleTimer.setTimerType(ms >= 5000 ? Qt::VeryCoarseTimer : Qt::CoarseTimer);
+    m_idleTimer.start(ms);
+}
+
+bool SpellCheck::unload()
+{
+    if (!m_thread)
+        return false;
+    // (Stopping waits for the worker: never in the middle of its batches.)
+    if (!m_inFlight.isEmpty() || !m_toSend.isEmpty())
+        return false;
+    stopWorker();
+    Q_EMIT unloaded();
+    return true;
+}
+
 void SpellCheck::stopWorker()
 {
+    m_idleTimer.stop();
     if (!m_thread)
         return;
     // The worker goes with its thread (finished → deleteLater); answers still on their way are
@@ -300,6 +344,8 @@ SpellCheck::Verdict SpellCheck::verdict(const QString &word)
     if (!m_inFlight.contains(word)) {
         m_inFlight.insert(word);
         m_toSend.append(word);
+        if (!m_reading)
+            m_typedQueued = true;
         if (!m_flushTimer.isActive())
             m_flushTimer.start();
     }
@@ -326,6 +372,7 @@ QList<spell::WordSpan> SpellCheck::wrongWords(const QString &text, bool *pending
         return it->wrong;
     TextWords found;
     found.epoch = m_epoch;
+    const QScopedValueRollback reading(m_reading, true);
     const QStringView all(text);
     for (qsizetype start = 0; start <= all.size();) {
         qsizetype end = all.indexOf(u'\n', start);
@@ -361,12 +408,12 @@ void SpellCheck::ensureWorker()
     m_worker->moveToThread(m_thread.get());
     connect(m_thread.get(), &QThread::finished, m_worker, &QObject::deleteLater);
     m_thread->start(QThread::LowPriority);
+    // It starts with the settings of now (the dictionaries are read on its thread).
+    sendSettings();
 }
 
-void SpellCheck::configure(bool forget)
+void SpellCheck::sendSettings()
 {
-    ensureWorker();
-    ++m_generation;
     const QStringList languages = m_languages;
     const QStringList personal = m_personal;
     const QStringList ignored = m_ignored;
@@ -374,6 +421,14 @@ void SpellCheck::configure(bool forget)
     QMetaObject::invokeMethod(
             worker, [worker, languages, personal, ignored] { worker->configure(languages, personal, ignored); },
             Qt::QueuedConnection);
+}
+
+void SpellCheck::configure(bool forget)
+{
+    ++m_generation;
+    // (No worker yet, or none any more: the one the next word makes starts with these settings.)
+    if (m_thread)
+        sendSettings();
     // What was on its way is asked again under the new settings (answers of the old ones are
     // dropped by their generation); without `forget`, so are the words marked wrong — they stay
     // marked until then.
@@ -389,6 +444,8 @@ void SpellCheck::configure(bool forget)
     m_suggestions.clear();
     m_toSend = again;
     m_inFlight = QSet<QString>(again.cbegin(), again.cend());
+    // (The user changed a setting or the dictionary: as after typing.)
+    m_typedQueued = !m_toSend.isEmpty();
     if (!m_toSend.isEmpty())
         m_flushTimer.start();
     if (forget)
@@ -399,8 +456,8 @@ void SpellCheck::flush()
 {
     if (m_toSend.isEmpty() || !active())
         return;
-    if (!m_thread)
-        configure(false);
+    ensureWorker();
+    used(std::exchange(m_typedQueued, false));
     const int generation = m_generation;
     SpellWorker *worker = m_worker;
     for (qsizetype i = 0; i < m_toSend.size(); i += BatchSize) {
@@ -442,8 +499,8 @@ void SpellCheck::requestSuggestions(const QString &word)
         Q_EMIT suggestionsReady(word, {});
         return;
     }
-    if (!m_thread)
-        configure(false);
+    ensureWorker();
+    used(true);
     const int generation = m_generation;
     SpellWorker *worker = m_worker;
     QMetaObject::invokeMethod(

@@ -280,8 +280,9 @@ FocusScope {
     /// The date dialog's request of this row (EditorDialogs.applied).
     readonly property string dateTarget: "property:" + key
     function pickDate(): void {
-        const current = present && !empty ? Js.replace(rawText, "T", " ") : ""
-        editor.dialogs.pickPropertyDate(row.dateTarget, key, current, type === "datetime")
+        editor.dialogsNow()
+        const current = present && !empty ? "" + Js.replace(rawText, "T", " ") : ""
+        QmlCall.call4(editor.dialogs, "pickPropertyDate", row.dateTarget, key, current, type === "datetime")
     }
     Connections {
         target: row.editor ? row.editor.dialogs : null

@@ -245,18 +245,19 @@ T.Control {
         contentItem: Item {
             Row {
                 id: segmentRow
-                anchors.centerIn: parent
+                x: Math.round(parent.width / 2) - Math.round(width / 2)
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 spacing: 6
                 BIcon {
                     id: segmentIcon
-                    anchors.verticalCenter: parent.verticalCenter
+                    y: Math.round(parent.height / 2) - Math.round(height / 2)
                     name: control.iconsShown ? segment.iconName : ""
                     size: control.iconSize
                     color: segment.isCurrent ? Theme.fg : Theme.fgMuted
                 }
                 Text {
                     id: segmentLabel
-                    anchors.verticalCenter: parent.verticalCenter
+                    y: Math.round(parent.height / 2) - Math.round(height / 2)
                     visible: !control.iconOnly
                     textFormat: Text.PlainText
                     text: segment.text

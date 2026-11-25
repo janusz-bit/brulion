@@ -773,7 +773,7 @@ QList<SearchHit> VaultIndex::search(const QString &query, int limit) const
         } else {
             const auto first = std::ranges::find_if(e->note.blocks, suggestable);
             if (first != e->note.blocks.cend())
-                hit.excerpt = excerptStart(first->text);
+                hit.excerpt = excerptStart(first->text.view());
         }
         out.append(std::move(hit));
     }

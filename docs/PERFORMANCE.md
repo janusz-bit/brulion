@@ -13,6 +13,22 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **Memory** (2026-11-25). Brulion with a small notebook open took about 400 MB of memory on a
+  computer, and kept it whether you used it or not. Now it takes about 130 MB a quarter of a
+  minute after it started, 180–270 MB while you move between its views, and about 140 MB when its
+  window is hidden — a third of what it was. With 10,000 notes: about 280 MB after the start
+  instead of 700 MB, at most 470 MB instead of 760 MB. What changed: views, dialogs and menus are
+  made when you first open them, not at the start (the three views you used last stay ready, and
+  the one you went to last is prepared ahead); the spelling dictionaries are in memory only while
+  words are checked; the notebook's index takes a third less; and the program lets go of the parts
+  of itself it is not using — when you have done nothing for twelve seconds, and whenever another
+  program is in front or the window is hidden, where the views you are not looking at and the
+  window's graphics go too. The window also appears about a tenth of a second sooner. What you may
+  notice: a view you have not used for a while opens a moment later (0.2–0.35 s for Tasks or
+  Calendar of 10,000 notes) and from its top; the first new word after a pause is underlined a
+  tenth of a second later. (Measured on Linux. On phones and on Windows the program does not yet
+  let go of its own pages or of a hidden window's graphics; they have not been measured.)
+
 * **Memory with photos in notes** (2026-11-24). A page with photos took as much memory as all its
   photos decoded at once, each far larger than it was shown: a page of forty phone photos went
   over 2 GB. And after you closed such a page the program kept most of that for as long as it
@@ -240,9 +256,10 @@ there, so a broken connection or a full disk never leaves half a file. Importing
   by piece) has become the longest part — the new time on a phone is not measured yet.
   The first open after a Brulion update is always "cold" (the ready index of the previous
   version is not used).
-* **Memory** — a notebook of 10,000 notes takes about 340 MB on a computer (before: about
-  500 MB). On phones with 3–4 GB of RAM the system may close Brulion in the background (notes are
-  always saved to disk).
+* **Memory** — a notebook of 10,000 notes takes about 280 MB on a computer after its start and
+  at most about 470 MB while its views are used (before 2026-11-25: 700 and 760 MB). On phones
+  with 3–4 GB of RAM the system may close Brulion in the background (notes are always saved to
+  disk); the new numbers are not measured there yet.
 * **Calendar and Agenda** open after 1–1.3 s on a phone with a large notebook.
   (Undo on a very long page took about 0.2 s on a phone; since 2026-10-30 it costs as much as
   Enter — measured on a computer, not yet on a phone.)
@@ -3433,6 +3450,215 @@ Reproduce: tests/bench/app/README.md, scenario `pictures`. Guards: `tests/app/me
 step "5r" (a page of thirty photos: which are loaded, at what size, the page as tall after
 scrolling to its end).
 
+### Memory: only what is in use (2026-11-25)
+
+The request: aggressive memory optimisation of the whole app. After the start of the 13-note
+sample notebook the app held 403 MB resident on a desktop's GPU (465 MB under Xvfb), 205–233 MB of
+it private — for a window of text. Measured with a new scenario of the app benchmarks, `memory`
+(tests/bench/app/README.md): the start, a tour of the views (a page, Tasks, Calendar, All pages,
+Search, Graph, Tags, Settings), back at the journal, a rest, then away as with another program in
+front, the window hidden, and shown again — a mark after a garbage collection at every step with
+the kernel's own counts (`smaps_rollup`), malloc's over every arena, the items, the QObjects and
+the QML files loaded. Two platforms: Xvfb + llvmpipe as before (every texture is the process's
+memory there, as on a phone), and — new, `--platform weston` — a headless Weston with its GL
+renderer and the app as its Wayland client on the machine's integrated GPU (Intel, Mesa), which is
+what a desktop shows.
+
+**Where it was** (the sample notebook after its start; heaptrack for the heap, `BENCH_UNLOAD=1`
+unloads one hidden thing at a time, `/proc/<pid>/pagemap` for the program's own pages):
+
+| what | MB | |
+|---|---:|---|
+| pages of the program and its libraries mapped | 198 (233 under Xvfb) | every page touched once stays mapped: relocation and symbol tables of sixty libraries, initialisers, the code only a start runs. The program's own code: 32 MB resident of 72 — a start runs 14 000 of its 175 000 functions, 8 MB, spread all over, and pages are read and mapped with their neighbours |
+| hidden views built ahead: Tasks 14, Calendar 13, All pages 4, Search 1 (10 000 notes: 36 + 34 + 12 + 1) | 32 (83) | 22 000 of the 34 800 QObjects alive belonged to views nobody had opened |
+| QML files: 291 of 303 loaded before the first window | 23.5 | 80–90 KB a file: Qt rebuilds each ahead-of-time unit on the heap (`QQmlTypeData::initializeFromCachedUnit` → the type compiler), plus property caches and bindings' tables; a file named as a type in another one is loaded with it |
+| the spell checker's dictionaries (Hunspell: Polish 18, English 5) | 23 | read at the start for the first rendered block, kept for good |
+| the gym's catalog and its instructions, parsed | 5 | 880 exercises as QVariants at every start |
+| popups built ahead (switcher, palette, the More menu, quick capture) | 3 | |
+| the bundled fonts, a copy of every file | 2.4 | `addApplicationFont()` reads a resource whole onto the heap |
+| the texture atlas | 8 (32 on a phone's screen) | sized by the window, whatever goes into it |
+| Qt Multimedia's FFmpeg backend, Tesseract and their libraries | 12 files' worth of 322 mapped | made / looked for at every start |
+| the index of 10 000 notes | 304 | the parsed model, the search index and the vault's copy of every file read |
+
+**What changed** (docs/UI.md "Navigation" — views loaded when first shown, kept views, Away, Not
+used for a while —, "Spell checking", "Compiled QML"):
+
+* **The program's own pages go when they are not used.** Twelve seconds after the last key,
+  click, touch or turn of the wheel (the first window shown counts as the first thing done) and
+  whenever the app is away, the pages of the program and its libraries are let go of
+  (`platform::releaseProgramPages()`, Linux: `madvise(MADV_DONTNEED)` on the segments of the
+  loaded ELF objects that are not writable, under the loader's lock, and of those only the
+  mappings the kernel reports as file-backed, private, not writable, not locked and without a
+  page of the process's own; the libraries OpenGL calls go through are left alone — a driver may
+  rewrite their entry points). They are clean pages of files: they stay in the page cache, first
+  in line when the system needs memory, and what the app touches next is mapped again without
+  reading. 156 MB go after a start; an idle journal then runs on 24–28 MB of them. Opening the
+  5000-block outline right after: 137 ms to its content with and without (3 runs each,
+  133–141 / 135–139 ms). The app's QML self-tests ran for half an hour with the pages let go
+  after every 0.3 s of idleness (`BRULION_IDLE_MS=300`).
+* **The functions a start runs are laid out first** (`cmake/startup-order.txt`, lld's
+  `--symbol-ordering-file`, optimised Linux builds): what a start runs, then what a tour of the
+  views and some typing run on top, and the compiled QML units of the files loaded by then.
+  Resident after a start, before anything is let go: code 32.0 → 9.4 MB, read-only data
+  15.2 → 12.0 MB. `scripts/startup-order.py` writes the file in four minutes — the app under
+  callgrind, driven by the benchmark probe: every function that ran, none sampled; a name the
+  program no longer has is skipped by the linker, and `tst_scripts_startup_order` fails when
+  fewer than half are left.
+* **QML files are loaded when first used.** `ShellRouteView` loads a view from its file when it
+  is first shown (`Loader.setSource` with the view's first properties, `Binding`s afterwards).
+  Nothing the first screen does not show is named by what it shows any more: the start screens,
+  the shell's and the editor's dialogs, menus and popups, the touch toolbar, source mode, a day
+  as a page, the viewers of other files, the side panels, the extensions' views, the block kinds
+  a page may not have and the self-tests are made from their files and reached through a base
+  type, their members by name (`QmlCall`, `QmlValue`, `QmlCall.connect`). 291 → 89 files at the
+  start. The first window comes 18 % sooner (GUI thread's instructions), the first page opens in
+  107 ms instead of 125 (its dialogs are no longer made with it). A first use pays for its files:
+  0.3–0.9 ms a file on the desktop, 5.6 ms for the editor's date and reminder dialogs with what
+  they load, 3.4 ms for the page view.
+* **Views are kept while they are in use.** A pane holds the three hidden views shown most
+  recently, for five minutes after the last switch (`ViewKeeper`); only the view the user went to
+  last is built ahead. (Two hidden views made a rotation through Tasks, Calendar and All pages
+  rebuild one of them every time: 0.2–0.35 s in the 10 000-note notebook on a desktop.)
+* **Away, the app lets go of everything hidden** (`MemoryPolicy`): another program in front for
+  a minute, or no window shown for eight seconds — the kept views, the closed popups and dialogs,
+  the rows of a page created whole beyond the view's reach, the dictionaries, the extensions'
+  catalogs, an on-device model that is not answering; then the QML engine collects its garbage
+  and drops the files nothing uses, and a window that is not shown gives up its scene graph and
+  its graphics context (Linux; elsewhere after it was tried there). Qt Quick's `Shape` does not
+  come back from that by itself — the notebook's round mark lost its fill —, so the policy makes
+  every `Shape` start over; the `memory` scenario compares the window before and after
+  (`back_picture`: a few hundred pixels of glyph edges differ, in every view of the tour).
+* **Fewer objects in what is shown.** `BIcon` and `BFocusRing` are C++ items that make their
+  image and their ring when they first show (866 icons and 582 rings at the start, nine and
+  eight bindings each); the rare parts of rows and controls are made when they show (a task
+  row's 13 chips, a button's spinner, a menu item's key caps, a field's clear button, a shadow
+  before its target shows); a block's 13 optional parts and nine non-text views are one component
+  per engine (`BlockParts`), not one per block; anchors to a parent's centre in components with
+  hundreds of instances are bindings. 34 809 → 22 634 QObjects at the start as it was then.
+* **The spell checker's dictionaries only while words are checked**: the worker is made for the
+  first word asked about and goes 8 s after the words of rendered text (a page was opened and is
+  read now), 30 s after a word of the edited text; the verdicts stay. Reading the Polish
+  dictionary again takes 0.08 s of a laptop's processor, on the worker.
+* **Read when asked for**: the gym's catalog and the assistant's reference (`extensions::DataFile`),
+  Qt Multimedia's player and prober (`MediaPlayback::engine()`), Tesseract (`AttachmentIndexer::
+  probeEngine()`).
+* **Not copied**: the bundled fonts are handed to the font engine in place (resources stored
+  uncompressed).
+* **The texture atlas** is 1024 × 1024 (4 MB) unless `QSG_ATLAS_*` say otherwise.
+* **The parsed model, the index and the vault's content cache**: a third smaller — below.
+
+**Measured** (v0.29.1 → this tree, both Release with Clang 21 and lld; a desktop's GPU — headless
+Weston, Intel; medians of three runs, the builds in turns; MB resident / PSS / private dirty):
+
+| step | sample notebook (13 notes): before | after | 40 photos: before | after | 10 000 notes: before | after |
+|---|---:|---:|---:|---:|---:|---:|
+| after the start (15 s) | 402 / 314 / 204 | 130 / 117 / 102 | 371 / 299 / 177 | 117 / 103 / 91 | 698 / 617 / 502 | 278 / 265 / 251 |
+| a page open | 452 / 364 / 251 | 244 / 206 / 163 | 420 / 348 / 225 | 229 / 190 / 151 | 732 / 650 / 534 | 371 / 338 / 301 |
+| end of the tour of eight views | 455 / 367 / 252 | 266 / 225 / 176 | 423 / 352 / 226 | 248 / 209 / 163 | 759 / 675 / 559 | 469 / 428 / 382 |
+| back at the journal | 430 / 343 / 228 | 234 / 192 / 143 | 395 / 323 / 197 | 218 / 179 / 133 | 722 / 640 / 522 | 414 / 372 / 326 |
+| … and 30 s later | 430 / 342 / 228 | 179 / 164 / 146 | 395 / 312 / 197 | 165 / 148 / 133 | 724 / 649 / 524 | 358 / 343 / 327 |
+| another program in front | 438 / 350 / 236 | 164 / 152 / 136 | 403 / 320 / 205 | 145 / 133 / 118 | 731 / 653 / 531 | 318 / 305 / 291 |
+| the window hidden | 438 / 351 / 236 | 141 / 130 / 114 | 403 / 320 / 205 | 124 / 112 / 98 | 732 / 653 / 531 | 295 / 283 / 269 |
+| shown again | 438 / 355 / 236 | 196 / 165 / 132 | 403 / 320 / 205 | 179 / 145 / 115 | 728 / 651 / 528 | 350 / 317 / 287 |
+| heap in use at the start | 178 | 76 | 152 | 68 | 455 | 224 |
+| QObjects at the start | 34805 | 9386 | 25014 | 6476 | 44849 | 10762 |
+| QML files loaded at the start | 291 | 89 | 291 | 87 | 291 | 87 |
+| peak resident | 453 | 275 | 423 | 264 | 757 | 468 |
+
+Under Xvfb with llvmpipe, where textures and the rasteriser are the process's own memory (one run):
+the sample notebook after its start 451 / 395 / 231 → 154 / 137 / 121, with its window hidden 488 /
+410 / 263 → 139 / 125 / 111, peak 508 → 330; 10 000 notes after the start 764 / 687 / 535 → 310 /
+295 / 279, hidden 799 / 726 / 566 → 304 / 291 / 278, peak 859 → 595.
+
+The first frame in the same runs (medians of three; the test suite ran beside them, so the ratios
+count, not the values): 591 → 407 ms with the sample notebook, 372 → 264 ms with the photos,
+389 → 268 ms with 10 000 notes. Opening the 5000-block outline for the first time: 888 → 807
+million instructions of the GUI thread to its frame.
+
+**What it costs.** A view is built when it is first shown, not ahead (10 000 notes, a loaded
+desktop: Calendar 58 → 328 ms the first time, 38 ms the second; All pages 40 → 74 ms). A view
+that is not among the three kept — a fourth one in rotation, or the one shown longest ago once a
+page or another view came in between —, or that was let go of while the app was away, is built
+again when it is shown (Tasks of 10 000 notes: 0.1–0.35 s on a desktop) and comes back at its
+top. The first unknown word after the dictionaries went is
+underlined 0.1 s later. A window shown again after it was hidden draws its first frame from
+nothing (50–80 ms on the desktop). The first thing done after the program's pages went takes
+their page faults — not measurable on a 137 ms page opening. Under memory pressure the system may
+drop those pages from its cache while the app sits idle; they are then read from the disk again.
+
+#### The parsed model, the index and the vault (the core)
+
+Seven steps on the parsed model, the index, the full-text index, the vault and the loader, each
+committed and measured on its own (`bench_index:memory`, glibc malloc statistics, exact; the
+10 000-note bench vault, 22.9 MB of Markdown):
+
+| step | ParsedNote only | + search index | loaded from disk |
+|---|---:|---:|---:|
+| before | 163.5 MiB | 227.0 MiB | 303.5 MiB |
+| `ParsedNote::tasks` a `TaskList` (the blocks' own `Boxed<Task>`, 8 instead of 280 bytes a task); a one-line task's text shares its block's | 146.8 | 210.3 | – |
+| the vault's `ContentCache` keeps text as the reader's `QString` (shared with the index) where it gives the bytes back | 146.8 | 210.3 | 264.8 |
+| `Block::text` a `BlockText` (a slice of the note's text where it is one piece of it: 94 % of the texts); tag keys, property keys and task markers from a per-thread pool | 104.3 | 167.6 | 222.1 |
+| full-text index: 8-byte postings (frequencies packed, large ones beside), 32-bit term ids per document | 104.3 | 152.8 | 207.3 |
+| a link's key shares the index's map key | 104.3 | 150.6 | 205.0 |
+| the index loader drops its list of notes once all are merged | 104.3 | 150.6 | **200.1 (−34.1 %)** |
+
+**After: + search index 150.6 MiB (−33.7 %); 50 000 notes 1126.1 → 747.8 MiB (−33.6 %).** The
+limit in `limits.csv` is ratcheted to 158 MiB. What made the difference: `Block::text` was a
+QString of its own beside the note's text (19.2 M characters, 38 MB of UTF-16 plus a heap block
+per block); now it is a `BlockText` like `BlockSource`, which reads like a const `QString`
+(implicit `QString`/`QStringView`, the usual const functions, comparisons, `QConcatenable`) —
+a slice converted to `QString` is copied, so hot paths read `view()`. Only one call outside the
+core had to name a type (a `QRegularExpression::globalMatch()` overloaded for both). The vault's
+content cache, which kept the raw bytes of every note read (a second copy of the notebook, for
+History snapshots of what other programs replace), now keeps the very `QString` the reader got —
+the index holds it anyway — when encoding it gives the bytes back (valid UTF-8 without a second
+BOM, checked again by size and hash when the bytes are needed); other files stay bytes, and
+eviction still counts the files' bytes. The index cache's format is unchanged (its decoder makes
+the same slices without copying).
+
+Times (seven rounds, the builds in turns, medians; none outside the noise, and by instructions —
+callgrind, the machine's load went up to 28 — parsing 0.3 % cheaper, the loader +0.1 %, the first
+search +0.5 %, a fuzzy search +1.75 %, an edit of a popular page with its search −78 %):
+
+| row | before | after |
+|---|---:|---:|
+| cacheEncode | 153 ms | 131 ms |
+| cacheDecode | 176 ms | 159 ms |
+| openFromDisk loader, 4 workers | 485 ms | 467 ms |
+| openFromDisk warm cache, 4 workers | 332 ms | 332 ms |
+| openFromDisk loader inline | 1260 ms | 1273 ms |
+| firstSearch | 671 ms | 675 ms |
+| query tag praca | 41 ms | 33 ms |
+| suggestBlocks | 20.6 ms | 20.7 ms |
+| saveRoundTrip 10 000 throttled | 1.39 ms | 1.38 ms |
+| reminders afterEdit | 5.9 ms | 5.5 ms |
+| syncNoChanges | 260 ms | 257 ms |
+
+Tried and left: `Block::text` as a `QString` pointing into the note's buffer (no API change, but it
+breaks Qt's `'\0'` at the end: `utf16()`, `qUtf16Printable`); a compressed `ContentCache` (150 ms of
+CPU at every opening); a small LRU instead of it (History would lose versions replaced from
+outside); compacting the fields of `Task` and `Link` (under 1 MB).
+
+**Not done** (TODO.md "Memory: what is left"): a real phone (PSS, the background; there the
+system itself lets go of a cached app's pages, and neither that nor the graphics release were
+tried); Windows (its working set can be emptied the same way); the functions' order for Android
+(the order file is made on Linux; names with the standard library's types in them differ under
+the NDK's);
+the views let go come back at their top, not where they were scrolled; Qt loads every image
+plugin for a PNG (53 libraries with KDE's formats installed); poppler and what it brings are
+linked, not loaded with the first PDF; the Polish translation is unpacked onto the heap (1.3 MB);
+Qt Wayland keeps a picture of the whole window for its own title bar where the compositor draws
+none (GNOME: 4 MB at 1280 × 800, 33 MB on a 4K screen); fewer allocator arenas (2–8 MB less
+private memory, but the index of 10 000 notes took 15 % longer to load in one run).
+
+Reproduce: tests/bench/app/README.md, scenario `memory`. Guards: `tst_memory_policy`,
+`tst_processmemory` (`programPages`), `tst_scripts_startup_order`, `tst_shell_viewkeeper`,
+`tst_editor_spellcheck` (`dictionariesGoWhenIdle`, `renderedTextLetsThemGoSooner` …),
+`tst_extensions_engine` (`dataFiles`), `tst_media_playback` (`noEngineUntilSomethingIsPlayed`),
+`tst_attachmentindexer` (`ocrLibraryLookedForWhenAsked`), `tst_ui_fonts` (`storedAsTheyAre`),
+`tst_qmlcall`, `tst_vault_contentcache`, `bench_index:memory` (limits.csv: 158 MiB at 10 000
+notes), the shell self-test's "0b" and "0d".
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -3452,7 +3678,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ❌ not the laptop (unreachable): a GitHub runner with llvmpipe, CPU-rendered frames — stall 219 ms (was 958 ms), settled 2.0 s (`views`; was 8.3 s), 9.2 s with drags (was 40 s), first frame 0.13 s (was 1.07 s); the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
-| memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
+| memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ✅ 224 MB heap after the start, 287 MB after a tour of the views ("Memory: only what is in use"; 455 / 477 MB before in the same runs; index alone 151 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
 | download | APK < 40 MB, web < 10 MB | – | ⚠️ 43.1 MB download, a 43.5 MB APK file (2026-11-20: the model on the device's libraries since 0.22.0, the native libraries compressed; was 116.7 MB) — 34.1 MB / 92.7 MB APK before the model (L20: was 36.1 / 105.9 MB; L9 on 2026-10-30: 26.3 / 80.6 MB) | ❌ 17.1 MB gzip (11.3 MB brotli, not served; L20: was 18.5 / 12.1 MB; L9 on 2026-10-30: 13.5 MB) |
 
 ### Next steps
@@ -3660,7 +3886,8 @@ k ≤ 1.3 (N6), `unlinkedLongLine` k ≤ 1.3 (N6), `htmlToMarkdown` flat and nes
 L5 `blockDocOps` undo+redo (measured k 1.15) k ≤ 1.3 — 1.5 for all of them in the Pi's small
 profile (3 workers); `saveRoundTrip` throttled k ≤ 0.25 between 3000 and 10 000 notes in both
 profiles (a save must not grow with the notebook); index heap at 10 000 notes
-≤ 233 MiB (wave 5: 220.6 MiB measured; it was ≤ 560 MiB before). The Pi baseline has no loader
+≤ 158 MiB ("Memory: only what is in use": 150.6 MiB measured; ≤ 233 MiB since wave 5, ≤ 560 MiB
+before). The Pi baseline has no loader
 rows and no undo+redo row yet (record them with `-u` in a quiet window; L1b, L5b).
 
 App-level guards (startup, typing, open-page, views, idle) are not automated: run

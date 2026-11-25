@@ -1466,17 +1466,25 @@ end
 
 -- ---- Extensions ---------------------------------------------------------------------------------
 
-local REFERENCE: string = str(b.data("reference"))
+-- (Read when first asked for: a few hundred kilobytes that most conversations never need.)
+local REFERENCE: string? = nil
+local function referenceText(): string
+    if REFERENCE == nil then
+        REFERENCE = str(b.data("reference"))
+    end
+    return REFERENCE :: string
+end
 
 type Heading = { level: number, title: string, line: number }
 
 -- The reference, or the sections whose heading has `section`'s words (with their subsections).
 local function reference(section: string): (string, boolean)
-    if REFERENCE == "" then
+    local text = referenceText()
+    if text == "" then
         return "The reference is not available.", true
     end
     local lines = {}
-    for line in (REFERENCE .. "\n"):gmatch("([^\n]*)\n") do
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
         table.insert(lines, line)
     end
     local heads: { Heading } = {}

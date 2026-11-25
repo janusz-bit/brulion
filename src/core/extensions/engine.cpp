@@ -15,6 +15,8 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QFile>
+#include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QTimeZone>
@@ -1994,6 +1996,20 @@ int Engine::stopTimerImpl(lua_State *L)
     return 0;
 }
 
+QVariant resolvedData(const QVariant &stored)
+{
+    if (stored.metaType() != QMetaType::fromType<DataFile>())
+        return stored;
+    const QString path = stored.value<DataFile>().path;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const QByteArray bytes = file.readAll();
+    if (path.endsWith(u".json", Qt::CaseInsensitive))
+        return QJsonDocument::fromJson(bytes).toVariant();
+    return QString::fromUtf8(bytes);
+}
+
 int Engine::dataImpl(lua_State *L)
 {
     QString name;
@@ -2001,6 +2017,14 @@ int Engine::dataImpl(lua_State *L)
     if (!argString(L, 1, "b.data", &name) || (!lua_isnoneornil(L, 2) && !argString(L, 2, "b.data", &key)))
         return kRaise;
     QVariant value = m_loaded.value(extensionOf(L)).data.value(name);
+    // A file: read and parsed when first asked for, kept until dropData().
+    if (value.metaType() == QMetaType::fromType<DataFile>()) {
+        const QString path = value.value<DataFile>().path;
+        auto held = m_dataFiles.constFind(path);
+        if (held == m_dataFiles.cend())
+            held = m_dataFiles.insert(path, resolvedData(value));
+        value = *held;
+    }
     // b.data(name, key): one entry of a record (the gym's instructions of one exercise), without
     // crossing the whole record into the script.
     if (!lua_isnoneornil(L, 2))

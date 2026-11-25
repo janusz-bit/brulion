@@ -1,7 +1,7 @@
-# BIcon (src/app/qml/components/BIcon.qml) and its pictures (src/app/ui/iconprovider.h, library
+# BIcon (the C++ item of src/app/ui/iconprovider.h) and its pictures (src/app/ui/iconprovider.h, library
 # brulion_ui_icons): the same pixels as Qt's IconImage, which BIcon held in a Loader until 2026-11,
 # at device pixel ratio 1 and 2; its sizes; names that must not leave the icon folder; one raster
-# for many icons. Qt Quick's software backend, offscreen; the app's BIcon.qml from the source tree.
+# for many icons; the theme's defaults. Qt Quick's software backend, offscreen.
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
 if(TARGET brulion_ui_icons AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls/impl")
     brulion_add_test(tst_icons

@@ -100,8 +100,12 @@ cross-module scenarios in `tests/core/integration`. Shared data model: `src/core
 compact where the index keeps hundreds of thousands of them (docs/PERFORMANCE.md, L8):
 `Block::task` is a `Boxed<Task>` (on the heap, shared by copies, read like `std::optional`),
 `Block::raw` a `BlockSource` (a slice of the note's text when its own lines are one piece of it,
-else its own copy; read as `QStringView` or `toString()`), `Properties` and `ParsedNote::blockIds`
-are `QMap`s (by key). **Changing what `parseNote()` returns** (any field, any input) needs a bump
+else its own copy; read as `QStringView` or `toString()`), `Block::text` a `BlockText` (the same
+for the stripped text: a slice where it is one piece of the note; reads like a const `QString` —
+implicit `QString`/`QStringView`, QString's const functions, comparisons, `+` — but a slice
+converted to `QString` is copied, so hot paths read `view()`; in a ternary with a `QString`
+it converts to `QString`), `ParsedNote::tasks` a `TaskList` (the blocks' own `Task` objects,
+read like a const `QList<Task>`), `Properties` and `ParsedNote::blockIds` are `QMap`s (by key). **Changing what `parseNote()` returns** (any field, any input) needs a bump
 of `markdown::ParserVersion` (`markdown/parse.h`): the index cache keeps parsed notes on the device;
 `tst_markdown_model`'s golden digest of a frozen corpus fails until then. A new field in `Block`,
 `Task`, `Reminder`, `Link` or `ParsedNote` also needs the cache's codec (`indexcache.cpp`, a

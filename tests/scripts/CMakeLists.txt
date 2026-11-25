@@ -61,6 +61,16 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/fastlane/metadata/android ${PROJECT_SOURCE_DIR}/CMakeLists.txt)
 endif()
 
+# The order of the app's functions in the program (cmake/startup-order.txt, read by the linker of
+# an optimised build: cmake/BrulionSize.cmake) still names functions of the app as it is built
+# here; needs python3 and nm (skipped without them).
+if(BRULION_BASH AND TARGET brulion AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_test(NAME tst_scripts_startup_order
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_startup_order.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/startup-order.py $<TARGET_FILE:brulion>)
+    set_tests_properties(tst_scripts_startup_order PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # The privacy policy's page (docs/PRIVACY.md -> privacy.html of the site, docs/GOOGLE_PLAY.md):
 # scripts/markdown-page.py on Markdown it knows and must refuse, then on the real policy; needs
 # python3 (skipped without it).

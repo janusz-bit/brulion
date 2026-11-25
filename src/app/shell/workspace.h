@@ -790,6 +790,9 @@ Q_SIGNALS:
     void indexingChanged();
     void indexProgressChanged();
     void readyChanged();
+    /// Something large was let go off the views' sight (the index cache written: its snapshot and
+    /// the encoded file): main() has the allocator hand the pages back (ui::MemoryKeeper).
+    void memoryFreed();
     void trashChanged();
     void revisionChanged();
     /// (After revisionChanged() when both change.)

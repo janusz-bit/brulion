@@ -3,7 +3,6 @@
 #include "extensions/pageextension.h"
 
 #include <QFile>
-#include <QJsonDocument>
 
 using namespace Qt::StringLiterals;
 
@@ -23,9 +22,9 @@ QByteArray resource(const QString &name)
 
 QList<BuiltinExtension> builtinExtensions()
 {
-    // Read once: the palette asks for their titles per command, and the gym's catalog is 880
-    // exercises with their instructions (immutable resources; a static local is initialised once,
-    // thread-safely).
+    // Read once: the palette asks for their titles per command (immutable resources; a static
+    // local is initialised once, thread-safely). The gym's catalog — 880 exercises with their
+    // instructions — and the assistant's reference are only named here (DataFile).
     static const QList<BuiltinExtension> builtins = [] {
         BuiltinExtension gym;
         gym.extension.id = u"silownia"_s;
@@ -34,11 +33,12 @@ QList<BuiltinExtension> builtinExtensions()
         // The catalog (scripts/gym-catalog.py): the exercises, and their instructions by id —
         // b.data("instructions", id) gives one exercise's (English; free-exercise-db's), and
         // b.data("instructions-pl", id) its Polish translation, written for the common ones only.
-        gym.extension.data.insert(u"exercises"_s, QJsonDocument::fromJson(resource(u"exercises.json"_s)).toVariant());
+        // Files (DataFile): read and parsed when the gym first asks for them, not with the app.
+        gym.extension.data.insert(u"exercises"_s, QVariant::fromValue(DataFile{u":/extensions/exercises.json"_s}));
         gym.extension.data.insert(u"instructions"_s,
-                                  QJsonDocument::fromJson(resource(u"exercise-instructions.json"_s)).toVariant());
+                                  QVariant::fromValue(DataFile{u":/extensions/exercise-instructions.json"_s}));
         gym.extension.data.insert(u"instructions-pl"_s,
-                                  QJsonDocument::fromJson(resource(u"exercise-instructions-pl.json"_s)).toVariant());
+                                  QVariant::fromValue(DataFile{u":/extensions/exercise-instructions-pl.json"_s}));
         gym.titleEn = u"Gym"_s;
         gym.titlePl = u"Siłownia"_s;
         BuiltinExtension assistant;
@@ -48,11 +48,7 @@ QList<BuiltinExtension> builtinExtensions()
         // only where the app runs it and the model is on the network: ctx.appTools.)
         assistant.extension.permissions = {u"ai"_s, u"app"_s, u"write"_s};
         // The extensions' reference (docs/EXTENSIONS.md): the model reads it to write one.
-        {
-            QFile reference(u":/extensions/EXTENSIONS.md"_s);
-            if (reference.open(QIODevice::ReadOnly))
-                assistant.extension.data.insert(u"reference"_s, QString::fromUtf8(reference.readAll()));
-        }
+        assistant.extension.data.insert(u"reference"_s, QVariant::fromValue(DataFile{u":/extensions/EXTENSIONS.md"_s}));
         assistant.titleEn = u"AI assistant"_s;
         assistant.titlePl = u"Asystent AI"_s;
         BuiltinExtension habits;

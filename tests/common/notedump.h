@@ -174,7 +174,7 @@ inline QString dumpNote(const ParsedNote &note)
                                               .arg(str(b.lang));
         const QStringView raw(b.raw);
         line += QStringLiteral(" raw=") + str(raw)
-                               + QStringLiteral(" text=") + str(b.text)
+                               + QStringLiteral(" text=") + str(b.text.toString())
                                                 + QStringLiteral(" props=") + properties(b.properties);
         line += QStringLiteral(" task=") + (b.task ? task(*b.task) : QStringLiteral("-"));
         for (const Reminder &r : b.reminders)

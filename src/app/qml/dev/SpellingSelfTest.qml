@@ -57,7 +57,7 @@ QtObject {
     /// The TextEdit showing the rendered text of `b` (null: none).
     function editOf(b: BlockText): TextEdit { return b ? b.tintedEdit : null }
     /// Source mode's view (null outside it).
-    function sourceView(): SourceEditor { return test.editor.sourceView }
+    function sourceView(): SourceEditor { return test.editor.sourceView as SourceEditor }
     /// The block starting with `prefix` shows a misspelled word underlined.
     function renderedMarked(prefix: string): bool {
         const b = test.blockText(test.window.rowOf(prefix))

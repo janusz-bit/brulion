@@ -13,8 +13,9 @@
 // width, height}; infoChanged(path)), the poster kept as a PNG in the cache folder.
 //
 // The engine is Qt Multimedia's (mediaengine.h; `available` false in a build without it: the views
-// offer "Open in another app"). A time fragment (`#t=83`, `#t=10,20`: core media::parseTimeFragment)
-// starts the file there and, with an end, pauses it there.
+// offer "Open in another app"), made with the first file played or looked at — not with the app,
+// which would load its FFmpeg backend and connect to the system's sound server at every start. A time fragment
+// (`#t=83`, `#t=10,20`: core media::parseTimeFragment) starts the file there and, with an end, pauses it there.
 #pragma once
 
 #include "mediaengine.h"
@@ -37,8 +38,9 @@ namespace brulion::media {
 class MediaPlayback : public QObject {
     Q_OBJECT
 
-    /// This build plays audio and video.
-    Q_PROPERTY(bool available READ available CONSTANT FINAL)
+    /// This build plays audio and video — and, once something was played or looked at, this system
+    /// too (a build whose backend Qt cannot load here turns it false then: availableChanged()).
+    Q_PROPERTY(bool available READ available NOTIFY availableChanged FINAL)
     /// The vault path of the file loaded ("": none) — the one playing or paused.
     Q_PROPERTY(QString path READ path NOTIFY sourceChanged FINAL)
     /// Its file name, for the now-playing bar.
@@ -75,6 +77,9 @@ public:
     static MediaPlayback *create(QQmlEngine *, QJSEngine *);
 
     bool available() const;
+    /// The engine or the prober exists (tests: neither is made before something is played or
+    /// looked at).
+    bool engineMade() const { return m_engine != nullptr || m_prober != nullptr; }
     QString path() const { return m_path; }
     QString title() const;
     bool playing() const;
@@ -147,6 +152,7 @@ public:
     void setPosterFolder(const QString &folder) { m_posterFolder = folder; }
 
 Q_SIGNALS:
+    void availableChanged();
     void sourceChanged();
     void stateChanged();
     void positionChanged();
@@ -167,8 +173,14 @@ private:
     void remember();
     QString posterPath(const QString &path, const QUrl &url) const;
 
-    std::unique_ptr<MediaEngine> m_engine;
-    std::unique_ptr<MediaProber> m_prober;
+    /// The build's engine / prober, made when first needed (the constructor's: from the start).
+    MediaEngine *engine();
+    MediaProber *prober();
+    void adopt(std::unique_ptr<MediaEngine> engine);
+    void adopt(std::unique_ptr<MediaProber> prober);
+
+    std::unique_ptr<MediaEngine> m_engine; ///< null until engine()
+    std::unique_ptr<MediaProber> m_prober; ///< null until prober()
     QString m_path;
     QUrl m_url;
     qint64 m_startMs = -1;

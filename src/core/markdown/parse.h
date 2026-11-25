@@ -35,6 +35,11 @@ ParsedNote parseNote(const VaultPath &path, const QString &content, const VaultC
 /// Index (into note.blocks) of the innermost block whose line range contains `line`, or -1.
 int blockAtLine(const ParsedNote &note, int line);
 
+/// One shared QString per value of the short strings parseNote() repeats across notes — tag keys,
+/// property keys, task markers — from a small pool of the calling thread; other strings as they
+/// are. For decoders that rebuild what parseNote() returns (the index cache).
+QString internedString(const QString &s);
+
 /// How a tag occurrence is written (see findNoteTags()).
 enum class TagForm {
     Hash,        ///< `#tag` in the text (also in a property value: `tags:: #a`, `typ:: #b`)

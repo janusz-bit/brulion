@@ -803,26 +803,38 @@ AttachmentIndexer::AttachmentIndexer(QObject *parent) : QObject(parent)
     m_manifestTimer.setSingleShot(true);
     m_manifestTimer.setInterval(2000);
     connect(&m_manifestTimer, &QTimer::timeout, this, &AttachmentIndexer::saveManifest);
+    // A build without OCR knows at once; the others look for their library when somebody asks —
+    // OCR turned on, the settings page or a PDF without text reading `ocrAvailable` (probeEngine()).
     if (platform::ocrBackend() == u"none"_s) {
+        m_probeAsked = true;
         applyEngine(false, platform::ocrUnavailableReason(), {}, {}, {});
-    } else {
-        // The library is looked for once, off the GUI thread (it loads some 50 libraries).
-        const QPointer<AttachmentIndexer> self(this);
-        QThreadPool::globalInstance()->start([self] {
-            const bool available = platform::ocrAvailable();
-            const QString reason = platform::ocrUnavailableReason();
-            const QString name = platform::ocrEngineName();
-            const QStringList languages = platform::ocrLanguages();
-            const QString userDir = platform::ocrUserDataDir();
-            QMetaObject::invokeMethod(
-                    QCoreApplication::instance(),
-                    [self, available, reason, name, languages, userDir] {
-                        if (self)
-                            self->applyEngine(available, reason, name, languages, userDir);
-                    },
-                    Qt::QueuedConnection);
-        });
     }
+}
+
+void AttachmentIndexer::probeEngine() const
+{
+    if (m_probeAsked)
+        return;
+    m_probeAsked = true;
+    // The library is looked for once, off the GUI thread (it loads some 50 libraries) — and not
+    // before it is needed: text recognition is off unless the user turned it on, and a start
+    // must not load Tesseract with everything it brings for nothing (docs/PERFORMANCE.md "Memory:
+    // only what is in use"). Until the answer comes the reason reads "probing".
+    const QPointer<AttachmentIndexer> self(const_cast<AttachmentIndexer *>(this));
+    QThreadPool::globalInstance()->start([self] {
+        const bool available = platform::ocrAvailable();
+        const QString reason = platform::ocrUnavailableReason();
+        const QString name = platform::ocrEngineName();
+        const QStringList languages = platform::ocrLanguages();
+        const QString userDir = platform::ocrUserDataDir();
+        QMetaObject::invokeMethod(
+                QCoreApplication::instance(),
+                [self, available, reason, name, languages, userDir] {
+                    if (self)
+                        self->applyEngine(available, reason, name, languages, userDir);
+                },
+                Qt::QueuedConnection);
+    });
 }
 
 AttachmentIndexer::~AttachmentIndexer()
@@ -1017,6 +1029,9 @@ void AttachmentIndexer::setOcrEnabled(bool on)
     if (m_ocrEnabled == on)
         return;
     m_ocrEnabled = on;
+    // Wanted: is it here? (applyEngine() starts the reading once the answer is yes.)
+    if (on)
+        probeEngine();
     Q_EMIT settingsChanged();
     if (m_worker)
         m_worker->setSettings({on && m_ocrAvailable, ocrLanguages()});

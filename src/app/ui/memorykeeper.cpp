@@ -10,6 +10,7 @@
 #include <QThreadPool>
 
 #include <algorithm>
+#include <utility>
 
 namespace brulion::ui {
 
@@ -84,6 +85,23 @@ void MemoryKeeper::releaseNow()
     run();
 }
 
+void MemoryKeeper::releaseAll()
+{
+    static const bool keep = qEnvironmentVariable("BRULION_PROGRAM_PAGES") == QLatin1String("0");
+    if (keep || !platform::canReleaseProgramPages() || switchedOff()) {
+        releaseNow();
+        return;
+    }
+    if (m_running) {
+        m_again = true;
+        m_againProgramPages = true;
+        return;
+    }
+    m_programPages = true;
+    m_quiet.stop();
+    run();
+}
+
 void MemoryKeeper::run()
 {
     QCoreApplication *app = QCoreApplication::instance();
@@ -92,30 +110,36 @@ void MemoryKeeper::run()
     m_running = true;
     m_since.invalidate();
     m_again = false;
+    const bool programPages = std::exchange(m_programPages, false);
     // On a worker: the allocator walks its heaps under their locks. The worker never touches the
     // keeper, which may be gone by then: the result comes back through the application (it waits
     // for the pool's threads before it goes).
-    QThreadPool::globalInstance()->start([app, self = QPointer<MemoryKeeper>(this)] {
+    QThreadPool::globalInstance()->start([app, programPages, self = QPointer<MemoryKeeper>(this)] {
         QElapsedTimer took;
         took.start();
         const qint64 before = platform::residentBytes();
         platform::releaseFreeMemory();
+        const qint64 programBytes = programPages ? platform::releaseProgramPages() : -1;
         const qint64 after = platform::residentBytes();
         const qint64 ms = took.elapsed();
         QMetaObject::invokeMethod(
                 app,
-                [self, before, after, ms] {
+                [self, before, after, ms, programBytes] {
                     if (self)
-                        self->ran(before, after, ms);
+                        self->ran(before, after, ms, programBytes);
                 },
                 Qt::QueuedConnection);
     });
 }
 
-void MemoryKeeper::ran(qint64 before, qint64 after, qint64 ms)
+void MemoryKeeper::ran(qint64 before, qint64 after, qint64 ms, qint64 programBytes)
 {
     m_running = false;
     ++m_runs;
+    if (programBytes >= 0) {
+        qCDebug(lcMemory) << "The program's own pages let go of:" << programBytes / (1024 * 1024) << "MB";
+        Q_EMIT programPagesReleased(programBytes);
+    }
     if (before >= 0 && after >= 0) {
         // (Worth a line in the log from 32 MB; every run with brulion.memory.debug=true.)
         const QString text = QStringLiteral("Memory given back to the system: %1 MB (%2 → %3 MB, %4 ms)")
@@ -129,7 +153,9 @@ void MemoryKeeper::ran(qint64 before, qint64 after, qint64 ms)
             qCDebug(lcMemory).noquote() << text;
     }
     Q_EMIT gaveBack(before, after, ms);
-    if (m_again)
+    if (std::exchange(m_againProgramPages, false))
+        releaseAll();
+    else if (m_again)
         released();
 }
 

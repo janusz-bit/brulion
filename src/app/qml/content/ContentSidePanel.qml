@@ -28,6 +28,10 @@ import Brulion
 Item {
     id: panel
 
+    /// An extension panel's view (ShellExtensionView): its file and first values.
+    readonly property url _linesSource: Qt.resolvedUrl("../shell/ShellExtensionView.qml")
+    property var _linesValues: ({})
+
     property string path
     property PageController controller
     property BlockEditor editor
@@ -237,14 +241,17 @@ Item {
                         Item {
                             id: extensionPanel
                             implicitHeight: panelLines.height + Theme.space2
-                            ShellExtensionView {
+                            // (ShellExtensionView, loaded from its file: docs/PERFORMANCE.md "QML
+                            // files loaded when first used".)
+                            Loader {
                                 id: panelLines
-                                objectName: "sidePanelExtensionLines"
                                 x: Theme.space3
                                 width: parent.width - 2 * Theme.space3
-                                embedded: true
-                                lines: panelModel
-                                Accessible.name: extensionSection.title
+                                Component.onCompleted: {
+                                    panel._linesValues = { objectName: "sidePanelExtensionLines", embedded: true, lines: panelModel,
+                                                           accessibleName: extensionSection.title }
+                                    panelLines.setSource(panel._linesSource, panel._linesValues)
+                                }
                             }
                             BText {
                                 visible: panelModel.error !== ""

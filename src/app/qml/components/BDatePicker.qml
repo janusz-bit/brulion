@@ -245,13 +245,13 @@ T.Control {
                     spacing: 6
                     width: parent.width
                     BIcon {
-                        anchors.verticalCenter: parent.verticalCenter
+                        y: Math.round(parent.height / 2) - Math.round(height / 2)
                         name: naturalResult.map.ok ? "" : "circle-help"
                         size: Theme.iconSizeSm
                         color: Theme.fgFaint
                     }
                     Text {
-                        anchors.verticalCenter: parent.verticalCenter
+                        y: Math.round(parent.height / 2) - Math.round(height / 2)
                         // Beside the icon (not recognised) or the Enter hint (recognised).
                         width: parent.width - 6 - (naturalResult.map.ok ? enterHint.width : Theme.iconSizeSm)
                         textFormat: Text.PlainText
@@ -414,7 +414,8 @@ T.Control {
 
                             background: Item {
                                 Rectangle {
-                                    anchors.centerIn: parent
+                                    x: Math.round(parent.width / 2) - Math.round(width / 2)
+                                    y: Math.round(parent.height / 2) - Math.round(height / 2)
                                     width: Math.min(parent.width, parent.height) - 4
                                     height: width
                                     radius: width / 2
@@ -428,7 +429,8 @@ T.Control {
                                 }
                                 Rectangle {
                                     visible: cell.isFocused
-                                    anchors.centerIn: parent
+                                    x: Math.round(parent.width / 2) - Math.round(width / 2)
+                                    y: Math.round(parent.height / 2) - Math.round(height / 2)
                                     width: Math.min(parent.width, parent.height) - 4 + 2 * Theme.focusRingWidth + 2
                                     height: width
                                     radius: width / 2
@@ -440,8 +442,8 @@ T.Control {
                             }
                             contentItem: Item {
                                 Text {
-                                    anchors.centerIn: parent
-                                    anchors.verticalCenterOffset: cell.kinds.length > 0 ? -3 : 0
+                                    x: Math.round(parent.width / 2) - Math.round(width / 2)
+                                    y: Math.round(parent.height / 2) - Math.round(height / 2) + (cell.kinds.length > 0 ? -3 : 0)
                                     textFormat: Text.PlainText
                                     text: cell.text
                                     font.family: Theme.fontUi
@@ -454,19 +456,23 @@ T.Control {
                                          : cell.isWeekend ? Theme.fgMuted : Theme.fg
                                     opacity: cell.inMonth || cell.isSelected ? 1 : 0.75
                                 }
-                                Row {
+                                // The day's marks (made for a day that has some).
+                                Loader {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: Theme.touchUi ? 9 : 7
-                                    spacing: 2
-                                    Repeater {
-                                        model: cell.kinds.slice(0, 3)
-                                        delegate: Rectangle {
-                                            required property string modelData
-                                            width: 4
-                                            height: 4
-                                            radius: 2
-                                            color: cell.isSelected ? Theme.primaryFg : Theme.markColor(modelData)
+                                    active: cell.kinds.length > 0
+                                    sourceComponent: Row {
+                                        spacing: 2
+                                        Repeater {
+                                            model: cell.kinds.slice(0, 3)
+                                            delegate: Rectangle {
+                                                required property string modelData
+                                                width: 4
+                                                height: 4
+                                                radius: 2
+                                                color: cell.isSelected ? Theme.primaryFg : Theme.markColor(modelData)
+                                            }
                                         }
                                     }
                                 }

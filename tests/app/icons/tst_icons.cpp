@@ -1,13 +1,13 @@
-// BIcon (src/app/qml/components/BIcon.qml) and its pictures (src/app/ui/iconprovider.h): one Image
-// whose picture comes from image://bicon/… must look exactly like Qt's IconImage, which BIcon used
-// to hold in a Loader — every pixel, at every size, colour, box and position, at device pixel
-// ratio 1 and 2 (tst_icons_dpr2: QT_SCALE_FACTOR=2). Also its sizes (collapseWhenEmpty, an
-// explicit width), names that must not leave the icon folder, names with Polish letters, and the
-// cache: many icons of one name and size rasterise the SVG once, a new colour only recolours.
+// BIcon (the C++ item of src/app/ui/iconprovider.h) and its pictures: one Image whose picture comes
+// from image://bicon/… must look exactly like Qt's IconImage, which BIcon used to hold in a
+// Loader — every pixel, at every size, colour, box and position, at device pixel ratio 1 and 2
+// (tst_icons_dpr2: QT_SCALE_FACTOR=2). Also its sizes (collapseWhenEmpty, an explicit width), the
+// theme's defaults it follows until set, no Image until it has a name, names that must not leave
+// the icon folder, names with Polish letters, and the cache: many icons of one name and size
+// rasterise the SVG once, a new colour only recolours.
 //
-// The test loads the app's own BIcon.qml from the source tree into a module "Brulion" of its own
-// (Theme: a stand-in with the two defaults BIcon reads; Icons: the real singleton) and renders with
-// Qt Quick's software backend, offscreen.
+// The test registers the real BIcon and Icons in a module "Brulion" of its own (Theme: a stand-in
+// with the two defaults BIcon reads) and renders with Qt Quick's software backend, offscreen.
 #include "iconprovider.h"
 
 #include <QDir>
@@ -91,24 +91,24 @@ private Q_SLOTS:
             QVERIFY(QFile::copy(iconFolder() + u'/' + name, m_folder + u'/' + name));
         QVERIFY(QFile::copy(iconFolder() + u"/bell.svg"_s, m_folder + u"/dzwonek-żółty.svg"_s));
 
-        // A module "Brulion" of the test's own, first on the import path: the real BIcon.qml (a
-        // copy, as the app's module holds it), a Theme with BIcon's defaults, and the real Icons
-        // (C++). Its own qmldir, so that no other "Brulion" found on the way — the app's, whose
-        // qmldir points into resources this test does not have (Windows CI: "Type BIcon
-        // unavailable … LinkPreviews.qml: No such file") — is the one `import Brulion` takes.
+        // A module "Brulion" of the test's own, first on the import path: a Theme with BIcon's
+        // defaults, and the real BIcon and Icons (C++). Its own qmldir, so that no other "Brulion" found on the way —
+        // the app's, whose qmldir points into resources this test does not have (Windows CI: "Type BIcon unavailable …
+        // LinkPreviews.qml: No such file") — is the one `import Brulion` takes.
         const QString module = m_dir.filePath(u"Brulion"_s);
         QVERIFY(QDir().mkpath(module));
         QFile themeFile(module + u"/Theme.qml"_s);
         QVERIFY(themeFile.open(QIODevice::WriteOnly));
         themeFile.write("pragma Singleton\nimport QtQuick\nQtObject {\n"
-                        "    readonly property int iconSize: 16\n"
+                        "    property int testIconSize: 16\n"
+                        "    readonly property int iconSize: testIconSize\n"
                         "    readonly property color fg: \"#1f2328\"\n}\n");
         themeFile.close();
-        QVERIFY(QFile::copy(kSourceDir + u"/src/app/qml/components/BIcon.qml"_s, module + u"/BIcon.qml"_s));
         QFile qmldir(module + u"/qmldir"_s);
         QVERIFY(qmldir.open(QIODevice::WriteOnly));
-        qmldir.write("module Brulion\nsingleton Theme 1.0 Theme.qml\nBIcon 1.0 BIcon.qml\n");
+        qmldir.write("module Brulion\nsingleton Theme 1.0 Theme.qml\n");
         qmldir.close();
+        qmlRegisterType<BIcon>("Brulion", 1, 0, "BIcon");
         qmlRegisterSingletonType<Icons>("Brulion", 1, 0, "Icons",
                                         [](QQmlEngine *engine, QJSEngine *) { return Icons::forEngine(engine); });
 
@@ -293,8 +293,13 @@ private Q_SLOTS:
         narrow->setWidth(12);
         narrow->setHeight(12);
         check("narrow", 12, 12);
-        QVERIFY(imageOf(child(root, u"empty"_s)));
-        QCOMPARE(imageOf(child(root, u"empty"_s))->property("source").toUrl(), QUrl());
+        // No name: no Image (made with the first name).
+        QVERIFY(!imageOf(child(root, u"empty"_s)));
+        QQuickItem *slot = child(root, u"slot"_s);
+        QVERIFY(!imageOf(slot));
+        slot->setProperty("name", u"bell"_s);
+        QTRY_COMPARE(statusOf(slot), 1);
+        QCOMPARE(imageOf(slot)->size(), QSizeF(20, 20));
 
         // A name that goes and comes back.
         QQuickItem *toggled = child(root, u"toggled"_s);
@@ -306,6 +311,44 @@ private Q_SLOTS:
         toggled->setProperty("name", u"check"_s);
         QTRY_COMPARE(statusOf(toggled), 1);
         check("toggled", 16, 16);
+    }
+
+    /// Without a size or colour of its own an icon has the theme's, and follows it; set ones stay.
+    void themeDefaults()
+    {
+        QQmlComponent component(m_engine.get());
+        component.setData(R"(
+            import QtQuick
+            import Brulion
+            Row {
+                width: 200
+                height: 60
+                BIcon { objectName: "themed"; name: "bell" }
+                BIcon { objectName: "own"; name: "bell"; size: 20; color: "#cf222e" }
+            })"_ba,
+                          QUrl(u"qrc:/theme.qml"_s));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QQuickItem *root = nullptr;
+        auto window = show(component, {}, &root);
+        QVERIFY(window);
+        QQuickItem *themed = child(root, u"themed"_s);
+        QQuickItem *own = child(root, u"own"_s);
+        QCOMPARE(themed->property("size").toReal(), 16.0);
+        QCOMPARE(themed->property("color").value<QColor>(), QColor(u"#1f2328"_s));
+        QCOMPARE(own->property("size").toReal(), 20.0);
+        QCOMPARE(own->property("color").value<QColor>(), QColor(u"#cf222e"_s));
+        QTRY_COMPARE(statusOf(themed), 1);
+        QCOMPARE(imageOf(themed)->property("sourceSize").toSize(), QSize(16, 16));
+        QCOMPARE(imageOf(themed)->property("source").toUrl(), Icons::sourceUrl(u"bell"_s, QColor(u"#1f2328"_s)));
+        // The theme changes (a stand-in made writable for the test: its properties are read-only).
+        QObject *theme = m_engine->singletonInstance<QObject *>("Brulion", "Theme");
+        QVERIFY(theme);
+        QVERIFY(theme->setProperty("testIconSize", 18));
+        QTRY_COMPARE(themed->property("size").toReal(), 18.0);
+        QCOMPARE(themed->width(), 18.0);
+        QCOMPARE(own->property("size").toReal(), 20.0);
+        QVERIFY(theme->setProperty("testIconSize", 16));
+        QTRY_COMPARE(themed->property("size").toReal(), 16.0);
     }
 
     /// Many icons of one name, size and colour: one SVG rasterised; another colour only recolours.

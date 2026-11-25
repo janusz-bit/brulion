@@ -5,10 +5,11 @@
 // KeyboardInsets and GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
 // (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; SmoothScroll (brulion_ui_smoothscroll),
-// the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons (brulion_ui_icons),
-// BIcon's image URLs; FilePicker (brulion_ui_files), the system's file picker (`FilePicker { fileMode:
-// FilePicker.OpenFiles }`); and NearView and PictureDecode (brulion_ui_memory): whether an item is in or
-// near its window's view, and the size a picture is decoded at for the place that shows it.
+// the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons and BIcon
+// (brulion_ui_icons), BIcon's image URLs and the icon item itself; FilePicker (brulion_ui_files), the system's file
+// picker (`FilePicker { fileMode: FilePicker.OpenFiles }`); and NearView, PictureDecode and MemoryPolicy
+// (brulion_ui_memory): whether an item is in or near its window's view, the size a picture is decoded at for the place
+// that shows it, and what the app keeps for speed (the instance main() made).
 #pragma once
 
 #include "dateshelper.h"
@@ -20,8 +21,10 @@
 #include "keyboardinsets.h"
 #include "later.h"
 #include "mapholder.h"
+#include "memorypolicy.h"
 #include "nearview.h"
 #include "picturedecode.h"
+#include "qmlcall.h"
 #include "rowscroll.h"
 #include "smoothscroll.h"
 #include "texthelper.h"
@@ -66,6 +69,23 @@ struct LaterForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ui::Later)
     QML_NAMED_ELEMENT(Later)
+};
+
+// A QML object's function called, a property read, written or followed by name (qmlcall.h): the
+// files made when first used (docs/UI.md "QML files loaded when first used").
+struct QmlCallForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::QmlCall)
+    QML_NAMED_ELEMENT(QmlCall)
+    QML_SINGLETON
+public:
+    static QmlCall *create(QQmlEngine *, QJSEngine *) { return new QmlCall; }
+};
+
+struct QmlValueForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::QmlValue)
+    QML_NAMED_ELEMENT(QmlValue)
 };
 
 struct JsHelperForeign {
@@ -176,6 +196,22 @@ struct NearViewForeign {
     QML_ATTACHED(brulion::ui::NearView)
 };
 
+// What the app keeps for speed and when it lets go of it (memorypolicy.h): `MemoryPolicy.keptViews`.
+struct MemoryPolicyForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::MemoryPolicy)
+    QML_NAMED_ELEMENT(MemoryPolicy)
+    QML_SINGLETON
+public:
+    /// The app's policy (main() makes it), else one of this engine's own (QML tooling, tests of
+    /// single components: nothing is followed, the app stays in use).
+    static MemoryPolicy *create(QQmlEngine *, QJSEngine *)
+    {
+        MemoryPolicy *policy = MemoryPolicy::instance();
+        return policy ? cppOwned(policy) : new MemoryPolicy;
+    }
+};
+
 // The size a picture is decoded at for the place that shows it (picturedecode.h).
 struct PictureDecodeForeign {
     Q_GADGET
@@ -210,6 +246,13 @@ struct IconsForeign {
     QML_SINGLETON
 public:
     static Icons *create(QQmlEngine *engine, QJSEngine *) { return Icons::forEngine(engine); }
+};
+
+// BIcon (iconprovider.h): the icon item itself, a C++ type since 2026-11 (it was BIcon.qml).
+struct BIconForeign {
+    Q_GADGET
+    QML_FOREIGN(::BIcon)
+    QML_NAMED_ELEMENT(BIcon)
 };
 
 struct FilePickerForeign {

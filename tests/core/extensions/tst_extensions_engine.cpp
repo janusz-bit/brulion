@@ -7,6 +7,8 @@
 
 #include "testtiming.h"
 
+#include <QFile>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <clocale>
@@ -560,6 +562,73 @@ private Q_SLOTS:
         QVERIFY2(r.ok(), qPrintable(r.error));
         QCOMPARE(r.value.toString(), u"2 Wiosłowanie false nil"_s);
         QCOMPARE(host.timers, (QList<QPair<int, QString>>{{90, u"Przerwa"_s}}));
+    }
+
+    void dataFiles()
+    {
+        // Data that is a file: nothing is read until b.data() asks, the engine keeps what it read
+        // until dropData(), and the next b.data() reads it again. JSON is parsed, other files are
+        // their text; a missing file and broken JSON give nil.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto write = [&dir](const QString &name, const QByteArray &bytes) {
+            QFile file(dir.filePath(name));
+            if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size())
+                return QString();
+            return file.fileName();
+        };
+        const QString catalog = write(u"ćwiczenia.json"_s, R"([{"nazwa":"Przysiad"},{"nazwa":"Wiosłowanie sztangą"}])");
+        const QString byId = write(u"opisy.json"_s, R"({"przysiad":["Stań prosto.","Zejdź w dół."],"żuraw":[]})");
+        const QString text = write(u"opis.md"_s, "# Zażółć\n\ngęślą jaźń\n");
+        const QString broken = write(u"zepsuty.json"_s, "{ not json");
+        QVERIFY(!catalog.isEmpty() && !byId.isEmpty() && !text.isEmpty() && !broken.isEmpty());
+        Extension e = ext(u"d"_s, uR"lua(
+            b.command("katalog", function() local c = b.data("katalog") return `{#c} {c[2].nazwa}` end)
+            b.command("opis", function(ctx) local o = b.data("opisy", ctx.id) return if o then #o else -1 end)
+            b.command("tekst", function() return b.data("tekst") end)
+            b.command("braki", function() return `{tostring(b.data("brak"))} {tostring(b.data("zepsuty"))}` end)
+        )lua"_s);
+        e.data.insert(u"katalog"_s, QVariant::fromValue(DataFile{catalog}));
+        e.data.insert(u"opisy"_s, QVariant::fromValue(DataFile{byId}));
+        e.data.insert(u"tekst"_s, QVariant::fromValue(DataFile{text}));
+        e.data.insert(u"brak"_s, QVariant::fromValue(DataFile{dir.filePath(u"nie ma.json"_s)}));
+        e.data.insert(u"zepsuty"_s, QVariant::fromValue(DataFile{broken}));
+        LOAD_OK(e);
+        QCOMPARE(engine->heldDataFiles(), 0); // loading read nothing
+
+        Result r = engine->runCommand(u"d"_s, u"katalog"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toString(), u"2 Wiosłowanie sztangą"_s);
+        QCOMPARE(engine->heldDataFiles(), 1);
+        // One entry of a record, by key.
+        r = engine->runCommand(u"d"_s, u"opis"_s, {{u"id"_s, u"przysiad"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toInt(), 2);
+        QCOMPARE(engine->runCommand(u"d"_s, u"opis"_s, {{u"id"_s, u"żuraw"_s}}).value.toInt(), 0);
+        QCOMPARE(engine->runCommand(u"d"_s, u"opis"_s, {{u"id"_s, u"nieznane"_s}}).value.toInt(), -1);
+        QCOMPARE(engine->heldDataFiles(), 2);
+        r = engine->runCommand(u"d"_s, u"tekst"_s, {});
+        QCOMPARE(r.value.toString(), u"# Zażółć\n\ngęślą jaźń\n"_s);
+        r = engine->runCommand(u"d"_s, u"braki"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toString(), u"nil nil"_s);
+
+        // Held: the file is not read again while the engine has it …
+        QVERIFY(QFile::remove(catalog));
+        QCOMPARE(engine->runCommand(u"d"_s, u"katalog"_s, {}).value.toString(), u"2 Wiosłowanie sztangą"_s);
+        // … and read again after dropData().
+        QVERIFY(!write(u"ćwiczenia.json"_s, R"([{"nazwa":"Martwy ciąg"},{"nazwa":"Żuraw"},{"nazwa":"Deska"}])")
+                         .isEmpty());
+        engine->dropData();
+        QCOMPARE(engine->heldDataFiles(), 0);
+        QCOMPARE(engine->runCommand(u"d"_s, u"katalog"_s, {}).value.toString(), u"3 Żuraw"_s);
+        QCOMPARE(engine->heldDataFiles(), 1);
+
+        // resolvedData(): what a DataFile holds, for code outside the engine; other values as they are.
+        QCOMPARE(resolvedData(QVariant::fromValue(DataFile{byId})).toMap().value(u"przysiad"_s).toList().size(), 2);
+        QCOMPARE(resolvedData(QVariant::fromValue(DataFile{text})).toString(), u"# Zażółć\n\ngęślą jaźń\n"_s);
+        QVERIFY(!resolvedData(QVariant::fromValue(DataFile{dir.filePath(u"nie ma.json"_s)})).isValid());
+        QCOMPARE(resolvedData(QVariant(u"zwykły"_s)).toString(), u"zwykły"_s);
     }
 
     void valuesCrossBothWays()

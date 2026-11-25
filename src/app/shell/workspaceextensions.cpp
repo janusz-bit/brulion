@@ -1,6 +1,7 @@
 #include "workspaceextensions.h"
 
 #include "extensionviewmodel.h"
+#include "memorypolicy.h"
 
 #include "ai/local.h"
 #include "extensions/builtin.h"
@@ -513,6 +514,15 @@ bool WorkspaceExtensions::ensureEngine()
     }
     m_loadedKeys.clear();
     m_hookFailures.clear();
+    // The catalogs b.data() read (the gym's exercises and instructions: megabytes once parsed) go
+    // while the app is away; the next b.data() reads them again.
+    if (ui::MemoryPolicy *policy = ui::MemoryPolicy::instance(); policy && !m_dropsData) {
+        m_dropsData = true;
+        connect(policy, &ui::MemoryPolicy::letGo, this, [this] {
+            if (m_engine)
+                m_engine->dropData();
+        });
+    }
     return true;
 }
 

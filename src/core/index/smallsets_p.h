@@ -367,6 +367,18 @@ void multiAdd(QHash<K, PathSet> &map, const K &key, const VaultPath &value)
     map[key].insert(value);
 }
 
+/// multiAdd(), returning the key as the map stores it: a caller keeping the key shares that string
+/// (one per distinct key, not one per occurrence).
+template<typename K>
+const K &multiAddShared(QHash<K, PathSet> &map, const K &key, const VaultPath &value)
+{
+    auto it = map.find(key);
+    if (it == map.end())
+        it = map.emplace(key);
+    it->insert(value);
+    return it.key();
+}
+
 /// Remove `value` from the set under `key`, dropping empty sets.
 template<typename K>
 void multiRemove(QHash<K, PathSet> &map, const K &key, const VaultPath &value)

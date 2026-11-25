@@ -82,8 +82,10 @@ void WriteJob::run()
     }
     written = statOf(after, path);
     dataHash = text::fnv1a64Hex(data);
-    if (afterWrite)
-        afterWrite(vaultutil::decodeUtf8(data));
+    if (afterWrite) {
+        writtenText = vaultutil::decodeUtf8(data);
+        afterWrite(writtenText);
+    }
     result = Result::Written;
 }
 
@@ -258,7 +260,8 @@ void VaultPrivate::mergeWrite(const std::shared_ptr<WriteJob> &job)
             qCWarning(lcVault).noquote() << "History snapshot failed:" << job->historyError;
         trackFile(*job->written);
         // Known hash = what was written: the watcher's echo of this write is recognised as such.
-        rememberContent(path, job->data, true, job->dataHash);
+        // (Kept as the text the writer handed out: the app's index keeps that one.)
+        rememberContent(path, job->data, true, job->dataHash, job->writtenText.isNull() ? nullptr : &job->writtenText);
         noteUnsettled(*job->written, true, job->save.fineStamps);
         if (watcher)
             noteOwnWrite(job->dir, job->save, job->pendingBefore);

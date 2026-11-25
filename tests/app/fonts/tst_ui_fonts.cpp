@@ -8,6 +8,7 @@
 #include <QFontDatabase>
 #include <QGlyphRun>
 #include <QRawFont>
+#include <QResource>
 #include <QSet>
 #include <QTest>
 #include <QTextLayout>
@@ -27,6 +28,23 @@ private Q_SLOTS:
         QVERIFY(families.contains(QString::fromUtf16(brulion::ui::kBundledMonoFamily)));
         // Once per process: the second call gives the same.
         QCOMPARE(brulion::ui::installBundledFonts(), families);
+    }
+
+    void storedAsTheyAre()
+    {
+        // The files are resources stored without compression: installBundledFonts() gives the
+        // font engine their data in place instead of a copy on the heap (a compressed resource
+        // has no data to point at).
+        const QStringList files = brulion::ui::bundledFontFiles();
+        QCOMPARE(files.size(), 12);
+        for (const QString &file : files) {
+            const QResource resource(file);
+            QVERIFY2(resource.isValid(), qPrintable(file));
+            QVERIFY2(resource.compressionAlgorithm() == QResource::NoCompression, qPrintable(file));
+            QVERIFY2(resource.size() > 1000, qPrintable(file));
+            // A font file: sfnt version 1.0 (TrueType outlines).
+            QCOMPARE(QByteArray(reinterpret_cast<const char *>(resource.data()), 4), QByteArray("\x00\x01\x00\x00", 4));
+        }
     }
 
     void shapedGlyphsHaveCharacters_data()
