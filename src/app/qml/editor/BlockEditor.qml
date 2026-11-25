@@ -99,16 +99,23 @@ FocusScope {
     /// The page is created whole: at most wholePageRows rows, and it stays so until it has a
     /// quarter more (rows typed or pasted one by one do not make the list drop its rows and create
     /// them again at the threshold). Set by updateWholePage() only — its own value is an input,
-    /// which a binding would make a loop.
+    /// which a binding would make a loop. Only while the app is in use (MemoryPolicy; docs/
+    /// PERFORMANCE.md "Memory: only what is in use"): away — another program in front for a while,
+    /// no window shown — the page keeps the rows near the view as a longer page does, and the
+    /// others (0.1–0.2 MB each) are made again, in the background, once it is back.
     property bool wholePage: false
     readonly property int rowCount: controller !== null ? controller.blocks.count : 0
     function updateWholePage(): void {
-        wholePage = !autoHeight && controller !== null
+        wholePage = !autoHeight && controller !== null && MemoryPolicy.inUse
                 && (rowCount <= wholePageRows || (wholePage && rowCount <= wholePageRows * 5 / 4))
     }
     onRowCountChanged: updateWholePage()
     onWholePageRowsChanged: updateWholePage()
     onAutoHeightChanged: updateWholePage()
+    Connections {
+        target: MemoryPolicy
+        function onInUseChanged(): void { editor.updateWholePage() }
+    }
     /// The cache of a page created whole: past the end of any page of wholePageRows rows.
     readonly property int wholePageCache: 10000000
     /// The page's rows are one PageItem (PageItemView) instead of the list's delegates: Z10 stage C

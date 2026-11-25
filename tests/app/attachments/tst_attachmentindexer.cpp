@@ -488,6 +488,39 @@ private Q_SLOTS:
         QVERIFY(hitFor(m_indexer->search(u"tablica"_s, 10), Board));
     }
 
+    void ocrLibraryLookedForWhenAsked()
+    {
+        // Text recognition is off unless the user turns it on: reading PDFs and documents never
+        // loads the OCR library. The first question about it — the settings page, a PDF without
+        // text, OCR turned on — starts the search, in the background.
+        if (brulion::platform::ocrBackend() == u"none"_s)
+            QSKIP("This build has no OCR to look for");
+        AttachmentIndexer indexer;
+        indexer.setUiLanguage(u"pl"_s);
+        indexer.setEnabled(true);
+        indexer.attach(m_vault.get(), m_cache, m_manifest);
+        indexer.start(0);
+        QVERIFY(waitFor([&] { return indexer.idle(); }, 60000));
+        QVERIFY(!indexer.engineAsked());
+        QVERIFY(!indexer.state().isEmpty());
+        QVERIFY(!indexer.engineAsked());
+        // Asked: not known yet, then known.
+        QSignalSpy engine(&indexer, &AttachmentIndexer::engineChanged);
+        QCOMPARE(indexer.ocrUnavailableReason(), u"probing"_s);
+        QVERIFY(indexer.engineAsked());
+        QVERIFY(!indexer.ocrAvailable());
+        QVERIFY(waitFor([&] { return indexer.ocrUnavailableReason() != u"probing"_s; }, 30000));
+        QCOMPARE(engine.size(), 1); // (looked for once)
+        QCOMPARE(indexer.ocrAvailable(), indexer.ocrUnavailableReason().isEmpty());
+
+        // Turning OCR on asks too.
+        AttachmentIndexer other;
+        QVERIFY(!other.engineAsked());
+        other.setOcrEnabled(true);
+        QVERIFY(other.engineAsked());
+        QVERIFY(waitFor([&] { return other.ocrUnavailableReason() != u"probing"_s; }, 30000));
+    }
+
     void ocr()
     {
         if (!m_indexer)

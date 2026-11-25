@@ -44,7 +44,7 @@ private Q_SLOTS:
         QVERIFY(!MemoryPolicy::switchedOff());
         QVERIFY(policy.inUse());
         QVERIFY(policy.buildAhead());
-        QCOMPARE(policy.keptViews(), 2);
+        QCOMPARE(policy.keptViews(), 3);
         QCOMPARE(policy.hiddenViewMs(), 5 * 60 * 1000);
         QCOMPARE(policy.unfocusedMs(), 60 * 1000);
         QCOMPARE(policy.hiddenMs(), 8 * 1000);
@@ -202,6 +202,30 @@ private Q_SLOTS:
         QCOMPARE(p.released.size(), 1);
     }
 
+    void setAway()
+    {
+        // Tests and measurements put the app away and back themselves.
+        Policy p;
+        p.policy.setFollowsApplication(true);
+        p.policy.setAway(true);
+        QVERIFY(!p.policy.inUse());
+        QVERIFY(!p.policy.buildAhead());
+        QCOMPARE(p.letGo.size(), 1);
+        QCOMPARE(p.letGo.at(0).at(0).toBool(), false);
+        QCOMPARE(p.inUse.size(), 1);
+        p.policy.setAway(true, true); // the window hidden too
+        QCOMPARE(p.letGo.size(), 2);
+        QCOMPARE(p.letGo.at(1).at(0).toBool(), true);
+        QCOMPARE(p.inUse.size(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(p.released.size(), 1, 2000 * Slowdown);
+        p.policy.setAway(false);
+        QVERIFY(p.policy.inUse());
+        QCOMPARE(p.inUse.size(), 2);
+        p.policy.setAway(false);
+        QCOMPARE(p.inUse.size(), 2);
+        QCOMPARE(p.letGo.size(), 2);
+    }
+
     void engineStaysUsable()
     {
         // letGo() → released(): the engine collects its garbage and drops the types nothing uses
@@ -243,6 +267,9 @@ private Q_SLOTS:
 
         Policy p;
         p.policy.setEngine(&engine);
+        QVERIFY(!p.policy.releasesGraphics()); // off unless main() turns it on (Linux)
+        p.policy.setReleasesGraphics(true);
+        QVERIFY(p.policy.releasesGraphics());
         window->hide();
         QTRY_VERIFY_WITH_TIMEOUT(!window->isExposed(), 2000 * Slowdown);
         p.policy.letGoNow(true);

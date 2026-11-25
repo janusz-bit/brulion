@@ -115,7 +115,7 @@ T.AbstractButton {
 
         BIcon {
             id: chipIcon
-            anchors.verticalCenter: parent.verticalCenter
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             name: control.showIcon ? control.iconName : ""
             size: control.size === "small" ? 12 : Theme.iconSizeSm
             color: control.fgColor
@@ -148,7 +148,8 @@ T.AbstractButton {
                 Accessible.name: qsTr("Remove %1").arg(control.text)
                 onClicked: control.removeClicked()
                 Rectangle {
-                    anchors.centerIn: parent
+                    x: Math.round(parent.width / 2) - Math.round(width / 2)
+                    y: Math.round(parent.height / 2) - Math.round(height / 2)
                     width: chipContent.removeCircle
                     height: width
                     radius: width / 2
@@ -156,7 +157,8 @@ T.AbstractButton {
                            ? control.fgColor.alpha(0.16) : "transparent"
                 }
                 BIcon {
-                    anchors.centerIn: parent
+                    x: Math.round(parent.width / 2) - Math.round(width / 2)
+                    y: Math.round(parent.height / 2) - Math.round(height / 2)
                     name: "x"
                     size: control.size === "small" ? 10 : 12
                     color: control.fgColor
@@ -178,7 +180,9 @@ T.AbstractButton {
         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
         Rectangle {
-            anchors.fill: parent
+            // (Its size bound, not anchored: no QQuickAnchors object for each of hundreds.)
+            width: parent.width
+            height: parent.height
             radius: chipBackground.radius
             visible: control.interactive
             color: control.down ? Theme.bgPressed : control.hovered && !control.selected ? Theme.bgHover : "transparent"

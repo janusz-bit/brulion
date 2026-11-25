@@ -5,11 +5,11 @@
 // KeyboardInsets and GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
 // (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; SmoothScroll (brulion_ui_smoothscroll),
-// the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons (brulion_ui_icons),
-// BIcon's image URLs; FilePicker (brulion_ui_files), the system's file picker (`FilePicker { fileMode:
-// FilePicker.OpenFiles }`); and NearView, PictureDecode and MemoryPolicy (brulion_ui_memory): whether an
-// item is in or near its window's view, the size a picture is decoded at for the place that shows it, and
-// what the app keeps for speed (the instance main() made).
+// the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons and BIcon
+// (brulion_ui_icons), BIcon's image URLs and the icon item itself; FilePicker (brulion_ui_files), the system's file
+// picker (`FilePicker { fileMode: FilePicker.OpenFiles }`); and NearView, PictureDecode and MemoryPolicy
+// (brulion_ui_memory): whether an item is in or near its window's view, the size a picture is decoded at for the place
+// that shows it, and what the app keeps for speed (the instance main() made).
 #pragma once
 
 #include "dateshelper.h"
@@ -246,6 +246,13 @@ struct IconsForeign {
     QML_SINGLETON
 public:
     static Icons *create(QQmlEngine *engine, QJSEngine *) { return Icons::forEngine(engine); }
+};
+
+// BIcon (iconprovider.h): the icon item itself, a C++ type since 2026-11 (it was BIcon.qml).
+struct BIconForeign {
+    Q_GADGET
+    QML_FOREIGN(::BIcon)
+    QML_NAMED_ELEMENT(BIcon)
 };
 
 struct FilePickerForeign {

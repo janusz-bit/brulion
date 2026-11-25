@@ -11377,7 +11377,7 @@ void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check 
 /// 0b. Views are kept, not hoarded (ShellRouteView, ViewKeeper, MemoryPolicy; docs/PERFORMANCE.md
 ///     "Memory: only what is in use"). Nothing but the view the user went to last is built ahead —
 ///     on a first start none. A view of the bottom navigation stays, hidden, once shown, and is
-///     the same one when it is shown again; a pane holds two hidden ones, the most recently shown.
+///     the same one when it is shown again; a pane holds three hidden ones, the most recently shown.
 ///     The view built ahead exists, hidden, before it is opened, leaves the keyboard alone, and
 ///     takes it when it is shown.
 void checkViewsKept(QQuickWindow *window, AppController *app, const Check &check)
@@ -11432,17 +11432,21 @@ void checkViewsKept(QQuickWindow *window, AppController *app, const Check &check
     check(tasks && viewIn("TasksView") == tasks && tasks->isVisible(), "shown again, it is the view kept");
     check(routeView->property("recentView").toString() == u"tasks", "the view gone to last is remembered");
 
-    // Two hidden views a pane: the ones shown most recently.
+    // Three hidden views a pane (the four of a phone's bottom navigation never rebuild each
+    // other): the ones shown most recently.
     show(u"calendar"_s);
     show(u"allPages"_s);
-    check(hidden() == (QStringList{u"calendar"_s, u"tasks"_s}), "the two views shown before stay hidden");
     show(u"search"_s);
-    check(hidden() == (QStringList{u"allPages"_s, u"calendar"_s}) && !viewIn("TasksView") && viewIn("CalendarView")
-                  && viewIn("AllPagesView"),
-          "a third one lets go of the view shown longest ago");
+    check(hidden() == (QStringList{u"allPages"_s, u"calendar"_s, u"tasks"_s}) && viewIn("TasksView") == tasks,
+          "the three views shown before stay hidden");
     show(u"journals"_s);
-    check(hidden() == (QStringList{u"search"_s, u"allPages"_s}) && !viewIn("CalendarView"),
-          "going home keeps the last two");
+    check(hidden() == (QStringList{u"search"_s, u"allPages"_s, u"calendar"_s}) && !viewIn("TasksView")
+                  && viewIn("CalendarView") && viewIn("AllPagesView") && viewIn("SearchView"),
+          "a fourth one lets go of the view shown longest ago");
+    show(u"tasks"_s);
+    show(u"journals"_s);
+    check(hidden() == (QStringList{u"tasks"_s, u"search"_s, u"allPages"_s}) && !viewIn("CalendarView"),
+          "going on keeps the last three");
 
     // The next start builds the view gone to last ahead (here: asked again for Calendar).
     routeView->setProperty("recentView", u"calendar"_s);
@@ -11455,8 +11459,8 @@ void checkViewsKept(QQuickWindow *window, AppController *app, const Check &check
                 return calendar != nullptr;
             },
             15000);
-    check(built && app->currentView() == u"journals" && !calendar->isVisible() && !viewIn("TasksView"),
-          "the view gone to last is built in the background, hidden; no other one is");
+    check(built && app->currentView() == u"journals" && !calendar->isVisible() && !viewIn("AllPagesView"),
+          "the view gone to last is built in the background, hidden; the one shown longest ago made room for it");
     if (!built)
         return;
     QQuickItem *focus = window->activeFocusItem();
@@ -12486,8 +12490,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         check(capture && waitFor([&] { return !isOpen(capture); }), "Escape closes quick capture");
     }
 
-    // 0b. The bottom navigation's views: kept once shown, two hidden ones a pane, the one gone to
-    //     last built ahead.
+    // 0b. The bottom navigation's views: kept once shown, three hidden ones a pane, the one gone
+    //     to last built ahead.
     checkViewsKept(window, app, check);
     // 0c. So are the popups used most (AppShell.prebuildNext()), closed; the others still are not.
     {

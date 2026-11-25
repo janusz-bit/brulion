@@ -77,7 +77,8 @@ T.AbstractButton {
     contentItem: Item {
         Rectangle {
             id: box
-            anchors.centerIn: parent
+            x: Math.round(parent.width / 2) - Math.round(width / 2)
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             width: control.boxSize
             height: control.boxSize
             radius: Theme.radiusXs + 1
@@ -92,11 +93,13 @@ T.AbstractButton {
 
             // Icons only for the states that show one (an icon is an image to load: a box is
             // created with every task row and block, also while lists scroll).
+            // (One icon for both states: a check when done, a chevron when deferred.)
             BIcon {
-                anchors.centerIn: parent
-                name: control.status === "done" ? "check" : ""
+                x: Math.round(parent.width / 2) - Math.round(width / 2)
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
+                name: control.status === "done" ? "check" : control.status === "deferred" ? "chevron-right" : ""
                 size: control.boxSize - 4
-                color: Theme.dark ? Theme.bg : "#ffffff"
+                color: control.status === "done" ? (Theme.dark ? Theme.bg : "#ffffff") : Theme.fgMuted
             }
             // Doing: the lower half filled.
             Rectangle {
@@ -111,16 +114,11 @@ T.AbstractButton {
             }
             Rectangle {
                 visible: control.status === "cancelled"
-                anchors.centerIn: parent
+                x: Math.round(parent.width / 2) - Math.round(width / 2)
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 width: parent.width - 6
                 height: 1.5
                 color: Theme.fgFaint
-            }
-            BIcon {
-                anchors.centerIn: parent
-                name: control.status === "deferred" ? "chevron-right" : ""
-                size: control.boxSize - 4
-                color: Theme.fgMuted
             }
         }
     }

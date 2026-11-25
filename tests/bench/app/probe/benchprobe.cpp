@@ -120,6 +120,15 @@
 #include <QtQml/private/qqmltypeloader_p.h> // which QML files of the app are loaded (memory)
 #define BENCH_HAS_TYPE_LOADER 1
 #endif
+#if __has_include(<QtQml/private/qqmldata_p.h>)
+#include <QtQml/private/qqmlcontextdata_p.h> // ids without reading properties; declaration sites
+#include <QtQml/private/qqmldata_p.h>
+#define BENCH_HAS_QML_DATA 1
+#endif
+#if __has_include(<QtQuick/private/qquickitem_p.h>)
+#include <QtQuick/private/qquickitem_p.h> // an item's lazily made anchors, layer, palette
+#define BENCH_HAS_ITEM_PRIVATE 1
+#endif
 #include <QtCore/private/qmetaobject_p.h>
 #include <QtCore/private/qobject_p.h>
 #include <qpa/qwindowsysteminterface.h>
@@ -276,6 +285,46 @@ Counters readGuiCounters()
 // component creates, the views built ahead…), any thread. BENCH_OBJECT_TYPES=1 also keeps the set
 // of live objects and prints, at the "settled" mark, how many there are of each class and under
 // which of AppShell's direct children (docs/PERFORMANCE.md, L10: what the shell creates at startup).
+
+/// The QML id of `object` ("" for none). QQmlContext::nameForObject() only on the context whose ids
+/// hold it: when it finds no id it reads every QObject property of the context's object — an item's
+/// lazily made `anchors`, `layer` (QQuickItemLayer) and `palette` (QQuickPalette) —, thousands of
+/// objects the probe itself added to the counts of the marks after its first object dump. (The
+/// QQmlContext made for a context with ids stays: the names live in a hash Qt does not export.) Without Qt's private
+/// QML headers, nameForObject() for every object.
+QString qmlIdOf(QObject *object)
+{
+#ifdef BENCH_HAS_QML_DATA
+    QQmlData *d = QQmlData::get(object);
+    if (!d)
+        return {};
+    for (QQmlContextData *c : {d->context, d->outerContext}) {
+        for (int i = 0; c && i < c->numIdValues(); ++i) {
+            if (c->idValue(i) == object) // (nameForObject() of this context finds it among its ids)
+                return c->asQQmlContext()->nameForObject(object);
+        }
+    }
+    return {};
+#else
+    QQmlContext *c = qmlContext(object);
+    return c ? c->nameForObject(object) : QString();
+#endif
+}
+
+/// Where `object` is declared: "<file>.qml:<line>", "" when it was not made from QML.
+QString qmlSiteOf(QObject *object)
+{
+#ifdef BENCH_HAS_QML_DATA
+    QQmlData *d = QQmlData::get(object);
+    if (!d || !d->outerContext || d->lineNumber == 0)
+        return {};
+    const QString url = d->outerContext->url().toString();
+    return url.mid(url.lastIndexOf(u'/') + 1) + u':' + QString::number(d->lineNumber);
+#else
+    Q_UNUSED(object);
+    return {};
+#endif
+}
 
 std::atomic<qint64> g_objCreated{0};
 std::atomic<qint64> g_objDestroyed{0};
@@ -1356,7 +1405,10 @@ private:
     }
     void wait(int ms)
     {
-        add(u"wait"_s, nullptr, [this, ms] { return monoNs() - m_stepStart >= qint64(ms) * 1000000; });
+        // (A step fails after its timeout: a long wait needs a longer one.)
+        add(
+                u"wait"_s, nullptr, [this, ms] { return monoNs() - m_stepStart >= qint64(ms) * 1000000; },
+                std::max<qint64>(60000, qint64(ms) + 30000));
     }
     void waitUntil(const QString &name, std::function<bool()> cond, qint64 timeoutMs = 60000, bool markIt = true)
     {
@@ -1673,16 +1725,14 @@ private:
             std::lock_guard<std::mutex> lock(g_liveMutex);
             live.assign(g_live->begin(), g_live->end());
         }
-        QHash<QString, qint64> byClass, byShellChild, byPath;
+        QHash<QString, qint64> byClass, byShellChild, byPath, bySite, byFile;
         const int depth = envOr("BENCH_OBJECT_DEPTH", "4").toInt(); // named ancestors in byPath
         const auto nameOf = [](QObject *object) {
             QString name = QString::fromLatin1(object->metaObject()->className());
             name.truncate(name.indexOf(u"_QML"_s) >= 0 ? name.indexOf(u"_QML"_s) : name.size());
-            if (QQmlContext *c = qmlContext(object)) {
-                const QString id = c->nameForObject(object);
-                if (!id.isEmpty())
-                    name += u" #"_s + id;
-            }
+            const QString id = qmlIdOf(object);
+            if (!id.isEmpty())
+                name += u" #"_s + id;
             if (!object->objectName().isEmpty())
                 name += u" \""_s + object->objectName() + u'"';
             return name;
@@ -1691,13 +1741,48 @@ private:
             if (o->thread() != thread())
                 continue;
             byClass[QString::fromLatin1(o->metaObject()->className())] += 1;
+            // Where it comes from: "<class> @ <file>:<line>" for an object a QML file declares,
+            // "<class> ^<n> <site>" for one made by the object n levels up (an attached object,
+            // a Repeater's model data…), "^ ?" when no ancestor was declared in QML (anchors,
+            // contexts: no QObject parent).
+            {
+                QString cls = QString::fromLatin1(o->metaObject()->className());
+                cls.truncate(cls.indexOf(u"_QML"_s) >= 0 ? cls.indexOf(u"_QML"_s) : cls.size());
+                QString site = qmlSiteOf(o);
+                QString key;
+                if (!site.isEmpty()) {
+                    key = cls + u" @ "_s + site;
+                } else {
+                    int up = 1;
+                    for (QObject *p = o->parent(); p && up <= 6; p = p->parent(), ++up) {
+                        site = qmlSiteOf(p);
+                        if (!site.isEmpty())
+                            break;
+                    }
+                    key = cls + u" ^"_s + (site.isEmpty() ? u"?"_s : QString::number(up) + u' ' + site);
+                }
+                bySite[key] += 1;
+                byFile[site.isEmpty() ? u"?"_s : site.left(site.indexOf(u':'))] += 1;
+#ifdef BENCH_HAS_ITEM_PRIVATE
+                // The helpers an item makes on first use, which have no QObject parent.
+                if (auto *item = qobject_cast<QQuickItem *>(o)) {
+                    QQuickItemPrivate *d = QQuickItemPrivate::get(item);
+                    const QString at = (site.isEmpty() ? u"?"_s : site) + u" ("_s + cls + u')';
+                    if (d->_anchors)
+                        bySite[u"+anchors @ "_s + at] += 1;
+                    if (d->extra.isAllocated() && d->extra->layer)
+                        bySite[u"+layer @ "_s + at] += 1;
+                    if (d->providesPalette())
+                        bySite[u"+palette @ "_s + at] += 1;
+                }
+#endif
+            }
             // The ancestors below the shell that have a QML id or an objectName, outermost first.
             QObject *child = nullptr;
             QStringList named;
             for (QObject *p = o; p; p = p->parent()) {
                 QObject *up = p->parent();
-                if (p != o
-                    && (!p->objectName().isEmpty() || (qmlContext(p) && !qmlContext(p)->nameForObject(p).isEmpty())))
+                if (p != o && (!p->objectName().isEmpty() || !qmlIdOf(p).isEmpty()))
                     named.prepend(nameOf(p));
                 if (up && QByteArray(up->metaObject()->className()).startsWith("AppShell")) {
                     child = p;
@@ -1721,7 +1806,9 @@ private:
                   {u"live"_s, qint64(live.size())},
                   {u"byClass"_s, toJson(byClass)},
                   {u"byShellChild"_s, toJson(byShellChild)},
-                  {u"byPath"_s, toJson(byPath)}});
+                  {u"byPath"_s, toJson(byPath)},
+                  {u"bySite"_s, toJson(bySite)},
+                  {u"byFile"_s, toJson(byFile)}});
     }
 
     void openPageSteps(const QString &page, const QString &tag)
@@ -2410,8 +2497,9 @@ private:
         action(u"mem"_s, [this] { markMem(u"pictures:end"_s, true); });
     }
 
-    /// The app away and back (memorySteps()): let go as with another program in front, the window
-    /// hidden and let go as with no window shown, the window shown again. Memory marks `away`,
+    /// The app away and back (memorySteps(); MemoryPolicy.setAway): away as with another program
+    /// in front, the window hidden and away as with no window shown, the window shown and the app
+    /// in use again. Memory marks `away`,
     /// `away_hidden`, `back` (with ":<tag>" for a tag) and `back_picture`: the pixels of the window
     /// that differ from before it was away.
     void awaySteps(const QString &tag)
@@ -2423,7 +2511,7 @@ private:
             if (m_window)
                 m_beforeAway = m_window->grabWindow();
             if (QObject *p = singleton("MemoryPolicy"))
-                QMetaObject::invokeMethod(p, "letGoNow", Q_ARG(bool, false));
+                QMetaObject::invokeMethod(p, "setAway", Q_ARG(bool, true), Q_ARG(bool, false));
         });
         wait(1500);
         mem(u"away"_s + suffix);
@@ -2434,13 +2522,15 @@ private:
         wait(500);
         action(u"away_hidden"_s, [this] {
             if (QObject *p = singleton("MemoryPolicy"))
-                QMetaObject::invokeMethod(p, "letGoNow", Q_ARG(bool, true));
+                QMetaObject::invokeMethod(p, "setAway", Q_ARG(bool, true), Q_ARG(bool, true));
         });
         wait(1500);
         mem(u"away_hidden"_s + suffix);
         action(u"show"_s, [this] {
             if (m_window)
                 m_window->show();
+            if (QObject *p = singleton("MemoryPolicy"))
+                QMetaObject::invokeMethod(p, "setAway", Q_ARG(bool, false), Q_ARG(bool, false));
         });
         waitSettled(u"back_settled"_s, 1000, 60000);
         wait(1000);
@@ -2493,9 +2583,9 @@ private:
 
     /// What the app holds: after its start (with everything it builds ahead), after a tour of its
     /// views (a page, Tasks, Calendar, All pages, Search, Graph, Tags, Settings — each `mem:view:<name>`),
-    /// back at the journal after BENCH_REST_MS (`mem:home`), and after BENCH_LONG_REST_MS more
-    /// (`mem:rested`: what goes when it is not used). Every mark after a garbage collection, with the
-    /// kernel's and malloc's own counts.
+    /// back at the journal after BENCH_REST_MS (`mem:home`), after BENCH_LONG_REST_MS more
+    /// (`mem:rested`: what goes when it is not used), then away, hidden and back (awaySteps()).
+    /// Every mark after a garbage collection, with the kernel's and malloc's own counts.
     void memorySteps()
     {
         const auto mem = [this](const QString &name, bool objects) {
@@ -2521,8 +2611,7 @@ private:
                 action(u"unload:"_s + name, [this, name] {
                     int done = 0;
                     walk(m_window ? m_window->contentItem() : nullptr, [&](QQuickItem *it) {
-                        QQmlContext *c = qmlContext(it);
-                        if (!c || c->nameForObject(it) != name)
+                        if (qmlIdOf(it) != name)
                             return true;
                         if (it->isVisible() && it->metaObject()->indexOfProperty("kept") >= 0)
                             return false; // the view shown stays
@@ -2570,6 +2659,13 @@ private:
         waitSettled(u"home_settled"_s, 1000, 60000);
         wait(m_restMs);
         mem(u"home"_s, true);
+        // BENCH_LONG_REST_MS: the same view for a while longer — what goes by itself when it is
+        // not used (the spell checker's dictionaries after 90 s, the hidden views after
+        // MemoryPolicy.hiddenViewMs: BRULION_HIDDEN_VIEW_MS shortens that for a measurement).
+        if (m_longRestMs > 0) {
+            wait(m_longRestMs);
+            mem(u"rested"_s, true);
+        }
         // What goes while the app is away (MemoryPolicy, trees that have it): another program in
         // front (`mem:away`), then no window shown (`mem:away_hidden`: the window hidden, its
         // graphics released too), then shown again (`mem:back`: it must draw as before —
@@ -2610,10 +2706,6 @@ private:
             waitSettled(u"shown_settled"_s, 1000, 60000);
             wait(1000);
             mem(u"shown_again"_s, false);
-        }
-        if (m_longRestMs > 0) {
-            wait(m_longRestMs);
-            mem(u"rested"_s, true);
         }
     }
 

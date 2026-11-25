@@ -173,7 +173,7 @@ Item {
                                      : hasEmbeds ? embedsY + embedLoader.height : topPad + contentHeight
 
     /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
-    readonly property real firstLineCenter: topPad + (onlyTransclusions ? transclusionLineCenter
+    readonly property real firstLineCenter: topPad + (onlyTransclusions && transclusionView !== null ? transclusionLineCenter
                                                       : textView ? textContent.firstLineCenter
                                                       : contentFirstLineCenter)
 
@@ -193,9 +193,11 @@ Item {
 
     /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
     readonly property Item contentItem: textView ? textContent : content.item as Item
-    /// The embedded pages / sections / blocks (TransclusionView) and the pictures and files
-    /// (EmbedView) under the block's text, null while it has none: loaded from their files then
-    /// (docs/PERFORMANCE.md "QML files loaded when first used").
+    /// The views of the block's embedded blocks and of its pictures and files (null until it has
+    /// some). Like the views of the kinds of blocks, they are not named here as types (a QML file
+    /// named is loaded with the editor, docs/PERFORMANCE.md "QML files loaded when first used"):
+    /// their members are reached by name (QmlCall), their first line followed (loadedLineCenter,
+    /// transclusionLineCenter).
     readonly property Item transclusionView: transclusionLoader.item as Item
     readonly property Item embedView: embedLoader.item as Item
 
@@ -204,6 +206,16 @@ Item {
         if (block.view === "table" && content.item !== null)
             QmlCall.call(content.item, "focusFirstCell")
     }
+    /// The first line's centre of the view of the block's kind and of its embedded blocks, as their
+    /// `firstLineCenter` says (followed by QmlCall.connect: no object of its own per block).
+    property real loadedLineCenter: 0
+    property real transclusionLineCenter: 0
+    function readLineCenter(): void {
+        block.loadedLineCenter = QmlCall.number(QmlCall.get(content.item, "firstLineCenter"))
+    }
+    function readTransclusionLine(): void {
+        block.transclusionLineCenter = QmlCall.number(QmlCall.get(transclusionLoader.item, "firstLineCenter"))
+    }
     /// The first line's centre in the view loaded for the block's content (not a text view).
     readonly property real contentFirstLineCenter: {
         const item = content.item as Item
@@ -211,16 +223,15 @@ Item {
         if (item === null)
             return fallback
         switch (view) {
-        case "code": { const v = item as CodeBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "math": { const v = item as MathBlockView; return v !== null ? v.firstLineCenter : fallback }
-        // (Loaded from their files, their first line followed by name: loadedLineCenter.)
-        case "table":
+        case "code":
         case "calc":
         case "query":
+        case "math":
         case "mermaid":
         case "chart":
         case "view":
-        case "frontmatter": return content.status === Loader.Ready ? block.loadedLineCenter : fallback
+        case "table":
+        case "frontmatter": return block.loadedLineCenter
         // (The quote / callout frame and the rule below are untyped components: computed here.)
         case "quote":
         case "callout": return (view === "callout" ? Theme.space3 : 0) + editor.firstLineCenter(shownHeadingLevel)
@@ -251,21 +262,6 @@ Item {
     // ---- Style by tag (an extension's b.app.tagStyle: docs/UI.md "Styles of blocks by tag") -------
     /// The tint of the block's styled tag ("" none): a colour of the theme by name, or "#rrggbb".
     readonly property string tagTint: shown ? rowData.tagTint : ""
-    /// The colour of `tint`: the strong one (the bar) or the soft one (the background) — the
-    /// theme's own pair for its names, a translucent shade of a "#rrggbb" in both themes.
-    function tagTintColor(tint: string, strong: bool): color {
-        switch (tint) {
-        case "accent": return strong ? Theme.accent : Theme.accentBg
-        case "success": return strong ? Theme.success : Theme.successBg
-        case "danger": return strong ? Theme.danger : Theme.dangerBg
-        case "warning": return strong ? Theme.warning : Theme.warningBg
-        case "info": return strong ? Theme.info : Theme.infoBg
-        case "neutral": return strong ? Theme.borderStrong : Theme.bgSunken
-        }
-        return strong ? tagTintHex : tagTintHex.alpha(Theme.dark ? 0.2 : 0.13)
-    }
-    /// The tint as a colour when it is one ("#rrggbb").
-    readonly property color tagTintHex: Js.startsWith(tagTint, "#") ? tagTint : "transparent"
     // Made only for blocks with a styled tag (none unless an extension declared a style).
     Loader {
         active: block.tagTint !== ""
@@ -273,21 +269,7 @@ Item {
         y: 1
         width: block.bandRight - x
         height: Math.max(0, block.height - 2)
-        sourceComponent: Rectangle {
-            id: tintFrame
-            objectName: "tagTint"
-            readonly property int mode: block.rowData.tagTintMode
-            radius: Theme.radiusSm
-            color: (mode & 1) !== 0 ? block.tagTintColor(block.tagTint, false) : "transparent"
-            Rectangle {
-                objectName: "tagTintBar"
-                visible: (tintFrame.mode & 2) !== 0
-                width: 3
-                height: tintFrame.height
-                radius: 1.5
-                color: block.tagTintColor(block.tagTint, true)
-            }
-        }
+        sourceComponent: BlockParts.part("TagTint")
     }
 
     // Made only for selected blocks (most blocks never are).
@@ -297,23 +279,7 @@ Item {
         y: block.bandTop
         width: block.bandRight - x
         height: Math.max(0, block.bandBottom - block.bandTop)
-        sourceComponent: Rectangle {
-            objectName: "selectionBand"
-            topLeftRadius: block.bandStart ? Theme.radiusSm : 0
-            topRightRadius: block.bandStart ? Theme.radiusSm : 0
-            bottomLeftRadius: block.bandEnd ? Theme.radiusSm : 0
-            bottomRightRadius: block.bandEnd ? Theme.radiusSm : 0
-            color: Theme.bgSelected
-            border.width: block.bandEdge === "single" ? 1 : 0
-            border.color: Theme.focusRing.alpha(0.35)
-            // A range: a line down its left edge marks the band as one.
-            Rectangle {
-                visible: block.bandEdge !== "single"
-                width: 2
-                height: parent.height
-                color: Theme.focusRing.alpha(0.6)
-            }
-        }
+        sourceComponent: BlockParts.part("SelectionBand")
     }
 
     // ---- Flash (a link to the block was followed) ------------------------------------------------
@@ -329,19 +295,7 @@ Item {
         y: 1
         width: block.bandRight - x
         height: Math.max(0, block.height - 2)
-        sourceComponent: Rectangle {
-            objectName: "blockFlash"
-            radius: Theme.radiusSm
-            color: Theme.mark
-            SequentialAnimation on opacity {
-                NumberAnimation { from: 0; to: 1; duration: Theme.reducedMotion ? 0 : 150; easing.type: Theme.easing }
-                PauseAnimation { duration: 700 }
-                NumberAnimation { to: 0; duration: Theme.reducedMotion ? 0 : 350; easing.type: Theme.easing }
-                // (Not a ScriptAction: its script is not compiled, and qmlcachegen skipped the
-                // rest of the file after it.)
-                onFinished: block.flashing = false
-            }
-        }
+        sourceComponent: BlockParts.part("Flash")
     }
 
     // ---- Guide lines -------------------------------------------------------------------------
@@ -388,33 +342,7 @@ Item {
         // Left of the bullet's hit area (with a mouse 24 px wide, a little wider than its column).
         x: (Theme.touchUi ? block.bulletX - block.editor.bulletColumn / 2 : block.levelX - bulletBox.width) - width + 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: Item {
-            visible: block.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed
-            opacity: block.collapsed ? 0.9 : 0.6
-            Accessible.role: Accessible.Button
-            Accessible.name: block.collapsed ? qsTr("Expand") : qsTr("Collapse")
-
-            BIcon {
-                anchors.centerIn: parent
-                name: "chevron-right"
-                size: Theme.iconSizeSm
-                color: arrowHover.hovered ? Theme.fg : Theme.fgMuted
-                rotation: block.collapsed ? 0 : 90
-                Behavior on rotation { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
-            }
-            // Touch: a 44 px hit area around the small arrow (the bullet, stacked above, keeps the
-            // part that overlaps it).
-            Item {
-                anchors.centerIn: parent
-                width: Theme.touchUi ? Theme.touchTarget : parent.width
-                height: Theme.touchUi ? Theme.touchTarget : parent.height
-                HoverHandler { id: arrowHover; cursorShape: Qt.PointingHandCursor }
-                TapHandler {
-                    id: arrowTap
-                    onTapped: block.controller.toggleFold(block.index)
-                }
-            }
-        }
+        sourceComponent: BlockParts.part("FoldArrow")
     }
 
     // ---- Bullet --------------------------------------------------------------------------------
@@ -435,53 +363,7 @@ Item {
         x: Theme.touchUi && besideArrow ? block.bulletX - width / 2
                                         : block.doc ? Math.max(0, block.levelX - width) : block.levelX - width
         y: block.firstLineCenter - height / 2
-        sourceComponent: Item {
-            id: bullet
-            /// The bullet's centre in the hit area.
-            readonly property real dotX: block.bulletX - bulletBox.x
-            Accessible.role: block.doc ? Accessible.Graphic : Accessible.Button
-            Accessible.name: block.doc ? qsTr("List item") : qsTr("Zoom into block")
-
-            // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
-            Rectangle {
-                x: bullet.dotX - width / 2
-                anchors.verticalCenter: parent.verticalCenter
-                width: 16
-                height: 16
-                radius: 8
-                color: block.collapsed ? Theme.bgPressed : Theme.bgHover
-                visible: !block.doc && (block.collapsed || bulletHover.hovered)
-            }
-            Rectangle {
-                // The same round bullet at every depth (a document too: nesting shows in the indent).
-                x: bullet.dotX - width / 2
-                anchors.verticalCenter: parent.verticalCenter
-                width: 6
-                height: width
-                radius: width / 2
-                color: block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
-            }
-            HoverHandler {
-                id: bulletHover
-                cursorShape: block.doc ? Qt.ArrowCursor : Qt.PointingHandCursor
-                enabled: !Theme.touchUi
-            }
-            TapHandler {
-                acceptedButtons: Qt.LeftButton
-                // A document has no zoom: the bullet is part of the text, a click edits the item.
-                // (The touch selection mode: a tap moves the selection's end here.)
-                onTapped: {
-                    if (block.editor.blockTapped(block.index))
-                        return
-                    if (block.doc)
-                        block.editor.startEditing(block.index, 0)
-                    else
-                        block.controller.zoomInto(block.index)
-                }
-                onLongPressed: block.openMenu(bullet, bullet.dotX, bullet.height)
-            }
-            MenuTap { onTapped: block.openMenu(bullet, bullet.dotX, bullet.height) }
-        }
+        sourceComponent: BlockParts.part("Bullet")
     }
 
     // ---- Number of an ordered list item (document mode) -----------------------------------------
@@ -492,36 +374,7 @@ Item {
         // Right-aligned in the marker column, on the first line's baseline (body font).
         x: block.levelX - width - gap
         y: block.firstLineCenter - block.editor.firstLineCenter(0)
-        sourceComponent: Text {
-            id: number
-            // Rich text like the item's own rendered text: the same line layout, the same baseline.
-            text: TextHelper.escapeHtml(block.listMarker)
-            textFormat: Text.RichText
-            font.family: Theme.fontEditor
-            font.pixelSize: block.editor.fontSize
-            font.features: { "tnum": 1 }
-            lineHeightMode: Text.FixedHeight
-            lineHeight: block.editor.lineHeight
-            color: block.closedTask ? Theme.fgFaint : Theme.fgMuted
-            Accessible.ignored: true
-            // The hit area, as the bullet's: a touch target (24 px with a mouse) around the number,
-            // its right edge at the text column (with no room left of it, under the first
-            // letters, which edit the item as well).
-            Item {
-                readonly property real size: Theme.touchUi ? Theme.touchTarget : 24
-                readonly property real textEdge: number.width + numberBox.gap
-                width: Math.max(size, textEdge)
-                height: Math.max(size, number.height)
-                x: Math.max(-numberBox.x, textEdge - width)
-                y: (number.height - height) / 2
-                TapHandler {
-                    acceptedButtons: Qt.LeftButton
-                    onTapped: block.editOnTap(0)
-                    onLongPressed: block.openMenu(number, 0, number.height)
-                }
-                MenuTap { onTapped: block.openMenu(number, 0, number.height) }
-            }
-        }
+        sourceComponent: BlockParts.part("Number")
     }
 
     // ---- Task checkbox ---------------------------------------------------------------------------
@@ -532,15 +385,7 @@ Item {
         x: block.doc ? block.bulletX - width / 2
                      : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: TaskBox {
-            id: box
-            objectName: "taskBox"
-            status: block.taskStatus
-            onToggled: block.controller.toggleTask(block.index)
-            // The editor's status menu (it follows the block while it is open).
-            ownMenu: false
-            onMenuRequested: block.editor.openTaskStatusMenu(block.index, box, 0, box.height)
-        }
+        sourceComponent: BlockParts.part("TaskBox")
     }
 
     // ---- "Add date" (an open task without a date; with one, "+" adds another) ---------------------
@@ -549,21 +394,7 @@ Item {
                 && (block.hovered || block.editing || block.editor.quickDateRow === block.index)
         x: block.contentRight - block.dateButtonRoom + (block.dateButtonRoom - width) / 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: BIconButton {
-            id: dateButton
-            objectName: "taskDateButton"
-            label: block.addable ? qsTr("Add a reminder or an alarm") : qsTr("Add date")
-            iconName: "calendar-plus"
-            size: "small"
-            // The edited text keeps the keyboard (the menu takes it while it is open).
-            focusPolicy: Qt.NoFocus
-            onClicked: {
-                if (block.addable)
-                    block.editor.addDateTo(block.index)
-                else
-                    block.editor.openQuickDateMenu(block.index, dateButton)
-            }
-        }
+        sourceComponent: BlockParts.part("DateButton")
     }
 
     // ---- Content ---------------------------------------------------------------------------
@@ -583,230 +414,73 @@ Item {
         width: Math.max(40, block.contentRight - x)
         active: block.shown && !block.textView
         visible: !block.noTextLine
-        onActiveChanged: block.loadContent()
-        onLoaded: block.contentLoaded()
-    }
-    onViewChanged: block.loadContent()
-    Component.onCompleted: block.loadContent()
-    /// The view of a block of `view` that is loaded from its file (docs/PERFORMANCE.md "QML files
-    /// loaded when first used": the kinds a page may well not have — a QML file named here is
-    /// loaded with the editor), "" for one made here.
-    function contentFile(kind: string): string {
-        switch (kind) {
-        case "table": return "TableBlockView.qml"
-        case "calc": return "CalcBlockView.qml"
-        case "query": return "QueryBlockView.qml"
-        case "mermaid": return "MermaidBlockView.qml"
-        case "chart": return "ChartBlockView.qml"
-        case "view": return "ViewBlockView.qml"
-        case "frontmatter": return "FrontmatterView.qml"
+        sourceComponent: {
+            switch (block.view) {
+            case "code": return BlockParts.part("Code")
+            case "calc": return BlockParts.part("Calc")
+            case "query": return BlockParts.part("Query")
+            case "math": return BlockParts.part("Math")
+            case "mermaid": return BlockParts.part("Mermaid")
+            case "chart": return BlockParts.part("Chart")
+            case "view": return BlockParts.part("View")
+            case "table": return BlockParts.part("Table")
+            case "quote":
+            case "callout": return BlockParts.part("Callout")
+            case "rule": return BlockParts.part("Rule")
+            case "frontmatter": return BlockParts.part("Frontmatter")
+            default: return null
+            }
         }
-        return ""
-    }
-    /// The content Loader gets the view of the block's kind (once active: an inactive one keeps
-    /// what it has for when it is active again).
-    function loadContent(): void {
-        if (!content.active)
-            return
-        const file = block.contentFile(block.view)
-        if (file === "") {
-            content.sourceComponent = block.contentComponent(block.view)
-            return
+        onLoaded: {
+            if (block.view === "quote" || block.view === "callout" || block.view === "rule")
+                return
+            QmlCall.connect(content.item, "firstLineCenterChanged", block, "readLineCenter")
+            block.readLineCenter()
         }
-        block._contentSource = Qt.resolvedUrl(file)
-        if (content.source === block._contentSource && content.item !== null)
-            return
-        block._contentValues = { blockItem: block }
-        content.setSource(block._contentSource, block._contentValues)
-    }
-    function contentComponent(kind: string): Component {
-        switch (kind) {
-        case "code": return codeComponent
-        case "math": return mathComponent
-        case "quote":
-        case "callout": return calloutComponent
-        case "rule": return ruleComponent
-        }
-        return null
-    }
-    /// What the next setSource() loads (read from properties: compiled QML wants a call's
-    /// arguments so).
-    property url _contentSource
-    property var _contentValues: ({})
-    /// The first line's centre of a view loaded from its file (its `firstLineCenter`, followed).
-    property real loadedLineCenter: 0
-    function contentLoaded(): void {
-        if (block.contentFile(block.view) === "")
-            return
-        QmlCall.connect(content.item, "firstLineCenterChanged", block, "readLineCenter")
-        block.readLineCenter()
-    }
-    function readLineCenter(): void {
-        block.loadedLineCenter = QmlCall.number(QmlCall.get(content.item, "firstLineCenter"))
     }
 
-    // The pictures and files under the text (EmbedView, BlockEmbeds.qml) and the embedded pages /
-    // sections / blocks (TransclusionView): loaded from their files for a block that has them.
+    // A block's pictures and files, and its embedded blocks: made the first time it has some
+    // (most blocks have neither: the views with their Repeaters were a tenth of a block's objects)
+    // and kept, also while a menu of theirs is still open when they go.
+    property bool embedsMade: hasEmbeds
+    onHasEmbedsChanged: if (hasEmbeds) embedsMade = true
+    property bool transclusionsMade: hasTransclusions
+    onHasTransclusionsChanged: if (hasTransclusions) transclusionsMade = true
     Loader {
         id: embedLoader
+        active: block.embedsMade
         visible: block.hasEmbeds
-        active: block.hasEmbeds
         x: block.contentLeft
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
-        onActiveChanged: block.loadEmbeds()
-        Component.onCompleted: block.loadEmbeds()
+        sourceComponent: BlockParts.part("Embeds")
     }
-    function loadEmbeds(): void {
-        if (!embedLoader.active || embedLoader.item !== null)
-            return
-        block._embedValues = { blockItem: block }
-        embedLoader.setSource(block._embedSource, block._embedValues)
-    }
-    readonly property url _embedSource: Qt.resolvedUrl("BlockEmbeds.qml")
-    property var _embedValues: ({})
 
     Loader {
         id: transclusionLoader
+        active: block.transclusionsMade
         visible: block.hasTransclusions
-        active: block.hasTransclusions
         x: block.contentLeft
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
-        onActiveChanged: block.loadTransclusions()
-        Component.onCompleted: block.loadTransclusions()
+        sourceComponent: BlockParts.part("Transclusions")
         onLoaded: {
             QmlCall.connect(transclusionLoader.item, "firstLineCenterChanged", block, "readTransclusionLine")
             block.readTransclusionLine()
         }
     }
-    function loadTransclusions(): void {
-        if (!transclusionLoader.active || transclusionLoader.item !== null)
-            return
-        block._transclusionValues = { blockItem: block, transclusions: block.transclusions }
-        transclusionLoader.setSource(block._transclusionSource, block._transclusionValues)
-    }
-    readonly property url _transclusionSource: Qt.resolvedUrl("TransclusionView.qml")
-    property var _transclusionValues: ({})
-    Binding {
-        target: transclusionLoader.item
-        property: "transclusions"
-        value: block.hasTransclusions ? block.transclusions : block.noItems
-        restoreMode: Binding.RestoreNone
-    }
-    /// The embeds' first line (TransclusionView.firstLineCenter, followed).
-    property real transclusionLineCenter: 0
-    function readTransclusionLine(): void {
-        block.transclusionLineCenter = QmlCall.number(QmlCall.get(transclusionLoader.item, "firstLineCenter"))
-    }
 
-    Component {
-        id: calloutComponent
-        Rectangle {
-            id: frame
-            readonly property bool callout: block.view === "callout"
-            readonly property string type: block.rowData.calloutType
-            readonly property color tint: {
-                switch (type) {
-                case "tip": case "success": case "check": case "done": return Theme.success
-                case "warning": case "caution": case "attention": return Theme.warning
-                case "danger": case "error": case "bug": case "failure": return Theme.marginRed // whatever the accent
-                case "todo": case "info": return Theme.info
-                case "quote": case "cite": return Theme.fgFaint
-                default: return Theme.info
-                }
-            }
-            implicitHeight: inner.implicitHeight + (callout ? 2 * Theme.space3 : 0)
-            height: implicitHeight
-            radius: callout ? Theme.radius : 0
-            color: callout ? tint.alpha(Theme.dark ? 0.12 : 0.10) : "transparent"
-            Rectangle {
-                width: 3
-                height: parent.height
-                radius: 1.5
-                color: frame.callout ? frame.tint : Theme.borderStrong
-            }
-            Item {
-                id: inner
-                x: Theme.space4
-                y: frame.callout ? Theme.space3 : 0
-                width: parent.width - x - (frame.callout ? Theme.space3 : 0)
-                implicitHeight: text.implicitHeight
-                BlockText {
-                    id: text
-                    width: parent.width
-                    blockItem: block
-                    quoted: !frame.callout
-                }
-            }
-        }
-    }
-    Component {
-        id: codeComponent
-        CodeBlockView { blockItem: block }
-    }
-    Component {
-        id: mathComponent
-        MathBlockView { blockItem: block }
-    }
-    Component {
-        id: ruleComponent
-        Item {
-            implicitHeight: block.editing ? ruleText.implicitHeight : block.editor.lineHeight
-            height: implicitHeight
-            Rectangle {
-                visible: !block.editing
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width
-                height: 1
-                color: Theme.border
-            }
-            TapHandler {
-                enabled: !block.editing
-                onTapped: block.editOnTap(-1)
-            }
-            BlockText {
-                id: ruleText
-                visible: block.editing
-                width: parent.width
-                blockItem: block
-            }
-        }
-    }
 
     // ---- The selection's grips (touch selection mode) -----------------------------------------------
     // A round grip at the band's start (top left) and end (bottom right), 44 px to hold: the finger
     // moves that end of the selection (the editor follows it, also when this block scrolls away).
-    component Grip: Item {
-        id: grip
-        property bool atStart: true
-        objectName: atStart ? "selectionGripStart" : "selectionGripEnd"
-        width: Theme.touchTarget
-        height: Theme.touchTarget
-        Rectangle {
-            anchors.centerIn: parent
-            width: 18
-            height: 18
-            radius: 9
-            color: Theme.link
-            border.width: 2
-            border.color: Theme.bg
-        }
-        MouseArea {
-            anchors.fill: parent
-            preventStealing: true
-            onPressed: block.editor.beginGripDrag(grip.atStart)
-        }
-        Accessible.role: Accessible.Button
-        Accessible.name: atStart ? qsTr("Start of the selection") : qsTr("End of the selection")
-    }
     Loader {
         active: block.bandStart && block.editor.selectionGrips
         z: 5
         // (Inside the window: a document's band starts near the screen's edge on a phone.)
         x: Math.max(block.bandX, 12) - Theme.touchTarget / 2
         y: block.bandTop + 9 - Theme.touchTarget / 2
-        sourceComponent: Grip { atStart: true }
+        sourceComponent: BlockParts.part("GripStart")
     }
     Loader {
         active: block.bandEnd && block.editor.selectionGrips
@@ -814,7 +488,7 @@ Item {
         // (Inside the window: the band reaches the screen's edge on a phone.)
         x: Math.min(block.bandRight, block.width - 12) - Theme.touchTarget / 2
         y: block.bandBottom - 9 - Theme.touchTarget / 2
-        sourceComponent: Grip { atStart: false }
+        sourceComponent: BlockParts.part("GripEnd")
     }
 
     // ---- Block menu ----------------------------------------------------------------------------
@@ -827,15 +501,5 @@ Item {
     function editOnTap(pos: int): void {
         if (!editor.blockTapped(index))
             editor.startEditing(index, pos)
-    }
-    /// A right-click on a marker opens the block menu. Mouse-like devices only: Qt gives a finger
-    /// (no buttons) to every TapHandler, so a tap on a phone zoomed in and opened the menu at
-    /// once (touch: the long press of the marker's own TapHandler). WithinBounds: the press is
-    /// the marker's, the editor's right-click on the block (menu at the pointer) does not open it
-    /// a second time.
-    component MenuTap: TapHandler {
-        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-        acceptedButtons: Qt.RightButton
-        gesturePolicy: TapHandler.WithinBounds
     }
 }

@@ -75,12 +75,6 @@ T.Button {
         if (control.busy && (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
             event.accepted = true
     }
-    MouseArea {
-        anchors.fill: parent
-        visible: control.busy
-        acceptedButtons: Qt.AllButtons
-        cursorShape: Qt.BusyCursor
-    }
 
     contentItem: Item {
         id: content
@@ -93,7 +87,8 @@ T.Button {
 
         Row {
             id: row
-            anchors.centerIn: parent
+            x: Math.round(parent.width / 2) - Math.round(width / 2)
+            y: Math.round(parent.height / 2) - Math.round(height / 2)
             spacing: control.size === "small" ? 5 : 7
             layoutDirection: control.iconRight ? Qt.RightToLeft : Qt.LeftToRight
 
@@ -101,7 +96,7 @@ T.Button {
                 width: iconItem.width
                 height: iconItem.height
                 visible: content.hasIcon
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
 
                 BIcon {
                     id: iconItem
@@ -111,18 +106,30 @@ T.Button {
                     color: control.textColor
                     opacity: control.busy ? 0 : 1
                 }
-                BSpinner {
-                    anchors.centerIn: parent
-                    visible: control.busy
-                    size: iconItem.size
-                    color: control.textColor
+                // While busy (made then: a button is seldom busy, and its spinner is a Shape with
+                // two paths, an animator and a timer): the spinner in the icon's place, and a
+                // MouseArea over the whole button that takes the clicks, with the busy cursor.
+                Loader {
+                    x: Math.round(parent.width / 2) - Math.round(width / 2)
+                    y: Math.round(parent.height / 2) - Math.round(height / 2)
+                    active: control.busy
+                    sourceComponent: BSpinner {
+                        size: iconItem.size
+                        color: control.textColor
+                        MouseArea {
+                            parent: control
+                            anchors.fill: parent
+                            acceptedButtons: Qt.AllButtons
+                            cursorShape: Qt.BusyCursor
+                        }
+                    }
                 }
             }
 
             Text {
                 id: label
                 visible: control.text !== ""
-                anchors.verticalCenter: parent.verticalCenter
+                y: Math.round(parent.height / 2) - Math.round(height / 2)
                 textFormat: Text.PlainText
                 text: control.text
                 font: control.font
@@ -157,7 +164,9 @@ T.Button {
 
         // State overlay for the outlined variant (keeps the elevated surface colour).
         Rectangle {
-            anchors.fill: parent
+            // (Its size bound, not anchored: no QQuickAnchors object for each of hundreds.)
+            width: parent.width
+            height: parent.height
             radius: backgroundRect.radius
             visible: control.variant === "secondary"
             color: control.down ? Theme.bgPressed : control.hovered || control.checked ? Theme.bgHover : "transparent"

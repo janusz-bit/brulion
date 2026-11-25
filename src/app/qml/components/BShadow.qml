@@ -35,9 +35,13 @@ Item {
     opacity: target ? target.opacity : 1
     z: target ? target.z - 0.01 : 0
 
+    /// Shown at least once: the shadow is made then (most are a closed dialog's or menu's) and kept.
+    property bool _made: visible
+    onVisibleChanged: if (visible) _made = true
+
     Loader {
         anchors.fill: parent
-        active: !shadow.software
+        active: !shadow.software && shadow._made
         sourceComponent: RectangularShadow {
             radius: shadow.radius
             blur: shadow.specBlur
@@ -50,7 +54,7 @@ Item {
 
     // Software fallback: stacked rings fading outwards.
     Repeater {
-        model: shadow.software ? shadow.rings : 0
+        model: shadow.software && shadow._made ? shadow.rings : 0
         delegate: Rectangle {
             required property int index
             readonly property real grow: (index + 1) * shadow.specBlur / (2 * shadow.rings)

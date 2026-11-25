@@ -51,9 +51,8 @@ set(BRULION_UI_QML
     qml/components/BDialog.qml
     qml/components/BDiffView.qml
     qml/components/BEmptyState.qml
-    qml/components/BFocusRing.qml
+    qml/components/BFocusRingShape.qml
     qml/components/BFontPickerDialog.qml
-    qml/components/BIcon.qml
     qml/components/BIconButton.qml
     qml/components/BKbd.qml
     qml/components/BKeyboardFocusKeeper.qml
@@ -129,6 +128,7 @@ set(BRULION_UI_SOURCES
     ui/devtesting.h ui/devtesting.cpp
     ui/scrollprobe.h ${_brulion_scroll_probe_sources}
     ui/deviceinfo.h ui/deviceinfo.cpp
+    ui/focusring.h ui/focusring.cpp
     ui/keyboardsources.h ui/keyboardsources.cpp
 )
 set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml qml/components/OpenIn.qml

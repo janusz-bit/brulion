@@ -44,7 +44,9 @@ T.TextField {
 
     readonly property int fieldHeight: size === "small" ? Theme.controlHeightSm : Theme.controlHeight
     readonly property int hitHeight: Math.max(fieldHeight, Theme.touchUi ? Theme.touchTarget : 0)
-    readonly property int errorHeight: errorText !== "" ? errorLabel.implicitHeight + 4 : 0
+    readonly property int errorHeight: errorText !== "" ? errorLabelHeight + 4 : 0
+    /// The error text's height (its Text is made only while there is an error).
+    property real errorLabelHeight: 0
     readonly property bool showClear: clearable && length > 0 && !readOnly && enabled
     readonly property int sidePadding: size === "small" ? 8 : 10
     /// The field area: the control minus its insets (callers may make the field taller).
@@ -140,63 +142,71 @@ T.TextField {
         color: control.activeFocus ? Theme.fgMuted : Theme.fgFaint
     }
 
-    T.AbstractButton {
+    // The × that clears the field: made while it shows (most fields never show one).
+    Loader {
         id: clearButton
-        visible: control.showClear
+        active: control.showClear
         width: Theme.touchUi ? Theme.touchTarget : 24
         height: Math.max(control.fieldAreaHeight, control.hitHeight)
         x: control.width - width - (Theme.touchUi ? 0 : control.sidePadding - 4)
         y: control.topInset + (control.fieldAreaHeight - height) / 2
-        focusPolicy: Qt.NoFocus
-        hoverEnabled: !Theme.touchUi
-        Accessible.role: Accessible.Button
-        Accessible.name: qsTr("Clear")
-        onClicked: {
-            control.clear()
-            control.forceActiveFocus()
-            control.cleared()
-        }
-        contentItem: Item {
-            Rectangle {
-                anchors.centerIn: parent
-                width: 18
-                height: 18
-                radius: 9
-                visible: clearButton.hovered
-                color: Theme.bgPressed
+        sourceComponent: T.AbstractButton {
+            id: clearTap
+            focusPolicy: Qt.NoFocus
+            hoverEnabled: !Theme.touchUi
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Clear")
+            onClicked: {
+                control.clear()
+                control.forceActiveFocus()
+                control.cleared()
             }
-            BIcon {
-                anchors.centerIn: parent
-                name: "x"
-                size: Theme.iconSizeSm
-                color: clearButton.hovered ? Theme.fg : Theme.fgFaint
+            contentItem: Item {
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 18
+                    height: 18
+                    radius: 9
+                    visible: clearTap.hovered
+                    color: Theme.bgPressed
+                }
+                BIcon {
+                    anchors.centerIn: parent
+                    name: "x"
+                    size: Theme.iconSizeSm
+                    color: clearTap.hovered ? Theme.fg : Theme.fgFaint
+                }
             }
         }
     }
 
-    Row {
+    // The error under the field: made while there is one.
+    Loader {
         id: errorRow
-        visible: control.errorText !== ""
+        active: control.errorText !== ""
         x: 2
         y: control.height - control.errorHeight + 4
         width: control.width - 2
-        spacing: 4
-        BIcon {
-            name: "circle-alert"
-            size: Theme.iconSizeSm
-            color: Theme.dangerText
-            anchors.top: parent.top
-            anchors.topMargin: 1
-        }
-        Text {
-            id: errorLabel
-            width: errorRow.width - Theme.iconSizeSm - 4
-            textFormat: Text.PlainText
-            text: control.errorText
-            color: Theme.dangerText
-            font.family: Theme.fontUi
-            font.pixelSize: Theme.textSm
-            wrapMode: Text.Wrap
+        sourceComponent: Row {
+            spacing: 4
+            BIcon {
+                name: "circle-alert"
+                size: Theme.iconSizeSm
+                color: Theme.dangerText
+                anchors.top: parent.top
+                anchors.topMargin: 1
+            }
+            Text {
+                width: errorRow.width - Theme.iconSizeSm - 4
+                textFormat: Text.PlainText
+                text: control.errorText
+                color: Theme.dangerText
+                font.family: Theme.fontUi
+                font.pixelSize: Theme.textSm
+                wrapMode: Text.Wrap
+                onImplicitHeightChanged: control.errorLabelHeight = implicitHeight
+                Component.onCompleted: control.errorLabelHeight = implicitHeight
+            }
         }
     }
 
