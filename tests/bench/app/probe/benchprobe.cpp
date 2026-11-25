@@ -13,7 +13,7 @@
 //   BENCH_SCENARIO   startup | open-page | typing | source-typing | select-copy | search |
 //                    switcher | views |
 //                    graph | journal-scroll | page-scroll | page-resize | switch-pages | idle |
-//                    idle-edit | workload | pictures (see buildScenario())
+//                    idle-edit | workload | pictures | memory (see buildScenario())
 //   BENCH_PAGE       page path for open-page / typing / source-typing / select-copy / idle-edit /
 //                    page-scroll /
 //                    page-resize ("Bench/Konspekt 5000.md")
@@ -28,6 +28,10 @@
 //   BENCH_CYCLES     pictures: how many rounds of album / viewer / pages (default 2)
 //   BENCH_REST_MS    pictures: the wait at home after each round (default 3000; 35000 lets Qt's
 //                    pixmap cache expire: 30 s)
+//   BENCH_SETTLE_MS  memory: the wait after the start has settled, for what the app builds ahead
+//                    (default 9000)
+//   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 75000 lets everything
+//                    the app gives up when it is not used go — dictionaries, kept views, caches)
 //   BENCH_VIEWPORT_OBSERVERS  1: every memory mark lists the shown items that observe the
 //                    viewport (QQuickItem::ItemObservesViewport), by class and name
 //   BENCH_IDLE_MS    idle duration (default 30000)
@@ -40,7 +44,8 @@
 //   BENCH_SPANS      signal spans in the typing windows: 1 (default) the watched signals and
 //                    every other signal of a brulion:: class taking >= BENCH_SPAN_MIN_US (200 us)
 //                    inclusive; "watched" only the watched ones; 0 none
-//   BENCH_OBJECT_TYPES 1: at the startup's "content" and "settled" marks, the live QObjects by class
+//   BENCH_OBJECT_TYPES 1: at the startup's "content" and "settled" marks (memory: at its "start",
+//                    "home" and "rested" marks too), the live QObjects by class
 //                    and by the direct child of AppShell that holds them ("objects" records; slower);
 //                    BENCH_OBJECT_DEPTH: how many named ancestors name a group (default 4)
 //
@@ -392,6 +397,67 @@ QJsonObject procStatus()
     return o;
 }
 
+/// What the kernel counts for the whole process (/proc/self/smaps_rollup, kB): the proportional
+/// set size and its anonymous / file parts, the private pages (dirty: what only this process holds
+/// and nothing can drop; clean: file pages mapped by this process alone) and what is swapped out.
+QJsonObject smapsRollup()
+{
+    QJsonObject o;
+    QFile f(u"/proc/self/smaps_rollup"_s);
+    if (!f.open(QIODevice::ReadOnly))
+        return o;
+    const QList<QByteArray> lines = f.readAll().split('\n');
+    for (const QByteArray &l : lines) {
+        for (const char *key : {"Pss", "Pss_Anon", "Pss_File", "Pss_Shmem", "Private_Dirty", "Private_Clean",
+                                "Shared_Clean", "Anonymous", "Swap"}) {
+            if (l.startsWith(key) && l.size() > qsizetype(strlen(key)) && l.at(qsizetype(strlen(key))) == ':') {
+                QByteArray v = l.mid(qsizetype(strlen(key)) + 1).trimmed();
+                o.insert(QString::fromLatin1(key), v.split(' ').first().toLongLong());
+            }
+        }
+    }
+    return o;
+}
+
+/// malloc's own count over every arena (mallinfo2() sees the main one only): what the arenas
+/// took from the system, what of it is free, the blocks mapped on their own and the arenas
+/// (glibc's malloc_info XML; kB).
+QJsonObject mallocArenas()
+{
+    QJsonObject o;
+    char *text = nullptr;
+    size_t size = 0;
+    FILE *mem = open_memstream(&text, &size);
+    if (!mem)
+        return o;
+    const int rc = malloc_info(0, mem);
+    std::fclose(mem);
+    if (rc == 0 && text) {
+        const QByteArray xml(text, qsizetype(size));
+        // The totals follow the last </heap>.
+        const QByteArray tail = xml.mid(std::max<qsizetype>(0, xml.lastIndexOf("</heap>")));
+        const auto number = [&tail](const char *element, const char *type) -> qint64 {
+            const QByteArray open = QByteArray("<") + element + " type=\"" + type + "\"";
+            const qsizetype at = tail.indexOf(open);
+            if (at < 0)
+                return 0;
+            const qsizetype sizeAt = tail.indexOf("size=\"", at);
+            const qsizetype end = tail.indexOf('"', sizeAt + 6);
+            return sizeAt < 0 || end < 0 ? 0 : tail.mid(sizeAt + 6, end - sizeAt - 6).toLongLong();
+        };
+        const qint64 system = number("system", "current");
+        const qint64 free = number("total", "fast") + number("total", "rest");
+        const qint64 mapped = number("total", "mmap");
+        o.insert(u"arenasSystemKB"_s, system / 1024);
+        o.insert(u"arenasFreeKB"_s, free / 1024);
+        o.insert(u"arenasMmapKB"_s, mapped / 1024);
+        o.insert(u"arenasInUseKB"_s, (system - free + mapped) / 1024);
+        o.insert(u"arenas"_s, qint64(xml.count("<heap nr=")));
+    }
+    std::free(text);
+    return o;
+}
+
 /// Per-thread context switches (wakeups) and CPU ticks: /proc/self/task/*/{comm,status,stat}.
 QJsonObject threadStats()
 {
@@ -728,6 +794,9 @@ public:
         m_pictures = readLines(qgetenv("BENCH_PICTURES"));
         m_cycles = std::max(1, envOr("BENCH_CYCLES", "2").toInt());
         m_restMs = std::max(0, envOr("BENCH_REST_MS", "3000").toInt());
+        m_settleMs = std::max(0, envOr("BENCH_SETTLE_MS", "9000").toInt());
+        m_longRestMs = std::max(0, envOr("BENCH_LONG_REST_MS", "0").toInt());
+        m_memoryDetail = m_scenario == u"memory";
         m_viewportObservers = envOr("BENCH_VIEWPORT_OBSERVERS", "0") == "1";
         emitJson({{u"ev"_s, u"start"_s},
                   {u"scenario"_s, m_scenario},
@@ -851,6 +920,10 @@ private:
         o.insert(u"pictureKB"_s, pictures.bytes / 1024);
         if (m_viewportObservers)
             o.insert(u"viewportObservers"_s, viewportObservers());
+        if (m_memoryDetail) {
+            o.insert(u"smaps"_s, smapsRollup());
+            o.insert(u"malloc"_s, mallocArenas());
+        }
         mark(u"mem:"_s + name, 0, o);
     }
 
@@ -2291,6 +2364,87 @@ private:
         action(u"mem"_s, [this] { markMem(u"pictures:end"_s, true); });
     }
 
+    /// What the app holds: after its start (with everything it builds ahead), after a tour of its
+    /// views (a page, Tasks, Calendar, All pages, Search, Graph, Tags, Settings — each `mem:view:<name>`),
+    /// back at the journal after BENCH_REST_MS (`mem:home`), and after BENCH_LONG_REST_MS more
+    /// (`mem:rested`: what goes when it is not used). Every mark after a garbage collection, with the
+    /// kernel's and malloc's own counts.
+    void memorySteps()
+    {
+        const auto mem = [this](const QString &name, bool objects) {
+            action(u"mem"_s, [this, name, objects] {
+                markMem(name, true);
+                if (objects && g_objTypes)
+                    dumpObjectTypes(name);
+            });
+        };
+        wait(m_settleMs);
+        waitSettled(u"start_settled"_s, 1000, 120000);
+        mem(u"start"_s, true);
+        // BENCH_UNLOAD=1: what each hidden part holds — the hidden kept views and the popups built
+        // ahead unloaded one by one, freed memory given back (malloc_trim), a mark after each.
+        if (qgetenv("BENCH_UNLOAD") == "1") {
+            action(u"trim"_s, [this] {
+                malloc_trim(0);
+                markMem(u"trimmed"_s, true);
+            });
+            for (const char *id : {"tasksLoader", "calendarLoader", "allPagesLoader", "searchLoader", "journalsLoader",
+                                   "switcherLoader", "paletteLoader", "captureLoader", "moreMenuLoader"}) {
+                const QString name = QString::fromLatin1(id);
+                action(u"unload:"_s + name, [this, name] {
+                    int done = 0;
+                    walk(m_window ? m_window->contentItem() : nullptr, [&](QQuickItem *it) {
+                        QQmlContext *c = qmlContext(it);
+                        if (!c || c->nameForObject(it) != name)
+                            return true;
+                        if (it->isVisible() && it->metaObject()->indexOfProperty("kept") >= 0)
+                            return false; // the view shown stays
+                        if (it->metaObject()->indexOfProperty("kept") >= 0)
+                            it->setProperty("kept", false);
+                        else
+                            it->setProperty("active", false);
+                        ++done;
+                        return false;
+                    });
+                    mark(u"unloaded:"_s + name, 0, {{u"n"_s, done}});
+                });
+                wait(600);
+                action(u"mem"_s, [this, name] {
+                    if (m_engine) {
+                        m_engine->collectGarbage();
+                        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+                    }
+                    malloc_trim(0);
+                    markMem(u"unload:"_s + name, true);
+                });
+            }
+        }
+        QList<QPair<QString, QVariantMap>> views;
+        if (!qEnvironmentVariableIsEmpty("BENCH_PAGE"))
+            views.append({u"page"_s, {{u"view"_s, u"page"_s}, {u"path"_s, m_page}}});
+        views.append({u"tasks"_s, {{u"view"_s, u"tasks"_s}}});
+        views.append({u"calendar"_s, {{u"view"_s, u"calendar"_s}}});
+        views.append({u"allPages"_s, {{u"view"_s, u"allPages"_s}}});
+        views.append({u"search"_s, {{u"view"_s, u"search"_s}}});
+        views.append({u"graph"_s, {{u"view"_s, u"graph"_s}}});
+        views.append({u"tags"_s, {{u"view"_s, u"tags"_s}}});
+        views.append({u"settings"_s, {{u"view"_s, u"settings"_s}}});
+        for (const auto &[name, route] : std::as_const(views)) {
+            action(u"nav:"_s + name, [this, route] { navigate(route); });
+            waitUntil(u"view_loaded:"_s + name, [this] { return pictureStats().loading == 0; }, 60000, false);
+            waitSettled(u"view_settled:"_s + name, 1000, 120000);
+            mem(u"view:"_s + name, false);
+        }
+        action(u"home"_s, [this] { navigate({{u"view"_s, u"journals"_s}}); });
+        waitSettled(u"home_settled"_s, 1000, 60000);
+        wait(m_restMs);
+        mem(u"home"_s, true);
+        if (m_longRestMs > 0) {
+            wait(m_longRestMs);
+            mem(u"rested"_s, true);
+        }
+    }
+
     void buildScenario()
     {
         // The start route (--route) decides what "content" means for startup.
@@ -2355,6 +2509,8 @@ private:
             workloadSteps();
         } else if (s == u"pictures") {
             picturesSteps();
+        } else if (s == u"memory") {
+            memorySteps();
         } else {
             emitJson({{u"ev"_s, u"error"_s}, {u"what"_s, u"unknown scenario "_s + s}});
         }
@@ -2372,6 +2528,9 @@ private:
     QStringList m_pages, m_pictures;
     int m_cycles = 2;
     int m_restMs = 3000;
+    int m_settleMs = 9000;
+    int m_longRestMs = 0;
+    bool m_memoryDetail = false;
     bool m_viewportObservers = false;
     int m_resizeBase = 1280;
     int m_resizeWidth = 920;
