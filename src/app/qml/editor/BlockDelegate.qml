@@ -256,7 +256,7 @@ Item {
         y: 1
         width: block.bandRight - x
         height: Math.max(0, block.height - 2)
-        sourceComponent: block.editor.tagTintPart
+        sourceComponent: BlockParts.part("TagTint")
     }
 
     // Made only for selected blocks (most blocks never are).
@@ -266,7 +266,7 @@ Item {
         y: block.bandTop
         width: block.bandRight - x
         height: Math.max(0, block.bandBottom - block.bandTop)
-        sourceComponent: block.editor.selectionBandPart
+        sourceComponent: BlockParts.part("SelectionBand")
     }
 
     // ---- Flash (a link to the block was followed) ------------------------------------------------
@@ -282,7 +282,7 @@ Item {
         y: 1
         width: block.bandRight - x
         height: Math.max(0, block.height - 2)
-        sourceComponent: block.editor.flashPart
+        sourceComponent: BlockParts.part("Flash")
     }
 
     // ---- Guide lines -------------------------------------------------------------------------
@@ -292,7 +292,14 @@ Item {
     // own marker.
     Repeater {
         model: !block.shown ? 0 : !block.doc || block.listItem ? block.depth : 0
-        delegate: block.editor.guideLinePart
+        delegate: Rectangle {
+            required property int index
+            objectName: "guideLine"
+            x: Math.round(block.markerX(index))
+            width: 1
+            height: block.height
+            color: Theme.guide
+        }
     }
     // From this bullet (a document's marker: bullet, number or checkbox) down to its (visible)
     // children.
@@ -322,7 +329,7 @@ Item {
         // Left of the bullet's hit area (with a mouse 24 px wide, a little wider than its column).
         x: (Theme.touchUi ? block.bulletX - block.editor.bulletColumn / 2 : block.levelX - bulletBox.width) - width + 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: block.editor.foldArrowPart
+        sourceComponent: BlockParts.part("FoldArrow")
     }
 
     // ---- Bullet --------------------------------------------------------------------------------
@@ -343,7 +350,7 @@ Item {
         x: Theme.touchUi && besideArrow ? block.bulletX - width / 2
                                         : block.doc ? Math.max(0, block.levelX - width) : block.levelX - width
         y: block.firstLineCenter - height / 2
-        sourceComponent: block.editor.bulletPart
+        sourceComponent: BlockParts.part("Bullet")
     }
 
     // ---- Number of an ordered list item (document mode) -----------------------------------------
@@ -354,7 +361,7 @@ Item {
         // Right-aligned in the marker column, on the first line's baseline (body font).
         x: block.levelX - width - gap
         y: block.firstLineCenter - block.editor.firstLineCenter(0)
-        sourceComponent: block.editor.numberPart
+        sourceComponent: BlockParts.part("Number")
     }
 
     // ---- Task checkbox ---------------------------------------------------------------------------
@@ -365,7 +372,7 @@ Item {
         x: block.doc ? block.bulletX - width / 2
                      : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: block.editor.taskBoxPart
+        sourceComponent: BlockParts.part("TaskBox")
     }
 
     // ---- "Add date" (an open task without a date; with one, "+" adds another) ---------------------
@@ -374,7 +381,7 @@ Item {
                 && (block.hovered || block.editing || block.editor.quickDateRow === block.index)
         x: block.contentRight - block.dateButtonRoom + (block.dateButtonRoom - width) / 2
         y: block.firstLineCenter - height / 2
-        sourceComponent: block.editor.dateButtonPart
+        sourceComponent: BlockParts.part("DateButton")
     }
 
     // ---- Content ---------------------------------------------------------------------------
@@ -396,18 +403,18 @@ Item {
         visible: !block.noTextLine
         sourceComponent: {
             switch (block.view) {
-            case "code": return block.editor.codeView
-            case "calc": return block.editor.calcView
-            case "query": return block.editor.queryView
-            case "math": return block.editor.mathView
-            case "mermaid": return block.editor.mermaidView
-            case "chart": return block.editor.chartView
-            case "view": return block.editor.viewView
-            case "table": return block.editor.tableView
+            case "code": return BlockParts.part("Code")
+            case "calc": return BlockParts.part("Calc")
+            case "query": return BlockParts.part("Query")
+            case "math": return BlockParts.part("Math")
+            case "mermaid": return BlockParts.part("Mermaid")
+            case "chart": return BlockParts.part("Chart")
+            case "view": return BlockParts.part("View")
+            case "table": return BlockParts.part("Table")
             case "quote":
-            case "callout": return block.editor.calloutPart
-            case "rule": return block.editor.rulePart
-            case "frontmatter": return block.editor.frontmatterView
+            case "callout": return BlockParts.part("Callout")
+            case "rule": return BlockParts.part("Rule")
+            case "frontmatter": return BlockParts.part("Frontmatter")
             default: return null
             }
         }
@@ -427,7 +434,7 @@ Item {
         x: block.contentLeft
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
-        sourceComponent: block.editor.embedsPart
+        sourceComponent: BlockParts.part("Embeds")
     }
 
     Loader {
@@ -437,7 +444,7 @@ Item {
         x: block.contentLeft
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
-        sourceComponent: block.editor.transclusionsPart
+        sourceComponent: BlockParts.part("Transclusions")
     }
 
 
@@ -494,15 +501,5 @@ Item {
     function editOnTap(pos: int): void {
         if (!editor.blockTapped(index))
             editor.startEditing(index, pos)
-    }
-    /// A right-click on a marker opens the block menu. Mouse-like devices only: Qt gives a finger
-    /// (no buttons) to every TapHandler, so a tap on a phone zoomed in and opened the menu at
-    /// once (touch: the long press of the marker's own TapHandler). WithinBounds: the press is
-    /// the marker's, the editor's right-click on the block (menu at the pointer) does not open it
-    /// a second time.
-    component MenuTap: TapHandler {
-        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-        acceptedButtons: Qt.RightButton
-        gesturePolicy: TapHandler.WithinBounds
     }
 }

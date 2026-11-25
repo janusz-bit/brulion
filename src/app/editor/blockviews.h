@@ -16,6 +16,7 @@
 #include <QFont>
 #include <QList>
 #include <QObject>
+#include <QHash>
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickTextDocument>
@@ -23,6 +24,9 @@
 #include <QTextDocument>
 #include <QVariantList>
 #include <QVariantMap>
+
+class QQmlComponent;
+class QQmlEngine;
 
 namespace brulion::editor {
 
@@ -37,6 +41,30 @@ QStringList tableCellLines(const QString &cell);
 /// a wrapped one —, so a Text in the same font and fixed line height beside the code puts each
 /// number next to its line. Lays the document out first; an empty or missing document: "1".
 QString codeLineNumberColumn(const QTextDocument *document);
+
+/// The components of a block's optional parts and of the views of its blocks that are not text
+/// (singleton `BlockParts`): BlockPart<name>.qml (qml/editor), one component each for every block
+/// of every editor, made on first use. A component declared in BlockDelegate itself is an object
+/// of every block, and a journal has an editor for each day. Made here, in C++, the components
+/// have no creation context: a Loader creates the part in the context of the block that holds
+/// it, so the part's bindings end with the block (made in a QML singleton or an editor, they
+/// outlived the block's context and read its properties while it was being destroyed).
+///
+///   Loader { active: block.listItem; sourceComponent: BlockParts.part("Bullet") }
+class BlockParts : public QObject {
+    Q_OBJECT
+
+public:
+    explicit BlockParts(QQmlEngine *engine, QObject *parent = nullptr);
+
+    /// The component of BlockPart<name>.qml (made on first use; one that does not load: null,
+    /// with a warning).
+    Q_INVOKABLE QQmlComponent *part(const QString &name);
+
+private:
+    QQmlEngine *m_engine = nullptr;
+    QHash<QString, QQmlComponent *> m_parts;
+};
 
 /// Pure helpers of the block views (singleton `BlockViews`): the roles' maps and lists shaped
 /// for typed QML. Every function takes what the view has and returns plain values.
