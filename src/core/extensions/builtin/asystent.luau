@@ -17,12 +17,19 @@
 -- page, like code from a sync. The palette does not offer the command (palette = false): only the
 -- chat has a conversation to give it.
 --
+-- The model that answers (b.aiModel()) decides what it is given: a provider on the network and the
+-- model trained on this very script (Brulion Assistant: docs/FINETUNE.md) get the tools and the
+-- instructions below as they are; another model on the device gets shorter tool results (4 000
+-- characters, read_page reading on from where one stopped), and a small one fewer tools and
+-- shorter instructions too (the setting "Fewer tools for small models", off by default).
+--
 -- Written with the extensions' public API only (docs/EXTENSIONS.md "AI"); its source can become a
 -- page of the notebook and be changed there, like any built-in extension: its tools, their
 -- descriptions and the instructions below are the agent.
 
 local MAX_PAGE = 30000 -- characters of the page on screen sent along
 local MAX_RESULT = 12000 -- characters of one tool's result
+local MAX_DEVICE_RESULT = 4000 -- … for a model on the device (all of it is read on its processor)
 local MAX_ROUNDS = 16 -- the model's turns for one question
 local MAX_IDLE = 2 -- turns in a row after a change that only repeat what was done: then the question ends
 local MAX_REFERENCE = 40000 -- characters of the extensions' reference in one result
@@ -43,6 +50,7 @@ local WRITTEN = {
     pl = {
         changed = "✏️ Zmienione: %s",
         system = "Jesteś asystentem w aplikacji do notatek Brulion: przeszukujesz, czytasz i zmieniasz notatnik użytkownika swoimi narzędziami.\n\nNotatki to Markdown: punkty \"- \", zadania \"- [ ]\" (zrobione \"- [x]\", w toku \"- [/]\"), terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag. Dziennik to strony dni, nazwane datą (2026-11-12).\n\nZasady:\n- Prośba o wpis albo zmianę („przypomnij mi…”, „zanotuj…”, „dopisz… do…”, „odhacz…”): zrób ją; szukaj tylko tego, co trzeba zmienić (ref zadania, nazwy strony).\n- Pytanie o notatki: najpierw w nich poszukaj (search_notes; query_notes dla zadań, terminów, tagów i przypomnień). Gdy wynik już odpowiada na pytanie, odpowiedz; stronę czytaj tylko wtedy, gdy wynik nie wystarcza. Nie powtarzaj szukania, które nic nie dało: spróbuj raz innymi słowami, potem powiedz, czego nie znalazłeś.\n- Odpowiadaj tylko z tego, co dały narzędzia: nazwy, liczby i daty przepisuj dokładnie, nigdy ich nie zmyślaj. Wynik tego samego rodzaju pod inną nazwą (kod, numer, data) podaj i powiedz, jak go nazywa notatka. Gdy notatki tego nie mówią, powiedz to.\n- Gdy prośba nie mówi, czego dotyczy („odhacz to”, „przesuń to”), a nic wcześniej tego nie mówi, zadaj krótkie pytanie zamiast wołać narzędzie.\n- Na pytania ogólne — tłumaczenia, rachunki, przeliczenia, wiedzę, pogawędkę — odpowiadaj od razu, bez narzędzi.\n- Zmieniaj notatki tylko na prośbę: strona albo lista, którą użytkownik nazywa (zakupy, lista lektur, projekt) → append_to_page; notatka dnia, coś zrobionego albo do pamiętania na dany dzień, przypomnienie → append_to_journal; status albo termin zadania → znajdź jego ref przez query_notes, potem update_block (sam status zostawia tekst). Raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono.\n- Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Nie mów, że coś zmieniłeś, zanim wynik narzędzia tego nie potwierdzi.\n- Obrazek w notatce to ![[nazwa.jpg]]: gdy pytanie go dotyczy, obejrzyj go (look_at_picture).\n- Nowe polecenie, widok albo automatyzacja w Brulionie: napisz rozszerzenie — najpierw przeczytaj opis (extension_reference: Quick start i części, których potrzebujesz), sprawdź stronę (check_extension), potem ją zapisz (write_extension) i powiedz użytkownikowi, że zadziała po naciśnięciu „Uruchom” na stronie rozszerzenia.\n- Odpowiadaj zwięźle, po polsku, chyba że notatki są w innym języku: zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
+        systemShort = "Jesteś asystentem w aplikacji do notatek Brulion: przeszukujesz, czytasz i zmieniasz notatnik użytkownika swoimi narzędziami.\n\nNotatki to Markdown: zadania \"- [ ]\" (zrobione \"- [x]\"), terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag. Dziennik ma stronę na każdy dzień, nazwaną datą.\n\nZasady:\n- Pytanie o notatki: najpierw poszukaj (search_notes; query_notes dla zadań, terminów i przypomnień), potem odpowiedz z wyników. Nie zmyślaj nazw, liczb ani dat; gdy notatki tego nie mówią, powiedz to.\n- Prośba o wpis albo zmianę: zrób ją narzędziem — append_to_page do strony, którą użytkownik nazywa, append_to_journal do dnia albo przypomnienia, update_block (z ref z query_notes) dla statusu albo tekstu zadania.\n- Każdą zmianę użytkownik zatwierdza. Nie mów, że coś zmieniłeś, zanim wynik narzędzia tego nie potwierdzi.\n- Na pytania ogólne odpowiadaj od razu, bez narzędzi.\n- Odpowiadaj zwięźle, po polsku, chyba że notatki są w innym języku, z linkami [[Strona]].",
         today = "Dziś jest %s, %s.\n\n",
         weekdays = { "niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota" },
         about = "Rozmowa dotyczy strony [[%s]]:\n\n%s\n\n---\n\n",
@@ -55,6 +63,7 @@ local WRITTEN = {
     en = {
         changed = "✏️ Changed: %s",
         system = "You are the assistant in the notes app Brulion: you search, read and change the user's notebook with your tools.\n\nNotes are Markdown: items \"- \", tasks \"- [ ]\" (done \"- [x]\", in progress \"- [/]\"), due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag. The journal is one page per day, named by its date (2026-11-12).\n\nRules:\n- A request to add or change something (\"remind me…\", \"note down…\", \"add … to …\", \"tick off…\"): make the change; search only for what it changes (a task's ref, a page's name).\n- A question about the notes: search them first (search_notes; query_notes for tasks, dates, tags and reminders). When a result already answers it, answer; read a page only when the result is not enough. Do not repeat a search that found nothing: try other words once, then say what you did not find.\n- Answer only from what the tools gave: copy names, numbers and dates exactly, never invent one. Give a result of the kind asked for under another name (a code, a number, a date) and say what the note calls it. When the notes do not say it, say so.\n- When the request does not say what it is about (\"tick it off\", \"move that\") and nothing before says it, ask a short question instead of calling a tool.\n- Answer general questions — translations, arithmetic, conversions, facts, small talk — directly, without tools.\n- Change notes only when the user asks: a page or list the user names (shopping, reading list, a project) → append_to_page; a day's note, something done or to remember on a day, a reminder → append_to_journal; a task's status or date → find its ref with query_notes, then update_block (a status alone keeps the text). Prefer adding to rewriting; never delete anything unless asked.\n- The user approves every change; when they decline one, do not try it again. Never say a change is made before its tool's result says so.\n- A picture in a note is ![[name.jpg]]: when the question is about it, look at it (look_at_picture).\n- A new command, view or automation for Brulion: write an extension — read the reference first (extension_reference: its Quick start and the sections you need), check the page (check_extension), then write it (write_extension) and tell the user it runs once they press Run on the extension's page.\n- Answer briefly, in English unless the notes are in another language: plain text or short points, with [[Page]] links to the pages you mention.",
+        systemShort = "You are the assistant in the notes app Brulion: you search, read and change the user's notebook with your tools.\n\nNotes are Markdown: tasks \"- [ ]\" (done \"- [x]\"), due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag. The journal has a page per day, named by its date.\n\nRules:\n- A question about the notes: search first (search_notes; query_notes for tasks, dates and reminders), then answer from the results. Never invent names, numbers or dates; when the notes do not say it, say so.\n- A request to add or change something: make it with its tool — append_to_page for a page the user names, append_to_journal for a day or a reminder, update_block (with the ref from query_notes) for a task's status or text.\n- The user approves every change. Never say a change is made before its tool's result says so.\n- Answer general questions directly, without tools.\n- Answer briefly, in English unless the notes are in another language, with [[Page]] links.",
         today = "Today is %s, %s.\n\n",
         weekdays = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" },
         about = "The conversation is about the page [[%s]]:\n\n%s\n\n---\n\n",
@@ -88,6 +97,8 @@ local INTERFACE = {
         looking = "Oglądam obrazek „%s”…",
         referencing = "Czytam, jak się pisze rozszerzenia…",
         checking = "Sprawdzam rozszerzenie „%s”…",
+        fewerTools = "Mniej narzędzi dla małych modeli",
+        fewerToolsAbout = "Mały model na tym urządzeniu (nie ten wytrenowany dla asystenta) dostaje 8 narzędzi zamiast 12 i krótsze instrukcje: mniej czyta przy pierwszym pytaniu, ale LFM3 1.7B robił tak mniej zadań.",
     },
     en = {
         chat = "AI: a turn of a conversation",
@@ -110,6 +121,8 @@ local INTERFACE = {
         looking = "Looking at the picture “%s”…",
         referencing = "Reading how extensions are written…",
         checking = "Checking the extension “%s”…",
+        fewerTools = "Fewer tools for small models",
+        fewerToolsAbout = "A small model on this device (not the one trained for the assistant) gets 8 tools instead of 12 and shorter instructions: less to read at its first question, but LFM3 1.7B did fewer tasks so.",
     },
 }
 
@@ -163,6 +176,10 @@ local APP_INTERFACE = {
 local WA = if b.lang() == "pl" then APP_WRITTEN.pl else APP_WRITTEN.en
 local TA = if b.uiLang() == "pl" then APP_INTERFACE.pl else APP_INTERFACE.en
 
+b.settings({
+    { key = "fewerTools", label = T.fewerTools, value = false, description = T.fewerToolsAbout },
+})
+
 local function trim(s: string): string
     return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -185,6 +202,22 @@ local function cut(s: string, n: number): string
         return s
     end
     return whole(s, n) .. "\n…"
+end
+
+-- A tool's result cut for a model on the device, saying how much is left and how to read on: a
+-- page with read_page from where it stopped, anything else by asking for less.
+local function cutPaged(s: string, n: number, tool: string, input: any): string
+    if #s <= n then
+        return s
+    end
+    local kept = whole(s, n)
+    local shown = utf8.len(kept) or #kept
+    local left = (utf8.len(s) or #s) - shown
+    if tool == "read_page" and type(input) == "table" then
+        local from = math.max(0, math.floor(tonumber(input.from) or 0))
+        return kept .. string.format("\n[… %d more characters: read_page with from = %d reads on.]", left, from + shown)
+    end
+    return kept .. string.format("\n[… %d more characters not shown: ask for less — other words, a narrower query.]", left)
 end
 
 -- A change as its confirmation shows it: all of it when it is short; else its beginning, under a
@@ -473,6 +506,157 @@ end
 local TOOLS_WITH_APP: { any } = table.clone(TOOLS)
 for _, tool in APP_TOOLS do
     table.insert(TOOLS_WITH_APP, tool)
+end
+
+-- For a model on the device that was not trained on the tools above: read_page also reads a long
+-- page on from where a result cut short stopped (its results are shorter: MAX_DEVICE_RESULT).
+local READ_FROM = {
+    type = "integer",
+    description = "Start at this character of the page (a result cut short says where to go on); default the start",
+}
+local function withPaging(tools: { any }): { any }
+    local out = {}
+    for _, tool in tools do
+        if tool.name == "read_page" then
+            local properties = table.clone(tool.input.properties)
+            properties.from = READ_FROM
+            local input = table.clone(tool.input)
+            input.properties = properties
+            local paged = table.clone(tool)
+            paged.input = input
+            table.insert(out, paged)
+        else
+            table.insert(out, tool)
+        end
+    end
+    return out
+end
+local PAGED_TOOLS = withPaging(TOOLS)
+
+-- … and a small one (b.aiModel().small, with the setting "fewerTools", off by default: LFM3 1.7B did
+-- fewer tasks of the bench so, docs/PERFORMANCE.md) fewer of them, described in
+-- fewer words: what its first question reads (some 2 500 tokens with all of them) before its
+-- state is kept on disk, and what it has to choose from. No list of pages (a search finds them),
+-- no extensions (a small model writes none that loads).
+local COMPACT_TOOLS = {
+    {
+        name = "search_notes",
+        description = "Full-text search of every note: words in any form. Returns matching lines with their page and ref (for update_block), and more of the first pages. Call it first for any question about the notes.",
+        input = {
+            type = "object",
+            properties = { query = { type = "string", description = "Words to look for" } },
+            required = { "query" },
+        },
+    },
+    {
+        name = "query_notes",
+        description = "Finds tasks and reminders with a query; returns each one's page, status, dates, text and ref. Queries: overdue: type:tasks status:open due:overdue; due in the coming week: type:tasks status:open due:today..+7d; in progress: type:tasks status:doing; unfinished: type:tasks status:open; done this week: type:tasks status:done done:this-week; with a tag: type:tasks status:open tag:name; of a page: type:tasks status:open page:\"Title\"; a task by its words: type:tasks \"its words\"; reminders today: type:reminders remind:today.",
+        input = {
+            type = "object",
+            properties = { query = { type = "string", description = "The query" } },
+            required = { "query" },
+        },
+    },
+    {
+        name = "read_page",
+        description = "Returns a page's Markdown text (a day by its date, 2026-11-12).",
+        input = {
+            type = "object",
+            properties = {
+                name = { type = "string", description = "The page's name, as in [[links]]" },
+                from = READ_FROM,
+            },
+            required = { "name" },
+        },
+    },
+    {
+        name = "append_to_journal",
+        description = "Adds Markdown to a day's journal note (today's by default): items \"- …\", tasks \"- [ ] … 📅 YYYY-MM-DD\", reminders \"- [ ] … ⏰ YYYY-MM-DD HH:MM\". The user approves it.",
+        input = {
+            type = "object",
+            properties = {
+                markdown = { type = "string", description = "What to add (Markdown)" },
+                date = { type = "string", description = "The day, YYYY-MM-DD (default today)" },
+            },
+            required = { "markdown" },
+        },
+    },
+    {
+        name = "append_to_page",
+        description = "Adds Markdown at the end of a page that exists: a page or list the user names. The user approves it.",
+        input = {
+            type = "object",
+            properties = {
+                name = { type = "string", description = "The page's name" },
+                markdown = { type = "string", description = "What to add (Markdown)" },
+            },
+            required = { "name", "markdown" },
+        },
+    },
+    {
+        name = "update_block",
+        description = "Changes a task's status and/or its line's text, by its ref from search_notes or query_notes. The user approves it.",
+        input = {
+            type = "object",
+            properties = {
+                ref = { type = "string", description = "The block's ref" },
+                text = { type = "string", description = "The line's new text, without its marker and checkbox; leave it out to change only the status" },
+                status = { type = "string", enum = { "todo", "doing", "done", "cancelled" }, description = "A task's new status" },
+            },
+            required = { "ref" },
+        },
+    },
+    {
+        name = "write_page",
+        description = "Creates a new page with its whole Markdown text. The user approves it.",
+        input = {
+            type = "object",
+            properties = {
+                name = { type = "string", description = "The page's name" },
+                content = { type = "string", description = "The page's Markdown text" },
+            },
+            required = { "name", "content" },
+        },
+    },
+    {
+        name = "look_at_picture",
+        description = "Looks at a picture of the notes (![[name.jpg]]) and answers a question about it: what it shows, the text on it.",
+        input = {
+            type = "object",
+            properties = {
+                name = { type = "string", description = "The picture's file name, as in ![[name.jpg]]" },
+                question = { type = "string", description = "What to find out about it" },
+            },
+            required = { "name" },
+        },
+    },
+}
+
+-- What the model that answers gets (b.aiModel(): nil where none is set up — the command line;
+-- `appTools`: ctx.appTools):
+-- its tools, its instructions, how long a tool's result may be, and whether a result cut short
+-- says how to read on.
+type Serving = { tools: { any }, system: string, result: number, reference: number, paged: boolean, kind: string }
+
+local function serving(appTools: boolean): Serving
+    local model: any = b.aiModel()
+    if model == nil or not model.onDevice or model.trained then
+        -- A provider on the network, or the model trained on exactly this: as it always was — and
+        -- the app's own tools after the notes' where the app runs this and the model is on the
+        -- network (ctx.appTools: never the model on the device, docs/FINETUNE.md).
+        if appTools and (model == nil or not model.onDevice) then
+            return { tools = TOOLS_WITH_APP, system = W.system .. WA.rules, result = MAX_RESULT,
+                reference = MAX_REFERENCE, paged = false, kind = "network" }
+        end
+        return { tools = TOOLS, system = W.system, result = MAX_RESULT, reference = MAX_REFERENCE, paged = false,
+            kind = if model ~= nil and model.trained then "trained" else "network" }
+    end
+    if model.small and b.setting("fewerTools") == true then
+        return { tools = COMPACT_TOOLS, system = W.systemShort, result = MAX_DEVICE_RESULT,
+            reference = MAX_DEVICE_RESULT, paged = true, kind = "compact" }
+    end
+    return { tools = PAGED_TOOLS, system = W.system, result = MAX_DEVICE_RESULT, reference = MAX_RESULT, paged = true,
+        kind = "device" }
 end
 
 local STATUS = { todo = " ", doing = "/", done = "x", cancelled = "-" }
@@ -1972,6 +2156,15 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         if text == nil then
             return "No page named \"" .. str(input.name) .. "\".", true
         end
+        -- (A long page read on from where a result cut short stopped: `from` characters in.)
+        local from = math.max(0, math.floor(tonumber(input.from) or 0))
+        if from > 0 then
+            local at = utf8.offset(text, from + 1)
+            if at == nil or at > #text then
+                return string.format("The page has %d characters: nothing from %d on.", utf8.len(text) or #text, from), true
+            end
+            text = text:sub(at)
+        end
         return if text == "" then "(The page is empty.)" else text, false
     elseif name == "append_to_journal" then
         local markdown = trim(str(input.markdown))
@@ -2331,13 +2524,14 @@ b.command("chat", function(ctx)
         appTools = ctx.appTools == true, app = {} }
     -- The app's own tools only where the app runs this and the model is on the network (ctx.appTools):
     -- the model on the device gets the tools and the system text it was trained on (docs/FINETUNE.md).
-    local system: string = if session.appTools then W.system .. WA.rules else W.system
-    local tools = if session.appTools then TOOLS_WITH_APP else TOOLS
+    local served = serving(session.appTools)
+    local system: string = served.system
     local answer: string? = nil
     local idle = 0 -- turns in a row, after a change, whose every call only repeated what was done
     for round = 1, MAX_ROUNDS do
         b.status("") -- (the model thinks: the chat's dots alone)
-        local said, reply = b.ai({ system = system, messages = messages, tools = tools, maxTokens = 8000, thoughts = true })
+        local said, reply = b.ai({ system = system, messages = messages, tools = served.tools, maxTokens = 8000,
+            thoughts = true })
         table.insert(messages, { role = "assistant", raw = reply.raw })
         if not reply.toolCalls then
             if round < MAX_ROUNDS and claimsUnmade(session, history, str(said)) then
@@ -2405,8 +2599,9 @@ b.command("chat", function(ctx)
                     end
                 end
             end
-            local limit = if str(call.name) == "extension_reference" then MAX_REFERENCE else MAX_RESULT
-            table.insert(results, { id = call.id, content = cut(result, limit), isError = failed })
+            local limit = if str(call.name) == "extension_reference" then served.reference else served.result
+            local content = if served.paged then cutPaged(result, limit, str(call.name), call.input) else cut(result, limit)
+            table.insert(results, { id = call.id, content = content, isError = failed })
         end
         -- After a change, a small model may call it again and again, each result saying it is made
         -- (the same reminder fifteen times, the task ticked off again), until its steps are up, and

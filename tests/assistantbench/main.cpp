@@ -20,12 +20,15 @@
 // (training data come from a generated set, finetune/generate.py: the hand-written tasks of
 // finetune/tasks are for measuring only, and --training refuses them)
 //   brulion-assistantbench --solution --assistant asystent-2026-11-17.luau   (another version of the assistant)
+//   brulion-assistantbench --model … --model-id lfm3-1.7b --as-app   (the tools the app gives that model)
+//   brulion-assistantbench --model ~/…/Qwen3-4B-Q4_K_M.gguf --model-id own --as-app   (a model of one's own)
 
 #include "bench.h"
 #include "server.h"
 #include "training.h"
 
 #include "ai/localrunner.h"
+#include "ai/ownmodels.h"
 
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -72,9 +75,20 @@ QTextStream &err()
 class ModelResponder : public assistantbench::Responder {
 public:
     ModelResponder(ai::LocalRunner *runner, ai::LocalModel model, assistantbench::ServerRunner *server = nullptr,
-                   QString effort = QString())
-        : m_runner(runner), m_model(std::move(model)), m_server(server), m_effort(std::move(effort))
+                   QString effort = QString(), bool asApp = false)
+        : m_runner(runner), m_model(std::move(model)), m_server(server), m_effort(std::move(effort)), m_asApp(asApp)
     {
+    }
+
+    /// --as-app: the model as the app tells it (a small one on the device: fewer tools, shorter results).
+    QVariantMap aiModel() const override
+    {
+        if (!m_asApp)
+            return {};
+        ai::Settings settings;
+        settings.provider = u"local"_s;
+        settings.model = m_model.id;
+        return ai::modelInfo(settings, &m_model, m_runner->contextTokens());
     }
 
     void begin(const assistantbench::Task &task) override
@@ -108,6 +122,7 @@ private:
     ai::LocalModel m_model;
     assistantbench::ServerRunner *m_server;
     QString m_effort;
+    bool m_asApp = false;
     QList<assistantbench::Turn> m_turns;
 };
 
@@ -381,9 +396,11 @@ int main(int argc, char *argv[])
             u"server"_s,
             u"A llama-server running the model of --model (with --special, a context of 16384 tokens per slot)."_s,
             u"url"_s);
-    const QCommandLineOption modelIdOpt(u"model-id"_s,
-                                        u"The app's model whose chat format and sampling it has (default: lfm3-1.7b)."_s,
-                                        u"id"_s, u"lfm3-1.7b"_s);
+    const QCommandLineOption modelIdOpt(
+            u"model-id"_s,
+            u"The app's model whose chat format and sampling it has (default: lfm3-1.7b; \"own\": the file of "
+            "--model as a model of one's own, its format read from it)."_s,
+            u"id"_s, u"lfm3-1.7b"_s);
     const QCommandLineOption nameOpt(u"name"_s, u"The model's name in the results (default: the file's name)."_s,
                                      u"name"_s);
     const QCommandLineOption contextOpt(u"context"_s, u"Tokens the model holds at once (default: 16384, as the app)."_s,
@@ -431,9 +448,15 @@ int main(int argc, char *argv[])
     const QCommandLineOption assistantOpt(
             u"assistant"_s, u"The assistant's Luau script instead of the built-in one (another asystent.luau)."_s,
             u"file"_s);
-    parser.addOptions({tasksOpt, notebooksOpt, filterOpt, solutionOpt, modelOpt, serverOpt, modelIdOpt, nameOpt,
-                       contextOpt, threadsOpt, attemptsOpt, seedOpt, temperatureOpt, jobsOpt, pluginOpt, outOpt,
-                       tracesOpt, trainingOpt, effortOpt, correctOpt, guidedOpt, verboseOpt, assistantOpt});
+    const QCommandLineOption asAppOpt(
+            u"as-app"_s,
+            u"Tell the assistant the model as the app does (b.aiModel()): a small model on the device that was not "
+            "trained on the assistant gets fewer tools and shorter results. Without it every model gets the tools "
+            "and instructions of a provider on the network (what the training data are written with)."_s);
+    parser.addOptions({tasksOpt,       notebooksOpt, filterOpt,  solutionOpt, modelOpt,     serverOpt,
+                       modelIdOpt,     nameOpt,      contextOpt, threadsOpt,  attemptsOpt,  seedOpt,
+                       temperatureOpt, jobsOpt,      pluginOpt,  outOpt,      tracesOpt,    trainingOpt,
+                       effortOpt,      correctOpt,   guidedOpt,  verboseOpt,  assistantOpt, asAppOpt});
     parser.process(app);
 
     QString assistant;
@@ -495,6 +518,12 @@ int main(int argc, char *argv[])
         return 2;
     }
     const bool guided = parser.isSet(guidedOpt);
+    const bool asApp = parser.isSet(asAppOpt);
+    if (asApp && parser.isSet(trainingOpt)) {
+        err() << "--as-app with --training: the training data are written with the assistant's whole tool set."
+              << Qt::endl;
+        return 2;
+    }
     const int corrected = parser.value(correctOpt).toInt();
     if ((guided || corrected > 0) && !(solution && server)) {
         err() << "--guided, --correct: with --solution, --server and --training" << Qt::endl;
@@ -515,12 +544,25 @@ int main(int argc, char *argv[])
                   << Qt::endl;
             return 2;
         }
-        const ai::LocalModel *ofApp = ai::localModel(parser.value(modelIdOpt));
-        if (!ofApp) {
-            err() << "--model-id: no such model of the app: " << parser.value(modelIdOpt) << Qt::endl;
-            return 2;
+        if (parser.value(modelIdOpt) == u"own") {
+            // (A model file of one's own, as Settings → Add a model file… takes it: its format and
+            // facts from its header.)
+            QString why;
+            const std::optional<ai::OwnModel> own =
+                    ai::ownModelFrom(parser.value(modelOpt), ai::readGgufFile(parser.value(modelOpt)), &why);
+            if (!own) {
+                err() << "--model-id own: " << parser.value(modelOpt) << ": " << why << Qt::endl;
+                return 2;
+            }
+            known = ai::localModelOf(*own);
+        } else {
+            const ai::LocalModel *ofApp = ai::localModel(parser.value(modelIdOpt));
+            if (!ofApp) {
+                err() << "--model-id: no such model of the app: " << parser.value(modelIdOpt) << Qt::endl;
+                return 2;
+            }
+            known = *ofApp;
         }
-        known = *ofApp;
         if (parser.isSet(temperatureOpt))
             known.temperature = parser.value(temperatureOpt).toFloat();
         if (!solution)
@@ -605,11 +647,11 @@ int main(int argc, char *argv[])
             sampled.seed = w.seed;
             if (server) {
                 assistantbench::ServerRunner serverRunner(serverUrl, vocabulary, contextTokens);
-                ModelResponder responder(&serverRunner, sampled, &serverRunner, effort);
+                ModelResponder responder(&serverRunner, sampled, &serverRunner, effort, asApp);
                 done.outcome = assistantbench::run(task, notebooks, dir.path(), responder, assistant);
                 done.turns = responder.turns();
             } else {
-                ModelResponder responder(runner.get(), sampled, nullptr, effort);
+                ModelResponder responder(runner.get(), sampled, nullptr, effort, asApp);
                 done.outcome = assistantbench::run(task, notebooks, dir.path(), responder, assistant);
             }
         }

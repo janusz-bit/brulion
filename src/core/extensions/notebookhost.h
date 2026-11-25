@@ -83,6 +83,8 @@ public:
             onApp;
     /// The theme or the UI items of an extension changed (Host::appChanged).
     std::function<void(const QString &extension)> onAppChanged;
+    /// b.aiModel (Host::aiModel): the model the app's b.ai asks. Unset: {} (b.aiModel() is nil).
+    std::function<QVariantMap()> onAiModel;
 
     void setLanguages(const QString &language, const QString &uiLanguage);
     /// The pages a dry run would have written, in the order first written.
@@ -142,6 +144,7 @@ public:
     QString setSetting(const QString &extension, const QString &key, const QVariant &value) override;
     void log(const QString &extension, const QString &message) override;
     void status(const QString &extension, const QString &text) override;
+    QVariantMap aiModel() override { return onAiModel ? onAiModel() : QVariantMap(); }
     QVariant app(const QString &extension, const QString &operation, const QVariantMap &args, QString *error) override;
     void appChanged(const QString &extension) override;
 

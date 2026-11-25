@@ -49,7 +49,8 @@ public:
     void setNetwork(QNetworkAccessManager *network);
 
     QString folder() const { return m_folder; }
-    /// Where a model's file is (or will be).
+    /// Where a model's file is (or will be): in the folder by its name, a file of the user's own
+    /// where it is (LocalFile::path).
     QString pathOf(const LocalFile &file) const;
     /// `model` was downloaded, and every file of it is there, whole and checked.
     bool has(const LocalModel &model) const;

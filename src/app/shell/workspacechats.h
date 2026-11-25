@@ -285,6 +285,9 @@ public:
     /// Stops every turn an AI agent on another computer answers (Android's notification of them:
     /// its Stop).
     void stopRemoteAgents();
+    /// Stops the turn the model on the device answers and those in line for it (Android's
+    /// notification of the model at work: its Stop).
+    void stopOnDevice();
     /// Forgets the failure shown in `path`.
     Q_INVOKABLE void dismissFailure(const QString &path);
     /// The page `path` is a conversation: in the folder AI/ with a message.

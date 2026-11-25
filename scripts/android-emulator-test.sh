@@ -192,8 +192,10 @@
 # written (the log of brulion.ai.local: "… opened: N tokens at once, ggml-cpu-sse42, N threads,
 # in N s", "… answered: N tokens read in N s (N kept from before), N written in N s"), and while
 # it answers the app's window keeps the screen on (FLAG_KEEP_SCREEN_ON among the window's flags
-# in dumpsys, gone again once the answer is there); a second "Check" is answered by the model
-# still in memory (opened once); no crash. Screenshots la-*.png.
+# in dumpsys, gone again once the answer is there), and on Android 14+ the foreground service
+# AgentService runs as specialUse (its type in `dumpsys activity services`, the service gone after
+# the answer); a second "Check" is answered by the model still in memory (opened once); no crash.
+# Screenshots la-*.png.
 # Pictures are not looked at here (ctest's tst_ai_llama and tst_ai_localplugin do that with the
 # same code on the desktop).
 # With --lock instead: the app lock (docs/ANDROID.md "App lock", docs/UI.md "App lock") — Settings →
@@ -931,6 +933,19 @@ if ((LOCALAI)); then
     adb shell dumpsys window windows | grep -A 12 -E "Window #[0-9]+ Window\{[^}]* $PKG/" | grep -q 'KEEP_SCREEN_ON'
   }
   la_lets_screen_go() { ! la_keeps_screen_on; }
+  # The foreground service (AgentService) while the model computes: of the type specialUse
+  # (0x40000000, Android 14+) — what the window manager's activity dump says of the app's services.
+  la_service_dump() { adb shell dumpsys activity services "$PKG" 2>/dev/null; }
+  la_service_special() { la_service_dump | grep -qE '(types|foregroundServiceType)=0x0*40000000'; }
+  la_service_gone() { ! la_service_dump | grep -q 'AgentService'; }
+  la_watch_service() {
+    local _
+    for _ in $(seq 1 240); do
+      la_service_special && return 0
+      sleep 0.5
+    done
+    return 1
+  }
   # (Looked for from before the tap, twice a second: a model in memory answers within a few.)
   la_watch_screen() {
     local _
@@ -971,6 +986,11 @@ if ((LOCALAI)); then
   check "the screen is not kept on before a model is asked" la_lets_screen_go
   la_watch_screen &
   screen_watch=$!
+  service_watch=""
+  if ((android_api >= 34)); then
+    la_watch_service &
+    service_watch=$!
+  fi
   ui_tap 'Sprawdź' || true
   # The model is read from the storage first (a gigabyte), then it answers.
   wait_for 300 la_ended 1 || true
@@ -979,6 +999,11 @@ if ((LOCALAI)); then
   check "the screen was kept on while the model answered" wait "$screen_watch"
   sleep 2
   check "and is let go once the answer is there" la_lets_screen_go
+  if [[ -n $service_watch ]]; then
+    check "the foreground service ran as specialUse while the model computed" wait "$service_watch"
+    wait_for 20 la_service_gone || true
+    check "and stopped after the answer" la_service_gone
+  fi
   check "the model was opened: the plugin, llama.cpp's libraries and a processor plugin this processor can run, loaded from the APK" la_opened_whole
   check "the model answered \"Check\"" la_answered_times 1
   # Once more: the model is still in memory.

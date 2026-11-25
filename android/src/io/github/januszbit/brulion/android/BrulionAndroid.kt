@@ -195,14 +195,23 @@ object BrulionAndroid {
   }
 
   /**
-   * An AI agent on another computer works for this device (C++ `platform::setAgentWork()`): the
-   * foreground service [AgentService] with its quiet notification — [title], [text], the button
-   * [stop]; the CPU kept awake unless [waiting] (every turn waits on the user's answer) — or, with
-   * an empty [title], none any more.
+   * An AI agent on another computer or the model on this device works for this device (C++
+   * `platform::setAgentWork()`): the foreground service [AgentService] with its quiet notification —
+   * [title], [text], a bar at [progress] percent (-1: none), the button [stop]; the CPU kept awake
+   * unless [waiting] (every turn waits on the user's answer); of the type [kind] says ("model":
+   * specialUse) — or, with an empty [title], none any more.
    */
   @JvmStatic
-  fun setAgentWork(context: Context, title: String, text: String, stop: String, waiting: Boolean) {
-    AgentService.update(context, title, text, stop, waiting)
+  fun setAgentWork(
+    context: Context,
+    title: String,
+    text: String,
+    stop: String,
+    waiting: Boolean,
+    progress: Int,
+    kind: String
+  ) {
+    AgentService.update(context, title, text, stop, waiting, progress, kind.ifEmpty { "agent" })
   }
 
   /** Hands the notification's Stop to C++ ([nativeAgentStop]); false when C++ does not listen. */

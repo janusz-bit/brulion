@@ -1211,19 +1211,30 @@ another phone the model is downloaded again.
   phone's slow cores (Cortex-A5xx) would hold the others back
   ([docs/PERFORMANCE.md](PERFORMANCE.md) "The model on the device"). Writing follows token by
   token, a dozen a second on a fast phone (measured before the threads were kept).
-* **While the app is on screen**: Qt for Android pauses the app's event loop while the activity
-  is off the screen, so a download stops there — the server waits: the files come over HTTP/1.1
-  with 4 MB read ahead, where over HTTP/2 Qt would take all the server sends into memory, 3 GB
-  within seconds in a test on a laptop — and after a minute without a byte it ends ("The
-  download stopped"); **Download** then goes on from where it was. An answer is shown only when
-  the app is back — and is hardly worked on meanwhile:
-  Android gives a background app little of the processor and then freezes it
-  ([measured below](#on-a-pixel-9-pro)). So the screen stays on while a model is downloaded or
-  answers (`LocalAi::working()` → `platform::keepScreenOn()`: `FLAG_KEEP_SCREEN_ON` on the
-  activity's window) — many phones turn it off after 30 seconds without a touch, in the middle
-  of an answer. An answer that gets nowhere for five minutes — no part of the request read, no
-  token written — ends as "the model on this device got nowhere for 5 minutes" (a slow phone
-  writes on as long as it writes; frozen behind another app, the time away counts: TODO.md).
+* **Off the screen**: while a model is downloaded, a model file of one's own is copied, or the
+  model answers, the app runs the foreground service of [An AI agent on another
+  computer](#an-ai-agent-on-another-computer) (`AgentService.kt`, `LocalAi::notice()` →
+  `platform::setAgentWork()`): a quiet notification — "The model on this device is
+  answering…" with the model's name, "Downloading LFM3 1.7B… 42 %" with its bar and how much of
+  it, "Copying Qwen3-4B.gguf… 18 %" — and **Stop**, which ends the answers not written yet, the
+  download (what it has stays for the next try) or the copy. One notification for whatever works:
+  an agent's turn first, then the model (`AppController`). The process keeps a foreground
+  service's priority, so Android neither freezes it behind another app nor stops its event loop
+  (a download goes on: the files come over HTTP/1.1 with 4 MB read ahead, where over HTTP/2 Qt
+  would take all the server sends into memory), and a partial wake lock keeps the processor
+  awake. Its type follows the work (Android 14+): **dataSync** while files come — from Hugging
+  Face, or a picked document copied —, **specialUse** while the model computes an answer on the
+  device's own processor, for which no other type is meant
+  (`PROPERTY_SPECIAL_USE_FGS_SUBTYPE` in the manifest says so; Google Play asks for that
+  reason: docs/GOOGLE_PLAY.md); a running service changes its type with another
+  `startForeground` when the work changes. Before Android 14 it is dataSync throughout. With the
+  app on screen the screen also stays on meanwhile (`LocalAi::working()` →
+  `platform::keepScreenOn()`: `FLAG_KEEP_SCREEN_ON` on the activity's window — many phones turn it
+  off after 30 seconds without a touch). How fast the model writes behind another app with the
+  service is not measured yet (before it, it read at a tenth of its speed and was frozen after
+  70 s: [below](#on-a-pixel-9-pro); TODO.md). An answer that gets nowhere for five minutes — no
+  part of the request read, no token written — still ends as "the model on this device got
+  nowhere for 5 minutes".
 * **In the APK** (`lib/arm64-v8a/`, 9.2 MB unpacked, compressed like every native library and
   unpacked when the app is installed — "APK size"):
   `libbrulion_localai.so` (the model runner, 0.1 MB), llama.cpp — `libllama.so` 4.4 MB,
@@ -1304,7 +1315,7 @@ app's own process: it is not a Qt service), so the stream goes on with the scree
 behind another app, and the answer is written into the conversation as it comes (before, the app
 kept the screen on, and an answer the app lost came only when Brulion ran again):
 
-* **Its notification** (channel "AI agents", quiet: no sound, no vibration, no heads-up) says what
+* **Its notification** (channel "AI at work" — the model on the phone uses it too: [A model on the phone](#a-model-on-the-phone) —, quiet: no sound, no vibration, no heads-up) says what
   runs — "Claude Code is answering…", "2 AI agents are answering…", or the first question waiting
   for your answer ("Claude Code asks: Write Dom.md") — and under it the computer and the
   conversation; **Stop** stops those turns (on the computer too), a tap brings Brulion to the front.
@@ -1321,7 +1332,7 @@ kept the screen on, and an answer the app lost came only when Brulion ran again)
   (`Brulion:agent`, 15 minutes at a time, renewed every 10 while the agent works) — released while
   every turn waits on your answer to a question, when nothing comes from the computer.
 * **Started and stopped by the app** (`AppController` → `platform::setAgentWork(title, text, stop,
-  waiting)` → `BrulionAndroid.setAgentWork` → `AgentService.update`): started when such a turn
+  waiting, progress, kind)` → `BrulionAndroid.setAgentWork` → `AgentService.update`): started when such a turn
   begins (the app is in front then: Android 12+ refuses a foreground service started from the
   background, and the app only logs it — the turn goes on on the computer, which keeps it),
   updated as the turns and their questions change, stopped 3 s after the last one ends or fails
@@ -2170,7 +2181,7 @@ taps, swipes and types, and `adb exec-out screencap -p > ekran.png` takes a scre
 | `src/platform/android/selftest/` | `brulion_android_selftest` — an APK that tests the bridge on a device/emulator (only with `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | building + signing, the release key |
 | `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | descriptions, icon and screenshots for F-Droid and IzzyOnDroid, and their check — [F-Droid and IzzyOnDroid](#f-droid-and-izzyondroid) |
-| `scripts/android-emulator-test.sh` | end-to-end test on the emulator (Android 16, x86_64); `--keyboard`: the editing toolbar on the keyboard; `--selection`: selecting and copying with a finger; `--folders`: folders, block links, the parts of a link to a page in a folder, and tags with a finger; `--share`: "Share → Brulion"; `--automation`: brulion:// links, Tasker's intents with and without the key (a background write with the app's process gone), the Quick Settings tile and the launcher's shortcuts; `--widgets`: widgets and quick add; `--done`: "Done" in a notification (on screen and while the app is closed); `--background`: background check of the notes (a reminder added and deleted while the app is closed, the job run at once, the new reminder's alarm rings without opening Brulion); `--drawing`: text on a drawing from the on-screen keyboard; `--stylus`: stylus pressure, its eraser and side button in the drawing editor; `--web-pictures`: pictures from the internet; `--pickers`: the system file pickers (importing files and a folder, the export's "Save"); `--device-folder`: the app for Google Play (its debuggable APK) with a folder picked in the system's dialog — the start screen, DocumentsUI, the first copy, changes both ways; `--pdf`: PDF thumbnails, the PDF viewer, pinching, search from Android 15, "Open in another app", "Draw on this page", memory; `--relaunch`: activity recreated during startup (a restart instead of an empty window); `--local-ai`: the model on the device answers from the APK's own libraries, the screen kept on meanwhile (the model's files given with `BRULION_LOCAL_MODEL` and `BRULION_LOCAL_PROJECTOR`); `--web-keyboard dist-wasm`: the browser version in Chrome, Brave and Firefox — the toolbar on the keyboard (docs/WEB.md "On-screen keyboard") |
+| `scripts/android-emulator-test.sh` | end-to-end test on the emulator (Android 16, x86_64); `--keyboard`: the editing toolbar on the keyboard; `--selection`: selecting and copying with a finger; `--folders`: folders, block links, the parts of a link to a page in a folder, and tags with a finger; `--share`: "Share → Brulion"; `--automation`: brulion:// links, Tasker's intents with and without the key (a background write with the app's process gone), the Quick Settings tile and the launcher's shortcuts; `--widgets`: widgets and quick add; `--done`: "Done" in a notification (on screen and while the app is closed); `--background`: background check of the notes (a reminder added and deleted while the app is closed, the job run at once, the new reminder's alarm rings without opening Brulion); `--drawing`: text on a drawing from the on-screen keyboard; `--stylus`: stylus pressure, its eraser and side button in the drawing editor; `--web-pictures`: pictures from the internet; `--pickers`: the system file pickers (importing files and a folder, the export's "Save"); `--device-folder`: the app for Google Play (its debuggable APK) with a folder picked in the system's dialog — the start screen, DocumentsUI, the first copy, changes both ways; `--pdf`: PDF thumbnails, the PDF viewer, pinching, search from Android 15, "Open in another app", "Draw on this page", memory; `--relaunch`: activity recreated during startup (a restart instead of an empty window); `--local-ai`: the model on the device answers from the APK's own libraries, the screen kept on meanwhile and (Android 14+) the foreground service running as specialUse (the model's files given with `BRULION_LOCAL_MODEL` and `BRULION_LOCAL_PROJECTOR`); `--web-keyboard dist-wasm`: the browser version in Chrome, Brave and Firefox — the toolbar on the keyboard (docs/WEB.md "On-screen keyboard") |
 | `nix/android.nix`, `nix/android/` | APK from the flake: derivation, Qt for Android (`qt.nix`), signing (`sign.nix`), locks (`*.json`) and `update-locks.sh` |
 
 `android/` is `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` copies it over the Qt template in
@@ -2261,7 +2272,7 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
 | `static bool deviceAuthAvailable()` | `deviceAuthAvailable(Context): Boolean` — Android 10+ and `KeyguardManager.isDeviceSecure` |
 | `bool requestDeviceAuth(title, subtitle, cancel)` | `requestDeviceAuth(Context, String, String, String): Boolean` — `BiometricPrompt` over the running activity; the answer: native `nativeDeviceAuth(Boolean, String)` → signal `deviceAuthFinished(bool ok, QString error)` ("" cancelled) |
 | `static bool copySensitiveText(const QString &)` (`platform::copySensitiveText()`) | `copySensitive(Context, String): Boolean` — the clip marked sensitive |
-| `static void setAgentWork(title, text, stop, waiting)` (`platform::setAgentWork()`) | `setAgentWork(Context, String, String, String, Boolean)` — `AgentService.update`: the foreground service while an AI agent on another computer works, its notification's title, text and button; the wake lock unless `waiting`; `title` "" stops it ([An AI agent on another computer](#an-ai-agent-on-another-computer)) |
+| `static void setAgentWork(title, text, stop, waiting, progress, kind)` (`platform::setAgentWork()`) | `setAgentWork(Context, String, String, String, Boolean, Int, String)` — `AgentService.update`: the foreground service while an AI agent on another computer or the model on the phone works, its notification's title, text, bar (`progress` percent, -1 none) and button; the wake lock unless `waiting`; its type from `kind` ("model": specialUse on Android 14+, else dataSync); `title` "" stops it ([An AI agent on another computer](#an-ai-agent-on-another-computer), [A model on the phone](#a-model-on-the-phone)) |
 | signal `agentStopRequested()` | native `nativeAgentStop()` (the notification's **Stop**: `AgentStopReceiver`) |
 | `platform::PdfReader::open(file)` (`src/platform/pdfpages_android.cpp`, not `AndroidBridge`; any thread) | `pdfOpen(String): String` — `{"session", "pages", "size": [w, h] (first page, points), "locked", "error"}` (`PdfPages.kt`: a session of the system's `android.graphics.pdf.PdfRenderer`; `session` 0 — not opened) |
 | `PdfReader::pageSize(page)` (as above, 64 pages at a time) | `pdfPageSizes(Int, Int, Int): String` — `[[w, h], …]` |

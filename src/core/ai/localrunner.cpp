@@ -8,6 +8,7 @@
 #endif
 
 #include <algorithm>
+#include <optional>
 
 using namespace Qt::StringLiterals;
 
@@ -143,19 +144,26 @@ bool hasLocalRunner(const QStringList &pluginDirs)
     return false;
 }
 
-std::unique_ptr<LocalRunner> loadLocalRunner(const QStringList &pluginDirs, LocalRunner::Options options,
-                                             QString *error)
+#if QT_CONFIG(library)
+namespace {
+
+using Open = LocalRunner *(*)(const LocalRunner::Options *, QString *);
+using Probe = bool (*)(const QString *, const QString *, QString *);
+
+/// The plugin, loaded once: its functions and its folder.
+struct Plugin {
+    Open open = nullptr;
+    Probe probe = nullptr;
+    QString dir;
+};
+
+/// Loads the plugin (once; it is never unloaded) from the first of `pluginDirs` that has it;
+/// nothing, with `error`, when none does or it cannot be loaded.
+std::optional<Plugin> plugin(const QStringList &pluginDirs, QString *error)
 {
-#if !QT_CONFIG(library)
-    Q_UNUSED(pluginDirs)
-    Q_UNUSED(options)
-    if (error)
-        *error = u"this build of Brulion runs no model on the device"_s;
-    return nullptr;
-#else
-    using Open = LocalRunner *(*)(const LocalRunner::Options *, QString *);
     static QMutex mutex;
     static Open open = nullptr;
+    static Probe probe = nullptr;
     static QString pluginDir;
 
     QMutexLocker lock(&mutex);
@@ -177,6 +185,7 @@ std::unique_ptr<LocalRunner> loadLocalRunner(const QStringList &pluginDirs, Loca
                 problems << u"%1 has no %2"_s.arg(file, QLatin1String(LocalRunnerOpen));
                 continue;
             }
+            probe = reinterpret_cast<Probe>(library->resolve(LocalRunnerProbe));
             pluginDir = dir.isEmpty() ? QString() : QFileInfo(library->fileName()).absolutePath();
             break;
         }
@@ -184,14 +193,52 @@ std::unique_ptr<LocalRunner> loadLocalRunner(const QStringList &pluginDirs, Loca
             if (error)
                 *error = problems.isEmpty() ? u"this build of Brulion runs no model on the device"_s
                                             : u"the model runner cannot be loaded: "_s + problems.join(u"; "_s);
-            return nullptr;
+            return std::nullopt;
         }
     }
+    return Plugin{open, probe, pluginDir};
+}
+
+} // namespace
+#endif
+
+std::unique_ptr<LocalRunner> loadLocalRunner(const QStringList &pluginDirs, LocalRunner::Options options,
+                                             QString *error)
+{
+#if !QT_CONFIG(library)
+    Q_UNUSED(pluginDirs)
+    Q_UNUSED(options)
+    if (error)
+        *error = u"this build of Brulion runs no model on the device"_s;
+    return nullptr;
+#else
+    const std::optional<Plugin> loaded = plugin(pluginDirs, error);
+    if (!loaded)
+        return nullptr;
     if (options.backendDir.isEmpty())
-        options.backendDir = pluginDir;
-    const Open opener = open;
-    lock.unlock();
-    return std::unique_ptr<LocalRunner>(opener(&options, error));
+        options.backendDir = loaded->dir;
+    return std::unique_ptr<LocalRunner>(loaded->open(&options, error));
+#endif
+}
+
+bool probeLocalModel(const QStringList &pluginDirs, const QString &path, QString *error)
+{
+#if !QT_CONFIG(library)
+    Q_UNUSED(pluginDirs)
+    Q_UNUSED(path)
+    if (error)
+        *error = u"this build of Brulion runs no model on the device"_s;
+    return false;
+#else
+    const std::optional<Plugin> loaded = plugin(pluginDirs, error);
+    if (!loaded)
+        return false;
+    if (!loaded->probe) {
+        if (error)
+            *error = u"the model runner cannot check a model file"_s;
+        return false;
+    }
+    return loaded->probe(&path, &loaded->dir, error);
 #endif
 }
 

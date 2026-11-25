@@ -1227,6 +1227,22 @@ thoughts, into the same reply an answer at once gives, a server-side fallback's 
 included), the model on the device hands on its tokens — and a stopped turn stops its request
 (`ai::Pending::stop`: the connection closed, the model's writing ended).
 
+**`b.aiModel()`** says which model answers `b.ai` on this device, so that a script can ask a small
+one less (the built-in assistant does: below): `{provider, model, name, onDevice, small, trained,
+sees?, own?, contextTokens?}` — the provider of the settings (`"anthropic"`, `"openai"`, `"local"`),
+the model's id (the settings' or the provider's default), its name, whether it runs on this device,
+whether it is small (a model on the device of at most 4.5 billion parameters — or, its count not
+known, a file of at most 3 GB: `ai::isSmall`), whether it was trained on the assistant's own tools
+and instructions (Brulion Assistant 1.7B: docs/FINETUNE.md), and of a model on the device whether it
+sees pictures, whether it is a file of the user's own (below) and the tokens it holds at once —
+nothing secret: no key, no address. `nil` where no model is set up (`brulion-cli`, which reads no
+app settings). It needs the permission `ai`, as `b.ai` does; it asks nothing and returns at once.
+
+```luau
+local model = b.aiModel()
+local limit = if model and model.onDevice then 4000 else 12000   -- characters of a note sent along
+```
+
 **Pictures**: `images = {"paragon.jpg", …}` next to `prompt` — or in a user's message of
 `messages` — shows the model pictures of the notebook, named as notes embed them
 (`![[paragon.jpg]]`) or by their path (`assets/skan.png`); at most 8 in a request. The app finds
@@ -1430,6 +1446,60 @@ end, { label = "Ask my notes (AI)" })
   * A note's text never becomes part of the conversation's structure: the request is given to
     the model as pieces — its control tokens (a turn's end, a tool call) apart from the text, in
     which the same letters are only letters — and its answer is read the same way.
+  * **A model of one's own**: **Add a model file…** under the three models takes a GGUF file of
+    any model llama.cpp runs (Qwen3, Llama 3, Gemma, Phi, Mistral, DeepSeek R1's distillations,
+    SmolLM …; `ai/ownmodels.h`, `LocalAi::addModelFile`). Its header is read first, with every
+    length and count checked against what is left of the file (`ai/gguf.h`: a file from anywhere
+    never makes the app allocate what it claims; a chat template over 1 MB is not kept): its
+    architecture, name, size, quantization, context length, chat template, parameters and the tags
+    of its vocabulary. A file that is no model the app can run is refused with the reason — not a
+    GGUF, a LoRA adapter, a vision projector, an embedding model, a model without weights, a chat
+    format the app does not write —, so is one that needs more than 85 % of the device's memory
+    (its weights, the context's keys and values in 16 bits for every layer at the context the app
+    gives it, some buffers: `ai::memoryNeeded`; the device's from `/proc/meminfo`); one that takes
+    more than half of it is added with a note that other apps may be closed meanwhile. Last, the
+    runner's plugin loads its vocabulary once (`brulion_localai_probe`, no weights: an architecture
+    this build's llama.cpp does not know is refused with llama.cpp's own words). On a computer the
+    file is used where it is; on Android — where a picked document has no path to keep — it is
+    copied into the models folder (`own/`), the free space checked first, as a part that gets its
+    name when whole, with its progress (Cancel removes the part). The list is
+    `<models>/own-models.json` (this device's, never the notebook's); a model is `own-<12 hex
+    digits of its path's SHA-1>` in the settings, named after its `general.name` (**Name** gives
+    it another), shown as "Qwen3 4B · Q4_K_M · 2.5 GB · context 32 768 · ChatML". **Pictures…** gives
+    it its vision projector (an `mmproj-….gguf`: refused unless it is one, `clip` with a vision
+    encoder), **No pictures** takes it away; **Remove** forgets it — a file used where it is stays
+    there, a copy goes. It holds at most what it was trained to (its context length, at least
+    2 048 and at most `ContextTokens`), and nothing about it is checked against a checksum: it is
+    the user's own file.
+  * **Chat formats**: a model of one's own is written in its own format, told from its chat template
+    the way llama.cpp's built-in templates tell them apart (`local::detectFormat`; without a
+    template, from the tags of its vocabulary): **ChatML** (Qwen, SmolLM, Hermes …), **Phi-3**,
+    **Phi-4**, **Llama 3**, **Gemma**, **Mistral v7** and **DeepSeek 3 / R1** — a conversation
+    without tools exactly as llama.cpp writes it (`tst_ai_llama_formats` compares them letter for
+    letter), the first token of the vocabulary before it where its tokenizer adds one. A template
+    that opens `<think>` makes the format a thinking one (`chatml+think`, `deepseek3+think`): its
+    thoughts are the reply's `thoughts`, and `effort = "low"` gives it an empty block, so that it
+    answers at once (Qwen3's `enable_thinking: false`). An LFM model's own template is LFM3's
+    (`lfm3`): the prompt of the three models the app knows is unchanged, token for token. Tools go
+    in the **Hermes** convention, worded as Qwen3's template words it: the tools as JSON in the
+    system text, a call `<tool_call>{"name": …, "arguments": …}</tool_call>`, the results as
+    `<tool_response>` in a user's turn. What the model writes is read leniently: a call without its
+    tags, `parameters` instead of `arguments`, arguments as a text of JSON, in a code fence, or as
+    LFM3 and Qwen3.5 write them (`<function=…>` with `<parameter=…>` lines). The tags of calls and
+    thoughts are tokens in some vocabularies (Qwen's) and letters in others (Llama's): the prompt
+    writes the token where there is one, else the letters (`Piece::loose`), and the answer is read
+    from its letters either way.
+  * **Tool calls kept to the tools**: a request with tools gets a grammar (llama.cpp's GBNF,
+    `local::toolGrammar`) for its calls — LFM3's and the Hermes convention's: the name one of the
+    request's tools, the arguments an object with the keys of the tool's schema, a value of its
+    type where that is simple (a string, a whole number, a number, true or false, one of an enum's
+    strings). It is lazy: the model writes and thinks freely until it starts a call (the call's
+    first tag), and from then on only a token the grammar allows is taken — the sampling changes
+    only where the token drawn breaks it, when it is drawn again from those it allows. A grammar
+    llama.cpp refuses, or a tag the vocabulary lacks where it must be a token, leaves the sampling
+    as it was, and one that has nowhere left to go in the middle of an answer (llama.cpp's "empty
+    grammar stack") is left off for the rest of it — never the end of the answer (the log says
+    so).
   * `brulion-cli` runs no model on the device (`acp agent` asks the network's providers only);
     the browser version has none (`available` is false there, and
     in any build without llama.cpp: docs/ARCHITECTURE.md "The model on the device").
@@ -1446,7 +1516,9 @@ end, { label = "Ask my notes (AI)" })
   provider "local" to an `ai::LocalBackend`. `local.h` — the models the app knows, a request
   written as a model's prompt and its answer read back (LFM3's chat format, compared in
   `tests/core/ai` with what the model's own template gives), cutting a request to fit.
-  `localfiles.h` — the models' files. `localrunner.h` / `llamarunner.h` — what runs a model:
+  `localfiles.h` — the models' files. `gguf.h` / `ownmodels.h` — a model of the user's own: its
+  GGUF header read, what makes a file one. `localformats.cpp` — the other chat formats, the Hermes
+  convention and the grammars. `localrunner.h` / `llamarunner.h` — what runs a model:
   llama.cpp, in a plugin the app loads on first use (`src/app/shell/localai.h`).
 
 **The AI assistant** (built in, `src/core/extensions/builtin/asystent.luau`; Settings → Extensions →
@@ -1545,8 +1617,10 @@ is a due date and rings no alarm."); the same change written again as a reminder
 already (a fine-tuned model wrote the line a second time so). **The app's own tools** come after
 these only where the app runs the turn and its model is on the network (`ctx.appTools`, set by
 `WorkspaceExtensions::runChat` when the provider is not `local`; never in `brulion-cli acp agent`
-nor the bench): the model on the device keeps exactly the twelve tools and the system text it was
-trained on (docs/FINETUNE.md), and the rules get one more line on when to use them. Six tools over
+nor the bench), and the rules get one more line on when to use them; a model on the device never
+gets them — Brulion Assistant 1.7B keeps exactly the twelve tools and the system text it was
+trained on (docs/FINETUNE.md), another model on the device what "What each model is given" below
+says. Six tools over
 `b.app` (the assistant has the permission `app`): `app_settings` (`b.app.settings()`, a line per
 setting — `key = value — label (group, kind)`, its options or range, the notebook's marked —, those
 with every word asked for), `change_setting` (an option as the model wrote it, letter case aside; a
@@ -1619,6 +1693,25 @@ question (`session/request_permission`), its `b.status` a tool call; the built-i
 well a model does its work is measured by the assistant's bench (docs/FINETUNE.md): tasks with a
 known outcome on notebooks of their own, run by this script — a change of its tools or instructions
 shows there.
+
+**What each model is given** (`b.aiModel()`, the script's `serving()`): a provider on the network —
+or no model set up, as in `brulion-cli` — and the model trained on this very script (`trained`:
+Brulion Assistant 1.7B, docs/FINETUNE.md) get the tools, the system text and the results' 12 000
+characters described above, exactly as before: their requests are the same, byte for byte
+(`tst_extensions_assistant` compares them). Another model on the device gets the same tools and
+system text, but a tool's result of at most 4 000 characters, cut at a whole letter and saying how
+much is left — "[… 6 120 more characters: read_page with from = 3 998 reads on.]" for a page, whose
+`read_page` takes a `from` (the character to start at; past the page's end the result says so),
+"ask for less — other words, a narrower query" for anything else —: all of a result is read on the
+device's processor, and a phone's model that got 12 000 characters a result went round in circles,
+its context growing with every turn. A small one (`small`) gets, with the setting **Fewer tools for
+small models** (the assistant's own settings, off by default), eight tools instead of twelve —
+`search_notes`, `query_notes`, `read_page` (with `from`), `append_to_journal`, `append_to_page`,
+`update_block`, `write_page`, `look_at_picture`, described in fewer words (no list of pages: a
+search finds them; no extensions: a small model writes none that loads) — and a shorter system text
+(the notes' syntax and five rules): some half of what its first question reads before its state is
+kept on disk, and less to choose from. It is off by default because LFM3 1.7B did fewer of the
+bench's tasks so, and no faster (docs/PERFORMANCE.md "Fewer tools for a small model").
 
 ### Chat partners
 

@@ -129,6 +129,9 @@ Reply answerLocally(LocalRunner *runner, const LocalModel &model, Request reques
 ///   *error)
 inline constexpr char LocalRunnerPlugin[] = "brulion_localai";
 inline constexpr char LocalRunnerOpen[] = "brulion_localai_open";
+/// …and the one that checks a file (probeLocalModel):
+///   extern "C" bool brulion_localai_probe(const QString *path, const QString *backendDir, QString *error)
+inline constexpr char LocalRunnerProbe[] = "brulion_localai_probe";
 
 /// Is the plugin there: in one of `pluginDirs`, or (with a "" among them) wherever the system
 /// finds a library by its name — Android. Does not load it.
@@ -140,5 +143,10 @@ bool hasLocalRunner(const QStringList &pluginDirs);
 /// plugin stays loaded until the app ends.
 std::unique_ptr<LocalRunner> loadLocalRunner(const QStringList &pluginDirs, LocalRunner::Options options,
                                              QString *error);
+
+/// Can the plugin's llama.cpp load the model file at `path` (a model of the user's own: its
+/// architecture one it knows, its vocabulary whole)? Loads the plugin as loadLocalRunner() does;
+/// reads the file's header and vocabulary only. False with `error` (no plugin, or why not).
+bool probeLocalModel(const QStringList &pluginDirs, const QString &path, QString *error);
 
 } // namespace brulion::ai

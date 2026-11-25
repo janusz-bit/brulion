@@ -120,6 +120,10 @@ public:
     /// The answer to `request` (b.ai's, as ai::requestFrom made it); `round` gets the counts and
     /// times there are (a model's).
     virtual ai::Reply answer(const ai::Request &request, Round *round) = 0;
+    /// What b.aiModel() tells the assistant of the model that answers ({}: nil — the tools and
+    /// instructions of a provider on the network, as before b.aiModel(): what every run that writes
+    /// training data gets).
+    virtual QVariantMap aiModel() const { return {}; }
 };
 
 /// Plays a task's solution: one step for each request, in order (a step `unlessShown` a text a tool

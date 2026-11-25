@@ -1782,6 +1782,73 @@ Item {
                 readonly property list<var> notifyModes: [{ value: "always", text: qsTr("Always") }, { value: "background", text: qsTr("In the background") }, { value: "never", text: qsTr("Never") }]
                 readonly property list<var> autoArchiveChoices: [{ value: "never", text: qsTr("Never") }, { value: "1", text: qsTr("1 day") }, { value: "3", text: qsTr("3 days") }, { value: "7", text: qsTr("A week") }, { value: "30", text: qsTr("30 days") }]
 
+                // The model on the device in words: the app's (adapted, seeing, reading text only)
+                // or a file of the user's own, and which model looks at pictures for it.
+                function localAbout(): string {
+                    const about = AppController.localAi.modelOwn ? aiGroup.ownAbout() : aiGroup.knownAbout()
+                    const seer = AppController.localAi.pictureModel
+                    if (seer === "")
+                        return about
+                    return about + "\n" + (AppController.localAi.pictureModelHere
+                                           ? qsTr("Pictures in notes are looked at by %1, which is on this device too: Brulion loads it for them in this one's place, which takes a few seconds more.").arg(seer)
+                                           : qsTr("To have pictures in notes looked at, download %1 too (choose it above): Brulion then loads it for them in this one's place.").arg(seer))
+                }
+                function knownAbout(): string {
+                    if (AppController.localAi.modelAdapted)
+                        return qsTr("%1 is %2 by %3, trained further for Brulion's assistant: the best at working through your notes. Answers at once and reads text only.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelBaseMaker)
+                    if (AppController.localAi.modelSees)
+                        return qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weakest of these models at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                    return qsTr("%1 by %2 reads text only. It searches the notebook and changes notes better than a model that sees pictures, not as well as the one trained for Brulion's assistant.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                }
+                function ownAbout(): string {
+                    const about = qsTr("A model file of your own: %1. Brulion writes to it in its own chat format; the assistant gives it shorter tool results.").arg(AppController.localAi.modelDetails)
+                    const memory = AppController.localAi.memoryNote
+                    return memory === "" ? about : about + "\n" + memory
+                }
+                // Where the chosen model's files are, or what is left to download of them.
+                function filesAbout(): string {
+                    if (AppController.localAi.modelOwn)
+                        return aiGroup.ownFilesAbout()
+                    const files = aiGroup.downloadAbout()
+                    const shared = AppController.localAi.modelSharesWith
+                    if (shared === "")
+                        return files
+                    return files + "\n" + qsTr("Shares a file with %1: it is downloaded once and kept while either of them is on this device.").arg(shared)
+                }
+                function downloadAbout(): string {
+                    if (AppController.localAi.modelHere)
+                        return qsTr("On this device (%1). The model answers without the internet.").arg(AppController.localAi.modelSize)
+                    if (AppController.localAi.checking)
+                        return qsTr("Checking the downloaded files…")
+                    if (AppController.localAi.downloading)
+                        return qsTr("Downloading: %1. You can leave this page; a download that stops goes on from where it was.").arg(AppController.localAi.progressText)
+                    if (AppController.localAi.downloadError !== "")
+                        return qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.localAi.downloadError)
+                    if (AppController.localAi.modelLeft === "")
+                        return qsTr("Its files are already on this device: nothing left to download.")
+                    if (AppController.localAi.modelLeft !== AppController.localAi.modelSize)
+                        return qsTr("Partly on this device: %1 of %2 left to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelLeft).arg(AppController.localAi.modelSize)
+                    return qsTr("Not on this device yet: %1 to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelSize)
+                }
+                function ownFilesAbout(): string {
+                    if (!AppController.localAi.modelHere)
+                        return qsTr("Its file is not there any more (%1): add it again.").arg(AppController.localAi.modelPath)
+                    const file = AppController.localAi.copiesFiles
+                               ? qsTr("Copied into Brulion's models folder (%1); removed, the copy goes.").arg(AppController.localAi.modelSize)
+                               : qsTr("Used where it is: %1. Removed here, the file stays there.").arg(AppController.localAi.modelPath)
+                    if (AppController.localAi.modelProjector === "")
+                        return file + "\n" + qsTr("It reads text only. With its vision projector (an mmproj-….gguf file of the same model) it sees pictures too.")
+                    return file + "\n" + qsTr("It sees pictures with its projector.")
+                }
+                // The user's own models: none yet, or how they are kept.
+                function ownModelsAbout(): string {
+                    if (AppController.localAi.ownModels.length === 0)
+                        return AppController.localAi.copiesFiles
+                               ? qsTr("A GGUF file of another model (Qwen, Llama, Gemma, Phi, Mistral …), copied into Brulion. Its chat format, size and memory are read from the file; one too big for this device is refused.")
+                               : qsTr("A GGUF file of another model (Qwen, Llama, Gemma, Phi, Mistral …), used where it is. Its chat format, size and memory are read from the file; one too big for this device is refused.")
+                    return qsTr("Choose one to use it; the models above stay as they are.")
+                }
+
                 SettingSwitch {
                     objectName: "assistantSetting"
                     text: qsTr("AI assistant")
@@ -1819,20 +1886,9 @@ Item {
                     visible: aiGroup.local
                     title: qsTr("Model")
                     // (An adapted model: the model under it and its maker, who trained it further.
-                    // A model that reads text only: which one looks at pictures in its place.)
-                    description: {
-                        const about = AppController.localAi.modelAdapted
-                                    ? qsTr("%1 is %2 by %3, trained further for Brulion's assistant: the best at working through your notes. Answers at once and reads text only.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelBaseMaker)
-                                    : AppController.localAi.modelSees
-                                      ? qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weakest of these models at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
-                                      : qsTr("%1 by %2 reads text only. It searches the notebook and changes notes better than a model that sees pictures, not as well as the one trained for Brulion's assistant.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
-                        const seer = AppController.localAi.pictureModel
-                        if (seer === "")
-                            return about
-                        return about + "\n" + (AppController.localAi.pictureModelHere
-                                               ? qsTr("Pictures in notes are looked at by %1, which is on this device too: Brulion loads it for them in this one's place, which takes a few seconds more.").arg(seer)
-                                               : qsTr("To have pictures in notes looked at, download %1 too (choose it above): Brulion then loads it for them in this one's place.").arg(seer))
-                    }
+                    // A model that reads text only: which one looks at pictures in its place. A file
+                    // of the user's own: what it is.)
+                    description: aiGroup.localAbout()
                     BSegmented {
                         objectName: "aiLocalModelSetting"
                         accessibleName: qsTr("Model")
@@ -1850,29 +1906,12 @@ Item {
                         Layout.fillWidth: true
                         title: qsTr("The model's files")
                         // (What is left to download when part of it is here — a file another model
-                        // shares, a download that stopped —, and with which models it shares one.)
-                        description: {
-                            const files = AppController.localAi.modelHere
-                                        ? qsTr("On this device (%1). The model answers without the internet.").arg(AppController.localAi.modelSize)
-                                        : AppController.localAi.checking
-                                          ? qsTr("Checking the downloaded files…")
-                                          : AppController.localAi.downloading
-                                            ? qsTr("Downloading: %1. You can leave this page; a download that stops goes on from where it was.").arg(AppController.localAi.progressText)
-                                            : AppController.localAi.downloadError !== ""
-                                              ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.localAi.downloadError)
-                                              : AppController.localAi.modelLeft === ""
-                                                ? qsTr("Its files are already on this device: nothing left to download.")
-                                                : AppController.localAi.modelLeft !== AppController.localAi.modelSize
-                                                  ? qsTr("Partly on this device: %1 of %2 left to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelLeft).arg(AppController.localAi.modelSize)
-                                                  : qsTr("Not on this device yet: %1 to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelSize)
-                            const shared = AppController.localAi.modelSharesWith
-                            if (shared === "")
-                                return files
-                            return files + "\n" + qsTr("Shares a file with %1: it is downloaded once and kept while either of them is on this device.").arg(shared)
-                        }
+                        // shares, a download that stopped —, and with which models it shares one;
+                        // of a file of the user's own, where it is and whether it sees.)
+                        description: aiGroup.filesAbout()
                         BButton {
                             objectName: "aiLocalDownload"
-                            visible: !AppController.localAi.modelHere && !AppController.localAi.downloading
+                            visible: !AppController.localAi.modelHere && !AppController.localAi.downloading && !AppController.localAi.modelOwn
                             enabled: !AppController.localAi.downloadingOther
                             size: "small"
                             variant: "primary"
@@ -1888,8 +1927,25 @@ Item {
                             onClicked: AppController.localAi.cancelDownload()
                         }
                         BButton {
+                            objectName: "aiLocalPictures"
+                            visible: AppController.localAi.modelOwn && AppController.localAi.modelProjector === ""
+                            enabled: !AppController.localAi.adding
+                            size: "small"
+                            variant: "ghost"
+                            text: qsTr("Pictures…")
+                            onClicked: projectorPicker.open()
+                        }
+                        BButton {
+                            objectName: "aiLocalNoPictures"
+                            visible: AppController.localAi.modelOwn && AppController.localAi.modelProjector !== ""
+                            size: "small"
+                            variant: "ghost"
+                            text: qsTr("No pictures")
+                            onClicked: AppController.localAi.removeProjector()
+                        }
+                        BButton {
                             objectName: "aiLocalRemove"
-                            visible: AppController.localAi.modelHere
+                            visible: AppController.localAi.modelHere || AppController.localAi.modelOwn
                             size: "small"
                             variant: "ghost"
                             text: qsTr("Remove")
@@ -1904,9 +1960,24 @@ Item {
                         value: AppController.localAi.progress
                     }
                 }
+                // A model of the user's own is called what they like ("": its file's name again).
+                ShellSettingRow {
+                    objectName: "aiOwnModelName"
+                    visible: aiGroup.local && AppController.localAi.modelOwn
+                    title: qsTr("Name")
+                    description: qsTr("What the settings call this model. Empty: the name its file gives.")
+                    BTextField {
+                        objectName: "aiOwnModelNameField"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: AppController.localAi.modelName
+                        accessibleName: qsTr("Name")
+                        onEditingFinished: AppController.localAi.renameModel(text)
+                    }
+                }
                 ShellSettingRow {
                     objectName: "aiLocalLicense"
-                    visible: aiGroup.local
+                    visible: aiGroup.local && !AppController.localAi.modelOwn
                     title: qsTr("Whose model")
                     // (An adapted model is its maker's model still, under its licence — not made by them.)
                     description: AppController.localAi.modelAdapted
@@ -1924,6 +1995,101 @@ Item {
                         text: qsTr("About the model")
                         onClicked: Workspace.openUrl(AppController.localAi.modelPageUrl)
                     }
+                }
+                // Models of the user's own: a GGUF file picked here — on Android copied into the
+                // models folder — read and checked before it is offered (LocalAi.addModelFile).
+                ShellSettingRow {
+                    objectName: "aiOwnModels"
+                    visible: aiGroup.local
+                    title: qsTr("A model of your own")
+                    description: aiGroup.ownModelsAbout()
+                    BButton {
+                        objectName: "aiAddModelFile"
+                        size: "small"
+                        variant: "secondary"
+                        iconName: "file"
+                        text: qsTr("Add a model file…")
+                        enabled: !AppController.localAi.adding
+                        onClicked: ownModelPicker.open()
+                    }
+                }
+                ColumnLayout {
+                    objectName: "aiOwnAdding"
+                    visible: aiGroup.local && (AppController.localAi.adding || AppController.localAi.addError !== "")
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.space2
+                        BText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            color: AppController.localAi.adding ? Theme.fgMuted : Theme.dangerText
+                            text: AppController.localAi.adding ? AppController.localAi.addText : qsTr("Not added: %1").arg(AppController.localAi.addError)
+                        }
+                        BButton {
+                            objectName: "aiOwnAddingStop"
+                            visible: AppController.localAi.adding
+                            size: "small"
+                            text: qsTr("Stop")
+                            onClicked: AppController.localAi.cancelAdding()
+                        }
+                    }
+                    BProgressBar {
+                        Layout.fillWidth: true
+                        visible: AppController.localAi.adding
+                        indeterminate: AppController.localAi.addProgress < 0
+                        value: Math.max(0, AppController.localAi.addProgress)
+                    }
+                }
+                Repeater {
+                    model: AppController.localAi.ownModels
+                    delegate: ShellSettingRow {
+                        id: ownRow
+                        required property var modelData
+                        readonly property string ownId: AppController.routeText(ownRow.modelData, "id")
+                        readonly property bool chosen: AppController.routeFlag(ownRow.modelData, "chosen")
+                        objectName: "aiOwnModelRow"
+                        visible: aiGroup.local
+                        Layout.fillWidth: true
+                        title: AppController.routeText(ownRow.modelData, "name")
+                        description: AppController.routeFlag(ownRow.modelData, "here")
+                                     ? AppController.routeText(ownRow.modelData, "details")
+                                     : qsTr("%1 — its file is not there any more.").arg(AppController.routeText(ownRow.modelData, "details"))
+                        BButton {
+                            objectName: "aiOwnModelUse"
+                            visible: !ownRow.chosen
+                            size: "small"
+                            variant: "ghost"
+                            text: qsTr("Use")
+                            onClicked: AppSettings.aiLocalModel = ownRow.ownId
+                        }
+                        BText {
+                            visible: ownRow.chosen
+                            color: Theme.fgMuted
+                            text: qsTr("In use")
+                        }
+                    }
+                }
+                FilePicker {
+                    id: ownModelPicker
+                    objectName: "aiOwnModelPicker"
+                    title: qsTr("Choose a model file (GGUF)")
+                    fileMode: FilePicker.OpenFile
+                    nameFilters: AppController.isAndroid ? [] : [qsTr("Models for llama.cpp (*.gguf)"), qsTr("All files (*)")]
+                    dark: Theme.dark
+                    colors: Theme.colors
+                    onAccepted: AppController.localAi.addModelFile(ownModelPicker.selectedFile)
+                }
+                FilePicker {
+                    id: projectorPicker
+                    objectName: "aiOwnProjectorPicker"
+                    title: qsTr("Choose its vision projector (mmproj-….gguf)")
+                    fileMode: FilePicker.OpenFile
+                    nameFilters: AppController.isAndroid ? [] : [qsTr("Models for llama.cpp (*.gguf)"), qsTr("All files (*)")]
+                    dark: Theme.dark
+                    colors: Theme.colors
+                    onAccepted: AppController.localAi.addProjector(projectorPicker.selectedFile)
                 }
                 ShellSettingRow {
                     id: aiKeyRow

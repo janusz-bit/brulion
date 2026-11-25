@@ -25,6 +25,9 @@
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+#include <QVariantMap>
+
+#include <optional>
 
 namespace brulion::ai {
 
@@ -34,6 +37,9 @@ struct LocalFile {
     QUrl url;          ///< where it comes from: one revision, so the file never changes
     QByteArray sha256; ///< of the whole file, hex — checked after the download
     qint64 bytes = 0;
+    /// A file of the user's own (LocalModel::own): where it is — on a computer where the user keeps
+    /// it, on Android the app's copy in the models folder. "": in the models folder by `name`.
+    QString path = {};
     friend bool operator==(const LocalFile &, const LocalFile &) = default;
 };
 
@@ -51,7 +57,9 @@ struct LocalModel {
     /// Who made it ("Liquid AI"); of an adapted model, who trained the adapter ("Brulion") — the
     /// model under it is `baseName` by `baseMaker`, whose licence it keeps.
     QString maker;
-    QString format;      ///< how its prompts are written (local::prompt): "lfm3"
+    /// How its prompts are written (local::prompt): "lfm3", or a format of a model of the user's
+    /// own (local::detectFormat: "chatml", "llama3", "gemma" … — "+think" when it thinks).
+    QString format;
     LocalFile file;      ///< the model itself (GGUF)
     /// What was learnt on top of it: a LoRA adapter (GGUF) the runner adds to the weights of
     /// `file`, which stays as it is (a 4-bit file trained for that precision keeps it); none: the
@@ -69,6 +77,18 @@ struct LocalModel {
     /// than "low"); false: it always answers at once — it was trained to, and every request it
     /// gets is taken as one of the effort "low".
     bool thinks = true;
+    /// Trained on the built-in assistant's own work — its tools and instructions as they are
+    /// (docs/FINETUNE.md): b.aiModel() says so, and the assistant gives it exactly those.
+    bool trained = false;
+    /// A GGUF file of the user's own (Settings → Extensions → AI → Add a model file…: ai/ownmodels.h),
+    /// not one the app downloads: `file.path` says where it is, and nothing about it is checked
+    /// against a known checksum.
+    bool own = false;
+    /// Its parameters (1.7e9; 0: not known) — what tells a small model (b.aiModel()'s `small`).
+    qint64 parameters = 0;
+    /// The most tokens it was trained to hold at once (its GGUF's context length; 0: not known):
+    /// the app's context is never more than that.
+    int trainedContext = 0;
 
     bool adapted() const { return !adapter.name.isEmpty(); }
     bool sees() const { return !projector.name.isEmpty(); }
@@ -100,6 +120,18 @@ const QList<LocalModel> &localModels();
 /// The model `id` names ("": the default); nullptr for an unknown one.
 const LocalModel *localModel(const QString &id);
 
+/// A model of at most this many parameters is a small one (b.aiModel()'s `small`: the assistant
+/// gives it fewer tools and shorter instructions). Without a count, a file of at most SmallBytes.
+inline constexpr qint64 SmallParameters = 4500000000LL;
+inline constexpr qint64 SmallBytes = 3LL * 1024 * 1024 * 1024;
+bool isSmall(const LocalModel &model);
+
+/// What b.aiModel() tells a script of the model that answers its requests on this device:
+/// {provider, model, name, onDevice, small, trained, sees?, contextTokens?} — `model` the settings'
+/// (or the provider's default), `local` the model on the device it names (nullptr: none, or another
+/// provider). Nothing secret: no key, no address.
+QVariantMap modelInfo(const Settings &settings, const LocalModel *local, int contextTokens = 0);
+
 /// What answers a request of the provider "local": the app's model runner (src/app/shell/localai.h)
 /// in builds that have one. `done` is called once, from the event loop; `partial` (when given)
 /// gets the answer while the model writes it, from the event loop; `stopped` set (Pending::stop,
@@ -110,6 +142,19 @@ public:
     virtual ~LocalBackend() = default;
     virtual void send(const Settings &settings, const Request &request, std::function<void(const Reply &)> done,
                       PartialCallback partial, std::shared_ptr<std::atomic<bool>> stopped) = 0;
+    /// The model `id` answers with ("": the default) — the app's own models of the user too;
+    /// nothing for an unknown one.
+    virtual std::optional<LocalModel> model(const QString &id) const
+    {
+        const LocalModel *known = localModel(id);
+        return known ? std::optional<LocalModel>(*known) : std::nullopt;
+    }
+    /// The tokens it holds at once (0: not known).
+    virtual int contextTokens(const LocalModel &model) const
+    {
+        Q_UNUSED(model)
+        return 0;
+    }
 };
 
 namespace local {
@@ -121,7 +166,25 @@ struct Piece {
     QString text;
     bool special = false;
     QByteArray image;
+    /// A control piece that is one token in some vocabularies only — the tags of tool calls and
+    /// thoughts in the formats of a model of the user's own ("<tool_call>", "<think>": tokens of
+    /// Qwen's vocabulary, plain letters of Llama's): its token where the vocabulary has one, else
+    /// its letters (never an error, as a `special` piece the vocabulary lacks is).
+    bool loose = false;
     friend bool operator==(const Piece &, const Piece &) = default;
+};
+
+/// Tool calls kept to the request's tools (toolGrammar()): llama.cpp's GBNF, which the runner
+/// applies from the first of its `triggers` on — free text and thoughts before a call stay free.
+struct Grammar {
+    /// The rules, "root" first. `<[@N]>` stands for `tags[N]`: the runner writes its token
+    /// (`<[id]>`) where the vocabulary has it as one, else (a loose tag) its letters as a literal.
+    QString rules;
+    QList<Piece> tags;
+    /// The tags (indexes into `tags`) the grammar starts with: a call begins.
+    QList<int> triggers;
+    bool isEmpty() const { return rules.isEmpty(); }
+    friend bool operator==(const Grammar &, const Grammar &) = default;
 };
 
 struct Prompt {
@@ -134,10 +197,34 @@ struct Prompt {
     /// Control tokens that end the answer besides the model's own end of turn: a model that
     /// starts another turn by itself has left its own.
     QStringList stops;
+    /// The runner puts the vocabulary's first token (BOS) before the pieces when its vocabulary
+    /// asks for one: the formats that leave it to the tokenizer, as llama.cpp's templates do.
+    /// (LFM3's prompt writes its own.)
+    bool bos = false;
+    /// The request's tools as a grammar (toolGrammar()); empty: a request without tools.
+    Grammar grammar;
 };
 
-/// Is `format` one this build can write ("lfm3")?
+/// Is `format` one this build can write ("lfm3", "chatml", "chatml+think", "llama3", "gemma",
+/// "phi3", "phi4", "mistral", "deepseek3", "deepseek3+think")?
 bool knowsFormat(const QString &format);
+
+/// The format of a model of the user's own, from its GGUF's chat template
+/// (`tokenizer.chat_template`) as llama.cpp's own templates tell them apart
+/// (llm_chat_detect_template: "<|im_start|>" is ChatML, "<|start_header_id|>" Llama 3 …), with
+/// "+think" where the template has the model think first ("<think>"); an LFM model's own
+/// ("<function=" calls, an "lfm" architecture) is "lfm3". Without a template, its vocabulary's
+/// tags (GgufInfo::tags: "<|im_start|>" ChatML). "" when it is none of those this build writes.
+QString detectFormat(const QString &chatTemplate, const QString &architecture = {},
+                     const QStringList &vocabularyTags = {});
+/// The family of a format, as people name it ("ChatML", "Llama 3", "Gemma" …; "" unknown).
+QString formatName(const QString &format);
+
+/// The grammar that keeps a model's tool calls to `tools` (none: an empty grammar): the call's
+/// name one of theirs, its arguments a JSON object — the keys of the tool's schema where it names
+/// them, a value of its type where that is simple —, in the format's own way of writing a call
+/// (LFM3's tags and parameters, the Hermes convention's `<tool_call>{"name": …, "arguments": …}`).
+Grammar toolGrammar(const QString &format, const QList<Tool> &tools);
 
 /// Does the model think before answering this request? Unless its effort is "low".
 bool thinks(const Request &request);

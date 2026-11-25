@@ -2,11 +2,14 @@
 // model and what Settings shows of it, its download (a local HTTP server) and removal, requests
 // answered on the worker thread by a fake runner (opened once, again for another model, let go
 // after a while without a request), a model with an adapter over another one's file, what is
-// refused (no plugin, not downloaded, an unknown model), and the app closing while a model answers.
+// refused (no plugin, not downloaded, an unknown model), the app closing while a model answers, and
+// models of the user's own — a GGUF file written by the test, checked by a fake probe against a
+// device's memory given, used where it is or copied, named, given a projector, removed.
 
 #include "localai.h"
 
 #include "fileserver.h"
+#include "ggufwriter.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -176,6 +179,56 @@ bool download(LocalAi &local, const QString &id)
     QSignalSpy finished(&local, &LocalAi::downloadFinished);
     local.download(id);
     return (!finished.isEmpty() || finished.wait(20000)) && finished[0][1].toBool();
+}
+
+/// A Qwen3 4B's header as its GGUF has it (the weights a few zeros): ChatML that thinks.
+QByteArray qwenFile(const QByteArray &type = "model", const QByteArray &architecture = "qwen3")
+{
+    test::GgufWriter g;
+    g.text("general.architecture", architecture);
+    g.text("general.type", type);
+    g.text("general.name", "Qwen3 4B");
+    g.text("general.size_label", "4B");
+    g.u32("general.file_type", 15);
+    g.u32(architecture + ".context_length", 32768);
+    g.u32(architecture + ".block_count", 36);
+    g.u32(architecture + ".embedding_length", 2560);
+    g.u32(architecture + ".attention.head_count", 32);
+    g.u32(architecture + ".attention.head_count_kv", 8);
+    g.strings("tokenizer.ggml.tokens", {"!", "<|im_start|>", "<|im_end|>", "<tool_call>", "</tool_call>", "<think>",
+                                        "</think>"});
+    g.text("tokenizer.chat_template", "{{- '<|im_start|>' + message.role }}<tool_call>{{- '<think>\\n' }}");
+    g.tensor("token_embd.weight", {2560, 151936}, 12);
+    g.tensor("blk.0.attn_norm.weight", {2560}, 0, 1024);
+    return g.bytes(64 * 1024);
+}
+
+/// A vision projector (mmproj) as llama.cpp's converter writes one.
+QByteArray projectorFile()
+{
+    test::GgufWriter g;
+    g.text("general.architecture", "clip");
+    g.text("general.type", "mmproj");
+    g.flag("clip.has_vision_encoder", true);
+    g.tensor("v.patch_embd.weight", {14, 14, 3, 1024}, 1);
+    return g.bytes(8 * 1024);
+}
+
+bool writeFile(const QString &path, const QByteArray &bytes)
+{
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+}
+
+/// Adds the file at `path` and waits until it is added or refused: the model's id, or "" (`error`).
+QString addFile(LocalAi &local, const QString &path, QString *error = nullptr)
+{
+    QSignalSpy added(&local, &LocalAi::ownModelAdded);
+    local.addModelFile(QUrl::fromLocalFile(path));
+    const bool ended = QTest::qWaitFor([&] { return !local.adding(); }, 20000);
+    if (error)
+        *error = ended ? local.addError() : u"still adding"_s;
+    return added.isEmpty() ? QString() : added.first().first().toString();
 }
 
 } // namespace
@@ -750,6 +803,235 @@ private Q_SLOTS:
         QVERIFY2(timer.elapsed() < 30000, qPrintable(QString::number(timer.elapsed())));
         QCOMPARE(f.record.open.load(), 0);
         QVERIFY(!answered); // nobody is left to hear it
+    }
+
+    void aModelOfOnesOwn()
+    {
+        // A GGUF file picked in the settings: its header read, checked against the device's memory,
+        // loaded once by the runner (a fake probe here, on the worker thread), then a model the
+        // runner opens from where the file is — in its own chat format.
+        Fixture f;
+        const QString path = f.dir.path() + u"/Pobrane/Qwen3-4B-Q4_K_M.gguf"_s;
+        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+        QVERIFY(writeFile(path, qwenFile()));
+        std::atomic<int> probes{0};
+        Qt::HANDLE probeThread = nullptr;
+        LocalAi::Options o = f.options();
+        o.memory = 16LL * 1024 * 1024 * 1024;
+        o.probe = [&](const QString &file, QString *) {
+            probeThread = QThread::currentThreadId();
+            ++probes;
+            return file == path;
+        };
+        auto local = std::make_unique<LocalAi>(o);
+        QVERIFY(local->ownModelsList().isEmpty());
+        QSignalSpy notices(local.get(), &LocalAi::noticeChanged);
+        QString error;
+        const QString id = addFile(*local, path, &error);
+        QVERIFY2(!id.isEmpty(), qPrintable(error));
+        QVERIFY(id.startsWith(u"own-"));
+        QCOMPARE(probes.load(), 1);
+        QVERIFY(probeThread != QThread::currentThreadId());
+        QVERIFY(!notices.isEmpty()); // (Android's notification said it was being added)
+        QCOMPARE(local->ownModelsList().size(), 1);
+        const QVariantMap row = local->ownModelsList().first().toMap();
+        QCOMPARE(row.value(u"id"_s).toString(), id);
+        QCOMPARE(row.value(u"name"_s).toString(), u"Qwen3 4B"_s);
+        QCOMPARE(row.value(u"path"_s).toString(), path);
+        QVERIFY(row.value(u"here"_s).toBool());
+        const QString details = row.value(u"details"_s).toString();
+        QVERIFY2(details.startsWith(u"Qwen3 4B · Q4_K_M · "_s) && details.endsWith(u" · ChatML"_s), qPrintable(details));
+        QVERIFY(details.contains(u"32"_s));
+
+        local->setChosen(id);
+        QCOMPARE(local->chosen(), id);
+        QVERIFY(local->modelOwn());
+        QVERIFY(local->modelHere());
+        QCOMPARE(local->modelPath(), path);
+        QCOMPARE(local->modelProjector(), QString());
+        QVERIFY(!local->modelSees());
+        QCOMPARE(local->modelDetails(), details);
+        QVERIFY(local->memoryNote().isEmpty()); // (it fits easily into 16 GB)
+        const std::optional<ai::LocalModel> model = local->model(id);
+        QVERIFY(model && model->own);
+        QCOMPARE(model->format, u"chatml+think"_s);
+        QCOMPARE(local->contextTokens(*model), LocalAi::ContextTokens); // (it holds 32 768)
+
+        // Asked: the runner opens the file where it is, the prompt in ChatML.
+        const ai::Reply reply = ask(*local, id);
+        QVERIFY2(reply.ok, qPrintable(reply.error));
+        QCOMPARE(reply.model, id);
+        {
+            const std::lock_guard lock(f.record.mutex);
+            QCOMPARE(f.record.opened.last().modelPath, path);
+            const QList<ai::local::Piece> pieces = f.record.prompts.last().pieces;
+            QVERIFY(!pieces.isEmpty());
+            QCOMPARE(pieces.first().text, u"<|im_start|>"_s);
+            QVERIFY(pieces.first().special);
+        }
+
+        // Kept in the models folder: another start knows it.
+        QVERIFY(QFile::exists(o.folder + u"/own-models.json"_s));
+        local.reset();
+        LocalAi again(o);
+        QCOMPARE(again.ownModelsList().size(), 1);
+        QVERIFY(again.has(id));
+        // Its file gone: still listed, not here.
+        QVERIFY(QFile::remove(path));
+        QVERIFY(!again.has(id));
+        QVERIFY(!again.ownModelsList().first().toMap().value(u"here"_s).toBool());
+        const ai::Reply gone = ask(again, id);
+        QVERIFY(!gone.ok);
+    }
+
+    void namedProjectedRemoved()
+    {
+        Fixture f;
+        const QString path = f.dir.path() + u"/qwen.gguf"_s;
+        const QString projector = f.dir.path() + u"/mmproj-qwen.gguf"_s;
+        QVERIFY(writeFile(path, qwenFile()));
+        QVERIFY(writeFile(projector, projectorFile()));
+        LocalAi::Options o = f.options();
+        o.memory = 0; // (not known: nothing refused for it)
+        o.probe = [](const QString &, QString *) { return true; };
+        LocalAi local(o);
+        const QString id = addFile(local, path);
+        QVERIFY(!id.isEmpty());
+        local.setChosen(id);
+        // A name of one's own; none: its file's name.
+        local.renameModel(u"  Mój   Qwen — żółw  "_s);
+        QCOMPARE(local.modelName(), u"Mój Qwen — żółw"_s);
+        local.renameModel(QString());
+        QCOMPARE(local.modelName(), u"qwen"_s);
+        // A projector: it sees. A model file is no projector.
+        QSignalSpy adding(&local, &LocalAi::addingChanged);
+        local.addProjector(QUrl::fromLocalFile(path));
+        QTRY_VERIFY_WITH_TIMEOUT(!local.adding() && !local.addError().isEmpty(), 10000);
+        QVERIFY(local.modelProjector().isEmpty());
+        local.addProjector(QUrl::fromLocalFile(projector));
+        QTRY_VERIFY_WITH_TIMEOUT(!local.adding() && local.modelProjector() == projector, 10000);
+        QVERIFY(local.addError().isEmpty());
+        QVERIFY(local.modelSees());
+        QVERIFY(ask(local, id).ok);
+        {
+            const std::lock_guard lock(f.record.mutex);
+            QCOMPARE(f.record.opened.last().projectorPath, projector);
+        }
+        local.removeProjector();
+        QVERIFY(!local.modelSees());
+        QVERIFY(QFile::exists(projector)); // (the user's own file stays)
+        // Removed: forgotten, the file used where it is stays there.
+        QSignalSpy removed(&local, &LocalAi::ownModelRemoved);
+        local.removeModel(id);
+        QTRY_COMPARE_WITH_TIMEOUT(removed.size(), 1, 10000);
+        QVERIFY(local.ownModelsList().isEmpty());
+        QVERIFY(QFile::exists(path));
+        QVERIFY(local.chosen() != id);
+    }
+
+    void aCopyOfTheFile()
+    {
+        // Android: a picked document has no path to keep — the file is copied into the models
+        // folder, and its copy goes when it is removed.
+        Fixture f;
+        const QString path = f.dir.path() + u"/Qwen3 4B (kopia).gguf"_s;
+        QVERIFY(writeFile(path, qwenFile()));
+        LocalAi::Options o = f.options();
+        o.copyFiles = true;
+        o.memory = 0;
+        QString probed;
+        o.probe = [&](const QString &file, QString *) {
+            probed = file;
+            return true;
+        };
+        LocalAi local(o);
+        QVERIFY(local.copiesFiles());
+        const QString id = addFile(local, path);
+        QVERIFY(!id.isEmpty());
+        local.setChosen(id);
+        const QString copy = local.modelPath();
+        QVERIFY2(copy.startsWith(o.folder + u"/own/"_s), qPrintable(copy));
+        QVERIFY(!copy.contains(u' '));
+        QCOMPARE(probed, copy); // (the copy is what the runner loads)
+        QFile in(copy);
+        QVERIFY(in.open(QIODevice::ReadOnly));
+        QCOMPARE(in.readAll(), qwenFile());
+        in.close();
+        QVERIFY(QDir(o.folder + u"/own"_s).entryList(QDir::Files).filter(u".part"_s).isEmpty());
+        QSignalSpy removed(&local, &LocalAi::ownModelRemoved);
+        local.removeModel(id);
+        QTRY_COMPARE_WITH_TIMEOUT(removed.size(), 1, 10000);
+        QVERIFY(!QFile::exists(copy));
+        QVERIFY(QFile::exists(path));
+    }
+
+    void filesThatAreRefused_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<qint64>("memory");
+        QTest::addColumn<bool>("probe");
+        QTest::addColumn<QString>("why");
+        QTest::newRow("no GGUF") << QByteArray("To nie jest model, tylko notatka: żółć.") << qint64(0) << true
+                                 << u"GGUF"_s;
+        QTest::newRow("a LoRA adapter") << qwenFile("adapter") << qint64(0) << true << u"adapter"_s;
+        QTest::newRow("a projector") << projectorFile() << qint64(0) << true << u"projector"_s;
+        QTest::newRow("too big for the memory") << qwenFile() << qint64(1024) * 1024 * 1024 << true << u"memory"_s;
+        QTest::newRow("llama.cpp cannot load it") << qwenFile() << qint64(0) << false
+                                                  << u"unknown model architecture"_s;
+    }
+    void filesThatAreRefused()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(qint64, memory);
+        QFETCH(bool, probe);
+        QFETCH(QString, why);
+        Fixture f;
+        const QString path = f.dir.path() + u"/plik.gguf"_s;
+        QVERIFY(writeFile(path, bytes));
+        LocalAi::Options o = f.options();
+        o.memory = memory;
+        o.copyFiles = true; // (a copy refused leaves nothing behind)
+        o.probe = [probe](const QString &, QString *error) {
+            if (!probe)
+                *error = u"this build's llama.cpp cannot load it: unknown model architecture: 'xyz'"_s;
+            return probe;
+        };
+        LocalAi local(o);
+        QString error;
+        QVERIFY(addFile(local, path, &error).isEmpty());
+        QVERIFY2(error.contains(why, Qt::CaseInsensitive), qPrintable(error));
+        QVERIFY(local.ownModelsList().isEmpty());
+        QVERIFY(!QFile::exists(o.folder + u"/own-models.json"_s));
+        const QStringList left = QDir(o.folder + u"/own"_s).entryList(QDir::Files);
+        QVERIFY2(left.isEmpty(), qPrintable(left.join(u", "_s)));
+        QVERIFY(QFile::exists(path));
+    }
+
+    void theNoticeAndItsStop()
+    {
+        // What Android's notification says while the model answers, and its Stop.
+        Fixture f;
+        LocalAi local(f.options());
+        QCOMPARE(local.notice(), LocalAi::Notice{});
+        QVERIFY(download(local, u"reads"_s));
+        f.record.block.store(true);
+        ai::Reply got;
+        bool done = false;
+        local.send(settingsFor(u"reads"_s), question(u"Pytanie na długo"_s), [&](const ai::Reply &reply) {
+            got = reply;
+            done = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(f.record.blocked.load(), 10000);
+        const LocalAi::Notice notice = local.notice();
+        QVERIFY2(notice.title.contains(u"answering"_s), qPrintable(notice.title));
+        QCOMPARE(notice.progress, -1);
+        QVERIFY(local.working());
+        local.stopWork();
+        QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+        QCOMPARE(got.error, u"stopped"_s);
+        f.record.block.store(false);
+        QTRY_VERIFY_WITH_TIMEOUT(!local.working(), 10000);
+        QCOMPARE(local.notice(), LocalAi::Notice{});
     }
 };
 

@@ -814,17 +814,19 @@ void AndroidBridge::setKeepScreenOn(bool on)
     failed("setKeepScreenOn");
 }
 
-void AndroidBridge::setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting)
+void AndroidBridge::setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting,
+                                 int progress, const QString &kind)
 {
     const QJniObject context = appContext();
     if (!context.isValid())
         return;
     QJniObject::callStaticMethod<void>(kClass, "setAgentWork",
                                        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/"
-                                       "String;Z)V",
+                                       "String;ZILjava/lang/String;)V",
                                        context.object(), QJniObject::fromString(title).object<jstring>(),
                                        QJniObject::fromString(text).object<jstring>(),
-                                       QJniObject::fromString(stop).object<jstring>(), jboolean(waiting));
+                                       QJniObject::fromString(stop).object<jstring>(), jboolean(waiting),
+                                       jint(progress), QJniObject::fromString(kind).object<jstring>());
     failed("setAgentWork");
 }
 

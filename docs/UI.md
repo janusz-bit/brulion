@@ -1334,8 +1334,24 @@ with its reason — it goes on from where it stopped; here: its size and **Remov
 names the models it shares a file with, `modelSharesWith`) and **Whose model** (the maker and
 the licence, with links; of an adapted model the base model's maker and licence, and that
 Brulion trained it further, a version that maker neither made nor endorses). One model downloads
-at a time (`downloadingOther` disables Download on the other). While a model is downloaded or answers (`working`) a phone's
-screen stays on (docs/ANDROID.md "A model on the phone"). A command whose
+at a time (`downloadingOther` disables Download on the other). Under them **A model of your own**
+(`aiOwnModels`; docs/EXTENSIONS.md "AI"): **Add a model file…** (`aiAddModelFile`: a `FilePicker`,
+`*.gguf` — on Android any document, copied: `copiesFiles`) → `LocalAi.addModelFile`; while it is
+read, copied and loaded once, a line with what happens (`addText`: "Copying Qwen3-4B.gguf: 1.1 GB of
+2.5 GB", "Checking that … loads…"), a progress bar (`addProgress`, indeterminate while not known)
+and **Stop** (`aiOwnAddingStop`); a refused file "Not added: <the reason>" in the danger colour
+(`addError`); then a row per model of one's own (`aiOwnModelRow`: its name, its details — "Qwen3
+4B · Q4_K_M · 2.5 GB · context 32 768 · ChatML", or that its file is gone — and **Use**, or "In use"
+for the chosen one). A model added is chosen (AppController: `ownModelAdded`). With one chosen, the
+**Model** row describes it (what it is, `memoryNote` where it takes more than half of the device's
+memory), **The model's files** says where its file is (used where it is, or Brulion's copy), whether
+it sees, with **Pictures…** (`aiLocalPictures`: its vision projector, a second picker) / **No
+pictures** (`aiLocalNoPictures`) and **Remove**; **Name** (`aiOwnModelName`, a field:
+`renameModel`) replaces **Whose model**. The rows' long descriptions are small typed functions of
+the group (`localAbout()`, `filesAbout()` …), not nested conditionals (compiled QML). While a model is
+downloaded, a file copied or a model answers (`working`) a phone's screen stays on, and Android's
+foreground service runs with its notification (`LocalAi::notice()`; docs/ANDROID.md "A model on the
+phone"). A command whose
 extension asks AI shows "Asking AI…" (once per call: an agent asks many times); its result comes
 as the command's own message when the answer arrives; the console shows "Asking AI…" and then the
 value. The assistant is talked to in the AI chat ("AI chat" below): its command `chat` is no

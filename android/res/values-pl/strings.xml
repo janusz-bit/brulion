@@ -41,7 +41,7 @@
     <string name="brulion_shortcut_today">Dzisiejszy dziennik</string>
     <string name="brulion_shortcut_search">Szukaj</string>
     <!-- An AI agent on another computer at work for the phone (AgentService.kt) -->
-    <string name="brulion_channel_agents">Agenci AI</string>
-    <string name="brulion_channel_agents_description">Odpowiada agent AI na innym komputerze: Brulion pobiera to, co pisze, także przy wygaszonym ekranie</string>
+    <string name="brulion_channel_agents">AI przy pracy</string>
+    <string name="brulion_channel_agents_description">Odpowiada agent AI na innym komputerze albo model na tym urządzeniu, albo model się pobiera: Brulion działa dalej także przy wygaszonym ekranie</string>
     <string name="brulion_agent_working">Agent AI odpowiada…</string>
 </resources>

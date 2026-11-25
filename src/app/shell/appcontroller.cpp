@@ -234,6 +234,9 @@ AppController::AppController(const Options &options, QObject *parent)
     // to themselves and spin between two tokens rather than wake up (docs/PERFORMANCE.md "The
     // model on the device").
     localAi.spinWait = true;
+    // A model file the user picks is a document without a path the app may keep: copied into the
+    // models folder.
+    localAi.copyFiles = true;
 #endif
     if (localAi.pluginDirs.isEmpty() && !localAi.open)
         localAi.pluginDirs = localAiPluginDirs();
@@ -515,16 +518,39 @@ AppController::AppController(const Options &options, QObject *parent)
     const auto keepScreenOn = [this] { platform::keepScreenOn(m_localAi->working() || m_speech->busy()); };
     connect(m_localAi.get(), &LocalAi::workingChanged, this, keepScreenOn);
     connect(m_speech.get(), &media::Transcriber::jobsChanged, this, keepScreenOn);
-    // An agent on another computer works there, but the phone waits for what it says: Android's
-    // foreground service keeps the app going meanwhile with the screen off or behind another app,
-    // its notification saying what runs (and a question waiting), its Stop ending those turns.
-    connect(m_workspace->chats()->agents(), &WorkspaceAgents::remoteWorkChanged, this, [this] {
-        const WorkspaceAgents::RemoteWork work = m_workspace->chats()->agents()->remoteWork();
-        const QStringList shown{work.title, work.text, work.waiting ? u"waiting"_s : QString()};
+    // An agent on another computer works there, but the phone waits for what it says — and the
+    // model on the device answers, a model is downloaded or copied: Android's foreground service
+    // keeps the app going meanwhile with the screen off or behind another app, its notification
+    // saying what runs (a question waiting, how far a download is), its Stop ending that.
+    const auto showWork = [this] {
+        const WorkspaceAgents::RemoteWork remote = m_workspace->chats()->agents()->remoteWork();
+        const LocalAi::Notice local = m_localAi->notice();
+        // (An agent's turn first: its question waits for the user.)
+        const bool agent = !remote.title.isEmpty();
+        const QString title = agent ? remote.title : local.title;
+        const QString text = agent ? remote.text : local.text;
+        const int progress = agent ? -1 : local.progress;
+        const QString kind = agent                                       ? u"agent"_s
+                             : title.isEmpty()                           ? QString()
+                             : local.progress >= 0 || !m_localAi->busy() ? u"data"_s
+                                                                         : u"model"_s;
+        const QStringList shown{title, text, agent && remote.waiting ? u"waiting"_s : QString(),
+                                QString::number(progress), kind};
         if (shown == m_agentWork)
             return;
         m_agentWork = shown;
-        platform::setAgentWork(work.title, work.text, tr("Stop"), work.waiting);
+        platform::setAgentWork(title, text, tr("Stop"), agent && remote.waiting, progress, kind);
+    };
+    connect(m_workspace->chats()->agents(), &WorkspaceAgents::remoteWorkChanged, this, showWork);
+    connect(m_localAi.get(), &LocalAi::noticeChanged, this, showWork);
+    // A file of the user's own added in the settings is the model chosen; one removed is not.
+    connect(m_localAi.get(), &LocalAi::ownModelAdded, this, [this](const QString &id) {
+        m_settings->setAiLocalModel(id);
+        m_localAi->setChosen(id);
+    });
+    connect(m_localAi.get(), &LocalAi::ownModelRemoved, this, [this](const QString &id) {
+        if (m_settings->aiLocalModel() == id)
+            m_settings->setAiLocalModel(QString());
     });
     connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
             [this](const QString &text, const QString &kind) { toast(text, kind); });
@@ -610,8 +636,16 @@ AppController::AppController(const Options &options, QObject *parent)
 
 #ifdef Q_OS_ANDROID
     auto *bridge = platform::AndroidBridge::instance();
-    connect(bridge, &platform::AndroidBridge::agentStopRequested, this,
-            [this] { m_workspace->chats()->stopRemoteAgents(); });
+    // The notification's Stop ends what it shows: an agent's turns, or the model on the device's
+    // (its turns in the chat, a download, a copy).
+    connect(bridge, &platform::AndroidBridge::agentStopRequested, this, [this] {
+        if (m_agentWork.value(4) == u"agent") {
+            m_workspace->chats()->stopRemoteAgents();
+            return;
+        }
+        m_workspace->chats()->stopOnDevice();
+        m_localAi->stopWork();
+    });
     connect(bridge, &platform::AndroidBridge::permissionsChanged, this, [this] {
         Q_EMIT permissionsChanged();
         // Granted "All files access" in the system settings: continue opening the vault.

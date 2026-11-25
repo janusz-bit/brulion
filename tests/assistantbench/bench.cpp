@@ -539,6 +539,8 @@ Outcome run(const Task &task, const QString &notebooksDir, const QString &workDi
     options.uiLanguage = task.language;
     options.updateIndex = true;
     extensions::NotebookHost host(vault, index, options);
+    const QVariantMap model = responder.aiModel();
+    host.onAiModel = [model] { return model; };
     extensions::Engine engine;
     // (Generous: the script's own work between two requests is small, but a sanitizer build is slow.)
     if (!engine.start(&host, extensions::Limits{20000, 256ll << 20}, &error)) {

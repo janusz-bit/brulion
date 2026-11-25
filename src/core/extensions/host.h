@@ -275,6 +275,11 @@ public:
         Q_UNUSED(text);
     }
 
+    /// b.aiModel: the model that answers b.ai on this device — {provider, model, name, onDevice,
+    /// small, trained, sees?, own?, contextTokens?} (ai::modelInfo) — or {} where none is set up (the
+    /// command line without the app's settings). Nothing secret: no key, no address.
+    virtual QVariantMap aiModel() { return {}; }
+
     // The app (b.app, docs/EXTENSIONS.md "The app (`b.app`)"; appapi.h appOperations())
     /// One of appOperations() with its arguments, asked by `extension`: its value, or `*error`
     /// set (an unknown setting, a route that is none …). The engine checked the permission "app"

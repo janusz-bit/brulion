@@ -269,11 +269,14 @@ public:
 
     /// The screen does not turn off by itself while `on` (the activity's window keeps it on).
     static void setKeepScreenOn(bool on);
-    /// An AI agent on another computer works for this device (platform::setAgentWork()): the
-    /// foreground service AgentService.kt with its quiet ongoing notification (`title`, `text`, the
-    /// button `stop`) keeps the process, its network and the CPU (but while `waiting`: every turn
-    /// waits on the user's answer) going; `title` "" ends it. Its button: agentStopRequested().
-    static void setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting);
+    /// An AI agent on another computer or the model on the device works for this device
+    /// (platform::setAgentWork()): the foreground service AgentService.kt with its quiet ongoing
+    /// notification (`title`, `text`, a bar at `progress` percent or none, the button `stop`) keeps
+    /// the process, its network and the CPU (but while `waiting`: every turn waits on the user's
+    /// answer) going, of the type `kind` says ("model": specialUse, else dataSync); `title` ""
+    /// ends it. Its button: agentStopRequested().
+    static void setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting,
+                             int progress = -1, const QString &kind = QString());
 
     // A photo from the camera (kind 0) and dictation (kind 1) for the AI chat: the system's camera
     // app and speech recognizer (MediaCapture.kt; src/platform/capture.h).

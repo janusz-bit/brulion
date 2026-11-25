@@ -280,7 +280,8 @@ The Play build's merged manifest (`aapt2 dump badging dist-android/*-play.apk`) 
 
 | Permission | Declaration in Play Console | Used by |
 |---|---|---|
-| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC` | **Foreground service: yes** — description, impact, **video** | `AgentService`: an AI agent on the user's computer answering in the AI chat while the screen is off |
+| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC` | **Foreground service: yes** — description, impact, **video** | `AgentService`: an AI agent on the user's computer answering in the AI chat while the screen is off; a model on the device downloaded, or a model file of the user's own copied |
+| `FOREGROUND_SERVICE_SPECIAL_USE` | **Foreground service: yes** — the special use's description (the manifest's `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`), impact, **video** | `AgentService` while the model on the device computes an answer |
 | `USE_FULL_SCREEN_INTENT` | **Full-screen intent** declaration | the alarm screen over the lock screen (`AlarmActivity`) |
 | `SCHEDULE_EXACT_ALARM` | none (only `USE_EXACT_ALARM` needs one; not in the Play build) | reminders and alarms at the exact minute |
 | `RECORD_AUDIO` | none (a runtime permission; Data safety covers audio) | voice notes |
@@ -305,9 +306,29 @@ location, SMS, call log, accessibility services, `MANAGE_EXTERNAL_STORAGE`, `USE
     an agent on a computer; AI chat → ask; the notification appears; lock the screen; unlock — the
     answer has arrived.
 
+  The same service is dataSync while a model of the device is downloaded from Hugging Face or a
+  model file the user picked is copied into the app (a second use case under the same type:
+  "Download of an AI model of 1–3 GB the user asked for; it shows its progress and Stop").
+
   Google recommends a user-initiated data transfer job instead of a dataSync service for network
   transfers a user starts. If the declaration is refused, the fallback is a Play build without the
   service (the agent answers only while the app is open).
+* **Foreground service (specialUse).** While the model on the device computes an answer
+  (docs/ANDROID.md "A model on the phone") the service runs as specialUse: no other type covers
+  work on the device's own processor that the user waits for (it is no media, sync, location or
+  data transfer, and a WorkManager job may be deferred and is ended after minutes). Play reviews
+  the subtype the manifest gives (`PROPERTY_SPECIAL_USE_FGS_SUBTYPE`: "An AI model that runs on
+  the device answers the user's question about their notes: it computes on the processor for up
+  to some minutes and must go on while the screen is off or another app is in front. Nothing
+  leaves the device."). Suggested:
+  * deferred: "The answer the user asked for is not written until the app is opened again";
+    interrupted: "The answer stops in the middle; the user has to ask again";
+  * video (about 30 s, on a phone): Settings → Extensions → AI → On this device → Download; AI
+    chat → ask; the notification "The model on this device is answering…" appears; lock the
+    screen; unlock — the answer is there.
+
+  If specialUse is refused, the Play build keeps dataSync for the downloads and the model answers
+  only while the app is on screen (`AgentService.typeFor`: no "model" kind).
 * **Full-screen intent.** On Android 14+ Play grants `USE_FULL_SCREEN_INTENT` by default only to
   apps whose core functionality is **calling or alarms**. Brulion's alarms (⏰!) ring like an
   alarm clock; declare the alarm functionality and see whether Play accepts it. If not, users turn

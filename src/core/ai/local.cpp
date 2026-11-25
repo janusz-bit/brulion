@@ -1,5 +1,7 @@
 #include "ai/local.h"
 
+#include "ai/local_p.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -44,6 +46,7 @@ QList<LocalModel> knownModels()
     vision.license = license;
     vision.licenseUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/blob/%1/LICENSE"_s.arg(visionRevision));
     vision.pageUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-VL-2B"_s);
+    vision.parameters = 2000000000;
 
     // Text only: better than the vision model at working through a notebook with tools.
     LocalModel text;
@@ -58,6 +61,7 @@ QList<LocalModel> knownModels()
     text.license = license;
     text.licenseUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/blob/%1/LICENSE"_s.arg(textRevision));
     text.pageUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-1.7B"_s);
+    text.parameters = 1700000000;
 
     // The text model trained further for the built-in assistant, without thinking (SFT, then
     // GRPO: docs/FINETUNE.md): a LoRA adapter over the text model's very file — downloaded once
@@ -82,6 +86,8 @@ QList<LocalModel> knownModels()
     assistant.licenseUrl = QUrl(u"%1/blob/%2/LICENSE"_s.arg(assistantRepository, assistantRevision));
     assistant.pageUrl = QUrl(assistantRepository);
     assistant.thinks = false; // (trained to answer at once)
+    assistant.trained = true; // (on the assistant's tools and instructions: docs/FINETUNE.md)
+    assistant.parameters = text.parameters;
 
     return {assistant, text, vision};
 }
@@ -106,7 +112,58 @@ const LocalModel *localModel(const QString &id)
     return nullptr;
 }
 
+bool isSmall(const LocalModel &model)
+{
+    if (model.parameters > 0)
+        return model.parameters <= SmallParameters;
+    return model.file.bytes > 0 && model.file.bytes <= SmallBytes;
+}
+
+QVariantMap modelInfo(const Settings &settings, const LocalModel *local, int contextTokens)
+{
+    const QString provider = settings.provider.isEmpty() ? u"anthropic"_s : settings.provider;
+    QVariantMap info{{u"provider"_s, provider}, {u"onDevice"_s, provider == u"local"}};
+    if (provider == u"local") {
+        if (local) {
+            info.insert(u"model"_s, local->id);
+            info.insert(u"name"_s, local->name);
+            info.insert(u"small"_s, isSmall(*local));
+            info.insert(u"trained"_s, local->trained);
+            info.insert(u"sees"_s, local->sees());
+            info.insert(u"own"_s, local->own);
+        } else {
+            info.insert(u"model"_s, settings.model);
+            info.insert(u"small"_s, true); // (a model on a device: never a large one)
+            info.insert(u"trained"_s, false);
+        }
+        if (contextTokens > 0)
+            info.insert(u"contextTokens"_s, contextTokens);
+        return info;
+    }
+    const QString model = settings.model.isEmpty() ? defaultModel(provider) : settings.model;
+    info.insert(u"model"_s, model);
+    info.insert(u"name"_s, model);
+    info.insert(u"small"_s, false);
+    info.insert(u"trained"_s, false);
+    return info;
+}
+
 namespace local {
+
+namespace detail {
+
+qsizetype lastQuestion(const Request &request)
+{
+    qsizetype last = -1;
+    for (qsizetype i = 0; i < request.messages.size(); ++i) {
+        const Message &m = request.messages.at(i);
+        if (m.role == u"user" && m.results.isEmpty())
+            last = i;
+    }
+    return last;
+}
+
+} // namespace detail
 
 namespace {
 
@@ -136,7 +193,10 @@ const QString kCut = u"\n[… cut: the model on this device cannot read more at 
 /// shorten() leaves at least this much of a text.
 constexpr qsizetype MinKept = 400;
 
-/// A JSON string literal of `text` (non-ASCII letters as they are).
+} // namespace
+
+namespace detail {
+
 QString jsonText(const QString &text)
 {
     const QByteArray array = QJsonDocument(QJsonArray{text}).toJson(QJsonDocument::Compact);
@@ -261,23 +321,6 @@ QList<std::pair<QString, QString>> orderedMembers(const QString &json)
     return out;
 }
 
-/// A tool call of an assistant's turn: its parameters in the order written, as the model's text.
-struct Call {
-    QString id;
-    QString name;
-    QList<std::pair<QString, QString>> parameters;
-};
-
-/// An assistant's turn as the prompt writes it.
-struct Turn {
-    bool thought = false; ///< it has thoughts (possibly none written)
-    QString thoughts;
-    QString content;
-    QList<Call> calls;
-};
-
-/// A message's turn: from a reply's raw (an OpenAI-style message — this module's own, or an
-/// OpenAI-compatible provider's), from another provider's blocks (their text), or its plain text.
 Turn turnOf(const Message &message)
 {
     Turn turn;
@@ -306,36 +349,20 @@ Turn turnOf(const Message &message)
         call.id = value.toObject().value(u"id"_s).toString();
         call.name = function.value(u"name"_s).toString();
         // A text of JSON (OpenAI's way); some servers send the object itself.
-        call.parameters = orderedMembers(
-                arguments.isObject()
-                        ? QString::fromUtf8(QJsonDocument(arguments.toObject()).toJson(QJsonDocument::Compact))
-                        : arguments.toString());
+        call.arguments = arguments.isObject()
+                                 ? QString::fromUtf8(QJsonDocument(arguments.toObject()).toJson(QJsonDocument::Compact))
+                                 : arguments.toString();
+        call.parameters = orderedMembers(call.arguments);
         turn.calls << call;
     }
     return turn;
 }
 
-/// A prompt's pieces as they are added: texts next to each other are one piece (a model's
-/// tokenizer reads the text between two control tokens as a whole).
-class Writer {
-public:
-    void tag(const QString &token) { m_pieces.append(Piece{token, true, {}}); }
-    void text(const QString &text)
-    {
-        if (text.isEmpty())
-            return;
-        if (!m_pieces.isEmpty() && !m_pieces.last().special && m_pieces.last().image.isEmpty())
-            m_pieces.last().text += text;
-        else
-            m_pieces.append(Piece{text, false, {}});
-    }
-    void image(const QByteArray &data) { m_pieces.append(Piece{QString(), false, data}); }
-    qsizetype size() const { return m_pieces.size(); }
-    QList<Piece> pieces() const { return m_pieces; }
+} // namespace detail
 
-private:
-    QList<Piece> m_pieces;
-};
+namespace {
+
+using namespace detail;
 
 Prompt lfm3Prompt(const Request &request)
 {
@@ -446,7 +473,10 @@ Prompt lfm3Prompt(const Request &request)
     return prompt;
 }
 
-/// The type a tool's schema gives a parameter ("string", "integer" …; "" when it gives none).
+} // namespace
+
+namespace detail {
+
 QString parameterType(const QList<Tool> &tools, const QString &tool, const QString &parameter)
 {
     for (const Tool &t : tools) {
@@ -486,6 +516,12 @@ QString valueJson(const QString &text, const QString &type)
         return valid && value.isObject() ? trimmed : jsonText(text);
     return valid && !value.isString() ? trimmed : jsonText(text);
 }
+
+} // namespace detail
+
+namespace {
+
+using namespace detail;
 
 /// What the model wrote, read: its thoughts, its words, the tools it calls.
 struct Written {
@@ -639,6 +675,68 @@ Reply lfm3Reply(const QList<Piece> &generated, const Request &request, bool comp
     return reply;
 }
 
+/// A value of LFM3's parameter (its text on lines of its own) of the type its schema names, where
+/// that is simple: an enum's words, a number, true or false; anything else up to </parameter>.
+QString lfm3Value(const QJsonObject &property)
+{
+    const QJsonArray choices = property.value(u"enum"_s).toArray();
+    if (!choices.isEmpty()) {
+        QStringList alternatives;
+        for (const QJsonValue choice : choices) {
+            if (!choice.isString())
+                return u"free"_s;
+            alternatives << gbnfLiteral(choice.toString());
+        }
+        return u"( "_s + alternatives.join(u" | "_s) + u" ) \"\\n\""_s;
+    }
+    const QString type = property.value(u"type"_s).toString();
+    if (type == u"integer")
+        return u"lfm-integer"_s;
+    if (type == u"number")
+        return u"lfm-number"_s;
+    if (type == u"boolean")
+        return u"lfm-boolean"_s;
+    return u"free"_s;
+}
+
+/// LFM3's calls as a grammar: <tool_call> <function=NAME> (<parameter=KEY> VALUE </parameter>)*
+/// </function> </tool_call>, every tag its token — a name of the request's tools, a key of its
+/// schema.
+Grammar lfm3Grammar(const QList<Tool> &tools)
+{
+    Grammar grammar;
+    if (tools.isEmpty())
+        return grammar;
+    for (const QString &tag : {kCall, kFunction, kFunctionEnd, kCallEnd, kParameter, kParameterEnd})
+        grammar.tags.append(Piece{tag, true, {}});
+    grammar.triggers = {0};
+    QStringList names;
+    QStringList toolRules;
+    for (qsizetype i = 0; i < tools.size(); ++i) {
+        const Tool &tool = tools.at(i);
+        const QString prefix = u"t%1"_s.arg(i);
+        names << prefix;
+        QStringList parameters;
+        const QJsonObject properties = tool.schema.value(u"properties"_s).toObject();
+        for (auto it = properties.begin(); it != properties.end(); ++it)
+            parameters << gbnfLiteral(it.key() + u">\n"_s) + u' ' + lfm3Value(it.value().toObject());
+        if (parameters.isEmpty())
+            parameters << u"[a-zA-Z0-9_-]{1,64} \">\\n\" free"_s;
+        toolRules << u"%1 ::= %2 %1-param*"_s.arg(prefix, gbnfLiteral(tool.name + u">\n"_s));
+        toolRules << u"%1-param ::= <[@4]> ( %2 ) <[@5]> \"\\n\"?"_s.arg(prefix, parameters.join(u" | "_s));
+    }
+    QStringList rules;
+    rules << u"root ::= call ( \"\\n\"{0,2} call )*"_s;
+    rules << u"call ::= <[@0]> \"\\n\"? <[@1]> ( %1 ) <[@2]> \"\\n\"? <[@3]>"_s.arg(names.join(u" | "_s));
+    rules << toolRules;
+    rules << u"free ::= ( !<[@5]> )*"_s;
+    rules << uR"(lfm-integer ::= "-"? [0-9]{1,15} "\n")"_s;
+    rules << uR"(lfm-number ::= "-"? [0-9]{1,15} ( "." [0-9]{1,15} )? "\n")"_s;
+    rules << uR"(lfm-boolean ::= ( "true" | "false" ) "\n")"_s;
+    grammar.rules = rules.join(u'\n') + u'\n';
+    return grammar;
+}
+
 /// `count` characters from the start of `text`, never half of a letter outside the basic plane.
 QString leftOf(const QString &text, qsizetype count)
 {
@@ -684,7 +782,7 @@ QString cutMiddle(const QString &text, qsizetype keep)
 
 bool knowsFormat(const QString &format)
 {
-    return format == kLfm3;
+    return format == kLfm3 || knowsOtherFormat(format);
 }
 
 bool thinks(const Request &request)
@@ -699,15 +797,31 @@ bool hasImages(const Request &request)
 
 Prompt prompt(const QString &format, const Request &request)
 {
-    if (format == kLfm3)
-        return lfm3Prompt(request);
+    if (format == kLfm3) {
+        Prompt prompt = lfm3Prompt(request);
+        prompt.grammar = lfm3Grammar(request.tools);
+        return prompt;
+    }
+    if (knowsOtherFormat(format))
+        return otherPrompt(format, request);
     return Prompt();
+}
+
+Grammar toolGrammar(const QString &format, const QList<Tool> &tools)
+{
+    if (format == kLfm3)
+        return lfm3Grammar(tools);
+    if (knowsOtherFormat(format))
+        return otherGrammar(format, tools);
+    return Grammar();
 }
 
 Reply reply(const QString &format, const QList<Piece> &generated, const Request &request, bool complete)
 {
     if (format == kLfm3)
         return lfm3Reply(generated, request, complete);
+    if (knowsOtherFormat(format))
+        return otherReply(format, generated, request, complete);
     Reply reply;
     reply.error = u"unknown model format \"%1\""_s.arg(format);
     return reply;
@@ -715,6 +829,8 @@ Reply reply(const QString &format, const QList<Piece> &generated, const Request 
 
 Partial partial(const QString &format, const QList<Piece> &generated, const Request &request)
 {
+    if (knowsOtherFormat(format))
+        return otherPartial(format, generated, request);
     if (format != kLfm3)
         return Partial();
     const Written written = lfm3Written(generated, request, /*complete*/ false);

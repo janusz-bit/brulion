@@ -51,7 +51,8 @@ void LocalModelFiles::setNetwork(QNetworkAccessManager *network)
 
 QString LocalModelFiles::pathOf(const LocalFile &file) const
 {
-    return m_folder + u'/' + file.name;
+    // (A file of the user's own is where it is: LocalFile::path.)
+    return file.path.isEmpty() ? m_folder + u'/' + file.name : file.path;
 }
 
 QString LocalModelFiles::markerOf(const LocalModel &model) const

@@ -1714,6 +1714,31 @@ limit over HTTP/1.1 and TLS the process stayed at 38 MiB (a small program with Q
 against servers on the same machine, 2026-11-15). `tst_ai_localfiles` keeps it so: after a
 second without reading, its server still holds 54 of the 64 MB it has to send.
 
+**Fewer tools for a small model, a grammar for its calls** (2026-11-25; docs/EXTENSIONS.md "AI":
+"What each model is given"). The assistant's system text and its twelve tools are 10 064
+characters (the tools as compact JSON, the Polish system text); the eight tools and the shorter
+system text a small model on the device gets are 4 371 (`tst_extensions_assistant` prints both) —
+less than half of what its first
+question reads before its state is kept on disk, and every later question after a new load reads
+it from the disk instead. Its tool results are at most 4 000 characters instead of 12 000. The
+grammar that keeps its calls to the tools costs nothing measurable per token: a sampled token is
+checked against it alone, and only a token it refuses makes the candidates go through it (Qwen3
+0.6B Q8_0 on the laptop, 2 threads, the machine busy with other builds: the call's 20 tokens under
+the grammar at 9.6 a second, the 42 of the answer after it at 7.6; `tst_ai_llama_formats` with
+`BRULION_OWN_MODEL`). With 6 threads on that busy machine the same answer took 3.7 s a token —
+threads that wait for one another at every step lose their cores to other programs (the app's
+choice of threads is for a machine that is not that busy).
+
+Measured with `brulion-assistantbench --as-app` (LFM3 1.7B Q4_0 on the laptop, one attempt a task,
+the app's sampling): the eight tools, the shorter system text and results of 4 000 characters did
+16 of home-en's 23 tasks and 12 of dom-pl's first 16, the whole set with 12 000-character results
+19 and 13 — 28 against 32 of 39 —, and took no less time (65 s a task against 53 on dom-pl, the
+machine as busy). Its failures were long searches that did not end within the 16 turns (a week's
+tasks, the unpaid invoices: no list of pages to fall back on). So the setting "Fewer tools for
+small models" is off by default; the shorter results stay for every model on the device that was
+not trained on the assistant. A tiny model of one's own (Qwen3 0.6B) did 0 and 1 of six such tasks:
+it mostly answers without calling a tool.
+
 **NFC in linear time.** `QString::normalized(NormalizationForm_C)` sorts combining marks with an
 insertion sort and decomposes in place: 16 000 marks above a letter followed by 16 000 below
 take it 4.1 s, 160 000 letters after one decomposed pair 3.7–4 s, and four times that for twice

@@ -7,13 +7,14 @@
 
 #include "ai/ai.h"
 #include "ai/local.h"
+#include "ai/ownmodels.h"
 #include "log/categories.h"
 #include "log/redact.h"
 #include "notebook/journals.h"
 #include "text/text.h"
+#include "uiscale.h"
 #include "util/unicode.h"
 #include "vault/vault.h"
-#include "uiscale.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -845,14 +846,15 @@ void AppSettings::setAiProvider(const QString &provider)
 
 QString AppSettings::aiLocalModel() const
 {
-    // A model the app knows; one it no longer does (or none chosen) is the default.
+    // A model the app knows or one of the user's own (LocalAi knows which are there); one it no
+    // longer does (or none chosen) is the default.
     const QString id = m_settings->value(kAiLocalModel).toString();
-    return ai::localModel(id) ? id : QString();
+    return ai::localModel(id) || ai::isOwnModelId(id) ? id : QString();
 }
 
 void AppSettings::setAiLocalModel(const QString &id)
 {
-    if (store(kAiLocalModel, ai::localModel(id) ? id : QString(), aiLocalModel()))
+    if (store(kAiLocalModel, ai::localModel(id) || ai::isOwnModelId(id) ? id : QString(), aiLocalModel()))
         Q_EMIT aiChanged();
 }
 

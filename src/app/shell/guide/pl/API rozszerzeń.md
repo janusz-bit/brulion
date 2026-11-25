@@ -485,6 +485,8 @@ end, { label = "Ile otwartych zadań" })
 ## AI
 `b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (pole `thoughts` odpowiedzi: to, co model myślał — streszczenie myślenia Claude'a, rozumowanie serwera, myśli modelu na urządzeniu), `images` (obrazki z notatnika dla modelu, który widzi: `b.ai({ prompt = "Co tu jest napisane?", images = { "paragon.jpg" } })`), `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
 
+`b.aiModel()` mówi, który to model — `{ provider, model, name, onDevice, small, trained, … }` albo `nil`, gdy żaden nie jest ustawiony — żeby kod mógł prosić mały model na urządzeniu o mniej: `local m = b.aiModel(); if m and m.onDevice then … end`.
+
 ## Aplikacja
 `b.app` to sam Brulion: to, co pokazuje, jego polecenia, ustawienia tego urządzenia i notatnika, kolory, górny pasek, pasek stanu i menu. Czytanie nie wymaga niczego; zmienianie wymaga uprawnienia `aplikacja` (`uprawnienia: [aplikacja]`). Zmienia się aplikacja na tym urządzeniu — tak jak przy ustawieniach zmienianych ręcznie — a to, co rozszerzenie dodało do aplikacji, znika, gdy je wyłączysz.
 

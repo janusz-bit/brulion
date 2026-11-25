@@ -24,20 +24,24 @@ import io.github.januszbit.brulion.R
 
 /**
  * An AI agent on another computer at work for this device (docs/ANDROID.md "An AI agent on another
- * computer"; C++: `platform::setAgentWork()` from AppController, docs/UI.md "AI agents (ACP)"): a
- * foreground service of the app's own process — not a Qt service, Qt runs here already — that keeps
- * the app going while the screen is off or another app is in front. The process keeps a foreground
+ * computer"; C++: `platform::setAgentWork()` from AppController, docs/UI.md "AI agents (ACP)") — or
+ * the model on this device answering, being downloaded or copied (docs/ANDROID.md "A model on the
+ * phone"): a foreground service of the app's own process — not a Qt service, Qt runs here already —
+ * that keeps the app going while the screen is off or another app is in front. The process keeps a foreground
  * service's priority (Android does not end it, and its network works in Doze), Qt's event loop runs
  * on in the background (the activity's `android.app.background_running`, the manifest), and a
  * partial wake lock keeps the CPU awake while the agent works — released while every turn waits on
  * the user's answer to a question, when nothing comes from that computer.
  *
- * Its notification is quiet and ongoing: what runs ("Claude Code is answering…", or the question
- * waiting), the computer and the conversation, and **Stop**, which ends those turns
- * ([AgentStopReceiver] → `BrulionAndroid.nativeAgentStop`). A tap brings Brulion to the front.
+ * Its notification is quiet and ongoing: what runs ("Claude Code is answering…", the question
+ * waiting, "The model on this device is answering…", "Downloading LFM3 1.7B… 42 %" with its bar),
+ * the computer and the conversation, and **Stop**, which ends that ([AgentStopReceiver] →
+ * `BrulionAndroid.nativeAgentStop`). A tap brings Brulion to the front.
  *
- * Type dataSync (Android 14+: the app fetches what the agent writes from that computer). Android
- * 15+ allows that type 6 hours a day: [onTimeout] ends it then, and the turns go on there (the
+ * Type dataSync (Android 14+: the app fetches what the agent writes from that computer, a model's
+ * files from Hugging Face or a picked document), specialUse while the model on the device computes
+ * an answer ([Work.kind] "model": no other type is for work on the device's own processor). Android
+ * 15+ allows dataSync 6 hours a day: [onTimeout] ends it then, and the turns go on there (the
  * computer keeps them for the app).
  *
  * C++ calls [update] (through `BrulionAndroid.setAgentWork`, any thread) with what the notification
@@ -87,7 +91,9 @@ class AgentService : Service() {
     return try {
       val notification = notification(this, work)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        val type = typeFor(work.kind, Build.VERSION.SDK_INT)
+        startForeground(NOTIFICATION_ID, notification, type)
+        foregroundType = type
       } else {
         startForeground(NOTIFICATION_ID, notification)
       }
@@ -106,6 +112,10 @@ class AgentService : Service() {
     if (work == null) {
       stopNow()
       return
+    }
+    // Another kind of work (a download done, the model answering now): the service's type follows.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && typeFor(work.kind, Build.VERSION.SDK_INT) != foregroundType) {
+      if (!goForeground()) Log.w(TAG, "the foreground service's type was not changed")
     }
     try {
       NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification(this, work))
@@ -143,8 +153,22 @@ class AgentService : Service() {
     stopSelf()
   }
 
-  /** What the notification says. */
-  internal data class Work(val title: String, val text: String, val stop: String, val waiting: Boolean)
+  /** The type the service runs as now (Android 10+). */
+  private var foregroundType = 0
+
+  /**
+   * What the notification says: its [title], [text] and button [stop], a bar at [progress] percent
+   * (-1: none), and what works — [kind] "agent" (on another computer), "model" (the model on this
+   * device computes), "data" (a model downloaded or copied).
+   */
+  internal data class Work(
+    val title: String,
+    val text: String,
+    val stop: String,
+    val waiting: Boolean,
+    val progress: Int = -1,
+    val kind: String = "agent"
+  )
 
   /** What [update] does. */
   internal enum class Step { START, APPLY, STOP_LATER, NOTHING }
@@ -178,11 +202,19 @@ class AgentService : Service() {
      * button [stop] of its notification, [waiting] while every turn waits on the user's answer —
      * or, with an empty [title], nothing runs any more.
      */
-    fun update(context: Context, title: String, text: String, stop: String, waiting: Boolean) {
+    fun update(
+      context: Context,
+      title: String,
+      text: String,
+      stop: String,
+      waiting: Boolean,
+      progress: Int = -1,
+      kind: String = "agent"
+    ) {
       val app = context.applicationContext
       handler.post {
         handler.removeCallbacks(stopLater)
-        val work = if (title.isEmpty()) null else Work(title, text, stop, waiting)
+        val work = if (title.isEmpty()) null else Work(title, text, stop, waiting, progress, kind)
         val step = next(work != null, current != null, instance != null, started, timedOut)
         current = work
         if (work == null) timedOut = false
@@ -208,6 +240,18 @@ class AgentService : Service() {
         starting -> Step.NOTHING // (onStartCommand applies it)
         timedOut && wasWorking -> Step.NOTHING
         else -> Step.START
+      }
+
+    /**
+     * The service's type for [kind] on Android [sdk] (pure): specialUse while the model on the
+     * device computes (Android 14+, where the type exists), dataSync for everything else — and
+     * before Android 14, where dataSync covers both.
+     */
+    internal fun typeFor(kind: String, sdk: Int): Int =
+      if (kind == "model" && sdk >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+      } else {
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
       }
 
     /**
@@ -264,7 +308,11 @@ class AgentService : Service() {
           // notwithstanding, which would show it at once.)
           .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
       if (work.text.isNotEmpty()) builder.setContentText(work.text)
-      if (!work.waiting) builder.setProgress(0, 0, true)
+      if (work.progress >= 0) {
+        builder.setProgress(100, work.progress.coerceIn(0, 100), false)
+      } else if (!work.waiting) {
+        builder.setProgress(0, 0, true)
+      }
       context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launch ->
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         builder.setContentIntent(

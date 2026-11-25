@@ -11,17 +11,31 @@
 // reads only what is new) and is let go after ten minutes without a request — what it read of a
 // request's system text and tools is kept on disk (`stateFolder`), so the first request after it
 // was opened again does not read them anew. It holds the same on every device: 16 384 tokens at
-// once (ContextTokens).
+// once (ContextTokens) — a model of the user's own at most what it was trained to hold.
+//
+// Models of the user's own (ai/ownmodels.h): a GGUF file picked in the settings (addModelFile) —
+// its header read and checked on a thread of its own, its memory needs held against the device's,
+// on Android copied into the models folder (copiesFiles: a picked document has no path to keep),
+// then loaded once by the runner's probe (its architecture one this llama.cpp knows) — and its
+// vision projector (addProjector). Kept in <models>/own-models.json; removed, a file used where
+// it is stays where it is, a copy goes.
+//
+// On Android what it does while the app may be off the screen — an answer, a download, a copy —
+// is said by notice(): AppController shows it as the foreground service's notification
+// (platform::setAgentWork()), whose Stop calls stopWork().
 #pragma once
 
 #include "ai/local.h"
 #include "ai/localfiles.h"
 #include "ai/localrunner.h"
+#include "ai/ownmodels.h"
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPointer>
 #include <QStringList>
 #include <QThread>
+#include <QUrl>
 #include <QVariantList>
 
 #include <atomic>
@@ -31,6 +45,7 @@
 namespace brulion::shell {
 
 class LocalAiWorker;
+struct LocalAiAdding;
 
 class LocalAi : public QObject, public ai::LocalBackend {
     Q_OBJECT
@@ -85,6 +100,29 @@ class LocalAi : public QObject, public ai::LocalBackend {
     Q_PROPERTY(bool downloadingOther READ downloadingOther NOTIFY downloadChanged FINAL)
     /// A model is answering (or being loaded for an answer).
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged FINAL)
+    /// The user's own GGUF files (addModelFile), each {id, name, details, path, sees, here, chosen}:
+    /// `details` as modelDetails, `here` its file still there.
+    Q_PROPERTY(QVariantList ownModels READ ownModelsList NOTIFY ownModelsChanged FINAL)
+    /// The chosen model is a file of the user's own.
+    Q_PROPERTY(bool modelOwn READ modelOwn NOTIFY modelChanged FINAL)
+    /// What a model of the user's own is: "Qwen3 4B · Q4_K_M · 2.5 GB · context 32 768 · ChatML"
+    /// ("": one the app knows).
+    Q_PROPERTY(QString modelDetails READ modelDetails NOTIFY modelChanged FINAL)
+    /// Where its file is (a model of the user's own) and its vision projector's ("": none).
+    Q_PROPERTY(QString modelPath READ modelPath NOTIFY modelChanged FINAL)
+    Q_PROPERTY(QString modelProjector READ modelProjector NOTIFY modelChanged FINAL)
+    /// What the memory it takes means on this device, for a model of the user's own ("": it fits
+    /// easily, or the device does not say): "It takes some 6.1 GB of this device's 8 GB …".
+    Q_PROPERTY(QString memoryNote READ memoryNote NOTIFY modelChanged FINAL)
+    /// A file is being added (read, checked, copied, loaded once): how far (0–1, -1 while not
+    /// known), what happens ("Copying Qwen3-4B.gguf: 1.1 GB of 2.5 GB"), and why the last one
+    /// failed ("": it did not).
+    Q_PROPERTY(bool adding READ adding NOTIFY addingChanged FINAL)
+    Q_PROPERTY(double addProgress READ addProgress NOTIFY addingChanged FINAL)
+    Q_PROPERTY(QString addText READ addText NOTIFY addingChanged FINAL)
+    Q_PROPERTY(QString addError READ addError NOTIFY addingChanged FINAL)
+    /// A file picked is copied into the models folder (Android), else used where it is.
+    Q_PROPERTY(bool copiesFiles READ copiesFiles CONSTANT FINAL)
 
 public:
     /// Opens a model's runner (the worker thread calls it); nullptr with `error`.
@@ -105,6 +143,24 @@ public:
         int idleMs = 10 * 60 * 1000;  ///< the model leaves memory after this long without a request
         /// The default model before the assistant's own came first (keptChoice()).
         QString formerDefault = QStringLiteral("lfm3-vl-2b");
+        /// A model file the user adds is copied into the models folder (Android: a picked
+        /// document has no path the app may keep), else used where it is.
+        bool copyFiles = false;
+        /// The device's memory in bytes (-1: ai::deviceMemory(); 0: not known — nothing refused).
+        qint64 memory = -1;
+        /// Checks that the runner can load a file (empty: the plugin's probe, ai::probeLocalModel;
+        /// tests: a fake). Called on the worker thread.
+        std::function<bool(const QString &path, QString *error)> probe;
+    };
+
+    /// What the model on the device does that Android's notification says while the app may be
+    /// off the screen: its title ("The model on this device is answering…", "Downloading LFM3
+    /// 1.7B… 42 %"), its line, how far (0–100; -1: no bar). Empty: nothing.
+    struct Notice {
+        QString title;
+        QString text;
+        int progress = -1;
+        friend bool operator==(const Notice &, const Notice &) = default;
     };
 
     explicit LocalAi(const Options &options, QObject *parent = nullptr);
@@ -136,9 +192,40 @@ public:
     bool checking() const { return m_files.checking(); }
     QString downloadError() const;
     bool busy() const { return m_pending > 0; }
-    /// A model is being downloaded or answers — what a phone does only while the app is on
-    /// screen, so its screen stays on meanwhile (AppController: platform::keepScreenOn()).
+    /// A model is being downloaded, copied or answers — what a phone does only while the app is on
+    /// screen (or Android's foreground service runs), so its screen stays on meanwhile while the
+    /// app is in front (AppController: platform::keepScreenOn()).
     bool working() const { return m_working; }
+    Notice notice() const;
+    /// The notification's Stop: the requests not answered yet end ("stopped"), a download or a
+    /// copy stops (what it has stays for the next try).
+    void stopWork();
+
+    QVariantList ownModelsList() const;
+    bool modelOwn() const;
+    QString modelDetails() const;
+    QString modelPath() const;
+    QString modelProjector() const;
+    QString memoryNote() const;
+    bool adding() const { return bool(m_adding); }
+    double addProgress() const;
+    QString addText() const;
+    QString addError() const { return m_addError; }
+    bool copiesFiles() const { return m_copyFiles; }
+
+    /// Adds a GGUF file of the user's own (a file: URL, or Android's content: URL): read, checked,
+    /// copied where the app copies files, loaded once by the runner — then ownModelAdded(id), or
+    /// `addError` says why not. One at a time.
+    Q_INVOKABLE void addModelFile(const QUrl &file);
+    /// Gives the chosen model of the user's own a vision projector (mmproj-….gguf), or takes it.
+    Q_INVOKABLE void addProjector(const QUrl &file);
+    Q_INVOKABLE void removeProjector();
+    /// Names the chosen model of the user's own ("": its file's name again).
+    Q_INVOKABLE void renameModel(const QString &name);
+    /// Stops adding a file (a copy's part is removed).
+    Q_INVOKABLE void cancelAdding();
+    /// Removes the model `id` (remove() of the chosen one; a model of the user's own is forgotten).
+    Q_INVOKABLE void removeModel(const QString &id) { remove(id); }
 
     /// Downloads the chosen model (what is missing of it), stops its download, deletes its files
     /// (a request it is answering ends: "stopped").
@@ -146,7 +233,8 @@ public:
     Q_INVOKABLE void cancelDownload();
     Q_INVOKABLE void remove() { remove(m_chosen); }
 
-    /// The model `id` is downloaded ("": the default model).
+    /// The model `id` is downloaded ("": the default model) — a model of the user's own: its file
+    /// is there.
     bool has(const QString &id) const;
     /// What a device that never chose a model keeps: the former default (Options::formerDefault)
     /// when its files are here and today's default's are not — so that an update does not swap the
@@ -170,6 +258,11 @@ public:
     /// downloaded: refused, with the name of the one to download.
     void send(const ai::Settings &settings, const ai::Request &request, std::function<void(const ai::Reply &)> done,
               ai::PartialCallback partial = {}, std::shared_ptr<std::atomic<bool>> stopped = {}) override;
+    /// The model `id` answers with — the app's or the user's own (b.aiModel()).
+    std::optional<ai::LocalModel> model(const QString &id) const override;
+    /// The tokens `model` holds at once on this device: ContextTokens, a model of the user's own
+    /// never more than it was trained to hold (at least 2 048).
+    int contextTokens(const ai::LocalModel &model) const override;
 
     /// The tokens a model holds at once, the request and the answer together, on every device (a
     /// token takes some 12 KB of memory: 200 MB), and the most a picture may take of them.
@@ -186,9 +279,25 @@ Q_SIGNALS:
     void workingChanged();
     /// A download ended: `ok`, or `error` ("" when it was cancelled).
     void downloadFinished(const QString &id, bool ok, const QString &error);
+    void ownModelsChanged();
+    void addingChanged();
+    /// A file of the user's own was added (AppController chooses it), or one was removed.
+    void ownModelAdded(const QString &id);
+    void ownModelRemoved(const QString &id);
+    /// notice() changed.
+    void noticeChanged();
 
 private:
-    const ai::LocalModel *model(const QString &id) const;
+    const ai::LocalModel *find(const QString &id) const;
+    const ai::OwnModel *own(const QString &id) const;
+    void loadOwn();
+    void saveOwn();
+    void ownChanged();
+    QString ownFolder() const;
+    void startAdding(const QString &source, bool projector);
+    void added(const std::shared_ptr<LocalAiAdding> &job);
+    void probed(const std::shared_ptr<LocalAiAdding> &job, bool ok, const QString &error);
+    void endAdding(const QString &error);
     /// The first model that sees pictures (`here`: of those downloaded); nullptr: none.
     const ai::LocalModel *seer(bool here) const;
     void finished(std::function<void(const ai::Reply &)> done, const ai::Reply &reply);
@@ -197,6 +306,14 @@ private:
     void updateWorking();
 
     QList<ai::LocalModel> m_models;
+    QList<ai::OwnModel> m_own;         ///< the user's own files
+    QList<ai::LocalModel> m_ownModels; ///< …as the runner takes them (ai::localModelOf)
+    bool m_copyFiles = false;
+    qint64 m_memory = 0;
+    std::function<bool(const QString &, QString *)> m_probe;
+    std::shared_ptr<LocalAiAdding> m_adding; ///< the file being added
+    QPointer<QThread> m_addThread;
+    QString m_addError;
     ai::LocalModelFiles m_files;
     QString m_stateFolder;
     bool m_spinWait = false;

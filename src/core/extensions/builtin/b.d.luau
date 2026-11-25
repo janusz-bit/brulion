@@ -156,6 +156,18 @@ type TagStyle = {
     bar: boolean?,
 }
 
+type AiModel = {
+    provider: string,
+    model: string,
+    name: string?,
+    onDevice: boolean,
+    small: boolean,
+    trained: boolean,
+    sees: boolean?,
+    own: boolean?,
+    contextTokens: number?,
+}
+
 type AiReply = {
     text: string,
     model: string,
@@ -238,6 +250,7 @@ declare b: {
     choose: (prompt: string, options: { any }) -> string?,
     form: (title: string, fields: { { [string]: any } }) -> { [string]: any }?,
     ai: (request: string | { [string]: any }) -> (string, AiReply),
+    aiModel: () -> AiModel?,
 
     -- the app itself (permission "app" to change it)
     app: {

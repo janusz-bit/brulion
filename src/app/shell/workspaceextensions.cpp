@@ -2,6 +2,7 @@
 
 #include "extensionviewmodel.h"
 
+#include "ai/local.h"
 #include "extensions/builtin.h"
 #include "extensions/notebookhost.h"
 #include "extensions/share.h"
@@ -483,6 +484,19 @@ bool WorkspaceExtensions::ensureEngine()
             m_printCapture->append(text);
         qCInfo(lcApp, "extension %s: %s", qUtf8Printable(extension), qUtf8Printable(text));
         m_console->append(u"print"_s, text, extension == kConsole ? QString() : title(extension));
+    };
+    // b.aiModel: the model this device's b.ai asks (the assistant gives a small one on the device
+    // fewer tools) — of the provider on the network, or the model on the device with its facts.
+    m_host->onAiModel = [this]() -> QVariantMap {
+        if (m_aiSettings.provider != u"local")
+            return ai::modelInfo(m_aiSettings, nullptr);
+        std::optional<ai::LocalModel> model;
+        if (m_localAi)
+            model = m_localAi->model(m_aiSettings.model);
+        else if (const ai::LocalModel *known = ai::localModel(m_aiSettings.model))
+            model = *known;
+        return ai::modelInfo(m_aiSettings, model ? &*model : nullptr,
+                             model && m_localAi ? m_localAi->contextTokens(*model) : 0);
     };
     // b.status: the chat shows what its turn does; other calls say nothing that way (yet).
     m_host->onStatus = [this](const QString &, const QString &text) {

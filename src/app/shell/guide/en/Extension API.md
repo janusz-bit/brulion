@@ -485,6 +485,8 @@ end, { label = "How many open tasks" })
 ## AI
 `b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (the reply's `thoughts`: what the model thought — Claude's summary of its thinking, a server's reasoning, the model on the device's thoughts), `images` (pictures of the notebook for a model that sees: `b.ai({ prompt = "What does it say?", images = { "receipt.jpg" } })`), `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
 
+`b.aiModel()` says which model that is — `{ provider, model, name, onDevice, small, trained, … }`, or `nil` when none is set up —, so that your code can ask a small model on the device for less: `local m = b.aiModel(); if m and m.onDevice then … end`.
+
 ## The app
 `b.app` is Brulion itself: what it shows, its commands, this device's settings and the notebook's, its colours and its toolbar, status bar and menus. Reading needs nothing; changing needs the permission `app` (`permissions: [app]`). What it changes is the app on this device — like the settings you change by hand — and what an extension put into the app goes away when it is switched off.
 

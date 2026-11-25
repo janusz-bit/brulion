@@ -8,7 +8,9 @@
 brulion_add_core_module(ai
     SOURCES
         ai.h ai.cpp
-        local.h local.cpp
+        local.h local.cpp local_p.h localformats.cpp
+        gguf.h gguf.cpp
+        ownmodels.h ownmodels.cpp
         localrunner.h localrunner.cpp
         localfiles.h localfiles.cpp
         cpus.h cpus.cpp

@@ -74,17 +74,16 @@ done in the repository simply disappears from the list.
     core below the middle ones (the Pixel's X4 at 0.7–1.4 GHz against the A720s' 1.8) and the
     model writes at a third of its speed; leaving the capped core out was no clear gain in one
     measurement (docs/PERFORMANCE.md "The model on the device");
-  * Android: a model works only while the app is on screen (the screen is kept on meanwhile; no
-    foreground service). Behind another app an answer is worked on at a fraction of the speed
-    and stands still once Android freezes the process — five minutes of that end it as getting
-    nowhere — and a download stops (it goes on from there
-    when asked again);
-  * a smaller tool set of the assistant for a small model (its first question still reads some
-    2 500 tokens of instructions and tools once — then they are kept on disk), shorter tool
-    results for it (12 000 characters each: a phone's model went round in circles for 14 requests,
-    its context grown to 9 600 tokens, writing slower with every one), tool calls kept to the
-    tools' names by a grammar;
-  * other models: a GGUF file of the user's own, a chat format beside LFM3's;
+  * Android with the foreground service (a model answering, downloaded or copied: docs/ANDROID.md
+    "A model on the phone"): not run on a phone yet — how fast an answer is written behind another
+    app and with the screen off, a running service switching between dataSync and specialUse, the
+    copy of a picked model file of one's own from a document provider, and whether Google Play
+    accepts specialUse for it (docs/GOOGLE_PLAY.md);
+  * models of one's own measured with the assistant (`brulion-assistantbench --model-id own
+    --as-app` with Qwen3 4B, Gemma 3, Llama 3.2 files: Qwen3 0.6B calls a tool right but did 0–1 of
+    six tasks), and the smaller tool set (off by default: 28 against 32 of 39 tasks on LFM3 1.7B,
+    one attempt each — docs/PERFORMANCE.md) measured with more attempts and the shorter results
+    apart from it;
   * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
     licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval

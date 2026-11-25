@@ -1028,8 +1028,10 @@ private:
     QHash<int, QStringList> m_autoArchiveToasts; ///< the conversations archived by themselves, for Undo
     QHash<int, QString> m_chatToasts; ///< an AI agent's question off screen: the toast's id → its conversation
     QHash<int, QString> m_rewindToasts; ///< "Edit from here": the toast's id → its conversation (Undo)
-    /// What platform::setAgentWork() was given last: title, text, "waiting" or "".
-    QStringList m_agentWork{QString(), QString(), QString()};
+    /// What platform::setAgentWork() was given last: title, text, "waiting" or "", the progress,
+    /// what works ("agent" — on another computer —, "model" — the model on the device answers —,
+    /// "data" — a model downloaded or copied —, "" nothing).
+    QStringList m_agentWork{QString(), QString(), QString(), QString(), QString()};
     QHash<int, QJSValue> m_functionToasts;   ///< toastAction()'s ids → the function
     QHash<int, int> m_extensionToasts;       ///< toastWithAction()'s ids → an extension's button
 #ifdef Q_OS_WASM

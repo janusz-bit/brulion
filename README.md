@@ -142,8 +142,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   [docs/EXTENSIONS.md](docs/EXTENSIONS.md); the examples there are run by the tests.
 * **AI in extensions**, also on the phone: `b.ai` asks Claude, any OpenAI-compatible API, a
   server of your own (Ollama) or a small model that runs **on the device itself** (Liquid AI's
-  LFM3-VL and LFM3, downloaded once: no key, no internet, nothing sent anywhere; Linux with Nix
-  and Android), with the key kept on the device, and may give the model tools the script runs
+  LFM3-VL and LFM3, Brulion's own model trained for the assistant, or a GGUF file of your own —
+  Qwen, Llama, Gemma, Phi …: no key, no internet, nothing sent anywhere; Linux with Nix
+  and Android, where it goes on with the screen off), with the key kept on the device, and may give the model tools the script runs
   and pictures of the notebook to look at; the built-in **AI assistant** is a **chat**, as in a
   messenger: it searches and reads the whole notebook to answer, looks at its pictures, changes
   notes only with your yes (asked in the conversation), and keeps every conversation as a page
@@ -392,8 +393,10 @@ przykładowym notatnikiem.
   w [docs/EXTENSIONS.md](docs/EXTENSIONS.md); tamtejsze przykłady uruchamiają testy.
   **AI w rozszerzeniach**, także na telefonie: `b.ai` pyta
   Claude'a, dowolne API zgodne z OpenAI, własny serwer (Ollama) albo mały model działający
-  **na samym urządzeniu** (LFM3-VL i LFM3 firmy Liquid AI, pobierane raz: bez klucza, bez
-  internetu, nic nigdzie nie jest wysyłane; Linux z Nixem i Android), klucz zostaje na urządzeniu,
+  **na samym urządzeniu** (LFM3-VL i LFM3 firmy Liquid AI, własny model Bruliona wytrenowany
+  dla asystenta albo Twój własny plik GGUF — Qwen, Llama, Gemma, Phi …: bez klucza, bez
+  internetu, nic nigdzie nie jest wysyłane; Linux z Nixem i Android, gdzie pracuje też przy
+  wygaszonym ekranie), klucz zostaje na urządzeniu,
   a model może dostać narzędzia, które wykonuje skrypt, i obrazki z notatnika do obejrzenia;
   wbudowany **Asystent AI** to **czat** jak w komunikatorze: przeszukuje i czyta cały notatnik,
   żeby odpowiedzieć, ogląda jego obrazki, zmienia notatki tylko za Twoją zgodą (pyta w rozmowie)

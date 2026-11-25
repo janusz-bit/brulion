@@ -347,6 +347,7 @@ private:
     static int apiForm(lua_State *L);
     static int apiOn(lua_State *L);
     static int apiAi(lua_State *L);
+    static int apiAiModel(lua_State *L);
     static int apiAttachments(lua_State *L);
     static int apiRevision(lua_State *L);
     static int apiNow(lua_State *L);
@@ -415,6 +416,7 @@ private:
     int questionImpl(lua_State *L, const char *kind);
     int onImpl(lua_State *L);
     int aiImpl(lua_State *L);
+    int aiModelImpl(lua_State *L);
     int attachmentsImpl(lua_State *L);
     int addDaysImpl(lua_State *L, bool months);
     int weekdayImpl(lua_State *L);

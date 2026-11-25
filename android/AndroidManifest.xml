@@ -61,11 +61,14 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <!-- An AI agent on another computer answers (AgentService): a foreground service of type
-         dataSync — the app fetches what the agent writes from that computer — and a wake lock
-         (WAKE_LOCK above) while it works. -->
+    <!-- An AI agent on another computer answers, or the model on this device does, or a model is
+         downloaded or copied (AgentService): a foreground service of type dataSync — the app
+         fetches what the agent writes from that computer, a model's files — or specialUse while
+         the model computes an answer on the processor, and a wake lock (WAKE_LOCK above) while it
+         works. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- The app lock's "Use the phone's lock": BiometricPrompt (a normal permission: no prompt). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
@@ -268,12 +271,18 @@
         </service>
 
         <!-- An AI agent on another computer at work for this device (docs/ANDROID.md "An AI agent
-             on another computer"): a foreground service in the app's own process with a quiet
-             notification and Stop, started and stopped by the app (AgentService.update). -->
+             on another computer"), or the model on this device ("A model on the phone"): a
+             foreground service in the app's own process with a quiet notification and Stop,
+             started and stopped by the app (AgentService.update). specialUse while the model
+             computes an answer: Google Play asks why (docs/GOOGLE_PLAY.md), the property says. -->
         <service
             android:name="io.github.januszbit.brulion.android.AgentService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="An AI model that runs on the device answers the user's question about their notes: it computes on the processor for up to some minutes and must go on while the screen is off or another app is in front. Nothing leaves the device." />
+        </service>
         <!-- Its notification's Stop. -->
         <receiver
             android:name="io.github.januszbit.brulion.android.AgentStopReceiver"

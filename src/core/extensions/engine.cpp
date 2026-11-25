@@ -906,6 +906,7 @@ void Engine::pushEnvironment(const QString &extension)
     set("setting", &Engine::apiSetting);
     set("setSetting", &Engine::apiSetSetting);
     set("stopTimer", &Engine::apiStopTimer);
+    set("aiModel", &Engine::apiAiModel);
     // b.require = factory(raw, done): the module's chunk runs in the Luau wrapper (prelude).
     lua_getref(L, m_requireFactoryRef);
     lua_pushlstring(L, id.constData(), size_t(id.size()));
@@ -1425,6 +1426,10 @@ int Engine::apiChoose(lua_State *L) { return finishApi(L, self(L)->questionImpl(
 int Engine::apiForm(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, "form")); }
 int Engine::apiOn(lua_State *L) { return finishApi(L, self(L)->onImpl(L)); }
 int Engine::apiAi(lua_State *L) { return finishApi(L, self(L)->aiImpl(L)); }
+int Engine::apiAiModel(lua_State *L)
+{
+    return finishApi(L, self(L)->aiModelImpl(L));
+}
 int Engine::apiAttachments(lua_State *L) { return finishApi(L, self(L)->attachmentsImpl(L)); }
 int Engine::apiAddDays(lua_State *L) { return finishApi(L, self(L)->addDaysImpl(L, false)); }
 int Engine::apiAddMonths(lua_State *L) { return finishApi(L, self(L)->addDaysImpl(L, true)); }
@@ -2196,6 +2201,20 @@ int Engine::aiImpl(lua_State *L)
     m_asking = true;
     m_askingKind = u"ai"_s;
     return kYield;
+}
+
+int Engine::aiModelImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    if (!m_loaded.value(extension).permissions.contains(u"ai"_s))
+        return failWith(L, u"b.aiModel: permission denied: ai (the page needs `uprawnienia:: ai`)"_s);
+    const QVariantMap model = m_host->aiModel();
+    Unlimited unlimited(&m_unlimited);
+    if (model.isEmpty())
+        lua_pushnil(L);
+    else
+        pushVariant(L, model);
+    return 1;
 }
 
 // ---- helpers and writes added with the habits (docs/EXTENSIONS.md "Helpers", "Writing") --------

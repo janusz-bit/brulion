@@ -971,6 +971,19 @@ void WorkspaceChats::stopRemoteAgents()
         stop(path);
 }
 
+void WorkspaceChats::stopOnDevice()
+{
+    QStringList paths;
+    if (m_onDevice)
+        paths << m_onDevice->path();
+    for (const QPointer<ChatTurn> &t : std::as_const(m_waiting)) {
+        if (t)
+            paths << t->path();
+    }
+    for (const QString &path : std::as_const(paths))
+        stop(path);
+}
+
 void WorkspaceChats::dismissFailure(const QString &path)
 {
     setFailure(find(path), QString());

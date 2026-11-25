@@ -30,13 +30,18 @@ QString deviceDescription();
 void keepScreenOn(bool on);
 
 /// An AI agent on another computer works for this device (docs/UI.md "AI agents (ACP)": a turn of
-/// it runs, or one this device lost is fetched) — Android: a foreground service (AgentService.kt)
-/// with a quiet ongoing notification of `title` and `text` and a button `stop` keeps the app's
-/// process, its network and its event loop going with the screen off or another app in front, the
-/// CPU too unless `waiting` (every turn waits on the user's answer: nothing comes meanwhile).
-/// Called again it updates the notification; `title` "" ends it. The button comes back as
-/// AndroidBridge::agentStopRequested(). Nothing elsewhere: a computer keeps the app running anyway.
-void setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting);
+/// it runs, or one this device lost is fetched), or the model on the device does (it answers, it
+/// is downloaded or copied: src/app/shell/localai.h) — Android: a foreground service
+/// (AgentService.kt) with a quiet ongoing notification of `title` and `text`, a bar at `progress`
+/// percent (-1: none) and a button `stop` keeps the app's process, its network and its event loop
+/// going with the screen off or another app in front, the CPU too unless `waiting` (every turn
+/// waits on the user's answer: nothing comes meanwhile). `kind` says what works — "agent" or
+/// "data" (Android 14+: the service's type dataSync), "model" (specialUse: the model computes on
+/// the device). Called again it updates the notification; `title` "" ends it. The button comes
+/// back as AndroidBridge::agentStopRequested(). Nothing elsewhere: a computer keeps the app
+/// running anyway.
+void setAgentWork(const QString &title, const QString &text, const QString &stop, bool waiting, int progress = -1,
+                  const QString &kind = QString());
 
 /// The app lock's hold on the window (docs/UI.md "App lock") — Android: `secure` sets FLAG_SECURE
 /// (nothing of the window on screenshots, screen recordings, a cast screen or the recent apps'

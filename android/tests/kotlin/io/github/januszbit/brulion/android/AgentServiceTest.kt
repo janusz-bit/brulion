@@ -2,7 +2,9 @@
 
 package io.github.januszbit.brulion.android
 
+import android.content.pm.ServiceInfo
 import io.github.januszbit.brulion.android.AgentService.Companion.next
+import io.github.januszbit.brulion.android.AgentService.Companion.typeFor
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -33,6 +35,17 @@ class AgentServiceTest {
     // (The turn that waited for this one starts right after it: the service stays.)
     assertEquals(AgentService.Step.STOP_LATER, next(working = false, wasWorking = true, running = true, starting = false, timedOut = false))
     assertEquals(AgentService.Step.STOP_LATER, next(working = false, wasWorking = true, running = false, starting = true, timedOut = false))
+  }
+
+  @Test
+  fun theModelOnTheDeviceComputesAsSpecialUse() {
+    // Android 14+: its own type while the model answers; a download and an agent's turn fetch data.
+    assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE, typeFor("model", 34))
+    assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE, typeFor("model", 36))
+    assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, typeFor("data", 36))
+    assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, typeFor("agent", 36))
+    // Before Android 14 there is no specialUse: dataSync for all of it.
+    assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, typeFor("model", 33))
   }
 
   @Test

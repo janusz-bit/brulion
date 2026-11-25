@@ -29,6 +29,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
@@ -319,6 +320,154 @@ private Q_SLOTS:
         // What it did, said as it did it; nothing while the model thinks.
         QCOMPARE(m_statuses, (QStringList{u""_s, u"Przeglądam notatki: type:tasks status:open due:<=+7d…"_s, u""_s,
                                           u"Szukam w notatkach: „żółw”…"_s, u"Czytam „Zakupy”…"_s, u""_s, u""_s}));
+    }
+
+    void whatEachModelIsGiven_data()
+    {
+        // b.aiModel() as the app tells it: a provider on the network and the model trained on
+        // this script get its tools and instructions as they were; another model on the device
+        // read_page's `from` (its results are shorter); a small one fewer tools and words.
+        QTest::addColumn<QVariantMap>("model");
+        QTest::addColumn<bool>("fewerTools");
+        QTest::addColumn<int>("tools");
+        QTest::addColumn<bool>("compact");
+        QTest::addColumn<bool>("paging");
+        const QVariantMap claude{{u"provider"_s, u"anthropic"_s},
+                                 {u"model"_s, u"claude-opus-5-5"_s},
+                                 {u"onDevice"_s, false},
+                                 {u"small"_s, false},
+                                 {u"trained"_s, false}};
+        const QVariantMap trained{{u"provider"_s, u"local"_s},
+                                  {u"model"_s, u"brulion-assistant-1.7b"_s},
+                                  {u"onDevice"_s, true},
+                                  {u"small"_s, true},
+                                  {u"trained"_s, true}};
+        const QVariantMap small{{u"provider"_s, u"local"_s},
+                                {u"model"_s, u"lfm3-1.7b"_s},
+                                {u"onDevice"_s, true},
+                                {u"small"_s, true},
+                                {u"trained"_s, false}};
+        QVariantMap large = small;
+        large.insert(u"model"_s, u"own-0123456789ab"_s);
+        large.insert(u"small"_s, false);
+        // (fewerTools: the assistant's setting switched on — it is off by default.)
+        QTest::newRow("none set up") << QVariantMap() << true << 12 << false << false;
+        QTest::newRow("Claude") << claude << true << 12 << false << false;
+        QTest::newRow("trained on it, fewer tools on") << trained << true << 12 << false << false;
+        QTest::newRow("trained on it") << trained << false << 12 << false << false;
+        QTest::newRow("small, fewer tools on") << small << true << 8 << true << true;
+        QTest::newRow("small") << small << false << 12 << false << true;
+        QTest::newRow("large on the device, fewer tools on") << large << true << 12 << false << true;
+    }
+    void whatEachModelIsGiven()
+    {
+        QFETCH(QVariantMap, model);
+        QFETCH(bool, fewerTools);
+        QFETCH(int, tools);
+        QFETCH(bool, compact);
+        QFETCH(bool, paging);
+        // What a provider on the network was given before b.aiModel(): the same request.
+        QVERIFY(open(sampleNotes()));
+        const Result before = ask(u"Co mam w domu?"_s);
+        const QVariantMap network = before.value.toMap().value(u"request"_s).toMap();
+        QVERIFY(open(sampleNotes()));
+        m_host->onAiModel = [model] { return model; };
+        if (fewerTools)
+            QVERIFY(m_host->setSetting(u"asystent"_s, u"fewerTools"_s, true).isEmpty());
+        const Result r = ask(u"Co mam w domu?"_s);
+        QCOMPARE(r.status, Status::Suspended);
+        const QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
+        const QVariantList list = request.value(u"tools"_s).toList();
+        QCOMPARE(list.size(), tools);
+        QStringList names;
+        QVariantMap readPage;
+        for (const QVariant &tool : list) {
+            names << tool.toMap().value(u"name"_s).toString();
+            if (names.last() == u"read_page")
+                readPage = tool.toMap();
+        }
+        QVERIFY2(names.contains(u"search_notes"_s) && names.contains(u"update_block"_s), qPrintable(names.join(u' ')));
+        QCOMPARE(names.contains(u"write_extension"_s), !compact);
+        QCOMPARE(readPage.value(u"input"_s).toMap().value(u"properties"_s).toMap().contains(u"from"_s), paging);
+        const QString system = request.value(u"system"_s).toString();
+        QVERIFY(system.startsWith(u"Jesteś asystentem w aplikacji do notatek Brulion"_s));
+        QCOMPARE(system == network.value(u"system"_s).toString(), !compact);
+        if (compact) {
+            // Fewer words: what its first question reads.
+            const QString all =
+                    system + QString::fromUtf8(QJsonDocument::fromVariant(list).toJson(QJsonDocument::Compact));
+            const QString full =
+                    network.value(u"system"_s).toString()
+                    + QString::fromUtf8(
+                            QJsonDocument::fromVariant(network.value(u"tools"_s)).toJson(QJsonDocument::Compact));
+            qInfo("compact: %lld of %lld characters (the system text and the tools)", qlonglong(all.size()),
+                  qlonglong(full.size()));
+            QVERIFY2(all.size() * 2 < full.size(),
+                     qPrintable(u"%1 of %2 characters"_s.arg(all.size()).arg(full.size())));
+        }
+        if (!paging) // (exactly what it was given before)
+            QCOMPARE(request, network);
+        // The tools all take a request the providers take, also the compact ones.
+        QString error;
+        QVERIFY2(ai::requestFrom(request, &error), qPrintable(error));
+    }
+
+    void aLongResultReadsOn()
+    {
+        // A page of 10 000 bytes: a model on the network gets 12 000 of a result (all of it);
+        // a model on the device 4 000, told how many more and how to read on — read_page from where it
+        // stopped, in whole letters.
+        QString page;
+        for (int i = 0; page.toUtf8().size() < 10000; ++i)
+            page += u"- Wpis %1: żółta łódź płynie\n"_s.arg(i);
+        QHash<QString, QString> notes = sampleNotes();
+        notes.insert(u"Długa.md"_s, page);
+        const QVariantMap small{{u"provider"_s, u"local"_s},
+                                {u"model"_s, u"lfm3-1.7b"_s},
+                                {u"onDevice"_s, true},
+                                {u"small"_s, true},
+                                {u"trained"_s, false}};
+        for (const bool onDevice : {false, true}) {
+            QVERIFY(open(notes));
+            if (onDevice)
+                m_host->onAiModel = [small] { return small; };
+            Result r = ask(u"Co jest na stronie Długa?"_s);
+            r = m_engine->resume(r.call, calling({call(u"c1"_s, u"read_page"_s, {{u"name"_s, u"Długa"_s}})}));
+            QCOMPARE(r.status, Status::Suspended);
+            const QString first = firstResult(r);
+            if (!onDevice) {
+                QCOMPARE(first, page);
+                continue;
+            }
+            QVERIFY2(first.toUtf8().size() < 4000 + 200, qPrintable(QString::number(first.toUtf8().size())));
+            static const QRegularExpression more(
+                    uR"(\[… (\d+) more characters: read_page with from = (\d+) reads on\.\]$)"_s);
+            const QRegularExpressionMatch m = more.match(first);
+            QVERIFY2(m.hasMatch(), qPrintable(first.right(200)));
+            const int from = m.captured(2).toInt();
+            QCOMPARE(m.captured(1).toInt() + from, int(page.size()));
+            QVERIFY(page.startsWith(first.left(first.lastIndexOf(u"\n[…"_s))));
+            // On from there: the rest, to its end.
+            r = m_engine->resume(
+                    r.call, calling({call(u"c2"_s, u"read_page"_s, {{u"name"_s, u"Długa"_s}, {u"from"_s, from}})}));
+            QString second = firstResult(r);
+            const qsizetype cut = second.lastIndexOf(u"\n[…"_s);
+            const QString text = cut < 0 ? second : second.left(cut);
+            QVERIFY2(page.mid(from).startsWith(text), qPrintable(text.left(100)));
+            QVERIFY(!text.isEmpty());
+            // Past its end: said so.
+            r = m_engine->resume(
+                    r.call, calling({call(u"c3"_s, u"read_page"_s, {{u"name"_s, u"Długa"_s}, {u"from"_s, 50000}})}));
+            QVERIFY2(firstResult(r).contains(u"nothing from 50000 on"_s), qPrintable(firstResult(r)));
+            // Another tool's long result: ask for less.
+            QVERIFY(open(notes));
+            m_host->onAiModel = [small] { return small; };
+            r = ask(u"Szukaj"_s);
+            r = m_engine->resume(r.call, calling({call(u"c1"_s, u"query_notes"_s, {{u"query"_s, u"type:blocks"_s}})}));
+            const QString blocks = firstResult(r);
+            if (blocks.toUtf8().size() > 4000)
+                QVERIFY2(blocks.contains(u"more characters not shown: ask for less"_s), qPrintable(blocks.right(200)));
+        }
     }
 
     void theDayGoesWithItsWeekday_data()
@@ -1657,6 +1806,39 @@ private Q_SLOTS:
         r = m_engine->resume(r.call, answering(u"Napisałem [[Licznik zadań]]: naciśnij Uruchom na jego stronie."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
         QVERIFY2(r.value.toString().endsWith(u"✏️ Zmienione: [[Rozszerzenia/Licznik zadań]]"_s), qPrintable(r.value.toString()));
+    }
+
+    // The app's tools never reach a model on the device, whatever ctx.appTools says (the app sets it
+    // only for a provider on the network): the trained one gets its twelve, a small one its twelve too (eight only with its setting);
+    // a provider on the network that b.aiModel() names gets them with the notes' tools.
+    void theAppsToolsNeverOnTheDevice_data()
+    {
+        QTest::addColumn<QVariantMap>("model");
+        QTest::addColumn<int>("tools");
+        QTest::newRow("Claude") << QVariantMap{{u"provider"_s, u"anthropic"_s}, {u"model"_s, u"claude-opus-5-5"_s},
+                                               {u"onDevice"_s, false}, {u"small"_s, false}, {u"trained"_s, false}}
+                                << 18;
+        QTest::newRow("trained") << QVariantMap{{u"provider"_s, u"local"_s}, {u"model"_s, u"brulion-assistant-1.7b"_s},
+                                                {u"onDevice"_s, true}, {u"small"_s, true}, {u"trained"_s, true}}
+                                 << 12;
+        QTest::newRow("small") << QVariantMap{{u"provider"_s, u"local"_s}, {u"model"_s, u"lfm3-1.7b"_s},
+                                              {u"onDevice"_s, true}, {u"small"_s, true}, {u"trained"_s, false}}
+                               << 12;
+    }
+    void theAppsToolsNeverOnTheDevice()
+    {
+        QFETCH(QVariantMap, model);
+        QFETCH(int, tools);
+        QVERIFY(open(sampleNotes()));
+        m_host->onAiModel = [model] { return model; };
+        const Result r = askWithApp(u"Włącz ciemny motyw"_s);
+        const QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
+        QStringList names;
+        for (const QVariant &t : request.value(u"tools"_s).toList())
+            names << t.toMap().value(u"name"_s).toString();
+        QCOMPARE(names.size(), tools);
+        QCOMPARE(names.contains(u"app_settings"_s), tools == 18);
+        QCOMPARE(request.value(u"system"_s).toString().contains(u"app_settings"_s), tools == 18);
     }
 
     // The app's own tools: only with ctx.appTools (the app, its model on the network) — never for the

@@ -1,6 +1,7 @@
 #include "ai/llamarunner.h"
 
 #include "ai/cpus.h"
+#include "ai/local_p.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -33,7 +34,9 @@ QT_WARNING_POP
 #include <array>
 #include <bit>
 #include <climits>
+#include <cmath>
 #include <cstring>
+#include <exception>
 #include <mutex>
 #include <vector>
 
@@ -78,16 +81,22 @@ constexpr quint32 StateVersion = 1;
 constexpr qint64 StateKeyBytes = 32; // SHA-256
 constexpr qint64 StateHeaderBytes = qint64(sizeof StateMagic) + 4 + StateKeyBytes + 4 + 8;
 
+/// Where llama.cpp's errors go on this thread besides the log (a probe of a file: probeLlamaModel).
+thread_local QByteArray *t_errors = nullptr;
+
 void logCallback(ggml_log_level level, const char *text, void *)
 {
     // (llama.cpp ends its lines itself, and writes some in pieces.)
     const QByteArray line = QByteArray(text).trimmed();
     if (line.isEmpty())
         return;
-    if (level == GGML_LOG_LEVEL_ERROR)
+    if (level == GGML_LOG_LEVEL_ERROR) {
         qCWarning(lcLlama, "%s", line.constData());
-    else
+        if (t_errors)
+            *t_errors = line;
+    } else {
         qCDebug(lcLlama, "%s", line.constData());
+    }
 }
 
 struct Backend {
@@ -252,6 +261,11 @@ private:
     bool tokenize(const local::Prompt &prompt, std::vector<Segment> *segments, int *stableCells, QString *error);
     bool tokenizeText(const QString &text, std::vector<llama_token> *out) const;
     llama_token controlToken(const QString &text, QString *error);
+    /// The one control token `text` is in this vocabulary (a loose tag's), else LLAMA_TOKEN_NULL.
+    llama_token tagToken(const QString &text);
+    /// The prompt's grammar for this vocabulary (its tags as tokens or letters); nullptr when it
+    /// cannot be used (a tag the vocabulary lacks, rules llama.cpp refuses).
+    llama_sampler *makeGrammar(const local::Grammar &grammar) const;
     bool tokenizePicture(const QByteArray &file, std::vector<llama_token> *run, std::vector<Segment> *segments,
                          QString *error);
     Lane &chooseLane(const std::vector<int32_t> &cells);
@@ -294,6 +308,7 @@ private:
     /// The texts of the model's control tokens: never read as one inside a text (tokenizeText).
     QList<QByteArray> m_controlTexts;
     QHash<QString, llama_token> m_controlTokens;
+    QHash<QString, llama_token> m_tagTokens;   ///< tagToken()'s answers, LLAMA_TOKEN_NULL too
     QHash<QByteArray, int32_t> m_pictureCells; ///< a picture (the hash of its file) → its cells' value
     // The request being answered (the abort callback of llama.cpp reads these).
     const std::atomic<bool> *m_cancel = nullptr;
@@ -501,6 +516,66 @@ llama_token LlamaRunner::controlToken(const QString &text, QString *error)
     return tokens[0];
 }
 
+llama_token LlamaRunner::tagToken(const QString &text)
+{
+    if (const auto it = m_tagTokens.constFind(text); it != m_tagTokens.constEnd())
+        return it.value();
+    const QByteArray utf8 = text.toUtf8();
+    llama_token tokens[4];
+    const int32_t n =
+            llama_tokenize(m_vocab, utf8.constData(), int32_t(utf8.size()), tokens, 4, false, /*parse_special*/ true);
+    const llama_token token = n == 1 && isControl(tokens[0]) ? tokens[0] : LLAMA_TOKEN_NULL;
+    m_tagTokens.insert(text, token);
+    return token;
+}
+
+llama_sampler *LlamaRunner::makeGrammar(const local::Grammar &grammar) const
+{
+    QString rules = grammar.rules;
+    std::vector<llama_token> triggerTokens;
+    std::vector<std::string> patterns;
+    auto *self = const_cast<LlamaRunner *>(this); // (tagToken caches what it found)
+    for (qsizetype i = 0; i < grammar.tags.size(); ++i) {
+        const local::Piece &tag = grammar.tags.at(i);
+        const llama_token token = self->tagToken(tag.text);
+        QString replacement;
+        if (token != LLAMA_TOKEN_NULL)
+            replacement = u"<[%1]>"_s.arg(token);
+        else if (tag.loose)
+            replacement = local::detail::gbnfLiteral(tag.text);
+        else {
+            qCWarning(lcLlama, "the tool calls' grammar is not used: the model has no token %s",
+                      qUtf8Printable(tag.text));
+            return nullptr;
+        }
+        rules.replace(u"<[@%1]>"_s.arg(i), replacement);
+        if (!grammar.triggers.contains(int(i)))
+            continue;
+        if (token != LLAMA_TOKEN_NULL) {
+            triggerTokens.push_back(token);
+        } else {
+            // (Its letters: llama.cpp's own pattern of a trigger word.)
+            QString escaped;
+            for (const QChar c : tag.text) {
+                if (QStringView(u".^$|()*+?[]{}\\").contains(c))
+                    escaped += u'\\';
+                escaped += c;
+            }
+            patterns.push_back(QString(u"[\\s\\S]*?("_s + escaped + u")[\\s\\S]*"_s).toStdString());
+        }
+    }
+    std::vector<const char *> patternTexts;
+    for (const std::string &pattern : patterns)
+        patternTexts.push_back(pattern.c_str());
+    const QByteArray utf8 = rules.toUtf8();
+    llama_sampler *sampler = llama_sampler_init_grammar_lazy_patterns(
+            m_vocab, utf8.constData(), "root", patternTexts.empty() ? nullptr : patternTexts.data(),
+            patternTexts.size(), triggerTokens.empty() ? nullptr : triggerTokens.data(), triggerTokens.size());
+    if (!sampler)
+        qCWarning(lcLlama, "the tool calls' grammar is not used: llama.cpp refused it");
+    return sampler;
+}
+
 /// A picture (the JPEG or PNG the app wrote) as the model reads it: its embeddings between the
 /// model's own picture tokens. The file is decoded by Qt; llama.cpp gets pixels.
 bool LlamaRunner::tokenizePicture(const QByteArray &file, std::vector<llama_token> *run, std::vector<Segment> *segments,
@@ -587,6 +662,10 @@ bool LlamaRunner::tokenize(const local::Prompt &prompt, std::vector<Segment> *se
         return ok;
     };
     *stableCells = 0;
+    // The vocabulary's first token, where its tokenizer adds one (a format that leaves it to it,
+    // as llama.cpp's templates do).
+    if (prompt.bos && llama_vocab_get_add_bos(m_vocab) && llama_vocab_bos(m_vocab) != LLAMA_TOKEN_NULL)
+        run.push_back(llama_vocab_bos(m_vocab));
     for (qsizetype i = 0; i < prompt.pieces.size(); ++i) {
         const local::Piece &piece = prompt.pieces.at(i);
         if (i == prompt.stable) {
@@ -602,10 +681,12 @@ bool LlamaRunner::tokenize(const local::Prompt &prompt, std::vector<Segment> *se
                 return false;
             for (size_t s = had; s < segments->size(); ++s)
                 before += segments->at(s).cells;
+        } else if (piece.special && piece.loose && tagToken(piece.text) == LLAMA_TOKEN_NULL) {
+            words += piece.text; // (a tag this vocabulary spells in letters)
         } else if (piece.special) {
             if (!flushWords())
                 return false;
-            const llama_token token = controlToken(piece.text, error);
+            const llama_token token = piece.loose ? tagToken(piece.text) : controlToken(piece.text, error);
             if (token == LLAMA_TOKEN_NULL)
                 return false;
             run.push_back(token);
@@ -1078,6 +1159,60 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
         if (cells[i] >= 0)
             llama_sampler_accept(sampler.get(), cells[i]);
     }
+    // The tool calls kept to the request's tools: from a call's first tag on, a token the
+    // grammar does not allow is not written — the token is drawn again from those it allows.
+    // Before that tag (and without tools) the sampling is as it was.
+    std::unique_ptr<llama_sampler, SamplerFree> grammar(prompt.grammar.isEmpty() ? nullptr
+                                                                                 : makeGrammar(prompt.grammar));
+    std::vector<llama_token_data> candidates;
+    const int vocabulary = llama_vocab_n_tokens(m_vocab);
+    const auto sample = [&]() -> llama_token {
+        if (!grammar)
+            return llama_sampler_sample(sampler.get(), m_ctx.get(), -1);
+        const float *logits = llama_get_logits_ith(m_ctx.get(), -1);
+        const auto fill = [&] {
+            candidates.resize(size_t(vocabulary));
+            for (llama_token t = 0; t < vocabulary; ++t)
+                candidates[size_t(t)] = llama_token_data{t, logits[t], 0.0f};
+            return llama_token_data_array{candidates.data(), candidates.size(), -1, false};
+        };
+        llama_token_data_array all = fill();
+        llama_sampler_apply(sampler.get(), &all);
+        llama_token token = all.data[all.selected].id;
+        llama_token_data one{token, 1.0f, 0.0f};
+        llama_token_data_array single{&one, 1, -1, false};
+        llama_sampler_apply(grammar.get(), &single);
+        if (std::isinf(one.logit) && one.logit < 0) {
+            all = fill();
+            llama_sampler_apply(grammar.get(), &all);
+            const bool any = std::any_of(all.data, all.data + all.size,
+                                         [](const llama_token_data &d) { return !std::isinf(d.logit); });
+            if (any) {
+                // (What the grammar allows, before the sampling reorders the candidates.)
+                std::vector<char> allowed(size_t(vocabulary), 0);
+                llama_token best = LLAMA_TOKEN_NULL;
+                float bestLogit = -INFINITY;
+                for (size_t i = 0; i < all.size; ++i) {
+                    if (std::isinf(all.data[i].logit))
+                        continue;
+                    allowed[size_t(all.data[i].id)] = 1;
+                    if (all.data[i].logit > bestLogit) {
+                        bestLogit = all.data[i].logit;
+                        best = all.data[i].id;
+                    }
+                }
+                llama_sampler_apply(sampler.get(), &all);
+                token = all.selected >= 0 ? all.data[all.selected].id : best;
+                // (The sampling may still land on a token of no weight: the likeliest allowed then.)
+                if (token < 0 || token >= vocabulary || !allowed[size_t(token)])
+                    token = best;
+            } else {
+                grammar.reset(); // (a dead end: the model writes on without it)
+            }
+        }
+        llama_sampler_accept(sampler.get(), token);
+        return token;
+    };
 
     const int room = m_contextTokens - int(others) - int(lane.cells.size());
     const int most = params.maxTokens > 0 ? std::min(params.maxTokens, room) : room;
@@ -1092,7 +1227,7 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
     while (r.outputTokens < most) {
         if (stopped())
             break;
-        const llama_token token = llama_sampler_sample(sampler.get(), m_ctx.get(), -1);
+        const llama_token token = sample();
         if (llama_vocab_is_eog(m_vocab, token)) {
             r.complete = true;
             break;
@@ -1110,6 +1245,16 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
             r.pieces.append(local::Piece{control, true, {}});
         } else {
             words += bytes;
+        }
+        if (grammar) {
+            // (A token kept: never an end of turn.) llama.cpp throws when its grammar has nowhere
+            // left to go — never the end of the answer: the model writes on without it.
+            try {
+                llama_sampler_accept(grammar.get(), token);
+            } catch (const std::exception &e) {
+                qCWarning(lcLlama, "the tool calls' grammar is left off: %s", e.what());
+                grammar.reset();
+            }
         }
         ++r.outputTokens;
         if (params.written) {
@@ -1147,6 +1292,39 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
 }
 
 } // namespace
+
+bool probeLlamaModel(const QString &path, const QString &backendDir, QString *error)
+{
+    const auto fail = [&](const QString &why) {
+        if (error)
+            *error = why;
+        return false;
+    };
+    const Backend &b = backend(backendDir);
+    if (!b.ok)
+        return fail(b.error);
+    ggml_backend_dev_t devices[1] = {nullptr};
+    llama_model_params mp = llama_model_default_params();
+    mp.devices = devices;
+    mp.n_gpu_layers = 0;
+    mp.vocab_only = true; // (its architecture, its numbers and its vocabulary: no weights)
+    QByteArray errors;
+    t_errors = &errors;
+    llama_model *model = llama_model_load_from_file(path.toUtf8().constData(), mp);
+    t_errors = nullptr;
+    if (!model) {
+        // ("llama_model_load: error loading model: error loading model architecture: unknown model
+        // architecture: 'xyz'": what follows its last "error loading model".)
+        QString why = QString::fromUtf8(errors);
+        const qsizetype at = why.lastIndexOf(u"error loading model"_s);
+        if (at >= 0)
+            why = why.mid(at).section(u": "_s, 1).trimmed();
+        return fail(why.isEmpty() ? u"this build's llama.cpp cannot load it"_s
+                                  : u"this build's llama.cpp cannot load it: %1"_s.arg(why));
+    }
+    llama_model_free(model);
+    return true;
+}
 
 std::unique_ptr<LocalRunner> openLlamaRunner(const LocalRunner::Options &options, QString *error)
 {

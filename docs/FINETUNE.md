@@ -50,7 +50,17 @@ docs/EXTENSIONS.md "AI"), and what the model learnt is what it gets in the app:
 * every change the assistant asks to make (`b.choose`: yes, yes to all, no) gets the task's answer
   (`answers`, "yes" when the list runs out — so a change tried again after a "no" is made, and
   fails the task);
-* any other question fails the run.
+* any other question fails the run;
+* `b.aiModel()` is nil, as for a provider on the network: every model gets the assistant's whole
+  tool set, its system text and results of 12 000 characters — the very requests the app sends
+  Brulion Assistant 1.7B, which `b.aiModel()` marks `trained` (docs/EXTENSIONS.md "AI": "What each
+  model is given"), and what every run that writes training data uses. **`--as-app`** tells the
+  assistant the model as the app does instead (`Responder::aiModel()`: `ai::modelInfo` of
+  `--model-id`): a small model on the device that was not trained on it — LFM3 1.7B, a model of
+  one's own — then gets results of 4 000 characters (and, with the assistant's setting "Fewer tools
+  for small models", eight tools and the shorter system text), to measure what the app gives it (refused with `--training`). `--model-id own` takes the file of
+  `--model` as a model of one's own (its chat format and facts read from its header, as Settings
+  → Add a model file… reads them: `ai::ownModelFrom`).
 
 What comes out (`Outcome`): the assistant's answer (the model's last words, without the "✏️ Changed"
 line the app adds; when the assistant ended the loop itself — the model only repeating a change it

@@ -12,4 +12,9 @@ namespace brulion::ai {
 /// cannot be loaded.
 std::unique_ptr<LocalRunner> openLlamaRunner(const LocalRunner::Options &options, QString *error);
 
+/// Can this llama.cpp load the model at `path` — its architecture known, its vocabulary whole —?
+/// Reads its header and vocabulary only (some hundred milliseconds), never its weights; `error`
+/// says why not ("this build's llama.cpp cannot load it: unknown model architecture: 'xyz'").
+bool probeLlamaModel(const QString &path, const QString &backendDir, QString *error);
+
 } // namespace brulion::ai
