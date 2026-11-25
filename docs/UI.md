@@ -5768,7 +5768,14 @@ text without a Loader, a table cell's tooltip when it shows, a table's buttons w
 task box's icon for "done" / "deferred" only; `BIcon` creates no image without a name or before
 it is first visible (Qt's `IconImage` without a source searched the icon theme on disk);
 `BFocusRing` (`src/app/ui/focusring.h`) makes its ring (`BFocusRingShape.qml`) the first time it
-shows; a button's spinner exists while it is busy. The shell
+shows; a button's spinner exists while it is busy. A block's optional parts and the views of its
+non-text blocks are files of their own, `qml/editor/BlockPart<name>.qml`, whose components the
+C++ singleton `BlockParts` (`blockviews.h`) makes once per engine (`sourceComponent:
+BlockParts.part("Bullet")`): a component declared in the delegate is an object of every block.
+Made in C++, they have no creation context, so the Loader creates the part in the block's own
+context and its bindings end with the block; a part finds its block once,
+`BlockViews.ancestor(part, 2)` (the Loader, then the block), and its texts keep BlockDelegate's
+translation context (`qsTranslate`). The shell
 does the same (docs/PERFORMANCE.md "L10"): its dialogs and menus, the journal's "Go to day", the
 side panel and the update banner are made the first time they open or show — the four popups
 used most are built ahead in the background after the notebook is ready —, a phone's drawer
