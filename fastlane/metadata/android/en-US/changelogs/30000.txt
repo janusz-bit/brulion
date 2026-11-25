@@ -1,0 +1,12 @@
+What's new in 0.30.0:
+• A model of your own on the device
+• The model on the device in the AppImage and on Windows
+• Text while recording
+• A side question
+• Agents that wake each other
+• Secrets in a private card
+• Webhooks
+• What your agents used
+• The assistant changes the app
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.30.0

@@ -1,0 +1,12 @@
+Nowości w 0.30.0:
+• Własny model na urządzeniu
+• Model na urządzeniu w AppImage i na Windows
+• Tekst w trakcie nagrywania
+• Pytanie na boku
+• Agenci, którzy się budzą
+• Sekrety w prywatnej karcie
+• Webhooki
+• Co zużyli Twoi agenci
+• Asystent zmienia aplikację
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.30.0
