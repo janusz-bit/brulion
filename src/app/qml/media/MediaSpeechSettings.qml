@@ -7,7 +7,8 @@ import Brulion
 // notes"): speech recognition on this device (AppController.speech): which Whisper model (Small,
 // Base, Large Turbo — their sizes and what they are good at), its file (Download / Stop / Remove,
 // with the progress), the language it listens for (Automatic, Polish, English), whether a voice
-// note is transcribed by itself, and whose model it is (OpenAI's, MIT). Hidden in builds without the
+// note is transcribed by itself, text while recording (and "Try again" when the model was too slow
+// for it on this device), and whose model it is (OpenAI's, MIT). Hidden in builds without the
 // recognizer (`available`). A card like SettingsView's groups (its heading, note, hairlines).
 ColumnLayout {
     id: group
@@ -139,6 +140,39 @@ ColumnLayout {
                 iconName: "captions"
                 checked: AppController.speech.automatic
                 onToggled: AppController.speech.automatic = checked
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space2
+                BSwitch {
+                    objectName: "speechLiveSetting"
+                    Layout.fillWidth: true
+                    text: qsTr("Text while recording")
+                    description: qsTr("The words appear as you speak — under the recorder and, while dictating, in the chat's field. The note still gets the whole recording heard again, more carefully, when it ends.")
+                    iconName: "audio-lines"
+                    checked: AppController.speech.live
+                    onToggled: AppController.speech.live = checked
+                }
+                // The model fell behind the recording on this device (LiveTranscript: "slow").
+                RowLayout {
+                    objectName: "speechLiveSlow"
+                    visible: AppController.speech.live && AppController.speech.liveSlow
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        variant: "muted"
+                        text: qsTr("Off with this model: this device heard it too slowly to keep up with the recording. A smaller model may keep up.")
+                    }
+                    BButton {
+                        objectName: "speechLiveRetry"
+                        size: "small"
+                        variant: "ghost"
+                        text: qsTr("Try again")
+                        onClicked: AppController.speech.retryLive()
+                    }
+                }
             }
             ShellSettingRow {
                 objectName: "speechLicense"

@@ -2,7 +2,7 @@
 # video", "Voice notes"): the one player every media embed and the player view steer
 # (mediaplayback.h: MediaPlayback, over mediaengine.h's engine and prober), the recorder
 # (voicerecorder.h), speech recognition's queue and model files (transcriber.h: Transcriber, over
-# core speech's plugin) and the chat's dictation on the desktop (dictation.h: the two as
+# core speech's plugin), text while recording (livetranscript.h) and the chat's dictation on the desktop (dictation.h: the two as
 # platform/capture.h's speech recognizer). Qt Multimedia where the build has it (BRULION_MULTIMEDIA,
 # cmake/BrulionMultimedia.cmake: the *_qt.cpp files), else the *_none.cpp files — nothing plays or
 # records, WAV recordings can still be transcribed. A static library so tests/app/media links it
@@ -17,6 +17,7 @@ qt_add_library(brulion_media STATIC
     mediaplayback.h mediaplayback.cpp
     voicerecorder.h voicerecorder_p.h voicerecorder.cpp
     transcriber.h transcriber.cpp
+    livetranscript.h livetranscript.cpp
     dictation.h dictation.cpp
     ${_brulion_media_backend}
 )

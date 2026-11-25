@@ -756,6 +756,8 @@ public:
     /// [[Page#A#B]], a fragment written by hand; markdown::findHeading — the matcher embeds use
     /// too); -1 when none.
     Q_INVOKABLE int rowOfHeading(const QString &fragment) const;
+    /// A block of this page embeds the attachment at vault path `path` (`![[x.m4a]]`, `![](…)`).
+    bool embedsAttachment(const QString &path) const;
     /// The row of the heading whose section holds `row`: the last heading at or above it (the
     /// side panel's outline marks the same one, OutlineModel::entryForSourceRow); -1 when none.
     Q_INVOKABLE int headingRowFor(int row) const;
@@ -972,7 +974,9 @@ public:
     /// resolves it to the page, the folder's pages or a new page; a malformed one does nothing.
     /// An encrypted fragment's chip (`encrypted:<from>-<to>`, docs/UI.md "Encrypted notes") gives
     /// {action: "encrypted", from, to (the fragment's range in the block's body), fragment (its
-    /// text), hint}: the editor's unlock dialog takes it from there.
+    /// text), hint}: the editor's unlock dialog takes it from there. A link to a moment of a sound
+    /// this page embeds (`[[x.m4a#t=83|1:23]]`: a transcript's) gives {action: "playMedia", path,
+    /// start (ms)}: the editor plays it there (MediaPlayback.playAt), the page stays.
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
     /// The encrypted fragment `fragment` of row `row` — at [from, to) of its body, else wherever the
     /// block now holds it (typed around meanwhile) — replaced by `text` (the fragment saved again,

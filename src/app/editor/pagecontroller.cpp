@@ -3016,6 +3016,24 @@ int PageController::rowOfHeading(const QString &fragment) const
     return index >= 0 ? rows.at(index) : -1;
 }
 
+bool PageController::embedsAttachment(const QString &path) const
+{
+    const QString name = paths::basename(path);
+    const QString encoded = QString::fromUtf8(QUrl::toPercentEncoding(name));
+    for (int row = 0; row < m_model->rowCount(); ++row) {
+        // (Only blocks that name the file are rendered for their embeds.)
+        const QString body = m_model->data(m_model->index(row), BlockListModel::BodyRole).toString();
+        if (!body.contains(u"!["_s) || (!body.contains(name) && !body.contains(encoded)))
+            continue;
+        const QVariantList embeds = m_model->data(m_model->index(row), BlockListModel::EmbedsRole).toList();
+        for (const QVariant &embed : embeds) {
+            if (embed.toMap().value(u"path"_s).toString() == path)
+                return true;
+        }
+    }
+    return false;
+}
+
 int PageController::headingRowFor(int row) const
 {
     if (!validRow(row))
@@ -4426,10 +4444,14 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
             return out;
         }
         // A link to a sound or a video (`[[wykład.mp3#t=1:23]]`, docs/UI.md "Audio and video"): the
-        // player view, started at the moment the fragment names.
+        // player view, started at the moment the fragment names — a sound this page embeds (a
+        // transcript's moment links, right under it: docs/UI.md "Voice notes") plays in its embed
+        // from there instead, the page staying where it is.
         if (m_host && !resolved.isEmpty() && paths::isMediaPath(resolved)) {
-            QVariantMap media{{u"view"_s, u"page"_s}, {u"path"_s, resolved}};
             const media::TimeRange at = media::parseTimeFragment(fragment);
+            if (!newPane && at.startMs >= 0 && paths::isAudioPath(resolved) && embedsAttachment(resolved))
+                return {{u"action"_s, u"playMedia"_s}, {u"path"_s, resolved}, {u"start"_s, double(at.startMs)}};
+            QVariantMap media{{u"view"_s, u"page"_s}, {u"path"_s, resolved}};
             if (at.startMs >= 0)
                 media.insert(u"mediaStart"_s, at.startMs);
             if (at.endMs >= 0)

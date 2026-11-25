@@ -302,9 +302,12 @@ done in the repository simply disappears from the list.
   AppImage's and Windows' packages with Qt Multimedia (built by CI only); players inside the
   browser version (Qt Multimedia's WebAssembly backend over the notebook's files — today a new tab)
   and recording there; transcripts in the AppImage and on Windows (with the model on the device,
-  above); text while it is being recorded (whisper.cpp's streaming), a transcript's sentences
-  linked to their moments (`#t=`), and whisper.cpp computing without spinning threads on a busy
-  processor (docs/PERFORMANCE.md "Audio and video: what Qt Multimedia costs").
+  above); text while recording on Android, whose system recorder (Qt's Android backend) passes no
+  samples through the app — it needs the FFmpeg backend's buffer input or a recorder of its own
+  over QAudioSource (docs/UI.md "Voice notes" → Text while recording); ggml's barrier between two
+  steps of a computation still spins — Whisper now computes with fewer threads on a busy processor
+  (docs/PERFORMANCE.md "Speech recognition on a busy processor"), a barrier that sleeps would need a
+  change to ggml itself.
 * **Photo and scan from the camera** — `/Photo` on the phone, straightening and cropping a
   document, scanning to PDF.
 * **On-device automation: checks on real devices** — brulion:// links, Tasker's intents, the Quick

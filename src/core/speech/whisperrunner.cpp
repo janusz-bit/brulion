@@ -1,6 +1,7 @@
 #include "speech/whisperrunner.h"
 
 #include "ai/cpus.h"
+#include "speech/load.h"
 
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -27,10 +28,10 @@ namespace {
 #define BRULION_LLAMA_CPU_VARIANTS ""
 #endif
 
-/// The most threads Whisper computes with (whisper.cpp's own default): more seldom make it faster,
-/// and ggml's threads wait for each other spinning — on a processor other programs keep busy, every
-/// thread more is time lost (docs/PERFORMANCE.md "Speech recognition").
-constexpr int MaxThreads = 4;
+/// A look at the processor shorter than this tells little (the system counts in hundredths of a
+/// second); one older than this says nothing of now.
+constexpr qint64 ShortestLookMs = 100;
+constexpr qint64 OldestLookMs = 10000;
 
 void logCallback(ggml_log_level level, const char *text, void *)
 {
@@ -88,38 +89,39 @@ const Backend &backend(const QString &dir)
     return loaded;
 }
 
-int threadsFor(int asked)
-{
-    if (asked > 0)
-        return std::min(asked, MaxThreads);
-    const QList<int> cores = ai::computeCores(ai::cpuCores());
-    const int n = cores.isEmpty() ? QThread::idealThreadCount() / 2 : int(cores.size());
-    return std::clamp(n, 1, MaxThreads);
-}
-
 struct ContextFree {
     void operator()(whisper_context *c) const { whisper_free(c); }
 };
 
 class WhisperRunner final : public SpeechRunner {
 public:
-    WhisperRunner(std::unique_ptr<whisper_context, ContextFree> ctx, QString backendName, int threads)
-        : m_ctx(std::move(ctx)), m_backend(std::move(backendName)), m_threads(threads)
-    { }
+    WhisperRunner(std::unique_ptr<whisper_context, ContextFree> ctx, QString backendName, int asked)
+        : m_ctx(std::move(ctx)), m_backend(std::move(backendName)), m_asked(asked)
+    {
+        m_cores = ai::computeCores(ai::cpuCores());
+        m_cpus = std::max(1, QThread::idealThreadCount());
+        m_last = sampleCpu();
+    }
 
-    QString device() const override { return u"%1, %2 threads"_s.arg(m_backend).arg(m_threads); }
+    QString device() const override
+    {
+        return m_asked > 0 ? u"%1, %2 threads"_s.arg(m_backend).arg(m_asked)
+                           : u"%1, up to %2 threads"_s.arg(m_backend).arg(maxThreads());
+    }
 
     Result transcribe(const QList<float> &samples, const Params &params) override
     {
         Result result;
         result.audioMs = samples.size() * 1000 / 16000;
-        QElapsedTimer clock;
-        clock.start();
         if (samples.isEmpty()) {
             result.status = Ok;
             result.language = params.language;
             return result;
         }
+        const int threads = threadsNow();
+        QElapsedTimer clock;
+        clock.start();
+        result.threads = threads;
 
         struct Callbacks {
             const Params *params;
@@ -127,8 +129,9 @@ public:
             int lastPercent = -1;
         } callbacks{&params, this};
 
-        whisper_full_params wp = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
-        wp.n_threads = m_threads;
+        whisper_full_params wp =
+                whisper_full_default_params(params.live ? WHISPER_SAMPLING_GREEDY : WHISPER_SAMPLING_BEAM_SEARCH);
+        wp.n_threads = threads;
         wp.translate = false;
         wp.no_context = true;
         wp.print_special = false;
@@ -136,7 +139,17 @@ public:
         wp.print_realtime = false;
         wp.print_timestamps = false;
         wp.suppress_nst = true;
-        wp.beam_search.beam_size = 3;
+        if (params.live) {
+            // A window of text while recording: once, greedily, no fallbacks at higher
+            // temperatures. The encoder still hears Whisper's whole 30 s (audio_ctx 0): over the
+            // window alone — whisper.cpp's stream example's --audio-ctx — the small models lose
+            // the words and repeat a phrase for the rest of the window (docs/PERFORMANCE.md
+            // "Speech recognition on a busy processor").
+            wp.greedy.best_of = 1;
+            wp.temperature_inc = 0.0f;
+        } else {
+            wp.beam_search.beam_size = 3;
+        }
         const QByteArray language = params.language.toLatin1();
         wp.language = params.language.isEmpty() || params.language == u"auto" ? "auto" : language.constData();
         wp.detect_language = false;
@@ -171,6 +184,9 @@ public:
 
         const int rc = whisper_full(m_ctx.get(), wp, samples.constData(), int(samples.size()));
         result.elapsedMs = clock.elapsed();
+        // The next recording's look at the processor counts from here (what others compute
+        // meanwhile).
+        m_last = sampleCpu();
         if (params.cancel && params.cancel->load()) {
             result.status = Cancelled;
             return result;
@@ -191,6 +207,30 @@ public:
     }
 
 private:
+    int maxThreads() const { return speechThreads(int(m_cores.size()), m_cpus, -1); }
+
+    /// The threads for this recording (speech/load.h): what the fast cores allow, less what other
+    /// programs keep busy now — measured since the last recording ended, or over a tenth of a
+    /// second now when that was too short or too long ago.
+    int threadsNow()
+    {
+        int threads = m_asked > 0 ? std::min(m_asked, MaxSpeechThreads) : 0;
+        if (threads <= 0) {
+            CpuSample now = sampleCpu();
+            const qint64 since = now.atMs - m_last.atMs;
+            CpuSample before = m_last;
+            if (!m_last.isValid() || since < ShortestLookMs || since > OldestLookMs) {
+                before = now;
+                QThread::msleep(ShortestLookMs);
+                now = sampleCpu();
+            }
+            const double busy = othersBusy(before, now, m_cpus);
+            threads = speechThreads(int(m_cores.size()), m_cpus, busy);
+            qCDebug(lcWhisper, "%d threads (others keep %.1f of %d processors busy)", threads, busy, m_cpus);
+        }
+        return threads;
+    }
+
     static Segment segmentAt(whisper_context *ctx, int i)
     {
         Segment s;
@@ -203,7 +243,10 @@ private:
 
     std::unique_ptr<whisper_context, ContextFree> m_ctx;
     QString m_backend;
-    int m_threads = 1;
+    int m_asked = 0;    ///< Options::threads (0: chosen for each recording)
+    QList<int> m_cores; ///< the fast cores (ai::computeCores; empty: not told)
+    int m_cpus = 1;     ///< the logical processors
+    CpuSample m_last;   ///< the processor when the last recording ended
 };
 
 } // namespace
@@ -231,7 +274,7 @@ std::unique_ptr<SpeechRunner> openWhisperRunner(const SpeechRunner::Options &opt
             *error = u"the speech model cannot be read (%1)"_s.arg(QFileInfo(options.modelPath).fileName());
         return nullptr;
     }
-    return std::make_unique<WhisperRunner>(std::move(ctx), b.name, threadsFor(options.threads));
+    return std::make_unique<WhisperRunner>(std::move(ctx), b.name, std::max(0, options.threads));
 }
 
 } // namespace brulion::speech

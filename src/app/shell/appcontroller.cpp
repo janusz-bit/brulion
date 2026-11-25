@@ -2094,10 +2094,12 @@ void AppController::setUpSpeech()
     m_speech = std::make_unique<media::Transcriber>(speech);
     // A transcript under the block that embeds the recording, written over the note as it is now
     // (the editor showing it merges the change).
-    m_speech->setPlacer([this](const QString &page, const QString &target, int line, const QString &text) {
+    // (A longer recording's paragraphs each start with a link to their moment.)
+    m_speech->setPlacer([this](const QString &page, const QString &target, int line,
+                               const QList<media::TimedText> &paragraphs, qint64 audioMs) {
         for (int attempt = 0; attempt < 3; ++attempt) {
             const QString before = m_workspace->readFile(page);
-            const media::TranscriptPlace placed = media::placeTranscript(before, target, line, text);
+            const media::TranscriptPlace placed = media::placeTranscript(before, target, line, paragraphs, audioMs);
             if (placed.line < 0)
                 return false;
             switch (m_workspace->writeIfUnchanged(page, placed.content, before)) {

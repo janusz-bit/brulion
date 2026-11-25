@@ -2,6 +2,7 @@
 
 #include "mediaengine.h"
 
+#include "media/pcm.h"
 #include "media/transcript.h"
 #include "speech/speech.h"
 
@@ -48,6 +49,8 @@ public:
     struct Result {
         bool ok = false;
         QString text;
+        QList<TimedText> paragraphs;
+        qint64 audioMs = 0;
         QString error;
     };
 
@@ -80,23 +83,9 @@ public:
             return r;
         }
         const qint64 decodedMs = clock.elapsed();
-        if (!m_runner || m_openPath != job.modelPath) {
-            progress(u"loading"_s, 0);
-            close();
-            speech::SpeechRunner::Options options;
-            options.modelPath = job.modelPath;
-            QElapsedTimer opening;
-            opening.start();
-            m_runner = m_open(options, &error);
-            if (!m_runner) {
-                qCWarning(lcSpeech).noquote() << u"cannot open %1: %2"_s.arg(job.modelId, error);
-                r.error = error.isEmpty() ? u"the speech model cannot be opened"_s : error;
-                m_idle.start();
-                return r;
-            }
-            m_openPath = job.modelPath;
-            qCInfo(lcSpeech).noquote() << u"%1 opened: %2, in %3 s"_s.arg(job.modelId, m_runner->device(),
-                                                                          seconds(opening.elapsed()));
+        if (!open(job.modelPath, job.modelId, &r.error, [&] { progress(u"loading"_s, 0); })) {
+            m_idle.start();
+            return r;
         }
         speech::SpeechRunner::Params params;
         params.language = job.language;
@@ -111,12 +100,46 @@ public:
             r.error = heard.error;
             return r;
         }
-        r.text = transcriptText(speech::spokenTexts(heard.segments));
+        const QList<speech::Segment> spoken = speech::spokenSegments(heard.segments);
+        r.text = transcriptText(speech::spokenTexts(spoken));
+        r.paragraphs = transcriptParagraphs(spoken);
+        r.audioMs = heard.audioMs;
         r.ok = true;
         qCInfo(lcSpeech).noquote() << u"%1 heard %2 s of sound (%3) in %4 s (decoded in %5 s): %6 characters"_s
                                               .arg(job.modelId, seconds(heard.audioMs), heard.language,
                                                    seconds(heard.elapsedMs), seconds(decodedMs))
                                               .arg(r.text.size());
+        return r;
+    }
+
+    /// A window of text while recording (Transcriber::hearLive()).
+    Transcriber::LiveHeard hearLive(const QList<float> &samples, int rate, const QString &modelPath,
+                                    const QString &modelId, const QString &language, const std::atomic<bool> *cancel)
+    {
+        Transcriber::LiveHeard r;
+        r.modelId = modelId;
+        m_idle.stop();
+        if (cancel->load() || !open(modelPath, modelId, &r.error, [] { })) {
+            m_idle.start();
+            return r;
+        }
+        const QList<float> speech = resample(samples, rate, SpeechSampleRate);
+        speech::SpeechRunner::Params params;
+        params.language = language;
+        params.cancel = cancel;
+        params.live = true;
+        const speech::SpeechRunner::Result heard = m_runner->transcribe(speech, params);
+        m_idle.start();
+        if (heard.status != speech::SpeechRunner::Ok || cancel->load()) {
+            r.error = heard.error;
+            return r;
+        }
+        r.ok = true;
+        r.segments = heard.segments;
+        r.language = heard.language;
+        r.elapsedMs = heard.elapsedMs;
+        qCDebug(lcSpeech).noquote() << u"%1 heard a window of %2 s live (%3 threads) in %4 s"_s.arg(
+                modelId, seconds(heard.audioMs), QString::number(heard.threads), seconds(heard.elapsedMs));
         return r;
     }
 
@@ -131,6 +154,31 @@ public:
     }
 
 private:
+    /// The recognizer of `modelPath` in memory: opened unless it is already (`opening` called
+    /// first) — the one step of transcriptions and of windows of text while recording.
+    bool open(const QString &modelPath, const QString &modelId, QString *error, const std::function<void()> &opening)
+    {
+        if (m_runner && m_openPath == modelPath)
+            return true;
+        opening();
+        close();
+        speech::SpeechRunner::Options options;
+        options.modelPath = modelPath;
+        QElapsedTimer clock;
+        clock.start();
+        QString why;
+        m_runner = m_open(options, &why);
+        if (!m_runner) {
+            qCWarning(lcSpeech).noquote() << u"cannot open %1: %2"_s.arg(modelId, why);
+            *error = why.isEmpty() ? u"the speech model cannot be opened"_s : why;
+            return false;
+        }
+        m_openPath = modelPath;
+        qCInfo(lcSpeech).noquote() << u"%1 opened: %2, in %3 s"_s.arg(modelId, m_runner->device(),
+                                                                      seconds(clock.elapsed()));
+        return true;
+    }
+
     Transcriber::Opener m_open;
     Transcriber::Decoder m_decode;
     std::unique_ptr<speech::SpeechRunner> m_runner;
@@ -179,6 +227,10 @@ Transcriber::Transcriber(const Options &options, QObject *parent)
         Q_EMIT modelsChanged();
     });
 
+    connect(this, &Transcriber::modelsChanged, this, &Transcriber::liveReadyChanged);
+    connect(this, &Transcriber::modelChanged, this, &Transcriber::liveReadyChanged);
+    connect(this, &Transcriber::settingsChanged, this, &Transcriber::liveReadyChanged);
+
     m_worker = new TranscriberWorker(std::move(open), std::move(decode), options.idleMs);
     if (m_available) {
         m_worker->moveToThread(&m_thread);
@@ -191,6 +243,7 @@ Transcriber::~Transcriber()
 {
     for (const Job &job : std::as_const(m_jobs))
         job.cancel->store(true);
+    cancelLive();
     if (m_thread.isRunning()) {
         // The worker goes on its own thread (its timer is that thread's), after the recording
         // being heard ends — it was told to stop above.
@@ -350,6 +403,97 @@ void Transcriber::setAutomatic(bool on)
     Q_EMIT settingsChanged();
 }
 
+bool Transcriber::live() const
+{
+    return m_options.setting ? m_options.setting(u"speech/live"_s, true).toBool() : true;
+}
+
+void Transcriber::setLive(bool on)
+{
+    if (on == live())
+        return;
+    if (m_options.setSetting)
+        m_options.setSetting(u"speech/live"_s, on);
+    Q_EMIT settingsChanged();
+}
+
+QStringList Transcriber::slowModels() const
+{
+    return m_options.setting ? m_options.setting(u"speech/liveSlow"_s, QStringList()).toStringList() : QStringList();
+}
+
+bool Transcriber::liveSlow() const
+{
+    const ai::LocalModel *m = usable();
+    if (!m)
+        m = model(m_chosen);
+    return m && slowModels().contains(m->id);
+}
+
+bool Transcriber::liveReady() const
+{
+    return live() && ready() && !liveSlow();
+}
+
+void Transcriber::markLiveSlow(const QString &modelId)
+{
+    QStringList slow = slowModels();
+    if (modelId.isEmpty() || slow.contains(modelId))
+        return;
+    qCInfo(lcSpeech).noquote() << u"%1 hears too slowly on this device for text while recording"_s.arg(modelId);
+    slow.append(modelId);
+    if (m_options.setSetting)
+        m_options.setSetting(u"speech/liveSlow"_s, slow);
+    Q_EMIT settingsChanged();
+}
+
+void Transcriber::retryLive()
+{
+    const ai::LocalModel *m = usable();
+    if (!m)
+        m = model(m_chosen);
+    QStringList slow = slowModels();
+    if (!m || !slow.removeAll(m->id))
+        return;
+    if (m_options.setSetting)
+        m_options.setSetting(u"speech/liveSlow"_s, slow);
+    Q_EMIT settingsChanged();
+}
+
+bool Transcriber::hearLive(const QList<float> &samples, int rate, const QString &language, QObject *context,
+                           std::function<void(const LiveHeard &)> done)
+{
+    const ai::LocalModel *m = usable();
+    if (!liveReady() || !m || m_liveBusy || !m_jobs.isEmpty() || samples.isEmpty() || rate <= 0)
+        return false;
+    m_liveBusy = true;
+    m_liveCancel = std::make_shared<std::atomic<bool>>(false);
+    const QString path = m_files.pathOf(m->file);
+    const QString id = m->id;
+    const QString lang = speech::knownLanguage(language);
+    QMetaObject::invokeMethod(m_worker, [this, worker = m_worker, samples, rate, path, id, lang, cancel = m_liveCancel,
+                                         context = QPointer<QObject>(context), done = std::move(done)] {
+        const LiveHeard heard = worker->hearLive(samples, rate, path, id, lang, cancel.get());
+        QMetaObject::invokeMethod(
+                this,
+                [this, heard, context, done] {
+                    m_liveBusy = false;
+                    if (context && done)
+                        done(heard);
+                    // (A transcription waited for the window.)
+                    next();
+                },
+                Qt::QueuedConnection);
+    });
+    return true;
+}
+
+void Transcriber::cancelLive()
+{
+    if (m_liveCancel)
+        m_liveCancel->store(true);
+}
+
 QStringList Transcriber::queue() const
 {
     QStringList out;
@@ -475,7 +619,10 @@ void Transcriber::next()
                     this, [this, stage, progress] { onProgress(stage, progress); }, Qt::QueuedConnection);
         });
         QMetaObject::invokeMethod(
-                this, [this, attachment = work.attachment, r] { onDone(attachment, r.ok, r.text, r.error); },
+                this,
+                [this, attachment = work.attachment, r] {
+                    onDone(attachment, r.ok, r.text, r.paragraphs, r.audioMs, r.error);
+                },
                 Qt::QueuedConnection);
     });
 }
@@ -492,7 +639,8 @@ void Transcriber::onProgress(const QString &stage, double progress)
     Q_EMIT jobsChanged();
 }
 
-void Transcriber::onDone(const QString &attachment, bool ok, const QString &text, const QString &error)
+void Transcriber::onDone(const QString &attachment, bool ok, const QString &text, const QList<TimedText> &paragraphs,
+                         qint64 audioMs, const QString &error)
 {
     m_running = false;
     Job job;
@@ -518,7 +666,7 @@ void Transcriber::onDone(const QString &attachment, bool ok, const QString &text
         Q_EMIT transcribed(attachment, job.page, false, QString(), error);
     } else if (text.isEmpty()) {
         Q_EMIT transcribed(attachment, job.page, false, QString(), tr("No speech was heard in the recording."));
-    } else if (m_place && !m_place(job.page, job.target, job.line, text)) {
+    } else if (m_place && !m_place(job.page, job.target, job.line, paragraphs, audioMs)) {
         Q_EMIT transcribed(attachment, job.page, false, text, tr("The note no longer has the recording."));
     } else {
         Q_EMIT transcribed(attachment, job.page, true, text, QString());

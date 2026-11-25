@@ -11,6 +11,7 @@
 #pragma once
 
 #include "ai/localfiles.h"
+#include "media/transcript.h"
 #include "speech/speechrunner.h"
 
 #include <QElapsedTimer>
@@ -57,6 +58,15 @@ class Transcriber : public QObject {
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY settingsChanged FINAL)
     /// A voice note just recorded is transcribed by itself (when a model is here).
     Q_PROPERTY(bool automatic READ automatic WRITE setAutomatic NOTIFY settingsChanged FINAL)
+    /// Text while recording (livetranscript.h: the recorder's dialog, dictation) — "speech/live",
+    /// on by default.
+    Q_PROPERTY(bool live READ live WRITE setLive NOTIFY settingsChanged FINAL)
+    /// The model text while recording would use heard its windows too late on this device (two of
+    /// them more than LiveTranscript::LateMs behind): no text while recording with it until
+    /// retryLive().
+    Q_PROPERTY(bool liveSlow READ liveSlow NOTIFY settingsChanged FINAL)
+    /// Text while recording can be heard: `live` on, a model here (`ready`), not `liveSlow`.
+    Q_PROPERTY(bool liveReady READ liveReady NOTIFY liveReadyChanged FINAL)
     /// Something is being transcribed (or waits to be).
     Q_PROPERTY(bool busy READ busy NOTIFY jobsChanged FINAL)
     /// The attachments being transcribed or waiting (vault paths), the first one being heard.
@@ -73,9 +83,22 @@ public:
     using Decoder =
             std::function<std::optional<QList<float>>(const QString &file, const std::atomic<bool> *cancel,
                                                       QString *error, const std::function<void(int)> &progress)>;
-    /// Writes `text` under the block of `page` that embeds `target` nearest to `line` — false when
-    /// the note no longer has it (the shell: Workspace, media::placeTranscript).
-    using Placer = std::function<bool(const QString &page, const QString &target, int line, const QString &text)>;
+    /// Writes the transcript — `paragraphs` (media::transcriptParagraphs()) of a recording
+    /// `audioMs` long — under the block of `page` that embeds `target` nearest to `line`, each
+    /// paragraph of a longer one with a link to its moment; false when the note no longer has it
+    /// (the shell: Workspace, media::placeTranscript).
+    using Placer = std::function<bool(const QString &page, const QString &target, int line,
+                                      const QList<TimedText> &paragraphs, qint64 audioMs)>;
+
+    /// What a window of text while recording was heard as (hearLive()).
+    struct LiveHeard {
+        bool ok = false;
+        QList<speech::Segment> segments; ///< times from the window's start
+        QString language;                ///< what it heard ("pl")
+        qint64 elapsedMs = 0;            ///< the time it took
+        QString modelId;                 ///< the model that heard it
+        QString error;
+    };
 
     struct Options {
         QString folder;               ///< where the models' files are kept
@@ -115,6 +138,10 @@ public:
     void setLanguage(const QString &language);
     bool automatic() const;
     void setAutomatic(bool on);
+    bool live() const;
+    void setLive(bool on);
+    bool liveSlow() const;
+    bool liveReady() const;
     bool busy() const { return !m_jobs.isEmpty(); }
     QStringList queue() const;
     double jobProgress() const { return m_jobProgress; }
@@ -140,12 +167,31 @@ public:
     /// Where the placer writes (the shell sets it).
     void setPlacer(Placer place) { m_place = std::move(place); }
 
+    /// Hears a window of a recording still going — `samples` of one channel at `rate` a second
+    /// (resampled to 16 kHz on the worker), in `language` ("auto", "pl", "en") — fast rather than
+    /// best (speech::SpeechRunner::Params::live), on the worker thread; `done` on the GUI thread
+    /// with what it heard, unless `context` went meanwhile. False (and no `done`) when it cannot
+    /// now: no `liveReady`, a transcription running or waiting (it goes first), a window being
+    /// heard already.
+    bool hearLive(const QList<float> &samples, int rate, const QString &language, QObject *context,
+                  std::function<void(const LiveHeard &)> done);
+    /// A window being heard is not needed any more (the recording ended: its transcript goes
+    /// first); its `done` still comes, not ok.
+    void cancelLive();
+    /// A window is being heard.
+    bool hearingLive() const { return m_liveBusy; }
+    /// `modelId` heard text while recording too late on this device: `liveSlow` with it.
+    void markLiveSlow(const QString &modelId);
+    /// Text while recording with the chosen model is tried again (`liveSlow` no more).
+    Q_INVOKABLE void retryLive();
+
 Q_SIGNALS:
     void modelChanged();
     void modelsChanged();
     void downloadChanged();
     void settingsChanged();
     void jobsChanged();
+    void liveReadyChanged();
     /// A transcription ended: `ok` with the text placed (`text`), else `error` ("" cancelled).
     void transcribed(const QString &attachment, const QString &page, bool ok, const QString &text,
                      const QString &error);
@@ -170,7 +216,8 @@ private:
     const ai::LocalModel *usable() const;
     void next();
     void onProgress(const QString &stage, double progress);
-    void onDone(const QString &attachment, bool ok, const QString &text, const QString &error);
+    void onDone(const QString &attachment, bool ok, const QString &text, const QList<TimedText> &paragraphs,
+                qint64 audioMs, const QString &error);
 
     QList<ai::LocalModel> m_models;
     ai::LocalModelFiles m_files;
@@ -186,6 +233,10 @@ private:
     QString m_jobStage;
     QThread m_thread;
     TranscriberWorker *m_worker = nullptr;
+    bool m_liveBusy = false;
+    std::shared_ptr<std::atomic<bool>> m_liveCancel;
+    /// The models text while recording was too slow with ("speech/liveSlow").
+    QStringList slowModels() const;
 };
 
 } // namespace brulion::media

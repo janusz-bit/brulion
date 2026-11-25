@@ -1134,10 +1134,65 @@ package, Android's 64-bit APKs).
 threads' machine, `tst_speech_plugin`): 0.6 s on an idle machine. On the same machine running 60–70
 compile jobs (load average 65 on 16 cores) the same recording took **225 s**: ggml's threads wait
 for each other spinning between the steps of a computation, so every thread descheduled holds up
-all the others. Whisper computes with at most 4 threads (whisper.cpp's own default; the language
-models' runner, which sets up its own thread pool, can switch the spinning off — whisper.cpp does
-not let it be chosen), and the speech thread runs at the normal priority: at a low one it got no
-processor at all under that load.
+all the others. Whisper computes with at most 4 threads (whisper.cpp's own default) — since
+2026-11-25 no more than the processor has free (below) —, and the speech thread runs at the normal
+priority: at a low one it got no processor at all under that load.
+
+### Speech recognition on a busy processor (2026-11-25)
+
+ggml splits every step of Whisper's computation (a matrix product, an attention) among its threads
+and waits at the step's end for the last one **spinning** (`ggml_barrier`, whatever a thread pool's
+poll level says), so on a processor other programs keep busy every thread the system takes off its
+core holds up all the others — and the spinning ones keep the very thread they wait for off its
+core. What was tried, on the laptop (i5-13450HX: 6 performance cores with SMT and 4 efficiency
+cores, 16 logical processors) while other agents compiled beside it (load average 17–57, changing
+from one minute to the next), Whisper Base 8-bit hearing 44 s of Polish speech made by espeak-ng
+(`tst_speech_plugin`: `BRULION_SPEECH_THREADS`; `hears` — beam search of 3, a voice note's
+transcript —, the time whisper.cpp took, and the process's CPU time from `time`), 11 rounds of each
+for 2 and 4 threads, the configurations interleaved (the times of one round vary by 2–10× with
+what the others compile: compare the medians and the worst rounds):
+
+| Threads | The time (median; fastest – slowest) | CPU time (s) |
+|---|---:|---:|
+| 1 | 16.2 s; 11.1 – 23.7 (5 rounds) | 16.7 – 18.1 |
+| 2, whisper.cpp's own threads | 7.7 s; 4.1 – 14.8 | 12.7 – 28.4 |
+| 2, a thread pool of their own, asleep between computations (`poll` 0) | 10.4 s; 3.8 – 24.8 | 13.3 – 44.4 |
+| 4, whisper.cpp's own threads (Brulion before) | 7.9 s; 3.7 – **66.3** | 20.3 – **206.6** |
+| 4, a thread pool of their own (`poll` 0) | 11.8 s; 2.4 – **97.8** | 14.2 – **324.3** |
+| chosen by the free processors (Brulion now: 1–4), whisper.cpp's own threads | 6.5 s; 4.0 – 7.8 (6 rounds, load 10–43: it took 4 five times, 2 once) | 23.6 – 45.1 |
+| the same, the 4 beside it in those rounds | 5.9 s; 3.3 – 10.5 | 19.6 – 43.3 |
+
+* **The spinning is what a busy processor pays for**: one thread does the work in 17–18 s of CPU
+  time; four took up to 324 s — the rest spent waiting at the barriers, and the recording took up
+  to 98 s (the whole 6 s sample, on 4 threads during the measurements of the live windows, once
+  took 113 s for one window). The bad rounds are the ones where other programs took every core.
+* **A thread pool asleep between computations does not help**: ggml's CPU plugin makes one
+  (`ggml_threadpool_new` with `poll` 0, attached to whisper.cpp's state through its CPU backend —
+  whisper.cpp's API has no way, so it needed whisper.cpp's own source compiled with a function of
+  ours). Its threads sleep between two computations instead of being started for each one, but the
+  barrier inside a computation spins as before, and threads woken on a busy processor wait for a
+  core at every computation's start: it was no faster (slower in the median) and spent more CPU
+  time. It was left out again.
+* **Fewer threads do help**: the recognizer looks at how busy the processor is just before each
+  recording (`speech/load.h`: `/proc/stat` and its own `/proc/self/stat` — its own threads of the
+  window just heard are not "others" — over the time since its last recording, or a tenth of a
+  second) and takes the fast cores (at most 4) but no more than are free now, at least one
+  (`speech::speechThreads`). Where the system does not tell (Windows, macOS, an Android that hides
+  `/proc/stat`) the fast cores decide, as before. With room on the processor it takes 4 and is as
+  fast as before; the rounds of 66–98 s with 4 threads were the moments others took every core,
+  when it takes one — and one thread's slowest round was 24 s (29 s in a round where it chose one
+  with the pool above). It looks only before a recording: a processor that gets busy while a long
+  recording is heard is not seen until the next one.
+* **Text while recording** (docs/UI.md "Voice notes") hears a window of up to 25 s every 3 s:
+  greedily, once, without fallbacks to higher temperatures (`Params::live`). The 44 s sample heard
+  so — 15 windows — took 17.0–31.8 s of computing in all with the threads chosen by the free
+  processors (the longest window 1.4–4.6 s; 6 rounds), 15.3–23.8 s with 4 threads beside them
+  (the longest 1.2–2.7 s), 37.9–75.7 s with one (the longest 2.9–6.8 s; 3 rounds, busier) — a
+  window of 3–25 s heard in 1–5 s keeps up; a device that falls more than 10 s behind twice gives
+  it up (LiveTranscript). The encoder still hears Whisper's whole 30 s: with whisper.cpp's
+  stream example's shorter `audio_ctx` (the window's length) the same windows took less but Base
+  lost the words and repeated a phrase for the rest of a window ("Dzię nie robię." 48 times); with
+  temperature fallbacks they took a third longer (112 against 77 s, 1 thread) for no better text.
 
 ### Tabs, split view and windows: what a tab costs (2026-11-03)
 

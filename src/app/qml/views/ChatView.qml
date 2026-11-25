@@ -578,10 +578,40 @@ FocusScope {
         if (!root.dictating)
             AppController.toast(qsTr("Dictation could not start"), "error")
     }
+    /// Text while dictating (docs/UI.md "AI chat" → Dictation): the words heard so far stand in the
+    /// field at the caret — [partialAt, partialAt + partialLength) — until the whole recording's
+    /// text takes their place (or nothing, cancelled or failed).
+    property int partialAt: -1
+    property int partialLength: 0
+    function dropPartial(): void {
+        if (root.partialAt < 0)
+            return
+        const at = root.partialAt
+        const end = at + root.partialLength
+        root.partialAt = -1
+        root.partialLength = 0
+        input.remove(at, end)
+        input.cursorPosition = at
+    }
+    function showPartial(text: string): void {
+        const heard = Js.trim(text)
+        if (heard === "")
+            return
+        root.dropPartial()
+        const at = input.cursorPosition
+        const before = at > 0 ? Js.charAt(input.text, at - 1) : ""
+        const length = input.length
+        input.insert(at, (before !== "" && before !== " " && before !== "\n" ? " " : "") + heard)
+        root.partialAt = at
+        const added = input.length - length
+        root.partialLength = added
+        input.cursorPosition = at + added
+    }
     /// Esc while dictating: nothing goes into the field, the recording is thrown away.
     function cancelDictation(): void {
         if (!root.dictationBusy)
             return
+        root.dropPartial()
         root.dictating = false
         root.chats.cancelDictation()
     }
@@ -617,9 +647,14 @@ FocusScope {
             root.takingPhoto = false
             AppController.toast(qsTr("No photo: %1").arg(why), "error")
         }
+        function onDictationPartial(text: string) {
+            if (root.dictating)
+                root.showPartial(text)
+        }
         function onDictated(text: string) {
             if (!root.dictating)
                 return
+            root.dropPartial()
             root.dictating = false
             const heard = Js.trim(text)
             if (heard === "")
@@ -633,6 +668,7 @@ FocusScope {
         function onDictationFailed(why: string) {
             if (!root.dictating)
                 return
+            root.dropPartial()
             root.dictating = false
             if (why !== "")
                 AppController.toast(qsTr("Dictation: %1").arg(why), "error")

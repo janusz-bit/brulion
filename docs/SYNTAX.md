@@ -311,10 +311,26 @@ caret (or in a new block at the end of today's journal). Its transcript (speech 
 device: docs/UI.md "Voice notes") is plain note text right under the block that embeds the
 recording (`media::placeTranscript`): a list item's first child (one level deeper, before its other
 children), after a paragraph a paragraph of its own; the note's indentation and line endings kept.
-It is one paragraph — what Whisper heard, its segments joined, its notes for no speech left out
-(`[BLANK_AUDIO]`, `(music)`, subtitle credits) — with Markdown at its start escaped (`\#`, `\-`,
-`1\.`) and `[[`, `((`, `{{` and `#` before a letter escaped inside: a word heard is never a link,
-an embed, a template or a tag.
+It is what Whisper heard, its segments joined into sentences, its notes for no speech left out
+(`[BLANK_AUDIO]`, `(music)`, subtitle credits), with Markdown at the start of each paragraph escaped
+(`\#`, `\-`, `1\.`) and `[[`, `((`, `{{` and `#` before a letter escaped inside: a word heard is
+never a link, an embed, a template or a tag. A short recording is one paragraph of text, as
+before. A longer one is paragraphs of whole sentences (`media::transcriptParagraphs`: a new one
+after a pause of 2 s or once one is 30 s or 600 characters long; a run without punctuation cut at
+60 s), each starting with a **moment link** to where it starts in the recording, written the way
+the embed above names it (`media::momentLink`): under `![[Nagranie 2026-11-20 18.30.m4a]]`
+
+```markdown
+- ![[Nagranie 2026-11-20 18.30.m4a]]
+    - [[Nagranie 2026-11-20 18.30.m4a#t=0|0:00]] Dzień dobry. Dzisiaj opowiem o tym, jak działa…
+    - [[Nagranie 2026-11-20 18.30.m4a#t=34|0:34]] Zdania łączone są w akapity…
+```
+
+and under `![](assets/Nagranie%201.m4a)` `[0:34](assets/Nagranie%201.m4a#t=34)` — whole seconds
+(every player reads them), the first `#t=0`, hours from a recording of an hour on (`1:02:03`).
+They are ordinary links with a time fragment (above), which any Markdown app follows; in Brulion a
+click on one plays the embed on that page from there. Transcripts written before (one paragraph,
+no links) stay as they are.
 
 **Drawings:** a drawing is an ordinary SVG attachment, embedded like any picture
 (`![[Drawing 2026-10-27 14.32.svg]]`; "/Drawing" creates `Drawing <yyyy-MM-dd HH.mm>.svg` — in a

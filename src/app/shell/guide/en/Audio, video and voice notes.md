@@ -28,6 +28,7 @@ Add `#t=` and the time to the name: `![[Lecture.mp3#t=1:23]]` starts the player 
 ## Recording a voice note
 Type **/Voice note** (or `/record`, `/nagranie`) in a block, tap the **microphone** on the toolbar above the keyboard on a phone, use *Record voice note* in the command palette (`Ctrl+K`), or **Voice note** in quick capture. The first time, Brulion asks for the microphone (on the phone, the system asks). Recording starts at once:
 - the time recorded and a meter of how loud you speak (on Android the system records by itself, so instead of the meter a microphone breathes while it records);
+- with a speech model downloaded (below), **the words as you speak them** — a preview that grows every few seconds;
 - **Pause** and **Resume**;
 - **Save** puts the recording into the note — where the cursor was, or at the end of the page — and from quick capture or the palette (off a note) into **today's journal**;
 - **Cancel** (or `Esc`, the back gesture) throws it away.
@@ -44,7 +45,11 @@ Brulion can write down what was said — in Polish, English and many other langu
 2. Tap **Download** (best over Wi-Fi; you can leave the page, and a download that stops goes on from where it was).
 3. Choose the **language**: *Automatic* recognizes it from the first half minute; *Polish* or *English* is better for short notes.
 
-With **Transcribe voice notes** on (the default), a voice note you record is written down by itself. Any recording in a note — also one you got from elsewhere — is written down from its menu: **More → Transcribe**. While it works the player says how far it is, with **Stop**; when it is done, the text appears **right under the recording**, as an ordinary block you can edit, move or delete. Several recordings are written down one after another.
+With **Transcribe voice notes** on (the default), a voice note you record is written down by itself. Any recording in a note — also one you got from elsewhere — is written down from its menu: **More → Transcribe**. While it works the player says how far it is, with **Stop**; when it is done, the text appears **right under the recording**, as ordinary blocks you can edit, move or delete. Several recordings are written down one after another.
+
+A short note becomes one paragraph. A longer recording — a lecture, a meeting — becomes paragraphs of whole sentences, each starting with **the moment it was said**: `[[Recording 2026-11-20 18.30.m4a#t=83|1:23]]`. Click the time and the recording above plays from there, so you can listen again to the part you are reading.
+
+**Text while recording** (on by default, in the same settings) shows the words under the recorder while you speak, and in the AI chat's field while you dictate. It is a quick preview: once you save, the whole recording is heard again, more carefully, and that is the text that goes into the note. If the device cannot keep up with you — the words come more than ten seconds late — it stops for that recording and stays off with that model until you tap **Try again** in the settings; a smaller model may keep up.
 
 > [!tip] Where it works
 > Players work on the computer (Linux, Windows) and on Android; in the browser a recording or a video opens in a new tab, where the browser plays it. Turning speech into text works where the model on the device does: the NixOS package and Android (not yet in the AppImage, on Windows or in the browser).
@@ -55,4 +60,7 @@ With **Transcribe voice notes** on (the default), a voice note you record is wri
 - From the important part: ![[Lecture.mp3#t=12:40]]
 - ![[Recording 2026-11-20 18.30.m4a]]
 	- Buy milk and bread tomorrow morning, then call the dentist.
+- ![[Lecture 2026-11-24 10.00.m4a]]
+	- [[Lecture 2026-11-24 10.00.m4a#t=0|0:00]] Good morning. Today we talk about how speech becomes text.
+	- [[Lecture 2026-11-24 10.00.m4a#t=34|0:34]] First the recording is cut into short windows…
 ```

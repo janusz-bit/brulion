@@ -1688,7 +1688,14 @@ FocusScope {
         } else if (action === "encrypted") {
             // An encrypted fragment's lock (docs/UI.md "Encrypted notes"): unlocked in its dialog.
             editor.openActivatedEncrypted(row)
+        } else if (action === "playMedia") {
+            // A transcript's moment (docs/UI.md "Voice notes"): its recording's embed plays from there.
+            editor.playActivatedMedia()
         }
+    }
+    function playActivatedMedia(): void {
+        const path = activated.text("path")
+        MediaPlayback.playAt(path, Workspace.assetUrl(path), activated.map.start)
     }
     /// PageController.activateLink's result.
     MapHolder {

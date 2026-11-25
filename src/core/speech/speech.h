@@ -11,6 +11,7 @@
 // removes it with ai::LocalModelFiles, as it does the language models, in a folder of its own.
 
 #include "ai/local.h"
+#include "media/transcript.h"
 
 #include <QList>
 #include <QString>
@@ -30,17 +31,15 @@ const QStringList &speechLanguages();
 /// `language` when it is one of speechLanguages(), else "auto".
 QString knownLanguage(const QString &language);
 
-/// One stretch of speech the recognizer heard.
-struct Segment {
-    qint64 startMs = 0;
-    qint64 endMs = 0;
-    QString text;
-    friend bool operator==(const Segment &, const Segment &) = default;
-};
+/// One stretch of speech the recognizer heard: its start, end (milliseconds into what it heard)
+/// and text — what a transcript's paragraphs are made of (media/transcript.h).
+using Segment = media::TimedText;
 
-/// The texts of `segments`, in order, without what Whisper writes for no speech at all — its
-/// bracketed or parenthesised notes ("[BLANK_AUDIO]", "(muzyka)", "[Music]", "*laughs*") and
-/// subtitle credits it learnt from films ("Napisy wykonane przez …", "Subtitles by …").
+/// `segments`, in order, without what Whisper writes for no speech at all — its bracketed or
+/// parenthesised notes ("[BLANK_AUDIO]", "(muzyka)", "[Music]", "*laughs*") and subtitle credits it
+/// learnt from films ("Napisy wykonane przez …", "Subtitles by …") —, their texts trimmed.
+QList<Segment> spokenSegments(const QList<Segment> &segments);
+/// The texts of spokenSegments().
 QStringList spokenTexts(const QList<Segment> &segments);
 
 } // namespace brulion::speech

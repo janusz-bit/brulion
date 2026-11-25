@@ -1,6 +1,9 @@
 # The speech module (src/core/speech): the Whisper models the app knows, the languages, what is
-# kept of what a recognizer heard — no recognizer runs here.
+# kept of what a recognizer heard, text while recording, the threads — no recognizer runs here.
 brulion_add_test(tst_speech SOURCES tst_speech.cpp LIBS brulion_core_speech)
+# Text while recording (live.h: the windows, what is kept and what replaced, the seams) and the
+# threads on a busy processor (load.h: /proc/stat and /proc/self/stat read, the threads chosen).
+brulion_add_test(tst_speech_live SOURCES tst_speech_live.cpp LIBS brulion_core_speech)
 
 # With the recognizer in the build (BRULION_SPEECH): the plugin brulion_speech loaded as the app
 # loads it (found, loaded with ggml from its folder, a missing model an error), and whisper.cpp

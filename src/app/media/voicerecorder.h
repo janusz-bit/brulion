@@ -95,6 +95,12 @@ public:
     void feed(const QByteArray &pcm16);
     /// Tests: the encoders are not tried (WAV).
     void setWavOnly(bool wav) { m_wavOnly = wav; }
+    /// Gets the samples as they are recorded: one channel (the channels' mean), floats in [-1, 1],
+    /// `rate` a second, on the GUI thread — text while recording (livetranscript.h). None come
+    /// where the system records by itself (`metered` false) or while paused. One listener at a
+    /// time; an empty one: none.
+    using SampleListener = std::function<void(const float *samples, qsizetype count, int rate)>;
+    void setSampleListener(SampleListener listener) { m_listener = std::move(listener); }
     /// The environment variable that makes every recorder hear a made-up voice instead of a
     /// microphone (a tone that swells and fades, 48 kHz, ten pieces a second): the UI self-test and
     /// screenshots of a machine without one.
@@ -121,6 +127,8 @@ private:
     QString newFile(const QString &extension);
     void pushLevel(double level);
     void addFrames(qint64 frames, int rate);
+    /// Samples recorded (the backend's, one channel) for the listener.
+    void hearSamples(const float *samples, qsizetype count, int rate);
     /// The system's recorder says how long the recording is (no samples pass here).
     void setDuration(qint64 ms);
     void saved(bool ok, const QString &error);
@@ -138,6 +146,7 @@ private:
     QString m_namePrefix = QStringLiteral("Recording");
     QString m_folder;
     bool m_wavOnly = false;
+    SampleListener m_listener;
     int m_feedRate = 0;
     int m_feedChannels = 0;
     /// The made-up voice (TestMicrophoneVariable): a timer and how far it is.

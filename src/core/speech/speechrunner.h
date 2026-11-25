@@ -30,7 +30,8 @@ class SpeechRunner {
 public:
     struct Options {
         QString modelPath; ///< the model's file (whisper.cpp's ggml .bin)
-        /// 0: as for the language models (ai/cpus.h: one per fast physical core), at most 8.
+        /// 0: chosen for each recording (speech/load.h: one per fast physical core, at most four,
+        /// no more than the processor has free from other programs then); more: that many.
         int threads = 0;
         /// The folder of ggml's processor plugins ("": found by name alone — Android).
         QString backendDir;
@@ -44,6 +45,9 @@ public:
         std::function<void(int percent)> progress;
         /// Called with each segment as it is heard, on the thread that transcribes.
         std::function<void(const Segment &)> heard;
+        /// A window of a recording still going (text while recording, speech/live.h): heard fast
+        /// rather than best — one greedy pass without fallbacks, no text of earlier windows.
+        bool live = false;
     };
 
     enum Status {
@@ -59,10 +63,11 @@ public:
         QString language;     ///< what it heard ("pl"; the asked one unless "auto")
         qint64 audioMs = 0;   ///< the recording's length
         qint64 elapsedMs = 0; ///< the time it took
+        int threads = 0;      ///< the threads it computed with
     };
 
     virtual ~SpeechRunner() = default;
-    /// What computes ("ggml-cpu-haswell, 8 threads").
+    /// What computes ("ggml-cpu-haswell, up to 4 threads").
     virtual QString device() const = 0;
     /// Hears `samples` (16 kHz mono, media::SpeechSampleRate). Blocks until done.
     virtual Result transcribe(const QList<float> &samples, const Params &params) = 0;

@@ -5520,6 +5520,41 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.host.openedInOtherApp().size(), 2);
     }
 
+    void momentOfAnEmbeddedSound()
+    {
+        // A transcript's moment link under its recording (docs/UI.md "Voice notes"): the embed on
+        // the page plays from there — no route; a sound not embedded here, a video, a link without
+        // a time and one in a new pane open the player view as before.
+        Fixture f(u"- ![[Nagranie żółwia.m4a]]\n\t- [[Nagranie żółwia.m4a#t=83|1:23]] Dzień dobry.\n"
+                  u"- ![](assets/Wyk%C5%82ad%201.mp3)\n- ![[film.mp4]] [[film.mp4#t=5]] [[inne.mp3#t=5]]\n"_s);
+        QCOMPARE(f.host.saveAttachment(u"Nagranie żółwia.m4a"_s, "RIFF"), u"assets/Nagranie żółwia.m4a"_s);
+        QCOMPARE(f.host.saveAttachment(u"Wykład 1.mp3"_s, "ID3"), u"assets/Wykład 1.mp3"_s);
+        QCOMPARE(f.host.saveAttachment(u"film.mp4"_s, "mp4"), u"assets/film.mp4"_s);
+        QCOMPARE(f.host.saveAttachment(u"inne.mp3"_s, "ID3"), u"assets/inne.mp3"_s);
+        const QVariantMap before = f.host.lastRoute();
+        QVariantMap r = f.page.activateLink(1, u"page:Nagranie%20%C5%BC%C3%B3%C5%82wia.m4a#t%3D83"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"playMedia"_s);
+        QCOMPARE(r.value(u"path"_s).toString(), u"assets/Nagranie żółwia.m4a"_s);
+        QCOMPARE(r.value(u"start"_s).toDouble(), 83000.0);
+        QCOMPARE(f.host.lastRoute(), before);
+        // A Markdown link to a sound embedded with a Markdown embed.
+        r = f.page.activateLink(2, u"page:assets%2FWyk%C5%82ad%201.mp3#t%3D1%3A02"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"playMedia"_s);
+        QCOMPARE(r.value(u"start"_s).toDouble(), 62000.0);
+        // A video: the player view.
+        QVERIFY(f.page.activateLink(3, u"page:film.mp4#t%3D5"_s).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"assets/film.mp4"_s);
+        QCOMPARE(f.host.lastRoute().value(u"mediaStart"_s).toLongLong(), 5000);
+        // Not embedded on this page: the player view.
+        QVERIFY(f.page.activateLink(3, u"page:inne.mp3#t%3D5"_s).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"assets/inne.mp3"_s);
+        // Without a time, or in a new pane: the player view.
+        QVERIFY(f.page.activateLink(1, u"page:Nagranie%20%C5%BC%C3%B3%C5%82wia.m4a"_s).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"assets/Nagranie żółwia.m4a"_s);
+        QVERIFY(f.page.activateLink(1, u"page:Nagranie%20%C5%BC%C3%B3%C5%82wia.m4a#t%3D83"_s, true).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"mediaStart"_s).toLongLong(), 83000);
+    }
+
     void drawingFileNames()
     {
         QCOMPARE(PageController::drawingFileNameOn(u"Wykład 3"_s, 4), u"Wykład 3 p. 4"_s);

@@ -4,9 +4,12 @@
 // VoiceRecorder (the system's default microphone, WAV into the cache's "dictation" folder) up to
 // MaxMs, then hears the recording on the device with the voice notes' speech model (Transcriber:
 // whisper.cpp, in the language the dictation started with unless the speech settings name one),
-// and gives the text (recognized()). The recording is deleted when it has been heard, when
-// dictation is cancelled, and — left over by an app that ended meanwhile — when the next dictation
-// starts. Without a speech model it is not ready(): the chat offers the download.
+// and gives the text (recognized()). While it records, the text heard so far comes as partial()
+// (LiveTranscript: windows heard as they are recorded, with "Text while recording" on) — the
+// chat shows it at the caret until the full pass's text replaces it. The recording is deleted
+// when it has been heard, when dictation is cancelled, and — left over by an app that ended
+// meanwhile — when the next dictation starts. Without a speech model it is not ready(): the chat
+// offers the download.
 //
 // States: idle → recording (listening(), elapsedMs()) → saving → recognizing (recognizing()) → idle
 // with recognized(text) or failed(why); cancel() from any of them: failed(""), the file gone.
@@ -20,6 +23,7 @@
 
 namespace brulion::media {
 
+class LiveTranscript;
 class Transcriber;
 class VoiceRecorder;
 
@@ -48,6 +52,8 @@ public:
     QString folder() const { return m_folder; }
     /// The recorder (tests: VoiceRecorder::useFeed(), feed()).
     VoiceRecorder *recorder() const { return m_recorder; }
+    /// Its text while recording (tests: its rules).
+    LiveTranscript *live() const { return m_live; }
     /// Tests: a shorter limit.
     void setMaxMs(qint64 ms) { m_maxMs = ms; }
 
@@ -61,6 +67,7 @@ private:
 
     QPointer<Transcriber> m_transcriber;
     VoiceRecorder *m_recorder = nullptr;
+    LiveTranscript *m_live = nullptr;
     QString m_folder;
     QString m_language;
     QString m_file; // the recording being heard

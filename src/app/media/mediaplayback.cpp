@@ -218,6 +218,26 @@ void MediaPlayback::play(const QString &path, const QUrl &url, double startMs, d
     m_engine->play();
 }
 
+void MediaPlayback::playAt(const QString &path, const QUrl &url, double ms)
+{
+    if (path.isEmpty() || !available())
+        return;
+    if (path != m_path || url != m_url) {
+        load(path, url);
+        m_startMs = -1;
+        m_endMs = -1;
+        Q_EMIT sourceChanged();
+    } else if (m_startMs >= 0 || m_endMs >= 0) {
+        // (A moment of the whole recording: no fragment's end stops it.)
+        m_startMs = -1;
+        m_endMs = -1;
+        Q_EMIT sourceChanged();
+    }
+    m_atEnd = false;
+    m_engine->setPosition(std::max<qint64>(0, qint64(ms)));
+    m_engine->play();
+}
+
 void MediaPlayback::toggle(const QString &path, const QUrl &url, double startMs, double endMs)
 {
     if (path == m_path && playing())

@@ -261,8 +261,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   plays on when you scroll away (a small bar shows it). **Voice notes** (`/Voice note`, the
   microphone on the phone's toolbar, quick capture) record with a level meter into an M4A
   attachment, and **on-device speech recognition** (OpenAI's Whisper through whisper.cpp — Polish
-  too, no sound leaves the device; the NixOS package and Android) writes the text right under the
-  recording.
+  too, no sound leaves the device; the NixOS package and Android) shows the words while you speak
+  and writes the text right under the recording — a longer one as paragraphs that each start
+  with a link to their moment (`[[lecture.m4a#t=83|1:23]]`, a click plays it from there).
 * **Search in PDFs, documents and pictures.** The whole-notebook search finds words in the
   notebook's PDFs too, page by page — read in the background, offline, kept on the device —, and a
   result opens the PDF at its page with the words highlighted; Word (DOCX), PowerPoint (PPTX),
@@ -518,7 +519,9 @@ przykładowym notatnikiem.
   (`/Notatka głosowa`, mikrofon na pasku w telefonie, szybka notatka) nagrywają się ze wskaźnikiem
   głośności do załącznika M4A, a **rozpoznawanie mowy na urządzeniu** (Whisper od OpenAI przez
   whisper.cpp — także po polsku, żaden dźwięk nie opuszcza urządzenia; pakiet dla NixOS i
-  Android) wpisuje tekst tuż pod nagraniem.
+  Android) pokazuje słowa już podczas mówienia i wpisuje tekst tuż pod nagraniem — dłuższe jako
+  akapity zaczynające się od linku do swojej chwili (`[[wykład.m4a#t=83|1:23]]`, kliknięcie
+  odtwarza od tego miejsca).
 * **Szukanie w PDF-ach, dokumentach i obrazach.** Wyszukiwanie w całym notatniku znajduje słowa
   także w jego PDF-ach, strona po stronie — czytanych w tle, bez internetu, przechowywanych na
   urządzeniu —, a wynik otwiera PDF na swojej stronie z podświetlonymi słowami; pliki Worda (DOCX),

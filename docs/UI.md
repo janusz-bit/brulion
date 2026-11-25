@@ -1738,13 +1738,19 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   / `dictationLimit`); pressed again, **Enter** or Send finish it ("Transcribing…",
   `WorkspaceChats.recognizing`), and the text goes in at the caret; **Esc** (in the field, or a
   `Shortcut` while the focus is elsewhere) throws it away. At five minutes it stops by itself and is
-  heard. The recording is deleted when heard or cancelled, and leftovers of an app that ended
-  meanwhile when the next dictation starts. Without a speech model (`WorkspaceChats.dictationReady`
+  heard. While it records, with **Text while recording** on (Settings → Speech), the words heard
+  so far stand in the field at the caret (`Dictation` emits `partial()` from its `LiveTranscript`,
+  `WorkspaceChats.dictationPartial`; ChatView keeps their range, `partialAt` / `partialLength`, and
+  replaces it with each new text), and the whole recording's text takes their place when it is
+  heard — or nothing, when it is cancelled or fails. The recording is deleted when heard or
+  cancelled, and leftovers of an app that ended meanwhile when the next dictation starts. Without a
+  speech model (`WorkspaceChats.dictationReady`
   false) the microphone opens `chatDictationSetup`: what it needs (the model's name and size), its
   download with the progress (`chatDictationDownload`, the voice notes' `AppController.speech`), and
   **Speech settings** (`chatDictationSettings`); once the model is there "Dictation is ready" with
   **Dictate**. A recognizer tells `SpeechRecognizer::ready()`, `elapsedMs()`, `maxMs()`,
-  `recognizing()` (`platform/capture.h`; the system's: ready, no time). Tests: `tst_media_dictation`.
+  `recognizing()`, `partial()` (`platform/capture.h`; the system's: ready, no time, no partial text —
+  its dialog shows its own). Tests: `tst_media_dictation`.
 * **The field** (`chatInput`, a `BTextArea` in a frame that grows to 168 px, then scrolls with the
   caret kept in view): with a keyboard Enter sends and Shift+Enter is a new line; on touch the
   keyboard's Enter is a new line and the round button sends (`chatSend`, an arrow up, disabled
@@ -5781,8 +5787,8 @@ quick capture's **Voice note** — opens the recorder: it asks for the microphon
 (`QMicrophonePermission`: Android's runtime request, the browser's, always granted on the desktop)
 and records at once. The dialog (a bottom sheet on phones) shows the time recorded, a level meter of
 the last seconds (48 bars, newest on the right; core `media::meterLevel`: the peak from −60 to
-0 dB), Recording / Paused / Saving…, **Pause** / **Resume**, and the microphone's name. **Save** ends
-it; **Cancel**, Escape, the back gesture throw it away (its file deleted). A denied microphone or a
+0 dB), Recording / Paused / Saving…, the words heard so far (below, "Text while recording"),
+**Pause** / **Resume**, and the microphone's name. **Save** ends it; **Cancel**, Escape, the back gesture throw it away (its file deleted). A denied microphone or a
 failure says why with **Try again**. It stops by itself after three hours.
 
 * **Where it goes**: from the editor at the caret of the block being edited (a block of its own
@@ -5808,13 +5814,43 @@ failure says why with **Try again**. It stops by itself after three hours.
   menu (**More → Transcribe**). Recordings are heard one after another on a worker thread: decoded
   to 16 kHz mono (a WAV file read directly, anything else through QAudioDecoder), heard, and the text
   written right under the block that embeds the recording — the note as it is then (a change made
-  meanwhile is kept; the editor showing it merges the write), as an ordinary block to edit. While it
+  meanwhile is kept; the editor showing it merges the write), as ordinary blocks to edit: a short
+  recording (one paragraph) as one paragraph of text, a longer one as paragraphs of whole sentences
+  — a new one after a pause of 2 s, or once one is half a minute or 600 characters long (core
+  `media::transcriptParagraphs`) — each starting with a link to its moment, `[[Nagranie
+  2026-11-20 18.30.m4a#t=83|1:23]]` (`[1:23](assets/Nagranie%201.m4a#t=83)` under a Markdown
+  embed: docs/SYNTAX.md §2 "Voice notes and transcripts"). A click on such a link plays the
+  recording's embed on the page from that moment (PageController.activateLink's `playMedia` →
+  `MediaPlayback.playAt()`: whatever it played, paused or not, at the fragment's end or not), the page
+  staying where it is; a link to a sound no block of the page embeds, and to a video, opens the
+  player view there as before. While it
   works the player's card says so ("Reading the recording…", "Opening the speech model…",
   "Transcribing… 42 %") with **Stop**; a toast says when it is done or why not (no speech heard, the
   note no longer has the recording). The model stays in memory five minutes after the last one.
   The AI chat's dictation on the desktop hears its recordings with the same model
   (`Transcriber::transcribeFile()`: "AI chat" → Dictation). Absent in builds without the model on the
   device (`BRULION_LOCAL_AI` / `BRULION_SPEECH`).
+* **Text while recording** (`LiveTranscript`, a QML type: the dialog's `voiceRecorderLive` under the
+  state; dictation's text at the chat's caret; the setting **Text while recording**, `speech/live`,
+  on by default): the recording so far heard again and again while it records, as whisper.cpp's
+  stream example does (core `speech::LiveWindows`): the samples (`VoiceRecorder`'s sample listener:
+  one channel of floats as the microphone gives them) make a window that is heard every 3 s as it
+  grows — its text tentative, replaced by the next hearing — until it is 10 s long; then its text is
+  kept but for a last segment that reaches its end (a word may be cut there: the next window starts
+  at it), and a word repeated at the seam is dropped. Each window is heard on the speech worker
+  (`Transcriber::hearLive()`: resampled to 16 kHz there, one greedy pass without fallbacks; never on
+  the GUI thread), one at a time; a transcription waiting goes first. Whisper's loops (a phrase again
+  and again: `speech::withoutLoops`) are said once. The dialog shows the end of the text (`tail`, 240
+  characters, plain text), "Listening…" before the first words. An "auto" language is the one the
+  first window with words was heard in (the next windows are heard in it); the dictation's is its
+  own. It is a preview: the note's transcript (and the dictation's text) is the whole recording
+  heard again when it ends, as before. **Too slow**: a window that comes back more than 10 s behind
+  the recording, twice, ends it for that recording ("Text while recording stopped: this device hears
+  it too slowly") and marks the model too slow on this device (`speech/liveSlow`,
+  `Transcriber.liveSlow`): no text while recording with it until **Try again** in the settings
+  (`speechLiveRetry`), where a note says so. None with the system's own recorder (Android without
+  the FFmpeg backend: no samples pass through the app, `metered` false). Tests: `tst_media_live`,
+  `tst_speech_live`, `tst_media_transcriber`, `tst_media_dictation`.
 * **Tests without a microphone**: with `BRULION_TEST_MICROPHONE` set every recorder hears a made-up
   voice (a tone that swells and fades) — the shell self-test's voice note, screenshots.
 

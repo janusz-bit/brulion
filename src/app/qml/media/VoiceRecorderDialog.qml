@@ -6,7 +6,9 @@ import Brulion
 // VoiceRecorderDialog — recording a voice note (docs/UI.md "Voice notes"; the slash command "Voice
 // note", the touch toolbar's microphone, "Record voice note" in the palette and quick capture): it
 // asks for the microphone and records as soon as it opens — the time so far, a level meter of the
-// last seconds, Pause / Resume; "Save" ends the recording and recorded(file) hands the file over
+// last seconds, Pause / Resume, and — with a speech model here and "Text while recording" on —
+// the words heard so far (LiveTranscript; the transcript itself is the whole recording heard again
+// once saved); "Save" ends the recording and recorded(file) hands the file over
 // (the editor stores and embeds it at the caret, the shell into today's journal); Cancel, Escape,
 // the back gesture throw it away. A denied microphone or a failure says why and offers Try again.
 // The dialog stays (closed) until the file is whole: saving takes a moment after the last word;
@@ -73,6 +75,15 @@ BDialog {
                 dialog.settle()
             }
         }
+    }
+
+    // Text while recording (docs/UI.md "Voice notes"): the windows heard as it records.
+    LiveTranscript {
+        id: live
+        objectName: "voiceRecorderLiveText"
+        recorder: recorder
+        transcriber: AppController.speech
+        tailChars: 240
     }
 
     // The time recorded so far.
@@ -169,6 +180,19 @@ BDialog {
                   : dialog.state_ === "failed" ? recorder.error
                   : ""
         }
+    }
+
+    // What was heard so far (its end), or why nothing is heard any more.
+    BText {
+        objectName: "voiceRecorderLive"
+        Layout.fillWidth: true
+        visible: dialog.active && live.status !== "off"
+        wrapMode: Text.Wrap
+        maximumLineCount: 5
+        variant: live.text === "" || live.status === "slow" ? "muted" : "body"
+        text: live.status === "slow"
+              ? qsTr("Text while recording stopped: this device hears it too slowly. The transcript comes once you save.")
+              : live.text !== "" ? live.tail : qsTr("Listening…", "text while recording, before the first words")
     }
 
     RowLayout {

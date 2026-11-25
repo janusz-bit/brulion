@@ -13,7 +13,12 @@
 #                         model files, the queue in order, cancel, the transcript placed, errors;
 #   tst_media_dictation   the AI chat's dictation (Dictation) with a fed recorder and the fake
 #                         recognizer: not ready without a model, the text heard in its language,
-#                         its limit, cancelled, nothing recorded, the recordings deleted.
+#                         the text so far while it records, its limit, cancelled, nothing
+#                         recorded, the recordings deleted;
+#   tst_media_live        text while recording (LiveTranscript) with a fed recorder and a fake
+#                         recognizer that reads each second's word from the samples: the windows,
+#                         nothing said twice or lost at a seam, the language, off, a transcription
+#                         first, the recording's end, falling behind.
 brulion_add_test(tst_media_playback SOURCES tst_media_playback.cpp LIBS brulion_media)
 brulion_add_test(tst_media_engine SOURCES tst_media_engine.cpp LIBS brulion_media Qt6::Gui)
 set_tests_properties(tst_media_engine PROPERTIES TIMEOUT 300)
@@ -21,5 +26,7 @@ set_tests_properties(tst_media_engine PROPERTIES TIMEOUT 300)
 set_property(TEST tst_media_engine APPEND PROPERTY ENVIRONMENT "PULSE_SERVER=unix:/nonexistent")
 brulion_add_test(tst_media_transcriber SOURCES tst_media_transcriber.cpp LIBS brulion_media)
 brulion_add_test(tst_media_dictation SOURCES tst_media_dictation.cpp LIBS brulion_media)
+brulion_add_test(tst_media_live SOURCES tst_media_live.cpp LIBS brulion_media)
+set_property(TEST tst_media_live APPEND PROPERTY ENVIRONMENT "PULSE_SERVER=unix:/nonexistent")
 # Silent: no sound card is reached (the recorder is fed its samples).
 set_property(TEST tst_media_dictation APPEND PROPERTY ENVIRONMENT "PULSE_SERVER=unix:/nonexistent")

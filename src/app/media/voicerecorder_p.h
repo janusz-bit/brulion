@@ -38,6 +38,9 @@ struct VoiceRecorder::Backend {
     void setFile(const QString &path) { recorder->m_filePath = path; }
     void setMetered(bool metered) { recorder->m_metered = metered; }
     void setDuration(qint64 ms) { recorder->setDuration(ms); }
+    /// Someone wants the samples (VoiceRecorder::setSampleListener): hand them over with hear().
+    bool listened() const { return bool(recorder->m_listener); }
+    void hear(const float *samples, qsizetype count, int rate) { recorder->hearSamples(samples, count, rate); }
     QString file() const { return recorder->m_filePath; }
     /// The recording reached media::MaxRecordingMs.
     bool full() const;

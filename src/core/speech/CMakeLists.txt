@@ -1,10 +1,13 @@
 # speech — speech recognition on the device (docs/UI.md "Voice notes"): the Whisper models the app
 # downloads (speech.h: files, sizes, licence; ai::LocalModelFiles downloads them), the languages it
-# is asked to hear, what it heard (speech.h), and the recognizer behind an interface
-# (speechrunner.h) that the plugin brulion_speech implements.
+# is asked to hear, what it heard (speech.h), text while recording — a recording heard in windows
+# as it grows (live.h) —, how many threads it computes with on a busy processor (load.h), and the
+# recognizer behind an interface (speechrunner.h) that the plugin brulion_speech implements.
 brulion_add_core_module(speech
     SOURCES
         speech.h speech.cpp
+        live.h live.cpp
+        load.h load.cpp
         speechrunner.h speechrunner.cpp
     DEPS ai media)
 

@@ -1,5 +1,6 @@
 #include "dictation.h"
 
+#include "livetranscript.h"
 #include "transcriber.h"
 #include "voicerecorder.h"
 
@@ -26,6 +27,14 @@ Dictation::Dictation(Transcriber *transcriber, QObject *parent)
         Q_EMIT elapsedChanged();
         if (m_state == State::Recording && qint64(m_recorder->duration()) >= m_maxMs)
             stop();
+    });
+    // The text so far while it records, in the field at the caret (replaced by the full pass's).
+    m_live = new LiveTranscript(this);
+    m_live->setRecorder(m_recorder);
+    m_live->setTranscriber(transcriber);
+    connect(m_live, &LiveTranscript::textChanged, this, [this] {
+        if (m_state == State::Recording && !m_live->text().isEmpty())
+            Q_EMIT partial(m_live->text());
     });
     if (transcriber) {
         connect(transcriber, &Transcriber::heard, this, &Dictation::onHeard);
@@ -96,6 +105,7 @@ bool Dictation::start(const QString &language)
     removeLeftovers();
     // "pl-PL" → "pl": short dictations are heard better in a language named than recognized.
     m_language = language.section(u'-', 0, 0).trimmed().toLower();
+    m_live->setPreferredLanguage(m_language);
     setState(State::Recording);
     m_recorder->start();
     // (A recorder that failed at once has said why: idle again.)

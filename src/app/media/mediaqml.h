@@ -1,8 +1,10 @@
 // QML registration of the media area's C++ (library brulion_media, media/CMakeLists.txt) in the
 // app's QML module "Brulion": MediaPlayback is a singleton (the app's one player), VoiceRecorder a
-// creatable type (qml/media/VoiceRecorderDialog.qml). The Transcriber is AppController.speech.
+// creatable type (qml/media/VoiceRecorderDialog.qml), and so is LiveTranscript (its text while
+// recording). The Transcriber is AppController.speech.
 #pragma once
 
+#include "livetranscript.h"
 #include "mediaplayback.h"
 #include "transcriber.h"
 #include "voicerecorder.h"
@@ -27,6 +29,12 @@ struct VoiceRecorderForeign {
     Q_GADGET
     QML_FOREIGN(brulion::media::VoiceRecorder)
     QML_NAMED_ELEMENT(VoiceRecorder)
+};
+
+struct LiveTranscriptForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::media::LiveTranscript)
+    QML_NAMED_ELEMENT(LiveTranscript)
 };
 
 struct TranscriberForeign {

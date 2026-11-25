@@ -1,6 +1,7 @@
 // The core module speech (src/core/speech/speech.h): the Whisper models the app downloads — each
 // pinned to one revision with its checksum and size, all multilingual (they hear Polish), MIT —,
-// the languages it is asked to hear, and what is kept of the segments a recognizer heard.
+// the languages it is asked to hear, and what is kept of the segments a recognizer heard (with their
+// times).
 #include "speech/speech.h"
 
 #include <QRegularExpression>
@@ -93,6 +94,17 @@ private Q_SLOTS:
             at += 1000;
         }
         QCOMPARE(speech::spokenTexts(segments), kept);
+    }
+
+    void spokenSegmentsKeepTheirTimes()
+    {
+        const QList<Segment> heard{{0, 1200, u"[BLANK_AUDIO]"_s},
+                                   {1200, 3400, u" Kupić mleko "_s},
+                                   {3400, 5000, u"(muzyka)"_s},
+                                   {5000, 7600, u"i chleb."_s}};
+        const QList<Segment> kept = speech::spokenSegments(heard);
+        QCOMPARE(kept, (QList<Segment>{{1200, 3400, u"Kupić mleko"_s}, {5000, 7600, u"i chleb."_s}}));
+        QVERIFY(speech::spokenSegments({}).isEmpty());
     }
 };
 

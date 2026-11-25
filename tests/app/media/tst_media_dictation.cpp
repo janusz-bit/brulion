@@ -1,7 +1,8 @@
 // Dictation (src/app/media/dictation.h), the AI chat's microphone on the desktop, with a recorder
 // fed samples instead of a microphone and a transcriber with a fake recognizer and decoder: not
 // ready without a speech model (and says where to get one); dictated text heard in the language
-// the dictation started with (or the one the speech settings name); its elapsed time and its
+// the dictation started with (or the one the speech settings name); the text heard so far while it
+// records (partial(): text while recording), replaced by the full pass's; its elapsed time and its
 // limit (it stops by itself and is heard); cancelled while recording and while being heard;
 // nothing recorded; the recording deleted every time, and what an earlier run left in its folder
 // removed when the next dictation starts.
@@ -52,7 +53,7 @@ public:
         m_heard->started = true;
         while (!m_heard->release.load()) {
             if (params.cancel && params.cancel->load())
-                return Result{Cancelled, {}, {}, {}, 0, 0};
+                return Result{Cancelled, {}, {}, {}, 0, 0, 0};
             QThread::msleep(5);
         }
         Result r;
@@ -213,6 +214,35 @@ private Q_SLOTS:
         d->stop();
         QTRY_VERIFY_WITH_TIMEOUT(!recognized.isEmpty(), test::kRoomyMs);
         QCOMPARE(m_heard.languages.last(), u"en"_s);
+        QTRY_VERIFY(empty(d->folder()));
+    }
+
+    void partialWhileRecording()
+    {
+        auto t = transcriber(true);
+        auto d = dictation(t.get());
+        if (!d->recorder()->available())
+            QSKIP("this build records nothing (no Qt Multimedia)");
+        QSignalSpy partial(d.get(), &Dictation::partial);
+        QSignalSpy recognized(d.get(), &Dictation::recognized);
+        QVERIFY(d->start(u"pl-PL"_s));
+        speak(d->recorder(), 3.5);
+        QTRY_VERIFY_WITH_TIMEOUT(!partial.isEmpty(), test::kRoomyMs);
+        QCOMPARE(partial.last().first().toString(), u"Zadzwonić do mamy w piątek o ósmej."_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!t->hearingLive(), test::kRoomyMs);
+        d->stop();
+        QTRY_VERIFY_WITH_TIMEOUT(!recognized.isEmpty(), test::kRoomyMs);
+        // The window in the dictation's language, then the whole recording.
+        QCOMPARE(m_heard.languages, (QStringList{u"pl"_s, u"pl"_s}));
+        const qsizetype partials = partial.size();
+        // Text while recording off: none.
+        t->setLive(false);
+        recognized.clear();
+        QVERIFY(d->start(u"pl-PL"_s));
+        speak(d->recorder(), 3.5);
+        d->stop();
+        QTRY_VERIFY_WITH_TIMEOUT(!recognized.isEmpty(), test::kRoomyMs);
+        QCOMPARE(partial.size(), partials);
         QTRY_VERIFY(empty(d->folder()));
     }
 

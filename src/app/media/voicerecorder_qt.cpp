@@ -28,6 +28,7 @@
 #include <QUrl>
 #include <QtEndian>
 
+#include <algorithm>
 #include <deque>
 
 using namespace Qt::StringLiterals;
@@ -336,6 +337,8 @@ private:
                 pcm16 = toPcm16(f.constData(), samples);
         }
         pushLevel(level);
+        if (listened())
+            hearMono(whole, frames);
         if (m_recorder) {
             m_pending.emplace_back(whole, m_format, m_startUs);
             m_startUs += m_format.durationForFrames(qint32(frames));
@@ -344,6 +347,24 @@ private:
             m_wav.write(pcm16);
         }
         addFrames(frames, m_format.sampleRate());
+    }
+
+    /// `frames` frames of m_format as one channel of floats, for the sample listener.
+    void hearMono(const QByteArray &bytes, qint64 frames)
+    {
+        const int channels = std::max(1, m_format.channelCount());
+        const int bytesPerSample = m_format.bytesPerSample();
+        QList<float> mono(frames);
+        const bool int16 = m_format.sampleFormat() == QAudioFormat::Int16;
+        for (qint64 f = 0; f < frames; ++f) {
+            float sum = 0;
+            for (int c = 0; c < channels; ++c) {
+                const char *at = bytes.constData() + (f * channels + c) * bytesPerSample;
+                sum += int16 ? float(qFromLittleEndian<qint16>(at)) / 32768.0f : m_format.normalizedSampleValue(at);
+            }
+            mono[f] = sum / float(channels);
+        }
+        hear(mono.constData(), mono.size(), m_format.sampleRate());
     }
 
     void sendPending()

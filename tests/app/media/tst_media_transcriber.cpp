@@ -3,10 +3,13 @@
 // with the chosen model (or the first one here), the stages and progress, cancelling one waiting
 // and one being heard, what Whisper writes over silence left out, the transcript handed to the
 // placer (and its refusal: the note no longer has the recording), errors of the decoder and of the
-// recognizer, the settings (model, language, transcribing by itself) through the shell's store.
+// recognizer, the settings (model, language, transcribing by itself, text while recording and a
+// model too slow for it) through the shell's store; the windows of text while recording
+// (hearLive(): heard fast, refused while a transcription runs or waits, cancelled).
 
 #include "transcriber.h"
 
+#include "media/transcript.h"
 #include "speech/speech.h"
 
 #include <QCryptographicHash>
@@ -32,6 +35,8 @@ struct Heard {
     std::mutex mutex;
     QStringList models;    ///< the model file of each open
     QStringList languages; ///< the language of each transcription
+    QList<bool> live;      ///< Params::live of each
+    QList<qsizetype> sizes; ///< the samples of each
     int opens = 0;
     /// Blocks transcribe() until set (a recording "being heard").
     std::atomic<bool> release{true};
@@ -47,11 +52,13 @@ public:
         {
             std::lock_guard lock(m_heard->mutex);
             m_heard->languages.append(params.language);
+            m_heard->live.append(params.live);
+            m_heard->sizes.append(samples.size());
         }
         m_heard->started = true;
         while (!m_heard->release.load()) {
             if (params.cancel && params.cancel->load())
-                return Result{Cancelled, {}, {}, {}, 0, 0};
+                return Result{Cancelled, {}, {}, {}, 0, 0, 0};
             QThread::msleep(5);
         }
         if (params.progress) {
@@ -61,6 +68,7 @@ public:
         Result r;
         r.status = Ok;
         r.language = u"pl"_s;
+        r.audioMs = samples.size() * 1000 / 16000;
         // The "sound" says how many samples it had.
         if (samples.isEmpty()) {
             r.status = Failed;
@@ -105,6 +113,8 @@ struct Placed {
     QString target;
     int line = -1;
     QString text;
+    QList<media::TimedText> paragraphs;
+    qint64 audioMs = 0;
 };
 
 } // namespace
@@ -149,8 +159,10 @@ private:
         o.setSetting = [this](const QString &key, const QVariant &value) { m_settings.insert(key, value); };
         o.filePath = [this](const QString &attachment) { return m_dir.filePath(attachment); };
         auto t = std::make_unique<Transcriber>(o);
-        t->setPlacer([this](const QString &page, const QString &target, int line, const QString &text) {
-            m_placed.append({page, target, line, text});
+        t->setPlacer([this](const QString &page, const QString &target, int line,
+                            const QList<media::TimedText> &paragraphs, qint64 audioMs) {
+            const QString text = media::transcriptBlocks(paragraphs, {true, target, audioMs}).join(u'\n');
+            m_placed.append({page, target, line, text, paragraphs, audioMs});
             return m_placeOk;
         });
         return t;
@@ -175,6 +187,8 @@ private Q_SLOTS:
         std::lock_guard lock(m_heard.mutex);
         m_heard.models.clear();
         m_heard.languages.clear();
+        m_heard.live.clear();
+        m_heard.sizes.clear();
         m_heard.opens = 0;
     }
 
@@ -254,7 +268,13 @@ private Q_SLOTS:
         QCOMPARE(m_placed.at(0).line, 3);
         // What Whisper writes for no speech goes; a heard tag is no tag.
         QCOMPARE(m_placed.at(0).text, u"Kupić mleko i \\#chleb."_s);
+        // With its times: one paragraph from the first word to the last, the recording's length.
+        QCOMPARE(m_placed.at(0).paragraphs.size(), 1);
+        QCOMPARE(m_placed.at(0).paragraphs.first().startMs, 1000);
+        QCOMPARE(m_placed.at(0).paragraphs.first().endMs, 3000);
+        QCOMPARE(m_placed.at(0).audioMs, 1000);
         QCOMPARE(m_placed.at(1).line, 7);
+        QCOMPARE(m_heard.live, (QList<bool>{false, false}));
         // One model opened for both, the language asked.
         QCOMPARE(m_heard.opens, 1);
         QCOMPARE(m_heard.languages, (QStringList{u"pl"_s, u"pl"_s}));
@@ -322,6 +342,100 @@ private Q_SLOTS:
         QVERIFY(t->transcribe(u"assets/x.m4a"_s, u"N.md"_s, u"x.m4a"_s, 0));
         QTRY_COMPARE_WITH_TIMEOUT(done.size(), 1, test::kRoomyMs);
         QCOMPARE(done.first().at(4).toString(), u"the speech model cannot be read"_s);
+    }
+
+    void liveSettings()
+    {
+        const QString folder = m_dir.filePath(u"na żywo"_s);
+        auto t = make({fakeModel(folder, u"small"_s, "mały", true), fakeModel(folder, u"base"_s, "bazowy", true)},
+                      folder);
+        QVERIFY(t->live());
+        QVERIFY(!t->liveSlow());
+        QVERIFY(t->liveReady());
+        QSignalSpy ready(t.get(), &Transcriber::liveReadyChanged);
+        t->setLive(false);
+        QVERIFY(!t->liveReady());
+        QCOMPARE(m_settings.value(u"speech/live"_s).toBool(), false);
+        QVERIFY(!ready.isEmpty());
+        t->setLive(true);
+        // Too slow with one model: not with the other, back with "Try again".
+        t->markLiveSlow(u"small"_s);
+        QVERIFY(t->liveSlow());
+        QVERIFY(!t->liveReady());
+        QCOMPARE(m_settings.value(u"speech/liveSlow"_s).toStringList(), QStringList{u"small"_s});
+        t->setChosen(u"base"_s);
+        QVERIFY(!t->liveSlow());
+        QVERIFY(t->liveReady());
+        t->setChosen(u"small"_s);
+        QVERIFY(t->liveSlow());
+        t->retryLive();
+        QVERIFY(!t->liveSlow());
+        QVERIFY(m_settings.value(u"speech/liveSlow"_s).toStringList().isEmpty());
+        // No model here: no text while recording.
+        const QString none = m_dir.filePath(u"bez modelu"_s);
+        auto empty = make({fakeModel(none, u"small"_s, "mały", false)}, none);
+        QVERIFY(!empty->liveReady());
+        QVERIFY(!empty->hearLive(QList<float>(16000, 0.1f), 16000, u"auto"_s, this, nullptr));
+    }
+
+    void hearsLive()
+    {
+        const QString folder = m_dir.filePath(u"okna"_s);
+        auto t = make({fakeModel(folder, u"small"_s, "mały", true)}, folder);
+        QList<Transcriber::LiveHeard> heard;
+        const auto done = [&heard](const Transcriber::LiveHeard &h) { heard.append(h); };
+        // 48 kHz: resampled to 16 kHz on the worker.
+        QVERIFY(t->hearLive(QList<float>(48000, 0.1f), 48000, u"pl"_s, this, done));
+        QVERIFY(t->hearingLive());
+        // One window at a time.
+        QVERIFY(!t->hearLive(QList<float>(16000, 0.1f), 16000, u"pl"_s, this, done));
+        QTRY_COMPARE_WITH_TIMEOUT(heard.size(), 1, test::kRoomyMs);
+        QVERIFY(!t->hearingLive());
+        QVERIFY(heard.first().ok);
+        QCOMPARE(heard.first().modelId, u"small"_s);
+        QCOMPARE(heard.first().language, u"pl"_s);
+        QCOMPARE(heard.first().segments.size(), 3);
+        QCOMPARE(m_heard.live, QList<bool>{true});
+        QVERIFY(qAbs(m_heard.sizes.first() - 16000) < 100);
+        QCOMPARE(m_heard.opens, 1);
+
+        // A transcription waits: it goes first, no window meanwhile; the model stays open.
+        touch(u"assets/notatka.m4a"_s);
+        m_heard.release = false;
+        QSignalSpy transcribed(t.get(), &Transcriber::transcribed);
+        QVERIFY(t->transcribe(u"assets/notatka.m4a"_s, u"N.md"_s, u"notatka.m4a"_s, 0));
+        QVERIFY(!t->hearLive(QList<float>(16000, 0.1f), 16000, u"pl"_s, this, done));
+        m_heard.release = true;
+        QTRY_COMPARE_WITH_TIMEOUT(transcribed.size(), 1, test::kRoomyMs);
+        QCOMPARE(m_heard.opens, 1);
+
+        // Cancelled while it is heard: `done`, not ok.
+        m_heard.release = false;
+        QVERIFY(t->hearLive(QList<float>(16000, 0.1f), 16000, u"auto"_s, this, done));
+        QTRY_VERIFY_WITH_TIMEOUT(m_heard.started.load(), test::kRoomyMs);
+        t->cancelLive();
+        QTRY_COMPARE_WITH_TIMEOUT(heard.size(), 2, test::kRoomyMs);
+        QVERIFY(!heard.at(1).ok);
+        m_heard.release = true;
+
+        // A transcription asked for while a window is heard waits for it.
+        m_heard.release = false;
+        m_heard.started = false;
+        QVERIFY(t->hearLive(QList<float>(16000, 0.1f), 16000, u"auto"_s, this, done));
+        QTRY_VERIFY_WITH_TIMEOUT(m_heard.started.load(), test::kRoomyMs);
+        QVERIFY(t->transcribe(u"assets/notatka.m4a"_s, u"N.md"_s, u"notatka.m4a"_s, 0));
+        m_heard.release = true;
+        QTRY_COMPARE_WITH_TIMEOUT(transcribed.size(), 2, test::kRoomyMs);
+        QCOMPARE(heard.size(), 3);
+        QVERIFY(heard.at(2).ok);
+
+        // Its context gone: no `done`.
+        {
+            QObject gone;
+            QVERIFY(t->hearLive(QList<float>(16000, 0.1f), 16000, u"auto"_s, &gone, done));
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!t->hearingLive(), test::kRoomyMs);
+        QCOMPARE(heard.size(), 3);
     }
 
     void removeStopsAndDeletes()

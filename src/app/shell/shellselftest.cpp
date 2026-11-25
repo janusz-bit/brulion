@@ -3891,7 +3891,8 @@ void checkAttachmentSearch(QQuickWindow *window, AppController *app, const Check
 // a note is a player — its length read before it plays, Play and Pause with real input, its place
 // moving; off its page the now-playing bar shows it and closes it; opened as a page it is the player
 // view; a voice note recorded from the made-up microphone (VoiceRecorder::TestMicrophoneVariable)
-// lands in the note as an embed of a new attachment. Silent: the player is muted. Skipped in a build
+// lands in the note as an embed of a new attachment; a transcript's moment link plays the embed
+// from its moment. Silent: the player is muted. Skipped in a build
 // that plays nothing.
 void checkMediaPlayer(QQuickWindow *window, AppController *app, const Check &check)
 {
@@ -4047,6 +4048,46 @@ void checkMediaPlayer(QQuickWindow *window, AppController *app, const Check &che
         }
     }
     qunsetenv(media::VoiceRecorder::TestMicrophoneVariable);
+
+    // A transcript's moment link (docs/UI.md "Voice notes"): a click plays the recording's embed
+    // on the page from that moment, whatever it did before; the page stays where it is.
+    player->stop();
+    // (Away first: the page opens again with no block being edited — the link drawn, not its text.)
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    check(workspace->writeFile(page, u"- Notatka ![["_s + name + u"]]\n\t- [["_s + name
+                                             + u"#t=1|0:01]] Dzień dobry, żółwiu.\n- Dalej\n"_s),
+          "a note with a transcript's moment link");
+    app->openPage(page);
+    QQuickItem *moment = nullptr;
+    check(waitFor([&] { return (moment = renderedTextContaining(window->contentItem(), u"0:01"_s)) != nullptr; }, 5000),
+          "the moment link is drawn");
+    // (The player above it settled first: its length known, nothing moves the link any more.)
+    waitFor([&] {
+        QQuickItem *player = shownNamed(window->contentItem(), u"mediaEmbed"_s);
+        QQuickItem *length = player ? shownNamed(player, u"mediaDuration"_s) : nullptr;
+        return length && length->property("text").toString() == u"0:03";
+    });
+    settle(300);
+    moment = renderedTextContaining(window->contentItem(), u"0:01"_s);
+    const QPointF at = moment ? linkPoint(moment, u"#t"_s) : QPointF(-1, -1);
+    if (at.x() >= 0) {
+        tapOrClick(window, at, touch);
+        mouseMove(window, QPointF(1, 1));
+        const bool fromThere = waitFor(
+                [&] { return player->path() == attachment && player->playing() && player->position() >= 900; }, 10000);
+        if (!fromThere)
+            std::fprintf(
+                    stderr,
+                    "selftest: media: after the moment link at (%.0f, %.0f): \"%s\" playing %d at %.0f ms; there: %s\n",
+                    at.x(), at.y(), qPrintable(player->path()), int(player->playing()), player->position(),
+                    qPrintable(uidriver::itemsAt(window, at)));
+        check(fromThere, "a click on the moment plays the recording from there");
+        check(app->currentRoute().value(u"path"_s).toString() == page, "and the page stays open");
+    } else {
+        std::fprintf(stderr, "selftest: media: no moment link in \"%s\"\n",
+                     moment ? qPrintable(moment->property("text").toString()) : "(no block)");
+        check(false, "the moment link is found in its block");
+    }
     player->stop();
     // The player's tooltips of the pages left wait for a deletion this running test does not let
     // happen (see closeToolTipsWaitingForDeletion): closed, so that they take nothing later.

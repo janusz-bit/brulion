@@ -79,7 +79,7 @@ QString knownLanguage(const QString &language)
     return speechLanguages().contains(language) ? language : speechLanguages().first();
 }
 
-QStringList spokenTexts(const QList<Segment> &segments)
+QList<Segment> spokenSegments(const QList<Segment> &segments)
 {
     // A segment that is only a note in brackets (or between asterisks), or a credit of subtitles
     // Whisper learnt from films and writes over silence.
@@ -88,13 +88,21 @@ QStringList spokenTexts(const QList<Segment> &segments)
             u"^\\s*(napisy|tłumaczenie|subtitles|transcription|transcribed|translated)\\b.*"
             u"\\b(by|przez|wykonane|wykonał|wykonała|zrobione|amara)\\b"_s,
             QRegularExpression::CaseInsensitiveOption);
-    QStringList out;
+    QList<Segment> out;
     for (const Segment &s : segments) {
         const QString text = s.text.trimmed();
         if (text.isEmpty() || note.match(text).hasMatch() || credit.match(text).hasMatch())
             continue;
-        out.append(text);
+        out.append(Segment{s.startMs, s.endMs, text});
     }
+    return out;
+}
+
+QStringList spokenTexts(const QList<Segment> &segments)
+{
+    QStringList out;
+    for (const Segment &s : spokenSegments(segments))
+        out.append(s.text);
     return out;
 }
 

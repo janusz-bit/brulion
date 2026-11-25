@@ -14427,6 +14427,22 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <source>About the model</source>
         <translation>O modelu</translation>
     </message>
+    <message>
+        <source>Text while recording</source>
+        <translation>Tekst w trakcie nagrywania</translation>
+    </message>
+    <message>
+        <source>The words appear as you speak — under the recorder and, while dictating, in the chat&apos;s field. The note still gets the whole recording heard again, more carefully, when it ends.</source>
+        <translation>Słowa pojawiają się, gdy mówisz — pod nagrywarką, a przy dyktowaniu w polu czatu. Notatka i tak dostaje całe nagranie usłyszane jeszcze raz, staranniej, gdy się skończy.</translation>
+    </message>
+    <message>
+        <source>Off with this model: this device heard it too slowly to keep up with the recording. A smaller model may keep up.</source>
+        <translation>Wyłączony dla tego modelu: to urządzenie słyszało nim zbyt wolno, by nadążyć za nagraniem. Mniejszy model może nadążyć.</translation>
+    </message>
+    <message>
+        <source>Try again</source>
+        <translation>Spróbuj ponownie</translation>
+    </message>
 </context>
 <context>
     <name>MobileEditToolbar</name>
@@ -27641,6 +27657,15 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <location filename="../src/app/qml/media/VoiceRecorderDialog.qml" line="195"/>
         <source>Try again</source>
         <translation>Spróbuj ponownie</translation>
+    </message>
+    <message>
+        <source>Text while recording stopped: this device hears it too slowly. The transcript comes once you save.</source>
+        <translation>Tekst w trakcie nagrywania zatrzymany: to urządzenie słyszy zbyt wolno. Transkrypcja pojawi się po zapisaniu.</translation>
+    </message>
+    <message>
+        <source>Listening…</source>
+        <comment>text while recording, before the first words</comment>
+        <translation>Słucham…</translation>
     </message>
 </context>
 <context>

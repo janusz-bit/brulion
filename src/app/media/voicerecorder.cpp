@@ -262,6 +262,13 @@ void VoiceRecorder::setDuration(qint64 ms)
         stop();
 }
 
+void VoiceRecorder::hearSamples(const float *samples, qsizetype count, int rate)
+{
+    // (A copy: the listener may set another one, or none, meanwhile.)
+    if (const SampleListener listener = m_listener; listener && count > 0 && rate > 0)
+        listener(samples, count, rate);
+}
+
 void VoiceRecorder::addFrames(qint64 frames, int rate)
 {
     if (rate <= 0)

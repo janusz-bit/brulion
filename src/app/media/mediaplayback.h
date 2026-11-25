@@ -98,6 +98,10 @@ public:
     /// one before paused and its place remembered — and starts at `startMs` (≥ 0: the embed's
     /// `#t=`), else where it was left, and pauses at `endMs` (≥ 0).
     Q_INVOKABLE void play(const QString &path, const QUrl &url, double startMs = -1, double endMs = -1);
+    /// Plays `path` from `ms` whatever it does now — loaded or not, playing or paused, at a
+    /// fragment's end or not (a transcript's moment link clicked: docs/UI.md "Voice notes"); no
+    /// fragment's end pauses it.
+    Q_INVOKABLE void playAt(const QString &path, const QUrl &url, double ms);
     /// play() when it is not playing `path`, else pause().
     Q_INVOKABLE void toggle(const QString &path, const QUrl &url, double startMs = -1, double endMs = -1);
     Q_INVOKABLE void pause();
