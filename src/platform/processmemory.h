@@ -59,8 +59,8 @@ bool canReleaseProgramPages();
 /// Only what cannot hold anything of the process's own: the segments of the loaded ELF objects
 /// that are not writable (the loader's lock is held meanwhile: none can go), and of those only
 /// the mappings the kernel reports as file-backed, private, not writable, not locked and without
-/// a single anonymous page (/proc/self/smaps: a debugger's breakpoint or a text relocation makes
-/// one) — madvise(MADV_DONTNEED) would throw such a page away. The libraries OpenGL calls go
+/// a single anonymous or swapped-out page (/proc/self/smaps: a debugger's breakpoint or a text
+/// relocation makes one) — madvise(MADV_DONTNEED) would throw such a page away. The libraries OpenGL calls go
 /// through (libGL*, libEGL*, libOpenGL*, libglapi*, libnvidia*) are left alone: a driver may
 /// rewrite their entry points in place at any moment.
 ///

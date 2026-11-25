@@ -121,7 +121,8 @@ qint64 smapsField(const char *line, const char *name)
 }
 
 /// The mappings of files that are private, not writable, not locked, and have no page of their
-/// own (no anonymous page: nothing was ever written into them), sorted by address.
+/// own (no anonymous page, none in the swap: nothing was ever written into them), sorted by
+/// address.
 std::vector<CleanMapping> cleanMappings(const std::string &smaps)
 {
     std::vector<CleanMapping> out;
@@ -165,6 +166,9 @@ std::vector<CleanMapping> cleanMappings(const std::string &smaps)
         } else if (const qint64 own = smapsField(line, "Anonymous"); own > 0) {
             candidate = false;
         } else if (const qint64 dirty = smapsField(line, "Private_Dirty"); dirty > 0) {
+            candidate = false;
+        } else if (const qint64 swapped = smapsField(line, "Swap"); swapped > 0) {
+            // (A page of its own that was swapped out is not counted above, and would go as well.)
             candidate = false;
         } else if (const qint64 locked = smapsField(line, "Locked"); locked > 0) {
             candidate = false;
