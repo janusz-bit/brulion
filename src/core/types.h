@@ -14,6 +14,8 @@
 #include <QTime>
 #include <QVariant>
 
+#include <compare>
+#include <iterator>
 #include <optional>
 #include <utility>
 
@@ -183,6 +185,103 @@ private:
     QSharedDataPointer<Holder> m;
 };
 
+/// ParsedNote::tasks: the tasks of the note's blocks in document order, each the very object its
+/// block's Boxed<Task> holds (no copy: a Task is ~280 bytes, docs/PERFORMANCE.md). Reads like a
+/// const QList<Task> — iteration, at(), size(), std::ranges algorithms; toList() copies.
+class TaskList {
+    using Items = QList<Boxed<Task>>;
+
+public:
+    class const_iterator {
+    public:
+        using iterator_category = std::random_access_iterator_tag;
+        using iterator_concept = std::random_access_iterator_tag;
+        using value_type = Task;
+        using difference_type = qsizetype;
+        using pointer = const Task *;
+        using reference = const Task &;
+
+        const_iterator() = default;
+        explicit const_iterator(Items::const_iterator it) : m_it(it) { }
+
+        reference operator*() const { return **m_it; }
+        pointer operator->() const { return &**m_it; }
+        reference operator[](difference_type n) const { return *m_it[n]; }
+        const_iterator &operator++() { ++m_it; return *this; }
+        const_iterator operator++(int) { const_iterator t = *this; ++m_it; return t; }
+        const_iterator &operator--() { --m_it; return *this; }
+        const_iterator operator--(int) { const_iterator t = *this; --m_it; return t; }
+        const_iterator &operator+=(difference_type n) { m_it += n; return *this; }
+        const_iterator &operator-=(difference_type n) { m_it -= n; return *this; }
+        friend const_iterator operator+(const_iterator a, difference_type n) { return a += n; }
+        friend const_iterator operator+(difference_type n, const_iterator a) { return a += n; }
+        friend const_iterator operator-(const_iterator a, difference_type n) { return a -= n; }
+        friend difference_type operator-(const_iterator a, const_iterator b) { return a.m_it - b.m_it; }
+        friend bool operator==(const_iterator a, const_iterator b) { return a.m_it == b.m_it; }
+        friend auto operator<=>(const_iterator a, const_iterator b) { return (a.m_it - b.m_it) <=> 0; }
+
+    private:
+        Items::const_iterator m_it{};
+    };
+    using iterator = const_iterator;
+    using value_type = Task;
+    using size_type = qsizetype;
+    using difference_type = qsizetype;
+    using const_reference = const Task &;
+    using reference = const Task &;
+
+    TaskList() = default;
+
+    qsizetype size() const noexcept { return m_items.size(); }
+    qsizetype count() const noexcept { return m_items.size(); }
+    qsizetype length() const noexcept { return m_items.size(); }
+    bool isEmpty() const noexcept { return m_items.isEmpty(); }
+    bool empty() const noexcept { return m_items.isEmpty(); }
+
+    const Task &at(qsizetype i) const { return *m_items.at(i); }
+    const Task &operator[](qsizetype i) const { return *m_items.at(i); }
+    const Task &first() const { return *m_items.first(); }
+    const Task &last() const { return *m_items.last(); }
+    const Task &constFirst() const { return *m_items.constFirst(); }
+    const Task &constLast() const { return *m_items.constLast(); }
+    const Task &front() const { return first(); }
+    const Task &back() const { return last(); }
+
+    const_iterator begin() const { return const_iterator(m_items.cbegin()); }
+    const_iterator end() const { return const_iterator(m_items.cend()); }
+    const_iterator cbegin() const { return begin(); }
+    const_iterator cend() const { return end(); }
+    const_iterator constBegin() const { return begin(); }
+    const_iterator constEnd() const { return end(); }
+
+    /// Shares the block's task (nothing when it holds none).
+    void append(const Boxed<Task> &task)
+    {
+        if (task)
+            m_items.append(task);
+    }
+    /// A task of its own (not a block's).
+    void append(const Task &task) { m_items.append(Boxed<Task>(task)); }
+    void clear() { m_items.clear(); }
+    void reserve(qsizetype n) { m_items.reserve(n); }
+    void squeeze() { m_items.squeeze(); }
+
+    /// A copy of every task.
+    QList<Task> toList() const
+    {
+        QList<Task> out;
+        out.reserve(size());
+        for (const Task &t : *this)
+            out.append(t);
+        return out;
+    }
+    /// Is task `i` the object `block` holds (no copy)? For tests.
+    bool isSharedWith(qsizetype i, const Boxed<Task> &block) const { return m_items.at(i).isSharedWith(block); }
+
+private:
+    Items m_items;
+};
+
 /// A block's own source lines joined with '\n' (Block::raw). Shares the note's text where those
 /// lines are one piece of it — consecutive lines each ending in "\n", the usual case: no copy —,
 /// else holds its own copy (CRLF or lone-CR endings; own lines interrupted by child blocks, e.g.
@@ -252,7 +351,7 @@ struct ParsedNote {
     QList<Block> blocks;          ///< all blocks in document order (pre-order); tree via parent/children
     QList<Link> links;
     QList<Heading> headings;
-    QList<Task> tasks;
+    TaskList tasks;               ///< the blocks' tasks (shared with Block::task), document order
     QList<Reminder> reminders;
     /// Block id -> index into blocks. A QMap: most notes have one or two ids, and a QHash
     /// allocates ~1.8 KB on its first insert (docs/PERFORMANCE.md, L8).

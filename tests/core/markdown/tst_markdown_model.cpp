@@ -1,5 +1,5 @@
 // The parsed model's compact types (types.h, docs/PERFORMANCE.md L8): Boxed (Block::task),
-// BlockIdMap (ParsedNote::blockIds), Properties, BlockSource (Block::raw) — and the golden digest
+// BlockIdMap (ParsedNote::blockIds), Properties, BlockSource (Block::raw), TaskList (ParsedNote::tasks) — and the golden digest
 // of parseNote()'s output over a frozen corpus (tests/common/notecorpus.h), which proves that the
 // memory diet changed no value and later guards markdown::ParserVersion (the index cache).
 #include "markdown/parse.h"
@@ -203,6 +203,99 @@ private Q_SLOTS:
         QVERIFY(copy.task.isSharedWith(block.task));
         block.task->status = TaskStatus::Done;
         QCOMPARE(copy.task->status, TaskStatus::Doing);
+    }
+
+    // ---- TaskList (ParsedNote::tasks) --------------------------------------------------------------
+
+    void taskListSharesTheBlocksTasks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("texts");
+        QTest::addColumn<QList<bool>>("sameAsBlockText");
+        QTest::newRow("none") << u"# Nagłówek\nAkapit\n"_s << QStringList() << QList<bool>();
+        QTest::newRow("one line") << u"- [ ] Zapłacić czynsz\n"_s << QStringList{u"Zapłacić czynsz"_s}
+                                  << QList<bool>{true};
+        QTest::newRow("tokens") << u"- [x] Kupić farbę 📅 2026-11-25 ✅ 2026-11-24\n"_s
+                                << QStringList{u"Kupić farbę"_s} << QList<bool>{true};
+        QTest::newRow("Logseq marker") << u"- TODO żółw\n- DONE łódź\n"_s << QStringList{u"żółw"_s, u"łódź"_s}
+                                       << QList<bool>{true, true};
+        // A task's text is its first line; the block's holds every line.
+        QTest::newRow("two lines") << u"- [ ] pierwsza\n  druga linia\n"_s << QStringList{u"pierwsza"_s}
+                                   << QList<bool>{false};
+        QTest::newRow("nested") << u"- [ ] rodzic\n  - [/] dziecko ⏳ 2026-12-01\n"_s
+                                << QStringList{u"rodzic"_s, u"dziecko"_s} << QList<bool>{true, true};
+        QTest::newRow("CRLF") << u"- [ ] ąć\r\n- [-] ęł\r\n"_s << QStringList{u"ąć"_s, u"ęł"_s}
+                              << QList<bool>{true, true};
+        QTest::newRow("empty task") << u"- [ ] \n"_s << QStringList{QString()} << QList<bool>{true};
+    }
+    void taskListSharesTheBlocksTasks()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, texts);
+        QFETCH(QList<bool>, sameAsBlockText);
+        const ParsedNote note = markdown::parseNote(u"Zadania.md"_s, content);
+        QCOMPARE(note.tasks.size(), texts.size());
+        QCOMPARE(note.tasks.isEmpty(), texts.isEmpty());
+        qsizetype t = 0;
+        for (const Block &b : note.blocks) {
+            if (!b.task)
+                continue;
+            QVERIFY(t < note.tasks.size());
+            QVERIFY(note.tasks.isSharedWith(t, b.task)); // the block's object, not a copy
+            QCOMPARE(&note.tasks.at(t), &*b.task);
+            QCOMPARE(note.tasks[t].text, texts.at(t));
+            // A one-line task's text is its block's (shared, not a second string).
+            QCOMPARE(b.task->text.isSharedWith(b.text), sameAsBlockText.at(t) && !b.text.isEmpty());
+            ++t;
+        }
+        QCOMPARE(t, note.tasks.size());
+        // It reads like a QList<Task>.
+        QStringList seen;
+        for (const Task &task : note.tasks)
+            seen.append(task.text);
+        QCOMPARE(seen, texts);
+        QCOMPARE(note.tasks.toList().size(), texts.size());
+        if (!texts.isEmpty()) {
+            QCOMPARE(note.tasks.first().text, texts.first());
+            QCOMPARE(note.tasks.last().text, texts.last());
+            const auto found = std::ranges::find(note.tasks, note.tasks.last().line, &Task::line);
+            QVERIFY(found != note.tasks.cend());
+            QCOMPARE(found - note.tasks.cbegin(), note.tasks.size() - 1);
+            QCOMPARE(found->text, texts.last());
+            QVERIFY(std::ranges::all_of(note.tasks, [](const Task &x) { return x.line >= 0; }));
+        }
+        // A copy of the note shares the tasks too.
+        const ParsedNote copy = note;
+        for (qsizetype i = 0; i < copy.tasks.size(); ++i)
+            QCOMPARE(&copy.tasks.at(i), &note.tasks.at(i));
+    }
+
+    void taskListOwnTasks()
+    {
+        TaskList list;
+        QVERIFY(list.isEmpty());
+        QCOMPARE(list.begin(), list.end());
+        list.append(Boxed<Task>()); // a block without a task adds nothing
+        QVERIFY(list.isEmpty());
+        list.append(sampleTask(u"własne"_s));
+        Boxed<Task> boxed = sampleTask(u"wspólne"_s);
+        list.append(boxed);
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list.at(0).text, u"własne"_s);
+        QVERIFY(list.isSharedWith(1, boxed));
+        QVERIFY(!list.isSharedWith(0, boxed));
+        auto it = list.begin();
+        QCOMPARE(it->text, u"własne"_s);
+        ++it;
+        QCOMPARE((*it).text, u"wspólne"_s);
+        QCOMPARE(list.end() - list.begin(), 2);
+        QCOMPARE(list.begin()[1].text, u"wspólne"_s);
+        QVERIFY(list.begin() < list.end());
+        list.squeeze();
+        list.clear();
+        QVERIFY(list.isEmpty());
+        static_assert(std::random_access_iterator<TaskList::const_iterator>);
+        static_assert(std::ranges::random_access_range<const TaskList>);
     }
 
     // Copies made on other threads while the original is read: the reference count is atomic

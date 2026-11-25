@@ -755,6 +755,8 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
             b.task = readTask(in);
             if (badLine(b.task->line))
                 return std::nullopt;
+            if (b.task->text == b.text)
+                b.task->text = b.text; // shared, as parseNote() leaves it
         }
         const qsizetype reminders = in.count(5);
         b.reminders.reserve(reminders);
@@ -777,7 +779,7 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
         if (b.kind == BlockKind::Heading && b.parent < 0 && b.headingLevel > 0)
             note.headings.append(Heading{b.headingLevel, b.text, b.line});
         if (b.task)
-            note.tasks.append(*b.task);
+            note.tasks.append(b.task);
         note.reminders.append(b.reminders);
         if (!b.id.isEmpty() && !note.blockIds.contains(b.id))
             note.blockIds.insert(b.id, index);

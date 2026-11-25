@@ -759,7 +759,8 @@ Block buildBlock(const Node &node, Ctx &ctx)
     const BlockText text = blockText(st, node, infos, marker);
     block.text = text.text;
     if (marker) {
-        block.task = buildTask(*marker, infos, text.first, node.line);
+        // A one-line task's text is its block's: shared, not a second copy.
+        block.task = buildTask(*marker, infos, text.first == block.text ? block.text : text.first, node.line);
         taskClockFromDrawers(st, infos, *block.task);
     }
     blockReminders(infos, block, ctx);
@@ -845,7 +846,7 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, 
         if (block.kind == BlockKind::Heading && parent < 0 && block.headingLevel > 0)
             note.headings.append(Heading{block.headingLevel, block.text, block.line});
         if (block.task)
-            note.tasks.append(*block.task);
+            note.tasks.append(block.task);
         note.reminders.append(block.reminders);
         if (!block.id.isEmpty() && !note.blockIds.contains(block.id))
             note.blockIds.insert(block.id, index);
