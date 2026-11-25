@@ -17,9 +17,14 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 set(QT_NO_PRIVATE_MODULE_WARNING ON)
 find_package(Qt6 REQUIRED COMPONENTS CorePrivate GuiPrivate)
+# (QmlPrivate: which QML files the engine has loaded — the memory scenario; without it that count is 0.)
+find_package(Qt6 QUIET COMPONENTS QmlPrivate)
 add_library(benchprobe SHARED benchprobe.cpp)
 target_compile_options(benchprobe PRIVATE -O2 -Wall)
 target_link_libraries(benchprobe PRIVATE Qt6::Core Qt6::CorePrivate Qt6::Gui Qt6::GuiPrivate Qt6::Qml Qt6::Quick dl)
+if(TARGET Qt6::QmlPrivate)
+    target_link_libraries(benchprobe PRIVATE Qt6::QmlPrivate)
+endif()
 CM
 cmake -S "$out/src" -B "$out/build" -G Ninja -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$out/build"

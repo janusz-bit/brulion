@@ -32,6 +32,8 @@
 //                    (default 9000)
 //   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 75000 lets everything
 //                    the app gives up when it is not used go — dictionaries, kept views, caches)
+//   BENCH_QML_TYPES  1: memory: every mark lists the app's QML files the engine has loaded
+//                    (their count is always there: qmlTypes)
 //   BENCH_VIEWPORT_OBSERVERS  1: every memory mark lists the shown items that observe the
 //                    viewport (QQuickItem::ItemObservesViewport), by class and name
 //   BENCH_IDLE_MS    idle duration (default 30000)
@@ -109,6 +111,10 @@
 #include <QRandomGenerator>
 #include <QTimer>
 #include <QtCore/private/qhooks_p.h>
+#if __has_include(<QtQml/private/qqmltypeloader_p.h>)
+#include <QtQml/private/qqmltypeloader_p.h> // which QML files of the app are loaded (memory)
+#define BENCH_HAS_TYPE_LOADER 1
+#endif
 #include <QtCore/private/qmetaobject_p.h>
 #include <QtCore/private/qobject_p.h>
 #include <qpa/qwindowsysteminterface.h>
@@ -923,8 +929,43 @@ private:
         if (m_memoryDetail) {
             o.insert(u"smaps"_s, smapsRollup());
             o.insert(u"malloc"_s, mallocArenas());
+            const QStringList types = loadedQmlTypes();
+            o.insert(u"qmlTypes"_s, types.size());
+            // (The names once per run and whenever BENCH_QML_TYPES=1: which files a step loaded.)
+            if (qgetenv("BENCH_QML_TYPES") == "1")
+                o.insert(u"qmlTypeNames"_s, QJsonArray::fromStringList(types));
         }
         mark(u"mem:"_s + name, 0, o);
+    }
+
+    /// The QML files of the app's module (":/qt/qml/Brulion/qmldir") the engine has loaded: every
+    /// one costs its compiled unit, property caches and bindings' tables for as long as the engine
+    /// keeps it (docs/PERFORMANCE.md "QML files loaded when first used"). Empty without Qt's
+    /// private QML headers.
+    QStringList loadedQmlTypes()
+    {
+        QStringList loaded;
+#ifdef BENCH_HAS_TYPE_LOADER
+        if (!m_engine)
+            return loaded;
+        if (m_moduleFiles.isEmpty()) {
+            QFile qmldir(u":/qt/qml/Brulion/qmldir"_s);
+            if (qmldir.open(QIODevice::ReadOnly)) {
+                const QList<QByteArray> lines = qmldir.readAll().split('\n');
+                for (const QByteArray &line : lines) {
+                    const QList<QByteArray> words = line.simplified().split(' ');
+                    if (!words.isEmpty() && words.last().endsWith(".qml"))
+                        m_moduleFiles.append(QString::fromUtf8(words.last()));
+                }
+            }
+        }
+        QQmlTypeLoader *loader = QQmlTypeLoader::get(m_engine);
+        for (const QString &file : std::as_const(m_moduleFiles)) {
+            if (loader->isTypeLoaded(QUrl(u"qrc:/qt/qml/Brulion/"_s + file)))
+                loaded.append(file);
+        }
+#endif
+        return loaded;
     }
 
     /// BENCH_VIEWPORT_OBSERVERS=1: the items with QQuickItem::ItemObservesViewport, by class (and
@@ -2531,6 +2572,7 @@ private:
     int m_settleMs = 9000;
     int m_longRestMs = 0;
     bool m_memoryDetail = false;
+    QStringList m_moduleFiles; ///< the QML files of the module Brulion (loadedQmlTypes())
     bool m_viewportObservers = false;
     int m_resizeBase = 1280;
     int m_resizeWidth = 920;

@@ -826,6 +826,8 @@ def m_memory(run):
         if "objAlive" in m:
             out["objects:" + step] = m["objAlive"]
         out["threads:" + step] = m.get("Threads", 0)
+        if "qmlTypes" in m:
+            out["qml_types:" + step] = m["qmlTypes"]
     if last:
         out["peak_rss_mb"] = last["VmHWM"] / 1024.0
     return out
