@@ -31,6 +31,8 @@
 #include "agentshare.h"
 #include "chatlineage.h"
 #include "chatschedules.h"
+#include "chatsecrets.h"
+#include "hookserver.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -207,6 +209,10 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(brulion::shell::ChatLineage *lineage READ lineage CONSTANT FINAL)
     /// Scheduled conversations (chatschedules.h).
     Q_PROPERTY(brulion::shell::ChatSchedules *schedules READ schedules CONSTANT FINAL)
+    /// The secrets AI agents ask the user for in a private card (chatsecrets.h).
+    Q_PROPERTY(brulion::shell::ChatSecrets *secrets READ secrets CONSTANT FINAL)
+    /// The webhooks of scheduled conversations: their server (hookserver.h).
+    Q_PROPERTY(brulion::shell::HookServer *hooks READ hooks CONSTANT FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -359,6 +365,8 @@ public:
     AgentLimits *limits() const { return m_limits; }
     ChatLineage *lineage() const { return m_lineage; }
     ChatSchedules *schedules() const { return m_schedules; }
+    ChatSecrets *secrets() const { return m_secrets; }
+    HookServer *hooks() const { return m_hooks; }
     /// The answers of agents on another computer that went on with a turn while this device was
     /// gone (Android ended the app): fetched from there (WorkspaceAgents::recover()). When the
     /// notebook is ready and when the agents change.
@@ -619,10 +627,13 @@ private:
     AgentLimits *m_limits = nullptr;
     ChatLineage *m_lineage = nullptr;
     ChatSchedules *m_schedules = nullptr;
+    ChatSecrets *m_secrets = nullptr;
+    HookServer *m_hooks = nullptr;
     QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
     QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order
     QPointer<ChatTurn> m_onDevice;              // the turn the model on the device answers
+    ChatTurn *m_stopping = nullptr;             // the turn stop() ends (its secret card: "stopped")
     QHash<QString, int> m_shown; // by path, lower case: the chat views showing it
     QStringList m_added;         // pictures added and not sent yet (dropPicture deletes only those)
     [[maybe_unused]] int m_lastPick = 0; // pickPicturesInBrowser()'s last pick (the browser build)

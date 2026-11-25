@@ -21,8 +21,11 @@
 // and drops the connections that showed it. Grants outlive close() and listen(). A grant of the
 // chat alone (GrantScope::Chat: every agent the app starts with Brulion's tools, one per
 // conversation) lets its connection call hello and the chat's methods (MethodSpec::chat) only:
-// anything else is answered `unauthorized`. The handler learns the token a request came with
-// (ControlRequest::grant), and whether it is such a grant (chatOnly).
+// anything else is answered `unauthorized`. A grant of the webhooks alone (GrantScope::Hook: the
+// app's `brulion-cli app hooks serve`) lets its connection call hello and chatHook (MethodSpec::hook)
+// only — and chatHook is answered `unauthorized` to every other connection. The handler learns the
+// token a request came with (ControlRequest::grant), and whether it is such a grant (chatOnly,
+// hookOnly).
 #pragma once
 
 #include "controlprotocol.h"
@@ -62,8 +65,9 @@ private:
 
 /// What a grant lets its connection do.
 enum class GrantScope {
-    Full, ///< every method (an AI agent let change the app)
+    Full, ///< every method (an AI agent let change the app) but the webhooks'
     Chat, ///< hello and the chat's methods (MethodSpec::chat)
+    Hook, ///< hello and the webhooks' method (MethodSpec::hook)
 };
 
 class ControlServer : public QObject {

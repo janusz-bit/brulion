@@ -89,6 +89,9 @@ struct ControlRequest {
     QString grant{};
     /// The grant covers only the chat's methods (MethodSpec::chat; GrantScope::Chat).
     bool chatOnly = false;
+    /// The grant covers only the webhooks' method (MethodSpec::hook; GrantScope::Hook: the app's own
+    /// `brulion-cli app hooks serve`).
+    bool hookOnly = false;
 };
 
 /// Stable error codes.
@@ -167,6 +170,9 @@ struct MethodSpec {
     /// A method of the AI chat (chats, chatRead, chatStart …, docs/CLI.md "Conversations"): one a
     /// chat grant may call (every agent the app starts with Brulion's tools has one).
     bool chat = false;
+    /// The webhooks' method (chatHook, docs/CLI.md "Webhooks"): only a connection with a hook grant
+    /// (the app's `brulion-cli app hooks serve`) may call it, and such a connection nothing else.
+    bool hook = false;
 };
 
 /// Every method of the protocol, in documentation order.

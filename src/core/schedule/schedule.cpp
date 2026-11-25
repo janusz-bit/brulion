@@ -173,6 +173,7 @@ bool When::isValid() const
     case Kind::Once: return date.isValid() && time.isValid();
     case Kind::Repeat: return time.isValid() && !rule.whenDone;
     case Kind::Interval: return minutes >= MinIntervalMinutes && minutes <= MaxIntervalMinutes;
+    case Kind::None: return true;
     }
     return false;
 }
@@ -267,6 +268,7 @@ QString describeWhen(const When &when, dates::UiLocale locale, QDate today)
         const QString day = dates::formatHuman(DateSpec{when.date, std::nullopt}, locale, today);
         return (pl ? u"jednorazowo: %1 o %2"_s : u"once: %1 at %2"_s).arg(day, clock(when.time));
     }
+    case When::Kind::None: return pl ? u"tylko przez webhook"_s : u"only by its webhook"_s;
     }
     return {};
 }
@@ -296,6 +298,7 @@ std::optional<DateSpec> nextRun(const When &when, const DateSpec &after)
             return DateSpec{next->date, when.time};
         return std::nullopt;
     }
+    case When::Kind::None: return std::nullopt;
     }
     return std::nullopt;
 }
@@ -309,6 +312,7 @@ QJsonObject toJson(const When &when)
                 {u"rule"_s, dates::formatRecurrence(when.rule, dates::UiLocale::English)},
                 {u"time"_s, when.time.toString(u"HH:mm"_s)}};
     case When::Kind::Interval: return {{u"kind"_s, u"interval"_s}, {u"minutes"_s, when.minutes}};
+    case When::Kind::None: return {{u"kind"_s, u"none"_s}};
     }
     return {};
 }
@@ -333,6 +337,8 @@ std::optional<When> whenFromJson(const QJsonObject &object)
     } else if (kind == u"interval") {
         w.kind = When::Kind::Interval;
         w.minutes = object.value(u"minutes"_s).toInt(0);
+    } else if (kind == u"none") {
+        w.kind = When::Kind::None;
     } else {
         return std::nullopt;
     }
@@ -375,6 +381,8 @@ QJsonObject toJson(const Schedule &s)
     put(u"lastError"_s, s.lastError);
     put(u"by"_s, s.by);
     put(u"parent"_s, s.parent);
+    put(u"hook"_s, s.hook);
+    put(u"lastHook"_s, spec(s.lastHook));
     return out;
 }
 
@@ -400,7 +408,13 @@ std::optional<Schedule> scheduleFromJson(const QJsonObject &o)
     s.lastError = o.value(u"lastError"_s).toString();
     s.by = o.value(u"by"_s).toString().simplified().left(64);
     s.parent = o.value(u"parent"_s).toString();
-    if (!s.created.isValid())
+    // A webhook's secret of the right shape (webhook/webhook.h: 43 base64url characters), else none.
+    static const QRegularExpression hook(u"^[A-Za-z0-9_-]{43}$"_s);
+    if (const QString h = o.value(u"hook"_s).toString(); hook.match(h).hasMatch())
+        s.hook = h;
+    s.lastHook = specFrom(o.value(u"lastHook"_s));
+    // (A rule with no time of its own runs only by its webhook: without one it never runs.)
+    if (!s.created.isValid() || (s.when.kind == When::Kind::None && s.hook.isEmpty()))
         return std::nullopt;
     return s;
 }

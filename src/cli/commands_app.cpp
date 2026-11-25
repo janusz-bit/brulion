@@ -859,6 +859,35 @@ Result appChatScheduleRun(Call &call)
     return chatCommand(call, u"chatScheduleRun"_s, {{u"id"_s, call.str(u"id"_s)}});
 }
 
+/// How long a request for a secret waits for the user (--timeout ms; default 5 minutes, at most 15).
+int secretWaitMs(const Call &call)
+{
+    return std::clamp(call.integer(u"timeout"_s, 300000), 1000, 900000);
+}
+
+Result appChatRequestSecret(Call &call)
+{
+    QJsonObject params{{u"label"_s, call.str(u"label"_s)}, {u"ms"_s, secretWaitMs(call)}};
+    copyGiven(call, params, {u"reason"_s, u"placeholder"_s, u"url"_s, u"delivery"_s});
+    if (call.has(u"conversation"_s))
+        params.insert(u"path"_s, call.str(u"conversation"_s));
+    if (call.dryRun())
+        return call.ok(QJsonObject{{u"dryRun"_s, true}, {u"method"_s, u"chatRequestSecret"_s}, {u"params"_s, params}});
+    const std::unique_ptr<ipc::ControlClient> client = connectApp(call, true);
+    if (!client)
+        return call.failed();
+    const auto result = callApp(call, *client, u"chatRequestSecret"_s, params, secretWaitMs(call) + 15000);
+    if (!result)
+        return call.failed();
+    return call.ok(*result);
+}
+
+Result appHooksServeCommand(Call &call)
+{
+    // run() starts the server itself (it serves until stopped).
+    return call.fail(ExitUsage, u"not_a_tool"_s, tr("app hooks serve starts the server; it is no tool of its own"));
+}
+
 Command make(const QString &id, const char *summary, Handler run, QList<Arg> args, bool appControl = true)
 {
     Command c;
@@ -1435,6 +1464,75 @@ void addAppCommands(QList<Command> &out)
                       QT_TRANSLATE_NOOP("brulion::cli", "Run a scheduled conversation now"), appChatScheduleRun,
                       {scheduleId}, true);
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Answers the schedule with the conversation it started (`path`)."));
+    out.append(c);
+    c = chatCommandOf(
+            u"app.chat.request-secret"_s,
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "Ask the user for a secret only they can give (a token, a password, a PIN) in "
+                              "a private card of the app: never in the chat"),
+            appChatRequestSecret,
+            {positional(u"label"_s, ArgType::String,
+                        QT_TRANSLATE_NOOP("brulion::cli", "What you ask for: \"GitHub token\", \"the router's PIN\"")),
+             option(u"reason"_s, ArgType::Text,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Why it is needed and what it will be used for")),
+             option(u"placeholder"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "A hint in the empty field (\"ghp_…\")")),
+             option(u"url"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "A page where the user signs in or makes it (http or https): a button "
+                                      "on the card")),
+             choice(u"delivery"_s, {u"file"_s, u"value"_s},
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "file (default): an owner-only file holding it; value: the value itself "
+                                      "(it then goes into your context)")),
+             option(u"conversation"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "The conversation whose card it is (a script; an agent the app started: "
+                                      "always its own)")),
+             option(u"timeout"_s, ArgType::Int,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "How long to wait for the user, ms (default 300000, at most 900000)"))},
+            false);
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "Never ask for a secret in the chat: it would be kept in the conversation's note and sent to the model. "
+            "The card shows the label and the reason; the user sends it or cancels. Answers {delivery: \"file\", "
+            "file, note}: a file only this user can read, deleted when your turn ends or in 15 minutes — read it only "
+            "inside the command that uses it (--token \"$(cat '<file>')\"), never print it, never write it into a "
+            "note. "
+            "With --delivery value {delivery: \"value\", value} instead (only where a file cannot be used: the value "
+            "then goes into your context and your provider's logs). Exit 7 refused when the user cancels or stops the "
+            "turn, 3 timeout, 4 busy while another request waits in the conversation."));
+    out.append(c);
+
+    // The webhooks of scheduled conversations (docs/CLI.md "Webhooks"): the app runs this server
+    // itself, with a grant of its own (hooks.cpp); no tool.
+    c = make(u"app.hooks.serve"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Serve the webhooks of the running app's scheduled conversations over HTTP (the app "
+                               "starts it)"),
+             appHooksServeCommand,
+             {option(u"listen"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli", "The IP address to listen on (default 127.0.0.1)")),
+              option(u"port"_s, ArgType::Int,
+                     QT_TRANSLATE_NOOP("brulion::cli", "The port (default 8791; 0: any free one)")),
+              option(u"publicUrl"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli",
+                                       "The address callers reach it at (a reverse proxy, Tailscale Funnel), for the "
+                                       "hooks' addresses")),
+              flag(u"stopOnEof"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "Stop when standard input ends (the app stops it so, and when it ends itself)"))},
+             false);
+    c.mcp = false;
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "POST <address>/hooks/<token> starts the scheduled conversation whose webhook that is (202 with its name; "
+            "404 for an unknown token or one that is off; 429 more than once a minute or while its conversation still "
+            "answers; 400 / 413 for a body not UTF-8 or over 1 MiB). The body goes into the run's message as untrusted "
+            "data, cut at 16 KiB. Needs the app's grant (BRULION_APP_HOOK_TOKEN): the app starts it while Settings → "
+            "Extensions → Scheduled conversations → Webhooks is on. Prints one JSON line when it listens, logs one line per request "
+            "on standard error (tokens masked) and serves until stopped."));
     out.append(c);
 }
 

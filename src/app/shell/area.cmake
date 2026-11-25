@@ -13,7 +13,9 @@
 # copies one's notes into a new notebook before it opens), Syncthing, conflicts —, the notebook kept in a GitHub repository —
 # WorkspaceGitHub: pull, commit, propose (core github) — and their wiring to the app,
 # workspaceintegration), AgentShare ("Share agents with the phone": `brulion-cli acp serve` run while
-# the app runs by ServerProcess, a reusable supervisor of brulion-cli servers), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
+# the app runs by ServerProcess, a reusable supervisor of brulion-cli servers), HookServer (the
+# webhooks of scheduled conversations: `brulion-cli app hooks serve`, the same way), ChatSecrets (a
+# secret an AI agent asks for in a private card, handed over as an owner-only file: core secretdrop), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
 # placement (traypopup.h, pure). SingleInstance is in
 # src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
 # shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
@@ -86,6 +88,8 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
     ${_brulion_shell_dir}/chatlineage.h ${_brulion_shell_dir}/chatlineage.cpp
     ${_brulion_shell_dir}/chatschedules.h ${_brulion_shell_dir}/chatschedules.cpp
+    ${_brulion_shell_dir}/chatsecrets.h ${_brulion_shell_dir}/chatsecrets.cpp
+    ${_brulion_shell_dir}/hookserver.h ${_brulion_shell_dir}/hookserver.cpp
     ${_brulion_shell_dir}/chatcontrol.h ${_brulion_shell_dir}/chatcontrol.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
     ${_brulion_shell_dir}/chattools.h ${_brulion_shell_dir}/chattools.cpp
@@ -122,7 +126,7 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
-           brulion_core_extensions brulion_core_ai brulion_core_acp brulion_core_agentlimits brulion_core_chat brulion_core_schedule brulion_core_automation brulion_planning
+           brulion_core_extensions brulion_core_ai brulion_core_acp brulion_core_agentlimits brulion_core_chat brulion_core_schedule brulion_core_webhook brulion_core_secretdrop brulion_core_automation brulion_planning
            brulion_core_writing
            brulion_core_encryption brulion_core_applock brulion_core_semantic
     PRIVATE Qt6::Network brulion_core_aireport brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture

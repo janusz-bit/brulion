@@ -441,6 +441,21 @@ AppController::AppController(const Options &options, QObject *parent)
     connect(m_workspace.get(), &Workspace::openChanged, this, shareNotebook);
     connect(this, &AppController::inDocsVaultChanged, this, shareNotebook);
     connect(share, &AgentShare::message, this, [this](const QString &text, const QString &kind) { toast(text, kind); });
+    // The webhooks of scheduled conversations (hookserver.h): their server's settings.
+    HookServer *hooks = m_workspace->chats()->hooks();
+    const auto hookSettings = [this, hooks] {
+        HookServer::Config c;
+        c.enabled = m_settings->chatHooks();
+        c.address = m_settings->chatHooksAddress();
+        c.port = m_settings->chatHooksPort();
+        c.publicUrl = m_settings->chatHooksPublicUrl();
+        hooks->setConfig(c);
+    };
+    hookSettings();
+    connect(m_settings.get(), &AppSettings::chatHooksChanged, this, hookSettings);
+    // A secret an agent asked for that could not be handed over (never the value: words only).
+    connect(m_workspace->chats()->secrets(), &ChatSecrets::message, this,
+            [this](const QString &text, const QString &kind) { toast(text, kind); });
     // An agent's question in a conversation no chat view shows: a toast whose Open shows it.
     connect(m_workspace->chats(), &WorkspaceChats::questionWaiting, this, [this](const QString &path, const QString &text) {
         const int id = toastWithAction(text, u"info"_s, tr("Open"));

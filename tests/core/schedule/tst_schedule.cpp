@@ -326,6 +326,47 @@ private Q_SLOTS:
         }
         QCOMPARE(parseSchedules(QJsonDocument(many).toJson()).size(), MaxSchedules);
     }
+
+    // A webhook (docs/UI.md "Scheduled conversations" → "Webhooks"): its secret kept with the
+    // schedule, a rule with no time of its own (only the webhook starts it), never due by itself.
+    void webhooks()
+    {
+        Schedule s;
+        s.id = u"s9"_s;
+        s.prompt = u"Ktoś zadzwonił do drzwi: sprawdź kamerę."_s;
+        s.when.kind = Kind::None;
+        s.created = at(u"2026-11-22 10:00"_s);
+        s.hook = QString(43, u'x');
+        QVERIFY(s.when.isValid());
+        QVERIFY(!s.next());
+        QVERIFY(!s.isDue(Now.addYears(1)));
+        QCOMPARE(describeWhen(s.when, dates::UiLocale::Polish), u"tylko przez webhook"_s);
+        QCOMPARE(describeWhen(s.when, dates::UiLocale::English), u"only by its webhook"_s);
+        QCOMPARE(toJson(s.when), (QJsonObject{{u"kind"_s, u"none"_s}}));
+        QCOMPARE(whenFromJson(toJson(s.when)), s.when);
+        s.lastHook = at(u"2026-11-23 18:05"_s);
+        // A timed one with a webhook too; its runs by the webhook never move the rule.
+        Schedule timed = s;
+        timed.id = u"s10"_s;
+        timed.whenText = u"codziennie o 7:30"_s;
+        timed.when = *parseWhen(timed.whenText, Now);
+        timed.hook = u"Ab-_0123456789Ab-_0123456789Ab-_0123456789A"_s;
+        QCOMPARE(timed.next()->toString(), u"2026-11-23 07:30"_s);
+        QCOMPARE(parseSchedules(serializeSchedules({s, timed})), (QList<Schedule>{s, timed}));
+        // A secret of another shape is none; a rule with no time and no webhook never runs: left out.
+        QJsonObject badHook = toJson(timed);
+        badHook.insert(u"hook"_s, u"za krótki"_s);
+        const QList<Schedule> read = parseSchedules(QJsonDocument(QJsonArray{badHook}).toJson());
+        QCOMPARE(read.size(), 1);
+        QVERIFY(read.first().hook.isEmpty());
+        QJsonObject noHook = toJson(s);
+        noHook.remove(u"hook"_s);
+        QVERIFY(parseSchedules(QJsonDocument(QJsonArray{noHook}).toJson()).isEmpty());
+        // Nothing written is no rule (the app takes "" as "only by its webhook" when it has one).
+        WhenError error = WhenError::None;
+        QVERIFY(!parseWhen(u""_s, Now, dates::UiLocale::Polish, &error));
+        QCOMPARE(error, WhenError::Empty);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSchedule)

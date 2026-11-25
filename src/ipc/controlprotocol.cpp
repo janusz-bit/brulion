@@ -519,6 +519,25 @@ const QList<MethodSpec> &controlMethods()
                     {param(u"id"_s, ParamType::String, true)}));
         chat(method(u"chatScheduleRun"_s, u"Run a scheduled conversation now"_s,
                     {param(u"id"_s, ParamType::String, true)}));
+        // A secret only the user can give (docs/UI.md "AI chat" → "A secret the agent asks for"):
+        // a private card in the conversation; the call waits for the user.
+        chat(method(u"chatRequestSecret"_s,
+                    u"Ask the user for a secret (a token, a password, a PIN) in a private card of the "
+                    u"conversation; waits up to ms for it: an owner-only file holding it (delivery file) or the "
+                    u"value itself (delivery value)"_s,
+                    {param(u"label"_s, ParamType::String, true), param(u"reason"_s, ParamType::String),
+                     param(u"placeholder"_s, ParamType::String), param(u"url"_s, ParamType::String),
+                     oneOf(u"delivery"_s, {u"file"_s, u"value"_s}), range(u"ms"_s, ParamType::Integer, 0, 900000),
+                     param(u"path"_s, ParamType::String)}));
+        // A webhook's request (docs/CLI.md "Webhooks"): only for the app's own hook server.
+        MethodSpec hook = method(u"chatHook"_s,
+                                 u"A webhook's request for a scheduled conversation (brulion-cli app hooks serve, "
+                                 u"with the app's hook grant)"_s,
+                                 {param(u"token"_s, ParamType::String, true), param(u"text"_s, ParamType::String),
+                                  oneOf(u"kind"_s, {u"empty"_s, u"text"_s, u"json"_s, u"form"_s}),
+                                  range(u"bytes"_s, ParamType::Integer, 0, 1e9), param(u"cut"_s, ParamType::Bool)});
+        hook.hook = true;
+        out.append(std::move(hook));
         return out;
     }();
     return methods;

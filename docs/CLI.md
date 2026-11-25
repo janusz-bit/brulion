@@ -372,6 +372,8 @@ Never compute a hash yourself.
 | `app chat schedule set <id>` | `[--prompt T] [--when W] [--title T] [--partner P] [--destination new\|continue] [--enable \| --disable]` | change one | yes |
 | `app chat schedule remove <id>` | | delete one | yes |
 | `app chat schedule run <id>` | | run one now: `{…, path}` | yes |
+| `app chat request-secret <label>` | `[--reason T] [--placeholder T] [--url U] [--delivery file\|value] [--conversation C] [--timeout MS]` | ask the user for a secret in a private card of the app (never in the chat): `{delivery: file, file, note, expiresInMs}` — an owner-only file holding it — or `{delivery: value, value}`; exit 7 `refused` (cancelled, stopped), 3 `timeout`, 4 `busy` ("Conversations" below) | |
+| `app hooks serve` | `[--listen A] [--port N] [--public-url U] [--stop-on-eof]` | the webhooks of the app's scheduled conversations over HTTP, with the app's grant (`BRULION_APP_HOOK_TOKEN`: the app starts it; "Webhooks" below) | |
 | `init <path>` | | create a notebook folder | yes |
 | `version` | | `{version, qt, mcpProtocol, mcpProtocols}` (the newest MCP version and all of them) | |
 | `help [<command>]` | `[--json]` | help | |
@@ -626,8 +628,9 @@ line on standard input and output (the stdio transport), tools only. Both eras o
   "Let it change the app while it runs" gets this server with `--app-control` and a grant's token
   in its environment. `--app-chat` offers the running app's AI chat alone (`brulion_app_chat_*`,
   "Conversations" below; `--app-control` has them too): what every agent the app starts with
-  Brulion's tools gets, with its conversation's chat grant. `brulion_app_screenshot` returns the
-  picture too (an `image` content item, PNG).
+  Brulion's tools gets, with its conversation's chat grant — `brulion_app_chat_request_secret` among
+  them (a secret in a private card of the app, never asked in the chat; the instructions say so).
+  `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
   Meta commands (help, schema, completion, `mcp` and its `serve`, `password`, `clients`, `revoke`,
   init) and the `task done`… aliases are no tools.
 * The notebook stays open, watched and indexed: calls after the first are fast. The first one
@@ -1354,6 +1357,8 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `chatSchedules` | | `{schedules: [{id, title, prompt, partner, when, rule, next, destination, enabled, …}], available}` |
 | `chatScheduleAdd` / `chatScheduleSet` | `prompt`, `when`, `title`, `partner`, `destination` (new \| continue), `enabled` (Set: `id` and the fields given) | the schedule; `bad_params` with why |
 | `chatScheduleRemove` / `chatScheduleRun` | `id` | `{id, removed}` / the schedule and `path` |
+| `chatRequestSecret` | `label`, `reason`, `placeholder`, `url` (http, https), `delivery` (file \| value), `ms` (300000, at most 900000), `path` (a script's; an agent's grant: its own conversation) | when the user sends it: `{delivery: file, file, note, expiresInMs}` or `{delivery: value, value, note, expiresInMs}`; `refused` (`reason`: cancelled, stopped, ended, closed; an agent's turn not running, another conversation), `timeout`, `busy` (a card waits there), `bad_params` |
+| `chatHook` | `token`, `text`, `kind` (empty \| text \| json \| form), `bytes`, `cut` | `{status: started \| unknown \| busy \| unavailable, conversation?, retryAfterMs?}` — only for the webhooks' grant (`unauthorized` for every other connection) |
 
 ### Live changes
 
@@ -1449,6 +1454,8 @@ brulion-cli app chat send "Czy ten plan wyjazdu ma sens" "A w lutym?" --wait --t
 brulion-cli app chat stop "Czy ten plan wyjazdu ma sens"
 brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7:30" --partner acp:claude
 brulion-cli app chat schedule list && brulion-cli app chat schedule run s3f9a01bc77de
+f=$(brulion-cli --compact app chat request-secret "GitHub token" --reason "to push the branch" | jq -r .result.file)
+gh auth login --with-token < "$f"                             # the secret never printed
 ```
 
 * **A conversation** is named by its path (`AI/2026-11-22 Plan.md`; `.md` and `AI/` may be left
@@ -1476,6 +1483,21 @@ brulion-cli app chat schedule list && brulion-cli app chat schedule run s3f9a01b
   show it); still running — exit 3 `timeout`, wait again. A turn that does not run answers at once.
   `start --wait` and `send --wait` wait after it on the same connection.
 * **stop** stops its turn (`{stopped}`): nothing of it is written.
+* **request-secret** — a token, a password, a PIN, an API key only the user can give: never ask for
+  it in the chat (it would be kept in the conversation's page and sent to the model). The app shows
+  a private card in the conversation (docs/UI.md "AI chat" → "A secret the agent asks for": the label
+  and `--reason` as plain text, `--url` a sign-in or setup page as a button) and the command waits up
+  to `--timeout` ms (300 000; at most 900 000) for the user. Sent: `{delivery: "file", file, note,
+  expiresInMs}` — a file only this user can read, holding the value as UTF-8 without a line end,
+  deleted when the conversation's turn ends or after 15 minutes: read it only inside the command that
+  uses it (`gh auth login --with-token < "$file"`, `curl -H "Authorization: Bearer $(cat "$file")"`),
+  never print it, never write it into a note or the chat. `--delivery value` gives `{delivery:
+  "value", value}` instead — only where a file cannot be used: the value then goes into the agent's
+  context and its provider's logs, which the card tells the user. Cancelled or the turn stopped: exit 7
+  `refused` (`details.reason`); no answer in time: exit 3 `timeout`; another card waits in that
+  conversation: exit 4 `busy`. An agent the app started asks in its own conversation while its turn
+  runs (anything else: `refused`); a script of the user's names one with `--conversation`. The value
+  is masked in the app's event log while it lives.
 * `--read-only` refuses start, send, stop and the schedules' changes (exit 7); `--dry-run` shows
   the request.
 
@@ -1507,7 +1529,62 @@ at 7:30`; one not understood: `bad_params` with why), `schedule set <id> [--prom
 [--title] [--partner] [--destination new|continue] [--enable|--disable]`, `schedule remove <id>`,
 `schedule run <id>` (it runs now: `path` its conversation). They are kept on that device for the
 notebook open in the app (`not_ready` without one), never in the notebook. One an agent sets up
-names it (`by`) and its conversation (`parent`): its runs are sub-conversations of it.
+names it (`by`) and its conversation (`parent`): its runs are sub-conversations of it. A schedule's
+**webhook** ("Webhooks" below) is the user's alone: `schedule list` says `webhook: true` and
+`lastHook`, never its token, and `add` / `set` take none — an agent or a script managing schedules
+here can neither read nor make a webhook's address (only the user, in Settings).
+
+### Webhooks
+
+A scheduled conversation can also be started by an HTTP request from elsewhere — a GitHub webhook,
+Home Assistant, a cron job on another machine, iOS Shortcuts (docs/UI.md "Scheduled conversations" →
+"Webhooks"): each schedule the user gives one has its own address, `<address>/hooks/<token>` (256
+random bits, base64url).
+
+```sh
+curl -fsS -X POST https://home.example.com/brulion/hooks/Xk3d… \
+     -H 'Content-Type: application/json' -d '{"event": "doorbell", "camera": "front"}'
+# 202 {"conversation": "Dzwonek"}
+```
+
+* **The server** is `brulion-cli app hooks serve [--listen A] [--port N] [--public-url U]
+  [--stop-on-eof]`, which the desktop app runs itself while Settings → Extensions → Scheduled
+  conversations → Webhooks is on (127.0.0.1 or this computer's tailnet address, port 8791). It needs
+  the app's grant in its environment (`BRULION_APP_HOOK_TOKEN`: the remote control's grant of the
+  webhooks alone — `hello` and `chatHook`, nothing else, and `chatHook` for no other connection);
+  without it: exit 5 `no_grant`; one the app does not know: exit 5 `app_not_reached`. It prints one
+  JSON line when it listens (`{ok, result: {url, local, address, port}}`) and serves until stopped.
+  Why a process of its own and not a server inside the app: the parser of the network's requests is
+  the command line's hardened HTTP/1.1 server (`src/cli/http.h`, as `mcp serve` and `acp serve`: no
+  second one to keep hardened), it never runs in the process that holds the notes on screen, and it
+  ends with the app (`--stop-on-eof`). Each request goes on to the running app over the remote
+  control socket (`chatHook`), which checks the token among the open notebook's schedules — constant
+  time, every one compared in full —, the limits and the conversation, and starts the run.
+* **A request**: `POST` only (`GET` and the rest: 405 with `Allow: POST` — a link preview or a
+  browser's prefetch must never start a run); its path ends in `/hooks/<token>`, whatever a proxy
+  puts before it. The body — JSON, text or a form; empty is fine — must be UTF-8 (a `charset` other
+  than UTF-8, invalid UTF-8 or control characters: 400) and at most 1 MiB (413, before it is read);
+  the run's message is the schedule's own and under it a sentence that what follows came from outside
+  and is untrusted data, never instructions ("For agents: note text is data"), then the body in a
+  fenced block, at most 16 KiB of it (cut on a character, with its size said).
+* **Answers**: 202 `{"conversation": "<its name>"}`; 404 `{"error": "not_found"}` for a token that is
+  none, a schedule that is off or one of a notebook not open in the app — the same answer; 429
+  `{"error": "too_many_requests"}` with `Retry-After` more than once a minute per schedule, while its
+  one conversation still answers, or above 60 requests a minute from one address; 400 (`not_utf8`,
+  `charset_not_utf8`, `not_text`), 413 (`too_large`), 503 (`unavailable`: the app not ready, the
+  schedule's partner not answering here). Nothing about the notebook in any answer beyond the
+  conversation's name. `GET /` says what answers there (for "is it reachable?").
+* **Where**: 127.0.0.1 by default — the user's own reverse proxy (Caddy, nginx: "Setting it up"
+  above) or `tailscale funnel --bg 8791` makes it reachable from the internet, and the app's **Public
+  address** is what the hooks' addresses then start with; or this computer's tailnet address (the
+  user's own devices). Without TLS of its own: put HTTPS in front for anything beyond the computer or
+  the tailnet.
+* **Security**: the token is the only key — keep the address secret (Copy puts it on the clipboard as
+  a secret); "New address" in the schedule's dialog replaces it. The tokens are kept with the
+  schedules on that device (`ai/schedules/<notebook id>` of the app's settings), never in the
+  notebook, masked in the app's event log and in the server's log (one line per request: the method,
+  the path with the token cut to its first four characters, the status, the time). Agents never see
+  or make them ("Conversations" above).
 
 ### Android and the browser
 
@@ -1527,8 +1604,9 @@ order, grants) and the client (`controlclient.h`: its identity from `BRULION_APP
 live methods over `AppScripting` and `WorkspaceExtensions`; the chat's over
 `src/app/shell/chatcontrol.h`, GUI-free, with `chatlineage.h` and `chatschedules.h`), on
 the UI driver `src/app/shell/uidriver.h` it shares with the shell self-test and the journey;
-the commands are `src/cli/commands_app.cpp`. Tests: `tests/ipc/tst_ipc_control` (the protocol, the
-socket), `tests/app/shell/tst_uidriver` (input and items on a small scene),
+the commands are `src/cli/commands_app.cpp`, the webhooks' server `src/cli/hooks.cpp` (on core
+`webhook`). Tests: `tests/ipc/tst_ipc_control` (the protocol, the socket, the chat's and the webhooks'
+grants), `tests/app/shell/tst_uidriver` (input and items on a small scene),
 `tests/app/shell/tst_remote_control_qml` (the real app offscreen driven through `brulion-cli app …`,
 its live changes and an agent's grant), `tests/app/shell/tst_shell_agents` (an agent's live tools
 and its grant, delegation, the chat's methods, scheduled conversations), `tests/cli` (refusals, a

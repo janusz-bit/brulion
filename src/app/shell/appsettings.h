@@ -140,6 +140,16 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool acpShare READ acpShare WRITE setAcpShare NOTIFY acpShareChanged FINAL)
     Q_PROPERTY(QString acpShareAddress READ acpShareAddress WRITE setAcpShareAddress NOTIFY acpShareChanged FINAL)
     Q_PROPERTY(bool acpShareTrust READ acpShareTrust WRITE setAcpShareTrust NOTIFY acpShareChanged FINAL)
+    /// The webhooks of scheduled conversations (hookserver.h; Settings → Extensions → Scheduled conversations →
+    /// Webhooks): the switch (`ai/hooks`, off by default), where it listens ("" this computer only,
+    /// "tailnet": its tailnet address; `ai/hooksAddress`), its port (`ai/hooksPort`, 8791) and the
+    /// address callers reach it at — the user's own reverse proxy or Tailscale Funnel ("" none;
+    /// `ai/hooksPublicUrl`). The hooks' tokens are kept with the schedules (`ai/schedules/…`).
+    Q_PROPERTY(bool chatHooks READ chatHooks WRITE setChatHooks NOTIFY chatHooksChanged FINAL)
+    Q_PROPERTY(QString chatHooksAddress READ chatHooksAddress WRITE setChatHooksAddress NOTIFY chatHooksChanged FINAL)
+    Q_PROPERTY(int chatHooksPort READ chatHooksPort WRITE setChatHooksPort NOTIFY chatHooksChanged FINAL)
+    Q_PROPERTY(QString chatHooksPublicUrl READ chatHooksPublicUrl WRITE setChatHooksPublicUrl NOTIFY chatHooksChanged
+                       FINAL)
     /// "Notify when the AI answers" (key `ai/chatNotify`; WorkspaceChats::setNotifyMode): "always",
     /// "background" (only while the app is not in front: the default) or "never".
     Q_PROPERTY(QString aiChatNotify READ aiChatNotify WRITE setAiChatNotify NOTIFY aiChatNotifyChanged FINAL)
@@ -410,6 +420,14 @@ public:
     void setAcpShareAddress(const QString &address);
     bool acpShareTrust() const;
     void setAcpShareTrust(bool on);
+    bool chatHooks() const;
+    void setChatHooks(bool on);
+    QString chatHooksAddress() const;
+    void setChatHooksAddress(const QString &address);
+    int chatHooksPort() const;
+    void setChatHooksPort(int port);
+    QString chatHooksPublicUrl() const;
+    void setChatHooksPublicUrl(const QString &url);
     QString aiChatNotify() const;
     void setAiChatNotify(const QString &mode);
     QString chatToolCalls() const;
@@ -682,6 +700,7 @@ Q_SIGNALS:
     void acpAgentsChanged();
     void mcpServerChanged();
     void acpShareChanged();
+    void chatHooksChanged();
     void aiChatNotifyChanged();
     void chatToolCallsChanged();
     void editorLineSpacingChanged();

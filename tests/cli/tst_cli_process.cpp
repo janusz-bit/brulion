@@ -24,6 +24,8 @@
 #include "singleinstance.h"
 #include "vault/vault.h"
 
+#include <algorithm>
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
@@ -34,6 +36,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QNetworkAccessManager>
+#include <QNetworkProxy>
 #include <QNetworkReply>
 #include <QProcess>
 #include <QRegularExpression>
@@ -43,6 +46,7 @@
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimeZone>
@@ -2735,6 +2739,13 @@ private Q_SLOTS:
                                      {u"answer"_s, QJsonObject{{u"position"_s, 1}, {u"text"_s, u"Plan jest dobry."_s}}}});
             } else if (request.method == u"chatSend" && path.contains(u"zajęta"_s)) {
                 reply.fail(u"busy"_s, u"Its turn runs"_s, {{u"state"_s, u"running"_s}});
+            } else if (request.method == u"chatRequestSecret"
+                       && request.params.value(u"label"_s).toString().contains(u"odmowa"_s)) {
+                reply.fail(u"refused"_s, u"The user did not give it"_s, {{u"reason"_s, u"cancelled"_s}});
+            } else if (request.method == u"chatRequestSecret") {
+                reply.ok(QJsonObject{{u"delivery"_s, u"file"_s},
+                                     {u"file"_s, u"/run/user/1000/brulion-x-secrets/run-1/secret-2"_s},
+                                     {u"params"_s, request.params}});
             } else {
                 reply.ok(QJsonObject{{u"method"_s, request.method},
                                      {u"params"_s, request.params},
@@ -2809,6 +2820,30 @@ private Q_SLOTS:
         }
         r = cliLive({u"app"_s, u"chat"_s, u"schedule"_s, u"list"_s});
         QCOMPARE(requests.last().method, u"chatSchedules"_s);
+        // A secret asked for in the app's private card: what is asked, the file that comes back, the
+        // user's refusal (exit 7); the call waits as long as asked and a margin.
+        r = cliLive({u"app"_s, u"chat"_s, u"request-secret"_s, u"Token GitHuba"_s, u"--reason"_s,
+                     u"Żeby wypchnąć gałąź"_s, u"--placeholder"_s, u"ghp_…"_s, u"--url"_s,
+                     u"https://github.com/settings/tokens"_s, u"--timeout"_s, u"20000"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"delivery"_s).toString(), u"file"_s);
+        QCOMPARE(requests.last().method, u"chatRequestSecret"_s);
+        QCOMPARE(requests.last().params, (QJsonObject{{u"label"_s, u"Token GitHuba"_s},
+                                                      {u"ms"_s, 20000},
+                                                      {u"reason"_s, u"Żeby wypchnąć gałąź"_s},
+                                                      {u"placeholder"_s, u"ghp_…"_s},
+                                                      {u"url"_s, u"https://github.com/settings/tokens"_s}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"request-secret"_s, u"PIN"_s, u"--delivery"_s, u"value"_s,
+                     u"--conversation"_s, u"AI/Plan"_s});
+        QCOMPARE(requests.last().params, (QJsonObject{{u"label"_s, u"PIN"_s},
+                                                      {u"ms"_s, 300000},
+                                                      {u"delivery"_s, u"value"_s},
+                                                      {u"path"_s, u"AI/Plan"_s}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"request-secret"_s, u"odmowa"_s});
+        QCOMPARE(r.code, 7);
+        QCOMPARE(r.errorCode(), u"refused"_s);
+        r = cliLive({u"app"_s, u"chat"_s, u"request-secret"_s, u"x"_s, u"--delivery"_s, u"mail"_s});
+        QCOMPARE(r.code, 2);
         // --read-only refuses what writes a conversation; --dry-run says what it would ask.
         const qsizetype asked = requests.size();
         r = cliLive({u"--read-only"_s, u"app"_s, u"chat"_s, u"start"_s, u"Ą"_s});
@@ -2875,9 +2910,12 @@ private Q_SLOTS:
             for (const QJsonValue &t :
                  QJsonDocument::fromJson(lines.last()).object().value(u"result"_s).toObject().value(u"tools"_s).toArray())
                 tools.append(t.toObject().value(u"name"_s).toString());
-            for (const char *tool : {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
-                                     "brulion_app_chat_partners", "brulion_app_chat_schedule_list"})
+            for (const char *tool :
+                 {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
+                  "brulion_app_chat_partners", "brulion_app_chat_schedule_list", "brulion_app_chat_request_secret"})
                 QVERIFY2(tools.contains(QLatin1String(tool)), tool);
+            // (The webhooks' server is no tool.)
+            QVERIFY(!tools.contains(u"brulion_app_hooks_serve"_s));
             for (const char *tool : {"brulion_app_chat_start", "brulion_app_chat_send", "brulion_app_chat_stop",
                                      "brulion_app_chat_schedule_add", "brulion_app_chat_schedule_run"})
                 QVERIFY2(tools.contains(QLatin1String(tool)) == !readOnly, tool);
@@ -2885,6 +2923,158 @@ private Q_SLOTS:
                 QVERIFY2(!tools.contains(QLatin1String(tool)), tool);
             QVERIFY(tools.contains(u"brulion_search"_s));
         }
+    }
+
+    // `app hooks serve` (docs/CLI.md "Webhooks") as the real program against a stand-in remote control
+    // that answers chatHook: refused without the app's grant and with a token that is none; its first
+    // line; a hook's POST passed on with its token and its body as text (JSON indented, a form decoded)
+    // — 202 with the conversation's name —, an unknown token 404, one too soon 429 with Retry-After, GET
+    // 405, a body not UTF-8 or of another charset 400, over 1 MiB 413, other paths 404, the root 200;
+    // only hello and chatHook asked; no token in its log; it ends when its standard input does.
+    void appHooks()
+    {
+        Run r = cli({u"app"_s, u"hooks"_s, u"serve"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"no_grant"_s);
+        const QString key = brulion::ipc::SingleInstance::keyFor(appDataDir());
+        brulion::ipc::SingleInstance app(key);
+        QVERIFY(app.listen());
+        brulion::ipc::ControlServer control;
+        const QString known = u"Kk0_-Kk0_-Kk0_-Kk0_-Kk0_-Kk0_-Kk0_-Kk0_-Kk0"_s; // (43 characters: a token)
+        const QString soon = QString(43, u'S');
+        QList<brulion::ipc::ControlRequest> requests;
+        control.setHandler([&](const brulion::ipc::ControlRequest &request, brulion::ipc::ControlReply reply) {
+            requests.append(request);
+            if (request.method == u"hello")
+                return reply.ok(QJsonObject{{u"granted"_s, request.granted}});
+            const QString token = request.params.value(u"token"_s).toString();
+            if (token == known)
+                reply.ok(QJsonObject{{u"status"_s, u"started"_s}, {u"conversation"_s, u"Dzwonek do drzwi"_s}});
+            else if (token == soon)
+                reply.ok(QJsonObject{{u"status"_s, u"busy"_s}, {u"retryAfterMs"_s, 42000}});
+            else
+                reply.ok(QJsonObject{{u"status"_s, u"unknown"_s}});
+        });
+        QVERIFY(control.listen(brulion::ipc::controlKeyFor(key)));
+        control.setOpen(false);
+        const QString grant = control.addGrant(u"webhooks"_s, brulion::ipc::GrantScope::Hook);
+        QProcessEnvironment env = environment();
+        env.insert(u"BRULION_APP_HOOK_TOKEN"_s, u"nie-grant"_s);
+        r = cliLive({u"app"_s, u"hooks"_s, u"serve"_s, u"--port"_s, u"0"_s}, {}, env);
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"app_not_reached"_s);
+        r = cliLive({u"app"_s, u"hooks"_s, u"serve"_s, u"--listen"_s, u"nie-adres"_s}, {}, env);
+        QCOMPARE(r.code, 2);
+
+        env.insert(u"BRULION_APP_HOOK_TOKEN"_s, grant);
+        QProcess server;
+        server.setProcessEnvironment(env);
+        server.start(QStringLiteral(BRULION_CLI),
+                                    {u"app"_s, u"hooks"_s, u"serve"_s, u"--port"_s, u"0"_s, u"--stop-on-eof"_s});
+        QVERIFY(server.waitForStarted(kTimeoutMs));
+        QVERIFY(QTest::qWaitFor([&server] { return server.canReadLine() || server.state() == QProcess::NotRunning; },
+                                kTimeoutMs));
+        const QJsonObject started = QJsonDocument::fromJson(server.readLine()).object();
+        QVERIFY2(started.value(u"ok"_s).toBool(), server.readAllStandardError().constData());
+        const QString base = started.value(u"result"_s).toObject().value(u"url"_s).toString();
+        QVERIFY2(base.startsWith(u"http://127.0.0.1:"_s), qPrintable(base));
+
+        QNetworkAccessManager nam;
+        nam.setProxy(QNetworkProxy::NoProxy);
+        struct Answer {
+            int status = 0;
+            QJsonObject json;
+            QByteArray retryAfter;
+            QByteArray allow;
+        };
+        const auto send = [&](const QByteArray &method, const QString &path, const QByteArray &body,
+                              const QByteArray &type) {
+            QNetworkRequest request(QUrl(base + path));
+            if (!type.isEmpty())
+                request.setRawHeader("Content-Type"_ba, type);
+            QNetworkReply *reply = nam.sendCustomRequest(request, method, body);
+            Answer a;
+            if (QTest::qWaitFor([reply] { return reply->isFinished(); }, kTimeoutMs)) {
+                a.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                a.json = QJsonDocument::fromJson(reply->readAll()).object();
+                a.retryAfter = reply->rawHeader("Retry-After"_ba);
+                a.allow = reply->rawHeader("Allow"_ba);
+            }
+            delete reply;
+            return a;
+        };
+        Answer a = send("POST"_ba, u"/hooks/"_s + known, R"({"kto":"listonosz","pokój":"sień"})", "application/json");
+        QCOMPARE(a.status, 202);
+        QCOMPARE(a.json, (QJsonObject{{u"conversation"_s, u"Dzwonek do drzwi"_s}}));
+        QCOMPARE(requests.last().method, u"chatHook"_s);
+        QVERIFY(requests.last().hookOnly);
+        QCOMPARE(requests.last().params.value(u"token"_s).toString(), known);
+        QCOMPARE(requests.last().params.value(u"kind"_s).toString(), u"json"_s);
+        QVERIFY(requests.last().params.value(u"text"_s).toString().contains(u"\"pokój\": \"sień\""_s));
+        // Behind a proxy's prefix, a form decoded.
+        a = send("POST"_ba, u"/brulion/hooks/"_s + known, "temat=Przesy%C5%82ka&od=DHL",
+                 "application/x-www-form-urlencoded");
+        QCOMPARE(a.status, 202);
+        QCOMPARE(requests.last().params.value(u"text"_s).toString(), u"temat: Przesyłka\nod: DHL"_s);
+        QCOMPARE(requests.last().params.value(u"kind"_s).toString(), u"form"_s);
+        // Empty: still a run.
+        a = send("POST"_ba, u"/hooks/"_s + known, {}, {});
+        QCOMPARE(a.status, 202);
+        QCOMPARE(requests.last().params.value(u"kind"_s).toString(), u"empty"_s);
+        // (Each request reaches the app over a connection of its own: hello, then chatHook.)
+        const auto hooks = [&requests] {
+            return std::count_if(requests.cbegin(), requests.cend(),
+                                 [](const brulion::ipc::ControlRequest &r) { return r.method == u"chatHook"; });
+        };
+        const qsizetype asked = hooks();
+        a = send("POST"_ba, u"/hooks/"_s + QString(43, u'x'), "{}", "application/json");
+        QCOMPARE(a.status, 404);
+        QCOMPARE(a.json.value(u"error"_s).toString(), u"not_found"_s);
+        a = send("POST"_ba, u"/hooks/"_s + soon, "ok", "text/plain");
+        QCOMPARE(a.status, 429);
+        QCOMPARE(a.retryAfter, "42"_ba);
+        QCOMPARE(hooks(), asked + 2);
+        // Refused before the app is asked.
+        a = send("GET"_ba, u"/hooks/"_s + known, {}, {});
+        QCOMPARE(a.status, 405);
+        QCOMPARE(a.allow, "POST"_ba);
+        a = send("POST"_ba, u"/hooks/"_s + known, QByteArray("Za\xbf\xf3\xb3\xe6"), "text/plain");
+        QCOMPARE(a.status, 400);
+        QCOMPARE(a.json.value(u"error"_s).toString(), u"not_utf8"_s);
+        a = send("POST"_ba, u"/hooks/"_s + known, "ok", "text/plain; charset=iso-8859-2");
+        QCOMPARE(a.status, 400);
+        {
+            // (Over 1 MiB: refused after the header fields, the body never read.)
+            QTcpSocket raw;
+            raw.connectToHost(QHostAddress::LocalHost, quint16(QUrl(base).port()));
+            QVERIFY(raw.waitForConnected(kTimeoutMs));
+            raw.write("POST /hooks/" + known.toLatin1()
+                      + " HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: text/plain\r\n"
+                        "Content-Length: 2000000\r\n\r\n");
+            QVERIFY(QTest::qWaitFor(
+                    [&raw] { return raw.bytesAvailable() > 12 || raw.state() != QAbstractSocket::ConnectedState; },
+                    kTimeoutMs));
+            const QByteArray answer = raw.readAll();
+            QVERIFY2(answer.startsWith("HTTP/1.1 413 "), answer.constData());
+        }
+        a = send("POST"_ba, u"/hooks/krótki"_s, "{}", "application/json");
+        QCOMPARE(a.status, 404);
+        a = send("POST"_ba, u"/mcp"_s, "{}", "application/json");
+        QCOMPARE(a.status, 404);
+        QCOMPARE(hooks(), asked + 2);
+        a = send("GET"_ba, u"/"_s, {}, {});
+        QCOMPARE(a.status, 200);
+        for (const brulion::ipc::ControlRequest &request : std::as_const(requests))
+            QVERIFY2(request.method == u"hello" || request.method == u"chatHook", qPrintable(request.method));
+        // It ends with its standard input; its log names every request, never a token.
+        server.closeWriteChannel();
+        QVERIFY(QTest::qWaitFor([&server] { return server.state() == QProcess::NotRunning; }, kTimeoutMs));
+        const QByteArray log = server.readAllStandardError();
+        QVERIFY2(log.contains("/hooks/Kk0_…"), log.constData());
+        QVERIFY(!log.contains(known.toLatin1()));
+        QVERIFY(!log.contains(soon.toLatin1()));
+        QVERIFY(!log.contains(grant.toLatin1()));
+        QVERIFY(control.revokeGrant(grant));
     }
 
     // `mcp serve` as the real program (the in-process flow: tst_cli_remote_mcp): the password

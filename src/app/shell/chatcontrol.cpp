@@ -2,6 +2,7 @@
 
 #include "chatlineage.h"
 #include "chatschedules.h"
+#include "chatsecrets.h"
 #include "workspace.h"
 #include "workspaceagents.h"
 #include "workspacechats.h"
@@ -76,10 +77,19 @@ ChatControl::~ChatControl() = default;
 
 bool ChatControl::handles(const QString &method)
 {
-    static const QSet<QString> methods{u"chats"_s,          u"chatRead"_s,        u"chatStart"_s,
-                                       u"chatSend"_s,       u"chatWait"_s,        u"chatStop"_s,
-                                       u"chatPartners"_s,   u"chatSchedules"_s,   u"chatScheduleAdd"_s,
-                                       u"chatScheduleSet"_s, u"chatScheduleRemove"_s, u"chatScheduleRun"_s};
+    static const QSet<QString> methods{u"chats"_s,
+                                       u"chatRead"_s,
+                                       u"chatStart"_s,
+                                       u"chatSend"_s,
+                                       u"chatWait"_s,
+                                       u"chatStop"_s,
+                                       u"chatPartners"_s,
+                                       u"chatSchedules"_s,
+                                       u"chatScheduleAdd"_s,
+                                       u"chatScheduleSet"_s,
+                                       u"chatScheduleRemove"_s,
+                                       u"chatScheduleRun"_s,
+                                       u"chatRequestSecret"_s};
     return methods.contains(method);
 }
 
@@ -107,6 +117,8 @@ void ChatControl::handle(const QString &method, const QJsonObject &params, const
         scheduleAdd(params, caller, reply);
     else if (method == u"chatScheduleSet" || method == u"chatScheduleRemove" || method == u"chatScheduleRun")
         scheduleSet(method, params, caller, reply);
+    else if (method == u"chatRequestSecret")
+        requestSecret(params, caller, reply);
     else
         reply.fail(u"unknown_method"_s, u"Unknown method %1"_s.arg(method), {});
 }
@@ -591,6 +603,45 @@ void ChatControl::scheduleSet(const QString &method, const QJsonObject &params, 
     if (!s->update(id, fieldsOf(params), &error))
         return reply.fail(BadParams, error, {});
     reply.ok(s->toJson(*s->find(id)));
+}
+
+void ChatControl::requestSecret(const QJsonObject &params, const Caller &caller, const Reply &reply)
+{
+    // An agent asks in its own conversation (its grant's), while its turn runs; a script of the
+    // user's names the conversation.
+    QString path;
+    if (caller.granted) {
+        if (caller.conversation.isEmpty() || !m_workspace->exists(caller.conversation))
+            return reply.fail(Refused, u"This grant belongs to no conversation of the app: it asks for no secret"_s,
+                              {});
+        path = caller.conversation;
+        if (params.contains(u"path"_s)
+            && resolve(params.value(u"path"_s).toString()).compare(path, Qt::CaseInsensitive) != 0)
+            return reply.fail(Refused, u"An agent asks for a secret in its own conversation only (%1)"_s.arg(path),
+                              {{u"param"_s, u"path"_s}});
+        if (!m_chats->isRunning(path))
+            return reply.fail(Refused, u"Its conversation's turn does not run: a secret is asked for while answering"_s,
+                              {{u"state"_s, m_chats->stateOf(path)}});
+    } else {
+        path = conversationOf(params, reply);
+        if (path.isEmpty())
+            return;
+    }
+    ChatSecrets::Request r;
+    r.path = path;
+    r.agent = caller.client;
+    r.label = params.value(u"label"_s).toString();
+    r.reason = params.value(u"reason"_s).toString();
+    r.placeholder = params.value(u"placeholder"_s).toString();
+    r.url = params.value(u"url"_s).toString();
+    r.inlineValue = params.value(u"delivery"_s).toString().toLower() == u"value";
+    if (params.contains(u"ms"_s))
+        r.waitMs = params.value(u"ms"_s).toInt(ChatSecrets::DefaultWaitMs);
+    ChatSecrets::Reply answer;
+    answer.ok = reply.ok;
+    answer.fail = reply.fail;
+    answer.connected = reply.connected;
+    m_chats->secrets()->ask(r, answer);
 }
 
 } // namespace brulion::shell

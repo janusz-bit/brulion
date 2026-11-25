@@ -138,10 +138,26 @@ An agent answering in the AI chat on the computer can hand a task to another par
 
 There is nothing to set up: every agent with **Brulion's tools** gets the chat's tools for its own conversation. It can start sub-conversations of that conversation only, three levels deep at most and four running at once, and a sub-conversation never gets the tools that change the app. Scripts do the same with `brulion-cli app chat …` ([[Command line and AI agents#Conversations in the running app]]).
 
+### A secret the agent asks for
+Sometimes an agent needs something only you can give — a token, a password, a PIN, an API key. It never asks for it in the chat (the conversation is a note: synced, kept in its history, sent to the model). It asks in a **private card** of the conversation instead: who asks and what for, a button to the page where you sign in or make the token when it gave one, and a masked field with **Show**, **Paste**, **Send** and **Cancel**. When you are elsewhere, a message with **Open** tells you that it waits.
+
+What you send goes to the agent as a **file only you can read**, deleted when its answer ends (15 minutes at most) — never into the conversation, the event log or a notification. An agent that cannot use a file may ask for the value itself; the card then warns that it goes to the agent's AI provider. **Cancel** — or Stop — and the agent hears that it was not given.
+
 ## Scheduled conversations
 **Settings → Extensions → Scheduled conversations** sends a message to the assistant or an agent when you say — "Plan my day" every weekday at 7:30, "What changed in my notes this week?" on Fridays. **Add…**, write the message and **when** in words — `every day at 7:30`, `on mondays at 9:00`, `every 3 hours`, `tomorrow at 8` (or in Polish: `codziennie o 7:30`, `w poniedziałki o 9:00`, `co 3 godziny`, `jutro o 8`) —, choose who answers and whether each time is **a new conversation** or **the same conversation** going on. The rule is shown back in words with its first run while you type; each row says when it runs next, with **Run now**, **Edit…** and **Delete**.
 
 They are kept **on this device**, for this notebook — never in the notebook, so a synced file can never start an agent. They run while Brulion runs (the tray keeps it running on the computer; on the phone while the app is open); one missed while Brulion was closed runs once when it starts again, not once for every time it missed. Agents and scripts manage them too: `brulion-cli app chat schedule add "Plan my day" --when "weekdays at 7:30"`.
+
+### Webhooks
+A scheduled conversation can also start when something happens elsewhere — a GitHub push, the doorbell in Home Assistant, a cron job on another machine, an iOS Shortcut. In its **Edit…** turn on **Also start it by a webhook**: it gets an address of its own (shown shortened; **Copy** copies all of it, **New address** replaces it). Leave **When** empty and only the webhook starts it.
+
+Turn on **Webhooks** under the scheduled conversations (on the computer): Brulion then answers at `http://127.0.0.1:8791` while it runs — on this computer only, or in your **tailnet** when Tailscale runs here. A reverse proxy of your own or `tailscale funnel --bg 8791` makes it reachable from the internet; write that address into **Public address**. A `POST` to the hook's address starts the conversation, and what the request sends (JSON, text, a form) goes along with its message — as data the AI is told not to obey:
+
+```sh
+curl -X POST https://home.example.com/brulion/hooks/Xk3d… -d '{"event": "doorbell"}'
+```
+
+At most once a minute, never while its one conversation still answers. The address is the only key: keep it secret. It is kept on this device with the schedule, and agents managing schedules never see it ([[Command line and AI agents#Conversations in the running app]]).
 
 ### The other way: the assistant in your editor
 Zed and the JetBrains IDEs talk to agents the same way — and Brulion's AI assistant can be one of them, with your notes and the model chosen above: `brulion-cli acp agent` ([[Command line and AI agents#Brulion's assistant in your editor]]).

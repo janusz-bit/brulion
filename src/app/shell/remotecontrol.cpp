@@ -4,6 +4,7 @@
 #include "appscripting.h"
 #include "appsettings.h"
 #include "chatcontrol.h"
+#include "chatschedules.h"
 #include "commandmodel.h"
 #include "extensionmodels.h"
 #include "navigation.h"
@@ -139,8 +140,10 @@ QString plainText(const QString &label)
 /// Its text is never shown, matched or logged.
 bool secretField(const QQuickItem *item)
 {
+    // (A field whose text is a secret even while it is shown — the AI chat's secret card with
+    // Show: its `secretText` — is one too.)
     const QVariant echoMode = item->property("echoMode");
-    return echoMode.isValid() && echoMode.toInt() != 0;
+    return (echoMode.isValid() && echoMode.toInt() != 0) || item->property("secretText").toBool();
 }
 
 /// The text an item shows as people read it; "" for a secret field.
@@ -198,6 +201,10 @@ QString paramsSummary(const QString &method, const QJsonObject &params)
             continue;
         const QString s = it.value().toString();
         if ((method == u"type" || method == u"capture") && it.key() == u"text")
+            it.value() = u"<%1 characters>"_s.arg(s.size());
+        else if (it.key() == u"token") // (a grant's, a webhook's: never in the log)
+            it.value() = u"<token>"_s;
+        else if (method == u"chatHook" && it.key() == u"text") // (what a webhook sent: data from outside)
             it.value() = u"<%1 characters>"_s.arg(s.size());
         else if (s.size() > 80)
             it.value() = QString(s.left(79) + u'…');
@@ -306,6 +313,14 @@ QString RemoteControl::chatGrant(const QString &client)
 {
     const QString token = m_server.addGrant(client, ipc::GrantScope::Chat);
     qCDebug(lcApp).noquote() << u"Remote control: a chat grant for the agent %1"_s.arg(ipc::cleanClientName(client));
+    apply();
+    return token;
+}
+
+QString RemoteControl::hookGrant()
+{
+    const QString token = m_server.addGrant(u"webhooks"_s, ipc::GrantScope::Hook);
+    qCInfo(lcApp) << "Remote control: a grant for the webhooks' server";
     apply();
     return token;
 }
@@ -429,6 +444,8 @@ void RemoteControl::handle(const ipc::ControlRequest &request, const ipc::Contro
                              {u"changes"_s, QJsonArray::fromVariantList(m_app->scripting()->changes())}});
     } else if (ChatControl::handles(method)) {
         chatRequest(request, reply);
+    } else if (method == u"chatHook") {
+        hookRequest(request, reply);
     } else {
         reply.fail(code(E::UnknownMethod), u"Unknown method %1"_s.arg(method));
     }
@@ -452,11 +469,38 @@ void RemoteControl::chatRequest(const ipc::ControlRequest &request, const ipc::C
     m_chat->handle(request.method, request.params, caller, answer);
 }
 
+void RemoteControl::hookRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply)
+{
+    // (The socket lets only the webhooks' grant call it: ipc::ControlServer.)
+    if (!request.hookOnly)
+        return reply.fail(code(E::Unauthorized), u"Only the app's webhook server calls chatHook"_s);
+    const QJsonObject &p = request.params;
+    ChatSchedules::HookRequest hook;
+    hook.token = p.value(u"token"_s).toString();
+    hook.body.text = p.value(u"text"_s).toString();
+    hook.body.kind = webhook::kindFromName(p.value(u"kind"_s).toString())
+                             .value_or(hook.body.text.isEmpty() ? webhook::BodyKind::Empty : webhook::BodyKind::Text);
+    hook.body.bytes = qsizetype(p.value(u"bytes"_s).toDouble(double(hook.body.text.toUtf8().size())));
+    hook.body.cut = p.value(u"cut"_s).toBool();
+    // (Cut here too: the server does, a request of another program would not.)
+    bool cut = false;
+    hook.body.text = webhook::cutUtf8(hook.body.text, webhook::MaxTextBytes, &cut);
+    hook.body.cut = hook.body.cut || cut;
+    const ChatSchedules::HookOutcome out = m_app->workspace()->chats()->schedules()->runHook(hook);
+    QJsonObject result{{u"status"_s, out.status}};
+    if (!out.conversation.isEmpty())
+        result.insert(u"conversation"_s, out.conversation);
+    if (out.retryAfterMs > 0)
+        result.insert(u"retryAfterMs"_s, double(out.retryAfterMs));
+    reply.ok(result);
+}
+
 QJsonObject RemoteControl::hello(const ipc::ControlRequest &request) const
 {
     QJsonArray methods;
     for (const ipc::MethodSpec &m : ipc::controlMethods()) {
-        if (m.chat || !request.chatOnly)
+        // (Each grant's own; the webhooks' method only for its server.)
+        if (request.hookOnly ? m.hook : (!m.hook && (m.chat || !request.chatOnly)))
             methods.append(m.name);
     }
     return {{u"protocol"_s, ipc::ControlProtocolVersion},

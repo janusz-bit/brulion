@@ -138,10 +138,26 @@ Agent, który odpowiada w czacie AI na komputerze, może dać zadanie innemu roz
 
 Nie trzeba nic ustawiać: każdy agent z **narzędziami Brulionu** dostaje narzędzia czatu dla własnej rozmowy. Może zaczynać tylko podrozmowy tej rozmowy, najwyżej trzy poziomy w głąb i cztery naraz, a podrozmowa nigdy nie dostaje narzędzi zmieniających aplikację. Skrypty robią to samo przez `brulion-cli app chat …` ([[Wiersz poleceń i agenci AI#Rozmowy w działającej aplikacji]]).
 
+### Sekret, o który prosi agent
+Czasem agent potrzebuje czegoś, co możesz dać tylko Ty — tokenu, hasła, PIN-u, klucza API. Nigdy nie prosi o to w czacie (rozmowa to notatka: synchronizowana, z historią wersji, wysyłana do modelu). Prosi w **prywatnej karcie** rozmowy: kto prosi i po co, przycisk do strony, na której się logujesz albo tworzysz token, gdy ją podał, i zamaskowane pole z **Pokaż**, **Wklej**, **Wyślij** i **Anuluj**. Gdy jesteś gdzie indziej, komunikat z **Otwórz** mówi, że czeka.
+
+To, co wyślesz, trafia do agenta jako **plik, który możesz przeczytać tylko Ty**, usuwany, gdy kończy się jego odpowiedź (najwyżej po 15 minutach) — nigdy do rozmowy, rejestru zdarzeń ani powiadomienia. Agent, który nie umie użyć pliku, może poprosić o samą wartość; karta ostrzega wtedy, że trafi ona do jego dostawcy AI. **Anuluj** — albo Zatrzymaj — i agent dowie się, że jej nie dostał.
+
 ## Rozmowy według harmonogramu
 **Ustawienia → Rozszerzenia → Rozmowy według harmonogramu** wysyła wiadomość asystentowi albo agentowi wtedy, kiedy powiesz — „Zaplanuj mi dzień” w dni robocze o 7:30, „Co się zmieniło w notatkach w tym tygodniu?” w piątki. **Dodaj…**, wpisz wiadomość i **kiedy** słowami — `codziennie o 7:30`, `w poniedziałki o 9:00`, `co 3 godziny`, `jutro o 8` (albo po angielsku: `every day at 7:30`) —, wybierz, kto odpowiada, i czy za każdym razem to **nowa rozmowa**, czy **ta sama rozmowa** ciągnięta dalej. Reguła wraca słowami, z pierwszym uruchomieniem, już przy pisaniu; każdy wiersz mówi, kiedy będzie następne, z **Uruchom teraz**, **Edytuj…** i **Usuń**.
 
 Są przechowywane **na tym urządzeniu**, dla tego notatnika — nigdy w notatniku, więc zsynchronizowany plik nigdy nie uruchomi agenta. Działają, gdy Brulion działa (na komputerze utrzymuje go ikona w zasobniku; na telefonie gdy aplikacja jest otwarta); pominięta, gdy Brulion był zamknięty, uruchamia się raz przy następnym starcie, a nie tyle razy, ile ją pominął. Agenci i skrypty też nimi zarządzają: `brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7:30"`.
+
+### Webhooki
+Rozmowa według harmonogramu może też zacząć się, gdy coś dzieje się gdzie indziej — push na GitHubie, dzwonek w Home Assistant, zadanie cron na innym komputerze, skrót iOS. W jej **Edytuj…** włącz **Uruchamiaj ją też webhookiem**: dostaje własny adres (pokazany skrócony; **Kopiuj** kopiuje go całego, **Nowy adres** go wymienia). Zostaw **Kiedy** puste, a uruchomi ją tylko webhook.
+
+Włącz **Webhooki** pod rozmowami według harmonogramu (na komputerze): Brulion odpowiada wtedy pod `http://127.0.0.1:8791`, dopóki działa — tylko na tym komputerze albo w Twoim **tailnecie**, gdy działa tu Tailscale. Twoje własne odwrotne proxy albo `tailscale funnel --bg 8791` udostępnia go w internecie; ten adres wpisz w **Adres publiczny**. `POST` na adres webhooka zaczyna rozmowę, a to, co żądanie przysyła (JSON, tekst, formularz), idzie z jej wiadomością — jako dane, o których AI wie, że nie wolno ich słuchać:
+
+```sh
+curl -X POST https://dom.example.com/brulion/hooks/Xk3d… -d '{"event": "dzwonek"}'
+```
+
+Najwyżej raz na minutę i nigdy, gdy jej jedna rozmowa jeszcze odpowiada. Adres to jedyny klucz: trzymaj go w tajemnicy. Jest przechowywany na tym urządzeniu razem z harmonogramem, a agenci zarządzający harmonogramami nigdy go nie widzą ([[Wiersz poleceń i agenci AI#Rozmowy w działającej aplikacji]]).
 
 ### W drugą stronę: asystent w Twoim edytorze
 Zed i środowiska JetBrains rozmawiają z agentami tak samo — a asystent AI Brulionu może być jednym z nich, z Twoimi notatkami i modelem wybranym wyżej: `brulion-cli acp agent` ([[Wiersz poleceń i agenci AI#Asystent Brulionu w edytorze]]).

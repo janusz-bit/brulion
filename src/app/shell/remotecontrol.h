@@ -32,8 +32,10 @@
 // the app's last 500 events (routes, toasts, console lines, live changes, extensions, notes
 // changed), recorded only while the socket listens; a request waits for a newer one (long poll).
 // The AI chat's methods (chats, chatRead, chatStart, chatSend, chatWait, chatStop, chatPartners,
-// chatSchedule*) are ChatControl's; every agent the app starts with Brulion's tools reaches them
-// with a grant of the chat alone for its conversation (chatGrant()).
+// chatSchedule*, chatRequestSecret) are ChatControl's; every agent the app starts with Brulion's
+// tools reaches them with a grant of the chat alone for its conversation (chatGrant()). The
+// webhooks' server (HookServer) passes each hook on as chatHook with a grant of its own
+// (hookGrant()), which calls nothing else and which nothing else may call.
 //
 // main() creates it for the real app (not the dev tools) once the QML is loaded; it reports its
 // state to AppController::setRemoteControl() for the settings page.
@@ -91,6 +93,9 @@ public:
     /// the AI agent `client` (BRULION_APP_CHAT_TOKEN of its tools). The socket listens while one
     /// exists.
     QString chatGrant(const QString &client);
+    /// A grant of the webhooks alone (hello and chatHook: HookServer's `brulion-cli app hooks
+    /// serve`, BRULION_APP_HOOK_TOKEN of its environment). The socket listens while one exists.
+    QString hookGrant();
     /// Ends the grant of `token` (the agent stopped) and drops its connections.
     void revokeGrant(const QString &token);
 
@@ -207,6 +212,8 @@ private:
 
     /// The AI chat's methods (chats, chatStart, chatWait …), answered by ChatControl.
     void chatRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply);
+    /// A webhook's request (chatHook, the webhooks' grant only): ChatSchedules::runHook().
+    void hookRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply);
 
     QQmlApplicationEngine *m_engine;
     AppController *m_app;

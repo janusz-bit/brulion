@@ -142,7 +142,10 @@ QString McpDispatcher::instructions(const McpPolicy &policy) const
                 u"brulion_app_chat_wait waits for its answer (call it again while it still runs; a question it "
                 u"waits on is for the user to answer in the app), brulion_app_chat_read reads a conversation, "
                 u"brulion_app_chat_send asks a follow-up, brulion_app_chat_schedule_* schedule conversations. Give "
-                u"another partner the whole task: it does not see this conversation."_s;
+                u"another partner the whole task: it does not see this conversation. A token, a password, a PIN or a "
+                u"key only the user can give: brulion_app_chat_request_secret asks for it in a private card of the "
+                u"app and returns a file only this user can read — use it only inside the command that needs it "
+                u"(\"$(cat <file>)\"), never print it; never ask for a secret in the chat."_s;
     if (policy.readOnly)
         text += u" This server is read-only."_s;
     return text;

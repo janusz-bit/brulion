@@ -10,7 +10,8 @@
 // server answers `unauthorized` to everything before hello with a grant's token, a wrong token is
 // refused also while it is open, a grant's client name sticks, closing drops the connections
 // without one, a revoked grant drops its connections; a grant of the chat alone serves only the
-// chat's methods (the handler learns its token); ControlClient's identity (setIdentity(),
+// chat's methods (the handler learns its token), a grant of the webhooks only chatHook, which nobody
+// else may call; ControlClient's identity (setIdentity(),
 // BRULION_APP_TOKEN / BRULION_APP_CLIENT) sent in a hello first.
 #include "controlclient.h"
 #include "controlprotocol.h"
@@ -839,9 +840,104 @@ private Q_SLOTS:
             if (m.chat)
                 chatMethods << m.name;
         }
-        QCOMPARE(chatMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s,
-                                           u"chatStop"_s, u"chatPartners"_s, u"chatSchedules"_s, u"chatScheduleAdd"_s,
-                                           u"chatScheduleSet"_s, u"chatScheduleRemove"_s, u"chatScheduleRun"_s}));
+        QCOMPARE(chatMethods,
+                 (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s, u"chatStop"_s,
+                              u"chatPartners"_s, u"chatSchedules"_s, u"chatScheduleAdd"_s, u"chatScheduleSet"_s,
+                              u"chatScheduleRemove"_s, u"chatScheduleRun"_s, u"chatRequestSecret"_s}));
+        // A secret asked for: its parameters checked before the app sees them.
+        r = exchange(script,
+                     R"({"id":2,"method":"chatRequestSecret","params":{"label":"Token GitHuba","delivery":"value"}})");
+        QVERIFY2(r.value(u"ok"_s).toBool(), QJsonDocument(r).toJson().constData());
+        QCOMPARE(code(exchange(script, R"({"id":3,"method":"chatRequestSecret","params":{"reason":"bez etykiety"}})")),
+                 u"bad_params"_s);
+        QCOMPARE(code(exchange(script,
+                               R"({"id":4,"method":"chatRequestSecret","params":{"label":"x","delivery":"mail"}})")),
+                 u"bad_params"_s);
+        QCOMPARE(code(exchange(script, R"({"id":5,"method":"chatRequestSecret","params":{"label":"x","ms":900001}})")),
+                 u"bad_params"_s);
+        server.close();
+    }
+
+    // A grant of the webhooks alone (the app's `brulion-cli app hooks serve`): hello and chatHook,
+    // nothing else — and chatHook for nobody else, not a full grant, a chat grant or an open socket's
+    // script; the handler learns that it is such a grant.
+    void hookGrants()
+    {
+        const QString k = key(u"brulion-test-hookgrants"_s);
+        ControlServer server;
+        server.setHandler([](const ControlRequest &request, ControlReply reply) {
+            reply.ok(QJsonObject{{u"method"_s, request.method},
+                                 {u"hookOnly"_s, request.hookOnly},
+                                 {u"chatOnly"_s, request.chatOnly},
+                                 {u"granted"_s, request.granted}});
+        });
+        QVERIFY(server.listen(k));
+        const QString hooks = server.addGrant(u"webhooks"_s, GrantScope::Hook);
+        const QString chat = server.addGrant(u"Claude Code"_s, GrantScope::Chat);
+        const QString full = server.addGrant(u"Claude Code"_s);
+        const auto code = [](const QJsonObject &response) {
+            return response.value(u"error"_s).toObject().value(u"code"_s).toString();
+        };
+        const auto hello = [](const QString &token) {
+            return QJsonDocument(QJsonObject{{u"id"_s, 1},
+                                             {u"method"_s, u"hello"_s},
+                                             {u"params"_s, QJsonObject{{u"token"_s, token}}}})
+                    .toJson(QJsonDocument::Compact);
+        };
+        const QByteArray hook = QJsonDocument(QJsonObject{{u"id"_s, 2},
+                                                          {u"method"_s, u"chatHook"_s},
+                                                          {u"params"_s, QJsonObject{{u"token"_s, QString(43, u'a')},
+                                                                                    {u"text"_s, u"{\"a\": 1}"_s},
+                                                                                    {u"kind"_s, u"json"_s},
+                                                                                    {u"bytes"_s, 8},
+                                                                                    {u"cut"_s, false}}}})
+                                        .toJson(QJsonDocument::Compact);
+        for (const bool open : {false, true}) {
+            server.setOpen(open);
+            QLocalSocket hookServer;
+            hookServer.connectToServer(k);
+            QVERIFY(hookServer.waitForConnected(1000));
+            QJsonObject r = exchange(hookServer, hello(hooks));
+            QVERIFY(r.value(u"ok"_s).toBool());
+            QVERIFY(r.value(u"result"_s).toObject().value(u"hookOnly"_s).toBool());
+            r = exchange(hookServer, hook);
+            QVERIFY2(r.value(u"ok"_s).toBool(), QJsonDocument(r).toJson().constData());
+            QVERIFY(r.value(u"result"_s).toObject().value(u"hookOnly"_s).toBool());
+            QVERIFY(!r.value(u"result"_s).toObject().value(u"chatOnly"_s).toBool());
+            for (const char *line : {R"({"id":3,"method":"chats"})", R"({"id":4,"method":"state"})",
+                                     R"({"id":5,"method":"eval","params":{"code":"return 1"}})",
+                                     R"({"id":6,"method":"chatScheduleRun","params":{"id":"s1"}})"}) {
+                r = exchange(hookServer, line);
+                QCOMPARE(code(r), u"unauthorized"_s);
+                QVERIFY(r.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"chatHook"_s));
+            }
+            QCOMPARE(code(exchange(hookServer, R"({"id":7,"method":"chatHook","params":{}})")), u"bad_params"_s);
+            QCOMPARE(code(exchange(hookServer, R"({"id":8,"method":"chatHook","params":{"token":"t","kind":"xml"}})")),
+                     u"bad_params"_s);
+            // Nobody else calls it: a chat grant, a full grant.
+            for (const QString &token : {chat, full}) {
+                QLocalSocket other;
+                other.connectToServer(k);
+                QVERIFY(other.waitForConnected(1000));
+                QVERIFY(exchange(other, hello(token)).value(u"ok"_s).toBool());
+                QCOMPARE(code(exchange(other, hook)), u"unauthorized"_s);
+            }
+        }
+        // Nor a script of the open socket.
+        server.setOpen(true);
+        QLocalSocket script;
+        script.connectToServer(k);
+        QVERIFY(script.waitForConnected(1000));
+        const QJsonObject r = exchange(script, hook);
+        QCOMPARE(code(r), u"unauthorized"_s);
+        QVERIFY(r.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"webhook"_s));
+        QStringList hookMethods;
+        for (const MethodSpec &m : controlMethods()) {
+            if (m.hook)
+                hookMethods << m.name;
+            QVERIFY2(!(m.hook && m.chat), qPrintable(m.name));
+        }
+        QCOMPARE(hookMethods, QStringList{u"chatHook"_s});
         server.close();
     }
 

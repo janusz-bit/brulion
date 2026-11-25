@@ -19,6 +19,8 @@
 //   AgentLimits      uncreatable — Workspace.chats.limits (Claude Code's and Codex's subscription limits)
 //   ChatLineage, ChatSchedules uncreatable — Workspace.chats.lineage / .schedules (sub-conversations,
 //                    scheduled conversations)
+//   ChatSecrets, HookServer uncreatable — Workspace.chats.secrets / .hooks (a secret an agent asks
+//                    for, the webhooks of scheduled conversations)
 //   WritingSession   creatable — WritingSession { workspace: Workspace } (the editor's AI assistant)
 //   AiReportDraft    creatable — AiReportDraft {} (Report response: the report of an AI answer)
 //   WorkspaceEncryption uncreatable — Workspace.encryption (encrypted notes)
@@ -41,11 +43,15 @@
 #include "appscripting.h"
 #include "appsettings.h"
 #include "appupdates.h"
+#include "chatlineage.h"
+#include "chatschedules.h"
+#include "chatsecrets.h"
 #include "cleanupselection.h"
 #include "commandmodel.h"
 #include "encryptedpagehost.h"
 #include "extensionviewmodel.h"
 #include "foldertreemodel.h"
+#include "hookserver.h"
 #include "recentnotebooks.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
@@ -56,8 +62,6 @@
 #include "workspacebackups.h"
 #include "workspacecalendars.h"
 #include "workspacechats.h"
-#include "chatlineage.h"
-#include "chatschedules.h"
 #include "workspaceencryption.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
@@ -316,6 +320,20 @@ struct ChatSchedulesForeign {
     QML_FOREIGN(brulion::shell::ChatSchedules)
     QML_NAMED_ELEMENT(ChatSchedules)
     QML_UNCREATABLE("Use Workspace.chats.schedules")
+};
+
+struct ChatSecretsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ChatSecrets)
+    QML_NAMED_ELEMENT(ChatSecrets)
+    QML_UNCREATABLE("Use Workspace.chats.secrets")
+};
+
+struct HookServerForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::HookServer)
+    QML_NAMED_ELEMENT(HookServer)
+    QML_UNCREATABLE("Use Workspace.chats.hooks")
 };
 
 struct WritingSessionForeign {

@@ -8192,6 +8192,126 @@ void checkChatDrawings(QQuickWindow *window, AppController *app, const Check &ch
         focused->forceActiveFocus();
 }
 
+/// A secret an agent asks for (docs/UI.md "AI chat" → "A secret the agent asks for"): its private
+/// card in the conversation — who asks and the label as plain text, the reason, the page's button, a
+/// masked field —, Show unmasks it, Send hands it over as an owner-only file (never into the page),
+/// the card goes; a second card cancelled: the agent hears it was refused.
+void checkChatSecret(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    ChatSecrets *secrets = app->workspace()->chats()->secrets();
+    const QString talk = u"AI/2026-11-25 Sekret dla agenta.md"_s;
+    app->workspace()->writeFile(talk, u"---\ntasks: ignore\n---\n- 🧑 Wypchnij gałąź\n- 🤖 Potrzebuję tokenu.\n"_s);
+    app->navigate({{u"view"_s, u"chat"_s}, {u"path"_s, talk}});
+    check(waitFor([&] { return named(u"chatMessageAi"_s) != nullptr; }), "the conversation of the secret is shown");
+
+    struct Answer {
+        bool done = false;
+        bool ok = false;
+        QString code;
+        QJsonObject result;
+    };
+    auto answer = std::make_shared<Answer>();
+    const auto ask = [&](bool inlineValue) {
+        *answer = Answer{};
+        ChatSecrets::Request request{talk, u"Agent próbny"_s, u"Token <b>GitHuba</b>"_s};
+        request.reason = u"Żeby wypchnąć gałąź ąćęłńóśźż"_s;
+        request.url = u"https://github.com/settings/tokens"_s;
+        request.inlineValue = inlineValue;
+        ChatSecrets::Reply reply;
+        reply.ok = [answer](const QJsonObject &result) {
+            answer->done = answer->ok = true;
+            answer->result = result;
+        };
+        reply.fail = [answer](const QString &code, const QString &, const QJsonObject &) {
+            answer->done = true;
+            answer->code = code;
+        };
+        secrets->ask(request, reply);
+    };
+    ask(false);
+    QQuickItem *card = nullptr;
+    check(waitFor([&] { return (card = named(u"chatSecret"_s)) != nullptr; }),
+          "the agent's request shows a private card");
+    QQuickItem *title = named(u"chatSecretTitle"_s);
+    // (In the UI's language: the phone's run is Polish.)
+    check(title && title->property("text").toString().contains(u"Agent próbny"_s)
+                  && title->property("text").toString().contains(u"Token <b>GitHuba</b>"_s)
+                  && title->property("textFormat").toInt() == Qt::PlainText,
+          "who asks and the label, as plain text");
+    QQuickItem *reason = named(u"chatSecretReason"_s);
+    check(reason && reason->property("text").toString() == u"Żeby wypchnąć gałąź ąćęłńóśźż"_s, "and the reason");
+    QQuickItem *open = named(u"chatSecretOpen"_s);
+    check(open && open->property("text").toString().contains(u"github.com"_s),
+          "the sign-in page's button names its host");
+    QQuickItem *note = named(u"chatSecretNote"_s);
+    const QString fileNote = note ? note->property("text").toString() : QString();
+    QQuickItem *field = named(u"chatSecretField"_s);
+    check(field && field->property("echoMode").toInt() == 2 /* TextInput.Password */, "the field is masked");
+    const QString value = u"ghp_Żółć-selftest-0042"_s;
+    if (field)
+        field->setProperty("text", value);
+    // Show unmasks it.
+    QPointF at;
+    if (steadyItem(window, [&] { return named(u"chatSecretShow"_s); }, &at))
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return field && field->property("echoMode").toInt() == 0; }), "Show shows the value");
+    // (The pointer away from Show: its tooltip would lie over Send.)
+    mouseMove(window, QPointF(1, 1));
+    closeToolTipsWaitingForDeletion(window);
+    // Send: the agent gets a file only the user reads; the card goes, the field is emptied.
+    if (steadyItem(window, [&] { return named(u"chatSecretSend"_s); }, &at, 5000))
+        tapOrClick(window, at, touch);
+    else
+        std::fprintf(stderr, "selftest: Send of the secret's card does not stay put (last at %.0f, %.0f)\n", at.x(),
+                     at.y());
+    check(waitFor([&] { return answer->done; }) && answer->ok
+                  && answer->result.value(u"delivery"_s).toString() == u"file"_s,
+          "Send hands the secret over as a file");
+    const QString file = answer->result.value(u"file"_s).toString();
+    QFile f(file);
+    check(f.open(QIODevice::ReadOnly) && f.readAll() == value.toUtf8(), "the file holds the value");
+    f.close();
+#ifdef Q_OS_UNIX
+    check(!file.isEmpty()
+                  && !(QFileInfo(file).permissions()
+                       & (QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ReadOther
+                          | QFileDevice::WriteOther)),
+          "only its owner may read it");
+#endif
+    check(waitFor([&] { return named(u"chatSecret"_s) == nullptr; }) && field
+                  && field->property("text").toString().isEmpty(),
+          "the card goes, its field emptied");
+    check(!app->workspace()->read(talk).contains(value), "the value is not in the conversation's page");
+    check(!logging::redact(u"token "_s + value).contains(value), "the event log masks it while it lives");
+    // The value itself, asked for: the card warns; Cancel refuses.
+    if (secrets->pending(talk))
+        secrets->cancel(talk);
+    ask(true);
+    check(waitFor([&] { return named(u"chatSecretNote"_s) != nullptr && named(u"chatSecret"_s) != nullptr; })
+                  && !fileNote.isEmpty() && named(u"chatSecretNote"_s)->property("text").toString() != fileNote,
+          "a request for the value itself warns");
+    if (steadyItem(window, [&] { return named(u"chatSecretCancel"_s); }, &at, 5000))
+        tapOrClick(window, at, touch);
+    else
+        std::fprintf(stderr, "selftest: Cancel of the secret's card does not stay put (last at %.0f, %.0f)\n", at.x(),
+                     at.y());
+    check(waitFor([&] { return answer->done; }) && !answer->ok && answer->code == u"refused"_s,
+          "Cancel: the agent hears it was refused");
+    check(waitFor([&] { return named(u"chatSecret"_s) == nullptr; }), "and the card goes");
+    secrets->turnEnded(talk);
+    check(!QFile::exists(file), "the file goes with the turn");
+    mouseMove(window, QPointF(1, 1)); // (away: no tooltip opens)
+    app->back();
+    settle(200);
+    app->workspace()->deletePage(talk);
+    closeToolTipsWaitingForDeletion(window);
+    if (focused)
+        focused->forceActiveFocus();
+}
+
 void clearToasts(QQuickWindow *window);
 
 /// The AI in the editor (docs/UI.md "AI in the editor") and the AI chat's list, the model on the
@@ -12502,6 +12622,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ai-draw. Drawings in an AI answer, opened large; the tool calls of a turn as the setting says.
     checkChatDrawings(window, app, check);
+    closeMenus(window);
+    // 3h-ai-secret. A secret an agent asks for: its private card, Show, Send as a file, Cancel.
+    checkChatSecret(window, app, check);
     closeMenus(window);
     // 3h-ign. A page's tasks ignored from its menu, and back.
     checkIgnoreTasks(window, app, check);

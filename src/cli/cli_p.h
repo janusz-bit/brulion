@@ -358,6 +358,12 @@ int serveRemoteMcp(Context &context, const Command &command, const QJsonObject &
 int serveAcpHost(Context &context, const Command &command, const QJsonObject &args,
                  const std::function<int(const Command *, const Result &)> &output);
 
+/// `app hooks serve` (hooks.cpp): the webhooks of the running app's scheduled conversations over
+/// HTTP, passed on to the app with its hook grant; serves until stopped, a problem on the way printed
+/// with `output`.
+int serveAppHooks(Context &context, const Command &command, const QJsonObject &args,
+                  const std::function<int(const Command *, const Result &)> &output);
+
 /// `acp agent` (acpagent.cpp): the AI assistant as an ACP agent on standard input and output, until
 /// the editor closes it.
 int serveAcpAgent(Context &context, const Command &command, const QJsonObject &args,

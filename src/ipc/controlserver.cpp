@@ -242,19 +242,28 @@ void ControlServer::readLines(QLocalSocket *socket)
             continue;
         // A grant of the chat alone: nothing but its methods.
         const bool chatOnly = peer.granted && peer.scope == GrantScope::Chat;
-        if (chatOnly && !hello) {
-            const MethodSpec *spec = findControlMethod(request->method);
-            if (!spec || !spec->chat) {
-                writeLine(socket, encodeError(request->id, QString::fromLatin1(ControlError::Unauthorized),
-                                              u"This grant covers the AI chat's methods only (chats, chatStart, "
-                                              u"chatWait …), not %1"_s.arg(request->method)));
-                continue;
-            }
+        const MethodSpec *spec = findControlMethod(request->method);
+        if (chatOnly && !hello && (!spec || !spec->chat)) {
+            writeLine(socket, encodeError(request->id, QString::fromLatin1(ControlError::Unauthorized),
+                                          u"This grant covers the AI chat's methods only (chats, chatStart, "
+                                          u"chatWait …), not %1"_s.arg(request->method)));
+            continue;
+        }
+        // The webhooks' grant: nothing but its method — which no other connection may call.
+        const bool hookOnly = peer.granted && peer.scope == GrantScope::Hook;
+        if (!hello && spec && spec->hook != hookOnly) {
+            writeLine(socket,
+                      encodeError(request->id, QString::fromLatin1(ControlError::Unauthorized),
+                                  hookOnly ? u"This grant covers the webhooks' method only (chatHook), not %1"_s.arg(
+                                                     request->method)
+                                           : u"Only the app's webhook server calls %1"_s.arg(request->method)));
+            continue;
         }
         request->client = peer.client;
         request->granted = peer.granted;
         request->grant = peer.granted ? peer.token : QString();
         request->chatOnly = chatOnly;
+        request->hookOnly = hookOnly;
         const ControlReply reply(socket, request->id);
         if (m_handler)
             m_handler(*request, reply);

@@ -7,6 +7,7 @@
 //   "every day at 7:30", "on mondays at 9am", "weekdays at 8"          Repeat
 //   "co 3 godziny", "co pół godziny", "every 2 hours", "hourly"         Interval (at least 15 min)
 //   "jutro o 8", "w piątek o 18", "2026-12-01 18:00", "tomorrow 8am"   Once (in the future)
+//   (no rule: only its webhook starts it)                               None
 //
 // Every time is the local wall-clock time (as reminders: never through UTC). A run is due once
 // the wall clock reaches it: a time a spring-forward skips (02:30) runs at the first minute after
@@ -46,7 +47,8 @@ inline constexpr int MaxPromptChars = 20000;
 
 /// When a scheduled conversation runs.
 struct When {
-    enum class Kind { Once, Repeat, Interval };
+    /// None: no time of its own — only its webhook (Schedule::hook) and Run now start it.
+    enum class Kind { Once, Repeat, Interval, None };
     Kind kind = Kind::Once;
     /// Once: the day (with `time`). Repeat: unused.
     QDate date;
@@ -91,12 +93,13 @@ std::optional<DateSpec> nextRun(const When &when, const DateSpec &after);
 DateSpec wallClock(const QDateTime &moment);
 
 /// The rule as kept: {kind: "once", at: "2026-11-23 08:00"} | {kind: "repeat", rule: "every day",
-/// time: "07:30"} | {kind: "interval", minutes: 180}.
+/// time: "07:30"} | {kind: "interval", minutes: 180} | {kind: "none"} (only by its webhook).
 QJsonObject toJson(const When &when);
 std::optional<When> whenFromJson(const QJsonObject &object);
 
 /// A scheduled conversation as the device keeps it (AppSettings, per notebook — never in the
-/// notebook, which syncs from anywhere: a synced file must not start agents).
+/// notebook, which syncs from anywhere: a synced file must not start agents). A rule of kind None
+/// needs a webhook (a schedule read back without one is left out).
 struct Schedule {
     QString id;      ///< "s" and random hex digits, made by the app
     QString title;   ///< its name (and the new conversations' first words come from `prompt`)
@@ -117,6 +120,12 @@ struct Schedule {
     /// The conversation of the AI agent that set it up ("" the user's): each run is a
     /// sub-conversation of it (docs/UI.md "Agents delegate").
     QString parent{};
+    /// The secret of its webhook (docs/UI.md "Scheduled conversations" → "Webhooks": a request to
+    /// `…/hooks/<hook>` starts a run; webhook/webhook.h), "" none. Only the user sets it (in
+    /// Settings): the remote control never gives it or takes it.
+    QString hook{};
+    /// When its webhook last started a run (invalid: never). It does not move the timed rule.
+    DateSpec lastHook{};
 
     /// The next run: after the last one, else after `created`; nullopt none (a single run done,
     /// switched off is not considered here).

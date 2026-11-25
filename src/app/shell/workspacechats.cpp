@@ -116,9 +116,16 @@ void ChatTurn::clearPartial()
 // ---- WorkspaceChats -------------------------------------------------------------------------------
 
 WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent)
-    : QObject(parent), m_workspace(workspace), m_extensions(extensions), m_agents(new WorkspaceAgents(workspace, this)),
-      m_share(new AgentShare(workspace, m_agents, this)), m_limits(new AgentLimits(m_agents, this)),
-      m_lineage(new ChatLineage(workspace, this, this)), m_schedules(new ChatSchedules(workspace, this, this))
+    : QObject(parent)
+    , m_workspace(workspace)
+    , m_extensions(extensions)
+    , m_agents(new WorkspaceAgents(workspace, this))
+    , m_share(new AgentShare(workspace, m_agents, this))
+    , m_limits(new AgentLimits(m_agents, this))
+    , m_lineage(new ChatLineage(workspace, this, this))
+    , m_schedules(new ChatSchedules(workspace, this, this))
+    , m_secrets(new ChatSecrets(workspace, this, this))
+    , m_hooks(new HookServer(this))
 {
     // A conversation's sub-conversations (an agent's tasks for other partners) are told which one
     // they come from: WorkspaceAgents gives their agents no tools that change the app, and none of
@@ -195,6 +202,15 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         t->clearPartial();
         Q_EMIT t->stateChanged();
         Q_EMIT stateChanged();
+    });
+    // A secret an agent asks for (chatsecrets.h): the conversation asks meanwhile; nobody sees it:
+    // said where the user is, as a question is (never with the value: there is none yet).
+    connect(m_secrets, &ChatSecrets::changed, this, &WorkspaceChats::questionsMoved);
+    // (A hook's address follows its server's: the schedules' rows show it.)
+    connect(m_hooks, &HookServer::changed, m_schedules, &ChatSchedules::changed);
+    connect(m_secrets, &ChatSecrets::asked, this, [this](const QString &path, const QString &text) {
+        if (!isShown(path))
+            Q_EMIT questionWaiting(path, text);
     });
     connect(m_workspace, &Workspace::readyChanged, this, &WorkspaceChats::recoverAgentTurns);
     connect(m_extensions, &WorkspaceExtensions::aiSettingsChanged, this, [this] {
@@ -279,7 +295,7 @@ void WorkspaceChats::questionsMoved()
     // what it asks); one whose question went, no longer.
     bool moved = false;
     for (ChatTurn *t : std::as_const(m_turns)) {
-        const bool asks = t->m_running && asking(t->m_path);
+        const bool asks = t->m_running && (asking(t->m_path) || m_secrets->pending(t->m_path));
         if (asks == t->m_asking)
             continue;
         t->m_asking = asks;
@@ -416,7 +432,10 @@ QString WorkspaceChats::questionText(const QString &path, int) const
 {
     if (!m_agents->questionOptions(path).isEmpty())
         return m_agents->questionText(path);
-    return m_extensions->chatQuestionKind(path) == u"choose" ? m_extensions->chatQuestionTitle(path) : QString();
+    if (m_extensions->chatQuestionKind(path) == u"choose")
+        return m_extensions->chatQuestionTitle(path);
+    // (A secret asked for: its card's line — the list's row, a parent's wait, the notification.)
+    return m_secrets->questionText(path);
 }
 
 QStringList WorkspaceChats::questionOptions(const QString &path, int) const
@@ -652,7 +671,7 @@ QString WorkspaceChats::stateOf(const QString &path, QString *failure) const
     if (failure)
         *failure = t && !t->m_running ? t->m_failure : QString();
     if (t && t->m_running)
-        return asking(path) ? u"asking"_s : (t->m_queued ? u"queued"_s : u"running"_s);
+        return (asking(path) || m_secrets->pending(path)) ? u"asking"_s : (t->m_queued ? u"queued"_s : u"running"_s);
     return t && !t->m_failure.isEmpty() ? u"failed"_s : u"idle"_s;
 }
 
@@ -869,11 +888,15 @@ void WorkspaceChats::stop(const QString &path)
     if (t->m_queued) {
         m_waiting.removeAll(QPointer<ChatTurn>(t));
         t->m_queued = false;
+        m_stopping = t;
         endTurn(t);
+        m_stopping = nullptr;
         return;
     }
     const QString key = t->m_key;
+    m_stopping = t;
     endTurn(t);
+    m_stopping = nullptr;
     m_extensions->stopChat(key);
     m_agents->stop(key);
 }
@@ -899,6 +922,7 @@ void WorkspaceChats::dismissFailure(const QString &path)
 
 void WorkspaceChats::reset()
 {
+    m_secrets->reset();
     m_agents->reset();
     m_waiting.clear();
     m_byKey.clear();
@@ -931,6 +955,8 @@ void WorkspaceChats::endTurn(ChatTurn *t)
 {
     if (!t)
         return;
+    // A secret asked for goes with the turn; one handed over is deleted.
+    m_secrets->turnEnded(t->m_path, m_stopping == t);
     if (!t->m_key.isEmpty() && m_byKey.value(t->m_key) == t)
         m_byKey.remove(t->m_key);
     t->m_key.clear();

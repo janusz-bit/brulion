@@ -18,10 +18,8 @@ done in the repository simply disappears from the list.
   on the desktop, prompt links, drawings in answers, tool calls in words, the list's pins, archive,
   search, badges and notifications are there (docs/UI.md "AI chat", "AI agents (ACP)"). Not yet:
   side chats (`/btw`: a fork shown only inside its conversation); a delegated conversation that
-  wakes its parent when it ends (today an agent starts and waits); webhooks that start a scheduled
-  conversation; a secret the agent asks for in a private card (T3's `request_secret`); a usage
-  history with costs (T3 reads the agents' own session logs); all of it tried with a real Claude
-  Code and Codex.
+  wakes its parent when it ends (today an agent starts and waits); a usage history with costs (T3
+  reads the agents' own session logs); all of it tried with a real Claude Code and Codex.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the

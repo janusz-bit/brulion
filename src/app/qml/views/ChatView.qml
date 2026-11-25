@@ -835,6 +835,9 @@ FocusScope {
     }
     // A change to allow or a failure shows under the last message: in view.
     onAskingChanged: if (root.asking) toEnd.restart()
+    // (A secret the agent asks for: its card, at the end.)
+    readonly property bool secretHere: root.path !== "" && root.chats.secrets.pending(root.path, root.chats.secrets.serial)
+    onSecretHereChanged: if (root.secretHere) toEnd.restart()
     onFailedHereChanged: if (root.failedHere) toEnd.restart()
 
     ChatMessageModel {
@@ -2014,6 +2017,13 @@ FocusScope {
                                         }
                                     }
                                 }
+                            }
+
+                            // A secret the agent asks for: a private card (chatsecrets.h).
+                            ChatSecretCard {
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: 640
+                                path: root.path
                             }
 
                             // A turn that failed.

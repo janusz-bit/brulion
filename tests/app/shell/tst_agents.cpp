@@ -34,16 +34,26 @@
 // chatRead's pages of long texts, partners). Scheduled conversations (chatschedules.h): a rule due
 // runs once (also one missed while the app was closed), a new conversation each run or the same
 // one going on (skipped while it answers), one of a partner that does not answer here skipped with
-// why, Run now, an agent's schedule a sub-conversation of its conversation, kept as JSON.
+// why, Run now, an agent's schedule a sub-conversation of its conversation, kept as JSON; webhooks
+// (a schedule's own address: its token kept with it, never in the remote control's answers, masked in
+// the log; a run with the request's body as data, at most one a minute, busy while its one
+// conversation answers, none for an unknown token or one that is off; a rule left empty with one).
+// A secret an agent asks for (chatsecrets.h): only in its own conversation while its turn runs, the
+// card's fields, the conversation asking meanwhile, an owner-only file holding the value (never in
+// the page) deleted when the turn ends, the value itself when asked so, masked in the log while it
+// lives, Cancel, Stop and the time ending the card, a second request busy, a script's request.
 #include "appsettings.h"
 #include "chatcontrol.h"
 #include "chatlineage.h"
 #include "chatschedules.h"
+#include "chatsecrets.h"
 #include "workspace.h"
 #include "workspaceagents.h"
 #include "workspacechats.h"
 
 #include "chat/chat.h"
+#include "log/redact.h"
+#include "webhook/webhook.h"
 
 #include <QDir>
 #include <QFile>
@@ -68,6 +78,7 @@ using brulion::shell::AgentConfig;
 using brulion::shell::ChatControl;
 using brulion::shell::ChatLineage;
 using brulion::shell::ChatSchedules;
+using brulion::shell::ChatSecrets;
 using brulion::shell::Workspace;
 using brulion::shell::WorkspaceAgents;
 using brulion::shell::WorkspaceChats;
@@ -750,6 +761,249 @@ private Q_SLOTS:
         schedules->setStorage({}, {});
         QVERIFY(schedules->rows().isEmpty());
         QCOMPARE(ask(control, u"chatScheduleAdd"_s, {{u"prompt"_s, u"Ą"_s}, {u"when"_s, u"jutro"_s}})->code, u"not_ready"_s);
+    }
+
+    void secrets()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        ChatSecrets *secrets = chats->secrets();
+        secrets->setBase(m_tmp.filePath(u"secrets-%1"_s.arg(m_n)));
+        ChatControl control(ws.get());
+        // A conversation whose agent waits (its turn runs until it is stopped).
+        auto a = ask(control, u"chatStart"_s, {{u"text"_s, u"czekaj na sekret"_s}, {u"partner"_s, u"acp:fake"_s}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString path = a->result.value(u"path"_s).toString();
+        QTRY_VERIFY_WITH_TIMEOUT(chats->isRunning(path), 20000);
+        const ChatControl::Caller agent{true, path, u"Fałszywy"_s};
+        // Its own conversation only; an address that is no http(s) page; a label.
+        QCOMPARE(ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"x"_s}, {u"path"_s, u"AI/inna"_s}}, agent)->code,
+                 u"refused"_s);
+        QCOMPARE(ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"Token"_s}, {u"url"_s, u"javascript:alert(1)"_s}},
+                     agent)
+                         ->code,
+                 u"bad_params"_s);
+        QCOMPARE(ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"  "_s}}, agent)->code, u"bad_params"_s);
+        QVERIFY(!secrets->pending(path));
+
+        // The card: who asks, the label and the reason as written, the page's host; the
+        // conversation asks meanwhile, and a toast says so (no chat view shows it).
+        QSignalSpy waiting(chats, &WorkspaceChats::questionWaiting);
+        a = ask(control, u"chatRequestSecret"_s,
+                {{u"label"_s, u"Token GitHuba"_s},
+                 {u"reason"_s, u"Żeby wypchnąć gałąź <b>teraz</b>"_s},
+                 {u"placeholder"_s, u"ghp_…"_s},
+                 {u"url"_s, u"https://github.com/settings/tokens"_s}},
+                agent);
+        QVERIFY(!a->done);
+        QVERIFY(secrets->pending(path));
+        QCOMPARE(chats->stateOf(path), u"asking"_s);
+        QCOMPARE(chats->questionText(path), u"Fałszywy asks for a secret: Token GitHuba"_s);
+        QCOMPARE(waiting.size(), 1);
+        QVERIFY(!waiting.first().at(1).toString().isEmpty());
+        const QVariantMap card = secrets->card(path);
+        QCOMPARE(card.value(u"agent"_s).toString(), u"Fałszywy"_s);
+        QCOMPARE(card.value(u"reason"_s).toString(), u"Żeby wypchnąć gałąź <b>teraz</b>"_s); // (shown as plain text)
+        QCOMPARE(card.value(u"placeholder"_s).toString(), u"ghp_…"_s);
+        QCOMPARE(card.value(u"host"_s).toString(), u"github.com"_s);
+        QVERIFY(!card.value(u"inline"_s).toBool());
+        // A second request meanwhile: busy.
+        QCOMPARE(ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"Inny"_s}}, agent)->code, u"busy"_s);
+
+        // Sent: an owner-only file holds it, the page does not, the log masks it.
+        const QString value = u"ghp_Żółć-1234567890"_s;
+        QVERIFY(!secrets->send(path, QString()));
+        QVERIFY(secrets->send(path, value));
+        QVERIFY(a->done && a->ok);
+        QCOMPARE(a->result.value(u"delivery"_s).toString(), u"file"_s);
+        const QString file = a->result.value(u"file"_s).toString();
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), value.toUtf8());
+        f.close();
+#ifdef Q_OS_UNIX
+        QCOMPARE(QFileInfo(file).permissions()
+                         & (QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ReadOther
+                            | QFileDevice::WriteOther),
+                 QFileDevice::Permissions());
+#endif
+        QVERIFY(a->result.value(u"note"_s).toString().contains(file));
+        QVERIFY(!secrets->pending(path));
+        QCOMPARE(chats->stateOf(path), u"running"_s);
+        bool ok = false;
+        QVERIFY(!ws->read(path, &ok).contains(value));
+        QVERIFY(ok);
+        QVERIFY(!logging::redact(u"echo "_s + value).contains(value));
+        // The turn ends (stopped): the file goes, and with it the value's redaction.
+        chats->stop(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        QVERIFY(!QFile::exists(file));
+        QVERIFY(logging::redact(u"echo "_s + value).contains(value));
+
+        // The next turn: Cancel — the agent hears it was not given.
+        QVERIFY(ask(control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"czekaj dalej"_s}})->ok);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->isRunning(path), 20000);
+        a = ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"PIN"_s}, {u"delivery"_s, u"value"_s}}, agent);
+        QVERIFY(secrets->card(path).value(u"inline"_s).toBool());
+        secrets->cancel(path);
+        QVERIFY(a->done && !a->ok);
+        QCOMPARE(a->code, u"refused"_s);
+        QCOMPARE(a->details.value(u"reason"_s).toString(), u"cancelled"_s);
+        QCOMPARE(chats->stateOf(path), u"running"_s);
+        // The value itself, when asked so: masked in the log while it lives.
+        a = ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"PIN"_s}, {u"delivery"_s, u"value"_s}}, agent);
+        QVERIFY(secrets->send(path, u"4321-żółw"_s));
+        QVERIFY(a->ok);
+        QCOMPARE(a->result.value(u"delivery"_s).toString(), u"value"_s);
+        QCOMPARE(a->result.value(u"value"_s).toString(), u"4321-żółw"_s);
+        QVERIFY(!a->result.contains(u"file"_s));
+        QVERIFY(!logging::redact(u"PIN 4321-żółw"_s).contains(u"4321-żółw"_s));
+        // Its time up: timeout.
+        a = ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"Hasło"_s}, {u"ms"_s, 1000}}, agent);
+        QTRY_VERIFY_WITH_TIMEOUT(a->done, 10000);
+        QCOMPARE(a->code, u"timeout"_s);
+        QVERIFY(!secrets->pending(path));
+        // Stop while a card waits: refused, "stopped"; the value handed over goes with the turn.
+        a = ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"Hasło"_s}}, agent);
+        QVERIFY(secrets->pending(path));
+        chats->stop(path);
+        QVERIFY(a->done);
+        QCOMPARE(a->code, u"refused"_s);
+        QCOMPARE(a->details.value(u"reason"_s).toString(), u"stopped"_s);
+        QVERIFY(!secrets->pending(path));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        QVERIFY(logging::redact(u"PIN 4321-żółw"_s).contains(u"4321-żółw"_s));
+        // An agent whose turn does not run asks for nothing.
+        QCOMPARE(ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"x"_s}}, agent)->code, u"refused"_s);
+        // A script of the user's names the conversation.
+        a = ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"Klucz API"_s}, {u"path"_s, path}});
+        QVERIFY(!a->done);
+        QVERIFY(secrets->pending(path));
+        QVERIFY(secrets->questionText(path).startsWith(u"An AI agent asks for a secret"_s));
+        QCOMPARE(ask(control, u"chatRequestSecret"_s, {{u"label"_s, u"x"_s}, {u"path"_s, u"AI/brak"_s}})->code,
+                 u"not_found"_s);
+        // The notebook closed: every card goes.
+        chats->reset();
+        QVERIFY(a->done);
+        QCOMPARE(a->code, u"refused"_s);
+        QVERIFY(!secrets->pending(path));
+    }
+
+    void webhooks()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        ChatSchedules *schedules = chats->schedules();
+        QDateTime now(QDate(2026, 11, 20), QTime(9, 15));
+        schedules->setClock([&now] { return now; });
+        QByteArray kept;
+        schedules->setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
+        // A rule left empty needs a webhook; with one, only the webhook starts it.
+        QVERIFY(schedules
+                        ->save(QString(), u"Dzwonek"_s, u"Ktoś dzwoni"_s, u"acp:fake"_s, QString(), false, true,
+                               QString())
+                        .isEmpty());
+        QVERIFY(schedules
+                        ->save(QString(), u"Dzwonek"_s, u"Ktoś dzwoni"_s, u"acp:fake"_s, QString(), false, true,
+                               u"za-krótki"_s)
+                        .isEmpty());
+        const QString token = schedules->newHookToken();
+        QVERIFY(webhook::isToken(token));
+        QVERIFY(token != schedules->newHookToken());
+        const QString id = schedules->save(QString(), u"Dzwonek"_s, u"Ktoś dzwoni do drzwi: sprawdź, kto to."_s,
+                                           u"acp:fake"_s, QString(), false, true, token);
+        QVERIFY2(!id.isEmpty(), qPrintable(schedules->lastError()));
+        QCOMPARE(schedules->find(id)->when.kind, schedule::When::Kind::None);
+        QCOMPARE(schedules->find(id)->hook, token);
+        QVERIFY(kept.contains(token.toLatin1())); // (on this device, with the schedules)
+        const QVariantMap row = schedules->rows().first().toMap();
+        QVERIFY(row.value(u"webhook"_s).toBool());
+        QCOMPARE(row.value(u"rule"_s).toString(), u"tylko przez webhook"_s);
+        QCOMPARE(row.value(u"rule"_s).toString(), schedules->hookOnlyText());
+        QCOMPARE(row.value(u"next"_s).toString(), QString());
+        now = now.addDays(3);
+        schedules->runDue();
+        QCOMPARE(chats->runningCount(), 0);
+        // Its address: the server's and the token; masked where it is shown, and in the log.
+        QCOMPARE(schedules->hookUrl(token), QString(u"http://127.0.0.1:8791/hooks/"_s + token));
+        QCOMPARE(schedules->maskedHookUrl(token), QString(u"http://127.0.0.1:8791/hooks/"_s + token.left(4) + u"…"_s));
+        QVERIFY(!logging::redact(u"POST /x/"_s + token).contains(token));
+        // The remote control's schedules: that there is one, never the token.
+        ChatControl control(ws.get());
+        auto a = ask(control, u"chatSchedules"_s, {});
+        QVERIFY(a->ok);
+        QVERIFY(!QJsonDocument(a->result).toJson().contains(token.toLatin1()));
+        QVERIFY(a->result.value(u"schedules"_s).toArray().first().toObject().value(u"webhook"_s).toBool());
+        // (Its fields take no token.)
+        QVERIFY(ask(control, u"chatScheduleSet"_s, {{u"id"_s, id}, {u"hook"_s, webhook::newToken()}})->ok);
+        QCOMPARE(schedules->find(id)->hook, token);
+
+        // Unknown and malformed tokens.
+        QCOMPARE(schedules->runHook({webhook::newToken(), {}}).status, u"unknown"_s);
+        QCOMPARE(schedules->runHook({u"nie-token"_s, {}}).status, u"unknown"_s);
+        // Its own: a run with the body as data in a fence, the conversation's name.
+        QSignalSpy ran(schedules, &ChatSchedules::ran);
+        webhook::Body body;
+        body.kind = webhook::BodyKind::Json;
+        body.text = u"{\n    \"kto\": \"listonosz\"\n}"_s;
+        body.bytes = 20;
+        ChatSchedules::HookOutcome out = schedules->runHook({token, body});
+        QCOMPARE(out.status, u"started"_s);
+        QCOMPARE(ran.size(), 1);
+        const QString path = ran.first().at(2).toString();
+        QCOMPARE(out.conversation, chats->nameOf(path));
+        bool ok = false;
+        const QString page = ws->read(path, &ok);
+        QVERIFY(page.contains(u"Ktoś dzwoni do drzwi"_s));
+        QVERIFY(page.contains(u"niezaufane dane"_s));
+        QVERIFY(page.contains(u"```json"_s));
+        QVERIFY(page.contains(u"listonosz"_s));
+        QVERIFY(schedules->find(id)->lastHook.isValid());
+        QVERIFY(!schedules->find(id)->lastRun.isValid()); // (its timed rule does not move)
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        // At most one a minute.
+        out = schedules->runHook({token, {}});
+        QCOMPARE(out.status, u"busy"_s);
+        QVERIFY(out.retryAfterMs > 0 && out.retryAfterMs <= webhook::MinIntervalMs);
+        now = now.addSecs(61);
+        QCOMPARE(schedules->runHook({token, {}}).status, u"started"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->runningCount() == 0, 20000);
+        // Off: as if there were none.
+        QVERIFY(schedules->setEnabled(id, false));
+        now = now.addSecs(61);
+        QCOMPARE(schedules->runHook({token, {}}).status, u"unknown"_s);
+        // One conversation going on: busy while it answers.
+        QCOMPARE(schedules->save(id, u"Dzwonek"_s, u"czekaj na kamerę"_s, u"acp:fake"_s, QString(), true, true, token),
+                 id);
+        out = schedules->runHook({token, {}});
+        QCOMPARE(out.status, u"started"_s);
+        const QString one = schedules->find(id)->conversation;
+        QVERIFY(chats->isRunning(one));
+        now = now.addSecs(61);
+        QCOMPARE(schedules->runHook({token, {}}).status, u"busy"_s);
+        chats->stop(one);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(one), 20000);
+        // A new address: the old one stops working.
+        const QString renewed = schedules->newHookToken();
+        QCOMPARE(schedules->save(id, u"Dzwonek"_s, u"Ktoś dzwoni"_s, u"acp:fake"_s, QString(), false, true, renewed),
+                 id);
+        now = now.addSecs(61);
+        QCOMPARE(schedules->runHook({token, {}}).status, u"unknown"_s);
+        QCOMPARE(schedules->runHook({renewed, {}}).status, u"started"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->runningCount() == 0, 20000);
+        // Without its webhook it needs a rule; with one the webhook may go.
+        QVERIFY(schedules->save(id, u"Dzwonek"_s, u"Ktoś dzwoni"_s, u"acp:fake"_s, QString(), false, true, QString())
+                        .isEmpty());
+        QVERIFY(!schedules->lastError().isEmpty());
+        QCOMPARE(schedules->save(id, u"Dzwonek"_s, u"Ktoś dzwoni"_s, u"acp:fake"_s, u"codziennie o 7:30"_s, false, true,
+                                 QString()),
+                 id);
+        QVERIFY(schedules->find(id)->hook.isEmpty());
+        QVERIFY(!kept.contains(renewed.toLatin1()));
+        QCOMPARE(schedules->runHook({renewed, {}}).status, u"unknown"_s);
+        // No notebook of the user's: no hook known.
+        schedules->setStorage({}, {});
+        QCOMPARE(schedules->runHook({renewed, {}}).status, u"unknown"_s);
     }
 
     void tools()
@@ -1602,6 +1856,10 @@ private Q_SLOTS:
         QVERIFY(!context.contains(u"about the note"_s));
         // Answers may draw: the chat shows a chart, a diagram and a formula as the editor does.
         QVERIFY(context.contains(u"```mermaid"_s) && context.contains(u"```chart"_s) && context.contains(u"$$…$$"_s));
+        // With the chat's tools: a secret is asked for in a private card, never in the chat.
+        QVERIFY(!context.contains(u"brulion_app_chat_request_secret"_s));
+        QVERIFY(WorkspaceAgents::context(u"/n"_s, u"AI/x"_s, QString(), true, false, true)
+                        .contains(u"brulion_app_chat_request_secret"_s));
         QCOMPARE(WorkspaceAgents::transcript({QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Tylko to"_s}}}), QString());
         QCOMPARE(WorkspaceAgents::transcript({QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Żółw?"_s}},
                                               QVariantMap{{u"role"_s, u"assistant"_s}, {u"content"_s, u" Je sałatę. "_s}},

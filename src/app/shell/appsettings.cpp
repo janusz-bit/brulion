@@ -76,6 +76,10 @@ constexpr auto kMcpServerReadOnly = "mcpServer/readOnly"_L1;
 constexpr auto kAcpShare = "ai/share"_L1;
 constexpr auto kAcpShareAddress = "ai/shareAddress"_L1;
 constexpr auto kAcpShareTrust = "ai/shareTrust"_L1;
+constexpr auto kChatHooks = "ai/hooks"_L1;
+constexpr auto kChatHooksAddress = "ai/hooksAddress"_L1;
+constexpr auto kChatHooksPort = "ai/hooksPort"_L1;
+constexpr auto kChatHooksPublicUrl = "ai/hooksPublicUrl"_L1;
 constexpr auto kAiChatNotify = "ai/chatNotify"_L1;
 constexpr auto kChatToolCalls = "ai/chatToolCalls"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
@@ -657,6 +661,56 @@ void AppSettings::setAcpShareTrust(bool on)
 {
     if (store(kAcpShareTrust, on, acpShareTrust()))
         Q_EMIT acpShareChanged();
+}
+
+bool AppSettings::chatHooks() const
+{
+    return acpProgramsAvailable() && m_settings->value(kChatHooks, false).toBool();
+}
+
+void AppSettings::setChatHooks(bool on)
+{
+    if (store(kChatHooks, on, chatHooks()))
+        Q_EMIT chatHooksChanged();
+}
+
+QString AppSettings::chatHooksAddress() const
+{
+    return m_settings->value(kChatHooksAddress).toString() == u"tailnet" ? u"tailnet"_s : QString();
+}
+
+void AppSettings::setChatHooksAddress(const QString &address)
+{
+    if (store(kChatHooksAddress, address.trimmed() == u"tailnet" ? u"tailnet"_s : QString(), chatHooksAddress()))
+        Q_EMIT chatHooksChanged();
+}
+
+int AppSettings::chatHooksPort() const
+{
+    const int port = m_settings->value(kChatHooksPort, 8791).toInt();
+    return port >= 1024 && port <= 65535 ? port : 8791;
+}
+
+void AppSettings::setChatHooksPort(int port)
+{
+    if (port < 1024 || port > 65535)
+        return;
+    if (store(kChatHooksPort, port, chatHooksPort()))
+        Q_EMIT chatHooksChanged();
+}
+
+QString AppSettings::chatHooksPublicUrl() const
+{
+    return m_settings->value(kChatHooksPublicUrl).toString().trimmed();
+}
+
+void AppSettings::setChatHooksPublicUrl(const QString &url)
+{
+    QString clean = url.trimmed();
+    while (clean.endsWith(u'/'))
+        clean.chop(1);
+    if (store(kChatHooksPublicUrl, clean, chatHooksPublicUrl()))
+        Q_EMIT chatHooksChanged();
 }
 
 QString AppSettings::aiChatNotify() const

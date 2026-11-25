@@ -659,6 +659,14 @@ int main(int argc, char *argv[])
                         if (control)
                             control->revokeGrant(token);
                     });
+            // The webhooks of scheduled conversations (hookserver.h): their server passes each one
+            // on with a grant of its own (chatHook alone).
+            controller->workspace()->chats()->hooks()->setGrants(
+                    [control] { return control ? control->hookGrant() : QString(); },
+                    [control](const QString &token) {
+                        if (control)
+                            control->revokeGrant(token);
+                    });
         }
 #endif
 #ifdef Q_OS_WASM

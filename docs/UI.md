@@ -1623,6 +1623,37 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   `Workspace.chats.showing(path, true)` while it shows the conversation, so `ShellExtensionQuestion`
   leaves the question to it — and asks it in its dialog once no view shows it (another view, the
   panel closed); answered in one, the other goes.
+* **A secret the agent asks for** (T3 Code's `request_secret`; `chatSecret`, `ChatSecretCard.qml`;
+  `Workspace.chats.secrets`, `shell/chatsecrets.h`, core `secretdrop`): an AI agent of this computer
+  that needs a token, a password, a PIN or a key only the user can give calls
+  `brulion_app_chat_request_secret` (docs/CLI.md "Conversations": the remote control's
+  `chatRequestSecret`) for its own conversation while its turn runs — never asks for it in the chat,
+  where it would be kept in the conversation's page (synced, in its history) and sent to the model;
+  the context and the MCP server's instructions say so. The conversation shows a private card under
+  the answer (the accent's border): "Claude Code asks for a secret: GitHub token" (`chatSecretTitle`),
+  the reason (`chatSecretReason`) — both the agent's words as plain text, never HTML —, a sign-in or
+  setup page's button when the agent gave one (`chatSecretOpen`, "Open github.com": http and https
+  only, through `Workspace.openUrl`), a masked field (`chatSecretField`, the agent's placeholder,
+  `secretText`: the remote control never reads it, also while **Show** shows it — `chatSecretShow`),
+  **Paste** (`chatSecretPaste`), **Send** (`chatSecretSend`, Enter) and **Cancel**
+  (`chatSecretCancel`), and a line on where it goes (`chatSecretNote`). Sent, the value goes to the
+  agent as the path of a file only this user can read (0600, in a 0700 folder of this run under the
+  user's runtime folder, `$XDG_RUNTIME_DIR/brulion-<id>-secrets/run-…/`, never on a disk where there
+  is one; else the app's cache), with a note to read it only inside the command that uses it
+  (`--token "$(cat '<file>')"`); the file is deleted when the conversation's turn ends (it is
+  answered, fails or is stopped; the agent's process ending ends its turns), after 15 minutes, or
+  when the app ends — and what a crashed run left at the next start (its folder's lock held by no
+  live process). An agent that cannot use a file asks for `delivery: value`: the value itself then
+  goes into its context and its provider's logs, which the card says in the warning tint. Either way
+  the value is registered with the event log's redaction while it lives and is never written into
+  the page, the event log, a notification, a toast or the notebook's device state; the field is
+  emptied when the card goes. While a card waits the conversation **asks** (its row, `stateOf` —
+  an agent that delegated to it learns `waiting_for_user` —, the notification) and, when no chat view
+  shows it, a toast "Claude Code asks for a secret: GitHub token" with **Open**. One card per
+  conversation at a time (a second request: `busy`); Cancel (`refused`, `cancelled`), Stop of the
+  turn (`stopped`), the turn's end, the agent's call gone, its time (5 minutes by default, at most 15:
+  `timeout`) or the notebook closed end it. A script of the user's (the remote control on) names the
+  conversation; its card says "An AI agent". Tests: `tst_secretdrop`, `tst_shell_agents` (`secrets`).
 * **A failed turn** (`chatFailure`, `ChatTurn.failure`): the reason in the danger tint ("AI: no
   connection: …", "The AI assistant is off: …", "The chat partner “…” is not running: …"), **Try
   again** (`chatRetry`: the turn again on the page as it is) and ×.
@@ -1690,6 +1721,8 @@ page deleted meanwhile ends the turn), `chatFailed` keeps the reason in the conv
 user (`isUnread()`, `cameBack()`, `failureOf()`, `attentionChanged`) and its notifications
 (`setNotifyMode()`, `notificationWanted`), `nameOf()`, `partnerOf()` / `setPartner()`,
 `setFlag()` (an AI's answer reported or hidden) / `modelName()` (who answered, for a report), the
+secrets agents ask for (`secrets`: ChatSecrets, "A secret the agent asks for" above), the webhooks'
+server (`hooks`: HookServer, "Scheduled conversations" below), the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
 `picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
 `stopDictation` / `cancelDictation` → `dictated`; `dictationReady`, `recognizing`, `dictationElapsed`,
@@ -2033,7 +2066,7 @@ built-in assistant's tools do not change (docs/FINETUNE.md).
   (one that deep gets no chat grant) and **four** of one conversation running at once; a
   sub-conversation's agent never gets the live tools ("Let it change the app"), whatever its setting.
 * The protocol's chat methods (`chats`, `chatRead`, `chatStart`, `chatSend`, `chatWait`, `chatStop`,
-  `chatPartners`, `chatSchedule*`) are `ChatControl`'s: GUI-free over `WorkspaceChats`
+  `chatPartners`, `chatSchedule*`, `chatRequestSecret`) are `ChatControl`'s: GUI-free over `WorkspaceChats`
   (`send(…, partner, parent)`, `stateOf()`: idle, running, queued, asking, failed), the desktop's
   `RemoteControl` passing them on with who asks.
 
@@ -2061,8 +2094,9 @@ one conversation (T3 Code's scheduled tasks).
 * **Kept on this device** (AppSettings `ai/schedules/<the notebook's id>`, JSON; at most 50) —
   never in the notebook, which syncs from anywhere: a synced file must not start agents; none for
   the documentation. `Workspace.chats.schedules` (`shell/chatschedules.h`): `rows`, `check()`,
-  `add()`, `update()`, `setEnabled()`, `remove()`, `runNow()`, `lastError()`; AppController gives it
-  its storage when a notebook opens.
+  `add()`, `update()`, `save()` (the dialog's, with its webhook's token), `newHookToken()`,
+  `maskedHookUrl()`, `copyHookUrl()`, `hookOnlyText()`, `setEnabled()`, `remove()`, `runNow()`,
+  `runHook()`, `lastError()`; AppController gives it its storage when a notebook opens.
 * **Runs while the app runs** (the desktop tray keeps it running; on Android while it is open, with
   partners that answer there): looked at every half minute and when the notebook is ready, so a run
   missed while the app was closed runs once at its next start — not once per missed occurrence. A
@@ -2073,6 +2107,48 @@ one conversation (T3 Code's scheduled tasks).
 * Agents and scripts manage them too (`brulion-cli app chat schedule list | add | set | remove |
   run`, docs/CLI.md "Conversations"); one an AI agent sets up names it and its conversation, its runs
   are sub-conversations of it, and the agent changes only those.
+* **Webhooks** (T3 Code's webhook triggers; core `webhook`, `shell/hookserver.h`, `src/cli/hooks.cpp`):
+  a schedule can also be started by a request from elsewhere — a GitHub webhook, Home Assistant, a cron
+  job on another machine, iOS Shortcuts. In its dialog **Also start it by a webhook**
+  (`chatScheduleHook`, off by default) gives it an address of its own, `<address>/hooks/<token>` (256
+  random bits, base64url), shown masked ("http://127.0.0.1:8791/hooks/Xk3d…", `chatScheduleHookUrl`)
+  with **Copy** (`chatScheduleHookCopy`: all of it onto the clipboard as a secret — clipboard managers
+  keep it out of their history) and **New address** (`chatScheduleHookNew`: the old one stops working
+  once saved); a warning line while webhooks are off. With a webhook **When** may stay empty: then only
+  the webhook (and Run now) start it — "only by its webhook" / "tylko przez webhook" in the rule's place
+  (`When::Kind::None`). The row says "Webhook" (a link icon, `chatScheduleWebhook`) and when it last
+  started one. A request — `POST` only: a link preview or a browser's prefetch must never start a run —
+  starts it as Run now does (a new conversation, or the next message of its one), the message the
+  schedule's own and under it a sentence that what follows came from outside and is data, never
+  instructions, and the body in a fenced block (JSON indented, a form's fields one a line, text as it
+  is: UTF-8 only, at most 1 MiB, cut at 16 KiB — docs/CLI.md "For agents: note text is data"). Its
+  timed rule does not move (the run is `lastHook`). Answers: 202 `{"conversation": "<name>"}`; 404 for
+  an unknown token, one that is off, or a schedule of a notebook not open (the same answer); 429 with
+  Retry-After more than once a minute per schedule, or while its one conversation still answers (as
+  the scheduler skips); 400 (not UTF-8, another charset, control characters), 413 (over 1 MiB), 405
+  (not POST), 503 (the app not ready, its partner not answering here). Nothing of the notebook in any
+  answer. The tokens are kept with the schedules on this device (AppSettings `ai/schedules/<notebook
+  id>`), never in the notebook, registered with the event log's redaction and masked in the server's
+  log; only the user sets one up, in Settings — the remote control's schedules say `webhook: true`
+  and never give or take a token, so agents managing schedules through the CLI cannot read or make
+  one.
+* **Settings → Extensions → Scheduled conversations → Webhooks** (`chatHooksSettings`, desktop):
+  **Webhooks** (`chatHooksSwitch`, `AppSettings.chatHooks`, key `ai/hooks`, off by default; its line
+  what the server does: "On at http://127.0.0.1:8791 · this computer only: put your own reverse proxy
+  or Tailscale Funnel in front…", "Starting…", "Stopped: …"), **Where it listens**
+  (`chatHooksAddress`: this computer only — 127.0.0.1, the default — or, while tailscaled runs here
+  (core `tailscale`), **Tailnet**: this computer's tailnet address, reached as
+  `http://<its MagicDNS name>:<port>` by the user's own devices; key `ai/hooksAddress`), **Port**
+  (`chatHooksPort`, 8791; `ai/hooksPort`) and **Public address** (`chatHooksPublicUrl`,
+  `ai/hooksPublicUrl`: what the hooks' addresses start with when the user's own reverse proxy or
+  `tailscale funnel --bg 8791` makes it reachable from the internet). On, the app runs `brulion-cli
+  app hooks serve` (`HookServer` over `ServerProcess`, as "Share agents with the phone" runs `acp
+  serve`: started again after a crash, stopped with its standard input; every line of its log in the
+  event log, tokens masked) with a grant of the remote control of its own (`BRULION_APP_HOOK_TOKEN`:
+  hello and `chatHook` alone, which nothing else may call) — docs/CLI.md "Webhooks" for why a process
+  of its own. Every hook is in the event log ("Webhook of scheduled conversation s… started it (json,
+  1234 bytes)", or why not), never its token. Tests: `tst_webhook`, `tst_schedule`, `tst_ipc_control`
+  (`hookGrants`), `tst_cli_process` (`appHooks`), `tst_shell_agents` (`webhooks`).
 
 ## AI in the editor
 
