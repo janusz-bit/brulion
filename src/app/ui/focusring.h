@@ -36,6 +36,9 @@ class FocusRing : public QQuickItem {
 
 public:
     explicit FocusRing(QQuickItem *parent = nullptr);
+    /// Deletes the ring first: its `ring` (this item) would become null while QObject's destructor
+    /// tells QML this item is going, and its bindings would read the null.
+    ~FocusRing() override;
 
     QQuickItem *target() const { return m_target ? m_target.data() : parentItem(); }
     void setTarget(QQuickItem *target);

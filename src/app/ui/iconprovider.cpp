@@ -318,6 +318,7 @@ void BIcon::updateImage()
             delete object;
             return;
         }
+        m_image->setParent(this); // (deleted with the icon: a parent item does not delete its children)
         m_image->setParentItem(this);
         m_image->setSize(QQuickItem::size());
         m_image->setProperty("sourceSize", QSizeF(m_size, m_size).toSize());

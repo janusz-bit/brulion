@@ -30,6 +30,11 @@ FocusRing::FocusRing(QQuickItem *parent) : QQuickItem(parent)
     setZ(10);
 }
 
+FocusRing::~FocusRing()
+{
+    delete m_ring;
+}
+
 void FocusRing::setTarget(QQuickItem *target)
 {
     if (m_target == target)
@@ -93,6 +98,7 @@ void FocusRing::makeRingIfShown()
         return;
     }
     component->setInitialProperties(ring, {{QStringLiteral("ring"), QVariant::fromValue(this)}});
+    ring->setParent(this); // (and deleted first by the destructor)
     ring->setParentItem(this);
     component->completeCreate();
     m_ring = ring;

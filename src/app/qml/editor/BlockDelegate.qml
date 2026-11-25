@@ -451,36 +451,13 @@ Item {
     // ---- The selection's grips (touch selection mode) -----------------------------------------------
     // A round grip at the band's start (top left) and end (bottom right), 44 px to hold: the finger
     // moves that end of the selection (the editor follows it, also when this block scrolls away).
-    component Grip: Item {
-        id: grip
-        property bool atStart: true
-        objectName: atStart ? "selectionGripStart" : "selectionGripEnd"
-        width: Theme.touchTarget
-        height: Theme.touchTarget
-        Rectangle {
-            anchors.centerIn: parent
-            width: 18
-            height: 18
-            radius: 9
-            color: Theme.link
-            border.width: 2
-            border.color: Theme.bg
-        }
-        MouseArea {
-            anchors.fill: parent
-            preventStealing: true
-            onPressed: block.editor.beginGripDrag(grip.atStart)
-        }
-        Accessible.role: Accessible.Button
-        Accessible.name: atStart ? qsTr("Start of the selection") : qsTr("End of the selection")
-    }
     Loader {
         active: block.bandStart && block.editor.selectionGrips
         z: 5
         // (Inside the window: a document's band starts near the screen's edge on a phone.)
         x: Math.max(block.bandX, 12) - Theme.touchTarget / 2
         y: block.bandTop + 9 - Theme.touchTarget / 2
-        sourceComponent: Grip { atStart: true }
+        sourceComponent: BlockParts.part("GripStart")
     }
     Loader {
         active: block.bandEnd && block.editor.selectionGrips
@@ -488,7 +465,7 @@ Item {
         // (Inside the window: the band reaches the screen's edge on a phone.)
         x: Math.min(block.bandRight, block.width - 12) - Theme.touchTarget / 2
         y: block.bandBottom - 9 - Theme.touchTarget / 2
-        sourceComponent: Grip { atStart: false }
+        sourceComponent: BlockParts.part("GripEnd")
     }
 
     // ---- Block menu ----------------------------------------------------------------------------

@@ -33,6 +33,9 @@ qt_target_qml_sources(brulion
         qml/editor/BlockPartTransclusions.qml
         qml/editor/BlockPartView.qml
         qml/editor/BlockMenuTap.qml
+        qml/editor/BlockSelectionGrip.qml
+        qml/editor/BlockPartGripStart.qml
+        qml/editor/BlockPartGripEnd.qml
         qml/editor/BlockMenu.qml
         qml/editor/BlockText.qml
         qml/editor/EditorToastAction.qml
