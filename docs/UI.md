@@ -7632,6 +7632,44 @@ The children of an item (`item.children[i]`) do not compile: `readonly property 
 ref.children` for a property, else a property of the child (`AppController.propertyOf(item,
 "day") as ContentJournalDay`).
 
+**Files loaded when first used.** A QML file named as a type in another one — a child element, an
+inline `Component { X {} }`, a `Loader.sourceComponent: X {}`, a property, parameter or return
+type, an `as X` cast — is loaded together with it, and the engine keeps its compiled unit (rebuilt
+on the heap), property caches and binding tables (docs/PERFORMANCE.md "QML files loaded when first
+used"). What the first screen (the shell, the journal with ordinary blocks) does not show is never
+named by what it shows: the views (ShellRouteView), the start screens (`Main.qml`), a day as a page
+(JournalsView), the shell's and the editor's dialogs, menus and popups (`AppShell.dialogNow()`,
+`BlockEditor.makePopup()`, `dialogsNow()`), the touch toolbar and the selection's tools, source mode,
+the block kinds a page may not have (tables, calculations, queries, diagrams, charts, views,
+properties — BlockDelegate's `contentFile()`), embeds and transclusions (`BlockEmbeds.qml`), a base's,
+a PDF's and a player's tile, the viewers of other files and the page's dialogs (PageView), the side
+panel's content, the extensions' views in the sidebar, the self-tests and dev scripts. They are made
+from their files: `Loader.setSource(url, values)` (the URL from `Qt.resolvedUrl()`, also in releases
+without the QML source text — the compiled unit is found by its URL; the arguments read from
+properties, "Side effects" above), or `Qt.createComponent(url).createObject(parent, values)` for an
+object kept in a property. Their users reach them through a type that is loaded anyway (`Item`,
+`T.Popup`, `BMenu`, `Window`), and:
+
+* call their own functions and set their properties by name — `QmlCall.call2(dialog, "openFor", path,
+  isDir)` (up to `call6`; `callFlag`, `callNumber`, `isTrue()`, `integer()`, `text()` type a result),
+  `QmlCall.set(menu, "kind", kind)`, `QmlCall.get()` / `object()` (`src/app/ui/qmlcall.h`: each
+  argument converted to the type its parameter declares, as `uidriver::callQml()` does);
+* follow a property for a binding — `QmlValue { object: loader.item; name: "sheet" }`, `.flag` /
+  `.number` / `.text`; or, without an object of their own per instance, `QmlCall.connect(item,
+  "firstLineCenterChanged", block, "readLineCenter")`;
+* take their signals with `Connections { target: loader.item; function onDone(path: string) … }` or
+  `QmlCall.connect(sender, "signal", receiver, "function or signal")` — what a handler written in the
+  inline component did moves into a typed function of the user;
+* set what follows the user's state with `Binding { target: loader.item; property: …; restoreMode:
+  Binding.RestoreNone }` (one object each: where many instances would each need one — a block's
+  embeds — `QmlCall.set()` from a change handler instead).
+
+A file that only moved out of another one (`ShellDeleteDialog.qml`, `JournalsJumpDialog.qml`,
+`EditorMergeDialog.qml`) keeps its texts' translation context with `qsTranslate("<old file>", …)`. Dev
+and self-test QML (loaded only when asked) may name anything: they cast what they read (`editor.blockMenu
+as BlockMenu`). The memory scenario of the app bench (`tests/bench/app`, `BENCH_QML_TYPES=1`) lists the
+files loaded at every step.
+
 **Other.** `"\r"` inside a compiled string literal breaks the generated C++ (qmlcachegen writes a
 raw CR): keep it in a property (`readonly property string crlf: "\r\n"`). `Qt.inputMethod` →
 `DeviceInfo.inputMethodVisible` / `hideInputMethod()`. A font in a `?:` → a `Binding` element. A typed
@@ -7708,8 +7746,9 @@ use the separate command line `brulion-cli` instead (docs/CLI.md: JSON output, a
 unless the CMake option `BRULION_DEV_QML` (`AUTO`, `ON`, `OFF`) turns it off. `AUTO`, the
 default, leaves it out of the shipped Android and browser builds (Release / MinSizeRel, about
 0.7 MB less) and is decided again on every configure, so a build dir reused for another
-`CMAKE_BUILD_TYPE` follows it. Without it `--editor-script` does nothing (stand-ins from
-`qml/stubs/`) and `--gallery` / `--editor` end at once (exit code 1); the QML tests that need it
+`CMAKE_BUILD_TYPE` follows it. Without it `--editor-script` does nothing (PageView and JournalsView
+load the scripts and self-tests from their files only when asked, and find none) and `--gallery` /
+`--editor` end at once (exit code 1); the QML tests that need it
 (`tst_editor_qml`, `tst_content_journals_qml`) are left out.
 
 | Option | Effect |
