@@ -225,7 +225,7 @@ const QStringList &Entry::foldedBlockTexts() const
         QStringList folded;
         folded.reserve(note.blocks.size());
         for (const Block &b : note.blocks)
-            folded.append(text::foldKey(b.text));
+            folded.append(text::foldKey(b.text.view()));
         m_foldedBlocks = std::move(folded);
     }
     return *m_foldedBlocks;

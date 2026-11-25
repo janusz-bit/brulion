@@ -286,13 +286,14 @@ void writeStrings(Out &o, const QStringList &l)
         o.str(s);
 }
 
-QStringList readStrings(In &in)
+/// `interned`: one string per value (markdown::internedString(): tag keys, as parseNote() makes them).
+QStringList readStrings(In &in, bool interned = false)
 {
     const qsizetype n = in.count();
     QStringList l;
     l.reserve(n);
     for (qsizetype i = 0; i < n && !in.failed(); ++i)
-        l.append(in.str());
+        l.append(interned ? markdown::internedString(in.str()) : in.str());
     return l;
 }
 
@@ -316,7 +317,7 @@ QVariantMap readMap(In &in, int depth = 0)
     const qsizetype n = in.count(2);
     QVariantMap m;
     for (qsizetype i = 0; i < n && !in.failed(); ++i) {
-        const QString key = in.str();
+        const QString key = markdown::internedString(in.str()); // (property keys repeat, as parsed)
         m.insert(key, readVariant(in, depth + 1));
     }
     return m;
@@ -485,7 +486,7 @@ Task readTask(In &in)
 {
     Task t;
     t.status = TaskStatus(in.small(int(TaskStatus::Deferred)));
-    t.marker = in.str();
+    t.marker = markdown::internedString(in.str());
     t.text = in.str();
     t.line = in.intValue();
     t.due = readOptional(in, readSpec);
@@ -515,10 +516,14 @@ Task readTask(In &in)
 /// A block's text: 0 = its own string (str), 1 = found in the note's text at the block's raw
 /// lines (varint offset from the raw's start, varint length) — most texts are, so the cache
 /// holds them as two small numbers and decoding copies them out of the note.
-void writeText(Out &o, const QString &text, const BlockSource &raw, const QString &content)
+void writeText(Out &o, const BlockText &text, const BlockSource &raw, const QString &content)
 {
     if (!text.isEmpty() && raw.isSlice() && raw.to() <= content.size()) {
-        const qsizetype at = QStringView(content).sliced(raw.from(), raw.to() - raw.from()).indexOf(text);
+        // A slice of this very text within the raw lines: its offsets (no search).
+        const bool within = text.isSlice() && text.buffer().constData() == content.constData()
+                            && text.from() >= raw.from() && text.to() <= raw.to();
+        const qsizetype at = within ? text.from() - raw.from()
+                                    : QStringView(content).sliced(raw.from(), raw.to() - raw.from()).indexOf(text.view());
         if (at >= 0) {
             o.u8(1);
             o.varint(quint64(at));
@@ -527,7 +532,7 @@ void writeText(Out &o, const QString &text, const BlockSource &raw, const QStrin
         }
     }
     o.u8(0);
-    o.str(text);
+    o.str(text.toString());
 }
 
 /// A block's raw text: 0 = a slice of the note's text (from, to), 1 = its own string.
@@ -707,7 +712,7 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
     note.frontmatter = readMap(in);
     note.properties = readMap(in);
     note.aliases = readStrings(in);
-    note.tags = readStrings(in);
+    note.tags = readStrings(in, true);
     const qsizetype blockCount = in.count(10);
     note.blocks.reserve(blockCount);
     for (qsizetype i = 0; i < blockCount && !in.failed(); ++i) {
@@ -740,7 +745,8 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
             const quint64 length = in.varint();
             if (!b.raw.isSlice() || length == 0 || at > quint64(b.raw.size()) || length > quint64(b.raw.size()) - at)
                 return std::nullopt;
-            b.text = b.raw.view().sliced(qsizetype(at), qsizetype(length)).toString();
+            // A slice of the note's text, as parseNote() makes it (no copy).
+            b.text = BlockText(content, b.raw.from() + qsizetype(at), b.raw.from() + qsizetype(at + length));
             break;
         }
         default: return std::nullopt;
@@ -755,29 +761,36 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
             b.task = readTask(in);
             if (badLine(b.task->line))
                 return std::nullopt;
-            if (b.task->text == b.text)
-                b.task->text = b.text; // shared, as parseNote() leaves it
+            if (!b.text.isSlice() && b.task->text == b.text)
+                b.task->text = b.text.buffer(); // one string, as parseNote() leaves it
         }
         const qsizetype reminders = in.count(5);
         b.reminders.reserve(reminders);
+        QString blockText; // the block's text as a QString, one for all its reminders (as parsed)
         for (qsizetype r = 0; r < reminders && !in.failed(); ++r) {
             Reminder rem;
             rem.at = readSpec(in);
             rem.alarm = in.boolean();
             rem.recurrence = in.str();
-            rem.text = in.boolean() ? b.text : in.str();
+            if (in.boolean()) {
+                if (blockText.isNull() && !b.text.isNull())
+                    blockText = b.text.toString();
+                rem.text = blockText;
+            } else {
+                rem.text = in.str();
+            }
             rem.line = in.intValue();
             if (badLine(rem.line))
                 return std::nullopt;
             b.reminders.append(std::move(rem));
         }
-        b.tags = readStrings(in);
+        b.tags = readStrings(in, true);
         b.parent = in.intValue();
         if (b.parent < -1 || b.parent >= i)
             return std::nullopt; // parents precede their children
         const int index = int(note.blocks.size());
         if (b.kind == BlockKind::Heading && b.parent < 0 && b.headingLevel > 0)
-            note.headings.append(Heading{b.headingLevel, b.text, b.line});
+            note.headings.append(Heading{b.headingLevel, b.text.toString(), b.line});
         if (b.task)
             note.tasks.append(b.task);
         note.reminders.append(b.reminders);

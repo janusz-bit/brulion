@@ -10,6 +10,7 @@
 #include <QMap>
 #include <QSharedDataPointer>
 #include <QString>
+#include <QStringBuilder>
 #include <QStringList>
 #include <QTime>
 #include <QVariant>
@@ -322,6 +323,163 @@ private:
     int m_to = -1;  ///< -1: m_text is the block's own copy
 };
 
+/// Block::text: a block's content with marker, checkbox, id, properties and tokens stripped.
+/// Shares the note's text where it is one piece of it — a line's content, a paragraph without
+/// indentation: nearly every block (docs/PERFORMANCE.md) —, else holds its own string. Reads like
+/// a const QString: converts implicitly to QString (a slice is copied then: hot paths read view()
+/// instead) and to QStringView, has QString's usual const functions, compares with strings and
+/// joins them in QStringBuilder expressions (`a + block.text`). A function overloaded for both
+/// QString and QStringView (QRegularExpression::match()) needs one named: `block.text.view()`
+/// or `toString()`. An empty text is never a slice, so isNull() is as the parser made it.
+class BlockText {
+public:
+    BlockText() = default;
+    /// Explicit: `cond ? aQString : block.text` stays a QString (assignment from a QString works).
+    explicit BlockText(const QString &own) : m_text(own) { }
+    explicit BlockText(QString &&own) noexcept : m_text(std::move(own)) { }
+    /// The text document[from, to) — the document is shared, not copied (an empty range: an
+    /// empty, not null, text of its own).
+    BlockText(const QString &document, qsizetype from, qsizetype to)
+    {
+        if (to > from) {
+            m_text = document;
+            m_from = int(from);
+            m_to = int(to);
+        } else {
+            m_text = QStringLiteral("");
+        }
+    }
+    BlockText &operator=(const QString &own)
+    {
+        m_text = own;
+        m_from = 0;
+        m_to = -1;
+        return *this;
+    }
+    BlockText &operator=(QString &&own) noexcept
+    {
+        m_text = std::move(own);
+        m_from = 0;
+        m_to = -1;
+        return *this;
+    }
+
+    QStringView view() const
+    {
+        return m_to < 0 ? QStringView(m_text) : QStringView(m_text).sliced(m_from, m_to - m_from);
+    }
+    operator QStringView() const { return view(); }
+    QString toString() const { return m_to < 0 ? m_text : view().toString(); }
+    operator QString() const { return toString(); }
+
+    /// Is this a slice of the note's text (tests, the index cache)?
+    bool isSlice() const { return m_to >= 0; }
+    qsizetype from() const { return m_to < 0 ? 0 : m_from; }
+    qsizetype to() const { return m_to < 0 ? m_text.size() : m_to; }
+    /// The QString the text lives in: the whole note for a slice.
+    const QString &buffer() const { return m_text; }
+
+    // ---- QString's const API --------------------------------------------------------------------
+    qsizetype size() const { return m_to < 0 ? m_text.size() : m_to - m_from; }
+    qsizetype length() const { return size(); }
+    bool isEmpty() const { return size() == 0; }
+    bool isNull() const { return m_to < 0 && m_text.isNull(); }
+    QChar at(qsizetype i) const { return view().at(i); }
+    QChar operator[](qsizetype i) const { return view().at(i); }
+    QChar front() const { return view().front(); }
+    QChar back() const { return view().back(); }
+    QStringView::const_iterator begin() const { return view().begin(); }
+    QStringView::const_iterator end() const { return view().end(); }
+    QStringView::const_iterator cbegin() const { return view().cbegin(); }
+    QStringView::const_iterator cend() const { return view().cend(); }
+
+    template<typename Needle>
+    bool contains(const Needle &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return view().contains(s, cs);
+    }
+    template<typename Needle>
+    bool startsWith(const Needle &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return view().startsWith(s, cs);
+    }
+    template<typename Needle>
+    bool endsWith(const Needle &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return view().endsWith(s, cs);
+    }
+    template<typename Needle>
+    qsizetype indexOf(const Needle &s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return view().indexOf(s, from, cs);
+    }
+    template<typename Needle>
+    qsizetype lastIndexOf(const Needle &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return view().lastIndexOf(s, cs);
+    }
+    template<typename Needle>
+    qsizetype count(const Needle &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return view().count(s, cs);
+    }
+    int compare(QStringView other, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return view().compare(other, cs);
+    }
+
+    QString left(qsizetype n) const { return view().left(n).toString(); }
+    QString right(qsizetype n) const { return view().right(n).toString(); }
+    QString mid(qsizetype pos, qsizetype n = -1) const { return view().mid(pos, n).toString(); }
+    QString first(qsizetype n) const { return view().first(n).toString(); }
+    QString last(qsizetype n) const { return view().last(n).toString(); }
+    QString sliced(qsizetype pos) const { return view().sliced(pos).toString(); }
+    QString sliced(qsizetype pos, qsizetype n) const { return view().sliced(pos, n).toString(); }
+    QString chopped(qsizetype n) const { return view().chopped(n).toString(); }
+    QString trimmed() const { return m_to < 0 ? m_text.trimmed() : view().trimmed().toString(); }
+    QString simplified() const { return toString().simplified(); }
+    QString toLower() const { return toString().toLower(); }
+    QString toUpper() const { return toString().toUpper(); }
+    QString toCaseFolded() const { return toString().toCaseFolded(); }
+    QString normalized(QString::NormalizationForm form) const { return toString().normalized(form); }
+    QStringList split(const QString &sep, Qt::SplitBehavior behavior = Qt::KeepEmptyParts,
+                      Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return toString().split(sep, behavior, cs);
+    }
+    QStringList split(QChar sep, Qt::SplitBehavior behavior = Qt::KeepEmptyParts,
+                      Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    {
+        return toString().split(sep, behavior, cs);
+    }
+    QString section(QChar sep, qsizetype start, qsizetype end = -1,
+                    QString::SectionFlags flags = QString::SectionDefault) const
+    {
+        return toString().section(sep, start, end, flags);
+    }
+    QString section(const QString &sep, qsizetype start, qsizetype end = -1,
+                    QString::SectionFlags flags = QString::SectionDefault) const
+    {
+        return toString().section(sep, start, end, flags);
+    }
+    QByteArray toUtf8() const { return view().toUtf8(); }
+
+    // ---- comparisons and concatenation ----------------------------------------------------------
+    friend bool operator==(const BlockText &a, const BlockText &b) { return a.view() == b.view(); }
+    friend bool operator==(const BlockText &a, const QString &b) { return a.view() == QStringView(b); }
+    friend bool operator==(const BlockText &a, QStringView b) { return a.view() == b; }
+    friend bool operator==(const BlockText &a, QLatin1StringView b) { return a.view() == b; }
+    friend bool operator==(const BlockText &a, const char16_t *b) { return a.view() == QStringView(b); }
+    friend bool operator<(const BlockText &a, const BlockText &b) { return a.view() < b.view(); }
+    friend bool operator<(const BlockText &a, const QString &b) { return a.view() < QStringView(b); }
+    friend bool operator<(const QString &a, const BlockText &b) { return QStringView(a) < b.view(); }
+
+private:
+    QString m_text; ///< the whole note (a slice) or the own string
+    int m_from = 0; ///< slices only
+    int m_to = -1;  ///< -1: m_text is the block's own string
+};
+
 struct Block {
     QString id;             ///< explicit block id (^abc123 or Logseq id::), empty if none
     BlockKind kind = BlockKind::Paragraph;
@@ -329,16 +487,16 @@ struct Block {
     int endLine = 0;        ///< last line incl. children
     int ownEndLine = 0;     ///< last line of the block's own content
     int depth = 0;          ///< outline depth, 0 = top level
-    BlockSource raw;        ///< own source lines (without children), usually a slice of the note
-    QString text;           ///< content with marker/checkbox/id/properties/tokens stripped
     int headingLevel = 0;
+    int parent = -1;        ///< index into ParsedNote::blocks, -1 for roots
+    BlockSource raw;        ///< own source lines (without children), usually a slice of the note
+    BlockText text;         ///< content with marker/checkbox/id/properties/tokens stripped, usually a slice
     QString lang;           ///< fenced code language ("calc", "query", ...)
     Properties properties;
     Boxed<Task> task; ///< on the heap, shared by copies (most blocks are no tasks)
     QList<Reminder> reminders;
     QStringList tags;       ///< lower-case, without '#'
     QList<int> children;    ///< indices into ParsedNote::blocks
-    int parent = -1;        ///< index into ParsedNote::blocks, -1 for roots
 };
 
 struct ParsedNote {
@@ -412,3 +570,20 @@ struct VaultConfig {
 };
 
 } // namespace brulion
+
+/// `a + block.text` in QStringBuilder expressions (QT_USE_QSTRINGBUILDER): appended without a copy.
+template<>
+struct QConcatenable<brulion::BlockText> : private QAbstractConcatenable {
+    using type = brulion::BlockText;
+    using ConvertTo = QString;
+    enum { ExactSize = true };
+    static qsizetype size(const type &a) { return a.size(); }
+    static inline void appendTo(const type &a, QChar *&out)
+    {
+        const QStringView v = a.view();
+        if (!v.isEmpty())
+            memcpy(static_cast<void *>(out), v.data(), sizeof(QChar) * size_t(v.size()));
+        out += v.size();
+    }
+};
+
