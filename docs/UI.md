@@ -2498,7 +2498,7 @@ deletions have run) the policy has the QML engine collect its garbage and drop t
 nothing uses any more (`trimComponentCache()`), every window drop what it cached, and — where
 `releasesGraphics` is on: Linux — a window that is not shown give up its scene graph and its
 graphics context, which Qt Quick builds again when the window is shown; `MemoryKeeper` then hands
-the freed pages back to the system. Qt Quick's `Shape` does not survive that by itself (Qt 6.12:
+the freed pages back to the system, and lets go of the program's own pages (below). Qt Quick's `Shape` does not survive that by itself (Qt 6.12:
 it keeps pointers to the nodes it made and makes a path's nodes only when the path changes — the
 notebook's round mark came back without its fill): the policy makes every `Shape` of the window
 start over (another renderer asked for, polished, its own again). In front again, the app is in
@@ -2509,6 +2509,18 @@ delays, `BRULION_HIDDEN_VIEW_MS` the kept views' time, `BRULION_RELEASE_GRAPHICS
 release of a hidden window's graphics whatever the platform. Tests: `tst_memory_policy`,
 `tst_shell_viewkeeper`, the shell self-test's "0b" (kept views, the three most recent, the one
 built ahead) and "0d" (away).
+
+**Not used for a while.** The program is memory too: every page of its code and of its
+libraries' that was touched once stays mapped — 160–190 MB after a start, most of it read by the
+start alone. Twelve seconds after the last key, click, touch or turn of the wheel
+(`MemoryPolicy.idleMs`; the first window shown counts as the first thing done), and whenever the
+app is away, `MemoryKeeper.releaseAll()` lets go of those pages (`platform::releaseProgramPages()`,
+Linux: the segments of the program and its libraries that are not writable and hold no page of the
+process's own; the libraries OpenGL calls go through are left alone). They stay in the system's
+page cache, and what the app uses next is mapped again as it is touched: opening a 5000-block
+page right after takes as long as before. Nothing shown or kept goes (`idle()`, not `letGo()`).
+`BRULION_IDLE_MS` sets the time (0: only when away), `BRULION_PROGRAM_PAGES=0` keeps the pages.
+Tests: `tst_memory_policy` (`notUsedForAWhile`), `tst_processmemory` (`programPages`).
 
 | Route `view` | View | Parameters |
 |---|---|---|

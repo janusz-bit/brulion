@@ -179,8 +179,9 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   needed — the spell checker's dictionaries go 8 s after the first page's words), a tour of the views
   (`mem:view:page` with `BENCH_PAGE`, `tasks`, `calendar`, `allPages`, `search`, `graph`, `tags`,
   `settings`), back at the journal (`mem:home`), after `BENCH_LONG_REST_MS` more in that view
-  (`mem:rested`: what goes by itself — the hidden
-  views after `MemoryPolicy.hiddenViewMs`, which `--env BRULION_HIDDEN_VIEW_MS=20000` shortens),
+  (`mem:rested`: what goes by itself — the program's own pages 12 s after the last thing done,
+  `MemoryPolicy.idleMs`; the hidden views after `MemoryPolicy.hiddenViewMs`, which
+  `--env BRULION_HIDDEN_VIEW_MS=20000` shortens),
   then away as with another program in front (`mem:away`), the window hidden (`mem:away_hidden`)
   and shown again, in use (`mem:back`; `MemoryPolicy.setAway()`: trees without it only hide the
   window). Every mark after a garbage collection, with the kernel's own count of the process

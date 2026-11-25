@@ -11,6 +11,12 @@
 // the app leaves the foreground; where the platform has no such call (Windows, the browser)
 // nothing ever runs.
 //
+//
+// releaseAll() also lets go of the pages of the program and its libraries that the process has
+// mapped (platform::releaseProgramPages(): clean pages of files, mapped again when touched) —
+// MemoryPolicy asks for it once the start is over and whenever the app is away.
+// BRULION_PROGRAM_PAGES=0 in the environment: never (A/B measurements).
+//
 //   brulion::ui::MemoryKeeper::instance()->released();
 #pragma once
 
@@ -51,14 +57,18 @@ public Q_SLOTS:
     void released();
     /// Now, without waiting to be quiet (the app goes to the background).
     void releaseNow();
+    /// Now, and the program's own pages too (the start is over; the app is away).
+    void releaseAll();
 
 Q_SIGNALS:
     /// A run ended: the process's resident bytes before and after (-1: unknown), how long it took.
     void gaveBack(qint64 residentBefore, qint64 residentAfter, qint64 tookMs);
+    /// … one that let go of the program's own pages too: their resident bytes.
+    void programPagesReleased(qint64 bytes);
 
 private:
     void run();
-    void ran(qint64 before, qint64 after, qint64 ms);
+    void ran(qint64 before, qint64 after, qint64 ms, qint64 programBytes);
 
     QTimer m_quiet;
     QElapsedTimer m_since; ///< running since the first release not yet given back
@@ -67,6 +77,8 @@ private:
     int m_runs = 0;
     bool m_again = false;   ///< released() came while a run was under way
     bool m_running = false; ///< a run is under way on a worker
+    bool m_programPages = false;      ///< the next run lets go of the program's own pages too
+    bool m_againProgramPages = false; ///< releaseAll() came while a run was under way
 };
 
 } // namespace brulion::ui

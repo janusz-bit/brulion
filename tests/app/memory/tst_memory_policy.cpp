@@ -4,6 +4,7 @@
 // again at once, and that a hidden window gives up its scene graph and draws again when shown.
 #include "memorypolicy.h"
 
+#include <QKeyEvent>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -49,6 +50,7 @@ private Q_SLOTS:
         QCOMPARE(policy.unfocusedMs(), 60 * 1000);
         QCOMPARE(policy.hiddenMs(), 8 * 1000);
         QCOMPARE(policy.startMs(), 20 * 1000);
+        QCOMPARE(policy.idleMs(), 12 * 1000);
         QSignalSpy limits(&policy, &MemoryPolicy::limitsChanged);
         policy.setKeptViews(1);
         policy.setKeptViews(1);
@@ -200,6 +202,47 @@ private Q_SLOTS:
         QCOMPARE(p.released.at(0).at(0).toBool(), true);
         QTest::qWait(350 * Slowdown);
         QCOMPARE(p.released.size(), 1);
+    }
+
+    void notUsedForAWhile()
+    {
+        // In use, but the user does nothing: the program's own pages go (idle()), once — until
+        // something is done again.
+        Policy p;
+        QSignalSpy idle(&p.policy, &MemoryPolicy::idle);
+        p.policy.setIdleMs(150 * Slowdown);
+        QTest::qWait(300 * Slowdown);
+        QCOMPARE(idle.size(), 0); // (no window shown yet: nothing was started)
+        p.policy.setState(true, true); // the first window: the start is the first thing done
+        QTRY_COMPARE_WITH_TIMEOUT(idle.size(), 1, 3000 * Slowdown);
+        QVERIFY(p.policy.inUse());
+        QCOMPARE(p.letGo.size(), 0); // nothing that is shown or kept goes
+        QTest::qWait(400 * Slowdown);
+        QCOMPARE(idle.size(), 1);
+        // Something done every now and then: never idle in between.
+        for (int i = 0; i < 6; ++i) {
+            p.policy.used();
+            QTest::qWait(50 * Slowdown);
+        }
+        QCOMPARE(idle.size(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(idle.size(), 2, 3000 * Slowdown);
+        // A key in a window is something done.
+        QQuickWindow window;
+        QKeyEvent key(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+        qApp->installEventFilter(&p.policy);
+        QCoreApplication::sendEvent(&window, &key);
+        qApp->removeEventFilter(&p.policy);
+        QTRY_COMPARE_WITH_TIMEOUT(idle.size(), 3, 3000 * Slowdown);
+        // Away: that is release()'s business. Never: idleMs 0.
+        p.policy.setAway(true);
+        p.policy.used();
+        QTest::qWait(400 * Slowdown);
+        QCOMPARE(idle.size(), 3);
+        p.policy.setAway(false);
+        p.policy.setIdleMs(0);
+        p.policy.used();
+        QTest::qWait(400 * Slowdown);
+        QCOMPARE(idle.size(), 3);
     }
 
     void setAway()

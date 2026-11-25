@@ -75,10 +75,15 @@ MemoryPolicy::MemoryPolicy(QObject *parent) : QObject(parent)
     m_releaseTimer.setSingleShot(true);
     m_releaseTimer.setTimerType(Qt::CoarseTimer);
     connect(&m_releaseTimer, &QTimer::timeout, this, &MemoryPolicy::release);
+    m_idleTimer.setSingleShot(true);
+    connect(&m_idleTimer, &QTimer::timeout, this, &MemoryPolicy::idleCheck);
     setReleasesGraphics(false); // (BRULION_RELEASE_GRAPHICS=1 turns it on by itself)
     bool viewOk = false;
     if (const int viewMs = qEnvironmentVariableIntValue("BRULION_HIDDEN_VIEW_MS", &viewOk); viewOk && viewMs >= 0)
         m_hiddenViewMs = viewMs;
+    bool idleOk = false;
+    if (const int idleMs = qEnvironmentVariableIntValue("BRULION_IDLE_MS", &idleOk); idleOk && idleMs >= 0)
+        m_idleMs = idleMs;
     bool ok = false;
     const int ms = qEnvironmentVariableIntValue("BRULION_AWAY_MS", &ok);
     if (ok && ms >= 0) {
@@ -147,9 +152,63 @@ void MemoryPolicy::setFollowsApplication(bool follows)
 
 bool MemoryPolicy::eventFilter(QObject *watched, QEvent *event)
 {
-    if (event->type() == QEvent::Expose && m_follows && watched->isWindowType())
-        QMetaObject::invokeMethod(this, &MemoryPolicy::evaluate, Qt::QueuedConnection);
+    switch (event->type()) {
+    case QEvent::Expose:
+        if (m_follows && watched->isWindowType())
+            QMetaObject::invokeMethod(this, &MemoryPolicy::evaluate, Qt::QueuedConnection);
+        break;
+    // The user does something (as a window gets it: once an event, whatever handles it).
+    case QEvent::KeyPress:
+    case QEvent::MouseButtonPress:
+    case QEvent::Wheel:
+    case QEvent::TouchBegin:
+    case QEvent::TouchEnd:
+    case QEvent::TabletPress:
+        if (watched->isWindowType())
+            used();
+        break;
+    default:
+        break;
+    }
     return false;
+}
+
+void MemoryPolicy::setIdleMs(int ms)
+{
+    m_idleMs = ms;
+    m_idleTimer.stop();
+    if (m_everShown)
+        used();
+}
+
+void MemoryPolicy::used()
+{
+    m_lastUse.start();
+    if (m_idleMs > 0 && !m_idleTimer.isActive() && !switchedOff())
+        startIdle(m_idleMs);
+}
+
+void MemoryPolicy::startIdle(int ms)
+{
+    m_idleTimer.setTimerType(ms >= 5000 ? Qt::VeryCoarseTimer : Qt::CoarseTimer);
+    m_idleTimer.start(ms);
+}
+
+void MemoryPolicy::idleCheck()
+{
+    // (One timer for the whole wait: what the user did meanwhile only moved its end.)
+    const qint64 since = m_lastUse.isValid() ? m_lastUse.elapsed() : m_idleMs;
+    if (since + 20 < m_idleMs) {
+        startIdle(int(m_idleMs - since));
+        return;
+    }
+    // (Away: release() did this, and more.)
+    if (!m_inUse || switchedOff())
+        return;
+    qCDebug(lcMemory) << "Not used for a while: the program's own pages go";
+    Q_EMIT idle();
+    if (MemoryKeeper *keeper = MemoryKeeper::instance())
+        keeper->releaseAll();
 }
 
 void MemoryPolicy::evaluate()
@@ -179,7 +238,8 @@ void MemoryPolicy::setState(bool active, bool shown)
         return;
     if (active) {
         m_everActive = true;
-        m_everShown = m_everShown || shown;
+        if (shown)
+            shownOnce();
         m_awayTimer.stop();
         m_letGoHidden = false;
         if (!m_inUse) {
@@ -190,7 +250,7 @@ void MemoryPolicy::setState(bool active, bool shown)
         return;
     }
     if (shown)
-        m_everShown = true;
+        shownOnce();
     // Shown but never in front: nothing says the user left (a window without a window manager;
     // the moment between a start and the window's first activation).
     if (shown && !m_everActive) {
@@ -215,6 +275,14 @@ void MemoryPolicy::setState(bool active, bool shown)
         const int hiddenMs = m_everShown ? m_hiddenMs : std::max(m_hiddenMs, m_startMs);
         startAway(hidden ? hiddenMs : m_unfocusedMs);
     }
+}
+
+void MemoryPolicy::shownOnce()
+{
+    if (std::exchange(m_everShown, true))
+        return;
+    // The start is the first thing the app did: its own pages go once nothing followed it.
+    used();
 }
 
 void MemoryPolicy::startAway(int ms)
@@ -306,8 +374,10 @@ void MemoryPolicy::release()
         }
     }
     QPixmapCache::clear();
+    // The allocator's free pages, and the pages of the program and its libraries: what the app
+    // touches while it is away is mapped again as it goes.
     if (MemoryKeeper *keeper = MemoryKeeper::instance())
-        keeper->releaseNow();
+        keeper->releaseAll();
     Q_EMIT released(hidden);
 }
 

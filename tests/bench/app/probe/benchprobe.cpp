@@ -31,8 +31,9 @@
 //   BENCH_SETTLE_MS  memory: the wait after the start has settled, for what the app builds ahead
 //                    and for what only the start needed to go (the spell checker's dictionaries,
 //                    8 s after the first page's words; default 15000)
-//   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 100000 with
-//                    BRULION_HIDDEN_VIEW_MS=20000 lets the hidden views go by themselves)
+//   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 30000 lets the
+//                    program's own pages go — MemoryPolicy.idleMs, 12 s —, 100000 with
+//                    BRULION_HIDDEN_VIEW_MS=20000 the hidden views too)
 //   BENCH_AWAY       0: memory: without the steps of an app that is away (mem:away, away_hidden, back)
 //   BENCH_AWAY_VIEWS 1: memory: those steps for every view of the tour too (back_picture:<view>)
 //   BENCH_PICTURES_DIR memory: where the window's pictures before it was away and back again go
@@ -1184,13 +1185,24 @@ private:
         QObject *ws = singleton("Workspace");
         return ws ? ws->property(name) : QVariant();
     }
+    /// The probe steers the app without keys or clicks: what a user would have pressed for it
+    /// counts as something done (MemoryPolicy.used(): the wait for "not used for a while" starts
+    /// over; trees without the policy have nothing to tell).
+    void userDid()
+    {
+        if (QObject *policy = singleton("MemoryPolicy");
+            policy && policy->metaObject()->indexOfMethod("used()") >= 0)
+            QMetaObject::invokeMethod(policy, "used");
+    }
     void navigate(const QVariantMap &route)
     {
+        userDid();
         if (QObject *app = singleton("AppController"))
             QMetaObject::invokeMethod(app, "navigate", Q_ARG(QVariantMap, route), Q_ARG(bool, false));
     }
     void uiAction(const QString &action)
     {
+        userDid();
         if (QObject *app = singleton("AppController"))
             QMetaObject::invokeMethod(app, "requestUiAction", Q_ARG(QString, action));
     }

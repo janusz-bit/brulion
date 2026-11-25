@@ -18,6 +18,15 @@
 //     context (`releasesGraphics`), rebuilt when it is shown again — and MemoryKeeper hand the
 //     freed pages back. Active again, the app is in use at once (and builds ahead again).
 //
+// The program itself is memory too: every page of its code and of its libraries' that was
+// touched once stays mapped — after a start 160–190 MB, most of it read by the start alone
+// (relocation and symbol tables of sixty libraries, initialisers, the code only a start runs),
+// and every view opened once adds its own. Whenever the user did nothing for `idleMs` (the
+// start counts as the first thing done) and whenever the app is away, those pages are let go of
+// (MemoryKeeper::releaseAll(), platform/processmemory.h: releaseProgramPages()): what the app
+// uses next is mapped again as it is touched — opening a 5000-block page right after takes as
+// long as before (137 ms either way, measured).
+//
 // An app whose window is shown but was never in front (a test under an X server without a
 // window manager) stays in use; one that never showed a window (a start into the tray) is away
 // `startMs` after its start.
@@ -26,6 +35,7 @@
 //                             built ahead, nothing let go
 //   BRULION_AWAY_MS=<ms>      both delays (tests, measurements)
 //   BRULION_HIDDEN_VIEW_MS=<ms>   `hiddenViewMs` (measurements: the state after a while in one view)
+//   BRULION_IDLE_MS=<ms>      `idleMs` (0: the program's pages stay until the app is away)
 //   BRULION_RELEASE_GRAPHICS=1 / 0   a hidden window's scene graph and graphics context released
 //                             or not, whatever the platform's default (`releasesGraphics`)
 //
@@ -34,6 +44,7 @@
 //   connect(policy, &ui::MemoryPolicy::letGo, spell, &SpellCheck::unload);
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -81,6 +92,11 @@ public:
     /// … and at least this long while no window was shown yet (a start into the tray; default 20 s).
     int startMs() const { return m_startMs; }
     void setStartMs(int ms) { m_startMs = ms; }
+    /// Nothing done by the user for this long (a key, a click, a touch, the wheel; the first
+    /// window shown counts as the first thing done): the program's own pages go (default 12 s;
+    /// 0: only when the app is away).
+    int idleMs() const { return m_idleMs; }
+    void setIdleMs(int ms);
 
     /// The engine whose garbage and unused types go when the app is away (main() sets it).
     void setEngine(QQmlEngine *engine);
@@ -101,6 +117,8 @@ public:
     void setState(bool active, bool shown);
 
 public Q_SLOTS:
+    /// The user did something (the policy sees keys, clicks, touches and the wheel by itself).
+    void used();
     /// Everything hidden goes now, as when the app has been away long enough (`hidden`: as with no
     /// window shown). The app stays in use.
     void letGoNow(bool hidden = false);
@@ -116,6 +134,8 @@ Q_SIGNALS:
     void letGo(bool hidden);
     /// The engine, the windows and the allocator were asked to give back what letGo() freed.
     void released(bool hidden);
+    /// In use, but nothing was done for `idleMs`: the program's own pages are let go of.
+    void idle();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -126,15 +146,21 @@ private:
     void startAway(int ms);
     void away();
     void release();
+    void shownOnce();
+    void startIdle(int ms);
+    void idleCheck();
 
     QPointer<QQmlEngine> m_engine;
     QTimer m_awayTimer;    ///< the app becomes "away" when it fires
     QTimer m_releaseTimer; ///< after letGo(): the deletions it started have run
+    QTimer m_idleTimer;    ///< running while the user did something less than `idleMs` ago
+    QElapsedTimer m_lastUse;
     int m_keptViews = 3;
     int m_hiddenViewMs = 5 * 60 * 1000;
     int m_unfocusedMs = 60 * 1000;
     int m_hiddenMs = 8 * 1000;
     int m_startMs = 20 * 1000;
+    int m_idleMs = 12 * 1000;
     int m_runs = 0;
     bool m_follows = true;
     bool m_releasesGraphics = false;

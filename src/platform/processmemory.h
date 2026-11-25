@@ -1,5 +1,6 @@
 // processmemory — asking the process's allocator to give freed memory back to the system
-// (docs/PERFORMANCE.md "Pictures and memory").
+// (docs/PERFORMANCE.md "Pictures and memory"), and the process to let go of the program's own
+// pages it no longer uses (releaseProgramPages(); docs/PERFORMANCE.md "Memory: only what is in use").
 //
 // Linux with glibc (the desktop, the AppImage, the Nix package): its malloc keeps what was freed.
 // A block over its mmap threshold is mapped on its own and unmapped when freed — but the threshold
@@ -42,5 +43,29 @@ bool releaseFreeMemory();
 /// The memory the process holds resident, in bytes (Linux and Android: /proc/self/statm; -1
 /// elsewhere).
 qint64 residentBytes();
+
+/// Whether releaseProgramPages() does anything on this platform (Linux with glibc).
+bool canReleaseProgramPages();
+
+/// Lets go of the pages of the program and of its libraries that the process has mapped — their
+/// code and read-only data, 160–190 MB after a start, most of it read once by the start itself
+/// (relocation and symbol tables, initialisers, the code only a start runs). They are clean pages
+/// of files: let go of, they stay in the system's page cache, where they are the first thing
+/// given to whoever needs memory, and one the process touches again is mapped again without any
+/// reading while it is still cached (a minor fault: microseconds). Worth it when the start is
+/// over and whenever the app is away (app: ui/memorykeeper.h); not while it is used — what is in
+/// use only comes back, a fault at a time.
+///
+/// Only what cannot hold anything of the process's own: the segments of the loaded ELF objects
+/// that are not writable (the loader's lock is held meanwhile: none can go), and of those only
+/// the mappings the kernel reports as file-backed, private, not writable, not locked and without
+/// a single anonymous page (/proc/self/smaps: a debugger's breakpoint or a text relocation makes
+/// one) — madvise(MADV_DONTNEED) would throw such a page away. The libraries OpenGL calls go
+/// through (libGL*, libEGL*, libOpenGL*, libglapi*, libnvidia*) are left alone: a driver may
+/// rewrite their entry points in place at any moment.
+///
+/// Thread-safe; milliseconds (it reads /proc/self/smaps); call it from a worker thread. Returns
+/// the resident bytes of the ranges let go (0: nothing, or not on this platform).
+qint64 releaseProgramPages();
 
 } // namespace brulion::platform
