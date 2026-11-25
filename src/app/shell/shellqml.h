@@ -18,6 +18,7 @@
 //   AgentShare       uncreatable — Workspace.chats.share ("Share agents with the phone")
 //   AgentLimits      uncreatable — Workspace.chats.limits (Claude Code's and Codex's subscription limits)
 //   AgentUsage       uncreatable — Workspace.chats.usage (what they used, from their session logs)
+//   NotificationCenter uncreatable — Workspace.notifications (what the app told the user)
 //   ChatLineage, ChatSchedules uncreatable — Workspace.chats.lineage / .schedules (sub-conversations,
 //                    scheduled conversations)
 //   ChatSecrets, HookServer uncreatable — Workspace.chats.secrets / .hooks (a secret an agent asks
@@ -48,11 +49,13 @@
 #include "chatschedules.h"
 #include "chatsecrets.h"
 #include "cleanupselection.h"
+#include "codeprojects.h"
 #include "commandmodel.h"
 #include "encryptedpagehost.h"
 #include "extensionviewmodel.h"
 #include "foldertreemodel.h"
 #include "hookserver.h"
+#include "notificationcenter.h"
 #include "recentnotebooks.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
@@ -321,6 +324,20 @@ struct ChatLineageForeign {
     QML_FOREIGN(brulion::shell::ChatLineage)
     QML_NAMED_ELEMENT(ChatLineage)
     QML_UNCREATABLE("Use Workspace.chats.lineage")
+};
+
+struct CodeProjectsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::CodeProjects)
+    QML_NAMED_ELEMENT(CodeProjects)
+    QML_UNCREATABLE("Use Workspace.projects")
+};
+
+struct NotificationCenterForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::NotificationCenter)
+    QML_NAMED_ELEMENT(NotificationCenter)
+    QML_UNCREATABLE("Use Workspace.notifications")
 };
 
 struct ChatSchedulesForeign {

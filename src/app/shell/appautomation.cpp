@@ -389,7 +389,7 @@ automation::Outcome AppController::carryOutAutomation(const automation::Request 
     if (plan.access == Access::Open) {
         QVariantMap route = plan.route.toVariantMap();
         // A prompt link's partner only when it is set up here (by its id or its name), else the
-        // default with a note.
+        // device's default (WorkspaceChats::defaultPartner) with a note.
         if (route.value(u"view"_s).toString() == u"chat" && route.contains(u"partner"_s)) {
             const QString wanted = route.take(u"partner"_s).toString();
             for (const QVariant &p : m_workspace->chats()->partners()) {
@@ -404,6 +404,9 @@ automation::Outcome AppController::carryOutAutomation(const automation::Request 
             if (!route.contains(u"partner"_s))
                 route.insert(u"partnerMissing"_s, wanted);
         }
+        // (No partner named, or one not here: the device's default answers.)
+        if (route.value(u"view"_s).toString() == u"chat" && !route.contains(u"partner"_s))
+            route.insert(u"partner"_s, m_workspace->chats()->defaultPartner());
         if (route.value(u"view"_s).toString() == u"capture")
             quickCapture();
         else {

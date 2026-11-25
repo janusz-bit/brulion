@@ -751,6 +751,9 @@ public:
     /// (toastWithActionRequested) and reports its toast host's id (setToastHostId) and the
     /// button (hostToastActionTriggered).
     Q_INVOKABLE int toastWithAction(const QString &text, const QString &kind, const QString &actionText);
+    /// A toast whose "Open" shows `path` as a notification's click does (openNotification(): a
+    /// conversation in the chat, else the page); `path` "" a plain toast. Its id (0 for a plain one).
+    int toastOpen(const QString &text, const QString &kind, const QString &path);
     /// An "info" toast whose button restores `trashPaths` from the trash (Workspace::restoreAll),
     /// also once the view that deleted them is gone: its id.
     Q_INVOKABLE int toastRestore(const QString &text, const QString &actionText, const QStringList &trashPaths);
@@ -1027,6 +1030,7 @@ private:
     QHash<int, std::tuple<QString, QString, bool>> m_chatMarkToasts; ///< toastUndoChatMark()'s → {path, mark, on}
     QHash<int, QStringList> m_autoArchiveToasts; ///< the conversations archived by themselves, for Undo
     QHash<int, QString> m_chatToasts; ///< an AI agent's question off screen: the toast's id → its conversation
+    QHash<int, QString> m_openToasts; ///< toastOpen()'s ids → the page or conversation its Open shows
     QHash<int, QString> m_rewindToasts; ///< "Edit from here": the toast's id → its conversation (Undo)
     /// What platform::setAgentWork() was given last: title, text, "waiting" or "", the progress,
     /// what works ("agent" — on another computer —, "model" — the model on the device answers —,

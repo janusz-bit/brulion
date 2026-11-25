@@ -164,6 +164,8 @@ brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7
 
 O sekret, który możesz dać tylko Ty — token, hasło — agent prosi przez `brulion-cli app chat request-secret "Token GitHuba" --reason "…"` (narzędzie MCP `brulion_app_chat_request_secret`): odpowiadasz w prywatnej karcie aplikacji, a agent dostaje plik, który możesz przeczytać tylko Ty, usuwany, gdy kończy się jego odpowiedź ([[AI#Sekret, o który prosi agent]]). [[AI#Webhooki|Webhooki]] rozmów według harmonogramu należą tylko do Ciebie: `app chat schedule list` mówi, że harmonogram go ma, ale nigdy nie podaje adresu, i żaden agent nie może go utworzyć.
 
+Gdy poprosisz agenta, by dał Ci znać, może to zrobić: `brulion-cli app chat notify "Zbudowane, testy przechodzą" --title "Budowanie"` (narzędzie MCP `brulion_app_chat_notify`) pokazuje powiadomienie na urządzeniu, na którym działa aplikacja, z jego nazwą w tytule; kliknięcie otwiera jego rozmowę albo `--page`. Najwyżej 10 na godzinę z jednej rozmowy i żadne, gdy je wyłączysz ([[AI#Powiadomienia od agenta]]).
+
 ## Dla dociekliwych
 - Wynik każdego polecenia to JSON (`--format text` — czytelnie dla ludzi), a kod wyjścia mówi, co się stało: 0 dobrze, 3 nie znaleziono, 4 konflikt (np. linia zmieniła się od odczytu), 7 odmowa.
 - Zadania i linie wskazujesz odnośnikiem z wyniku, np. `Dom.md#L12@3f9a01bc` — jeśli linia zmieniła się w międzyczasie, polecenie odmówi zamiast zmienić coś innego.

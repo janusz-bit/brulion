@@ -487,6 +487,45 @@ AppController::AppController(const Options &options, QObject *parent)
         const int id = toastWithAction(tr("Scheduled conversation “%1” started").arg(title), u"info"_s, tr("Open"));
         m_chatToasts.insert(id, path);
     });
+    // A mode chosen (docs/CODE.md): its home — Code mode's threads, the notebook's journal.
+    connect(m_settings.get(), &AppSettings::appModeChanged, this, [this] {
+        if (m_status != u"ready")
+            return;
+        if (m_settings->appMode() == u"code") {
+            if (currentView() != u"code")
+                navigate({{u"view"_s, u"code"_s}});
+        } else if (currentView() == u"code") {
+            navigate(m_tabs.home());
+        }
+    });
+    // The route decides the mode it belongs to: Code mode's view switches to Code mode, a view of
+    // the notebook back to Notes mode; settings, notifications and the like keep the mode.
+    connect(this, &AppController::currentRouteChanged, this, [this] {
+        static const QSet<QString> notes{
+                u"journals"_s,   u"journal"_s,  u"page"_s,    u"calendar"_s, u"tasks"_s,   u"habits"_s,      u"gym"_s,
+                u"flashcards"_s, u"allPages"_s, u"tags"_s,    u"tag"_s,      u"graph"_s,   u"search"_s,      u"chat"_s,
+                u"canvas"_s,     u"drawing"_s,  u"history"_s, u"replace"_s,  u"cleanup"_s, u"importExport"_s};
+        const QString view = currentView();
+        if (view == u"code")
+            m_settings->setAppMode(u"code"_s);
+        else if (notes.contains(view))
+            m_settings->setAppMode(u"notes"_s);
+    });
+    // The projects of Code mode (docs/CODE.md): this device's, kept in its settings.
+    m_workspace->projects()->setStorage(
+            [this] { return m_settings->value(u"code/projects"_s).toString().toUtf8(); },
+            [this](const QByteArray &json) { m_settings->setValue(u"code/projects"_s, QString::fromUtf8(json)); });
+    // Who answers a new conversation and whether AI agents and extensions may notify the user
+    // (Settings → Extensions): the device's choices.
+    const auto chatChoices = [this] {
+        m_workspace->chats()->setDefaultPartner(m_settings->aiDefaultPartner());
+        m_workspace->notifications()->setAllowed(NotificationCenter::Kind::Agent, m_settings->aiAgentNotify());
+        m_workspace->notifications()->setAllowed(NotificationCenter::Kind::Extension, m_settings->extensionsNotify());
+    };
+    chatChoices();
+    connect(m_settings.get(), &AppSettings::aiDefaultPartnerChanged, this, chatChoices);
+    connect(m_settings.get(), &AppSettings::aiAgentNotifyChanged, this, chatChoices);
+    connect(m_settings.get(), &AppSettings::extensionsNotifyChanged, this, chatChoices);
     // Conversations untouched for a while, archived by themselves (Settings → Extensions → AI;
     // WorkspaceChats::setAutoArchiveDays): never in the documentation; a toast says how many, its
     // Undo brings them all back.
@@ -1311,6 +1350,7 @@ void AppController::search(const QString &query)
 
 void AppController::openNotification(const QString &path, int line)
 {
+    m_workspace->notifications()->markOpened(path); // (seen: the notification centre's entries too)
     m_pendingNotePath = path;
     m_pendingNoteLine = line;
     showWindow();
@@ -2003,6 +2043,8 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
                         {{u"view"_s, u"journal"_s}, {u"date"_s, date}, {u"path"_s, m_workspace->journalFileFor(date)}});
     } else if (!first.isEmpty())
         m_tabs.navigate(0, first);
+    else if (m_settings->appMode() == u"code" && !docs && currentView() != u"code")
+        m_tabs.navigate(0, {{u"view"_s, u"code"_s}}); // (Code mode: its threads, not the journal)
     else if (const QString welcome = docs ? docsWelcomePage(docsLanguage(path)) : demoWelcomePage(notebooksLanguage());
              showWelcome && m_workspace->exists(welcome))
         m_tabs.navigate(0, {{u"view"_s, u"page"_s}, {u"path"_s, welcome}});
@@ -2575,6 +2617,17 @@ int AppController::toastWithAction(const QString &text, const QString &kind, con
     return id;
 }
 
+int AppController::toastOpen(const QString &text, const QString &kind, const QString &path)
+{
+    if (path.isEmpty()) {
+        toast(text, kind);
+        return 0;
+    }
+    const int id = toastWithAction(text, kind, tr("Open"));
+    m_openToasts.insert(id, path);
+    return id;
+}
+
 int AppController::toastRestore(const QString &text, const QString &actionText, const QStringList &trashPaths)
 {
     const int id = ++m_lastToastId;
@@ -2642,6 +2695,10 @@ void AppController::hostToastActionTriggered(int hostId)
         navigate(QVariantMap{{u"view"_s, u"chat"_s}, {u"path"_s, m_chatToasts.take(id)}});
         return;
     }
+    if (m_openToasts.contains(id)) {
+        openNotification(m_openToasts.take(id), -1);
+        return;
+    }
     if (m_rewindToasts.contains(id)) {
         if (!m_workspace->chats()->undoRewind(m_rewindToasts.take(id)))
             toast(tr("The conversation changed since: nothing was put back."), u"info"_s);
@@ -2670,6 +2727,7 @@ void AppController::hostToastRemoved(int hostId)
     m_renameToasts.remove(id);
     m_functionToasts.remove(id);
     m_chatToasts.remove(id);
+    m_openToasts.remove(id);
     m_rewindToasts.remove(id);
     m_chatMarkToasts.remove(id);
     m_autoArchiveToasts.remove(id);

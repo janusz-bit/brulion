@@ -48,6 +48,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[API rozszerzeń|API rozszerzeń]] — każda funkcja, którą może wywołać Twój kod: czytanie i zmienianie notatek, widoki, pytania, limity i komunikaty błędów.
 - [[Przepisy na rozszerzenia|Przepisy na rozszerzenia]] — gotowe polecenia, widoki i reakcje do skopiowania.
 - [[AI|AI]] — Asystent AI i `b.ai`: Claude, API zgodne z OpenAI albo własny serwer, także na telefonie.
+- [[Tryb kodu|Tryb kodu]] — projekty i wątki agentów AI, jak w T3 Code: worktree, zmiany, terminal, pull requesty.
 
 ## Pod ręką
 - [[Szukanie|Szukanie]] — słowa w notatkach, PDF-ach, dokumentach i obrazach, filtry, rozpoznawanie tekstu (OCR).

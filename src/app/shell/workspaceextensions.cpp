@@ -479,6 +479,12 @@ bool WorkspaceExtensions::ensureEngine()
         return m_appHandler(extension, operation, args, error);
     };
     m_host->onAppChanged = [this](const QString &) { scheduleAppChanged(); };
+    // b.notify: the app's notification center shows it, titled with the extension's name.
+    m_host->onNotify = [this](const QString &extension, const extensions::NotifySpec &spec) -> QString {
+        if (!m_notifyHandler)
+            return u"not available here"_s;
+        return m_notifyHandler(extension, title(extension), spec.title, spec.text, spec.page);
+    };
     m_host->onLog = [this](const QString &extension, const QString &text) {
         if (m_printCapture && m_printCapture->size() < 1000)
             m_printCapture->append(text);

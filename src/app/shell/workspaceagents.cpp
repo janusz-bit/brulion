@@ -2,6 +2,7 @@
 
 #include "chatlineage.h"
 #include "chattools.h"
+#include "codeprojects.h"
 #include "workspace.h"
 
 #include "chat/chat.h"
@@ -14,11 +15,13 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QLocale>
 #if QT_CONFIG(process) // (not in the browser: AI agents run in the desktop app)
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSaveFile>
 #endif
 #include <QStandardPaths>
 #include <QSysInfo>
@@ -452,7 +455,9 @@ QString WorkspaceAgents::context(const QString &root, const QString &conversatio
                  u"you need not wait: end your turn, and its end comes back as a message of this conversation that "
                  u"starts with \"↩\" (from the app, not the user). When you need a token, a password, a PIN or a key "
                  u"only the user can give, ask with brulion_app_chat_request_secret (a private card in the app) — "
-                 u"never in the chat, where it would be kept in the conversation's note."_s;
+                 u"never in the chat, where it would be kept in the conversation's note. When the user asks to be "
+                 u"told of something (\"let me know when it is done\"), brulion_app_chat_notify shows them a "
+                 u"notification on their device; a click opens this conversation."_s;
     lines << u"This conversation is kept in the note \"%1\" and the app writes your answers into it: never change "
              u"that note yourself."_s.arg(conversation);
     if (!page.isEmpty())
@@ -1073,7 +1078,7 @@ void WorkspaceAgents::stopProcess(const QString &id)
 }
 
 acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Process *p, const QString &chatToken,
-                                          bool child) const
+                                          bool child, const QString &codeFolder) const
 {
     acp::TurnInput input;
     if (config.isRemote()) {
@@ -1083,10 +1088,13 @@ acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Proce
             input.config.insert(it.key(), it.value());
         return input;
     }
-    input.cwd = QDir(m_workspace->rootPath()).absolutePath();
+    input.cwd = QDir(codeFolder.isEmpty() ? m_workspace->rootPath() : codeFolder).absolutePath();
     const QString program = config.tools ? toolsProgram() : QString();
     if (!program.isEmpty()) {
-        acp::McpServer server{u"brulion"_s, program, {u"mcp"_s, u"--vault"_s, input.cwd}};
+        // (A thread of Code mode works in a project: the app's tools without the notebook's.)
+        acp::McpServer server{u"brulion"_s, program,
+                              codeFolder.isEmpty() ? QStringList{u"mcp"_s, u"--vault"_s, input.cwd}
+                                                   : QStringList{u"mcp"_s, u"--no-notes"_s}};
         // The tools that change the running app: they reach it with the process's grant (the
         // token only in their environment, never in the arguments others can list). Not for a
         // sub-conversation: an agent's task for another never gets more than the chat.
@@ -1103,7 +1111,11 @@ acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Proce
             }
             server.env << std::pair{u"BRULION_APP_CHAT_TOKEN"_s, chatToken};
         }
-        input.mcpServers << server;
+        // (Without the notebook's tools and the app's, the server would have none.)
+        if (!codeFolder.isEmpty() && !live && chatToken.isEmpty())
+            server.command.clear();
+        if (!server.command.isEmpty())
+            input.mcpServers << server;
     }
     for (auto it = config.options.constBegin(); it != config.options.constEnd(); ++it)
         input.config.insert(it.key(), it.value());
@@ -1141,8 +1153,20 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
         return;
     }
+    // A thread of Code mode works in its project's folder (or its own worktree), on this computer.
+    const CodePlace code = codePlace(path);
+    if (!code.project.isEmpty() && agent->isRemote()) {
+        Q_EMIT failed(path, tr("A thread of a project runs with an AI agent of this computer: choose one of them."));
+        return;
+    }
+    if (!code.project.isEmpty() && !code.error.isEmpty()) {
+        Q_EMIT failed(path, code.error);
+        return;
+    }
     // The notebook's folder as the agent sees it: this device's, or that computer's copy of it.
-    const QString root = agent->isRemote() ? agent->root : m_workspace->rootPath();
+    const QString root = !code.project.isEmpty() ? code.folder
+                         : agent->isRemote()     ? agent->root
+                                                 : m_workspace->rootPath();
     const QString conversation = path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path;
     Process *p = processFor(*agent);
     if (!p) {
@@ -1153,7 +1177,7 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // with the conversation (none from ChatLineage::MaxDepth levels down).
     const bool child = m_isChild && m_isChild(path);
     const QString chatToken = chatGrantFor(*agent, path);
-    acp::TurnInput input = baseInput(*agent, p, chatToken, child);
+    acp::TurnInput input = baseInput(*agent, p, chatToken, child, code.folder);
     // An agent on another computer: what its session may do with this app, named in its request
     // (that computer gives the session's tools grants of its own and calls back with the handle).
     const bool remoteControl = agent->isRemote() && !p->grant.isEmpty() && !child;
@@ -1170,7 +1194,7 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         const QString picture = m_workspace->resolveLink(name, path);
         if (picture.isEmpty())
             continue;
-        const QString url = fileUrl(root, picture);
+        const QString url = fileUrl(agent->isRemote() ? agent->root : m_workspace->rootPath(), picture);
         if (const std::optional<ai::Image> image = m_workspace->aiPicture(name))
             input.prompt << acp::Block::image(image->data, image->mediaType, url, QFileInfo(picture).fileName());
         else
@@ -1178,8 +1202,9 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     }
     // The pages the message names ([[…]], as T3 Code's @-mentions): their text where the agent
     // takes it (at most 5, not the conversation itself nor the page it is about).
-    const QString pagePath = page.isEmpty() ? QString() : m_workspace->resolveLink(page, path);
-    {
+    const QString pagePath =
+            page.isEmpty() || !code.project.isEmpty() ? QString() : m_workspace->resolveLink(page, path);
+    if (code.project.isEmpty()) {
         static const QRegularExpression wiki(u"(?<!!)\\[\\[([^\\[\\]|#^\\n]+)(?:[|#^][^\\[\\]\\n]*)?\\]\\]"_s);
         QStringList named;
         for (auto it = wiki.globalMatch(newest.value(u"content"_s).toString()); it.hasNext() && named.size() < 5;) {
@@ -1206,9 +1231,15 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // Before its stream started, it is not known yet.)
     const bool tunnel = !agent->isRemote() || !p->remote || !p->remote->isStarted()
                         || p->remote->hostFeatures().contains(QString(acp::AppFeature));
-    input.firstPrompt << acp::Block::textBlock(context(
-            root, conversation, pagePath.isEmpty() ? QString() : page, tools, !p->grant.isEmpty() && !child && tunnel,
-            !chatToken.isEmpty() && tunnel, agent->isRemote() ? deviceName() : QString()));
+    if (!code.project.isEmpty())
+        input.firstPrompt << acp::Block::textBlock(codeContext(code.name, code.folder, code.branch,
+                                                               tools && !p->grant.isEmpty() && !child,
+                                                               tools && !chatToken.isEmpty()));
+    else
+        input.firstPrompt << acp::Block::textBlock(context(root, conversation, pagePath.isEmpty() ? QString() : page,
+                                                           tools, !p->grant.isEmpty() && !child && tunnel,
+                                                           !chatToken.isEmpty() && tunnel,
+                                                           agent->isRemote() ? deviceName() : QString()));
     if (!pagePath.isEmpty()) {
         bool ok = false;
         const QString text = markdown::isEncryptedNotePath(pagePath) ? QString() : m_workspace->read(pagePath, &ok);
@@ -1245,7 +1276,8 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     // changes that computer's files).
     if (m_changes.remove(path))
         Q_EMIT changesChanged(path);
-    if (!agent->isRemote())
+    // (A thread's changes are its project's: git's checkpoints show them, docs/CODE.md.)
+    if (!agent->isRemote() && code.project.isEmpty())
         m_tracking.insert(path, {});
     noteWorking();
     Q_EMIT status(path, tr("%1 is working…").arg(agent->name));
@@ -1953,7 +1985,7 @@ void WorkspaceAgents::handle(Process *p, const QString &key, const QJsonValue &i
                              const QJsonObject &params)
 {
     if (method == u"fs/read_text_file")
-        readFile(p->client, id, params);
+        readFile(p->client, key, id, params);
     else if (method == u"fs/write_text_file")
         writeFile(p->client, key, id, params);
     else if (method.startsWith(u"terminal/"_s))
@@ -1981,8 +2013,77 @@ QString WorkspaceAgents::notebookPath(const QString &file) const
     return full.mid(root.size() + 1);
 }
 
-void WorkspaceAgents::readFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params)
+WorkspaceAgents::CodePlace WorkspaceAgents::codePlace(const QString &path) const
 {
+    CodePlace place;
+    bool ok = false;
+    const chat::Conversation c = path.isEmpty() ? chat::Conversation{} : chat::parse(m_workspace->read(path, &ok));
+    if (!ok || c.project.isEmpty())
+        return place;
+    const CodeProjects *projects = m_workspace->projects();
+    place.project = c.project;
+    place.name = projects->contains(c.project) ? projects->nameOf(c.project) : c.project;
+    place.branch = c.worktree.isEmpty() ? QString() : c.branch;
+    place.folder = !c.worktree.isEmpty() ? c.worktree : projects->folderOf(c.project);
+    if (place.folder.isEmpty())
+        place.error = tr("The project “%1” is not on this device: add its folder in Code mode.").arg(c.project);
+    else if (!QFileInfo(place.folder).isDir())
+        place.error = tr("The folder %1 of this thread is not there any more.").arg(place.folder);
+    else
+        place.folder = QDir::cleanPath(QFileInfo(place.folder).absoluteFilePath());
+    return place;
+}
+
+QString WorkspaceAgents::codeFile(const QString &folder, const QString &file)
+{
+    if (file.isEmpty() || folder.isEmpty())
+        return {};
+    return QDir::cleanPath(QDir::isAbsolutePath(file) ? file : QDir(folder).absoluteFilePath(file));
+}
+
+QString WorkspaceAgents::codeContext(const QString &name, const QString &folder, const QString &branch, bool app,
+                                     bool chat)
+{
+    QStringList lines;
+    lines << u"You are working on the software project \"%1\" in the folder %2, for the user of Brulion's Code "
+             u"mode (a desktop app for coding agents, like T3 Code)."_s.arg(name, folder);
+    if (!branch.isEmpty())
+        lines << u"That folder is a git worktree of its own on the branch \"%1\": commit there; the user merges it or "
+                 u"opens a pull request from the app."_s.arg(branch);
+    lines << u"The user sees the project's changes as a git diff after each of your turns and can revert a turn, "
+             u"commit, push and open a pull request in the app."_s;
+    if (app)
+        lines << u"Its brulion_app_* tools let you see and change the running Brulion app live; change only what "
+                 u"the user asks for."_s;
+    if (chat)
+        lines << u"Its brulion_app_chat_* tools reach the app's other AI partners: brulion_app_chat_start gives one a "
+                 u"task as a sub-conversation of this thread (a second opinion, a review) and brulion_app_chat_wait "
+                 u"returns its answer (with wake true, end your turn instead: its end comes back as a message starting "
+                 u"with \"↩\"). A token, a password or a key only the user can give: brulion_app_chat_request_secret "
+                 u"(a private card in the app) — never in the chat. When the user asks to be told of something (\"let "
+                 u"me know when the tests pass\"), brulion_app_chat_notify shows them a notification on their device; "
+                 u"a click opens this thread."_s;
+    lines << u"Answer in Markdown, in the language of the user's message; keep the chat short and put the work into "
+             u"the project."_s;
+    return lines.join(u'\n');
+}
+
+void WorkspaceAgents::readFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params)
+{
+    // A thread of Code mode reads the project's files (and any other the agent names: it runs with
+    // the user's rights anyway — its own permissions decide).
+    if (const CodePlace code = codePlace(key); !code.project.isEmpty()) {
+        const QString file = codeFile(code.folder, params.value(u"path"_s).toString());
+        QFile f(file);
+        if (file.isEmpty() || !f.open(QIODevice::ReadOnly)) {
+            client->respondError(id, acp::ResourceNotFound, u"No such file: %1"_s.arg(file));
+            return;
+        }
+        const QString text = QString::fromUtf8(f.readAll());
+        client->respond(id, QJsonObject{{u"content"_s, lines(text, params.value(u"line"_s).toInt(),
+                                                             params.value(u"limit"_s).toInt())}});
+        return;
+    }
     const QString path = notebookPath(params.value(u"path"_s).toString());
     if (path.isEmpty()) {
         client->respondError(id, acp::InvalidParams, u"Only files of the notebook can be read: %1"_s.arg(m_workspace->rootPath()));
@@ -2001,6 +2102,18 @@ void WorkspaceAgents::readFile(acp::Client *client, const QJsonValue &id, const 
 
 void WorkspaceAgents::writeFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params)
 {
+    if (const CodePlace code = codePlace(key); !code.project.isEmpty()) {
+        const QString file = codeFile(code.folder, params.value(u"path"_s).toString());
+        QDir().mkpath(QFileInfo(file).absolutePath());
+        QSaveFile f(file);
+        const QByteArray bytes = params.value(u"content"_s).toString().toUtf8();
+        if (file.isEmpty() || !f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size() || !f.commit()) {
+            client->respondError(id, -32603, u"%1 could not be written"_s.arg(file));
+            return;
+        }
+        client->respond(id, QJsonValue());
+        return;
+    }
     const QString path = notebookPath(params.value(u"path"_s).toString());
     if (path.isEmpty()) {
         client->respondError(id, acp::InvalidParams, u"Only files of the notebook can be written: %1"_s.arg(m_workspace->rootPath()));
@@ -2051,7 +2164,10 @@ void WorkspaceAgents::terminalRequest(Process *p, const QString &key, const QJso
             env.insert(v.toObject().value(u"name"_s).toString(), v.toObject().value(u"value"_s).toString());
         t->process->setProcessEnvironment(env);
         const QString cwd = params.value(u"cwd"_s).toString();
-        t->process->setWorkingDirectory(cwd.isEmpty() || !QDir(cwd).exists() ? m_workspace->rootPath() : cwd);
+        // (A thread of Code mode: its project's folder by default.)
+        const CodePlace code = codePlace(key);
+        const QString home = code.project.isEmpty() || !code.error.isEmpty() ? m_workspace->rootPath() : code.folder;
+        t->process->setWorkingDirectory(cwd.isEmpty() || !QDir(cwd).exists() ? home : cwd);
         t->process->setProcessChannelMode(QProcess::MergedChannels);
         t->process->setProgram(parts.value(0));
         t->process->setArguments(parts.mid(1));

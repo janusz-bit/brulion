@@ -20,6 +20,8 @@
 //   "importExport" ImportExportView
 //   "history"      HistoryView                   path
 //   "trash"        TrashView
+//   "notifications" NotificationsView           (what the app told the user)
+//   "code"         CodeView                      project?, path? (a thread), new? (Code mode)
 //   "cleanup"      CleanupView                   kind?, selected? (restored by Back)
 //   "replace"      ReplaceView                   query?, replacement?, ticksKept? (restored by Back)
 //   "settings"     SettingsView                  section?

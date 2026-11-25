@@ -68,6 +68,8 @@ public:
     std::function<void(const QString &extension, int seconds, const QString &label)> onTimer;
     /// b.timer with its message, b.stopTimer (a spec with 0 seconds); unset: onTimer.
     std::function<void(const QString &extension, const TimerSpec &spec)> onExtensionTimer;
+    /// b.notify (Host::notify): "" when shown, else why not. Unset: "not available here".
+    std::function<QString(const QString &extension, const NotifySpec &spec)> onNotify;
     std::function<void(const QString &extension, const QString &message)> onLog;
     std::function<void(const QString &extension, const QString &text)> onStatus;
     /// Called after every write the host made (the path written).
@@ -136,6 +138,7 @@ public:
     void timer(const QString &extension, int seconds, const QString &label) override;
     void startTimer(const QString &extension, const TimerSpec &spec) override;
     void stopTimer(const QString &extension) override;
+    QString notify(const QString &extension, const NotifySpec &spec) override;
     /// The extension page `name` as b.require takes it (Options::moduleAllowed decides whether).
     ModuleSource module(const QString &requester, const QString &name) override;
     /// The extension's settings on this device: the notebook's device state (LocalStore

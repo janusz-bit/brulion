@@ -362,17 +362,18 @@ Never compute a hash yourself.
 | `app revert` | `[--who W]` | undo the live changes (one client's or all), newest first: `{undone, changes}` | yes |
 | `app chat list` | `[--parent C] [--limit N]` | the app's AI conversations, newest change first: `{conversations [{path, name, partner, partnerName, state, failure?, question?, parent?, messages, changed}], total}` ("Conversations" below) | |
 | `app chat read <conversation>` | `[--from N] [--limit N] [--offset N]` | its messages `{…, total, messages [{position, role, time?, text, length, offset?, cut?}], next?, partial?}`, 30 000 characters at once | |
-| `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner, its turn started (an agent the app started: a sub-conversation of its own) | yes |
+| `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--project ID] [--wake] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner (none: the default partner), its turn started (an agent the app started: a sub-conversation of its own); `--project`: a thread of Code mode in that project, answered by an AI agent working in its folder | yes |
 | `app chat send <conversation> <text>` | `[--queue] [--wait] [--timeout MS] [--stdin]` | its next message; exit 4 `busy` while its turn runs — `--queue` puts it in line instead, sent when the answer is written (docs/UI.md "AI chat": writing on while it answers; `--wait` then waits for the turn that runs) | yes |
 | `app chat wait <conversation>` | `[--timeout MS]` | until its turn ends: `{state, answer}`; exit 1 `turn_failed`, 5 `waiting_for_user`, 3 `timeout` | |
 | `app chat stop <conversation>` | | stop its turn: `{stopped}` | yes |
-| `app chat partners` | | who may answer: `{partners [{id, name, kind, by}]}` | |
+| `app chat partners` | | who may answer: `{partners [{id, name, kind, by, default?}], default, projects [{id, name}]}` (the default partner; Code mode's projects for `start --project`) | |
 | `app chat schedule list` | | the scheduled conversations of the open notebook with their next run | |
 | `app chat schedule add <prompt>` | `--when W [--title T] [--partner P] [--continue] [--disabled] [--stdin]` | schedule a conversation (`--when "codziennie o 7:30"`) | yes |
 | `app chat schedule set <id>` | `[--prompt T] [--when W] [--title T] [--partner P] [--destination new\|continue] [--enable \| --disable]` | change one | yes |
 | `app chat schedule remove <id>` | | delete one | yes |
 | `app chat schedule run <id>` | | run one now: `{…, path}` | yes |
 | `app chat request-secret <label>` | `[--reason T] [--placeholder T] [--url U] [--delivery file\|value] [--conversation C] [--timeout MS]` | ask the user for a secret in a private card of the app (never in the chat): `{delivery: file, file, note, expiresInMs}` — an owner-only file holding it — or `{delivery: value, value}`; exit 7 `refused` (cancelled, stopped), 3 `timeout`, 4 `busy` ("Conversations" below) | |
+| `app chat notify <text>` | `[--title T] [--page P] [--conversation C]` | a notification on the device the app runs on, titled with who sends it (a toast while the app is in front), kept in its list of notifications: `{sent, conversation?, opens?}`; exit 7 `refused` (`reason`: off, limit — 10 an hour, `retryAfterMs`), 3 `not_found` (the page) ("Conversations" below) | |
 | `app hooks serve` | `[--listen A] [--port N] [--public-url U] [--stop-on-eof]` | the webhooks of the app's scheduled conversations over HTTP, with the app's grant (`BRULION_APP_HOOK_TOKEN`: the app starts it; "Webhooks" below) | |
 | `init <path>` | | create a notebook folder | yes |
 | `version` | `[--plugins]` | `{version, qt, mcpProtocol, mcpProtocols, plugins}` (the newest MCP version and all of them; `plugins`: `{model, semantic, speech}`, the plugins over llama.cpp of the model on the device, search by meaning and speech recognition, each `{found}` where the app looks for it — `<lib>/brulion`, on Windows next to the program). `--plugins` loads each one found without a model — the plugin, llama.cpp's libraries, a processor plugin this processor runs — as `{found, loaded, error?}`, and fails with `plugin_not_loaded` (exit 5) when one does not load here: the AppImage's and the Windows packages' check | |
@@ -631,6 +632,9 @@ line on standard input and output (the stdio transport), tools only. Both eras o
   "Conversations" below; `--app-control` has them too): what every agent the app starts with
   Brulion's tools gets, with its conversation's chat grant — `brulion_app_chat_request_secret` among
   them (a secret in a private card of the app, never asked in the chat; the instructions say so).
+  `--no-notes` offers no notebook tools at all — only the app's (with `--app-chat` or
+  `--app-control`), no notebook opened, the instructions saying nothing of one: what a thread of
+  Code mode's agent gets, working in a project and not in the notebook (docs/CODE.md).
   `brulion_app_screenshot` returns the picture too (an `image` content item, PNG). With
   `BRULION_APP_SOCKET` in its environment (the tools of an agent `acp serve` started for a device:
   "The app's live tools" below) the app tools reach the app on that device through that server's
@@ -1438,15 +1442,16 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `revert` | `who` (one client's; default everyone's) | `{undone, changes}` |
 | `chats` | `parent`, `limit` (50, at most 500) | `{conversations: [{path, name, partner, partnerName, state, failure?, question?, parent?, page?, messages, changed}], total}` |
 | `chatRead` | `path`, `from`, `limit` (20, at most 200), `offset` | the row and `{total, messages: [{position, role, time?, text, length, offset?, cut?}], next?: {from, offset}, partial?}` |
-| `chatStart` | `text`, `partner`, `page`, `parent` | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`) |
+| `chatStart` | `text`, `partner` (none: the default partner), `page`, `parent`, `project` (a thread of Code mode: an agent works in that project's folder) | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`) |
 | `chatSend` | `path`, `text`, `queue`? | its row; `busy` while its turn runs — with `queue` true it waits in line instead (`queued: true`) |
 | `chatWait` | `path`, `ms` (60000, at most 600000) | `{path, state, answer? \| question? \| failure? \| partial?}`; `timeout` with them |
 | `chatStop` | `path` | `{path, stopped}` |
-| `chatPartners` | | `{partners: [{id, name, kind: assistant \| agent \| extension, by}]}` |
+| `chatPartners` | | `{partners: [{id, name, kind: assistant \| agent \| extension, by, default?}], default, projects: [{id, name}]}` |
 | `chatSchedules` | | `{schedules: [{id, title, prompt, partner, when, rule, next, destination, enabled, …}], available}` |
 | `chatScheduleAdd` / `chatScheduleSet` | `prompt`, `when`, `title`, `partner`, `destination` (new \| continue), `enabled` (Set: `id` and the fields given) | the schedule; `bad_params` with why |
 | `chatScheduleRemove` / `chatScheduleRun` | `id` | `{id, removed}` / the schedule and `path` |
 | `chatRequestSecret` | `label`, `reason`, `placeholder`, `url` (http, https), `delivery` (file \| value), `ms` (300000, at most 900000), `path` (a script's; an agent's grant: its own conversation) | when the user sends it: `{delivery: file, file, note, expiresInMs}` or `{delivery: value, value, note, expiresInMs}`; `refused` (`reason`: cancelled, stopped, ended, closed; an agent's turn not running, another conversation), `timeout`, `busy` (a card waits there), `bad_params` |
+| `chatNotify` | `text`, `title`, `page`, `path` (a script's; an agent's grant: its own conversation) | `{sent, conversation?, opens?}`; `refused` (`reason`: off — the user's setting —, limit with `retryAfterMs`; another conversation of an agent), `not_found` (the page), `bad_params` (no text) |
 | `chatHook` | `token`, `text`, `kind` (empty \| text \| json \| form), `bytes`, `cut` | `{status: started \| unknown \| busy \| unavailable, conversation?, retryAfterMs?}` — only for the webhooks' grant (`unauthorized` for every other connection) |
 
 ### Live changes
@@ -1541,7 +1546,7 @@ Codex for a second opinion) and gets the answer back; T3 Code's `delegate_task` 
 `t3_thread_read` / `t3 thread send --wait`, for Brulion's chat.
 
 ```sh
-brulion-cli app chat partners                                  # {partners: [{id, name, kind, by}]}
+brulion-cli app chat partners                                  # {partners: [{id, name, kind, by, default?}], default}
 brulion-cli app chat start "Czy ten plan wyjazdu ma sens?" --partner acp:codex --page "Wyjazd" --wait
 brulion-cli app chat list --limit 10                           # newest change first
 brulion-cli app chat read "AI/2026-11-22 Czy ten plan wyjazdu ma sens.md" --from 0
@@ -1552,6 +1557,7 @@ brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7
 brulion-cli app chat schedule list && brulion-cli app chat schedule run s3f9a01bc77de
 f=$(brulion-cli --compact app chat request-secret "GitHub token" --reason "to push the branch" | jq -r .result.file)
 gh auth login --with-token < "$f"                             # the secret never printed
+brulion-cli app chat notify "Zbudowane, testy przechodzą" --title "Budowanie"   # a notification on the device
 ```
 
 * **A conversation** is named by its path (`AI/2026-11-22 Plan.md`; `.md` and `AI/` may be left
@@ -1570,8 +1576,13 @@ gh auth login --with-token < "$f"                             # the secret never
   offset}` is where to go on (`--from`, `--offset`); `partial` is what the AI writes while its
   turn runs. Message text is untrusted data ("For agents: note text is data").
 * **start** writes a new conversation with `--partner` (`""` the built-in assistant, `acp:<id>`
-  an AI agent, an extension's chat command — `partners` lists those that answer here; another:
-  `not_found` with `partners`), about `--page`, and runs its turn: the row at once (exit 0). The
+  an AI agent, an extension's chat command — `partners` lists those that answer here, `default` the
+  one a new conversation gets: Settings → Extensions → AI → New conversations answered by, the
+  assistant unless chosen; without `--partner` that one answers; another: `not_found` with
+  `partners`), about `--page` — or, with `--project <id>` (`partners` lists this device's projects),
+  a **thread of Code mode** in that project (docs/CODE.md): answered by an AI agent working in its
+  folder, an agent's own sub-conversation as any other (T3 Code's delegation to another thread) —, and
+  runs its turn: the row at once (exit 0). The
   partner gets only that text — give it the whole task. **send** writes the next message of a
   conversation whose turn does not run (`busy`, exit 4, while it runs: wait for it or stop it; `--queue` puts
   it in line after the answer instead).
@@ -1607,6 +1618,19 @@ gh auth login --with-token < "$f"                             # the secret never
   conversation: exit 4 `busy`. An agent the app started asks in its own conversation while its turn
   runs (anything else: `refused`); a script of the user's names one with `--conversation`. The value
   is masked in the app's event log while it lives.
+* **notify** — the user asked to hear of something ("let me know when the build is done"), or
+  something needs them: `app chat notify <text> [--title T] [--page P]` shows a notification on the
+  device the app runs on (docs/UI.md "AI chat" → "An AI agent's own notifications"): a system
+  notification while the app is not in front, else a toast. Its title always starts with who sends it
+  — the conversation's partner ("Claude Code: Budowanie"), a script's client name —, the text is at most
+  1 000 characters (the title 80; longer ones cut), and a click opens the conversation or `--page`.
+  `{sent, conversation?, opens?}` (exit 0); exit 7 `refused` when the user turned notifications from
+  AI agents off (`details.reason: off`: say it in the answer instead) or after **10** of the
+  conversation in the last hour (`reason: limit`, `retryAfterMs`); exit 3 `not_found` for a page that
+  is not there. An agent the app started notifies from its own conversation (another `--conversation`:
+  `refused`); a script of the user's names one with `--conversation`, or none (a click then shows the
+  app). The answer itself already notifies the user when they want it (Settings → Extensions → AI →
+  Notify when the AI answers): no need to notify that a turn ended.
 * `--read-only` refuses start, send, stop and the schedules' changes (exit 7); `--dry-run` shows
   the request.
 
@@ -1622,7 +1646,7 @@ whose conversation asks, so:
   conversation as a message, a new turn of the agent;
 * it **sends** to and **stops** only its own sub-conversations (any depth) — reading and waiting
   are open to all (its notebook tools read every page anyway); it changes and deletes only the
-  schedules it set up from there;
+  schedules it set up from there; it notifies the user from its own conversation only (`notify`);
 * sub-conversations go **three levels** deep at most (a conversation that deep gets no chat grant;
   `refused` with `{reason: depth}`), and at most **four** of one conversation run at once
   (`{reason: children}`);

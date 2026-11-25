@@ -596,6 +596,10 @@ Conversation parse(QStringView content)
                                              QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression parent(u"^parent:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression side(u"^side:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression project(u"^project:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression worktree(u"^worktree:[ \\t]*(.*)$"_s,
+                                                 QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression branch(u"^branch:[ \\t]*(.*)$"_s, QRegularExpression::CaseInsensitiveOption);
         static const QRegularExpression sideFrom(u"^side-from:[ \\t]*[\"']?(\\d{1,7})[\"']?[ \\t]*$"_s,
                                                  QRegularExpression::CaseInsensitiveOption);
         const auto unquoted = [](QString value) {
@@ -608,6 +612,7 @@ Conversation parse(QStringView content)
         QString from;
         QString forkedFrom;
         QString besides;
+        QString inProject, inWorktree, onBranch;
         int ownFrom = 0;
         bool pinned = false, archived = false;
         for (qsizetype j = 1; j < lines.size(); ++j) {
@@ -620,6 +625,9 @@ Conversation parse(QStringView content)
                 conversation.archived = archived;
                 conversation.side = besides;
                 conversation.sideFrom = besides.isEmpty() ? 0 : ownFrom;
+                conversation.project = inProject;
+                conversation.worktree = inWorktree;
+                conversation.branch = onBranch;
                 break;
             }
             if (const auto m = fork.matchView(lines.at(j)); m.hasMatch())
@@ -634,6 +642,12 @@ Conversation parse(QStringView content)
                 from = linkTarget(unquoted(m.captured(1)));
             if (const auto m = side.matchView(lines.at(j)); m.hasMatch())
                 besides = linkTarget(unquoted(m.captured(1)));
+            if (const auto m = project.matchView(lines.at(j)); m.hasMatch())
+                inProject = unquoted(m.captured(1));
+            if (const auto m = worktree.matchView(lines.at(j)); m.hasMatch())
+                inWorktree = unquoted(m.captured(1));
+            if (const auto m = branch.matchView(lines.at(j)); m.hasMatch())
+                onBranch = unquoted(m.captured(1));
             if (const auto m = sideFrom.matchView(lines.at(j)); m.hasMatch())
                 ownFrom = std::max(0, m.captured(1).toInt() - 1);
         }
@@ -806,7 +820,15 @@ QString newConversation(QStringView question, QStringView page, QStringView lang
 
 QString setPartner(const QString &content, QStringView partner)
 {
-    const QString value = partner.trimmed().toString();
+    return setField(content, u"partner", partner);
+}
+
+QString setField(const QString &content, QStringView name, QStringView text)
+{
+    QString value = text.trimmed().toString();
+    // (One line: a value is never a way to add another key.)
+    value.replace(u'\r', u' ').replace(u'\n', u' ');
+    const QString keyName = name.toString();
     const QString newline = content.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
     // The frontmatter's lines, with their line breaks (as they are).
     const auto lineEnd = [&](qsizetype from) {
@@ -819,7 +841,9 @@ QString setPartner(const QString &content, QStringView partner)
             line.chop(1);
         return line;
     };
-    static const QRegularExpression key(u"^partner:"_s, QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression key(u"^"_s + QRegularExpression::escape(keyName) + u':',
+                                 QRegularExpression::CaseInsensitiveOption);
+    const QString entry = keyName + u": "_s + value;
     if (bare(0, lineEnd(0)).trimmed() == u"---") {
         qsizetype at = lineEnd(0);
         while (at < content.size()) {
@@ -829,13 +853,13 @@ QString setPartner(const QString &content, QStringView partner)
                 // Not there yet: before the frontmatter's end.
                 if (value.isEmpty())
                     return content;
-                return content.left(at) + u"partner: "_s + value + newline + content.mid(at);
+                return content.left(at) + entry + newline + content.mid(at);
             }
             if (key.matchView(line).hasMatch()) {
                 if (value.isEmpty())
                     return content.left(at) + content.mid(end);
                 const QString ending = content.mid(at + line.size(), end - at - line.size());
-                return content.left(at) + u"partner: "_s + value + ending + content.mid(end);
+                return content.left(at) + entry + ending + content.mid(end);
             }
             at = end;
         }
@@ -843,7 +867,7 @@ QString setPartner(const QString &content, QStringView partner)
     }
     if (value.isEmpty())
         return content;
-    return u"---"_s + newline + u"partner: "_s + value + newline + u"---"_s + newline + content;
+    return u"---"_s + newline + entry + newline + u"---"_s + newline + content;
 }
 
 QString flagKey(Flag flag, QStringView language)

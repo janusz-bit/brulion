@@ -61,6 +61,13 @@ struct TimerSpec {
     QString message; ///< what its end says ("Herbata gotowa."), at most 300 characters; "" = the app's
 };
 
+/// b.notify: a notification an extension shows the user (the app cleans and limits it further).
+struct NotifySpec {
+    QString title; ///< what it is about, one line of at most 80 characters; "" = none given
+    QString text;  ///< what it says, trimmed, never empty; at most 1000 characters
+    QString page;  ///< "" or the page a tap on it opens, as a link names it
+};
+
 /// Where b.insertBlock puts new lines (blockedit.h Placement).
 enum class InsertAt { Before, After, Child };
 
@@ -266,6 +273,15 @@ public:
     }
     /// b.stopTimer: the extension's timer ends without a word.
     virtual void stopTimer(const QString &extension) { Q_UNUSED(extension); }
+    /// b.notify: shows `spec` to the user as a notification from `extension` — "" when it was
+    /// shown, else why not, in a few English words ("turned off", "too many: at most 10 an hour").
+    /// A host without the app (the command line, the tests) shows none.
+    virtual QString notify(const QString &extension, const NotifySpec &spec)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(spec);
+        return QStringLiteral("not available here");
+    }
     virtual void log(const QString &extension, const QString &message) = 0;
     /// b.status: what the running call does now ("" = nothing to say), for the user to see while
     /// it waits (the chat shows it under the AI's dots). A host that shows nothing ignores it.

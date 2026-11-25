@@ -178,6 +178,8 @@ private Q_SLOTS:
         QCOMPARE(markdown::macroViewText(macro(u"liczba"_s)), u"82,5"_s);
         QVERIFY(macro(u"nic"_s).pieces.isEmpty());
         QCOMPARE(markdown::macroViewText(macro(u"html"_s)), u"<b>gruby</b> nowa linia"_s);
+        // A macro shows no notification (it is computed again as its notes change): refused, not raised.
+        QCOMPARE(markdown::macroViewText(macro(u"powiadamia"_s)), u"false: not from a macro or a template variable"_s);
     }
 
     void wrongValues_data()
@@ -523,6 +525,7 @@ b.macro("ustawia", function(ctx) b.setSetting("ile", 3) return "ustawione" end)
 b.macro("deklaruje", function(ctx) b.settings({ { key = "ile", label = "Ile", value = 1 } }) return "zadeklarowane" end)
 b.macro("timer", function(ctx) b.timer(60, "Herbata") return "start" end)
 b.macro("stoper", function(ctx) b.stopTimer() return "stop" end)
+b.macro("powiadamia", function(ctx) local ok, why = b.notify("Herbata") return `{ok}: {why}` end)
 b.macro("ustawienie", function(ctx) return `{b.setting("ile") or "-"}` end)
 b.macro("biblioteka", function(ctx) return b.require("Biblioteka").dwa("ż") end)
 b.macro("petla", function(ctx) while true do end end)

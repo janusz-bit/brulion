@@ -318,6 +318,9 @@ if(TARGET brulion-cli)
 endif()
 # Claude Code's and Codex's subscription limits as the chat shows them (agentlimits.h): which agents
 # have them, their texts in local time, read when shown or refreshed over a fake transport.
+# What the app told the user (notificationcenter.h): kept per notebook, read or unread, pruned;
+# agents', extensions' and scripts' posts limited, titled with who sends them, cleaned.
+brulion_add_test(tst_shell_notificationcenter SOURCES tst_notificationcenter.cpp LIBS brulion_shell)
 brulion_add_test(tst_shell_agentlimits SOURCES tst_agentlimits.cpp LIBS brulion_shell brulion_core_agentlimits)
 # What the agents used, from their own session logs, as Settings and the chat show it
 # (agentusage.h): which agents, where their logs are, the texts in English and in Polish (the app's

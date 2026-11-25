@@ -162,6 +162,8 @@ Item {
         case "importExport": return importExportView
         case "history": return historyView
         case "trash": return trashView
+        case "notifications": return notificationsView
+        case "code": return codeView
         case "cleanup": return cleanupView
         case "replace": return replaceView
         case "settings": return settingsView
@@ -371,6 +373,8 @@ Item {
     Component { id: importExportView; ImportExportView { route: root.otherRoute } }
     Component { id: historyView; HistoryView { route: root.otherRoute } }
     Component { id: trashView; TrashView { route: root.otherRoute } }
+    Component { id: notificationsView; NotificationsView { route: root.otherRoute } }
+    Component { id: codeView; CodeView { route: root.otherRoute } }
     Component { id: cleanupView; CleanupView { route: root.otherRoute } }
     Component { id: replaceView; ReplaceView { route: root.otherRoute } }
     Component { id: settingsView; SettingsView { route: root.otherRoute } }

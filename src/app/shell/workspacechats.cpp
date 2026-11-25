@@ -4,6 +4,7 @@
 #include "chatlineage.h"
 #include "chatschedules.h"
 #include "chattools.h"
+#include "codeprojects.h"
 
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -18,6 +19,7 @@
 #include "ai/local.h"
 #include "aireport/aireport.h"
 #include "chat/chat.h"
+#include "gitcli/client.h"
 #include "log/categories.h"
 #include "util/paths.h"
 #include "vault/localstore.h"
@@ -26,6 +28,7 @@
 #include <QBuffer>
 #include <QClipboard>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QJsonArray>
@@ -33,6 +36,7 @@
 #include <QJsonValue>
 #include <QLocale>
 #include <QMimeData>
+#include <QPointer>
 
 #include <algorithm>
 
@@ -140,6 +144,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     connect(m_extensions, &WorkspaceExtensions::chatStatus, this, &WorkspaceChats::setStatus);
     connect(m_extensions, &WorkspaceExtensions::chatPartial, this, &WorkspaceChats::setWriting);
     connect(m_extensions, &WorkspaceExtensions::commandsChanged, this, &WorkspaceChats::partnersChanged);
+    connect(this, &WorkspaceChats::partnersChanged, this, &WorkspaceChats::defaultPartnerChanged);
     connect(m_extensions, &WorkspaceExtensions::questionChanged, this, &WorkspaceChats::questionsMoved);
     connect(m_extensions, &WorkspaceExtensions::chatQuestionsChanged, this, &WorkspaceChats::questionsMoved);
     // An AI agent's turns (WorkspaceAgents) end, say and ask the same way.
@@ -682,6 +687,8 @@ void WorkspaceChats::showing(const QString &path, bool shown)
     Q_EMIT shownChanged();
     if (shown && isUnread(path))
         setUnread(path, false); // (read)
+    if (shown)
+        m_workspace->notifications()->markOpened(path); // (its notifications seen too)
 }
 
 bool WorkspaceChats::isShown(const QString &path) const { return !path.isEmpty() && m_shown.contains(path.toLower()); }
@@ -734,6 +741,191 @@ ChatTurn *WorkspaceChats::turn(const QString &path)
 QString WorkspaceChats::send(const QString &path, const QString &text, const QString &page, const QStringList &pictures,
                              const QString &partner, const QString &parent, const QString &wakes)
 {
+    return sendMessage(path, text, page, pictures, partner, parent, wakes, nullptr);
+}
+
+QString WorkspaceChats::startThreadFrom(const QString &project, const QString &text, const QString &partner,
+                                        const QString &parent, const QString &wakes)
+{
+    if (!m_workspace->projects()->contains(project)) {
+        setFailure(turn(QString()), tr("No such project on this device: add its folder in Code mode."));
+        return {};
+    }
+    const QString who = partner.trimmed().isEmpty() ? threadPartner() : partner.trimmed();
+    if (!WorkspaceAgents::isAgent(who)) {
+        setFailure(turn(QString()), tr("A thread is answered by an AI agent such as Claude Code or Codex: add one in "
+                                       "Settings → Extensions → AI agents."));
+        return {};
+    }
+    const ThreadPlace place{project, QString(), QString()};
+    return sendMessage(QString(), text, QString(), {}, who, parent, wakes, &place);
+}
+
+QString WorkspaceChats::startThread(const QString &project, const QString &text, const QStringList &pictures,
+                                    const QString &partner, const QString &worktree, const QString &branch)
+{
+    if (!m_workspace->projects()->contains(project)) {
+        setFailure(turn(QString()), tr("No such project on this device: add its folder in Code mode."));
+        return {};
+    }
+    // An AI agent answers a thread: the one chosen, else the default one, else the first set up.
+    QString who = partner.trimmed();
+    if (who.isEmpty())
+        who = threadPartner();
+    if (!WorkspaceAgents::isAgent(who)) {
+        setFailure(turn(QString()), tr("A thread is answered by an AI agent such as Claude Code or Codex: add one in "
+                                       "Settings → Extensions → AI agents."));
+        return {};
+    }
+    const ThreadPlace place{project, worktree.trimmed(), branch.trimmed()};
+    return sendMessage(QString(), text, QString(), pictures, who, QString(), QString(), &place);
+}
+
+namespace {
+
+const QString CheckpointsKey = u"code/checkpoints"_s;
+
+} // namespace
+
+void WorkspaceChats::checkpointThenRun(ChatTurn *t, const QString &folder, int message, const QString &partner,
+                                       const QVariantList &history, const QString &page)
+{
+    if (!m_git)
+        m_git = new gitcli::Client(this);
+    const QString key = t->m_key;
+    const int token = ++m_checkpointToken;
+    m_checkpointing.insert(key, token);
+    t->m_status = tr("Saving a checkpoint…");
+    Q_EMIT t->stateChanged();
+    const QString id = gitcli::Client::newCheckpointId();
+    const QPointer<ChatTurn> guard(t);
+    m_git->checkpoint(
+            folder, id,
+            [this, guard, key, token, folder, id, message, partner, history, page](const gitcli::Outcome &outcome) {
+                // (Stopped meanwhile, or another turn of it started: nothing more for this one.)
+                if (m_checkpointing.value(key) != token)
+                    return;
+                m_checkpointing.remove(key);
+                if (!guard || !guard->m_running || guard->m_key != key)
+                    return;
+                // (No git there, or a folder git refuses: the turn goes on without one.)
+                if (outcome.ok)
+                    keepCheckpoint(guard->m_path, folder, id, message);
+                else
+                    qCInfo(logging::lcApp) << "No checkpoint of" << folder << ':' << outcome.message;
+                guard->m_status.clear();
+                Q_EMIT guard->stateChanged();
+                m_agents->run(key, partner, history, page);
+            });
+}
+
+void WorkspaceChats::keepCheckpoint(const QString &path, const QString &folder, const QString &id, int message)
+{
+    LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store)
+        return;
+    QJsonObject all = store->get(CheckpointsKey).toObject();
+    QJsonArray list = all.value(path.toLower()).toArray();
+    list.append(QJsonObject{{u"id"_s, id},
+                            {u"at"_s, m_workspace->now().toString(u"yyyy-MM-dd HH:mm"_s)},
+                            {u"message"_s, message},
+                            {u"folder"_s, folder}});
+    QStringList dropped;
+    while (list.size() > MaxCheckpoints) {
+        dropped << list.first().toObject().value(u"id"_s).toString();
+        list.removeFirst();
+    }
+    all.insert(path.toLower(), list);
+    store->set(CheckpointsKey, all);
+    // (The oldest ones' refs go too: git may collect their objects.)
+    if (!dropped.isEmpty() && m_git)
+        m_git->dropCheckpoints(folder, dropped, [](const gitcli::Outcome &) { });
+    ++m_checkpointSerial;
+    Q_EMIT checkpointsChanged();
+}
+
+QVariantList WorkspaceChats::checkpoints(const QString &path, int serial) const
+{
+    Q_UNUSED(serial);
+    const LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    QVariantList out;
+    if (!store || path.isEmpty())
+        return out;
+    for (const QJsonValue &v : store->get(CheckpointsKey).toObject().value(path.toLower()).toArray()) {
+        const QJsonObject o = v.toObject();
+        if (!o.value(u"id"_s).toString().isEmpty())
+            out << QVariantMap{{u"id"_s, o.value(u"id"_s).toString()},
+                               {u"at"_s, o.value(u"at"_s).toString()},
+                               {u"message"_s, o.value(u"message"_s).toInt()}};
+    }
+    return out;
+}
+
+QString WorkspaceChats::lastCheckpoint(const QString &path, int serial) const
+{
+    const QVariantList all = checkpoints(path, serial);
+    return all.isEmpty() ? QString() : all.last().toMap().value(u"id"_s).toString();
+}
+
+QVariantList WorkspaceChats::agentPartners() const
+{
+    QVariantList out;
+    for (const QVariant &p : partners())
+        if (WorkspaceAgents::isAgent(p.toMap().value(u"id"_s).toString()))
+            out << p;
+    return out;
+}
+
+QString WorkspaceChats::threadPartner() const
+{
+    if (WorkspaceAgents::isAgent(defaultPartner()))
+        return defaultPartner();
+    const QVariantList agents = agentPartners();
+    return agents.isEmpty() ? QString() : agents.first().toMap().value(u"id"_s).toString();
+}
+
+QVariantMap WorkspaceChats::threadPlace(const QString &path) const
+{
+    if (path.isEmpty() || !m_workspace->ready())
+        return {};
+    bool ok = false;
+    const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
+    if (!ok || c.project.isEmpty())
+        return {};
+    const CodeProjects *projects = m_workspace->projects();
+    const bool known = projects->contains(c.project);
+    const QString folder = !c.worktree.isEmpty() ? c.worktree : projects->folderOf(c.project);
+    return {{u"project"_s, c.project},
+            {u"projectName"_s, known ? projects->nameOf(c.project) : c.project},
+            {u"worktree"_s, c.worktree},
+            {u"branch"_s, c.branch},
+            {u"folder"_s, known || !c.worktree.isEmpty() ? folder : QString()},
+            {u"known"_s, known},
+            {u"exists"_s, !folder.isEmpty() && QFileInfo(folder).isDir()}};
+}
+
+QString WorkspaceChats::threadFolder(const QString &path) const
+{
+    const QVariantMap place = threadPlace(path);
+    return place.value(u"exists"_s).toBool() ? place.value(u"folder"_s).toString() : QString();
+}
+
+bool WorkspaceChats::setThreadWorktree(const QString &path, const QString &worktree, const QString &branch)
+{
+    bool ok = false;
+    const QString content = path.isEmpty() ? QString() : m_workspace->read(path, &ok);
+    if (!ok || chat::parse(content).project.isEmpty())
+        return false;
+    const QString folder = worktree.trimmed();
+    QString next = chat::setField(content, u"worktree", folder.isEmpty() ? QString() : QString(u'"' + folder + u'"'));
+    next = chat::setField(next, u"branch", folder.isEmpty() ? QString() : branch.trimmed());
+    return next == content || m_workspace->write(path, next);
+}
+
+QString WorkspaceChats::sendMessage(const QString &path, const QString &text, const QString &page,
+                                    const QStringList &pictures, const QString &partner, const QString &parent,
+                                    const QString &wakes, const ThreadPlace *thread)
+{
     const QString message = text.trimmed();
     QStringList sent;
     for (const QString &picture : pictures) {
@@ -757,11 +949,22 @@ QString WorkspaceChats::send(const QString &path, const QString &text, const QSt
         // A new conversation: its page, named after the question, and a line in today's journal.
         const QString title = chat::pageTitle(message, now.date(), language);
         target = paths::uniquePath(title + u".md"_s, [this](const QString &p) { return m_workspace->exists(p); });
-        if (!m_workspace->write(target, chat::newConversation(markdown, page, language, now, who, parent))) {
+        QString content = chat::newConversation(markdown, page, language, now, who, parent);
+        if (thread) {
+            // A thread of Code mode: where it works (the worktree quoted: a path may hold ": ").
+            content = chat::setField(content, u"project", thread->project);
+            if (!thread->worktree.isEmpty()) {
+                content = chat::setField(content, u"worktree", QString(u'"' + thread->worktree + u'"'));
+                content = chat::setField(content, u"branch", thread->branch);
+            }
+        }
+        if (!m_workspace->write(target, content)) {
             setFailure(turn(QString()), tr("The conversation could not be saved."));
             return {};
         }
-        m_workspace->appendJournalBlocks(chat::journalEntry(target.chopped(3)));
+        // (A thread of a project is no event of the day: not in the journal.)
+        if (!thread)
+            m_workspace->appendJournalBlocks(chat::journalEntry(target.chopped(3)));
         setFailure(turn(QString()), QString());
     } else {
         bool ok = false;
@@ -849,8 +1052,15 @@ bool WorkspaceChats::startTurn(ChatTurn *t)
         m_onDevice = t;
     Q_EMIT t->stateChanged();
     Q_EMIT stateChanged();
-    // (A missing partner fails at once, through failed().)
-    if (agent)
+    // (A missing partner fails at once, through failed().) A thread of Code mode: a git snapshot
+    // of its folder first, so its changes can be seen and reverted (docs/CODE.md "Checkpoints").
+    const QString folder = agent && !conversation.project.isEmpty() ? threadFolder(t->m_path) : QString();
+    if (!folder.isEmpty() && gitcli::Client::processesAvailable())
+        checkpointThenRun(t, folder,
+                          int(std::ranges::count_if(conversation.messages,
+                                                    [](const chat::Message &m) { return m.role == chat::Role::User; })),
+                          conversation.partner, history, conversation.page);
+    else if (agent)
         m_agents->run(t->m_key, conversation.partner, history, conversation.page);
     else
         m_extensions->runChat(t->m_key, history, conversation.page, conversation.partner, from);
@@ -950,6 +1160,7 @@ void WorkspaceChats::stop(const QString &path)
         return;
     }
     const QString key = t->m_key;
+    m_checkpointing.remove(key); // (a snapshot on its way: the agent's turn never starts)
     m_stopping = t;
     endTurn(t);
     m_stopping = nullptr;
@@ -1127,13 +1338,39 @@ void WorkspaceChats::notifyUser(const QString &path, const QString &text)
     // (A side chat is the user's aside: shown inside its conversation, never a notification.)
     if (path.isEmpty() || m_notifyMode == u"never" || isSideChat(path))
         return;
-    const bool active = m_appActive ? m_appActive()
-                                    : qobject_cast<QGuiApplication *>(QCoreApplication::instance()) != nullptr
-                                              && QGuiApplication::applicationState() == Qt::ApplicationActive;
+    const bool active = appActive();
     // On screen in an active window: seen there.
     if (active && (isShown(path) || m_notifyMode != u"always"))
         return;
+    m_workspace->notifications()->record(NotificationCenter::Kind::Chat, partnerLabel(partnerOf(path)), nameOf(path),
+                                         text, path);
     Q_EMIT notificationWanted(path, nameOf(path), text);
+}
+
+bool WorkspaceChats::appActive() const
+{
+    return m_appActive ? m_appActive()
+                       : qobject_cast<QGuiApplication *>(QCoreApplication::instance()) != nullptr
+                                 && QGuiApplication::applicationState() == Qt::ApplicationActive;
+}
+
+void WorkspaceChats::setDefaultPartner(const QString &partner)
+{
+    const QString id = partner.trimmed();
+    if (id == m_defaultPartner)
+        return;
+    m_defaultPartner = id;
+    Q_EMIT defaultPartnerChanged();
+}
+
+QString WorkspaceChats::defaultPartner() const
+{
+    if (m_defaultPartner.isEmpty())
+        return {};
+    for (const QVariant &p : partners())
+        if (p.toMap().value(u"id"_s).toString() == m_defaultPartner)
+            return m_defaultPartner;
+    return {};
 }
 
 // ---- the list's menu ------------------------------------------------------------------------------

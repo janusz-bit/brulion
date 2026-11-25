@@ -1573,6 +1573,15 @@ Item {
                 heading: qsTr("Extensions")
                 note: qsTr("Extensions add views, commands and reactions to Brulion. They read and write only the open notebook, in plain Markdown that other apps read too.")
 
+                // Extensions' own notifications (b.notify → NotificationCenter::post; docs/EXTENSIONS.md).
+                SettingSwitch {
+                    objectName: "extensionsNotifySetting"
+                    text: qsTr("Let extensions send notifications")
+                    description: qsTr("An extension tells you something with its name in the title: at most 10 an hour from one extension. Each is kept under Notifications.")
+                    iconName: "bell"
+                    checked: AppSettings.extensionsNotify
+                    onToggled: AppSettings.extensionsNotify = checked
+                }
                 SettingSwitch {
                     objectName: "habitsSetting"
                     text: qsTr("Habits")
@@ -1779,6 +1788,14 @@ Item {
                 readonly property bool local: AppSettings.aiProvider === "local"
                 readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
                 readonly property list<var> providersWithLocal: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }, { value: "local", text: qsTr("On this device") }]
+                // Who may answer (Workspace.chats.partners()): the default's menu.
+                property list<var> partners: Workspace.chats.partners()
+                Connections {
+                    target: Workspace.chats
+                    function onPartnersChanged(): void {
+                        aiGroup.partners = Workspace.chats.partners()
+                    }
+                }
                 readonly property list<var> notifyModes: [{ value: "always", text: qsTr("Always") }, { value: "background", text: qsTr("In the background") }, { value: "never", text: qsTr("Never") }]
                 readonly property list<var> autoArchiveChoices: [{ value: "never", text: qsTr("Never") }, { value: "1", text: qsTr("1 day") }, { value: "3", text: qsTr("3 days") }, { value: "7", text: qsTr("A week") }, { value: "30", text: qsTr("30 days") }]
 
@@ -2168,6 +2185,46 @@ Item {
                         onClicked: Workspace.extensions.testAi()
                     }
                 }
+                // Who answers a new conversation (WorkspaceChats::setDefaultPartner; docs/UI.md "AI
+                // chat"): the assistant, an AI agent, an extension's chat command — this device's choice.
+                ShellSettingRow {
+                    objectName: "aiDefaultPartnerRow"
+                    visible: aiGroup.partners.length > 1 || AppSettings.aiDefaultPartner !== ""
+                    title: qsTr("New conversations answered by")
+                    description: AppSettings.aiDefaultPartner !== "" && Workspace.chats.defaultPartner === ""
+                                 //: %1: an AI agent's or an extension's id that answers no more
+                                 ? qsTr("“%1” is not set up on this device: the AI assistant answers until it is.").arg(AppSettings.aiDefaultPartner)
+                                 : qsTr("Also for prompt links that name nobody and for new scheduled conversations. Each conversation can still be given to another.")
+                    BButton {
+                        id: defaultPartnerButton
+                        objectName: "aiDefaultPartnerSetting"
+                        size: "small"
+                        variant: "secondary"
+                        iconName: "sparkles"
+                        text: Workspace.chats.partnerLabel(Workspace.chats.defaultPartner)
+                        Accessible.name: qsTr("New conversations answered by %1").arg(defaultPartnerButton.text)
+                        onClicked: defaultPartnerMenu.popup(defaultPartnerButton, 0, defaultPartnerButton.height)
+                    }
+                    BMenu {
+                        id: defaultPartnerMenu
+                        objectName: "aiDefaultPartnerMenu"
+                        Instantiator {
+                            model: aiGroup.partners
+                            delegate: BMenuItem {
+                                id: defaultPartnerItem
+                                required property var modelData
+                                readonly property string partnerId: AppController.routeText(defaultPartnerItem.modelData, "id")
+                                objectName: "aiDefaultPartnerItem"
+                                text: AppController.routeText(defaultPartnerItem.modelData, "label")
+                                hint: AppController.routeText(defaultPartnerItem.modelData, "extension")
+                                iconName: defaultPartnerItem.partnerId === Workspace.chats.defaultPartner ? "check" : ""
+                                onTriggered: AppSettings.aiDefaultPartner = defaultPartnerItem.partnerId
+                            }
+                            onObjectAdded: (index, object) => defaultPartnerMenu.insertItem(index, object as Item)
+                            onObjectRemoved: (index, object) => defaultPartnerMenu.removeItem(object as Item)
+                        }
+                    }
+                }
                 // The AI chat's notifications (WorkspaceChats::setNotifyMode; docs/UI.md "AI chat").
                 ShellSettingRow {
                     title: qsTr("Notify when the AI answers")
@@ -2179,6 +2236,15 @@ Item {
                         currentValue: AppSettings.aiChatNotify
                         onActivated: (value) => AppSettings.aiChatNotify = "" + value
                     }
+                }
+                // An AI agent's notifications of its own (WorkspaceChats::notify: brulion_app_chat_notify;
+                // docs/CLI.md "Conversations").
+                SettingSwitch {
+                    objectName: "aiAgentNotifySetting"
+                    text: qsTr("Let AI agents send notifications")
+                    description: qsTr("An agent tells you what you asked it to — “let me know when it is done” — with its name in the title: at most 10 an hour from one conversation. A click opens the conversation; each is kept under Notifications.")
+                    checked: AppSettings.aiAgentNotify
+                    onToggled: AppSettings.aiAgentNotify = checked
                 }
                 // The AI chat's conversations untouched for a while archived by themselves
                 // (WorkspaceChats::setAutoArchiveDays, T3 Code's auto-settle; docs/UI.md "AI chat").
@@ -2645,6 +2711,53 @@ Item {
                         description: agentDialog.remote
                                      ? qsTr("Its tools on that computer may also change this app live while it answers (Luau, extensions for this run, the theme, settings, the window's items); the top bar shows what it changed, and you can undo all of it.")
                                      : qsTr("With Brulion's tools it may also change this running app live (Luau, extensions for this run, the theme, settings, the window's items); the top bar shows what it changed, and you can undo all of it.")
+                    }
+                }
+            }
+
+            // Code mode (docs/CODE.md): projects and AI agents' threads as in T3 Code — the mode, the
+            // editor "Open in editor" starts, where new worktrees go. This device's.
+            SettingsGroup {
+                objectName: "codeSettings"
+                visible: AppSettings.acpAvailable
+                heading: qsTr("Code mode")
+                note: qsTr("Projects — folders of this computer — and AI agents' threads in them, as in T3 Code: each thread in the project's folder or a git worktree of its own, with its changes, a terminal, commits and pull requests. Its threads are kept as pages in AI/, never in the journal.")
+                ShellSettingRow {
+                    title: qsTr("Mode")
+                    description: qsTr("Also on the rail's top button and in the palette (“Code mode”, “Notes mode”).")
+                    BSegmented {
+                        objectName: "appModeSetting"
+                        accessibleName: qsTr("Mode")
+                        model: [{ value: "notes", text: qsTr("Notes") }, { value: "code", text: qsTr("Code") }]
+                        currentValue: AppSettings.appMode
+                        onActivated: (value) => AppSettings.appMode = "" + value
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Editor")
+                    description: qsTr("The command “Open in editor” runs with the folder after it: code, zed, cursor, idea… Empty: the system's file manager.")
+                    BTextField {
+                        objectName: "codeEditorSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: Workspace.projects.editorCommand
+                        placeholderText: "code"
+                        accessibleName: qsTr("Editor")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                        onEditingFinished: Workspace.projects.editorCommand = text
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Worktrees")
+                    description: qsTr("Where a thread's own git worktree goes: a folder per project in it. Empty: %1.").arg("~/.brulion/worktrees")
+                    BTextField {
+                        objectName: "codeWorktreesSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: Workspace.projects.worktreesRoot
+                        accessibleName: qsTr("Worktrees")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                        onEditingFinished: Workspace.projects.worktreesRoot = text
                     }
                 }
             }

@@ -52,6 +52,21 @@ FocusScope {
 
     property var route: ({})
     property bool inSidePanel: false
+    /// The route's view this one belongs to: "chat" (the AI chat), "code" (a thread of Code mode in
+    /// CodeView: docs/CODE.md) — its navigations name it.
+    property string routeView: "chat"
+    /// Code mode: a new conversation is a thread of this project, working in `newWorktree` on
+    /// `newBranch` ("" the project's folder); answered by an AI agent (only agents are offered).
+    property string project
+    property string newWorktree
+    property string newBranch
+    readonly property bool codeThread: root.routeView === "code"
+    /// The list of conversations beside the conversation (CodeView: its sidebar lists the threads).
+    property bool showList: true
+    /// A new thread wants a git worktree of its own: the first Send asks for it (worktreeWanted:
+    /// CodeView makes it, sets newWorktree / newBranch and sends again).
+    property bool wantsWorktree: false
+    signal worktreeWanted(string text)
     /// The conversation shown: the route's, or the one its first message just started ("" none).
     property string path
     /// A new conversation's page (the chip; taken away before the first message: none).
@@ -60,15 +75,17 @@ FocusScope {
     property bool starting
     /// Who answers a new conversation ("" the built-in assistant; an extension's "id/command").
     property string newPartner
+    /// The device's default partner as last seen (Workspace.chats.defaultPartner).
+    property string knownDefault
     /// Who answers this one (its page's `partner:`).
     property string partnerHere
     /// The pictures going with the next message (vault paths, stored when picked).
     property list<string> attached
     readonly property string title: root.path !== "" && messages.title !== "" ? messages.title : qsTr("AI chat")
 
-    readonly property bool wide: !root.inSidePanel && root.width >= 720
-    readonly property bool listShown: root.wide || (root.path === "" && !root.starting)
-    readonly property bool conversationShown: root.wide || root.path !== "" || root.starting
+    readonly property bool wide: root.showList && !root.inSidePanel && root.width >= 720
+    readonly property bool listShown: root.showList && (root.wide || (root.path === "" && !root.starting))
+    readonly property bool conversationShown: !root.showList || root.wide || root.path !== "" || root.starting
     readonly property WorkspaceChats chats: Workspace.chats
     /// This conversation's turn ("" a new one's: only its failure).
     readonly property ChatTurn turn: root.chats.turn(root.path)
@@ -190,6 +207,7 @@ FocusScope {
         root.seekLine = root.path !== "" ? AppController.routeInt(root.route, "line", -1) : -1
         root.foundLine = -1
         const prompt = AppController.routeText(root.route, "prompt")
+        root.knownDefault = root.chats.defaultPartner
         if (root.starting && AppController.routeFlag(root.route, "fromLink")) {
             // A prompt link: its prompt in the field, never sent — the user reads it first.
             // (Typed through this file's functions: values a later call cannot change.)
@@ -199,15 +217,21 @@ FocusScope {
             const partnerMissing = root.routeString("partnerMissing")
             const partner = root.routeString("partner")
             const draft = root.routeString("draft")
-            const note = root.linkNoteText(hidden, capped, pageMissing, partnerMissing)
             // (Its partner, or the default: not the one an earlier draft had.)
             root.newPartner = partner
+            const note = root.linkNoteText(hidden, capped, pageMissing, partnerMissing)
             input.text = draft
             input.cursorPosition = input.length
             root.linkWarning = hidden > 0
             root.linkNote = note
             focusLater.restart()
-        } else if (root.starting && prompt !== "") {
+            return
+        }
+        // A new conversation: the device's default answers it, unless another is chosen (a thread:
+        // an agent).
+        if (root.path === "")
+            root.newPartner = root.codeThread ? root.chats.threadPartner() : root.knownDefault
+        if (root.starting && prompt !== "") {
             input.text = prompt
             sendLater.restart()
         } else if (root.conversationShown && (root.starting || !Theme.touchUi) && !root.sideOpen) {
@@ -229,11 +253,21 @@ FocusScope {
         root.refreshPartners()
     }
     function refreshPartners(): void {
-        root.partners = root.chats.partners()
+        root.partners = root.codeThread ? root.chats.agentPartners() : root.chats.partners()
     }
     Connections {
         target: root.chats
         function onPartnersChanged() { root.refreshPartners() }
+        // (Another default — chosen in the settings, or the one chosen gone —: it answers a new
+        // conversation whose partner nobody changed.)
+        function onDefaultPartnerChanged() {
+            const now = root.chats.defaultPartner
+            if (now === root.knownDefault)
+                return
+            if (root.path === "" && root.newPartner === root.knownDefault)
+                root.newPartner = now
+            root.knownDefault = now
+        }
     }
     /// A list of strings of a map (a result's).
     function routeList(map: var, key: string): list<string> {
@@ -258,9 +292,9 @@ FocusScope {
         if (path === "" && !fresh)
             return
         if (root.inSidePanel)
-            AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path }, true)
+            AppController.navigate(fresh ? { view: root.routeView, new: true, project: root.project } : { view: root.routeView, path: path }, true)
         else
-            AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path })
+            AppController.navigate(fresh ? { view: root.routeView, new: true, project: root.project } : { view: root.routeView, path: path })
     }
     /// Opens the conversation `path` at its message at the page's line `line` (a search's match;
     /// -1: as open()).
@@ -270,9 +304,9 @@ FocusScope {
             return
         }
         if (root.inSidePanel)
-            AppController.navigate({ view: "chat", path: path, line: line }, true)
+            AppController.navigate({ view: root.routeView, path: path, line: line }, true)
         else
-            AppController.navigate({ view: "chat", path: path, line: line })
+            AppController.navigate({ view: root.routeView, path: path, line: line })
     }
     /// The list's row `row` opened (Enter, a click, Alt+1…9).
     function openRow(row: int): void {
@@ -301,8 +335,14 @@ FocusScope {
                 root.clearField()
             return
         }
-        const sent = root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
-                                     root.path === "" ? root.newPartner : "")
+        if (root.path === "" && root.codeThread && root.wantsWorktree && root.newWorktree === "") {
+            root.worktreeWanted(text)
+            return
+        }
+        const sent = root.path === "" && root.codeThread
+                     ? root.chats.startThread(root.project, text, root.attached, root.newPartner, root.newWorktree, root.newBranch)
+                     : root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
+                                       root.path === "" ? root.newPartner : "")
         if (sent === "")
             return
         root.clearField()
@@ -311,9 +351,9 @@ FocusScope {
             root.path = sent
             root.starting = false
             if (root.inSidePanel)
-                AppController.navigate({ view: "chat", path: sent }, true)
+                AppController.navigate({ view: root.routeView, path: sent }, true)
             else
-                AppController.replaceRoute({ view: "chat", path: sent })
+                AppController.replaceRoute({ view: root.routeView, path: sent })
         }
         toEnd.restart()
     }
@@ -393,11 +433,11 @@ FocusScope {
         root.pendingSide = side
         root.pendingPushed = replacing ? root.sidePushed : !root.inSidePanel
         if (root.inSidePanel)
-            AppController.navigate({ view: "chat", path: root.path, side: side }, true)
+            AppController.navigate({ view: root.routeView, path: root.path, side: side }, true)
         else if (replacing)
-            AppController.replaceRoute({ view: "chat", path: root.path, side: side })
+            AppController.replaceRoute({ view: root.routeView, path: root.path, side: side })
         else
-            AppController.navigate({ view: "chat", path: root.path, side: side })
+            AppController.navigate({ view: root.routeView, path: root.path, side: side })
     }
     function closeSide(): void {
         if (root.sidePath === "")
@@ -405,9 +445,9 @@ FocusScope {
         if (root.sidePushed && AppController.canGoBack && AppController.back(0))
             return
         if (root.inSidePanel)
-            AppController.navigate({ view: "chat", path: root.path }, true)
+            AppController.navigate({ view: root.routeView, path: root.path }, true)
         else
-            AppController.replaceRoute({ view: "chat", path: root.path })
+            AppController.replaceRoute({ view: root.routeView, path: root.path })
     }
     /// A side chat's answer as a quote in this conversation's field (the narrow pane closes for it).
     function bringIn(markdown: string): void {
@@ -502,7 +542,8 @@ FocusScope {
         if (pageMissing !== "")
             note += "\n" + qsTr("The page “%1” is not in this notebook: the conversation is about no page.").arg(pageMissing)
         if (partnerMissing !== "")
-            note += "\n" + qsTr("“%1” is not set up on this device: the AI assistant answers instead.").arg(partnerMissing)
+            //: %1: the partner a prompt link names, %2: the one who answers instead (the default)
+            note += "\n" + qsTr("“%1” is not set up on this device: %2 answers instead.").arg(partnerMissing).arg(root.partnerName(root.newPartner))
         return note
     }
     /// The prompt link of `text` (brulion://chat: it opens a new conversation with it, never sent)
@@ -739,7 +780,7 @@ FocusScope {
         AppController.toastRestore(qsTr("Conversation moved to trash"), qsTr("Undo"), root.chats.lastRemoved())
         if (shown) {
             root.path = ""
-            AppController.replaceRoute({ view: "chat" })
+            AppController.replaceRoute({ view: root.routeView })
         }
     }
     BMenu {
@@ -2415,11 +2456,40 @@ FocusScope {
                         spacing: Theme.space3
                         BEmptyState {
                             Layout.alignment: Qt.AlignHCenter
-                            iconName: "sparkles"
-                            title: qsTr("Ask about your notes")
-                            description: qsTr("The AI searches and reads the whole notebook, looks at its pictures and, with your yes, changes it. The conversation is kept as a page.")
+                            iconName: root.codeThread ? "code" : "sparkles"
+                            title: root.codeThread ? qsTr("What should the agent do?") : qsTr("Ask about your notes")
+                            description: root.codeThread
+                                         ? qsTr("It works in the project's folder with your subscription; its changes show in the Changes panel after each turn, where you can revert a turn, commit and open a pull request.")
+                                         : qsTr("The AI searches and reads the whole notebook, looks at its pictures and, with your yes, changes it. The conversation is kept as a page.")
                         }
                         Flow {
+                            objectName: "codeSuggestions"
+                            visible: root.codeThread
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 560
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Theme.space2
+                            BChip {
+                                interactive: true
+                                iconName: "search"
+                                text: qsTr("Explain this project")
+                                onClicked: root.suggest(qsTr("Explain this project: what it does, how it is built and where to start reading."))
+                            }
+                            BChip {
+                                interactive: true
+                                iconName: "list-checks"
+                                text: qsTr("Run the tests")
+                                onClicked: root.suggest(qsTr("Run the project's tests and fix what fails."))
+                            }
+                            BChip {
+                                interactive: true
+                                iconName: "git-compare"
+                                text: qsTr("Review my changes")
+                                onClicked: root.suggest(qsTr("Review the uncommitted changes in this project: bugs, risks and what to simplify."))
+                            }
+                        }
+                        Flow {
+                            visible: !root.codeThread
                             Layout.fillWidth: true
                             Layout.maximumWidth: 560
                             Layout.alignment: Qt.AlignHCenter
@@ -2567,7 +2637,7 @@ FocusScope {
                     BChip {
                         id: newPartnerChip
                         objectName: "chatNewPartner"
-                        visible: root.choosesPartner
+                        visible: root.choosesPartner || (root.codeThread && root.partners.length > 0)
                         iconName: "sparkles"
                         text: qsTr("Answers: %1").arg(root.partnerName(root.newPartner))
                         interactive: true

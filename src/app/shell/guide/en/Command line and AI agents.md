@@ -164,6 +164,8 @@ brulion-cli app chat schedule add "Plan my day" --when "weekdays at 7:30"
 
 A secret only you can give — a token, a password — an agent asks for with `brulion-cli app chat request-secret "GitHub token" --reason "…"` (the MCP tool `brulion_app_chat_request_secret`): you answer in a private card of the app and the agent gets a file only you can read, deleted when its answer ends ([[AI#A secret the agent asks for]]). The [[AI#Webhooks|webhooks]] of scheduled conversations are yours alone: `app chat schedule list` says a schedule has one, never its address, and no agent can make one.
 
+When you ask an agent to let you know of something, it can: `brulion-cli app chat notify "Build done, tests pass" --title "Build"` (the MCP tool `brulion_app_chat_notify`) shows a notification on the device the app runs on, its name in the title; a click opens its conversation or `--page`. At most 10 an hour from a conversation, and none when you turned them off ([[AI#Notifications from the agent]]).
+
 ## For the curious
 - The output of every command is JSON (`--format text` — readable for people), and the exit code tells you what happened: 0 fine, 3 not found, 4 conflict (e.g. the line changed since it was read), 7 refused.
 - You point to tasks and lines with a reference from the output, e.g. `Home.md#L12@3f9a01bc` — if the line has changed in the meantime, the command refuses instead of changing something else.

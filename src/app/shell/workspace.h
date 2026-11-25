@@ -48,11 +48,13 @@
 #pragma once
 
 #include "attachmentindexer.h"
+#include "codeprojects.h"
 #include "drawing/excalidrawmd.h"
 #include "editorhost.h"
 #include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
 #include "notebook/pages.h"
+#include "notificationcenter.h"
 #include "queryhost.h"
 #include "replacesession.h"
 #include "semanticsearch.h"
@@ -151,6 +153,12 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(brulion::shell::SemanticSearch *semantic READ semantic CONSTANT FINAL)
     /// The conversations with the AI assistant (pages in AI/; docs/UI.md "AI chat").
     Q_PROPERTY(brulion::shell::WorkspaceChats *chats READ chats CONSTANT FINAL)
+    /// What the app told the user, and the way in for agents' and extensions' own notifications
+    /// (notificationcenter.h; docs/UI.md "Notifications").
+    Q_PROPERTY(brulion::shell::NotificationCenter *notifications READ notifications CONSTANT FINAL)
+    /// The projects of Code mode: folders of this device AI agents work in (codeprojects.h;
+    /// docs/CODE.md).
+    Q_PROPERTY(brulion::shell::CodeProjects *projects READ projects CONSTANT FINAL)
     /// Find and replace in the whole notebook (replacesession.h).
     Q_PROPERTY(brulion::shell::ReplaceSession *replacing READ replacing CONSTANT FINAL)
     /// Encrypted notes: fragments, `.mdenc` pages and the session's passwords (workspaceencryption.h).
@@ -246,6 +254,8 @@ public:
     /// The attachments' text cache (tests; default: <app cache>/attachment-text).
     void setAttachmentCacheDir(const QString &dir) { m_attachmentCacheDir = dir; }
     WorkspaceChats *chats() const { return m_chats; }
+    NotificationCenter *notifications() const { return m_notifications; }
+    CodeProjects *projects() const { return m_projects; }
     ReplaceSession *replacing() const { return m_replacing; }
     WorkspaceEncryption *encryption() const { return m_encryption; }
     /// The threads for looking through notes (indexworkers.h); none on WebAssembly.
@@ -933,6 +943,8 @@ private:
     /// The extensions changed the app: their input rules and tag styles taken again.
     void followExtensionStyles();
     WorkspaceChats *m_chats = nullptr;
+    NotificationCenter *m_notifications = nullptr;
+    CodeProjects *m_projects = nullptr;
     ReplaceSession *m_replacing = nullptr;
     WorkspaceEncryption *m_encryption = nullptr;
     std::function<QDateTime()> m_clock;

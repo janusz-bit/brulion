@@ -111,6 +111,7 @@ FocusScope {
     /// its own at the bottom instead (the drawing's tools). An editing toolbar that stays after
     /// the keyboard went (a menu above it took the keys) docks right above it.
     readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !shell.routeView.viewReplacesBottomNav && !focusMode
+                                           && AppSettings.appMode !== "code"
     /// Room under the content: the keyboard (minus the bottom navigation, while that is shown:
     /// sliding, the keyboard covers or uncovers it first); while typing without the navigation
     /// at least the system's navigation bar, which the docked toolbar must clear, and the
@@ -485,18 +486,32 @@ FocusScope {
                 height: sidebarSlot.height
                 x: sidebarSlot.width - width
                 opacity: shell.sidebarReveal
-                sourceComponent: ShellSidebar {
-                    // (Its header's name starts after the panel's button, which stays over it.)
-                    leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.layoutWidth
-                    topInset: shell.SafeArea.margins.top
-                    // (The navigation bar's part the keyboard's room leaves.)
-                    bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
-                    onNewPageRequested: (folder) => shell.openNewPage(folder)
-                    onNewFolderRequested: (folder) => shell.openNewFolder(folder)
-                    onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
-                    onDeleteRequested: (path) => shell.confirmDelete(path)
-                    onMoveRequested: (path, isDir) => shell.openMove(path, isDir)
-                    onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
+                sourceComponent: AppSettings.appMode === "code" ? codeSidebarWide : notesSidebarWide
+
+                // Code mode: its projects and threads in place of the notebook's pages (docs/CODE.md).
+                Component {
+                    id: notesSidebarWide
+                    ShellSidebar {
+                        // (Its header's name starts after the panel's button, which stays over it.)
+                        leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.layoutWidth
+                        topInset: shell.SafeArea.margins.top
+                        // (The navigation bar's part the keyboard's room leaves.)
+                        bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
+                        onNewPageRequested: (folder) => shell.openNewPage(folder)
+                        onNewFolderRequested: (folder) => shell.openNewFolder(folder)
+                        onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
+                        onDeleteRequested: (path) => shell.confirmDelete(path)
+                        onMoveRequested: (path, isDir) => shell.openMove(path, isDir)
+                        onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
+                    }
+                }
+                Component {
+                    id: codeSidebarWide
+                    CodeSidebar {
+                        leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.layoutWidth
+                        topInset: shell.SafeArea.margins.top
+                        bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
+                    }
                 }
             }
         }
@@ -802,31 +817,45 @@ FocusScope {
             anchors.bottom: parent.bottom
             active: Theme.narrow && shell._drawerMade
             asynchronous: !drawer.visible
-            sourceComponent: ShellSidebar {
-                topInset: shell.SafeArea.margins.top
-                bottomInset: shell.navigationBar
-                onNavigated: drawer.close()
-                onNewPageRequested: (folder) => {
-                    drawer.close()
-                    shell.openNewPage(folder)
+            sourceComponent: AppSettings.appMode === "code" ? codeSidebarDrawer : notesSidebarDrawer
+
+            // Code mode: its projects and threads in place of the notebook's pages (docs/CODE.md).
+            Component {
+                id: notesSidebarDrawer
+                ShellSidebar {
+                    topInset: shell.SafeArea.margins.top
+                    bottomInset: shell.navigationBar
+                    onNavigated: drawer.close()
+                    onNewPageRequested: (folder) => {
+                        drawer.close()
+                        shell.openNewPage(folder)
+                    }
+                    onNewFolderRequested: (folder) => {
+                        drawer.close()
+                        shell.openNewFolder(folder)
+                    }
+                    onRenameRequested: (path, isDir) => {
+                        drawer.close()
+                        shell.openRename(path, isDir)
+                    }
+                    onDeleteRequested: (path) => {
+                        drawer.close()
+                        shell.confirmDelete(path)
+                    }
+                    onMoveRequested: (path, isDir) => {
+                        drawer.close()
+                        shell.openMove(path, isDir)
+                    }
+                    onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
                 }
-                onNewFolderRequested: (folder) => {
-                    drawer.close()
-                    shell.openNewFolder(folder)
+            }
+            Component {
+                id: codeSidebarDrawer
+                CodeSidebar {
+                    topInset: shell.SafeArea.margins.top
+                    bottomInset: shell.navigationBar
+                    onNavigated: drawer.close()
                 }
-                onRenameRequested: (path, isDir) => {
-                    drawer.close()
-                    shell.openRename(path, isDir)
-                }
-                onDeleteRequested: (path) => {
-                    drawer.close()
-                    shell.confirmDelete(path)
-                }
-                onMoveRequested: (path, isDir) => {
-                    drawer.close()
-                    shell.openMove(path, isDir)
-                }
-                onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
             }
         }
     }

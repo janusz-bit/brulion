@@ -169,8 +169,35 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_attachments = new attachsearch::AttachmentIndexer(this);
     m_semantic = new SemanticSearch(this);
     m_extensions = new WorkspaceExtensions([this] { return now(); }, this);
+    // What the app tells the user is kept (notificationcenter.h): reminders that rang, the
+    // extensions' timers that ended — the chat's and the posted ones by their own code.
+    m_notifications = new NotificationCenter([this] { return now(); }, this);
+    m_projects = new CodeProjects(this);
+    connect(m_reminders, &WorkspaceReminders::fired, this, [this](const QVariantMap &n) {
+        m_notifications->record(NotificationCenter::Kind::Reminder, QString(), n.value(u"title"_s).toString(),
+                                n.value(u"body"_s).toString(), n.value(u"path"_s).toString());
+    });
+    // b.notify: an extension's own notification, through the centre (the user's setting, its hourly
+    // count, its name in the title); `page` what a click opens.
+    m_extensions->setNotifyHandler([this](const QString &id, const QString &extension, const QString &title,
+                                          const QString &text, const QString &page) -> QString {
+        QString open;
+        if (!page.isEmpty()) {
+            open = resolveLink(page, QString());
+            if (open.isEmpty() || !exists(open))
+                return u"no page “%1” in the notebook"_s.arg(page.left(100));
+        }
+        const QString why =
+                m_notifications->post({NotificationCenter::Kind::Extension, id, extension, title, text, open});
+        if (why == u"off")
+            return u"turned off"_s;
+        if (why == u"limit")
+            return u"too many: at most %1 an hour"_s.arg(NotificationCenter::MaxPerHour);
+        return why;
+    });
     m_extensions->setNotifier([this](const QString &title, const QString &body) {
         m_reminders->showNotification(u"brulion-rest-timer"_s, title, body);
+        m_notifications->record(NotificationCenter::Kind::Timer, QString(), title, body, QString());
     });
     m_extensions->setAiPictures([this](const QString &name, QString *why) { return aiPicture(name, why); });
     m_extensions->setPictureHost(this);
@@ -222,6 +249,7 @@ Workspace::~Workspace()
     m_semantic->blockSignals(true);
     m_extensions->blockSignals(true);
     m_chats->blockSignals(true);
+    m_notifications->blockSignals(true);
     blockSignals(true);
     close();
 }
@@ -306,6 +334,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     m_trashCount = -1;
     m_reminders->attach(m_vault.get(), m_index.get());
     m_extensions->attach(m_vault.get(), m_index.get());
+    m_notifications->attach(m_vault->store());
     m_sync->attach(m_vault.get());
     m_github->attach(m_vault.get());
     m_calendars->attach(m_vault.get(), m_index.get());
@@ -363,6 +392,7 @@ void Workspace::close()
     m_reminders->detach();
     m_extensions->detach();
     m_chats->reset();
+    m_notifications->detach();
     m_backups->detach(); // before sync: it releases its hold there
     m_attachments->detach(); // (its worker reads the vault's files)
     m_semantic->detach(); // (it reads the index; what it has not saved yet is written now)

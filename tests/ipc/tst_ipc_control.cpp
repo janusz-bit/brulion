@@ -817,6 +817,8 @@ private Q_SLOTS:
                      u"bad_params"_s);
             r = exchange(agent, R"({"id":8,"method":"chatSchedules"})");
             QVERIFY(r.value(u"ok"_s).toBool());
+            r = exchange(agent, R"({"id":9,"method":"chatNotify","params":{"text":"Gotowe","title":"Budowanie"}})");
+            QVERIFY2(r.value(u"ok"_s).toBool(), QJsonDocument(r).toJson().constData());
         }
         // The full grant: everything, not chat-only.
         QLocalSocket other;
@@ -843,7 +845,7 @@ private Q_SLOTS:
         QCOMPARE(chatMethods,
                  (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s, u"chatStop"_s,
                               u"chatPartners"_s, u"chatSchedules"_s, u"chatScheduleAdd"_s, u"chatScheduleSet"_s,
-                              u"chatScheduleRemove"_s, u"chatScheduleRun"_s, u"chatRequestSecret"_s}));
+                              u"chatScheduleRemove"_s, u"chatScheduleRun"_s, u"chatRequestSecret"_s, u"chatNotify"_s}));
         // A secret asked for: its parameters checked before the app sees them.
         r = exchange(script,
                      R"({"id":2,"method":"chatRequestSecret","params":{"label":"Token GitHuba","delivery":"value"}})");
@@ -855,6 +857,13 @@ private Q_SLOTS:
                  u"bad_params"_s);
         QCOMPARE(code(exchange(script, R"({"id":5,"method":"chatRequestSecret","params":{"label":"x","ms":900001}})")),
                  u"bad_params"_s);
+        // A notification: its text is needed, its fields are strings.
+        QCOMPARE(code(exchange(script, R"({"id":6,"method":"chatNotify","params":{"title":"Gotowe"}})")),
+                 u"bad_params"_s);
+        QCOMPARE(code(exchange(script, R"({"id":7,"method":"chatNotify","params":{"text":"Już","page":3}})")),
+                 u"bad_params"_s);
+        r = exchange(script, R"({"id":8,"method":"chatNotify","params":{"text":"Zbudowane — żółwie są szybkie"}})");
+        QVERIFY2(r.value(u"ok"_s).toBool(), QJsonDocument(r).toJson().constData());
         server.close();
     }
 

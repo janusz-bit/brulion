@@ -122,7 +122,15 @@ public:
     void timer(const QString &, int seconds, const QString &label) override { timers.append({seconds, label}); }
     void log(const QString &extension, const QString &message) override { logs << extension + u": "_s + message; }
     void status(const QString &extension, const QString &text) override { statuses << extension + u": "_s + text; }
+    /// b.notify: what was asked, answered `notifyAnswer` ("" = shown).
+    QString notify(const QString &extension, const NotifySpec &spec) override
+    {
+        notified.append({extension, spec});
+        return notifyAnswer;
+    }
 
+    QList<std::pair<QString, NotifySpec>> notified;
+    QString notifyAnswer;
     QString lastReplace;
     QStringList statuses;
 };
@@ -560,6 +568,100 @@ private Q_SLOTS:
         QVERIFY2(r.ok(), qPrintable(r.error));
         QCOMPARE(r.value.toString(), u"2 Wiosłowanie false nil"_s);
         QCOMPARE(host.timers, (QList<QPair<int, QString>>{{90, u"Przerwa"_s}}));
+    }
+
+    // b.notify: true when the host showed it, else false and the host's reason (never raised);
+    // the text trimmed and cut to 1000 characters, the title made one line of at most 80; an empty
+    // text never reaches the host. No permission is needed: a notification changes no note.
+    void notify_data()
+    {
+        QTest::addColumn<QString>("call");
+        QTest::addColumn<QString>("answer"); // the host's
+        QTest::addColumn<QString>("result"); // what the command returns
+        QTest::addColumn<QString>("text");   // what reached the host ("-": nothing did)
+        QTest::addColumn<QString>("title");
+        QTest::addColumn<QString>("page");
+        QTest::newRow("shown") << uR"(b.notify("  Herbata gotowa.  "))"_s << QString() << u"true nil"_s
+                               << u"Herbata gotowa."_s << QString() << QString();
+        QTest::newRow("Polish, with a title and a page")
+                << uR"(b.notify("Zażółć gęślą jaźń\ndruga linia", { title = "  Żółw\n i  ćma ", page = " Książki " }))"_s
+                << QString() << u"true nil"_s << u"Zażółć gęślą jaźń\ndruga linia"_s << u"Żółw i ćma"_s << u"Książki"_s;
+        QTest::newRow("refused") << uR"(b.notify("Przerwa"))"_s << u"too many: at most 10 an hour"_s
+                                 << u"false too many: at most 10 an hour"_s << u"Przerwa"_s << QString() << QString();
+        QTest::newRow("turned off") << uR"(b.notify("Przerwa", {}))"_s << u"turned off"_s << u"false turned off"_s
+                                    << u"Przerwa"_s << QString() << QString();
+        QTest::newRow("empty") << uR"(b.notify(" \n\t "))"_s << QString() << u"false empty"_s << u"-"_s << QString()
+                               << QString();
+        QTest::newRow("nil options") << uR"(b.notify("ś", nil))"_s << QString() << u"true nil"_s << u"ś"_s << QString()
+                                     << QString();
+    }
+    void notify()
+    {
+        QFETCH(QString, call);
+        QFETCH(QString, answer);
+        QFETCH(QString, result);
+        QFETCH(QString, text);
+        QFETCH(QString, title);
+        QFETCH(QString, page);
+        host.notifyAnswer = answer;
+        LOAD_OK(ext(u"powiadomienia"_s,
+                    u"b.command(\"x\", function() local ok, why = "_s + call + u" return `{ok} {why}` end)"_s, false));
+        const Result r = engine->runCommand(u"powiadomienia"_s, u"x"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toString(), result);
+        if (text == u"-") {
+            QVERIFY(host.notified.isEmpty());
+            return;
+        }
+        QCOMPARE(host.notified.size(), 1);
+        QCOMPARE(host.notified[0].first, u"powiadomienia"_s);
+        QCOMPARE(host.notified[0].second.text, text);
+        QCOMPARE(host.notified[0].second.title, title);
+        QCOMPARE(host.notified[0].second.page, page);
+    }
+
+    // A long text and title cut; arguments of the wrong kind raise; a hook may notify (the app
+    // limits how often), the top level of a page may not (each load would notify).
+    void notifyCutsRaisesAndHooks()
+    {
+        LOAD_OK(ext(u"n"_s, uR"lua(
+            b.command("dlugi", function()
+                return b.notify(string.rep("ż", 5000), { title = string.rep("ł", 500) })
+            end)
+            b.command("zle", function(ctx) b.notify(table.unpack(ctx.args)) end)
+            b.on("save", function(e) b.notify(`Zapisano {e.page}`) end)
+            local ok, why = b.notify("Wczytane")
+            assert(ok == false and why == "not while the extension loads", why)
+        )lua"_s));
+        QVERIFY(host.notified.isEmpty());
+        Result r = engine->runCommand(u"n"_s, u"dlugi"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QVERIFY(r.value.toBool());
+        QCOMPARE(host.notified.size(), 1);
+        const NotifySpec spec = host.notified[0].second;
+        QCOMPARE(spec.text.size(), QuestionLimits::notifyText);
+        QVERIFY(spec.text.endsWith(u"ż…"_s));
+        QCOMPARE(spec.title.size(), QuestionLimits::notifyTitle);
+        QVERIFY(spec.title.endsWith(u"ł…"_s));
+        const QList<std::pair<QVariantList, QString>> wrong{
+                {QVariantList{}, u"b.notify: argument 1 must be a string"_s},
+                {QVariantList{42}, u"b.notify: argument 1 must be a string, not number"_s},
+                {QVariantList{u"x"_s, u"tytuł"_s}, u"b.notify: argument 2 must be a table, not string"_s},
+                {QVariantList{u"x"_s, QVariantMap{{u"title"_s, 3}}}, u"b.notify: title must be a text"_s},
+                {QVariantList{u"x"_s, QVariantMap{{u"page"_s, true}}}, u"b.notify: page must be a text"_s},
+        };
+        for (const auto &[args, error] : wrong) {
+            r = engine->runCommand(u"n"_s, u"zle"_s, {{u"args"_s, args}});
+            QCOMPARE(r.status, Status::Error);
+            QVERIFY2(r.error.contains(error), qPrintable(r.error));
+        }
+        QCOMPARE(host.notified.size(), 1);
+        const QList<HookInfo> hooks = engine->hooks(u"save"_s);
+        QCOMPARE(hooks.size(), 1);
+        r = engine->runHook(hooks[0].id, {{u"page"_s, u"Dom"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(host.notified.size(), 2);
+        QCOMPARE(host.notified[1].second.text, u"Zapisano Dom"_s);
     }
 
     void valuesCrossBothWays()

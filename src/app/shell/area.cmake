@@ -93,6 +93,8 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/chatsecrets.h ${_brulion_shell_dir}/chatsecrets.cpp
     ${_brulion_shell_dir}/hookserver.h ${_brulion_shell_dir}/hookserver.cpp
     ${_brulion_shell_dir}/chatcontrol.h ${_brulion_shell_dir}/chatcontrol.cpp
+    ${_brulion_shell_dir}/notificationcenter.h ${_brulion_shell_dir}/notificationcenter.cpp
+    ${_brulion_shell_dir}/codeprojects.h ${_brulion_shell_dir}/codeprojects.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
     ${_brulion_shell_dir}/chattools.h ${_brulion_shell_dir}/chattools.cpp
     ${_brulion_shell_dir}/agentshare.h ${_brulion_shell_dir}/agentshare.cpp
@@ -133,7 +135,7 @@ target_link_libraries(brulion_shell
            brulion_core_writing
            brulion_core_encryption brulion_core_applock brulion_core_semantic
     PRIVATE Qt6::Network brulion_core_aireport brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
-            brulion_core_github brulion_core_caldav brulion_core_clipper
+            brulion_core_github brulion_core_caldav brulion_core_clipper brulion_core_gitcli
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
             brulion_ui_scale) # appsettings.cpp, appcontroller.cpp: the interface scale

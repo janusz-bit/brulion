@@ -133,7 +133,7 @@ local T = if b.uiLang() == "pl" then INTERFACE.pl else INTERFACE.en
 -- never the model on the device, whose tools are what it was trained on: docs/FINETUNE.md).
 local APP_WRITTEN = {
     pl = {
-        rules = "\n- Sama aplikacja, tylko na prośbę: jej ustawienie (motyw jasny albo ciemny, akcent, czcionki, układ, edytor) → app_settings, potem change_setting; własny motyw z kolorami i czcionkami → set_theme; przycisk w aplikacji (górny pasek, pasek boczny, menu strony, dolna nawigacja) → add_button; polecenie aplikacji (otwórz widok, przełącz coś) → app_commands, potem run_app_command. Każdą zmianę też zatwierdza użytkownik.",
+        rules = "\n- Sama aplikacja, tylko na prośbę: jej ustawienie (motyw jasny albo ciemny, akcent, czcionki, układ, edytor) → app_settings, potem change_setting; własny motyw z kolorami i czcionkami → set_theme; przycisk w aplikacji (górny pasek, pasek boczny, menu strony, dolna nawigacja) → add_button; polecenie aplikacji (otwórz widok, przełącz coś) → app_commands, potem run_app_command. Każdą zmianę też zatwierdza użytkownik.\n- Powiadomienie na tym urządzeniu → notify_user, tylko gdy użytkownik prosił, żeby dać mu o czymś znać, albo gdy w zaplanowanej rozmowie coś wymaga jego uwagi. Sama odpowiedź już go powiadamia: nigdy nie powiadamiaj tylko po to, by powiedzieć, że odpowiedź jest gotowa.",
         changed = "⚙️ W aplikacji: %s",
         themeFolder = "Motywy/",
         themeTag = "motyw",
@@ -143,7 +143,7 @@ local APP_WRITTEN = {
         buttonAbout = "Przycisk „%s”, który dodał asystent AI.",
     },
     en = {
-        rules = "\n- The app itself, only when asked: a setting of it (the light or dark theme, the accent, fonts, the layout, the editor) → app_settings, then change_setting; a theme of one's own with colours and fonts → set_theme; a button in the app (the top bar, the sidebar, a page's menu, the bottom navigation) → add_button; a command of the app (open a view, switch something) → app_commands, then run_app_command. The user approves each of these changes too.",
+        rules = "\n- The app itself, only when asked: a setting of it (the light or dark theme, the accent, fonts, the layout, the editor) → app_settings, then change_setting; a theme of one's own with colours and fonts → set_theme; a button in the app (the top bar, the sidebar, a page's menu, the bottom navigation) → add_button; a command of the app (open a view, switch something) → app_commands, then run_app_command. The user approves each of these changes too.\n- A notification on this device → notify_user, only when the user asked to be told of something or, in a scheduled conversation, when something needs them. The answer itself already notifies them: never notify just to say the answer is ready.",
         changed = "⚙️ In the app: %s",
         themeFolder = "Themes/",
         themeTag = "theme",
@@ -162,6 +162,7 @@ local APP_INTERFACE = {
         createTheme = "AI chce utworzyć motyw „%s” i użyć go w tym notatniku:\n\n%s",
         replaceTheme = "AI chce zastąpić motyw „%s” nowym i użyć go w tym notatniku:\n\n%s",
         createButton = "AI chce dodać przycisk „%s” jako rozszerzenie „%s” (pokaże się, gdy naciśniesz Uruchom na jego stronie):\n\n%s",
+        notifying = "Wysyłam powiadomienie…",
     },
     en = {
         settings = "Looking through the app's settings…",
@@ -171,6 +172,7 @@ local APP_INTERFACE = {
         createTheme = "The AI wants to create the theme “%s” and use it in this notebook:\n\n%s",
         replaceTheme = "The AI wants to replace the theme “%s” with a new one and use it in this notebook:\n\n%s",
         createButton = "The AI wants to add the button “%s” as the extension “%s” (it shows once you press Run on its page):\n\n%s",
+        notifying = "Sending a notification…",
     },
 }
 local WA = if b.lang() == "pl" then APP_WRITTEN.pl else APP_WRITTEN.en
@@ -495,6 +497,19 @@ local APP_TOOLS = {
                 page = { type = "string", description = "Or the page it opens (made when missing)" },
             },
             required = { "label" },
+        },
+    },
+    {
+        name = "notify_user",
+        description = "Shows the user a notification on this device (a system notification, or a message in the app while it is in front). Only when the user asked to be told of something, or in a scheduled conversation when something needs them; the answer itself already notifies them, so never notify just to say the answer is ready. Changes nothing, needs no approval; the app may refuse it (notifications turned off, too many).",
+        input = {
+            type = "object",
+            properties = {
+                text = { type = "string", description = "What it says: one or two short sentences" },
+                title = { type = "string", description = "Its title, a few words (default the assistant's name)" },
+                page = { type = "string", description = "A page a tap on it opens (its name, as [[links]] name it)" },
+            },
+            required = { "text" },
         },
     },
 }
@@ -1609,6 +1624,9 @@ CHANGING.change_setting = true
 CHANGING.run_app_command = true
 CHANGING.set_theme = true
 CHANGING.add_button = true
+-- (A notification changes nothing — no confirmation, no "In the app" line —, and the same one twice
+-- tells the user nothing new: the same call again, as a read.)
+READING.notify_user = true
 
 -- A call as a key: its tool and its input, the input's keys in order.
 local function callKey(name: string, input: any): string
@@ -2047,6 +2065,25 @@ local function runAppTool(session: Session, name: string, input: any): (string, 
         end
         noteChanged(session, pageName)
         return "Wrote the extension [[" .. pageName .. "]] with the button. It shows once the user presses Run on its page (or in Settings → Extensions): tell them.", false
+    elseif name == "notify_user" then
+        local text = trim(str(input.text))
+        if text == "" then
+            return "A notification's text is needed.", true
+        end
+        b.status(TA.notifying)
+        local options: { [string]: string } = {}
+        if trim(str(input.title)) ~= "" then
+            options.title = trim(str(input.title))
+        end
+        if pageName(str(input.page)) ~= "" then
+            options.page = pageName(str(input.page))
+        end
+        local shown, why = b.notify(text, options)
+        if not shown then
+            -- (The app's no is no failure of the model's: it says so to the user.)
+            return "Not notified: " .. str(why) .. ".", false
+        end
+        return "Notified.", false
     end
     return "No tool named \"" .. name .. "\".", true
 end

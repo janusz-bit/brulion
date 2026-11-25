@@ -83,6 +83,10 @@ constexpr auto kChatHooksPort = "ai/hooksPort"_L1;
 constexpr auto kChatHooksPublicUrl = "ai/hooksPublicUrl"_L1;
 constexpr auto kAiChatNotify = "ai/chatNotify"_L1;
 constexpr auto kAiChatAutoArchive = "ai/chatAutoArchive"_L1;
+constexpr auto kAiDefaultPartner = "ai/defaultPartner"_L1;
+constexpr auto kAiAgentNotify = "ai/agentNotify"_L1;
+constexpr auto kExtensionsNotify = "extensions/notify"_L1;
+constexpr auto kAppMode = "ui/mode"_L1;
 constexpr auto kChatToolCalls = "ai/chatToolCalls"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
@@ -726,6 +730,50 @@ void AppSettings::setAiChatNotify(const QString &mode)
     const QString value = mode == u"always" || mode == u"never" ? mode : u"background"_s;
     if (store(kAiChatNotify, value, aiChatNotify()))
         Q_EMIT aiChatNotifyChanged();
+}
+
+QString AppSettings::aiDefaultPartner() const
+{
+    return m_settings->value(kAiDefaultPartner).toString().trimmed();
+}
+
+void AppSettings::setAiDefaultPartner(const QString &partner)
+{
+    if (store(kAiDefaultPartner, partner.trimmed(), aiDefaultPartner()))
+        Q_EMIT aiDefaultPartnerChanged();
+}
+
+bool AppSettings::aiAgentNotify() const
+{
+    return m_settings->value(kAiAgentNotify, true).toBool();
+}
+
+void AppSettings::setAiAgentNotify(bool on)
+{
+    if (store(kAiAgentNotify, on, aiAgentNotify()))
+        Q_EMIT aiAgentNotifyChanged();
+}
+
+QString AppSettings::appMode() const
+{
+    return m_settings->value(kAppMode).toString() == u"code" ? u"code"_s : u"notes"_s;
+}
+
+void AppSettings::setAppMode(const QString &mode)
+{
+    if (store(kAppMode, mode == u"code" ? u"code"_s : u"notes"_s, appMode()))
+        Q_EMIT appModeChanged();
+}
+
+bool AppSettings::extensionsNotify() const
+{
+    return m_settings->value(kExtensionsNotify, true).toBool();
+}
+
+void AppSettings::setExtensionsNotify(bool on)
+{
+    if (store(kExtensionsNotify, on, extensionsNotify()))
+        Q_EMIT extensionsNotifyChanged();
 }
 
 QString AppSettings::aiChatAutoArchive() const

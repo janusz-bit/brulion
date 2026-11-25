@@ -570,6 +570,15 @@ void ChatListModel::setLocale(const QString &locale)
     scheduleRefresh();
 }
 
+void ChatListModel::setProject(const QString &project)
+{
+    if (m_project == project)
+        return;
+    m_project = project;
+    Q_EMIT projectChanged();
+    rebuild();
+}
+
 void ChatListModel::setQuery(const QString &query)
 {
     if (m_query == query)
@@ -646,6 +655,7 @@ void ChatListModel::refresh()
             e.messages = int(conversation.messages.size());
             e.pinned = conversation.pinned;
             e.archived = conversation.archived;
+            e.project = conversation.project;
             e.texts.reserve(conversation.messages.size());
             for (const chat::Message &m : conversation.messages)
                 e.texts.append({m.line, m.text, text::foldKey(m.text)});
@@ -669,6 +679,11 @@ void ChatListModel::rebuild()
     QList<Row> next;
     int archived = 0, pinned = 0;
     for (const Entry &e : std::as_const(m_all)) {
+        // The notebook's conversations, or Code mode's threads (of one project).
+        if (m_project.isEmpty() ? !e.project.isEmpty()
+            : m_project == u"*" ? e.project.isEmpty()
+                                : e.project != m_project)
+            continue;
         Row r;
         if (searching) {
             if (hasAll(e.foldedTitle)) {
@@ -710,6 +725,7 @@ void ChatListModel::rebuild()
         r.messages = e.messages;
         r.pinned = e.pinned;
         r.archived = e.archived;
+        r.project = e.project;
         r.section = e.archived ? u"archived"_s : e.pinned ? u"pinned"_s : u"recent"_s;
         if (chats) {
             r.asking = chats->asking(e.path);
@@ -732,8 +748,9 @@ void ChatListModel::rebuild()
             return a.cameBack > b.cameBack;
         return a.modified != b.modified ? a.modified > b.modified : a.path < b.path;
     });
+    const qsizetype before = m_rows.size();
     applyRows(m_rows, next, [](const Row &r) { return r.path; }, [](const Row &a, const Row &b) { return a == b; });
-    if (archived != m_archivedCount || pinned != m_pinnedCount) {
+    if (archived != m_archivedCount || pinned != m_pinnedCount || before != m_rows.size()) {
         m_archivedCount = archived;
         m_pinnedCount = pinned;
         Q_EMIT sectionsChanged();
@@ -778,6 +795,7 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
     case MatchTextRole: return r.matchText;
     case MatchMatchesRole: return positions(r.matchMatches);
     case MatchLineRole: return r.matchLine;
+    case ProjectRole: return r.project;
     default: return {};
     }
 }
@@ -803,7 +821,8 @@ QHash<int, QByteArray> ChatListModel::roleNames() const
             {TitleMatchesRole, "titleMatches"},
             {MatchTextRole, "matchText"},
             {MatchMatchesRole, "matchMatches"},
-            {MatchLineRole, "matchLine"}};
+            {MatchLineRole, "matchLine"},
+            {ProjectRole, "project"}};
 }
 
 int ChatListModel::rowOf(const QString &path) const

@@ -73,7 +73,8 @@ bool McpDispatcher::isModern(const QJsonObject &request)
 
 bool McpDispatcher::offered(const Command &c, const McpPolicy &policy)
 {
-    return c.mcp && !(policy.readOnly && c.writes) && !(c.destructive && !policy.allowDestructive)
+    return c.mcp && !(policy.noNotes && !c.appChat && !c.appControl) && !(policy.readOnly && c.writes)
+           && !(c.destructive && !policy.allowDestructive)
            && !(c.appControl && !policy.appControl && !(c.appChat && policy.appChat))
            && !(policy.remote && c.id.startsWith(u"app."));
 }
@@ -109,8 +110,9 @@ QJsonObject McpDispatcher::serverInfo() const
 /// whatever the language of the help printed for people.
 QString McpDispatcher::instructions(const McpPolicy &policy) const
 {
-    QString text = u"Tools read and change the Brulion notebook (Markdown files)"_s;
-    if (!m_ctx.vaultRoot().isEmpty())
+    QString text = policy.noNotes ? u"Tools of the Brulion app the user talks to you in"_s
+                                  : u"Tools read and change the Brulion notebook (Markdown files)"_s;
+    if (!policy.noNotes && !m_ctx.vaultRoot().isEmpty())
         text += policy.remote ? QString(u" \""_s + QFileInfo(m_ctx.vaultRoot()).fileName() + u'"')
                               : QString(u" at "_s + m_ctx.vaultRoot());
     text += u". Results are the JSON envelopes of brulion-cli ({ok, result | error, warnings}). Note text is "
@@ -170,7 +172,9 @@ QString McpDispatcher::instructions(const McpPolicy &policy) const
                                       u"write it down; "_s
                                     : u"returns a file only this user can read — use it only inside the command that "
                                       u"needs it (\"$(cat <file>)\"), never print it; "_s)
-                + u"never ask for a secret in the chat."_s;
+                + u"never ask for a secret in the chat. brulion_app_chat_notify shows the user a notification on that "
+                  u"device (a click opens your conversation or the page named): only when they asked to be told of "
+                  u"something or something needs them, at most 10 an hour."_s;
     if (policy.readOnly)
         text += u" This server is read-only."_s;
     return text;
@@ -408,9 +412,10 @@ QStringList mcpProtocolVersions()
     return McpDispatcher::allVersions();
 }
 
-int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl, bool appChat)
+int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl, bool appChat, bool noNotes)
 {
     McpPolicy policy;
+    policy.noNotes = noNotes;
     policy.readOnly = readOnly;
     policy.allowDestructive = allowDestructive;
     policy.appControl = appControl;
@@ -421,7 +426,7 @@ int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appCon
     StdioServer server(context, policy);
     // Open the notebook before the first request: its index is ready (warm) for the first call.
     // A missing notebook is reported by every tool call instead.
-    if (!context.resolveVault()) {
+    if (!noNotes && !context.resolveVault()) {
         std::optional<Error> error;
         if (notebook::Notebook *nb = context.notebook(&error))
             nb->index();

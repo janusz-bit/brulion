@@ -1374,6 +1374,74 @@ again) and "Extensions" (Settings → Extensions). Extension commands carry the 
 their subtitle and the icon `puzzle` (the gym's `dumbbell`, the habits' `flame`); the views of the
 gym and the habits are offered as "Gym" and "Habits" (`go.gym`, `go.habits`, while they are on),
 not as `extview.…`.
+## Code mode
+
+Projects and AI agents' threads, as in T3 Code (docs/CODE.md: the model; this section: the UI). The
+mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first button (`modeSwitch`: a
+`code` icon in Notes mode, `notebook-pen` in Code mode; "Code mode" / "Notes mode", in the drawer
+"Code" / "Notes"), the palette's `mode.code` / `mode.notes` and Settings → Extensions → Code mode
+(`codeSettings`: the mode `appModeSetting`, the editor `codeEditorSetting`, the worktrees' folder
+`codeWorktreesSetting`; shown where agents run).
+
+* **In Code mode** the rail shows only "Code" (`sidebarNav_code`, route `code`; `ShellRail.shows()`), the
+  page panel is `CodeSidebar` (AppShell's loaders choose it by the mode, wide and in the drawer) and the
+  bottom navigation is hidden; settings, notifications, the palette, tabs and the top bar stay.
+* **CodeSidebar** (`qml/code/CodeSidebar.qml`): "Projects" with "Add a project…" (`codeAddProject`, a
+  folder picker `codeProjectFolderDialog`; with none: a note and `codeAddProjectEmpty`), a section per
+  project (`codeProject_<id>`: a click folds it — kept in `code/collapsed` —, "+" `codeNewThread_<id>`, "⋯"
+  `codeProjectMore_<id>` and a right click / long press: New thread, Open in editor, Show the folder, Name
+  and scripts… (`codeProjectDialog`: `codeProjectName`, `codeProjectScripts` — a line each,
+  "name: command"), Remove from the list (confirmed: its folder and threads stay)) with its threads
+  (`codeThread`, `ChatListModel { project: id }`): the state (a spinner while the agent works, a question
+  mark in the accent while it asks, the alert in the danger colour after a failure, an accent dot while
+  unread), the title (semibold unread or current), when; the current one selected; a right click / long
+  press: Archive / Unarchive, Move to trash (a toast with Undo). "No threads yet" under an empty project.
+* **CodeView** (`qml/code/CodeView.qml`, route `code`: `{}` a new thread of the last project used —
+  `code/lastProject` — or the first; `{new: true, project}`; `{path}` a thread; `{addProject: true}` the
+  folder picker): no project yet — an empty state (`codeEmpty`) with "Add a project…" and, without an agent,
+  "Set up an AI agent". A header (`codeHeader`): the project (`codeProjectChip`; for a new thread a menu of
+  the projects, `codeProjectPick`, and "Add a project…"), where the thread works (`codeWhere`: its
+  worktree's branch, else "Local"; the folder in its tooltip) or, for a new one, **Local / New worktree**
+  (`codeEnvironment`, kept in `code/newWorktree`: the first Send makes the worktree —
+  `CodeProjects.createWorktree`, a spinner meanwhile — then sends), the project's script buttons
+  (`codeScript_<n>`: run in a new tab of the terminal), Open in editor (`codeOpenEditor`), the terminal's
+  and the changes' toggles (`codeTerminalToggle`, `codeChangesToggle`; kept in `code/terminalOpen`,
+  `code/changesOpen`). Under it a horizontal SplitView: the thread — `ChatView` with `routeView: "code"`
+  (its navigations name route `code`), `showList: false`, `project`, `wantsWorktree` /
+  `worktreeWanted()`; only agents among the partners (`chatNewPartner` shown with one agent too); its
+  empty state "What should the agent do?" with suggestions (`codeSuggestions`) — over the terminal
+  (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
+
+## Notifications
+
+What the app told the user is kept, per notebook and on this device (`shell/notificationcenter.h`,
+QML `Workspace.notifications`, its device state `notify/log` — never in the notebook, it syncs
+nothing): a reminder or a calendar event's alarm that rang (`WorkspaceReminders::fired`), the AI
+chat's answers, failures and questions it notified of (`WorkspaceChats::notifyUser`), an extension's
+timer that ended, and the notifications AI agents (`chatNotify`), extensions (`b.notify`) and the
+user's scripts (`brulion-cli app chat notify`) send. Newest first, at most 200 and none older than 30
+days; one that came while the app was in front counts as read, the others are **unread** until
+opened from the list, until what they point to is opened another way (`markOpened`: a system
+notification's click — `AppController::openNotification` —, the conversation shown in a chat view)
+or "Mark all as read".
+
+* **The bell** (`topBarNotifications`, the top bar before the AI button): `bell-ring` and the unread
+  count as an accent badge (`topBarNotificationsBadge`, "9+") while something is unread; on narrow
+  windows only then — **More → Notifications (3)** (`menuNotifications`) and the palette's
+  "Notifications" (`go.notifications`) always lead there. Route `notifications` (views table).
+* **Posted ones** (`NotificationCenter::post`) — an agent's, an extension's, a script's — are checked
+  against the user's settings (Settings → Extensions → AI → "Let AI agents send notifications",
+  `AppSettings.aiAgentNotify`; Settings → Extensions → "Let extensions send notifications",
+  `extensionsNotifySetting`, `AppSettings.extensionsNotify`, key `extensions/notify`; a script of the
+  user's always), at most **10 an hour from one source** (a conversation, an extension, the scripts:
+  `MaxPerHour`, the workspace's clock), titled with who sends them ("Claude Code: Build", an
+  extension's name), cleaned (no control characters but line ends and tabs, no runs of empty lines)
+  and cut (1 000 characters, the title 80). Shown (`shown` → `workspaceintegration.cpp`): a system
+  notification while the app is not in front — its id `brulion-message:<kind>:<what it opens>`, a
+  newer one of the same replacing it —, else, or with nowhere to show one, a toast with **Open**
+  (`AppController::toastOpen`). The app lock's "Hide the note's text in notifications" makes it
+  "Brulion" — "Something new: open Brulion to see it".
+
 ## AI chat
 
 `qml/views/ChatView.qml`, route `chat` (the palette's "AI chat", `go.chat`, and "AI: new conversation",
@@ -1395,7 +1463,7 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   takes it away) that says it came from a link — with the warning tint "This prompt came from a link
   with N hidden characters, taken out now: they can hide instructions. Read it before you send it."
   when it had some —, that it was cut at 8 000 characters, that its page is not in this notebook or
-  its partner not set up here (the AI assistant answers instead). The first message of a new one replaces the route with the
+  its partner not set up here (the default partner answers instead: "Who answers a new one" below). The first message of a new one replaces the route with the
   conversation's (`AppController.replaceRoute`; in the side panel, where the view also opens, it
   pins the conversation there again). Title: the conversation's name without its date, else "AI
   chat".
@@ -1462,6 +1530,27 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   **Never**; never for a conversation shown in an active window. The app lock's "Hide the note's
   text in notifications" makes it "AI chat" — "Something new in a conversation". The toast for a
   question nobody sees stays as it was.
+* **An AI agent's own notifications** (T3 Code's notifications from the agent; `chatNotify`, the tool
+  `brulion_app_chat_notify`, docs/CLI.md "Conversations"): an agent tells the user what they asked to
+  hear of ("let me know when the build is done") — `ChatControl`'s `chatNotify` →
+  `NotificationCenter::post` ("Notifications" above): a system notification while the app is not in
+  front, else a toast with **Open**, kept in the list of notifications. Its title always says who
+  sends it ("Claude Code: Build", the conversation's partner; a script's its client name): a note an
+  agent read cannot make it pass for another app's. A click opens the agent's conversation, or the
+  page it named (`page`). At most **10 of a conversation an hour**: the next is refused with
+  `retryAfterMs`. **Settings → Extensions → AI → Let AI agents send notifications**
+  (`aiAgentNotifySetting`, `AppSettings.aiAgentNotify`, key `ai/agentNotify`, on by default): off,
+  every one is refused (`reason: off`) and the agent says it in its answer instead.
+* **Who answers a new one**: **Settings → Extensions → AI → New conversations answered by**
+  (`aiDefaultPartnerRow`, its button `aiDefaultPartnerSetting` and menu `aiDefaultPartnerMenu` of the
+  chat's partners; shown with more than one partner or a choice made; `AppSettings.aiDefaultPartner`,
+  key `ai/defaultPartner`, this device's — agents are set up per device): the built-in assistant (the
+  default), an AI agent or an extension's chat command. `WorkspaceChats::defaultPartner` is that
+  choice while it answers here, else "" (the assistant; the row then says the one chosen is not set up
+  here) — `defaultPartnerChanged` also when the partners change. A new conversation's chip starts with
+  it (`ChatView.newPartner`, set again when the default changes and nobody picked another), and so do
+  prompt links that name nobody or one not set up here (`carryOutAutomation`), "Add…" of the scheduled
+  conversations, and `chatStart` / `chatScheduleAdd` without a `partner` (`""` names the assistant).
 * **The list's menu** (`chatRowMenu`: a right-click, a long press): **Pin** / **Unpin**
   (`chatPin`, not on an archived one) and **Archive** / **Unarchive** (`chatArchive`):
   `WorkspaceChats.setPinned()` / `setArchived()` write the page's frontmatter (`chat::setMark`, the
@@ -1900,7 +1989,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   off.
 * **Who answers**: an agent is offered among the partners (`acp:<id>`, its name, "AI agent") and the
   conversation's page keeps it (`partner: acp:claude`, docs/SYNTAX.md §14); an agent not set up on
-  this device fails the turn with what to do.
+  this device fails the turn with what to do. It may answer every new conversation: Settings →
+  Extensions → AI → New conversations answered by ("AI chat" → "Who answers a new one").
 * **Its options** (`chatAgentOptions` under the conversation's row, `chatNewAgentOptions` before a
   new one's first message; `ChatAgentOptions.qml`): a chip per option of the session — its model,
   mode, effort … (`configOptions`; an agent's older `modes` and `models` as options of their own) —
@@ -2738,6 +2828,8 @@ panel keeps none.
 | `sync` | `SyncView` — Overview, Syncthing, Nextcloud (live progress, history of runs), GitHub (a notebook kept in a GitHub repository: "Notebooks from GitHub" below; `{tab: "github"}` is where a notebook opened from GitHub lands), Calendars (ICS subscriptions and CalDAV accounts: "Calendars" below; `{tab: "calendars"}`), Conflicts (merge; drawings element by element). Conflicts: the list beside the resolver on wide windows; on narrow ones (< 900 px) one at a time, and a conflict opens through the route (`{tab: "conflicts", copy}`, the entry before it showing the list, also when the tab was chosen here), so the top bar's ← and Android's Back return to the list — the resolver has no ← of its own — and a resolved one goes back to it too. `copy` is read on every route change: a route without one shows the list | `tab?`, `copy?`, `run?` (open a run's details) |
 | `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "More" (both remembered on the device), **Sign in to Microsoft**; then a well with the device code in large monospace, **Copy code**, the address as text and an **Open microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Cancel**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). The OneNote card uses the same block (`service: "onenote"`, scope Notes.Read) and, once signed in, lists the notebooks with check boxes and **Download n notebooks**; the Todoist and Airtable cards add `TokenSignIn` (the personal token in a password field, where to get it, **Download from Todoist** / **Connect to Airtable**; Airtable then a base menu and the tables as check boxes, **Download n tables**); the OneNote card has no file buttons. For a spreadsheet (CSV, Airtable) the preview adds the mapping card `ImportCsvMapping` (`ImportController.csvOptions` / `csvMapping`): A page per row / One page with the table (`BSegmented`), the title column (`IoChoiceButton`: a button with a menu of choices) or a title template, subfolders, the page-text column, a row per column — its name and a sample, the property's name (phones: a line of its own) and its type ("Detect: Number" until chosen, or Leave out) —, **Download the attachments** when cells name files on the web, the encoding, separator, header row and list separator under a toggle, the base switch, the first rows with their pages' titles and the first page as it will be written (monospace), **Back to what Brulion detected**; every change is checked again before anything is written. Export (`ExportPanel`): the format tiles (also PDF and Word: "Exporting and printing a page"), what to export (notebook / folder / page; several notes in a PDF or DOCX: each on its own page), for the HTML, PDF, Word and Pandoc formats **Pictures from the internet**: Keep addresses / Include copies (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Fetching pictures from the internet (1 of 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), for the "HTML document" **Protect with a password** (`ExportPasswordBox`: "Exporting and printing a page"), Export…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Replaced from the command line (agent)" with a terminal icon —, a restored version) | `path` |
+| `code` | `CodeView` ("Code mode" above): an AI agent's thread of a project with its changes and terminal, or a new thread | `project?`, `path?`, `new?`, `addProject?` |
+| `notifications` | `NotificationsView` ("Notifications" below): what the app told the user in this notebook, newest first under a heading per day (`section`: Today, Yesterday, the date); All / Unread (`notificationsFilter`), "Mark all as read" (`notificationsMarkRead`), "Clear" (`notificationsClear`, confirmed); a row (`notificationRow`: the kind's icon, its title — semibold while unread —, three lines of its text, its time, an accent dot `notificationUnread`, × `notificationRemove`) is marked read and opens what it points to on a click or Enter (`AppController.openNotification`), Delete removes it | — |
 | `trash` | `TrashView` — a row shows "Restore" (its icon on compact windows) and a "⋯" whose menu, also from a right-click or a long press on the row, has Restore and, after a separator in the danger colour, "Delete for good…" (asked first; no bare red × — the app's dismiss glyph — that deletes); the header's "Empty trash" is a secondary button with danger text, only the confirmations are solid red, and both say "This cannot be undone." | — |
 | `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
 | `settings` | `SettingsView` — one section at a time: on wide windows the list of sections on the left, choosing one replaces the route's section (no history entry); on narrow ones (under 900 px, phones) a route without a section shows the **list of sections** (`settingsHome`), drawn as the page's menu sheet (`BMenu.sheet`'s `BMenuItem`s: no cards, no coloured tiles): the Notebook row first (`settingsHomeRow-vault`, the notebook's name muted beside it), then the sections in groups set apart by a thin line, without headings — Appearance, Editor | Reminders, Search, Extensions | Sync, Backups, Privacy | General, Keyboard shortcuts (not on touch UIs), Automation, Application — each a row with its line icon in the muted colour, its title and an arrow (`settingsHomeRow-<key>`); a row opens its section as a step of the history (Back returns to the list), a route with a section shows it at once. General, Appearance (`appearance`), Editor, Notebook (also this device's "Follow links to folders outside the notebook", `AppSettings.followsOutsideLinks`, default off, never in `.brulion/config.json` — a sync peer must not switch it on —, pushed into `Workspace.setFollowsOutsideLinks` → `Vault::setFollowsOutsideLinks`, and read by brulion-cli and the background check: a toggle rescans, the linked files come or go as changes; off, a file opened from such a folder is offered as a copy, and neither its pictures nor its PDFs are shown. Devices that followed such links before it was a setting keep them: while the setting was never chosen, each notebook's first open checks once (`AppSettings::checkOutsideLinksOnce`, "vaults/outsideLinksChecked/<id>") and switches it on — before the index and sync see the notebook — only when this device knew the notebook before (state in its device folder, or a recent notebook) and it has such a link; a new device, or a link planted after the check, never does), Reminders, Sync, Backups (`backups`, "Backups" below), Automation (`automation`: brulion:// links and the notebook's key, "Automation (brulion:// links)" above), Application (on Android and Windows "Check for new versions" — `AppController.updates.enabled`, "Window layout"; on the desktop "Keep running in the system tray" and "Click on the tray icon" Window | Calendar — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Start when you sign in" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop "Browser extension (Web Clipper)": each browser's row with its state — Connected (the user's or the system's host manifest naming a program that is there), Not connected, Not installed for you, a broken one with the program it misses — and "Connect browsers" / "Connect again", "Disconnect" (only the user's own manifests), "How to install the extension" — `WebClipperSetup` (`src/app/shell/webclippersetup.h`, the same code as `brulion-cli clip install`: `clipper/hostinstall.h`), docs/CLIPPER.md; on the desktop with "For developers": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Reminders → sounds: on Windows the "Ringtone" menu lists Windows' notification sounds (Notification, Alarm 1–10, Call 1–10…) and "Sound file…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |

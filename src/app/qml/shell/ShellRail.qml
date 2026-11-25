@@ -33,6 +33,7 @@ Item {
     readonly property string routeView: AppController.currentView
     /// The views offered (the ones hidden in the settings are not shown: rail.shows()).
     readonly property list<var> entries: [
+        { entryView: "code", entryAlso: "", entryTitle: qsTr("Code"), entryShort: qsTr("Code"), entryIcon: "code" },
         { entryView: "journals", entryAlso: "journal", entryTitle: qsTr("Journals"), entryShort: qsTr("Journal"), entryIcon: "book-open" },
         { entryView: "calendar", entryAlso: "", entryTitle: qsTr("Calendar"), entryShort: qsTr("Calendar"), entryIcon: "calendar" },
         { entryView: "tasks", entryAlso: "", entryTitle: qsTr("Tasks"), entryShort: qsTr("Tasks"), entryIcon: "list-todo" },
@@ -45,7 +46,7 @@ Item {
         { entryView: "search", entryAlso: "", entryTitle: qsTr("Search"), entryShort: qsTr("Search"), entryIcon: "search" }
     ]
     /// The entries' views in their order (typed, for startsGroup()).
-    readonly property list<string> entryViews: ["journals", "calendar", "tasks", "habits", "gym", "flashcards",
+    readonly property list<string> entryViews: ["code", "journals", "calendar", "tasks", "habits", "gym", "flashcards",
                                                 "allPages", "tags", "graph", "search"]
     readonly property list<var> noRows: []
     /// The extensions' entries as text: made again only when they change.
@@ -85,12 +86,16 @@ Item {
     /// A view of the app is offered: not hidden in the settings, the built-in extensions' views
     /// only while switched on (Settings → Extensions).
     function shows(view: string): bool {
-        return AppSettings.sidebarHidden.indexOf(view) < 0 && (view !== "gym" || AppSettings.gymEnabled)
+        // Code mode (docs/CODE.md): its threads alone; the notebook's views in Notes mode.
+        if (AppSettings.appMode === "code")
+            return view === "code"
+        return view !== "code" && AppSettings.sidebarHidden.indexOf(view) < 0 && (view !== "gym" || AppSettings.gymEnabled)
                 && (view !== "habits" || AppSettings.habitsEnabled)
                 && (view !== "flashcards" || AppSettings.flashcardsEnabled)
     }
     function groupOf(view: string): int {
         switch (view) {
+        case "code":
         case "journals":
         case "calendar":
         case "tasks":
@@ -284,6 +289,20 @@ Item {
                 }
                 // No tooltip: the panel beside it names the notebook, and the window's corner is
                 // where a pointer rests when the app starts (a tooltip would greet every start).
+            }
+
+            // The mode: the notebook, or Code mode's projects and AI agents' threads (docs/CODE.md).
+            RailButton {
+                objectName: "modeSwitch"
+                Layout.bottomMargin: Theme.space1
+                label: AppSettings.appMode === "code" ? qsTr("Notes mode") : qsTr("Code mode")
+                shortName: AppSettings.appMode === "code" ? qsTr("Notes", "the drawer's short name of Notes mode")
+                                                          : qsTr("Code", "the drawer's short name of Code mode")
+                iconName: AppSettings.appMode === "code" ? "notebook-pen" : "code"
+                onClicked: {
+                    AppSettings.appMode = AppSettings.appMode === "code" ? "notes" : "code"
+                    rail.navigated()
+                }
             }
 
             // ---- The views (scrolling when the window is too low) ---------------------------

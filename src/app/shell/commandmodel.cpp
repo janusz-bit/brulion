@@ -330,8 +330,7 @@ static QList<Command> buildCommands(const AppController *app)
             {u"view.zoomOut"_s, CommandModel::tr("Smaller interface"), CommandModel::tr("Text, buttons and icons"),
              u"zoom-out"_s, u"Ctrl+Alt+-"_s, app->interfaceScaleSupported()},
             {u"view.zoomReset"_s, CommandModel::tr("Interface size: automatic"),
-             CommandModel::tr("As the screen suggests"), u"monitor"_s, u"Ctrl+Alt+0"_s,
-             app->interfaceScaleSupported()},
+             CommandModel::tr("As the screen suggests"), u"monitor"_s, u"Ctrl+Alt+0"_s, app->interfaceScaleSupported()},
             {u"sync.now"_s,
              CommandModel::tr("Sync now"),
              CommandModel::tr("Nextcloud"),
@@ -365,6 +364,36 @@ static QList<Command> buildCommands(const AppController *app)
              {},
              ready && !app->inDocsVault()},
             {u"go.trash"_s, CommandModel::tr("Trash"), {}, u"trash-2"_s, {}, ready},
+            {u"mode.code"_s,
+             CommandModel::tr("Code mode"),
+             CommandModel::tr("Projects and AI agents' threads, as in T3 Code"),
+             u"code"_s,
+             {},
+             ready && app->settings()->appMode() != u"code"},
+            {u"mode.notes"_s,
+             CommandModel::tr("Notes mode"),
+             CommandModel::tr("The notebook: journal, pages, tasks"),
+             u"notebook-pen"_s,
+             {},
+             ready && app->settings()->appMode() == u"code"},
+            {u"code.newThread"_s,
+             CommandModel::tr("New thread"),
+             CommandModel::tr("Code mode: an AI agent's new thread in a project"),
+             u"plus"_s,
+             {},
+             ready && app->workspace()->projects()->count() > 0},
+            {u"code.addProject"_s,
+             CommandModel::tr("Add a project…"),
+             CommandModel::tr("Code mode: a folder AI agents work in"),
+             u"folder-plus"_s,
+             {},
+             ready},
+            {u"go.notifications"_s,
+             CommandModel::tr("Notifications"),
+             CommandModel::tr("Reminders, AI answers, agents and extensions that told you something"),
+             u"bell"_s,
+             {},
+             ready},
             {u"go.cleanup"_s,
              CommandModel::tr("Clean up"),
              CommandModel::tr("Notes and attachments without links"),
@@ -884,6 +913,15 @@ bool CommandModel::run(const QString &id)
         if (path.isEmpty())
             return false;
         m_app->openPage(path);
+    } else if (id == u"mode.code" || id == u"mode.notes") {
+        m_app->settings()->setAppMode(id.mid(5));
+    } else if (id == u"code.newThread") {
+        const QString project = m_app->currentRoute().value(u"project"_s).toString();
+        m_app->settings()->setAppMode(u"code"_s);
+        m_app->navigate({{u"view"_s, u"code"_s}, {u"new"_s, true}, {u"project"_s, project}});
+    } else if (id == u"code.addProject") {
+        m_app->settings()->setAppMode(u"code"_s);
+        m_app->navigate({{u"view"_s, u"code"_s}, {u"addProject"_s, true}});
     } else if (id == u"ai.newChat") {
         const QString path = m_app->currentRoute().value(u"path"_s).toString();
         m_app->navigate({{u"view"_s, u"chat"_s},

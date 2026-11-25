@@ -5,6 +5,15 @@ done in the repository simply disappears from the list.
 
 ## Features
 
+* **Code mode: what is still missing** — projects, AI agents' threads in a project's folder or a
+  worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
+  and the terminal are there (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
+  real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
+  mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
+  staging and discarding single files or hunks, stash, merge conflicts, pull requests from forks or
+  to another base in the UI; a worktree removed with its thread; threads continued from the phone
+  through `acp serve` (a project's folder on that computer).
+
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
   Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and
   the built-in AI assistant is an agent over the whole notebook — full-text search, queries,
@@ -50,7 +59,8 @@ done in the repository simply disappears from the list.
   key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
   real microphone on Windows; the browser's picture picker for a message in a real browser (CI's
   headless Chrome cannot open a file picker); the chat's notifications (an answer, a failure, a
-  question while the app is behind another: docs/UI.md "AI chat") on a real phone — Android shows
+  question while the app is behind another, an AI agent's own — `brulion_app_chat_notify`: docs/UI.md
+  "AI chat") on a real phone — Android shows
   them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; a side
   chat's pane (`/btw`) on a real phone (in place of the conversation, Back closing it) and a
   sub-conversation's wake with a real Claude Code and Codex.

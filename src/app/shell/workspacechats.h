@@ -33,7 +33,10 @@
 // parent gets a message (chat::wakeMessage) through its queue — after its running turn, kept over a
 // restart — and its partner a turn; MaxWakesPerHour at most, an archived parent's waits for the user.
 // Conversations untouched for a while are archived by themselves when the device's setting says so
-// (setAutoArchiveDays(): when the notebook is ready, then every hour).
+// (setAutoArchiveDays(): when the notebook is ready, then every hour). New conversations are answered
+// by the device's default partner (setDefaultPartner(), defaultPartner) — the assistant when it is
+// not set up here. The notifications of answers, failures and questions are kept in the workspace's
+// NotificationCenter too; an AI agent's own go through it (ChatControl's chatNotify).
 //
 // Single-threaded (the GUI thread).
 
@@ -60,6 +63,10 @@
 
 #include <functional>
 #include <utility>
+
+namespace brulion::gitcli {
+class Client;
+}
 
 namespace brulion::platform {
 struct PickedFile;
@@ -226,6 +233,11 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(brulion::shell::ChatSecrets *secrets READ secrets CONSTANT FINAL)
     /// The webhooks of scheduled conversations: their server (hookserver.h).
     Q_PROPERTY(brulion::shell::HookServer *hooks READ hooks CONSTANT FINAL)
+    /// Changes whenever a thread's checkpoints change (checkpoints() asks again).
+    Q_PROPERTY(int checkpointSerial READ checkpointSerial NOTIFY checkpointsChanged FINAL)
+    /// Who answers a new conversation (setDefaultPartner()): the device's choice while it answers
+    /// here (one of partners()), else "" — the built-in assistant.
+    Q_PROPERTY(QString defaultPartner READ defaultPartner NOTIFY defaultPartnerChanged FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -274,6 +286,45 @@ public:
     Q_INVOKABLE QString send(const QString &path, const QString &text, const QString &page = QString(),
                              const QStringList &pictures = QStringList(), const QString &partner = QString(),
                              const QString &parent = QString(), const QString &wakes = QString());
+
+    // ---- threads of Code mode (docs/CODE.md) ------------------------------------------------------
+    /// A new thread of the project `project` (Workspace.projects): a conversation whose page says
+    /// `project:` — and `worktree:` / `branch:` of the git worktree it works in ("" the project's
+    /// folder) —, answered by the AI agent `partner` ("" the default partner when it is an agent,
+    /// else the first agent), its first message `text` and `pictures`; no line in the journal.
+    /// Its path ("" when it did not start: why in turn("")'s failure).
+    Q_INVOKABLE QString startThread(const QString &project, const QString &text,
+                                    const QStringList &pictures = QStringList(), const QString &partner = QString(),
+                                    const QString &worktree = QString(), const QString &branch = QString());
+    /// startThread() as a sub-conversation of `parent` whose end wakes `wakes` ("" none): an AI
+    /// agent's or a script's task in a project (ChatControl's chatStart with `project`).
+    QString startThreadFrom(const QString &project, const QString &text, const QString &partner, const QString &parent,
+                            const QString &wakes);
+    /// Where the thread `path` works: {project, projectName, worktree, branch, folder (the
+    /// worktree's, else the project's), known (the project is on this device), exists (the folder
+    /// is there)}; {} for a conversation of the notebook.
+    Q_INVOKABLE QVariantMap threadPlace(const QString &path) const;
+    /// The folder the thread `path` works in ("" none: not a thread, or its project or worktree
+    /// is not on this device).
+    Q_INVOKABLE QString threadFolder(const QString &path) const;
+    /// The AI agents among partners() (a thread is answered by one) …
+    Q_INVOKABLE QVariantList agentPartners() const;
+    /// … and the one a new thread gets: the default partner when it is an agent, else the first
+    /// agent ("" none set up).
+    Q_INVOKABLE QString threadPartner() const;
+    /// The checkpoints of the thread `path`, oldest first: [{id, at ("yyyy-MM-dd HH:mm"), message
+    /// (the user's message the turn answered, counted from 1)}] — git snapshots of its folder taken
+    /// before each of its agent's turns (gitcli checkpoints: the Changes panel shows what a turn
+    /// changed and reverts it). Kept in the notebook's device state ("code/checkpoints"), at most
+    /// MaxCheckpoints a thread (older ones dropped from git too). `serial` only makes a binding ask
+    /// again.
+    Q_INVOKABLE QVariantList checkpoints(const QString &path, int serial = 0) const;
+    /// The newest one's id ("" none).
+    Q_INVOKABLE QString lastCheckpoint(const QString &path, int serial = 0) const;
+    static constexpr int MaxCheckpoints = 30;
+    int checkpointSerial() const { return m_checkpointSerial; }
+    /// Sets the thread's worktree and branch ("" both: back to the project's folder).
+    Q_INVOKABLE bool setThreadWorktree(const QString &path, const QString &worktree, const QString &branch);
     /// The AI's turn again on the conversation as it is (its last message the user's): after a
     /// failure or a stop. False when it cannot run now.
     Q_INVOKABLE bool retry(const QString &path);
@@ -384,6 +435,12 @@ public:
     QString notifyMode() const { return m_notifyMode; }
     /// Whether the app is active now (tests; default: QGuiApplication::applicationState()).
     void setAppActive(std::function<bool()> active) { m_appActive = std::move(active); }
+
+    // ---- who answers a new conversation ---------------------------------------------------------
+    /// The device's default partner (AppSettings::aiDefaultPartner: "" the assistant, `acp:<id>`,
+    /// an extension's chat command). defaultPartner() gives it while it answers here.
+    void setDefaultPartner(const QString &partner);
+    QString defaultPartner() const;
 
     // ---- who answers ----------------------------------------------------------------------------
     /// Who may answer: the built-in assistant, the extensions' chat commands
@@ -627,6 +684,9 @@ Q_SIGNALS:
     void settingsChanged();
     /// Who may answer changed (partners()).
     void partnersChanged();
+    /// defaultPartner() may have changed.
+    void defaultPartnerChanged();
+    void checkpointsChanged();
     void questionsChanged();
     void agentsChanged();
     void queueChanged();
@@ -645,7 +705,7 @@ Q_SIGNALS:
     /// A turn of `path` was answered, failed or asks something, and the user hears of it
     /// (setNotifyMode()): a system notification with `title`, the conversation's name, and
     /// `text` — the answer's first line, why it failed, what it asks (workspaceintegration.cpp
-    /// shows it; a click opens the conversation).
+    /// shows it; a click opens the conversation). Kept in the NotificationCenter as well.
     void notificationWanted(const QString &path, const QString &title, const QString &text);
     void agentChecked(const QString &id, bool ok, const QString &text);
     /// A pairing ended: `text` says with whom and which agents, or why not ("" nothing to say:
@@ -673,6 +733,14 @@ Q_SIGNALS:
     void dictationFailed(const QString &why);
 
 private:
+    /// Where a new thread works (startThread()).
+    struct ThreadPlace {
+        QString project;
+        QString worktree;
+        QString branch;
+    };
+    QString sendMessage(const QString &path, const QString &text, const QString &page, const QStringList &pictures,
+                        const QString &partner, const QString &parent, const QString &wakes, const ThreadPlace *thread);
     ChatTurn *find(const QString &path) const;
     bool runTurn(ChatTurn *turn);
     /// Starts the turn now (false: failed at once).
@@ -719,6 +787,18 @@ private:
     bool m_runningShown = false;
     QString m_notifyMode = QStringLiteral("background");
     std::function<bool()> m_appActive;
+    QString m_defaultPartner; // the device's choice (defaultPartner(): if it answers)
+    // Checkpoints of threads (checkpoints()): git, the turn waiting for its snapshot (key → token).
+    gitcli::Client *m_git = nullptr;
+    QHash<QString, int> m_checkpointing;
+    int m_checkpointToken = 0;
+    int m_checkpointSerial = 0;
+    /// The agent's turn of `t` after a snapshot of the thread's `folder` (checkpoints()).
+    void checkpointThenRun(ChatTurn *t, const QString &folder, int message, const QString &partner,
+                           const QVariantList &history, const QString &page);
+    void keepCheckpoint(const QString &path, const QString &folder, const QString &id, int message);
+    /// The app is active now (m_appActive, else the application's state).
+    bool appActive() const;
     QPointer<QObject> m_speech; // the recognizer connected to (platform::SpeechRecognizer)
 
     // The messages waiting for a turn (by path, lower case) and those held after a stop or a

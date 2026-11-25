@@ -822,6 +822,13 @@ void NotebookHost::stopTimer(const QString &extension)
         onExtensionTimer(extension, TimerSpec{});
 }
 
+QString NotebookHost::notify(const QString &extension, const NotifySpec &spec)
+{
+    if (!onNotify)
+        return u"not available here"_s;
+    return onNotify(extension, spec);
+}
+
 ModuleSource NotebookHost::module(const QString &requester, const QString &name)
 {
     ModuleSource out;

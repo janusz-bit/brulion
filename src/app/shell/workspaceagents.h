@@ -167,6 +167,10 @@ public:
     /// whether they may change the running app.
     static QString context(const QString &root, const QString &conversation, const QString &page, bool tools,
                            bool app = false, bool chat = false, const QString &device = QString());
+    /// The text a new session of a thread of Code mode starts with (English): the project `name`,
+    /// its folder (a worktree on `branch` when given), whether the app's chat tools (`chat`) and
+    /// live tools (`app`) are there — nothing of the notebook.
+    static QString codeContext(const QString &name, const QString &folder, const QString &branch, bool app, bool chat);
     /// The conversation so far as one text for a new session ("" when there is none before the
     /// newest message): `history` as WorkspaceChats builds it ({role, content}).
     static QString transcript(const QVariantList &history);
@@ -406,8 +410,23 @@ private:
     const AgentConfig *config(const QString &id) const;
     /// What every turn of the agent's process `p` sends: the folder, Brulion's tools (with its
     /// grant's live tools unless `child`, and with `chatToken` the chat's), the options.
+    /// `codeFolder`: a thread of Code mode works there (its session's cwd; Brulion's tools without
+    /// the notebook's: `mcp --no-notes`).
     acp::TurnInput baseInput(const AgentConfig &config, const Process *p, const QString &chatToken = QString(),
-                             bool child = false) const;
+                             bool child = false, const QString &codeFolder = QString()) const;
+    /// Where a conversation's agent works when it is a thread of Code mode (docs/CODE.md): its
+    /// folder (its worktree's, else its project's), the project's name and the worktree's branch;
+    /// `project` "" for a conversation of the notebook; `error` why it cannot run here.
+    struct CodePlace {
+        QString project;
+        QString name;
+        QString folder;
+        QString branch;
+        QString error;
+    };
+    CodePlace codePlace(const QString &path) const;
+    /// `file` (absolute, or relative to `folder`) as a clean absolute path ("" none).
+    static QString codeFile(const QString &folder, const QString &file);
     /// The grants of `p`'s process end (it stopped): its own and its conversations' chat grants.
     void releaseGrant(Process *p);
     /// The chat grant of the conversation `path` answered by `config`'s process (made when first
@@ -418,7 +437,7 @@ private:
     /// The handle of `p`'s session of `path` for the app's tools (made when first asked).
     QString appHandle(Process *p, const QString &path, bool control, const QString &chatToken);
     void handle(Process *p, const QString &key, const QJsonValue &id, const QString &method, const QJsonObject &params);
-    void readFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params);
+    void readFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params);
     void writeFile(acp::Client *client, const QString &key, const QJsonValue &id, const QJsonObject &params);
 
     // The files a running turn changes (m_tracking, by conversation) and those its last one

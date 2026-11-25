@@ -420,6 +420,14 @@ public:
     QVariantList timers() const;
     /// Ends the timer of `extension` without a word (the banner's ×).
     Q_INVOKABLE void stopTimer(const QString &extension);
+    /// What shows b.notify's notifications (docs/EXTENSIONS.md "Notifications"): called with the
+    /// extension's id and its title as the user knows it (title()), the notification's title ("" =
+    /// none given), text and page ("" = none); answers "" when it showed it, else why not in a few
+    /// English words ("turned off", "too many: at most 10 an hour") — b.notify's second value. The
+    /// app's notification center sets it; unset, b.notify says "not available here".
+    using NotifyHandler = std::function<QString(const QString &extensionId, const QString &extensionTitle,
+                                                const QString &title, const QString &text, const QString &page)>;
+    void setNotifyHandler(NotifyHandler handler) { m_notifyHandler = std::move(handler); }
 
     // ---- the app (b.app; appscripting.h, docs/EXTENSIONS.md "The app (`b.app`)") ---------------
     using AppHandler = std::function<QVariant(const QString &extension, const QString &operation,
@@ -716,6 +724,7 @@ private:
     int m_chatQuestionSerial = 0;
     // b.app (the app's handler, the revision of the UI items and themes, a route's hooks).
     AppHandler m_appHandler;
+    NotifyHandler m_notifyHandler; // setNotifyHandler()
     int m_appRevision = 0;
     bool m_appChangePending = false;
     QVariantMap m_lastRoute;

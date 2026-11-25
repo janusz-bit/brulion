@@ -234,7 +234,8 @@ stdenv.mkDerivation (finalAttrs: {
   '';
 
   doCheck = false;
-  # Without these the tests that need them skip themselves: git (tst_scripts_release), python3
+  # Without these the tests that need them skip themselves: git (tst_scripts_release, and real
+  # repositories for the "Code" mode's tst_gitcli_repo and tst_codegit), python3
   # (tst_scripts_wasm_single_file) and hostname (tst_scripts_bench_budget), node (tst_uibench_*),
   # fc-match and DejaVu (tst_fallback_fonts_*).
   nativeCheckInputs = [

@@ -249,22 +249,27 @@ void addMetaCommands(QList<Command> &out)
              {choice(u"shell"_s, {u"bash"_s, u"fish"_s, u"zsh"_s}, QT_TRANSLATE_NOOP("brulion::cli", "The shell"), true,
                      true)});
     out.append(c);
-    c = make(u"mcp"_s,
-             QT_TRANSLATE_NOOP("brulion::cli",
-                               "Serve the commands as MCP tools over standard input/output (for AI agents)"),
-             mcpCommand,
-             {flag(u"readOnly"_s, QT_TRANSLATE_NOOP("brulion::cli", "Offer only the tools that read")),
-              flag(u"allowDestructive"_s,
-                   QT_TRANSLATE_NOOP("brulion::cli",
-                                     "Also offer the destructive tools (page write, rename, move, delete …)")),
-              flag(u"appControl"_s,
-                   QT_TRANSLATE_NOOP("brulion::cli",
-                                     "Also offer the tools that drive the running app (app state, click, type, "
-                                     "screenshot …; its remote control must be on)")),
-              flag(u"appChat"_s,
-                   QT_TRANSLATE_NOOP("brulion::cli",
-                                     "Also offer the tools of the running app's AI chat (app chat …): what an AI agent "
-                                     "the app starts gets"))});
+    c = make(
+            u"mcp"_s,
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "Serve the commands as MCP tools over standard input/output (for AI agents)"),
+            mcpCommand,
+            {flag(u"readOnly"_s, QT_TRANSLATE_NOOP("brulion::cli", "Offer only the tools that read")),
+             flag(u"allowDestructive"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "Also offer the destructive tools (page write, rename, move, delete …)")),
+             flag(u"appControl"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "Also offer the tools that drive the running app (app state, click, type, "
+                                    "screenshot …; its remote control must be on)")),
+             flag(u"appChat"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "Also offer the tools of the running app's AI chat (app chat …): what an AI agent "
+                                    "the app starts gets")),
+             flag(u"noNotes"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli",
+                                    "Offer no notebook tools, only the running app's (with --app-chat or "
+                                    "--app-control): a thread of Code mode works in a project, not in the notebook"))});
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "JSON-RPC 2.0 over stdio, tools only; the notebook stays open and watched, so "
                                        "calls after the first are fast. Give the notebook with --vault."));

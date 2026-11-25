@@ -2980,6 +2980,15 @@ private Q_SLOTS:
         }
         r = cliLive({u"app"_s, u"chat"_s, u"schedule"_s, u"list"_s});
         QCOMPARE(requests.last().method, u"chatSchedules"_s);
+        // A notification through the app: its text, title, the page a click opens, a script's conversation.
+        r = cliLive({u"app"_s, u"chat"_s, u"notify"_s, u"Kopia"_s, u"gotowa:"_s, u"żółw"_s, u"--title"_s, u"Kopie"_s,
+                     u"--page"_s, u"Dom"_s, u"--conversation"_s, u"AI/Plan"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatNotify"_s);
+        QCOMPARE(requests.last().params, (QJsonObject{{u"text"_s, u"Kopia gotowa: żółw"_s},
+                                                      {u"title"_s, u"Kopie"_s},
+                                                      {u"page"_s, u"Dom"_s},
+                                                      {u"path"_s, u"AI/Plan"_s}}));
         // A secret asked for in the app's private card: what is asked, the file that comes back, the
         // user's refusal (exit 7); the call waits as long as asked and a margin.
         r = cliLive({u"app"_s, u"chat"_s, u"request-secret"_s, u"Token GitHuba"_s, u"--reason"_s,
@@ -3066,6 +3075,13 @@ private Q_SLOTS:
                             .value(u"instructions"_s)
                             .toString()
                             .contains(u"brulion_app_chat_start"_s));
+            QVERIFY(QJsonDocument::fromJson(lines.at(0))
+                            .object()
+                            .value(u"result"_s)
+                            .toObject()
+                            .value(u"instructions"_s)
+                            .toString()
+                            .contains(u"brulion_app_chat_notify"_s));
             QStringList tools;
             QJsonObject startProperties;
             for (const QJsonValue &t : QJsonDocument::fromJson(lines.last())
@@ -3080,9 +3096,9 @@ private Q_SLOTS:
             }
             // (Its wake: the parent woken instead of a wait.)
             QCOMPARE(startProperties.contains(u"wake"_s), !readOnly);
-            for (const char *tool :
-                 {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
-                  "brulion_app_chat_partners", "brulion_app_chat_schedule_list", "brulion_app_chat_request_secret"})
+            for (const char *tool : {"brulion_app_chat_list", "brulion_app_chat_read", "brulion_app_chat_wait",
+                                     "brulion_app_chat_partners", "brulion_app_chat_schedule_list",
+                                     "brulion_app_chat_request_secret", "brulion_app_chat_notify"})
                 QVERIFY2(tools.contains(QLatin1String(tool)), tool);
             // (The webhooks' server is no tool.)
             QVERIFY(!tools.contains(u"brulion_app_hooks_serve"_s));

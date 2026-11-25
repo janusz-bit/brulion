@@ -48,6 +48,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Extension API|Extension API]] — every function your code can call: reading and changing notes, views, questions, limits and error messages.
 - [[Extension recipes|Extension recipes]] — ready commands, views and reactions to copy.
 - [[AI|AI]] — the AI assistant and `b.ai`: Claude, OpenAI-compatible APIs or your own server, also on the phone.
+- [[Code mode|Code mode]] — projects and AI agents' threads, as in T3 Code: worktrees, changes, a terminal, pull requests.
 
 ## Handy
 - [[Search|Search]] — words in notes, PDFs, documents and pictures, filters, text recognition (OCR).

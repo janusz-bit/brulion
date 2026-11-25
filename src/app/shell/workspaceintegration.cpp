@@ -133,6 +133,30 @@ void wireReminders(AppController *app)
                          n.vault = ws->vault() ? ws->vault()->id() : QString();
                          guard->showMessage(n);
                      });
+    // A notification an AI agent, an extension or a script sends (NotificationCenter::post): a
+    // system notification while the app is not in front — one per sender's kind and what it opens, a
+    // newer one replacing it, apart from the turns' —, else (or with nowhere to show it) a toast
+    // with Open. The app lock may hide its text.
+    QObject::connect(ws->notifications(), &NotificationCenter::shown, notifier,
+                     [app, ws, guard](const QString &kind, const QString &open, const QString &title,
+                                      const QString &text, bool inApp) {
+                         if (inApp || !guard || !guard->canShow()) {
+                             app->toastOpen(title + u"\n"_s + text, u"info"_s, open);
+                             return;
+                         }
+                         const bool hide = app->appLock() && app->appLock()->hidesNotificationText();
+                         ScheduledNotification n;
+                         n.id = notify::MessageIdPrefix.toString() + kind + u':' + open;
+                         n.nativeId = nativeIdFor(n.id);
+                         n.title = hide ? u"Brulion"_s : title.left(ScheduledNotification::MaxTitleLength);
+                         n.body = hide ? QCoreApplication::translate("brulion::shell::WorkspaceIntegration",
+                                                                     "Something new: open Brulion to see it")
+                                       : text;
+                         n.at = ws->now();
+                         n.path = open;
+                         n.vault = ws->vault() ? ws->vault()->id() : QString();
+                         guard->showMessage(n);
+                     });
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_WASM)
     // Android taps reach AppController through main.cpp (AndroidBridge::activated), browser
     // clicks through its own WasmNotifier: only the desktop notifier opens notes from here.

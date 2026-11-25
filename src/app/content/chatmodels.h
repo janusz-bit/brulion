@@ -204,6 +204,11 @@ class ChatListModel : public WorkspaceListModel {
     /// How many are archived (with a query: of those that match it), listed or not / pinned.
     Q_PROPERTY(int archivedCount READ archivedCount NOTIFY sectionsChanged FINAL)
     Q_PROPERTY(int pinnedCount READ pinnedCount NOTIFY sectionsChanged FINAL)
+    /// Which conversations: "" those of the notebook (no `project:` — the AI chat), "*" every
+    /// thread of Code mode, a project's id its threads (docs/CODE.md).
+    Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged FINAL)
+    /// How many are listed (rows).
+    Q_PROPERTY(int count READ count NOTIFY sectionsChanged FINAL)
 
 public:
     enum Role {
@@ -226,9 +231,13 @@ public:
         TitleMatchesRole,
         MatchTextRole,
         MatchMatchesRole,
-        MatchLineRole
+        MatchLineRole,
+        ProjectRole
     };
     explicit ChatListModel(QObject *parent = nullptr);
+    QString project() const { return m_project; }
+    void setProject(const QString &project);
+    int count() const { return int(m_rows.size()); }
 
     QString locale() const { return m_locale; }
     void setLocale(const QString &locale);
@@ -260,6 +269,7 @@ Q_SIGNALS:
     void queryChanged();
     void showArchivedChanged();
     void sectionsChanged();
+    void projectChanged();
 
 protected:
     void refresh() override;
@@ -277,6 +287,7 @@ private:
         int messages = 0;
         bool pinned = false;
         bool archived = false;
+        QString project;
         /// Its messages for a query: {first line in the page, text, the text folded}.
         struct Text {
             int line = 0;
@@ -306,6 +317,7 @@ private:
         QString matchText;
         QList<int> matchMatches;
         int matchLine = -1;
+        QString project;
         bool operator==(const Row &) const = default;
     };
     QList<Entry> m_all;
@@ -313,6 +325,7 @@ private:
     QString m_locale = QStringLiteral("pl");
     QString m_query;
     bool m_showArchived = false;
+    QString m_project;
     int m_archivedCount = 0;
     int m_pinnedCount = 0;
     QList<QMetaObject::Connection> m_turnsChanged;
