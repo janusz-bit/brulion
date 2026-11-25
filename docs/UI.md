@@ -5666,7 +5666,9 @@ screen are created at once, as on any page, and the others in the background —
 asynchronous cache, one row per incubation slice — and scrolling creates no rows and releases
 none. The page stays whole until it has a quarter more rows than the threshold (no rows dropped
 and created again while rows are typed or pasted at it); a longer page keeps a cache of about two
-screens (1600 px). The price, measured on 2026-11-06 (docs/PERFORMANCE.md "Scrolling pages:
+screens (1600 px). Whole only while the app is in use (`MemoryPolicy.inUse`, "Navigation" → Away):
+away, the page keeps the rows near the view as a longer page does, and the others are made
+again, in the background, when it is back. The price, measured on 2026-11-06 (docs/PERFORMANCE.md "Scrolling pages:
 cheaper rows, pages created whole"): about 0.1–0.2 MB a row (a 1100-row outline 200 MB more), a
 new width — the window, the side panel, a phone turned — lays every row out again (36 → 337 ms on
 that outline), and the background filling makes some frames of 25–45 ms just after a page opens.
@@ -6262,6 +6264,13 @@ keep that down (numbers: docs/PERFORMANCE.md "Pictures and memory"):
   pages back by itself). Without it glibc kept what was freed: the process stayed as large as at
   its peak for as long as it ran (docs/ARCHITECTURE.md "Process memory").
   `BRULION_MEMORY_KEEPER=0` switches the giving back off (A/B).
+* **`MemoryPolicy`** (`src/app/ui/memorypolicy.h`; a QML singleton, `main()` makes the app's) says
+  what is kept for speed and when the app is away — the kept views' limits (`keptViews`,
+  `hiddenViewMs`), `buildAhead` / `inUse`, `letGo(hidden)`: "Navigation" → Away. What follows it:
+  `ViewKeeper` (the panes' hidden views), `AppShell.letGoPopups()`, `BlockEditor.wholePage` (a
+  page created whole keeps only the rows near the view while the app is away), `SpellCheck`
+  (`unload()`), the extensions' catalogs (`Engine::dropData()`), the on-device models (`LocalAi`,
+  `SemanticSearch`: an idle one leaves memory at once).
 
 For contributors:
 
@@ -7349,10 +7358,12 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   wheel and the scroll bars' paging scroll like a web browser in every Flickable ("Scrolling
   performance" → "Wheel and scroll bar"); `SmoothScroll.scrollBy(flickable, dx, dy)` scrolls the
   same way from QML. Static library `brulion_ui_smoothscroll`, tested by `tests/app/smoothscroll`.
-* **`NearView`** (attached, `NearView.near`), **`PictureDecode`** (singleton) and `MemoryKeeper`:
-  pictures hold their pixels only near the window's view, decoded for the place that shows them,
-  and freed memory goes back to the system ("Scrolling performance" → "Pictures hold their pixels
-  only near the view"). Static library `brulion_ui_memory`, tested by `tests/app/memory`.
+* **`NearView`** (attached, `NearView.near`), **`PictureDecode`** (singleton), `MemoryKeeper` and
+  **`MemoryPolicy`** (singleton): pictures hold their pixels only near the window's view, decoded
+  for the place that shows them, freed memory goes back to the system ("Scrolling performance" →
+  "Pictures hold their pixels only near the view"), and what the app keeps for speed goes while
+  it is away ("Navigation" → Away). Static library `brulion_ui_memory`, tested by
+  `tests/app/memory`.
 * **`TouchFlick`** (attached, `TouchFlick.enabled: true` on a Flickable / ListView): touch flicks
   at the finger's speed on Android ("Scrolling performance"); static library `brulion_ui_touch`
   (Qt Quick, no private Qt headers), tested by `tests/app/touch`. As an attached type it carries
