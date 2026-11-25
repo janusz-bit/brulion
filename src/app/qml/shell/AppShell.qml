@@ -856,15 +856,78 @@ FocusScope {
     // property is null; the open*() functions above make it through its *Now() function (also
     // --popup and the self-tests: the dialogs' objectNames are found once they exist).
 
+    // Built ahead only while the app is in use, and let go of — closed — once it is away
+    // (MemoryPolicy; docs/PERFORMANCE.md "Memory: only what is in use"): another program in front
+    // for a minute, or no window shown. In use again, they are built ahead again.
+
     /// The popups built ahead so far (prebuildNext()).
     property int _prebuilt: 0
     Timer {
         id: prebuildTimer
-        // After the kept views (ShellRouteView.preloadViews: 1.2 s after ready, then 0.4 s each).
+        // After the kept view (ShellRouteView.preloadViews: 1.2 s after ready).
         interval: shell._prebuilt === 0 ? 3000 : 400
         repeat: true
-        running: Workspace.ready && shell._prebuilt < 4
+        running: Workspace.ready && shell._prebuilt < 4 && MemoryPolicy.buildAhead
         onTriggered: shell.prebuildNext()
+    }
+    Connections {
+        target: MemoryPolicy
+        function onLetGo(hidden: bool): void { shell.letGoPopups() }
+        function onInUseChanged(): void {
+            if (MemoryPolicy.inUse)
+                shell._prebuilt = 0
+        }
+    }
+    /// A popup that is not open (none counts too).
+    function closedPopup(popup: T.Popup): bool {
+        return popup === null || !popup.visible
+    }
+    /// Lets go of a popup's Loader unless its popup is open; built ahead again, it is made in
+    /// pieces again (its *Now() function made the Loader synchronous).
+    function letGoLoader(popupLoader: Loader): void {
+        if (!shell.closedPopup(popupLoader.item as T.Popup))
+            return
+        popupLoader.active = false
+        popupLoader.asynchronous = true
+    }
+    /// The app is away: every closed popup and dialog that keeps nothing between two openings goes
+    /// (made again when it opens, or built ahead once the app is in use again).
+    function letGoPopups(): void {
+        shell.letGoLoader(paletteLoader)
+        shell.letGoLoader(switcherLoader)
+        shell.letGoLoader(captureLoader)
+        topBar.letGoMoreMenu()
+        if (shell.newPage !== null && shell.closedPopup(shell.newPage)) {
+            shell.newPage.destroy()
+            shell.newPage = null
+        }
+        if (shell.rename !== null && shell.closedPopup(shell.rename)) {
+            shell.rename.destroy()
+            shell.rename = null
+        }
+        if (shell.moveDialog !== null && shell.closedPopup(shell.moveDialog)) {
+            shell.moveDialog.destroy()
+            shell.moveDialog = null
+        }
+        shell.letGoDialogs()
+    }
+    function letGoDialogs(): void {
+        if (shell.about !== null && shell.closedPopup(shell.about)) {
+            shell.about.destroy()
+            shell.about = null
+        }
+        if (shell.deleteDialog !== null && shell.closedPopup(shell.deleteDialog)) {
+            shell.deleteDialog.destroy()
+            shell.deleteDialog = null
+        }
+        if (shell.extensionSettings !== null && shell.closedPopup(shell.extensionSettings)) {
+            shell.extensionSettings.destroy()
+            shell.extensionSettings = null
+        }
+        if (shell.extensionCopy !== null && shell.closedPopup(shell.extensionCopy)) {
+            shell.extensionCopy.destroy()
+            shell.extensionCopy = null
+        }
     }
     /// Starts building the next popup used most, in pieces over several frames (an asynchronous
     /// Loader; opened before it is ready, the rest is made at once).

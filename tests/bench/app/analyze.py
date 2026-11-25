@@ -830,6 +830,14 @@ def m_memory(run):
             out["qml_types:" + step] = m["qmlTypes"]
     if last:
         out["peak_rss_mb"] = last["VmHWM"] / 1024.0
+    for name, back in mk.items():
+        if not name.startswith("back_picture"):
+            continue
+        # The window after it was away and hidden: the pixels that differ from before (-1: no
+        # picture), and those off by more than a quarter of a channel's range — not drawn as before.
+        step = name[len("back_picture"):]
+        out["back_differing_pixels" + step] = back.get("differingPixels", -1)
+        out["back_changed_pixels" + step] = back.get("changedPixels", -1)
     return out
 
 

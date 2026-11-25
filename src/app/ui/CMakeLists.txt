@@ -121,13 +121,16 @@ brulion_set_warnings(brulion_ui_scroll)
 # an item whether it is in or near its window's view — a picture holds its pixels only there —;
 # PictureDecode (picturedecode.h), the size a picture is decoded at for the place that shows it;
 # MemoryKeeper (memorykeeper.h), which hands freed memory back to the system once the app is quiet
-# (platform/processmemory.h). Qt Quick's public API only; a static library so that tests/app/memory
-# drives them with a window without the app; registered as "NearView" and "PictureDecode" by
-# qmlforeign.h, the keeper is made by main().
+# (platform/processmemory.h); MemoryPolicy (memorypolicy.h), which says what is kept for speed and
+# lets go of everything hidden once the app is away (docs/PERFORMANCE.md "Memory: only what is in
+# use"). Qt Quick's public API only; a static library so that tests/app/memory
+# drives them with a window without the app; registered as "NearView", "PictureDecode" and
+# "MemoryPolicy" by qmlforeign.h, the keeper and the policy are made by main().
 qt_add_library(brulion_ui_memory STATIC
     nearview.h nearview.cpp
     picturedecode.h picturedecode.cpp
     memorykeeper.h memorykeeper.cpp
+    memorypolicy.h memorypolicy.cpp
 )
 target_include_directories(brulion_ui_memory PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_ui_memory PUBLIC Qt6::Core Qt6::Gui Qt6::Quick PRIVATE brulion_platform)
@@ -188,12 +191,15 @@ if(NOT ANDROID)
 endif()
 # The bundled text fonts (uifonts.h; assets/fonts/ui, subsets of Inter, Literata and JetBrains Mono
 # under the SIL OFL 1.1, made by scripts/ui-fonts.py) as resources ":/fonts/ui/*.ttf" (~1.4 MB),
-# on every platform, Android and the browser included.
+# on every platform, Android and the browser included. Stored as they are (--no-compress):
+# installBundledFonts() hands the font engine the program's own data, and no copy of the files
+# is held on the heap (docs/PERFORMANCE.md "Memory: only what is in use").
 file(GLOB _brulion_ui_font_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/fonts/ui/*.ttf)
 qt_add_resources(brulion_ui_fonts brulion_ui_text_fonts
     PREFIX /fonts/ui
     BASE ${PROJECT_SOURCE_DIR}/assets/fonts/ui
-    FILES ${_brulion_ui_font_files})
+    FILES ${_brulion_ui_font_files}
+    OPTIONS --no-compress)
 brulion_set_warnings(brulion_ui_fonts)
 
 # Qt's own Polish texts (standard dialog buttons, the fallback QFileDialog of FilePicker —

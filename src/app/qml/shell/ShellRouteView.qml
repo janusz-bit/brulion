@@ -11,11 +11,20 @@ import Brulion
 // Search, Tasks, Calendar — are kept instead, hidden, once shown: going back to one shows it again
 // at once (where it was scrolled, its filters) instead of building it anew, which took 0.5–1 s on
 // a phone (docs/PERFORMANCE.md "Switching views"). A kept view is hidden with its editing ended
-// (`endEditing()`), and keeps the route it was shown with; the kept views go when the pane shows
-// no route (a split pane closed). Nothing else keeps a view (the shell self-test's "5n"). A hidden
+// (`endEditing()`), and keeps the route it was shown with. Kept, not hoarded (ViewKeeper,
+// MemoryPolicy; docs/PERFORMANCE.md "Memory: only what is in use"): the two shown most recently
+// stay, for five minutes after the last switch of views, and none while the app is away; they
+// all go when the pane shows no route (a split pane closed). Nothing else keeps a view (the shell
+// self-test's "5n"). A hidden
 // kept view never keeps the keyboard: given it (a popup closed hands it back to an item Qt
 // remembered from long ago, a view's own forceActiveFocus()), it passes it to the view shown at
 // once — `focusShownView()` (docs/UI.md "Keyboard shortcuts (desktop)").
+//
+// Every view is loaded from its file when it is first shown (`viewSource()`, `Loader.setSource`
+// with the view's first properties), never named as a type here: a QML file named in another one
+// is loaded with it, and this file named all of them — the whole app's QML was loaded, and its
+// compiled units held, before the first window (docs/PERFORMANCE.md "QML files loaded when first
+// used"). `Binding`s hand the views their route and the pane's state afterwards.
 //
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
@@ -146,36 +155,66 @@ Item {
         default: return ""
         }
     }
-    function componentFor(view: string): Component {
+    /// The QML file of the view `view` (an empty URL for a name without one).
+    function viewSource(view: string): url {
         switch (view) {
-        case "page": return pageView
-        case "habits": return habitsView
-        case "gym": return gymView
-        case "flashcards": return flashcardsView
-        case "console": return consoleView
-        case "chat": return chatView
-        case "extension": return extensionView
-        case "graph": return graphView
+        case "journals":
+        case "journal": return Qt.resolvedUrl("../views/JournalsView.qml")
+        case "allPages": return Qt.resolvedUrl("../views/AllPagesView.qml")
+        case "search": return Qt.resolvedUrl("../views/SearchView.qml")
+        case "tasks": return Qt.resolvedUrl("../views/TasksView.qml")
+        case "calendar": return Qt.resolvedUrl("../views/CalendarView.qml")
+        case "page": return Qt.resolvedUrl("../views/PageView.qml")
+        case "habits": return Qt.resolvedUrl("../views/HabitsView.qml")
+        case "gym": return Qt.resolvedUrl("../views/GymView.qml")
+        case "flashcards": return Qt.resolvedUrl("../views/FlashcardsView.qml")
+        case "console": return Qt.resolvedUrl("../views/ConsoleView.qml")
+        case "chat": return Qt.resolvedUrl("../views/ChatView.qml")
+        case "extension": return Qt.resolvedUrl("../views/ExtensionRouteView.qml")
+        case "graph": return Qt.resolvedUrl("../views/GraphView.qml")
         case "tags":
-        case "tag": return tagsView
-        case "sync": return syncView
-        case "importExport": return importExportView
-        case "history": return historyView
-        case "trash": return trashView
-        case "cleanup": return cleanupView
-        case "replace": return replaceView
-        case "settings": return settingsView
-        case "logs": return logsView
-        case "drawing": return drawingView
-        case "canvas": return canvasView
-        default: return null
+        case "tag": return Qt.resolvedUrl("../views/TagsView.qml")
+        case "sync": return Qt.resolvedUrl("../views/SyncView.qml")
+        case "importExport": return Qt.resolvedUrl("../views/ImportExportView.qml")
+        case "history": return Qt.resolvedUrl("../views/HistoryView.qml")
+        case "trash": return Qt.resolvedUrl("../views/TrashView.qml")
+        case "cleanup": return Qt.resolvedUrl("../views/CleanupView.qml")
+        case "replace": return Qt.resolvedUrl("../views/ReplaceView.qml")
+        case "settings": return Qt.resolvedUrl("../views/SettingsView.qml")
+        case "logs": return Qt.resolvedUrl("../diag/LogsView.qml")
+        case "drawing": return Qt.resolvedUrl("../drawing/DrawingView.qml")
+        case "canvas": return Qt.resolvedUrl("../canvas/CanvasView.qml")
+        default: return ""
         }
     }
+    /// The properties the view `view` starts with — its route, and what else it takes of the pane
+    /// (`shown`: it is made to be shown now, not built ahead). The Bindings below keep them
+    /// current afterwards: a view must not start without its route.
+    function firstValues(view: string, shown: bool): var {
+        switch (view) {
+        case "journals":
+        case "journal":
+            return { route: root.journalsRoute, inSidePanel: root.inSidePanel, paneActive: root.paneActive && shown }
+        case "allPages": return { route: root.allPagesRoute }
+        case "search": return { route: root.searchRoute }
+        case "tasks": return { route: root.tasksRoute }
+        case "calendar": return { route: root.calendarRoute, covered: root.covered && shown }
+        case "page": return { route: root.otherRoute, inSidePanel: root.inSidePanel, paneActive: root.paneActive }
+        case "chat":
+        case "drawing":
+        case "canvas": return { route: root.otherRoute, inSidePanel: root.inSidePanel }
+        default: return { route: root.otherRoute }
+        }
+    }
+    /// The view shown by `loader` (not one of the kept ones): its name while its file is loaded.
+    property string otherView
+    readonly property bool otherInSidePanel: otherView === "page" || otherView === "chat" || otherView === "drawing"
+                                             || otherView === "canvas"
     /// Show the view of `route`: its route first (a view made now starts with it), then the view.
     function showRoute(): void {
         // (Not viewName: its binding follows the route only after this handler.)
-        const name = AppController.routeText(root.route, "view")
-        const kept = root.keptKey(name)
+        const name = "" + AppController.routeText(root.route, "view")
+        const kept = "" + root.keptKey(name)
         const key = kept !== "" ? kept : name
         // A kept view being hidden ends its editing (the touch keyboard goes with it).
         if (key !== root.shownKey && root.keepViews && root.keptKey(root.shownKey) !== "")
@@ -194,16 +233,81 @@ Item {
             searchLoader.kept = false
             tasksLoader.kept = false
             calendarLoader.kept = false
+            keeper.clear()
+        }
+        // The view's file and its first properties, before the Loader that shows it is active.
+        if (kept !== "") {
+            root.prepare(kept, true)
+            root.showOther("")
+        } else {
+            root.showOther(name)
         }
         root.shownKey = key
+        if (root.keepViews && name !== "") {
+            keeper.show(kept)
+            if (root.preloadViews && kept !== "" && kept !== "journals" && root.recentView !== kept) {
+                root.recentView = kept
+                AppSettings.setValue("ui/recentView", kept)
+            }
+        }
+    }
+    /// What the next setSource() loads: read from properties, as compiled code wants a call's
+    /// arguments ("Compiled QML": no value another call may have changed).
+    property url _source
+    property var _values: ({})
+    /// The file `loader` shows, as text ("": none).
+    property string otherFile
+    /// The kept view `key` gets its file and the properties it starts with, unless it exists
+    /// (`shown`: it is about to be shown, not built ahead).
+    function prepare(key: string, shown: bool): void {
+        const kept = root.keptLoader(key)
+        if (kept === null || kept.active)
+            return
+        root._source = root.viewSource(key)
+        root._values = root.firstValues(key, shown)
+        kept.setSource(root._source, root._values)
+    }
+    /// `loader` shows the view `name` ("": none — a kept view is shown). The same file again (a
+    /// page after a page, "tags" after "tag") keeps its view: only its route changed.
+    function showOther(name: string): void {
+        root._source = root.viewSource(name)
+        const file = "" + root._source
+        if (file === root.otherFile) {
+            root.otherView = name
+            return
+        }
+        // (The view before, if any, is deleted on the event loop's next turn.)
+        root.otherView = ""
+        root.otherFile = file
+        if (file === "") {
+            loader.source = ""
+            return
+        }
+        root._values = root.firstValues(name, true)
+        loader.setSource(root._source, root._values)
+        root.otherView = name
     }
 
-    /// The views built ahead, in this order, and the plain route each starts with.
-    readonly property list<string> preloadOrder: ["tasks", "calendar", "journals", "allPages", "search"]
-    /// The notebook is open and indexed: building views ahead may start (and goes on).
+    /// Which hidden kept views stay (the most recently shown, for a while), and lets go of the
+    /// others: sets their `kept` to false.
+    ViewKeeper {
+        id: keeper
+        limit: MemoryPolicy.keptViews
+        idleMs: MemoryPolicy.hiddenViewMs
+    }
+    /// The hidden kept views of this pane, the one shown last first (tests, the self-test).
+    readonly property list<string> hiddenViews: keeper.hidden
+
+    /// The kept view the user went to last, on this device ("": none yet): the one built ahead.
+    property string recentView: "" + AppSettings.value("ui/recentView", "")
+    /// Every kept view, in the order they are built ahead with MemoryPolicy switched off.
+    readonly property list<string> allKept: ["tasks", "calendar", "journals", "allPages", "search"]
+    /// Views were built ahead for this notebook (once: what goes later is made when it is shown).
+    property bool _preloaded: false
+    /// The notebook is open and indexed, and the app in use: building ahead may start (and go on).
     readonly property bool preloadAllowed: root.preloadViews && root.keepViews && root.shownKey !== ""
-                                           && Workspace.ready && !Workspace.indexing
-    onPreloadAllowedChanged: if (preloadAllowed) preloadTimer.restart()
+                                           && Workspace.ready && !Workspace.indexing && MemoryPolicy.buildAhead
+    onPreloadAllowedChanged: if (preloadAllowed && !_preloaded) preloadTimer.restart()
     function keptLoader(key: string): KeptLoader {
         switch (key) {
         case "journals": return journalsLoader
@@ -214,26 +318,40 @@ Item {
         default: return null
         }
     }
-    /// Starts building the next kept view that does not exist yet (none left: nothing). The next one
-    /// follows once it is loaded (KeptLoader.onLoaded → preloadTimer).
+    /// Builds the kept view `key` ahead, hidden, with its plain route. False: it exists already.
+    function preload(key: string): bool {
+        const next = root.keptLoader(key)
+        if (next === null || next.active)
+            return false
+        switch (key) {
+        case "journals": if (!Js.hasKey(root.journalsRoute, "view")) root.journalsRoute = { view: "journals" }; break
+        case "allPages": if (!Js.hasKey(root.allPagesRoute, "view")) root.allPagesRoute = { view: "allPages" }; break
+        case "search": if (!Js.hasKey(root.searchRoute, "view")) root.searchRoute = { view: "search" }; break
+        case "tasks": if (!Js.hasKey(root.tasksRoute, "view")) root.tasksRoute = { view: "tasks" }; break
+        case "calendar": if (!Js.hasKey(root.calendarRoute, "view")) root.calendarRoute = { view: "calendar" }; break
+        }
+        root.prepare(key, false)
+        next.kept = true
+        keeper.built(key)
+        return true
+    }
+    /// Builds ahead what is worth its memory: the one view the user went to last (the others are
+    /// made when they are first shown). With MemoryPolicy switched off, every kept view, one
+    /// after another (KeptLoader.onLoaded → preloadTimer).
     function preloadNext(): void {
         if (!root.preloadAllowed)
             return
-        for (let i = 0; i < root.preloadOrder.length; ++i) {
-            const key = root.preloadOrder[i]
-            const next = root.keptLoader(key)
-            if (next === null || next.active)
-                continue
-            switch (key) {
-            case "journals": if (!Js.hasKey(root.journalsRoute, "view")) root.journalsRoute = { view: "journals" }; break
-            case "allPages": if (!Js.hasKey(root.allPagesRoute, "view")) root.allPagesRoute = { view: "allPages" }; break
-            case "search": if (!Js.hasKey(root.searchRoute, "view")) root.searchRoute = { view: "search" }; break
-            case "tasks": if (!Js.hasKey(root.tasksRoute, "view")) root.tasksRoute = { view: "tasks" }; break
-            case "calendar": if (!Js.hasKey(root.calendarRoute, "view")) root.calendarRoute = { view: "calendar" }; break
-            }
-            next.kept = true
+        if (!MemoryPolicy.switchedOff) {
+            if (!root._preloaded)
+                root.preload(root.keptKey(root.recentView))
+            root._preloaded = true
             return
         }
+        for (let i = 0; i < root.allKept.length; ++i) {
+            if (root.preload(root.allKept[i]))
+                return
+        }
+        root._preloaded = true
     }
     /// After the notebook is ready, and between two views: the app's own work comes first.
     Timer {
@@ -243,15 +361,27 @@ Item {
     }
     /// A kept view finished loading: the next one a moment later.
     function preloaded(): void {
-        if (root.preloadAllowed) {
+        if (root.preloadAllowed && !root._preloaded) {
             preloadTimer.interval = 400
             preloadTimer.restart()
         }
     }
+    Connections {
+        target: Workspace
+        // Another notebook: its own views may be built ahead.
+        function onOpenChanged(): void { root._preloaded = false }
+    }
 
     onRouteChanged: showRoute()
     onKeepViewsChanged: showRoute()
-    Component.onCompleted: showRoute()
+    Component.onCompleted: {
+        keeper.add("journals", journalsLoader)
+        keeper.add("allPages", allPagesLoader)
+        keeper.add("search", searchLoader)
+        keeper.add("tasks", tasksLoader)
+        keeper.add("calendar", calendarLoader)
+        showRoute()
+    }
 
     // A view shown (made now or kept): it fades in, and gets the state restoreViewState() kept.
     onViewChanged: {
@@ -285,15 +415,30 @@ Item {
         }
     }
 
-    // Views not kept: one at a time.
+    // Views not kept: one at a time (showOther()).
     Loader {
         id: loader
         anchors.fill: parent
         focus: root.shownLoader === loader
-        sourceComponent: root.componentFor(root.shownKey)
     }
-    // The kept views: made when first shown (or built ahead, `kept` set by preloadNext()), then
-    // (`kept`, with keepViews) only hidden. Built ahead while hidden: in pieces over several frames;
+    Binding { target: loader.item; property: "route"; value: root.otherRoute; restoreMode: Binding.RestoreNone }
+    Binding {
+        target: loader.item
+        when: root.otherInSidePanel
+        property: "inSidePanel"
+        value: root.inSidePanel
+        restoreMode: Binding.RestoreNone
+    }
+    Binding {
+        target: loader.item
+        when: root.otherView === "page"
+        property: "paneActive"
+        value: root.paneActive
+        restoreMode: Binding.RestoreNone
+    }
+    // The kept views: made when first shown (or built ahead, `kept` set by preload()), then
+    // (`kept`, with keepViews) only hidden — until the keeper lets go of them (`kept` false).
+    // Built ahead while hidden: in pieces over several frames;
     // shown before it is ready, the rest at once (asynchronous turned off finishes it).
     component KeptLoader: Loader {
         required property bool shown
@@ -316,65 +461,53 @@ Item {
         id: journalsLoader
         shown: root.shownKey === "journals"
         keepViews: root.keepViews
-        sourceComponent: journalsView
         onLoaded: root.preloaded()
         onHiddenFocused: root.focusShownView()
+    }
+    Binding { target: journalsLoader.item; property: "route"; value: root.journalsRoute; restoreMode: Binding.RestoreNone }
+    Binding { target: journalsLoader.item; property: "inSidePanel"; value: root.inSidePanel; restoreMode: Binding.RestoreNone }
+    Binding {
+        target: journalsLoader.item
+        property: "paneActive"
+        value: root.paneActive && journalsLoader.shown
+        restoreMode: Binding.RestoreNone
     }
     KeptLoader {
         id: allPagesLoader
         shown: root.shownKey === "allPages"
         keepViews: root.keepViews
-        sourceComponent: allPagesView
         onLoaded: root.preloaded()
         onHiddenFocused: root.focusShownView()
     }
+    Binding { target: allPagesLoader.item; property: "route"; value: root.allPagesRoute; restoreMode: Binding.RestoreNone }
     KeptLoader {
         id: searchLoader
         shown: root.shownKey === "search"
         keepViews: root.keepViews
-        sourceComponent: searchView
         onLoaded: root.preloaded()
         onHiddenFocused: root.focusShownView()
     }
+    Binding { target: searchLoader.item; property: "route"; value: root.searchRoute; restoreMode: Binding.RestoreNone }
     KeptLoader {
         id: tasksLoader
         shown: root.shownKey === "tasks"
         keepViews: root.keepViews
-        sourceComponent: tasksView
         onLoaded: root.preloaded()
         onHiddenFocused: root.focusShownView()
     }
+    Binding { target: tasksLoader.item; property: "route"; value: root.tasksRoute; restoreMode: Binding.RestoreNone }
     KeptLoader {
         id: calendarLoader
         shown: root.shownKey === "calendar"
         keepViews: root.keepViews
-        sourceComponent: calendarView
         onLoaded: root.preloaded()
         onHiddenFocused: root.focusShownView()
     }
-
-    Component { id: journalsView; JournalsView { route: root.journalsRoute; inSidePanel: root.inSidePanel; paneActive: root.paneActive && journalsLoader.shown } }
-    Component { id: pageView; PageView { route: root.otherRoute; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }
-    Component { id: calendarView; CalendarView { route: root.calendarRoute; covered: root.covered && calendarLoader.shown } }
-    Component { id: tasksView; TasksView { route: root.tasksRoute } }
-    Component { id: habitsView; HabitsView { route: root.otherRoute } }
-    Component { id: gymView; GymView { route: root.otherRoute } }
-    Component { id: flashcardsView; FlashcardsView { route: root.otherRoute } }
-    Component { id: consoleView; ConsoleView { route: root.otherRoute } }
-    Component { id: chatView; ChatView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
-    Component { id: extensionView; ExtensionRouteView { route: root.otherRoute } }
-    Component { id: graphView; GraphView { route: root.otherRoute } }
-    Component { id: searchView; SearchView { route: root.searchRoute } }
-    Component { id: allPagesView; AllPagesView { route: root.allPagesRoute } }
-    Component { id: tagsView; TagsView { route: root.otherRoute } }
-    Component { id: syncView; SyncView { route: root.otherRoute } }
-    Component { id: importExportView; ImportExportView { route: root.otherRoute } }
-    Component { id: historyView; HistoryView { route: root.otherRoute } }
-    Component { id: trashView; TrashView { route: root.otherRoute } }
-    Component { id: cleanupView; CleanupView { route: root.otherRoute } }
-    Component { id: replaceView; ReplaceView { route: root.otherRoute } }
-    Component { id: settingsView; SettingsView { route: root.otherRoute } }
-    Component { id: logsView; LogsView { route: root.otherRoute } }
-    Component { id: drawingView; DrawingView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
-    Component { id: canvasView; CanvasView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
+    Binding { target: calendarLoader.item; property: "route"; value: root.calendarRoute; restoreMode: Binding.RestoreNone }
+    Binding {
+        target: calendarLoader.item
+        property: "covered"
+        value: root.covered && calendarLoader.shown
+        restoreMode: Binding.RestoreNone
+    }
 }

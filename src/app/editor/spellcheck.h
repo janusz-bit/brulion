@@ -1,8 +1,12 @@
 // SpellCheck — spell checking for the editor (docs/UI.md "Spell checking"; QML singleton
 // `SpellCheck` of the module Brulion, registered in editorforeign.h). Never blocks the UI thread:
 // the checker (spell::SpellChecker over the platform's backends, src/platform/spellbackends.h)
-// runs on a worker thread of its own, made when spell checking is first needed; the UI thread
-// only reads verdicts it already has.
+// runs on a worker thread of its own, made when the first word is asked about; the UI thread
+// only reads verdicts it already has. The worker goes again, with its dictionaries (Hunspell's
+// Polish and English ones hold about 20 MB), once nothing was asked for `idleMs` or the app is
+// away (unload(), docs/PERFORMANCE.md "Memory: only what is in use"): the verdicts stay, and the
+// next unknown word brings the worker back (the dictionaries are read again: its verdict comes a
+// moment later).
 //
 //   SpellCheck::Verdict v = spell->verdict(u"zażółć"_s);   // Pending the first time: queued
 //   // … checked(changed) — the verdicts of queued words are in: re-highlight what was pending
@@ -83,6 +87,8 @@ public:
     static constexpr int MaxSuggestions = 6;
     /// Texts whose misspelled words wrongWords() keeps; more and the cache starts again.
     static constexpr int MaxCachedTexts = 2000;
+    /// The worker and its dictionaries go when nothing was asked for this long.
+    static constexpr int DefaultIdleMs = 90 * 1000;
 
     /// `available`: the languages backends can be made for; `factory` makes them (on the worker
     /// thread).
@@ -143,6 +149,15 @@ public:
     /// empty, and words added from now on are not stored (no personalWordsEdited()).
     Q_INVOKABLE void useWordLists(const QVariantMap &lists);
 
+    /// The worker and its dictionaries go when nothing was asked for this long (0: never).
+    int idleMs() const { return m_idleMs; }
+    void setIdleMs(int ms);
+    /// The worker exists: its dictionaries are in memory.
+    bool loaded() const { return m_thread != nullptr; }
+    /// Let the worker and its dictionaries go now, unless words are on their way (the verdicts
+    /// known stay; the next unknown word brings it back). True: it went.
+    bool unload();
+
     /// Nothing queued or in flight (tests).
     Q_INVOKABLE bool idle() const { return m_inFlight.isEmpty() && !m_flushTimer.isActive(); }
     /// Process events until nothing is queued or in flight (tests), at most `ms`.
@@ -167,6 +182,8 @@ Q_SIGNALS:
     void suggestionsReady(const QString &word, const QStringList &suggestions);
     void wholePageChanged();
     void revisionChanged();
+    /// The worker and its dictionaries went (unload(): their memory is free).
+    void unloaded();
 
 private:
     /// What wrongWords() found in a text, and under which verdicts.
@@ -180,7 +197,9 @@ private:
 
     void updateLanguages();
     void ensureWorker();
+    void sendSettings();
     void stopWorker();
+    void used();
     void configure(bool forget);
     void flush();
     void onChecked(int generation, const QStringList &words, const QList<bool> &right);
@@ -209,6 +228,8 @@ private:
     int m_epoch = 0;
     QHash<QString, TextWords> m_textWords;
     QTimer m_flushTimer;
+    QTimer m_idleTimer; ///< unload() when it fires
+    int m_idleMs = DefaultIdleMs;
     std::unique_ptr<QThread> m_thread;
     SpellWorker *m_worker = nullptr; ///< deleted on m_thread when it finishes
 };

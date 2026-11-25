@@ -68,6 +68,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/replacesession.h ${_brulion_shell_dir}/replacesession.cpp
     ${_brulion_shell_dir}/shortcutmap.h ${_brulion_shell_dir}/shortcutmap.cpp
     ${_brulion_shell_dir}/traypopup.h ${_brulion_shell_dir}/traypopup.cpp
+    ${_brulion_shell_dir}/viewkeeper.h ${_brulion_shell_dir}/viewkeeper.cpp
     ${_brulion_shell_dir}/viewtraits.h ${_brulion_shell_dir}/viewtraits.cpp
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
     ${_brulion_shell_dir}/workspacequery.cpp
@@ -129,6 +130,7 @@ target_link_libraries(brulion_shell
             brulion_core_github brulion_core_caldav brulion_core_clipper
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
+            brulion_ui_memory # viewkeeper.cpp: MemoryPolicy's letGo()
             brulion_ui_scale) # appsettings.cpp, appcontroller.cpp: the interface scale
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,

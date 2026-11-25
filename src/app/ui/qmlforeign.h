@@ -7,8 +7,9 @@
 // (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; SmoothScroll (brulion_ui_smoothscroll),
 // the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons (brulion_ui_icons),
 // BIcon's image URLs; FilePicker (brulion_ui_files), the system's file picker (`FilePicker { fileMode:
-// FilePicker.OpenFiles }`); and NearView and PictureDecode (brulion_ui_memory): whether an item is in or
-// near its window's view, and the size a picture is decoded at for the place that shows it.
+// FilePicker.OpenFiles }`); and NearView, PictureDecode and MemoryPolicy (brulion_ui_memory): whether an
+// item is in or near its window's view, the size a picture is decoded at for the place that shows it, and
+// what the app keeps for speed (the instance main() made).
 #pragma once
 
 #include "dateshelper.h"
@@ -20,6 +21,7 @@
 #include "keyboardinsets.h"
 #include "later.h"
 #include "mapholder.h"
+#include "memorypolicy.h"
 #include "nearview.h"
 #include "picturedecode.h"
 #include "rowscroll.h"
@@ -174,6 +176,22 @@ struct NearViewForeign {
     QML_NAMED_ELEMENT(NearView)
     QML_UNCREATABLE("NearView is an attached property: Image { source: frame.NearView.near ? url : \"\" }")
     QML_ATTACHED(brulion::ui::NearView)
+};
+
+// What the app keeps for speed and when it lets go of it (memorypolicy.h): `MemoryPolicy.keptViews`.
+struct MemoryPolicyForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::MemoryPolicy)
+    QML_NAMED_ELEMENT(MemoryPolicy)
+    QML_SINGLETON
+public:
+    /// The app's policy (main() makes it), else one of this engine's own (QML tooling, tests of
+    /// single components: nothing is followed, the app stays in use).
+    static MemoryPolicy *create(QQmlEngine *, QJSEngine *)
+    {
+        MemoryPolicy *policy = MemoryPolicy::instance();
+        return policy ? cppOwned(policy) : new MemoryPolicy;
+    }
 };
 
 // The size a picture is decoded at for the place that shows it (picturedecode.h).

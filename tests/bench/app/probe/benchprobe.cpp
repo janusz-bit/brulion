@@ -30,8 +30,11 @@
 //                    pixmap cache expire: 30 s)
 //   BENCH_SETTLE_MS  memory: the wait after the start has settled, for what the app builds ahead
 //                    (default 9000)
-//   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 75000 lets everything
-//                    the app gives up when it is not used go — dictionaries, kept views, caches)
+//   BENCH_LONG_REST_MS memory: a second rest at the end (default 0: none; 100000 lets what
+//                    goes by itself when it is not used go — the spell checker's dictionaries)
+//   BENCH_AWAY       0: memory: without the steps of an app that is away (mem:away, away_hidden, back)
+//   BENCH_AWAY_VIEWS 1: memory: those steps for every view of the tour too (back_picture:<view>)
+//   BENCH_PICTURES_DIR memory: where the window's pictures before it was away and back again go
 //   BENCH_QML_TYPES  1: memory: every mark lists the app's QML files the engine has loaded
 //                    (their count is always there: qmlTypes)
 //   BENCH_VIEWPORT_OBSERVERS  1: every memory mark lists the shown items that observe the
@@ -99,6 +102,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -109,6 +113,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRandomGenerator>
+#include <QRect>
 #include <QTimer>
 #include <QtCore/private/qhooks_p.h>
 #if __has_include(<QtQml/private/qqmltypeloader_p.h>)
@@ -2405,6 +2410,87 @@ private:
         action(u"mem"_s, [this] { markMem(u"pictures:end"_s, true); });
     }
 
+    /// The app away and back (memorySteps()): let go as with another program in front, the window
+    /// hidden and let go as with no window shown, the window shown again. Memory marks `away`,
+    /// `away_hidden`, `back` (with ":<tag>" for a tag) and `back_picture`: the pixels of the window
+    /// that differ from before it was away.
+    void awaySteps(const QString &tag)
+    {
+        const QString suffix = tag.isEmpty() ? QString() : u':' + tag;
+        const auto mem = [this](const QString &name) { action(u"mem"_s, [this, name] { markMem(name, true); }); };
+        action(u"away"_s, [this] {
+            // What the window shows now: it must show the same when it is back.
+            if (m_window)
+                m_beforeAway = m_window->grabWindow();
+            if (QObject *p = singleton("MemoryPolicy"))
+                QMetaObject::invokeMethod(p, "letGoNow", Q_ARG(bool, false));
+        });
+        wait(1500);
+        mem(u"away"_s + suffix);
+        action(u"hide"_s, [this] {
+            if (m_window)
+                m_window->hide();
+        });
+        wait(500);
+        action(u"away_hidden"_s, [this] {
+            if (QObject *p = singleton("MemoryPolicy"))
+                QMetaObject::invokeMethod(p, "letGoNow", Q_ARG(bool, true));
+        });
+        wait(1500);
+        mem(u"away_hidden"_s + suffix);
+        action(u"show"_s, [this] {
+            if (m_window)
+                m_window->show();
+        });
+        waitSettled(u"back_settled"_s, 1000, 60000);
+        wait(1000);
+        mem(u"back"_s + suffix);
+        action(u"back_picture"_s, [this, tag, suffix] {
+            // The window drawn again from nothing (its scene graph and graphics were released).
+            // `differing`: any difference (glyphs land elsewhere in their atlas: their edges
+            // differ by a shade); `changed`: a channel off by more than a quarter of its range —
+            // something that is not drawn as before; `changedBox`: where those are.
+            const QImage now = m_window ? m_window->grabWindow() : QImage();
+            qint64 differing = -1;
+            qint64 changed = -1;
+            QRect box;
+            if (!now.isNull() && now.size() == m_beforeAway.size()) {
+                const QImage a = m_beforeAway.convertToFormat(QImage::Format_RGB32);
+                const QImage b = now.convertToFormat(QImage::Format_RGB32);
+                differing = 0;
+                changed = 0;
+                for (int y = 0; y < a.height(); ++y) {
+                    const QRgb *la = reinterpret_cast<const QRgb *>(a.constScanLine(y));
+                    const QRgb *lb = reinterpret_cast<const QRgb *>(b.constScanLine(y));
+                    for (int x = 0; x < a.width(); ++x) {
+                        if (la[x] == lb[x])
+                            continue;
+                        ++differing;
+                        const int off =
+                                std::max({std::abs(qRed(la[x]) - qRed(lb[x])), std::abs(qGreen(la[x]) - qGreen(lb[x])),
+                                          std::abs(qBlue(la[x]) - qBlue(lb[x]))});
+                        if (off > 64) {
+                            ++changed;
+                            box |= QRect(x, y, 1, 1);
+                        }
+                    }
+                }
+            }
+            if (const QByteArray dir = qgetenv("BENCH_PICTURES_DIR"); !dir.isEmpty()) {
+                const QString base = QString::fromUtf8(dir) + u'/' + (tag.isEmpty() ? u"home"_s : tag);
+                m_beforeAway.save(base + u"-before.png"_s);
+                now.save(base + u"-back.png"_s);
+            }
+            mark(u"back_picture"_s + suffix, 0,
+                 {{u"differingPixels"_s, differing},
+                  {u"changedPixels"_s, changed},
+                  {u"changedBox"_s, u"%1x%2+%3+%4"_s.arg(box.width()).arg(box.height()).arg(box.x()).arg(box.y())},
+                  {u"pixels"_s, qint64(now.width()) * now.height()},
+                  {u"sameSize"_s, now.size() == m_beforeAway.size()}});
+            m_beforeAway = QImage();
+        });
+    }
+
     /// What the app holds: after its start (with everything it builds ahead), after a tour of its
     /// views (a page, Tasks, Calendar, All pages, Search, Graph, Tags, Settings — each `mem:view:<name>`),
     /// back at the journal after BENCH_REST_MS (`mem:home`), and after BENCH_LONG_REST_MS more
@@ -2475,11 +2561,56 @@ private:
             waitUntil(u"view_loaded:"_s + name, [this] { return pictureStats().loading == 0; }, 60000, false);
             waitSettled(u"view_settled:"_s + name, 1000, 120000);
             mem(u"view:"_s + name, false);
+            // BENCH_AWAY_VIEWS=1: every view of the tour hidden, let go of and shown again — does
+            // each draw as before (`back_picture:<view>`)?
+            if (qgetenv("BENCH_AWAY_VIEWS") == "1")
+                awaySteps(name);
         }
         action(u"home"_s, [this] { navigate({{u"view"_s, u"journals"_s}}); });
         waitSettled(u"home_settled"_s, 1000, 60000);
         wait(m_restMs);
         mem(u"home"_s, true);
+        // What goes while the app is away (MemoryPolicy, trees that have it): another program in
+        // front (`mem:away`), then no window shown (`mem:away_hidden`: the window hidden, its
+        // graphics released too), then shown again (`mem:back`: it must draw as before —
+        // `back_picture`).
+        if (qgetenv("BENCH_AWAY") != "0")
+            awaySteps(QString());
+        // BENCH_HIDE=sg|graphics: the window hidden and its scene graph (sg), or the scene graph and
+        // the graphics context (graphics), released by hand — what a window nobody sees holds —,
+        // then shown again (must draw as before).
+        if (const QByteArray hide = qgetenv("BENCH_HIDE"); !hide.isEmpty()) {
+            action(u"hide"_s, [this] {
+                if (m_window)
+                    m_window->hide();
+            });
+            wait(1500);
+            action(u"mem"_s, [this] {
+                malloc_trim(0);
+                markMem(u"hidden"_s, true);
+            });
+            action(u"release"_s, [this, hide] {
+                if (!m_window)
+                    return;
+                m_window->setPersistentSceneGraph(false);
+                m_window->setPersistentGraphics(hide != "graphics");
+                m_window->releaseResources();
+                m_window->setPersistentSceneGraph(true);
+                m_window->setPersistentGraphics(true);
+            });
+            wait(1000);
+            action(u"mem"_s, [this] {
+                malloc_trim(0);
+                markMem(u"hidden_released"_s, true);
+            });
+            action(u"show"_s, [this] {
+                if (m_window)
+                    m_window->show();
+            });
+            waitSettled(u"shown_settled"_s, 1000, 60000);
+            wait(1000);
+            mem(u"shown_again"_s, false);
+        }
         if (m_longRestMs > 0) {
             wait(m_longRestMs);
             mem(u"rested"_s, true);
@@ -2573,6 +2704,7 @@ private:
     int m_longRestMs = 0;
     bool m_memoryDetail = false;
     QStringList m_moduleFiles; ///< the QML files of the module Brulion (loadedQmlTypes())
+    QImage m_beforeAway;       ///< memory: the window before the app was "away" (back_picture)
     bool m_viewportObservers = false;
     int m_resizeBase = 1280;
     int m_resizeWidth = 920;

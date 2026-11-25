@@ -652,6 +652,14 @@ Rectangle {
     function prebuildMoreMenu(): void {
         moreMenuLoader.active = true
     }
+    /// The app is away (AppShell.letGoPopups()): the menu goes unless it is open; it is made
+    /// again when it opens, or built ahead.
+    function letGoMoreMenu(): void {
+        if (bar.moreMenuPopup !== null && bar.moreMenuPopup.visible)
+            return
+        moreMenuLoader.active = false
+        moreMenuLoader.asynchronous = true
+    }
     Loader {
         id: moreMenuLoader
         active: false

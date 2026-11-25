@@ -12,6 +12,10 @@ brulion_add_test(tst_shell_scripting SOURCES tst_scripting.cpp LIBS brulion_shel
 # optional functions called (typed and untyped QML views); folderChoices (folderchoices.h): the
 # rows of "Move to…".
 brulion_add_test(tst_shell_viewtraits SOURCES tst_viewtraits.cpp LIBS brulion_shell Qt6::Qml)
+# ViewKeeper (viewkeeper.h): which hidden views a pane holds on to — the most recently shown up to
+# a limit, none after a while without a switch or when asked to let go (docs/PERFORMANCE.md "Memory:
+# only what is in use").
+brulion_add_test(tst_shell_viewkeeper SOURCES tst_viewkeeper.cpp LIBS brulion_shell)
 # "Share → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
 # data, saving to the journal or to new pages, waiting for the notebook, the copies removed; files
 # opened with Brulion (--open, a second launch's `share` message: copies, the files untouched, a

@@ -10,6 +10,7 @@
 #include "keyboardinsets.h"
 #include "mediaengine.h"
 #include "mediaplayback.h"
+#include "memorypolicy.h"
 #include "nearview.h"
 #include "pagecontroller.h"
 #include "shortcutmap.h"
@@ -891,27 +892,40 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     // Late in the day: today's time has not rung yet (no notification during the checks).
     ws->writeFile(pills, u"- Leki na ciśnienie ⏰ "_s + app->today(0) + u" 23:58 🔁 every day\n"_s);
     const auto isOccurrence = [&entryOf](QQuickItem *row) { return entryOf(row).value(u"occurrence"_s).toBool(); };
-    QQuickItem *pillsRow = agenda ? shownWhere(agenda,
-                                               [&](QQuickItem *item) {
-                                                   return isA(item, "PlanningItemRow")
-                                                          && entryTitle(item).contains(u"ciśnienie"_s)
-                                                          && isOccurrence(item);
-                                               })
+    // (Once it stays put — steadyItem(): the new note's rows come into the list, which moves the
+    // ones below; a press a moment too early opened the menu of the row that was there before.)
+    QPointF pillsAt;
+    QQuickItem *pillsRow = agenda ? steadyItem(
+                                            window,
+                                            [&] {
+                                                return shownWhere(agenda, [&](QQuickItem *item) {
+                                                    return isA(item, "PlanningItemRow")
+                                                           && entryTitle(item).contains(u"ciśnienie"_s)
+                                                           && isOccurrence(item);
+                                                });
+                                            },
+                                            &pillsAt, 5000)
                                   : nullptr;
     check(pillsRow != nullptr, "the agenda shows the next times of a repeated reminder");
     if (pillsRow) {
         if (touch)
-            longPressForMenu(window, pointIn(pillsRow));
+            longPressForMenu(window, pillsAt);
         else
-            mouseClick(window, pointIn(pillsRow), Qt::RightButton);
+            mouseClick(window, pillsAt, Qt::RightButton);
         const bool opened = waitFor(
                 [&] { return openMenus(window) == 1 && named(window->contentItem(), u"dateChipChange"_s) != nullptr; });
         const auto shownNow = [window](const QString &name) {
             return findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
         };
-        check(opened && shownNow(u"dateChipAlarm"_s) && !shownNow(u"dateChipHourLater"_s)
-                      && !shownNow(u"dateChipTomorrowSameTime"_s) && !shownNow(u"dateChipDayLater"_s),
-              "a later time of a repeated reminder in the agenda has the series' menu, without a snooze");
+        const bool series = opened && shownNow(u"dateChipAlarm"_s) && !shownNow(u"dateChipHourLater"_s)
+                            && !shownNow(u"dateChipTomorrowSameTime"_s) && !shownNow(u"dateChipDayLater"_s);
+        if (!series)
+            std::fprintf(stderr, "selftest: the occurrence's menu: opened %d (menus %d), alarm %d, snoozes %d %d %d\n",
+                         int(opened), int(openMenus(window)), int(shownNow(u"dateChipAlarm"_s) != nullptr),
+                         int(shownNow(u"dateChipHourLater"_s) != nullptr),
+                         int(shownNow(u"dateChipTomorrowSameTime"_s) != nullptr),
+                         int(shownNow(u"dateChipDayLater"_s) != nullptr));
+        check(series, "a later time of a repeated reminder in the agenda has the series' menu, without a snooze");
         closeMenus(window);
     }
     ws->deletePage(pills);
@@ -11360,10 +11374,13 @@ void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check 
     app->goHome();
 }
 
-/// 0b. Tasks, Calendar… are built in the background once the notebook is ready (ShellRouteView.
-///     preloadViews, the main pane): they exist, hidden, before they were ever opened; opening
-///     Tasks shows that same view, and it takes the keyboard then (not while it was hidden).
-void checkViewsBuiltAhead(QQuickWindow *window, AppController *app, const Check &check)
+/// 0b. Views are kept, not hoarded (ShellRouteView, ViewKeeper, MemoryPolicy; docs/PERFORMANCE.md
+///     "Memory: only what is in use"). Nothing but the view the user went to last is built ahead —
+///     on a first start none. A view of the bottom navigation stays, hidden, once shown, and is
+///     the same one when it is shown again; a pane holds two hidden ones, the most recently shown.
+///     The view built ahead exists, hidden, before it is opened, leaves the keyboard alone, and
+///     takes it when it is shown.
+void checkViewsKept(QQuickWindow *window, AppController *app, const Check &check)
 {
     auto *mainPane = window->findChild<QQuickItem *>(u"shellMainPane"_s);
     if (!mainPane) {
@@ -11386,31 +11403,124 @@ void checkViewsBuiltAhead(QQuickWindow *window, AppController *app, const Check 
         visit(mainPane);
         return found;
     };
-    QQuickItem *tasks = nullptr;
+    QQuickItem *routeView = viewIn("ShellRouteView");
+    if (!routeView) {
+        check(false, "the main pane has its route view");
+        return;
+    }
+    const auto hidden = [routeView] { return routeView->property("hiddenViews").toStringList(); };
+    const auto show = [&](const QString &view) {
+        app->navigate({{u"view"_s, view}});
+        waitFor([&] { return app->currentView() == view; });
+        settle(30);
+    };
+
+    // A first start: the build-ahead had its turn, and built nothing.
+    check(waitFor([&] { return routeView->property("_preloaded").toBool(); }, 15000)
+                  && app->currentView() == u"journals" && !viewIn("TasksView") && !viewIn("CalendarView")
+                  && !viewIn("AllPagesView") && !viewIn("SearchView"),
+          "no view is built ahead before the user went to one");
+
+    // Shown, hidden, shown again: the same view.
+    show(u"tasks"_s);
+    const QPointer<QQuickItem> tasks = viewIn("TasksView");
+    check(tasks && tasks->isVisible(), "Tasks is made when it is first shown");
+    show(u"journals"_s);
+    check(tasks && viewIn("TasksView") == tasks && !tasks->isVisible() && hidden() == QStringList{u"tasks"_s},
+          "left, it stays, hidden");
+    show(u"tasks"_s);
+    check(tasks && viewIn("TasksView") == tasks && tasks->isVisible(), "shown again, it is the view kept");
+    check(routeView->property("recentView").toString() == u"tasks", "the view gone to last is remembered");
+
+    // Two hidden views a pane: the ones shown most recently.
+    show(u"calendar"_s);
+    show(u"allPages"_s);
+    check(hidden() == (QStringList{u"calendar"_s, u"tasks"_s}), "the two views shown before stay hidden");
+    show(u"search"_s);
+    check(hidden() == (QStringList{u"allPages"_s, u"calendar"_s}) && !viewIn("TasksView") && viewIn("CalendarView")
+                  && viewIn("AllPagesView"),
+          "a third one lets go of the view shown longest ago");
+    show(u"journals"_s);
+    check(hidden() == (QStringList{u"search"_s, u"allPages"_s}) && !viewIn("CalendarView"),
+          "going home keeps the last two");
+
+    // The next start builds the view gone to last ahead (here: asked again for Calendar).
+    routeView->setProperty("recentView", u"calendar"_s);
+    routeView->setProperty("_preloaded", false);
+    QMetaObject::invokeMethod(routeView, "preloadNext");
     QQuickItem *calendar = nullptr;
     const bool built = waitFor(
             [&] {
-                tasks = viewIn("TasksView");
                 calendar = viewIn("CalendarView");
-                return tasks && calendar;
+                return calendar != nullptr;
             },
             15000);
-    check(built && app->currentView() == u"journals" && !tasks->isVisible() && !calendar->isVisible(),
-          "Tasks and Calendar are built in the background, hidden, before they are opened");
+    check(built && app->currentView() == u"journals" && !calendar->isVisible() && !viewIn("TasksView"),
+          "the view gone to last is built in the background, hidden; no other one is");
     if (!built)
         return;
     QQuickItem *focus = window->activeFocusItem();
-    check(!focus || !tasks->isAncestorOf(focus), "a view built ahead leaves the keyboard alone");
-    app->navigate({{u"view"_s, u"tasks"_s}});
-    check(waitFor([&] { return tasks->isVisible(); }) && viewIn("TasksView") == tasks,
-          "opening Tasks shows the view built ahead");
+    check(!focus || !calendar->isAncestorOf(focus), "a view built ahead leaves the keyboard alone");
+    app->navigate({{u"view"_s, u"calendar"_s}});
+    check(waitFor([&] { return calendar->isVisible(); }) && viewIn("CalendarView") == calendar,
+          "opening it shows the view built ahead");
     check(waitFor([&] {
               focus = window->activeFocusItem();
-              return focus && tasks->isAncestorOf(focus);
+              return focus && calendar->isAncestorOf(focus);
           }),
           "and gives it the keyboard");
-    sendKey(window, Qt::Key_Back);
+    // (The steps after this one start at home with no way back.)
+    for (int i = 0; i < 20 && app->canGoBack(); ++i)
+        sendKey(window, Qt::Key_Back);
+    waitFor([&] { return app->currentView() == u"journals" && !app->canGoBack(); });
+}
+
+/// 0d. Away — another program in front for a while, or no window shown —, the app lets go of what
+///     is hidden (MemoryPolicy::letGo(); docs/PERFORMANCE.md "Memory: only what is in use"): the
+///     hidden views and the closed popups, built ahead or opened before. Each is made again when
+///     it is needed next (the steps after this one open them all).
+void checkAwayLetsGo(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const auto find = [window](const char *name) { return window->findChild<QObject *>(QString::fromLatin1(name)); };
+    auto *mainPane = window->findChild<QQuickItem *>(u"shellMainPane"_s);
+    ui::MemoryPolicy *policy = ui::MemoryPolicy::instance();
+    if (!mainPane || !policy) {
+        check(false, "the main pane and the memory policy exist");
+        return;
+    }
+    QQuickItem *routeView = findShown(mainPane, [](QQuickItem *item) { return isA(item, "ShellRouteView"); });
+    // Something hidden to let go of: Tasks behind the journal, the popups built ahead.
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    waitFor([&] { return app->currentView() == u"tasks"; });
+    app->goHome();
     waitFor([&] { return app->currentView() == u"journals"; });
+    const bool had = routeView && !routeView->property("hiddenViews").toStringList().isEmpty() && find("shellSwitcher")
+                     && find("shellPalette") && find("topBarMoreMenu") && find("shellCapture");
+    int released = 0;
+    const QMetaObject::Connection counting =
+            QObject::connect(policy, &ui::MemoryPolicy::released, policy, [&released] { ++released; });
+    policy->letGoNow();
+    // (The deletions wait for the event loop, which the running self-test never returns to.)
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    settle(50);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QStringList left;
+    for (const char *name : {"shellSwitcher", "shellPalette", "topBarMoreMenu", "shellCapture"}) {
+        if (find(name))
+            left.append(QString::fromLatin1(name));
+    }
+    if (!left.isEmpty())
+        std::fprintf(stderr, "selftest: not let go: %s\n", qPrintable(left.join(u", "_s)));
+    check(had && left.isEmpty() && routeView->property("hiddenViews").toStringList().isEmpty()
+                  && app->currentView() == u"journals" && policy->inUse(),
+          "away, the hidden views and the closed popups go; the view shown stays");
+    // What the engine and the windows held for them is given back a moment later, and the app
+    // goes on as before.
+    check(waitFor([&] { return released > 0; }, 5000), "and their memory is given back");
+    QObject::disconnect(counting);
+    for (int i = 0; i < 20 && app->canGoBack(); ++i)
+        sendKey(window, Qt::Key_Back);
+    waitFor([&] { return app->currentView() == u"journals" && !app->canGoBack(); });
 }
 
 /// 5n. The views a route leaves go with their editors: ShellRouteView's Loader detaches the old
@@ -12376,8 +12486,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         check(capture && waitFor([&] { return !isOpen(capture); }), "Escape closes quick capture");
     }
 
-    // 0b. Tasks, Calendar… are built in the background before they are opened.
-    checkViewsBuiltAhead(window, app, check);
+    // 0b. The bottom navigation's views: kept once shown, two hidden ones a pane, the one gone to
+    //     last built ahead.
+    checkViewsKept(window, app, check);
     // 0c. So are the popups used most (AppShell.prebuildNext()), closed; the others still are not.
     {
         QStringList missing;
@@ -12397,6 +12508,18 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       && !isOpen(find("topBarMoreMenu")) && !find("shellRename") && !find("topBarAiMenu"),
               "the switcher, the palette, the More menu and quick capture are built in the background, closed; "
               "the other popups are not");
+    }
+
+    // 0d. Away, the app lets go of the hidden views and the closed popups.
+    checkAwayLetsGo(window, app, check);
+    // From here on every view shown stays, as long as the test runs: its steps come back to Tasks,
+    // the Calendar and the journal hundreds of times and count on finding them as they left them
+    // (a row just written, a menu's target, the editors of the journal's days counted by "5n") —
+    // while the event loop's deletions are held (see "5n"), a view let go and made again would be
+    // there twice. What the policy does to the views is 0b's and 0d's to check.
+    if (ui::MemoryPolicy *policy = ui::MemoryPolicy::instance()) {
+        policy->setKeptViews(-1);
+        policy->setHiddenViewMs(0);
     }
 
     // 1. The back key walks the history and is handled; at home it is left to the system.
