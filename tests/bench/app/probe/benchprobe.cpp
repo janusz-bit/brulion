@@ -42,10 +42,11 @@
 //   BENCH_IDLE_MS    idle duration (default 30000)
 //   BENCH_TIMEOUT_MS whole-run watchdog (default 240000): exit code 3
 //   BENCH_KEEP       1: do not quit at the end
-//   BENCH_WAIT_KEPT  1: typing / source-typing / open-page / journal-scroll wait until every kept view of
-//                    the main pane (ShellRouteView's KeptLoaders: Tasks, Calendar, Journal, All pages,
-//                    Search, built ahead 1.2 s after ready, one per 0.4 s) exists before the first burst
-//                    (the open, the scroll)
+//   BENCH_WAIT_KEPT  1: typing / source-typing / open-page / journal-scroll wait until the main pane
+//                    built ahead what it meant to (ShellRouteView: the kept view the user went to
+//                    last, 1.2 s after ready; every kept view, one per 0.4 s, in builds before
+//                    MemoryPolicy and with BRULION_MEMORY_POLICY=0) before the first burst (the
+//                    open, the scroll)
 //   BENCH_SPANS      signal spans in the typing windows: 1 (default) the watched signals and
 //                    every other signal of a brulion:: class taking >= BENCH_SPAN_MIN_US (200 us)
 //                    inclusive; "watched" only the watched ones; 0 none
@@ -1600,10 +1601,13 @@ private:
     // ---- kept views -----------------------------------------------------------------------------
     struct KeptViews {
         int built = 0, total = 0, loading = 0;
+        bool done = false; ///< the pane built ahead all it meant to (ShellRouteView._preloaded)
     };
     /// The kept views of the panes that build them ahead (ShellRouteView.preloadViews: the main
     /// pane): its KeptLoaders (Loaders with `kept` and `everShown`), built = Loader.Ready with an
-    /// item. Trees without them: total 0.
+    /// item. Trees without them: total 0. `done`: the pane says it built ahead what it meant to
+    /// (only the view the user went to last, since MemoryPolicy; builds before it have no such
+    /// property and are done when every kept view exists).
     KeptViews keptViews()
     {
         KeptViews k;
@@ -1612,6 +1616,7 @@ private:
                 return true;
             if (!it->property("preloadViews").toBool())
                 return false;
+            k.done = it->property("_preloaded").toBool();
             const QList<QQuickItem *> kids = it->childItems();
             for (QQuickItem *c : kids) {
                 const QMetaObject *mo = c->metaObject();
@@ -1628,7 +1633,8 @@ private:
         });
         return k;
     }
-    /// BENCH_WAIT_KEPT=1: until every kept view exists (at most 30 s), then settled again.
+    /// BENCH_WAIT_KEPT=1: until every kept view exists, or the pane built ahead all it meant to
+    /// (at most 30 s), then settled again.
     void waitKeptSteps()
     {
         if (!m_waitKept)
@@ -1638,7 +1644,8 @@ private:
                 [this] {
                     const KeptViews k = keptViews();
                     const bool timedOut = monoNs() - m_stepStart > 30000000000LL;
-                    if (k.built < k.total && !timedOut)
+                    const bool builtAhead = k.done && k.loading == 0;
+                    if (k.built < k.total && !builtAhead && !timedOut)
                         return false;
                     mark(u"kept_ready"_s, 0, {{u"n"_s, k.built}, {u"of"_s, k.total}, {u"timedOut"_s, timedOut}});
                     return true;

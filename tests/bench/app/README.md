@@ -252,7 +252,9 @@ end + 1.7 s fits unless a save takes over 300 ms) the probe records, on the GUI 
   exist: ShellRouteView's KeptLoaders — Tasks, Calendar, Journal, All pages, Search — with an
   item), `of` and `loading`: views built ahead 1.2 s after `ready`, one every 0.4 s, may or may not
   exist during the first burst. `BENCH_WAIT_KEPT=1` waits (at most 30 s, mark `kept_ready`) until
-  all of them exist and the app has settled before typing (and before `journal-scroll`'s scroll).
+  all of them exist — or, since MemoryPolicy builds ahead only the view the user went to last, until
+  the pane says it built what it meant to (`ShellRouteView._preloaded`) — and the app has settled
+  before typing (and before `journal-scroll`'s scroll).
 
 What the callbacks see (checked with Qt 6.12 on a test object): `signal_begin` / `signal_end` wrap
 every **direct** connection of an emission — string-based (`SIGNAL`/`SLOT`), pointer-to-member and
