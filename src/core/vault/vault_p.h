@@ -130,6 +130,7 @@ struct WriteJob {
     // --- results of run()
     Result result = Result::Failed;
     QByteArray data; ///< what was written (a BOM kept)
+    QString writtenText; ///< `data` decoded, as afterWrite got it (null without afterWrite)
     QString dataHash;
     QString readHash; ///< Changed: the hash of what the file holds
     std::optional<FileStat> written;
@@ -154,7 +155,10 @@ struct RenamePair {
 
 /// Raw bytes of text files the vault read or wrote, so content that other programs replace or
 /// delete can still be snapshotted into History. Bounded: the least recently stored entries
-/// are evicted beyond `limit` bytes.
+/// are evicted beyond `limit` bytes (of the files). Content read or written as text is kept as
+/// that text — the very QString the reader got, shared with whoever keeps it (the index keeps
+/// every note's text): no second copy of every note — when it gives the bytes back exactly
+/// (valid UTF-8; checked again against the bytes' hash when they are asked for), else as bytes.
 class ContentCache {
 public:
     static constexpr qint64 kDefaultLimit = 64LL * 1024 * 1024;
@@ -163,15 +167,34 @@ public:
     std::optional<QByteArray> get(const VaultPath &path) const;
     bool contains(const VaultPath &path) const { return m_items.contains(path); }
     void put(const VaultPath &path, const QByteArray &bytes);
-    std::optional<QByteArray> take(const VaultPath &path);
+    /// `bytes` and the text they decode to (vaultutil::decodeUtf8()): kept as the text when
+    /// encoding it gives the bytes back. `key`: text::fnv1a64() of the bytes.
+    void put(const VaultPath &path, const QByteArray &bytes, const QString &text, quint64 key);
+    struct Item;
+    /// Take the entry of `path` out (a rename puts it back under the new path with restore()).
+    std::optional<Item> take(const VaultPath &path);
+    void restore(const VaultPath &path, Item item) { insert(path, std::move(item)); }
     void remove(const VaultPath &path);
     void clear();
+    /// Is the entry of `path` kept as text (tests)?
+    bool holdsText(const VaultPath &path) const
+    {
+        const auto it = m_items.constFind(path);
+        return it != m_items.cend() && it->isText;
+    }
+
+    struct Item {
+        QByteArray bytes; ///< empty for an entry kept as text
+        QString text;     ///< the decoded text (isText)
+        quint64 key = 0;  ///< text::fnv1a64() of the bytes (isText)
+        qint64 size = 0;  ///< of the bytes
+        quint64 tick = 0;
+        bool bom = false; ///< the bytes start with a UTF-8 byte order mark (isText)
+        bool isText = false;
+    };
 
 private:
-    struct Item {
-        QByteArray bytes;
-        quint64 tick = 0;
-    };
+    void insert(const VaultPath &path, Item item);
     void evict();
     QHash<VaultPath, Item> m_items;
     qint64 m_bytes = 0;
@@ -233,15 +256,19 @@ public:
     bool isTextual(const VaultPath &path) const;
     bool comparesContent(const FileStat &stat) const;
     /// `hash`: text::fnv1a64Hex(bytes) when the caller has it already.
-    void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false, const QString &hash = {});
+    /// `text`: what the bytes decode to (vaultutil::decodeUtf8()), as the reader got it — kept
+    /// instead of the bytes (ContentCache).
+    void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false, const QString &hash = {},
+                         const QString *text = nullptr);
     /// At most `limit` bytes (vaultutil::readContent()); `ok` is false for anything else.
     QByteArray readDisk(const VaultPath &path, qint64 limit, bool *ok) const;
-    QByteArray readFile(const VaultPath &path, bool asText, bool *ok);
+    /// `text` (optional): set to the bytes decoded (vaultutil::decodeUtf8()) when the read succeeds.
+    QByteArray readFile(const VaultPath &path, bool asText, bool *ok, QString *text = nullptr);
     /// Why a read of readText(), readBinary() or readDetached() failed: the "%2" of "Cannot read %1: %2".
     static QString readFailure(const vaultutil::ContentRead &read);
     /// The bookkeeping after reading a tracked file (readFile(), Vault::adoptRead()).
     void takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes, bool asText,
-                  const QString &hash);
+                  const QString &hash, const QString *text = nullptr);
     /// `stat` (the file's, just recorded with its content) as written by the vault itself
     /// (`ownWrite`: its stamp is now) or found (its stamp may be old): unsettled while its time is
     /// coarse and recent — `fineStamp` when the caller knows, else fineMtime() asked.

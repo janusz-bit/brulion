@@ -151,33 +151,72 @@ std::optional<QByteArray> ContentCache::get(const VaultPath &path) const
     const auto it = m_items.constFind(path);
     if (it == m_items.cend())
         return std::nullopt;
-    return it->bytes;
+    if (!it->isText)
+        return it->bytes;
+    QByteArray bytes = it->bom ? vaultutil::utf8Bom() + it->text.toUtf8() : it->text.toUtf8();
+    if (bytes.size() != it->size || text::fnv1a64(bytes) != it->key)
+        return std::nullopt; // (never: valid UTF-8 round-trips)
+    return bytes;
+}
+
+void ContentCache::insert(const VaultPath &path, Item item)
+{
+    remove(path);
+    if (item.size > kMaxItemBytes)
+        return; // huge files are not worth the memory
+    item.tick = ++m_tick;
+    m_bytes += item.size;
+    m_items.insert(path, std::move(item));
+    evict();
 }
 
 void ContentCache::put(const VaultPath &path, const QByteArray &bytes)
 {
-    remove(path);
-    if (bytes.size() > kMaxItemBytes)
-        return; // huge files are not worth the memory
-    m_items.insert(path, Item{bytes, ++m_tick});
-    m_bytes += bytes.size();
-    evict();
+    Item item;
+    item.bytes = bytes;
+    item.size = bytes.size();
+    insert(path, std::move(item));
 }
 
-std::optional<QByteArray> ContentCache::take(const VaultPath &path)
+void ContentCache::put(const VaultPath &path, const QByteArray &bytes, const QString &text, quint64 key)
+{
+    const bool bom = bytes.startsWith(vaultutil::utf8Bom());
+    const QByteArrayView body = bom ? QByteArrayView(bytes).sliced(3) : QByteArrayView(bytes);
+    // Valid UTF-8 decodes and encodes back to itself — but for a second BOM, which
+    // QString::fromUtf8() drops too; the text's length is a cheap check that `text` is what the
+    // bytes decode to.
+    if (bytes.size() > kMaxItemBytes || text.size() > body.size() || (text.isEmpty() != body.isEmpty())
+        || body.startsWith(vaultutil::utf8Bom()) || !body.isValidUtf8()) {
+        put(path, bytes);
+        return;
+    }
+    Item item;
+    item.text = text;
+    item.key = key;
+    item.size = bytes.size();
+    item.bom = bom;
+    item.isText = true;
+    insert(path, std::move(item));
+}
+
+std::optional<ContentCache::Item> ContentCache::take(const VaultPath &path)
 {
     const auto it = m_items.constFind(path);
     if (it == m_items.cend())
         return std::nullopt;
-    QByteArray bytes = it->bytes;
-    m_bytes -= bytes.size();
+    Item item = *it;
+    m_bytes -= it->size;
     m_items.erase(it);
-    return bytes;
+    return item;
 }
 
 void ContentCache::remove(const VaultPath &path)
 {
-    take(path);
+    const auto it = m_items.constFind(path);
+    if (it == m_items.cend())
+        return;
+    m_bytes -= it->size;
+    m_items.erase(it);
 }
 
 void ContentCache::clear()
@@ -703,14 +742,19 @@ bool VaultPrivate::comparesContent(const FileStat &stat) const
     return stat.size <= ContentCache::kMaxItemBytes && isTextual(stat.path);
 }
 
-void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText, const QString &hash)
+void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText, const QString &hash,
+                                   const QString *text)
 {
-    hashes.insert(path, hash.isEmpty() ? text::fnv1a64Hex(bytes) : hash);
+    const QString &known = *hashes.insert(path, hash.isEmpty() ? text::fnv1a64Hex(bytes) : hash);
     if (bytes.startsWith(vaultutil::utf8Bom()))
         bomPaths.insert(path);
     else
         bomPaths.remove(path);
-    if (asText || isTextual(path))
+    if (!asText && !isTextual(path))
+        return;
+    if (text)
+        contents.put(path, bytes, *text, known.toULongLong(nullptr, 16));
+    else
         contents.put(path, bytes);
 }
 
@@ -736,7 +780,7 @@ QString VaultPrivate::readFailure(const vaultutil::ContentRead &read)
     return read.error;
 }
 
-QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok)
+QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok, QString *text)
 {
     *ok = false;
     if (!requireOpen())
@@ -765,13 +809,15 @@ QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok)
         return {};
     }
     *ok = true;
+    if (text)
+        *text = vaultutil::decodeUtf8(read.bytes);
     if (tracked)
-        takeRead(path, before, read.bytes, asText, text::fnv1a64Hex(read.bytes));
+        takeRead(path, before, read.bytes, asText, text::fnv1a64Hex(read.bytes), text);
     return std::move(read.bytes);
 }
 
 void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes,
-                            bool asText, const QString &hash)
+                            bool asText, const QString &hash, const QString *text)
 {
     const auto known = files.constFind(path);
     if (known == files.cend() || !before || !sameStat(*before, *known)) {
@@ -783,7 +829,7 @@ void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat>
         scheduleCheck(path);
     } else {
         const bool sameAsKnown = hashes.value(path) == hash;
-        rememberContent(path, bytes, asText, hash);
+        rememberContent(path, bytes, asText, hash, text);
         if (sameAsKnown && unsettled.contains(path))
             settleIfDue(path);
         else
@@ -1435,10 +1481,11 @@ QString Vault::readText(const VaultPath &path, bool *ok)
 {
     d->settleWrites();
     bool good = false;
-    const QByteArray bytes = d->readFile(paths::normalize(path), true, &good);
+    QString text;
+    d->readFile(paths::normalize(path), true, &good, &text);
     if (ok)
         *ok = good;
-    return good ? vaultutil::decodeUtf8(bytes) : QString();
+    return text;
 }
 
 DetachedRead Vault::readDetached(const VaultPath &path, const QString &absolutePath)
@@ -1473,7 +1520,7 @@ void Vault::adoptRead(const DetachedRead &read)
         return;
     }
     if (vaultutil::isTracked(path))
-        d->takeRead(path, read.statBefore, read.bytes, true, read.hash);
+        d->takeRead(path, read.statBefore, read.bytes, true, read.hash, &read.text);
 }
 
 QByteArray Vault::readBinary(const VaultPath &path, bool *ok)
