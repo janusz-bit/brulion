@@ -162,6 +162,17 @@ int main(int argc, char *argv[])
     // (docs/UI.md "The QML engine's garbage collector").
     if (!qEnvironmentVariableIsSet("QV4_GC_TIMELIMIT"))
         qputenv("QV4_GC_TIMELIMIT", "0");
+    // Qt Quick's texture atlas — the one texture icons and other small pictures share — is as
+    // large as the window rounded up to powers of two whatever goes into it: 2048 × 1024 texels
+    // (8 MB) for a 1280 × 800 window, 16 MB for a full-HD one, 2048 × 4096 (32 MB) on a phone's
+    // screen. 1024 × 1024 (4 MB) holds a few hundred icons at a phone's density; a picture that
+    // does not fit, or is more than half as wide or as tall as the atlas, gets a texture of its
+    // own as any large one does (docs/PERFORMANCE.md "Memory: only what is in use"). Read when
+    // the first window's scene graph starts; the user's own values win.
+    if (!qEnvironmentVariableIsSet("QSG_ATLAS_WIDTH") && !qEnvironmentVariableIsSet("QSG_ATLAS_HEIGHT")) {
+        qputenv("QSG_ATLAS_WIDTH", "1024");
+        qputenv("QSG_ATLAS_HEIGHT", "1024");
+    }
 #ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
 #else
