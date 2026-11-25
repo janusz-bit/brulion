@@ -290,7 +290,8 @@ Counters readGuiCounters()
 /// hold it: when it finds no id it reads every QObject property of the context's object — an item's
 /// lazily made `anchors`, `layer` (QQuickItemLayer) and `palette` (QQuickPalette) —, thousands of
 /// objects the probe itself added to the counts of the marks after its first object dump. (The
-/// QQmlContext made for a context with ids stays: the names live in a hash Qt does not export.) Without Qt's private QML headers, nameForObject() for every object.
+/// QQmlContext made for a context with ids stays: the names live in a hash Qt does not export.) Without Qt's private
+/// QML headers, nameForObject() for every object.
 QString qmlIdOf(QObject *object)
 {
 #ifdef BENCH_HAS_QML_DATA
@@ -1405,8 +1406,9 @@ private:
     void wait(int ms)
     {
         // (A step fails after its timeout: a long wait needs a longer one.)
-        add(u"wait"_s, nullptr, [this, ms] { return monoNs() - m_stepStart >= qint64(ms) * 1000000; },
-            std::max<qint64>(60000, qint64(ms) + 30000));
+        add(
+                u"wait"_s, nullptr, [this, ms] { return monoNs() - m_stepStart >= qint64(ms) * 1000000; },
+                std::max<qint64>(60000, qint64(ms) + 30000));
     }
     void waitUntil(const QString &name, std::function<bool()> cond, qint64 timeoutMs = 60000, bool markIt = true)
     {
@@ -1780,8 +1782,7 @@ private:
             QStringList named;
             for (QObject *p = o; p; p = p->parent()) {
                 QObject *up = p->parent();
-                if (p != o
-                    && (!p->objectName().isEmpty() || !qmlIdOf(p).isEmpty()))
+                if (p != o && (!p->objectName().isEmpty() || !qmlIdOf(p).isEmpty()))
                     named.prepend(nameOf(p));
                 if (up && QByteArray(up->metaObject()->className()).startsWith("AppShell")) {
                     child = p;

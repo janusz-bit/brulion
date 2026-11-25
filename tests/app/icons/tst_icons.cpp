@@ -92,9 +92,9 @@ private Q_SLOTS:
         QVERIFY(QFile::copy(iconFolder() + u"/bell.svg"_s, m_folder + u"/dzwonek-żółty.svg"_s));
 
         // A module "Brulion" of the test's own, first on the import path: a Theme with BIcon's
-        // defaults, and the real BIcon and Icons (C++). Its own qmldir, so that no other "Brulion" found on the way — the app's, whose
-        // qmldir points into resources this test does not have (Windows CI: "Type BIcon
-        // unavailable … LinkPreviews.qml: No such file") — is the one `import Brulion` takes.
+        // defaults, and the real BIcon and Icons (C++). Its own qmldir, so that no other "Brulion" found on the way —
+        // the app's, whose qmldir points into resources this test does not have (Windows CI: "Type BIcon unavailable …
+        // LinkPreviews.qml: No such file") — is the one `import Brulion` takes.
         const QString module = m_dir.filePath(u"Brulion"_s);
         QVERIFY(QDir().mkpath(module));
         QFile themeFile(module + u"/Theme.qml"_s);

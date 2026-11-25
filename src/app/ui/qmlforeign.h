@@ -6,10 +6,10 @@
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
 // (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; SmoothScroll (brulion_ui_smoothscroll),
 // the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons and BIcon
-// (brulion_ui_icons), BIcon's image URLs and the icon item itself; FilePicker (brulion_ui_files), the system's file picker (`FilePicker { fileMode:
-// FilePicker.OpenFiles }`); and NearView, PictureDecode and MemoryPolicy (brulion_ui_memory): whether an
-// item is in or near its window's view, the size a picture is decoded at for the place that shows it, and
-// what the app keeps for speed (the instance main() made).
+// (brulion_ui_icons), BIcon's image URLs and the icon item itself; FilePicker (brulion_ui_files), the system's file
+// picker (`FilePicker { fileMode: FilePicker.OpenFiles }`); and NearView, PictureDecode and MemoryPolicy
+// (brulion_ui_memory): whether an item is in or near its window's view, the size a picture is decoded at for the place
+// that shows it, and what the app keeps for speed (the instance main() made).
 #pragma once
 
 #include "dateshelper.h"

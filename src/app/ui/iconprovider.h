@@ -105,8 +105,8 @@ class BIcon : public QQuickItem {
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged FINAL)
     Q_PROPERTY(qreal size READ iconSize WRITE setIconSize NOTIFY sizeChanged FINAL)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged FINAL)
-    Q_PROPERTY(bool collapseWhenEmpty READ collapseWhenEmpty WRITE setCollapseWhenEmpty NOTIFY
-                       collapseWhenEmptyChanged FINAL)
+    Q_PROPERTY(bool collapseWhenEmpty READ collapseWhenEmpty WRITE setCollapseWhenEmpty NOTIFY collapseWhenEmptyChanged
+                       FINAL)
 
 public:
     explicit BIcon(QQuickItem *parent = nullptr);
@@ -151,4 +151,3 @@ private:
     QPointer<QObject> m_theme; // followed while size or colour are the theme's
     QQuickItem *m_image = nullptr;
 };
-

@@ -342,4 +342,3 @@ void BIcon::updateFillMode()
     const int side = qRound(m_size);
     m_image->setProperty("fillMode", width() < side || height() < side ? PreserveAspectFit : Pad);
 }
-

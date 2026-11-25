@@ -14,9 +14,9 @@
 #include <QAbstractListModel>
 #include <QColor>
 #include <QFont>
+#include <QHash>
 #include <QList>
 #include <QObject>
-#include <QHash>
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickTextDocument>
