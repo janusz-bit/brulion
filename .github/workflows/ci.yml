@@ -93,8 +93,10 @@ jobs:
     name: Linux (Qt 6.12.0 from aqt, Clang 18, -Werror, sanitizers)
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
-    # Warm cache: ~35 min (the build 13, ctest 19); a cold one (new compiler, Qt or flags) builds
-    # for 67 min before ctest (Qt 6.12, 2026-11-16).
+    # Warm cache: ~35 min (the build 13, ctest 19); a cold one (new compiler, Qt or flags, or a
+    # tag's run after main's cache was evicted) built for more than 97 min (v0.30.0's release,
+    # 2026-11-25) — the build stops at 80 min instead, and its cache is saved all the same, so the
+    # next run finishes it.
     timeout-minutes: 100
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -160,6 +162,7 @@ jobs:
 
       - name: Build
         id: build
+        timeout-minutes: 80
         run: |
           ccache -z
           cmake --build build --parallel
