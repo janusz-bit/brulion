@@ -24,6 +24,7 @@
 #include "memorypolicy.h"
 #include "nearview.h"
 #include "picturedecode.h"
+#include "qmlcall.h"
 #include "rowscroll.h"
 #include "smoothscroll.h"
 #include "texthelper.h"
@@ -68,6 +69,23 @@ struct LaterForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ui::Later)
     QML_NAMED_ELEMENT(Later)
+};
+
+// A QML object's function called, a property read, written or followed by name (qmlcall.h): the
+// files made when first used (docs/UI.md "QML files loaded when first used").
+struct QmlCallForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::QmlCall)
+    QML_NAMED_ELEMENT(QmlCall)
+    QML_SINGLETON
+public:
+    static QmlCall *create(QQmlEngine *, QJSEngine *) { return new QmlCall; }
+};
+
+struct QmlValueForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::QmlValue)
+    QML_NAMED_ELEMENT(QmlValue)
 };
 
 struct JsHelperForeign {

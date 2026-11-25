@@ -173,7 +173,7 @@ Item {
                                      : hasEmbeds ? embedsY + embedLoader.height : topPad + contentHeight
 
     /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
-    readonly property real firstLineCenter: topPad + (onlyTransclusions && transclusionView !== null ? transclusionView.firstLineCenter
+    readonly property real firstLineCenter: topPad + (onlyTransclusions && transclusionView !== null ? transclusionLineCenter
                                                       : textView ? textContent.firstLineCenter
                                                       : contentFirstLineCenter)
 
@@ -193,15 +193,28 @@ Item {
 
     /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
     readonly property Item contentItem: textView ? textContent : content.item as Item
-    /// The views of the block's embedded blocks and of its pictures and files (null until it has some).
-    readonly property TransclusionView transclusionView: transclusionLoader.item as TransclusionView
-    readonly property EmbedView embedView: embedLoader.item as EmbedView
+    /// The views of the block's embedded blocks and of its pictures and files (null until it has
+    /// some). Like the views of the kinds of blocks, they are not named here as types (a QML file
+    /// named is loaded with the editor, docs/PERFORMANCE.md "QML files loaded when first used"):
+    /// their members are reached by name (QmlCall), their first line followed (loadedLineCenter,
+    /// transclusionLineCenter).
+    readonly property Item transclusionView: transclusionLoader.item as Item
+    readonly property Item embedView: embedLoader.item as Item
 
     /// Give the keyboard to the block content (tables: the first cell).
     function focusContent(): void {
-        const table = content.item as TableBlockView
-        if (table !== null)
-            table.focusFirstCell()
+        if (block.view === "table" && content.item !== null)
+            QmlCall.call(content.item, "focusFirstCell")
+    }
+    /// The first line's centre of the view of the block's kind and of its embedded blocks, as their
+    /// `firstLineCenter` says (followed by QmlCall.connect: no object of its own per block).
+    property real loadedLineCenter: 0
+    property real transclusionLineCenter: 0
+    function readLineCenter(): void {
+        block.loadedLineCenter = QmlCall.number(QmlCall.get(content.item, "firstLineCenter"))
+    }
+    function readTransclusionLine(): void {
+        block.transclusionLineCenter = QmlCall.number(QmlCall.get(transclusionLoader.item, "firstLineCenter"))
     }
     /// The first line's centre in the view loaded for the block's content (not a text view).
     readonly property real contentFirstLineCenter: {
@@ -210,15 +223,15 @@ Item {
         if (item === null)
             return fallback
         switch (view) {
-        case "code": { const v = item as CodeBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "calc": { const v = item as CalcBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "query": { const v = item as QueryBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "math": { const v = item as MathBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "mermaid": { const v = item as MermaidBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "chart": { const v = item as ChartBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "view": { const v = item as ViewBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "table": { const v = item as TableBlockView; return v !== null ? v.firstLineCenter : fallback }
-        case "frontmatter": { const v = item as FrontmatterView; return v !== null ? v.firstLineCenter : fallback }
+        case "code":
+        case "calc":
+        case "query":
+        case "math":
+        case "mermaid":
+        case "chart":
+        case "view":
+        case "table":
+        case "frontmatter": return block.loadedLineCenter
         // (The quote / callout frame and the rule below are untyped components: computed here.)
         case "quote":
         case "callout": return (view === "callout" ? Theme.space3 : 0) + editor.firstLineCenter(shownHeadingLevel)
@@ -418,6 +431,12 @@ Item {
             default: return null
             }
         }
+        onLoaded: {
+            if (block.view === "quote" || block.view === "callout" || block.view === "rule")
+                return
+            QmlCall.connect(content.item, "firstLineCenterChanged", block, "readLineCenter")
+            block.readLineCenter()
+        }
     }
 
     // A block's pictures and files, and its embedded blocks: made the first time it has some
@@ -445,6 +464,10 @@ Item {
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
         sourceComponent: BlockParts.part("Transclusions")
+        onLoaded: {
+            QmlCall.connect(transclusionLoader.item, "firstLineCenterChanged", block, "readTransclusionLine")
+            block.readTransclusionLine()
+        }
     }
 
 

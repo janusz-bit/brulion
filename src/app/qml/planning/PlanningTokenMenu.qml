@@ -51,35 +51,44 @@ Item {
     property string targetTime
     /// The time of an occurrence (a calendar entry of a recurring reminder): the reminder's, 09:00 for none.
     readonly property string occurrenceTime: targetTime !== "" ? targetTime : "09:00"
-    property DateChipMenu dateMenu
-    property QuickDateMenu quickDateMenu
-    property LinkMenu linkMenu
+    // The menus and the dialogs are made from their files when first opened (docs/PERFORMANCE.md
+    // "QML files loaded when first used"), reached as BMenu / Item, their own members by name.
+    property BMenu dateMenu
+    property BMenu quickDateMenu
+    property BMenu linkMenu
+    /// A menu of `file` (in qml/editor), a child of this item.
+    function makeMenu(file: string): BMenu {
+        const component = Qt.createComponent(Qt.resolvedUrl("../editor/" + file))
+        return component.createObject(root) as BMenu
+    }
     // The link whose menu is open (see openLink()).
     property string linkUrl
     property string linkFromPath
     property bool linkFilterable: false
     property string linkTag
 
-    EditorDialogs {
-        id: dialogs
-        editor: null
-        controller: null
+    /// The dialogs (EditorDialogs, without an editor or controller), made when one first opens.
+    property Item dialogs: null
+    function dialogsNow(): Item {
+        if (!root.dialogs) {
+            const component = Qt.createComponent(Qt.resolvedUrl("../editor/EditorDialogs.qml"))
+            root.dialogs = component.createObject(root) as Item
+            QmlCall.connect(root.dialogs, "applied", root, "dialogApplied")
+        }
+        return root.dialogs
     }
     // openToken()'s token and PlanningActions.tokenMenu()'s answer, read by key.
     MapHolder { id: tokenHolder }
     MapHolder { id: infoHolder }
     // The dialogs' answers to the requests made here ("planning").
-    Connections {
-        target: dialogs
-        function onApplied(target: string, action: string, a: var, b: var) {
-            if (target === "planning")
-                root.run(action, a, b)
-            else if (target === "planningAdd" && action === "set")
-                root.addDate("" + a)
-            // (The date dialog switched to "Reminder" / "Alarm".)
-            else if (target === "planningAdd" && action === "reminder")
-                root.addReminder("" + a, UiModels.boolField(b, "alarm") === true)
-        }
+    function dialogApplied(target: string, action: string, a: var, b: var): void {
+        if (target === "planning")
+            root.run(action, a, b)
+        else if (target === "planningAdd" && action === "set")
+            root.addDate("" + a)
+        // (The date dialog switched to "Reminder" / "Alarm".)
+        else if (target === "planningAdd" && action === "reminder")
+            root.addReminder("" + a, UiModels.boolField(b, "alarm") === true)
     }
 
     /// Open the token menu for `t` at (x, y) of `item`: { path, line, text (the task's plain text:
@@ -89,18 +98,21 @@ Item {
     function openToken(t: var, item: Item, x: real, y: real): bool {
         if (!setTarget(t))
             return false
-        if (!dateMenu)
-            dateMenu = dateMenuComponent.createObject(root) as DateChipMenu
-        dateMenu.kind = targetKind
-        dateMenu.alarm = targetAlarm
-        dateMenu.rule = targetRule
-        dateMenu.priority = targetPriority
-        dateMenu.logseq = infoHolder.map.logseq === true
-        dateMenu.isTask = tokenHolder.map.isTask === true
-        dateMenu.occurrence = targetOccurrence
+        if (!dateMenu) {
+            dateMenu = root.makeMenu("DateChipMenu.qml")
+            QmlCall.connect(dateMenu, "chosen", root, "choose")
+        }
+        QmlCall.set(dateMenu, "kind", targetKind)
+        QmlCall.set(dateMenu, "alarm", targetAlarm)
+        QmlCall.set(dateMenu, "rule", targetRule)
+        QmlCall.set(dateMenu, "priority", targetPriority)
+        QmlCall.set(dateMenu, "logseq", infoHolder.map.logseq === true)
+        QmlCall.set(dateMenu, "isTask", tokenHolder.map.isTask === true)
+        QmlCall.set(dateMenu, "occurrence", targetOccurrence)
         // A later time of a recurring reminder that has not come yet would still ring: no snooze.
-        dateMenu.snoozable = !(targetOccurrence && targetKind === "reminder"
-                               && DatesHelper.compare(occurrenceAt(), DatesHelper.now()) > 0)
+        const snoozable = !(targetOccurrence && targetKind === "reminder"
+                            && DatesHelper.compare(occurrenceAt(), DatesHelper.now()) > 0)
+        QmlCall.set(dateMenu, "snoozable", snoozable)
         dateMenu.popup(item, x, y)
         return true
     }
@@ -154,8 +166,11 @@ Item {
         targetPath = path
         targetLine = line
         targetText = text
-        if (!quickDateMenu)
-            quickDateMenu = quickDateComponent.createObject(root) as QuickDateMenu
+        if (!quickDateMenu) {
+            quickDateMenu = root.makeMenu("QuickDateMenu.qml")
+            QmlCall.connect(quickDateMenu, "dateChosen", root, "addDate")
+            QmlCall.connect(quickDateMenu, "pickRequested", root, "pickNewDate")
+        }
         quickDateMenu.popup(item, x, y)
         return true
     }
@@ -188,14 +203,17 @@ Item {
         linkFromPath = fromPath
         linkFilterable = filterable
         linkTag = kind === "tag" ? Js.decodeURIComponent(Js.sliceFrom(url, 4)) : ""
-        if (!linkMenu)
-            linkMenu = linkMenuComponent.createObject(root) as LinkMenu
-        linkMenu.kind = kind
+        if (!linkMenu) {
+            linkMenu = root.makeMenu("LinkMenu.qml")
+            QmlCall.connect(linkMenu, "chosen", root, "chooseLink")
+        }
+        QmlCall.set(linkMenu, "kind", kind)
         // A [[link]] to a page that does not exist offers "Create page", as in the editor; a
         // path part naming a folder "Show folder".
-        linkMenu.unresolved = kind === "page" && actions.linkMissing(url, fromPath)
-        linkMenu.folder = partFolder
-        linkMenu.filterFirst = kind === "tag" && filterable
+        const unresolved = kind === "page" && actions.linkMissing(url, fromPath)
+        QmlCall.set(linkMenu, "unresolved", unresolved)
+        QmlCall.set(linkMenu, "folder", partFolder)
+        QmlCall.set(linkMenu, "filterFirst", kind === "tag" && filterable)
         linkMenu.popup(item, x, y)
         return true
     }
@@ -218,15 +236,17 @@ Item {
     function choose(action: string, a: var, b: var): void {
         switch (action) {
         case "change":
+            root.dialogsNow()
             if (targetKind === "reminder")
-                dialogs.editReminderWith("planning", targetValue, targetAlarm, targetRule, targetText)
+                QmlCall.call5(root.dialogs, "editReminderWith", "planning", targetValue, targetAlarm, targetRule, targetText)
             else if (targetKind === "recurrence")
-                dialogs.pickRecurrenceWith("planning", targetRule, "recurrence")
+                QmlCall.call3(root.dialogs, "pickRecurrenceWith", "planning", targetRule, "recurrence")
             else
-                dialogs.pickDateWith("planning", targetKind, targetValue)
+                QmlCall.call3(root.dialogs, "pickDateWith", "planning", targetKind, targetValue)
             break
         case "blockRecurrenceChange":
-            dialogs.pickRecurrenceWith("planning", targetRule, "blockRecurrence")
+            root.dialogsNow()
+            QmlCall.call3(root.dialogs, "pickRecurrenceWith", "planning", targetRule, "blockRecurrence")
             break
         default:
             // One time of a recurring reminder (the calendar's other dates): snoozed, the series stays.
@@ -258,7 +278,12 @@ Item {
         case "openTab": root.openLinkIn("tab"); break
         case "openWindow": root.openLinkIn("window"); break
         case "overview": AppController.navigate({ view: "tag", tag: linkTag, overview: true }); break
-        case "tasks": if (linkMenu) AppController.navigate({ view: "tasks", query: linkMenu.tasksQuery(linkTag) }); break
+        case "tasks":
+            if (linkMenu) {
+                const query = QmlCall.text(QmlCall.call1(linkMenu, "tasksQuery", linkTag))
+                AppController.navigate({ view: "tasks", query: query })
+            }
+            break
         case "copy": root.copyLink(actions.linkText(linkUrl, linkFromPath)); break
         }
     }
@@ -270,23 +295,9 @@ Item {
             message(qsTr("Could not copy: the clipboard is not available"), "error")
     }
 
-    Component {
-        id: dateMenuComponent
-        DateChipMenu {
-            onChosen: (action, a, b) => root.choose(action, a, b)
-        }
-    }
-    Component {
-        id: quickDateComponent
-        QuickDateMenu {
-            onDateChosen: (date) => root.addDate(date)
-            onPickRequested: dialogs.pickNewDateWith("planningAdd", "due")
-        }
-    }
-    Component {
-        id: linkMenuComponent
-        LinkMenu {
-            onChosen: (action) => root.chooseLink(action)
-        }
+    /// The quick date menu's "Pick a date…".
+    function pickNewDate(): void {
+        root.dialogsNow()
+        QmlCall.call2(root.dialogs, "pickNewDateWith", "planningAdd", "due")
     }
 }

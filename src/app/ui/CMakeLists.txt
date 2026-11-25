@@ -137,6 +137,19 @@ target_link_libraries(brulion_ui_memory PUBLIC Qt6::Core Qt6::Gui Qt6::Quick PRI
 qt_extract_metatypes(brulion_ui_memory)
 brulion_set_warnings(brulion_ui_memory)
 
+# brulion_ui_qmlcall — QmlCall and QmlValue (qmlcall.h): a function of a QML object called, and a
+# property read, written or followed, by name — for QML made from its file when first used and
+# reached through a base type (docs/UI.md "QML files loaded when first used"). QtCore + QtQml; a
+# static library so that tests/app/tst_qmlcall drives it without the app; registered as the
+# singleton "QmlCall" and the type "QmlValue" by qmlforeign.h.
+qt_add_library(brulion_ui_qmlcall STATIC
+    qmlcall.h qmlcall.cpp
+)
+target_include_directories(brulion_ui_qmlcall PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_qmlcall PUBLIC Qt6::Core PRIVATE Qt6::Qml)
+qt_extract_metatypes(brulion_ui_qmlcall)
+brulion_set_warnings(brulion_ui_qmlcall)
+
 # brulion_ui_layoutdump — LayoutDump (layoutdump.h): what a window shows (texts with colours and
 # fonts, targets, boxes, the theme's tokens) as JSON for the UI benchmark (`--dump-layout`,
 # tests/app/uibench). Qt Quick's public API only; a static library so that

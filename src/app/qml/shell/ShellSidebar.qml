@@ -35,6 +35,10 @@ import Brulion
 Rectangle {
     id: sidebar
 
+    /// An extension section's view (ShellExtensionView): its file and first values.
+    readonly property url _linesSource: Qt.resolvedUrl("ShellExtensionView.qml")
+    property var _linesValues: ({})
+
     property real topInset: 0
     property real bottomInset: 0
     /// Room at the header's start for something drawn over it (wide windows: AppShell's button
@@ -769,6 +773,7 @@ Rectangle {
                     }
                 }
                 // ---- The extensions' sections (a view each, for the page on screen) --------
+                // (What the next view's setSource() gets, read from properties as compiled QML wants.)
                 Repeater {
                     model: sidebar.extensionPanels
                     delegate: Column {
@@ -811,14 +816,17 @@ Rectangle {
                             sourceComponent: Item {
                                 id: sidebarPanel
                                 implicitHeight: sidebarLines.height + Theme.space2
-                                ShellExtensionView {
+                                // (ShellExtensionView, loaded from its file: docs/PERFORMANCE.md "QML
+                                // files loaded when first used".)
+                                Loader {
                                     id: sidebarLines
-                                    objectName: "sidebarExtensionLines"
                                     x: Theme.space2
                                     width: parent.width - 2 * Theme.space2
-                                    embedded: true
-                                    lines: sidebarModel
-                                    Accessible.name: AppController.routeText(extensionSection.modelData, "title")
+                                    Component.onCompleted: {
+                                        sidebar._linesValues = { objectName: "sidebarExtensionLines", embedded: true, lines: sidebarModel,
+                                                                 accessibleName: AppController.routeText(extensionSection.modelData, "title") }
+                                        sidebarLines.setSource(sidebar._linesSource, sidebar._linesValues)
+                                    }
                                 }
                             }
                         }

@@ -164,11 +164,22 @@ FocusScope {
     readonly property bool touch: Theme.touchUi
 
     // ---- The touch toolbar, docked on the keyboard (docs/UI.md "On-screen keyboard") ------------
-    /// The table whose cell is being edited (TableBlockView sets and clears it), else null.
-    final property TableBlockView editingTable: null
+    /// The table whose cell is being edited (TableBlockView sets and clears it), else null. Its
+    /// members are reached by name (QmlCall): TableBlockView is loaded from its file for a page that
+    /// has a table (BlockDelegate; docs/PERFORMANCE.md "QML files loaded when first used").
+    property Item editingTable: null
     /// editingTable = `table` (a TableBlockView, or null).
     function setEditingTable(table: Item): void {
-        editingTable = table as TableBlockView
+        editingTable = table
+    }
+    /// The field of the cell being edited (null: none).
+    function tableCell(): T.TextField {
+        return editingTable !== null ? QmlCall.object(editingTable, "cellInput") as T.TextField : null
+    }
+    /// The row of `table`'s block (-1: none).
+    function tableRow(table: Item): int {
+        const owner = table !== null ? QmlCall.object(table, "block") as BlockDelegate : null
+        return owner !== null ? owner.index : -1
     }
     /// Source mode with its text being edited (SourceEditor: the text has the keyboard).
     property bool sourceEditing: false
@@ -198,8 +209,10 @@ FocusScope {
     function typingHasKeys(): bool {
         if (toolbarMode === "block")
             return activeEditor !== null && activeEditor.activeFocus
-        if (toolbarMode === "cell")
-            return editingTable !== null && editingTable.cellInput !== null && editingTable.cellInput.activeFocus
+        if (toolbarMode === "cell") {
+            const cell = editor.tableCell()
+            return cell !== null && cell.activeFocus
+        }
         if (toolbarMode === "source")
             return sourceTextEdit !== null && sourceTextEdit.activeFocus
         return false
@@ -240,9 +253,9 @@ FocusScope {
     property string copyRefShortcut: "Ctrl+Shift+C"
     property string sourceModeShortcut: "Ctrl+E"
     /// The source's text editor in source mode (the toolbar inserts into it), else null.
-    readonly property TextEdit sourceTextEdit: sourceLoader.item ? (sourceLoader.item as SourceEditor).textEdit : null
+    readonly property TextEdit sourceTextEdit: sourceLoader.item ? QmlCall.object(sourceLoader.item, "textEdit") as TextEdit : null
     /// Source mode's view (null outside it).
-    final readonly property SourceEditor sourceView: sourceLoader.item as SourceEditor
+    final readonly property Item sourceView: sourceLoader.item as Item
 
     /// The bottom of what is seen of the editor, in its own coordinates: the toolbar's top while it
     /// shows, else the bottom of the dock host (on the keyboard). Computed when asked: the days of
@@ -637,6 +650,11 @@ FocusScope {
     // applies its value only when the editor has been completed — after the rows exist — and the
     // new palette (or day) made every row render its text a second time.
     onControllerChanged: {
+        // (What is loaded from its file follows the controller without a Binding of its own.)
+        if (dialogs)
+            QmlCall.set(dialogs, "controller", controller)
+        if (sourceLoader.item)
+            QmlCall.set(sourceLoader.item, "controller", controller)
         updateWholePage()
         if (!controller)
             return
@@ -784,9 +802,8 @@ FocusScope {
         closeSuggestions()
         findTarget.map = target
         if (findTarget.map.source) {
-            const source = sourceLoader.item as SourceEditor
-            if (source)
-                source.showRange(findTarget.map.sourceFrom, findTarget.map.sourceTo, keepKeyboard)
+            if (sourceLoader.item)
+                QmlCall.call3(sourceLoader.item, "showRange", findTarget.map.sourceFrom, findTarget.map.sourceTo, keepKeyboard)
             return
         }
         const row = findTarget.rowOf()
@@ -847,9 +864,8 @@ FocusScope {
     }
     /// Source mode's text: the replaces go through its own undo history.
     function replaceInSource(ranges: list<var>, text: string): void {
-        const source = sourceLoader.item as SourceEditor
-        if (source)
-            source.replaceRanges(ranges, text)
+        if (sourceLoader.item)
+            QmlCall.call2(sourceLoader.item, "replaceRanges", ranges, text)
     }
     /// The caret in source mode, where the bar starts searching (-1: not in source mode).
     function sourcePosition(): int {
@@ -864,7 +880,7 @@ FocusScope {
             return
         if (controller.sourceMode) {
             if (sourceLoader.item)
-                (sourceLoader.item as SourceEditor).focusEditor()
+                QmlCall.call(sourceLoader.item, "focusEditor")
         } else if (controller.editingRow >= 0 && !touch) {
             if (activeEditor)
                 activeEditor.ensureFocus()
@@ -957,8 +973,8 @@ FocusScope {
         // A word the keyboard is still composing becomes text first (an id resets the text).
         if (activeEditor && activeEditor.row === row)
             EditorInput.commitPreedit(activeEditor)
-        else if (editingTable && editingTable.block && editingTable.block.index === row && editingTable.cellInput)
-            EditorInput.commitPreedit(editingTable.cellInput)
+        else if (editor.tableRow(editingTable) === row && editor.tableCell() !== null)
+            EditorInput.commitPreedit(editor.tableCell())
         copied.map = controller.copyLink(row, kind)
         const ok = copied.map.ok === true
         const reason = copied.reason()
@@ -1003,8 +1019,9 @@ FocusScope {
             return -1
         if (controller.editingRow >= 0)
             return controller.editingRow
-        if (editingTable && editingTable.block)
-            return editingTable.block.index
+        const tableRow = editor.tableRow(editingTable)
+        if (tableRow >= 0)
+            return tableRow
         return controller.selectedRow
     }
     /// An extension's command on the block under the caret (uiAction "extension:<id>/<name>", the
@@ -1266,17 +1283,18 @@ FocusScope {
             return
         const name = title !== "" ? title : pageTitle()
         const text = controller.sourceText
-        dialogs.showQrCode(name, text, 0)
+        QmlCall.call3(editor.dialogsNow(), "showQrCode", name, text, 0)
     }
     /// "QR code…" of the selection (a block's menu selects the block with its children first); a
     /// selection over several days of the journal stream goes whole, without a title.
     function showSelectionQrCode(): void {
         if (!controller)
             return
+        editor.dialogsNow()
         const name = inSpan ? "" : pageTitle()
         const count = Math.max(1, inSpan ? stream.count : controller.selectionCount)
         const text = inSpan ? stream.markdown() : controller.selectionMarkdown()
-        dialogs.showQrCode(name, text, count)
+        QmlCall.call3(editor.dialogs, "showQrCode", name, text, count)
     }
     function cutSelection(): bool {
         if (!controller || spanRefuses() || readOnlyRefuses())
@@ -1519,7 +1537,7 @@ FocusScope {
     function ensureEditVisible(): void {
         if (KeyboardInsets.animating || !editor.alive)
             return
-        const cell = editingTable ? editingTable.cellInput : null
+        const cell = editor.tableCell()
         if (activeEditor && activeEditor.activeFocus)
             ensureVisible(activeEditor, activeEditor.caretRect)
         else if (cell)
@@ -1545,9 +1563,9 @@ FocusScope {
     }
 
     /// The table block shown in `row` (null: another kind of block, or no delegate for it now).
-    function tableAt(row: int): TableBlockView {
+    function tableAt(row: int): Item {
         const item = list.itemAtIndex(row) as BlockDelegate
-        return item ? item.contentItem as TableBlockView : null
+        return item !== null && item.view === "table" ? item.contentItem : null
     }
     /// Edit cell (r, c) of the table in `row` (the cell's toolbar after an undo or redo, which
     /// closed the cell first: the table keeps its delegate, the cell opens again with the text the
@@ -1558,7 +1576,7 @@ FocusScope {
         list.forceLayout()
         const table = tableAt(row)
         if (table)
-            table.startCell(r, c)
+            QmlCall.call2(table, "startCell", r, c)
     }
 
     /// The toast after "/Table from CSV…" made a table (`truncated`: rows, columns or text left out).
@@ -1592,7 +1610,7 @@ FocusScope {
             list.forceLayout()
             const table = editor.tableAt(tableFilterLater.row)
             if (table)
-                table.openFilter(tableFilterLater.column)
+                QmlCall.call1(table, "openFilter", tableFilterLater.column)
         }
     }
     Connections {
@@ -1605,7 +1623,7 @@ FocusScope {
     /// The table in `row` shows its filter row.
     function tableFiltering(row: int): bool {
         const table = tableAt(row)
-        return table !== null && table.filtering
+        return table !== null && QmlCall.isTrue(QmlCall.get(table, "filtering"))
     }
 
     /// The same once `menu` is closed: a menu closing gives the keys back to what had them, which
@@ -1639,14 +1657,13 @@ FocusScope {
     /// keyboard — as its "Hide keyboard" does (the word being composed is kept): the shell's quick
     /// capture from the bottom navigation would otherwise open over it. The selection's tools stay.
     function endTouchEditing(): void {
-        const bar = toolbarLoader.item as MobileEditToolbar
-        if (bar && typingToolbar)
-            bar.hideKeyboard()
+        if (toolbarLoader.item && typingToolbar)
+            QmlCall.call(toolbarLoader.item, "hideKeyboard")
     }
 
     function releaseSourceKeyboard(): void {
         if (sourceLoader.item)
-            (sourceLoader.item as SourceEditor).releaseKeyboard()
+            QmlCall.call(sourceLoader.item, "releaseKeyboard")
     }
 
     /// Alt+Enter while editing: follow the link at the caret (a path part of [[A/B/C]]: that
@@ -1673,7 +1690,7 @@ FocusScope {
         if (!controller)
             return
         const offset = controller.editOffsetAt(row)
-        dialogs.editReminder(row, from + offset, to + offset)
+        QmlCall.call3(editor.dialogsNow(), "editReminder", row, from + offset, to + offset)
     }
 
     function activateLink(row: int, link: string): void {
@@ -1684,7 +1701,7 @@ FocusScope {
             return
         const action = activated.action()
         if (action === "reminder") {
-            dialogs.editReminder(row, activated.map.from, activated.map.to)
+            QmlCall.call3(editor.dialogsNow(), "editReminder", row, activated.map.from, activated.map.to)
         } else if (action === "scrollTo") {
             revealRow(activated.map.row)
         } else if (action === "notFound") {
@@ -1728,8 +1745,12 @@ FocusScope {
         }
         editor.voiceRow = row
         editor.voiceCursor = cursor
-        voiceLoader.active = true
-        const dialog = voiceLoader.item as VoiceRecorderDialog
+        if (voiceLoader.item === null) {
+            voiceLoader.source = editor._voiceSource
+            QmlCall.connect(voiceLoader.item, "recorded", editor, "storeVoiceNote")
+            QmlCall.connect(voiceLoader.item, "released", editor, "voiceReleased")
+        }
+        const dialog = voiceLoader.item as T.Popup
         if (dialog)
             dialog.open()
     }
@@ -1749,23 +1770,19 @@ FocusScope {
             AppController.speech.transcribe(path, page, target, line)
     }
     MapHolder { id: recorded }
-    Loader {
-        id: voiceLoader
-        active: false
-        sourceComponent: VoiceRecorderDialog {
-            onRecorded: (file) => editor.storeVoiceNote(file)
-            onReleased: voiceLater.restart()
-        }
-    }
+    // (VoiceRecorderDialog, loaded from its file when first opened.)
+    Loader { id: voiceLoader }
+    readonly property url _voiceSource: Qt.resolvedUrl("../media/VoiceRecorderDialog.qml")
+    function voiceReleased(): void { voiceLater.restart() }
     /// The dialog goes once it has closed and its recording is stored or thrown away (not inside
     /// its own signal).
     Later {
         id: voiceLater
         onTriggered: {
             // (Not one opened again meanwhile.)
-            const dialog = voiceLoader.item as VoiceRecorderDialog
+            const dialog = voiceLoader.item as T.Popup
             if (editor.alive && (!dialog || !dialog.visible))
-                voiceLoader.active = false
+                voiceLoader.source = ""
         }
     }
 
@@ -1797,21 +1814,21 @@ FocusScope {
         command.map = result
         const cursor = command.cursor()
         switch (command.action()) {
-        case "reminder": dialogs.createReminder(row, false); break
-        case "alarm": dialogs.createReminder(row, true); break
-        case "due": dialogs.pickDate(row, "due"); break
-        case "scheduled": dialogs.pickDate(row, "scheduled"); break
-        case "recurrence": dialogs.pickRecurrence(row); break
-        case "date": dialogs.pickJournalDate(row, cursor); break
-        case "template": dialogs.pickTemplate(row); break
-        case "image": dialogs.pickImage(row, cursor); break
-        case "fileLink": dialogs.pickFileLink(row, cursor); break
-        case "csvTable": dialogs.pickCsvTable(row); break
+        case "reminder": QmlCall.call2(editor.dialogsNow(), "createReminder", row, false); break
+        case "alarm": QmlCall.call2(editor.dialogsNow(), "createReminder", row, true); break
+        case "due": QmlCall.call2(editor.dialogsNow(), "pickDate", row, "due"); break
+        case "scheduled": QmlCall.call2(editor.dialogsNow(), "pickDate", row, "scheduled"); break
+        case "recurrence": QmlCall.call1(editor.dialogsNow(), "pickRecurrence", row); break
+        case "date": QmlCall.call2(editor.dialogsNow(), "pickJournalDate", row, cursor); break
+        case "template": QmlCall.call1(editor.dialogsNow(), "pickTemplate", row); break
+        case "image": QmlCall.call2(editor.dialogsNow(), "pickImage", row, cursor); break
+        case "fileLink": QmlCall.call2(editor.dialogsNow(), "pickFileLink", row, cursor); break
+        case "csvTable": QmlCall.call1(editor.dialogsNow(), "pickCsvTable", row); break
         case "encrypt": insertEncrypted(row, cursor); break
-        case "webImage": dialogs.pickWebImage(row, cursor); break
+        case "webImage": QmlCall.call2(editor.dialogsNow(), "pickWebImage", row, cursor); break
         case "drawing": insertDrawing(row, cursor); break
         case "voiceNote": recordVoiceNote(row, cursor); break
-        case "drawingOn": dialogs.pickDrawingBackdrop(row, cursor); break
+        case "drawingOn": QmlCall.call2(editor.dialogsNow(), "pickDrawingBackdrop", row, cursor); break
         case "table":
             list.forceActiveFocus()
             break
@@ -1872,25 +1889,28 @@ FocusScope {
             return
         }
         const popup = suggestionPopup()
-        popup.trigger = detected.map
-        popup.row = edit.row
-        popup.target = edit
-        popup.show()
+        editor.suggestionTrigger = detected.map
+        editor.suggestionRow = edit.row
+        editor.suggestionTarget = edit
+        QmlCall.set(popup, "trigger", editor.suggestionTrigger)
+        QmlCall.set(popup, "row", editor.suggestionRow)
+        QmlCall.set(popup, "target", editor.suggestionTarget)
+        QmlCall.call(popup, "show")
     }
 
     /// SuggestionModel.detect()'s trigger.
     MapHolder { id: detected }
 
     function acceptSuggestion(index: int): void {
-        const edit = suggestions ? suggestions.target : null
+        const edit = suggestions ? editor.suggestionTarget : null
         if (!controller || !edit || index < 0 || index >= suggestionModel.count)
             return
         // The trigger counted the composed word: make it text before replacing it.
         chosenItem.map = suggestionModel.get(index)
         if (EditorInput.commitPreedit(edit))
             updateCompletion(edit)
-        chosenTrigger.map = suggestions.trigger
-        const row = suggestions.row + 0 // (a typed copy: passed on after other calls)
+        chosenTrigger.map = editor.suggestionTrigger
+        const row = editor.suggestionRow + 0 // (a typed copy: passed on after other calls)
         closeSuggestions()
         chosenResult.map = controller.applyCompletion(row, chosenTrigger.map, chosenItem.map)
         handleCommandResult(row, chosenResult.map)
@@ -1954,9 +1974,8 @@ FocusScope {
         if (controller === null)
             return
         if (controller.sourceMode) {
-            const source = sourceLoader.item as SourceEditor
-            if (source !== null)
-                source.reportVimView()
+            if (sourceLoader.item !== null)
+                QmlCall.call(sourceLoader.item, "reportVimView")
             return
         }
         // The view in the editor's own coordinates (a day of the journal stream: what its scroller
@@ -2146,13 +2165,13 @@ FocusScope {
         // Suggestion popup navigation.
         if (suggestionsOpen) {
             switch (key) {
-            case Qt.Key_Up: suggestions.move(-1); return true
-            case Qt.Key_Down: suggestions.move(1); return true
+            case Qt.Key_Up: QmlCall.call1(suggestions, "move", -1); return true
+            case Qt.Key_Down: QmlCall.call1(suggestions, "move", 1); return true
             case Qt.Key_Return:
             case Qt.Key_Enter:
             case Qt.Key_Tab:
                 if (!ctrl && !shift) {
-                    acceptSuggestion(suggestions.currentIndex)
+                    acceptSuggestion(QmlCall.integer(QmlCall.get(suggestions, "currentIndex")))
                     return true
                 }
                 break
@@ -2566,7 +2585,7 @@ FocusScope {
         onTriggered: {
             if (!editor.alive || !editor.controller)
                 return
-            if (!editor.activeFocus && !editor.suggestionsOpen && !editor.dialogs.anyOpen)
+            if (!editor.activeFocus && !editor.suggestionsOpen && !editor.dialogsOpen())
                 editor.controller.save()
         }
     }
@@ -2731,36 +2750,14 @@ FocusScope {
 
     // Popups, dialogs and the drop hint are created when first needed (see EditorDialogs): every
     // page and every day of the journal stream has its own editor.
-    property BDialog mergeDialog: null
+    property T.Popup mergeDialog: null
     function openMergeDialog(): void {
-        if (!mergeDialog)
-            mergeDialog = mergeComponent.createObject(editor) as BDialog
+        if (!mergeDialog) {
+            editor._popupValues = { editorItem: editor }
+            mergeDialog = editor.makePopup("EditorMergeDialog.qml", editor) as T.Popup
+        }
         mergeDialog.open()
     }
-    Component {
-        id: mergeComponent
-        BDialog {
-            id: dialog
-            parent: T.Overlay.overlay
-            title: qsTr("Merge changes")
-            iconName: "git-merge"
-            preferredWidth: Theme.dialogWidthLg
-            showFooter: false
-            BMergeView {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(560, editor.height * 0.7)
-                ours: dialog.opened && editor.controller ? editor.controller.sourceText : ""
-                theirs: dialog.opened && editor.controller ? editor.controller.conflictText : ""
-                oursLabel: qsTr("This device")
-                theirsLabel: qsTr("Other version")
-                onResolved: (text) => {
-                    editor.controller.resolveConflict(text)
-                    dialog.close()
-                }
-            }
-        }
-    }
-
     // ---- The blocks --------------------------------------------------------------------------
 
     ListView {
@@ -2855,14 +2852,17 @@ FocusScope {
                     color: Theme.bgSunken
                     border.width: 1
                     border.color: Theme.borderSubtle
-                    PropertiesPanel {
+                    // (PropertiesPanel, loaded from its file: docs/PERFORMANCE.md "QML files loaded
+                    // when first used".)
+                    Loader {
                         id: draftPanel
                         x: Theme.space1
                         y: Theme.space1
                         width: parent.width - 2 * Theme.space1
-                        editorItem: editor
-                        controller: editor.controller
-                        draft: true
+                        Component.onCompleted: {
+                            editor._popupValues = { editorItem: editor, controller: editor.controller, draft: true }
+                            draftPanel.setSource(editor._propertiesSource, editor._popupValues)
+                        }
                     }
                 }
             }
@@ -3294,15 +3294,22 @@ FocusScope {
         }
     }
 
+    // The page's Markdown source (SourceEditor), loaded from its file when first shown
+    // (docs/PERFORMANCE.md "QML files loaded when first used").
     Loader {
         id: sourceLoader
         anchors.fill: parent
         active: editor.controller !== null && editor.controller.sourceMode
-        sourceComponent: SourceEditor {
-            editorItem: editor
-            controller: editor.controller
-        }
-        onLoaded: (item as SourceEditor).focusEditor()
+        onActiveChanged: editor.loadSource()
+        Component.onCompleted: editor.loadSource()
+        onLoaded: QmlCall.call(sourceLoader.item, "focusEditor")
+    }
+    readonly property url _sourceEditorSource: Qt.resolvedUrl("SourceEditor.qml")
+    function loadSource(): void {
+        if (!sourceLoader.active || sourceLoader.item !== null)
+            return
+        editor._popupValues = { editorItem: editor, controller: editor.controller }
+        sourceLoader.setSource(editor._sourceEditorSource, editor._popupValues)
     }
 
     // ---- Popups, dialogs, toolbar ------------------------------------------------------------
@@ -3323,13 +3330,36 @@ FocusScope {
     readonly property string slashKey: Workspace.extensions !== null
                                        ? Workspace.extensions.contributionsKey("slash", Workspace.extensions.appRevision) : ""
 
-    /// The autocomplete popup (tests read it), created the first time there is something to
-    /// complete — like the dialogs and the touch toolbar, not with every editor.
-    property SuggestionPopup suggestions: null
+    // ---- Popups and dialogs loaded from their files ----------------------------------------------
+    // None of the editor's popups, menus and dialogs is named here as a type (docs/PERFORMANCE.md
+    // "QML files loaded when first used"): a QML file named in another one is loaded with it, and
+    // every page and journal day has an editor. Each is made from its file the first time it opens
+    // (makePopup()), reached through its base type (T.Popup, BMenu, Item), its own members by name
+    // (QmlCall) and its signals connected to this editor's functions (QmlCall.connect).
+    /// The first properties of the next makePopup() (compiled QML wants a call's arguments read
+    /// from properties).
+    property var _popupValues: ({})
+    /// An object of the QML file `file` (relative to this one) with the properties `_popupValues`,
+    /// a child of `owner` (the editor, mostly).
+    function makePopup(file: string, owner: QtObject): QtObject {
+        const component = Qt.createComponent(Qt.resolvedUrl(file))
+        return component.createObject(owner, editor._popupValues)
+    }
+
+    /// The autocomplete popup (SuggestionPopup; tests read it), created the first time there is
+    /// something to complete — like the dialogs and the touch toolbar, not with every editor.
+    property T.Popup suggestions: null
     readonly property bool suggestionsOpen: suggestions !== null && suggestions.visible
-    function suggestionPopup(): SuggestionPopup {
-        if (!suggestions)
-            suggestions = suggestionComponent.createObject(editor) as SuggestionPopup
+    /// What the popup was last opened for (also its own `trigger`, `row`, `target`).
+    property var suggestionTrigger: ({})
+    property int suggestionRow: -1
+    property InlineEditor suggestionTarget: null
+    function suggestionPopup(): T.Popup {
+        if (!suggestions) {
+            editor._popupValues = { editorItem: editor, model: suggestionModel }
+            suggestions = editor.makePopup("SuggestionPopup.qml", editor) as T.Popup
+            QmlCall.connect(suggestions, "activated", editor, "acceptSuggestion")
+        }
         return suggestions
     }
     function closeSuggestions(): void {
@@ -3338,19 +3368,18 @@ FocusScope {
         // No mode left behind: a closed popup computes nothing when the index changes.
         suggestionModel.clear()
     }
-    Component {
-        id: suggestionComponent
-        SuggestionPopup {
-            editorItem: editor
-            model: suggestionModel
-            onActivated: (index) => editor.acceptSuggestion(index)
-        }
-    }
 
     // ---- The block menu --------------------------------------------------------------------------
     /// BlockMenu for a block (made when first opened, one per editor; tests read it): a bullet's or
     /// number's right-click / long press, a right-click on a block, the touch toolbar's "More".
-    property BlockMenu blockMenu: null
+    property BMenu blockMenu: null
+    function blockMenuNow(): BMenu {
+        if (!blockMenu) {
+            editor._popupValues = { editorItem: editor }
+            blockMenu = editor.makePopup("BlockMenu.qml", editor) as BMenu
+        }
+        return blockMenu
+    }
     function openBlockMenu(row: int, item: Item, x: real, y: real): void {
         openCellBlockMenu(row, item, x, y, -2, 0, 0, 0, "")
     }
@@ -3361,14 +3390,13 @@ FocusScope {
                                cellColumns: int, cellAlign: string): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
-        if (!blockMenu)
-            blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
+        blockMenuNow()
         menuAbove = null
         closeSuggestions()
         // A word the keyboard is still composing becomes text before anything acts on the block.
         if (activeEditor)
             EditorInput.commitPreedit(activeEditor)
-        blockMenu.openFor(row, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
+        QmlCall.call6(blockMenu, "openFor", row, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         blockMenu.bottomMargin = menuBottomMargin()
         if (item)
@@ -3402,10 +3430,9 @@ FocusScope {
     function openBlockMenuAbove(row: int, item: Item): void {
         if (!controller || row < 0)
             return
-        if (!blockMenu)
-            blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
-        blockMenu.openFor(row, -2, 0, 0, 0, "")
-        const y = -blockMenu.openHeight() - Theme.space1
+        blockMenuNow()
+        QmlCall.call6(blockMenu, "openFor", row, -2, 0, 0, 0, "")
+        const y = -QmlCall.callNumber(blockMenu, "openHeight") - Theme.space1
         openBlockMenu(row, item, 0, y)
         followToolbarWith(blockMenu, item, y)
         DeviceInfo.hideInputMethod()
@@ -3414,31 +3441,26 @@ FocusScope {
     /// is no block editor that could go on under the menu: its editing ends (its text kept, the
     /// keyboard hidden), the table is selected — the block the menu acts on, the current block of
     /// the palette's commands afterwards — and the menu opens at the table.
-    function openTableBlockMenu(table: TableBlockView): void {
-        if (!controller || !table || !table.block)
+    function openTableBlockMenu(table: Item): void {
+        if (!controller || !table || editor.tableRow(table) < 0)
             return
         // (Typed copies: passed on after other calls.)
-        const row = table.block.index + 0
-        const cellRow = table.editRow + 0
-        const cellColumn = table.editColumn + 0
-        const cellRows = table.cellRowCount() + 0
-        const cellColumns = table.columns + 0
-        const cellAlign = table.cellAlignOf(cellColumn) + ""
-        if (table.cellInput)
-            EditorInput.commitPreedit(table.cellInput)
+        const row = editor.tableRow(table) + 0
+        const cellRow = QmlCall.integer(QmlCall.get(table, "editRow")) + 0
+        const cellColumn = QmlCall.integer(QmlCall.get(table, "editColumn")) + 0
+        const cellRows = QmlCall.integer(QmlCall.call(table, "cellRowCount")) + 0
+        const cellColumns = QmlCall.integer(QmlCall.get(table, "columns")) + 0
+        const cellAlign = QmlCall.text(QmlCall.call1(table, "cellAlignOf", cellColumn)) + ""
+        const cell = QmlCall.object(table, "cellInput") as Item
+        if (cell)
+            EditorInput.commitPreedit(cell)
         DeviceInfo.hideInputMethod()
-        table.closeCell()
+        QmlCall.call(table, "closeCell")
         controller.selectedRow = row
         list.forceActiveFocus()
         list.forceLayout()
         const item = list.itemAtIndex(row) as BlockDelegate
         openCellBlockMenu(row, item, item ? item.contentLeft : 0, 0, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
-    }
-    Component {
-        id: blockMenuComponent
-        BlockMenu {
-            editorItem: editor
-        }
     }
 
     // ---- Pictures from the internet ------------------------------------------------------------
@@ -3455,26 +3477,29 @@ FocusScope {
     }
     /// WebPictureMenu for a shown picture from the internet (EmbedView: a right-click or long
     /// press on it; "⋯" in its viewer). Created when first opened.
-    property WebPictureMenu webPictureMenu: null
+    property BMenu webPictureMenu: null
     property string webPictureMenuUrl: ""
     property int webPictureMenuRow: -1
     function openWebPictureMenu(row: int, url: string, host: string, item: Item, x: real, y: real): void {
         if (!controller)
             return
-        if (!webPictureMenu)
-            webPictureMenu = webPictureMenuComponent.createObject(editor) as WebPictureMenu
+        if (!webPictureMenu) {
+            editor._popupValues = {}
+            webPictureMenu = editor.makePopup("WebPictureMenu.qml", editor) as BMenu
+            QmlCall.connect(webPictureMenu, "chosen", editor, "chooseWebPictureAction")
+        }
         menuAbove = null
         closeSuggestions()
         webPictureMenuUrl = url
         webPictureMenuRow = row
-        webPictureMenu.host = host
-        webPictureMenu.canView = !(webPictureViewer && webPictureViewer.visible)
+        QmlCall.set(webPictureMenu, "host", host)
+        QmlCall.set(webPictureMenu, "canView", !(webPictureViewer && webPictureViewer.visible))
         webPictureMenu.bottomMargin = menuBottomMargin()
         webPictureMenu.popup(item, x, y)
     }
     /// WebPictureViewer: a shown picture from the internet on its own (EmbedView: a click on it;
     /// "View picture" in its menu). `picture` is its embed. Created when first opened.
-    property WebPictureViewer webPictureViewer: null
+    property T.Popup webPictureViewer: null
     property int webPictureViewerRow: -1
     function openWebPictureViewer(row: int, picture: var): void {
         if (!controller || !picture)
@@ -3482,12 +3507,18 @@ FocusScope {
         embedInfo.map = picture
         if (embedInfo.map.state !== "ready")
             return
-        if (!webPictureViewer)
-            webPictureViewer = webPictureViewerComponent.createObject(editor) as WebPictureViewer
+        if (!webPictureViewer) {
+            editor._popupValues = {}
+            webPictureViewer = editor.makePopup("WebPictureViewer.qml", editor) as T.Popup
+            QmlCall.connect(webPictureViewer, "saveRequested", editor, "saveViewedWebPicture")
+            QmlCall.connect(webPictureViewer, "menuRequested", editor, "openViewedWebPictureMenu")
+        }
         menuAbove = null
         closeSuggestions()
         webPictureViewerRow = row
-        webPictureViewer.picture = picture
+        viewedPicture.map = embedInfo.map
+        QmlCall.set(webPictureViewer, "noteBacking", editor.controller !== null ? editor.controller.pictureBacking : -1)
+        QmlCall.set(webPictureViewer, "picture", viewedPicture.map)
         webPictureViewer.open()
     }
     /// The embed of the picture from the internet `url` in row `row` ({} when not shown there).
@@ -3528,34 +3559,25 @@ FocusScope {
             break
         }
     }
-    Component {
-        id: webPictureMenuComponent
-        WebPictureMenu {
-            onChosen: (action) => editor.chooseWebPictureAction(action)
-        }
+    /// The picture the viewer shows (its embed).
+    MapHolder {
+        id: viewedPicture
+        function target(): string { return viewedPicture.map.target ? viewedPicture.map.target : "" }
+        function host(): string { return viewedPicture.map.host ? viewedPicture.map.host : "" }
     }
-    Component {
-        id: webPictureViewerComponent
-        WebPictureViewer {
-            id: pictureViewer
-            noteBacking: editor.controller !== null ? editor.controller.pictureBacking : -1
-            MapHolder {
-                id: shownPicture
-                map: pictureViewer.picture
-                function target(): string { return shownPicture.map.target ? shownPicture.map.target : "" }
-                function host(): string { return shownPicture.map.host ? shownPicture.map.host : "" }
-            }
-            onSaveRequested: {
-                const url = shownPicture.target()
-                pictureViewer.close()
-                if (url !== "")
-                    editor.downloadWebPictures(url)
-            }
-            onMenuRequested: (item) => {
-                editor.openWebPictureMenu(editor.webPictureViewerRow, shownPicture.target(), shownPicture.host(), item, 0,
-                                          item.height)
-            }
-        }
+    /// The viewer's "Save to notebook".
+    function saveViewedWebPicture(): void {
+        const url = viewedPicture.target()
+        if (webPictureViewer)
+            webPictureViewer.close()
+        if (url !== "")
+            downloadWebPictures(url)
+    }
+    /// The viewer's "⋯": the picture's menu under `item`.
+    function openViewedWebPictureMenu(item: Item): void {
+        const target = viewedPicture.target()
+        const host = viewedPicture.host()
+        openWebPictureMenu(webPictureViewerRow, target, host, item, 0, item.height)
     }
 
     // ---- Token menus: dates, reminders, 🔁, priorities, days (DateChipMenu) ---------------------
@@ -3565,7 +3587,7 @@ FocusScope {
     /// Created when first opened; what the menu's choice applies to is `dateMenuMode` with the
     /// values below (popupTokenMenu()). A block is tracked while its menu is open and the chip's
     /// range is used only while the block is unchanged (PageController.trackedRow).
-    property DateChipMenu dateMenu: null
+    property BMenu dateMenu: null
     property int dateMenuBlock: -1
     /// What the open menu's choice applies to: "own" (a token of block dateMenuHandle's text),
     /// "in" (a copy of a block of another file: dateMenuPath, dateMenuLine, dateMenuRaw), "cell"
@@ -3614,19 +3636,23 @@ FocusScope {
             readOnlyHint()
             return
         }
-        if (!dateMenu)
-            dateMenu = dateMenuComponent.createObject(editor) as DateChipMenu
+        if (!dateMenu) {
+            editor._popupValues = {}
+            dateMenu = editor.makePopup("DateChipMenu.qml", editor) as BMenu
+            QmlCall.connect(dateMenu, "chosen", editor, "chooseDateAction")
+            QmlCall.connect(dateMenu, "closed", editor, "tokenMenuClosed")
+        }
         menuAbove = null
         closeSuggestions()
         dateMenuMode = mode
-        dateMenu.kind = dateMenuChip.kind()
-        dateMenu.alarm = dateMenuChip.map.alarm === true
-        dateMenu.rule = dateMenuChip.rule()
-        dateMenu.priority = dateMenuChip.priority()
-        dateMenu.logseq = dateMenuChip.map.logseq === true
-        dateMenu.isTask = dateMenuChip.map.isTask === true
-        dateMenu.occurrence = false
-        dateMenu.readOnly = readOnly
+        QmlCall.set(dateMenu, "kind", dateMenuChip.kind())
+        QmlCall.set(dateMenu, "alarm", dateMenuChip.map.alarm === true)
+        QmlCall.set(dateMenu, "rule", dateMenuChip.rule())
+        QmlCall.set(dateMenu, "priority", dateMenuChip.priority())
+        QmlCall.set(dateMenu, "logseq", dateMenuChip.map.logseq === true)
+        QmlCall.set(dateMenu, "isTask", dateMenuChip.map.isTask === true)
+        QmlCall.set(dateMenu, "occurrence", false)
+        QmlCall.set(dateMenu, "readOnly", readOnly)
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         dateMenu.bottomMargin = menuBottomMargin()
         dateMenu.popup(item, x, y)
@@ -3657,10 +3683,11 @@ FocusScope {
             return false
         closeSuggestions()
         chipFound.map = controller.dateChip(row, link)
-        const kind = BlockViews.textAt(chipFound.map, "kind")
+        const kind = "" + BlockViews.textAt(chipFound.map, "kind")
         if (kind === "" || kind === "day")
             return false
-        dialogs.pickDateAt(row, chipFound.map.from, chipFound.map.to, kind, chipFound.map.at)
+        editor.dialogsNow()
+        QmlCall.call5(editor.dialogs, "pickDateAt", row, chipFound.map.from, chipFound.map.to, kind, chipFound.map.at)
         return true
     }
     /// The "+" of an open task that has a date: the date dialog adding a reminder, an alarm (or a
@@ -3672,7 +3699,7 @@ FocusScope {
         if (activeEditor !== null && activeEditor.row === row && activeEditor.activeFocus)
             EditorInput.commitPreedit(activeEditor)
         closeSuggestions()
-        dialogs.addDateTo(row)
+        QmlCall.call1(editor.dialogsNow(), "addDateTo", row)
     }
 
     /// The menu of a token in block `row`'s text. False when `link` names none.
@@ -3717,7 +3744,7 @@ FocusScope {
     function tokenMenuClosed(): void {
         const edit = dateMenuEdit
         dateMenuEdit = null
-        if (edit && edit.active && !dialogs.anyOpen)
+        if (edit && edit.active && !dialogsOpen())
             edit.ensureFocus()
     }
     /// A chip just asked for (before its menu shows it).
@@ -3735,13 +3762,13 @@ FocusScope {
         switch (action) {
         case "change":
             if (kind === "reminder")
-                dialogs.editReminder(row, dateMenuChip.map.from, dateMenuChip.map.to)
+                QmlCall.call3(editor.dialogsNow(), "editReminder", row, dateMenuChip.map.from, dateMenuChip.map.to)
             else if (kind === "recurrence")
-                dialogs.pickRecurrenceAt(row, dateMenuChip.map.from, dateMenuChip.map.to, dateMenuChip.map.rule)
+                QmlCall.call4(editor.dialogsNow(), "pickRecurrenceAt", row, dateMenuChip.map.from, dateMenuChip.map.to, dateMenuChip.map.rule)
             else
-                dialogs.pickDateAt(row, dateMenuChip.map.from, dateMenuChip.map.to, kind, dateMenuChip.map.at)
+                QmlCall.call5(editor.dialogsNow(), "pickDateAt", row, dateMenuChip.map.from, dateMenuChip.map.to, kind, dateMenuChip.map.at)
             break
-        case "blockRecurrenceChange": dialogs.pickRecurrence(row); break
+        case "blockRecurrenceChange": QmlCall.call1(editor.dialogsNow(), "pickRecurrence", row); break
         case "open": activateLink(row, dateMenuChip.map.url); break
         case "openSide": controller.activateLink(row, dateMenuChip.map.url, true); break
         case "copy": copyText(dateMenuChip.map.copyText ? dateMenuChip.map.copyText : ""); break
@@ -3832,16 +3859,16 @@ FocusScope {
                 const alarm = dateMenuChip.map.alarm === true
                 const rule = dateMenuChip.rule()
                 const context = dateMenuChip.context()
-                dialogs.editReminderWith("token", at, alarm, rule, context)
+                QmlCall.call5(editor.dialogsNow(), "editReminderWith", "token", at, alarm, rule, context)
             } else if (kind === "recurrence") {
-                dialogs.pickRecurrenceWith("token", dateMenuChip.rawRule(), "recurrence")
+                QmlCall.call3(editor.dialogsNow(), "pickRecurrenceWith", "token", dateMenuChip.rawRule(), "recurrence")
             } else {
                 const at = dateMenuChip.at()
-                dialogs.pickDateWith("token", kind, at)
+                QmlCall.call3(editor.dialogsNow(), "pickDateWith", "token", kind, at)
             }
             break
         case "blockRecurrenceChange":
-            dialogs.pickRecurrenceWith("token", dateMenuChip.rawRule(), "blockRecurrence")
+            QmlCall.call3(editor.dialogsNow(), "pickRecurrenceWith", "token", dateMenuChip.rawRule(), "blockRecurrence")
             break
         default: tokenRun(action); break
         }
@@ -3862,15 +3889,13 @@ FocusScope {
                                                dateMenuChip.map.to, action, tokenA, tokenB)
         }
     }
-    Connections {
-        target: dialogsItem
-        function onApplied(target: string, action: string, a: var, b: var) {
-            if (target !== "token")
-                return
-            editor.tokenA = a
-            editor.tokenB = b
-            editor.tokenRun(action)
-        }
+    /// A dialog's choice for a token elsewhere (EditorDialogs.applied).
+    function dialogApplied(target: string, action: string, a: var, b: var): void {
+        if (target !== "token")
+            return
+        editor.tokenA = a
+        editor.tokenB = b
+        editor.tokenRun(action)
     }
     /// The toast after editTokenIn(): what changed, with "Undo" for another file; why not.
     function reportTokenEdit(r: var, action: string): void {
@@ -3902,13 +3927,6 @@ FocusScope {
         id: tokenEdit
         function undo(): int { return tokenEdit.map.undo ? tokenEdit.map.undo : 0 }
     }
-    Component {
-        id: dateMenuComponent
-        DateChipMenu {
-            onChosen: (action, a, b) => editor.chooseDateAction(action, a, b)
-            onClosed: editor.tokenMenuClosed()
-        }
-    }
 
     // ---- The menu of a link: [[page]], #tag, ((block)), web address (LinkMenu) ------------------
     /// LinkMenu for a page:, tag:, block: or ext: link of rendered text — `fromPath`: the page the
@@ -3916,7 +3934,7 @@ FocusScope {
     /// panel with newPane): on the link in block `row` (requester null), else what `requester`
     /// does on linkMenuOpenRequested(requester, link, newPane) (a query result, an embed). Created
     /// when first opened. False when `link` is no such link.
-    property LinkMenu linkMenu: null
+    property BMenu linkMenu: null
     property int linkMenuRow: -1
     property Item linkMenuRequester: null
     property string linkMenuLink
@@ -3938,8 +3956,11 @@ FocusScope {
         chipFound.map = controller.linkMenu(link, fromPath)
         if (!chipFound.map.kind)
             return false
-        if (!linkMenu)
-            linkMenu = linkMenuComponent.createObject(editor) as LinkMenu
+        if (!linkMenu) {
+            editor._popupValues = {}
+            linkMenu = editor.makePopup("LinkMenu.qml", editor) as BMenu
+            QmlCall.connect(linkMenu, "chosen", editor, "chooseLinkAction")
+        }
         menuAbove = null
         closeSuggestions()
         linkMenuInfo.map = chipFound.map
@@ -3947,9 +3968,9 @@ FocusScope {
         linkMenuRequester = requester
         linkMenuLink = link
         linkMenuArmed = true
-        linkMenu.kind = linkMenuInfo.map.kind
-        linkMenu.unresolved = linkMenuInfo.map.unresolved === true
-        linkMenu.folder = linkMenuInfo.map.target === "folder" // a path part naming a folder
+        QmlCall.set(linkMenu, "kind", linkMenuInfo.map.kind)
+        QmlCall.set(linkMenu, "unresolved", linkMenuInfo.map.unresolved === true)
+        QmlCall.set(linkMenu, "folder", linkMenuInfo.map.target === "folder") // a path part naming a folder
         linkMenu.bottomMargin = menuBottomMargin()
         linkMenu.popup(item, x, y)
         return true
@@ -4002,8 +4023,11 @@ FocusScope {
         case "copy": copyText(linkMenuInfo.map.copyText ? linkMenuInfo.map.copyText : ""); break
         case "overview": controller.navigate({ view: "tag", tag: linkMenuInfo.tag(), overview: true }); break
         case "tasks":
-            if (linkMenu)
-                controller.navigate({ view: "tasks", query: linkMenu.tasksQuery(linkMenuInfo.tag()) })
+            if (linkMenu) {
+                const tag = linkMenuInfo.tag()
+                const query = QmlCall.text(QmlCall.call1(linkMenu, "tasksQuery", tag))
+                controller.navigate({ view: "tasks", query: query })
+            }
             break
         }
     }
@@ -4019,19 +4043,24 @@ FocusScope {
             notice(copyFailure(copied.reason()), "error", null)
         return ok
     }
-    Component {
-        id: linkMenuComponent
-        LinkMenu {
-            onChosen: (action) => editor.chooseLinkAction(action)
-        }
-    }
 
     // ---- The status menu of a block's task ----------------------------------------------------
     /// TaskStatusMenu for a block: its checkbox's right-click / long press, Ctrl+Shift+Enter, the
     /// touch toolbar's task button held down. Created when first opened. The block is tracked while
     /// the menu is open (sync or undo may move it); the choice is one undo step
     /// (PageController.setTaskStatus) and the block being edited gets the keyboard back.
-    property TaskStatusMenu taskMenu: null
+    property BMenu taskMenu: null
+    function taskMenuNow(): BMenu {
+        if (!taskMenu) {
+            editor._popupValues = {}
+            taskMenu = editor.makePopup("TaskStatusMenu.qml", editor) as BMenu
+            QmlCall.connect(taskMenu, "statusChosen", editor, "chooseTaskStatus")
+            QmlCall.connect(taskMenu, "clockRequested", editor, "taskMenuClock")
+            QmlCall.connect(taskMenu, "dependencyRequested", editor, "taskMenuDependency")
+            QmlCall.connect(taskMenu, "closed", editor, "taskMenuClosed")
+        }
+        return taskMenu
+    }
     property int taskMenuBlock: -1
     /// Where the keyboard goes when the menu closes: "edit" (the block being edited), "list" (the
     /// selected block, Ctrl+Shift+Enter) or "" (opened with the pointer: wherever it was).
@@ -4043,8 +4072,7 @@ FocusScope {
         if (!controller || row < 0 || row >= controller.blocks.count || readOnlyRefuses())
             return
         taskMenuForSelection = false
-        if (!taskMenu)
-            taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
+        taskMenuNow()
         menuAbove = null
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         taskMenu.bottomMargin = menuBottomMargin()
@@ -4055,14 +4083,15 @@ FocusScope {
         const editing = controller.editingRow >= 0 && activeEditor !== null && activeEditor.row === controller.editingRow
                         && activeEditor.activeFocus
         taskMenuReturn = editing ? "edit" : list.activeFocus ? "list" : ""
-        taskMenu.status = taskStatusOf(row)
+        const status = taskStatusOf(row)
+        QmlCall.set(taskMenu, "status", status)
         // The timer and "Add dependency…" for a task (docs/SYNTAX.md §5).
-        taskMenu.showTaskTools = taskMenu.status !== ""
-        if (taskMenu.showTaskTools) {
+        QmlCall.set(taskMenu, "showTaskTools", status !== "")
+        if (status !== "") {
             taskInfo.map = controller.taskInfo(row)
-            taskMenu.clockRunning = taskInfo.map.clockRunning === true
+            QmlCall.set(taskMenu, "clockRunning", taskInfo.map.clockRunning === true)
         } else {
-            taskMenu.clockRunning = false
+            QmlCall.set(taskMenu, "clockRunning", false)
         }
         closeSuggestions()
         // A word the keyboard is still composing becomes text first (the status resets the text).
@@ -4098,16 +4127,15 @@ FocusScope {
         }
         taskMenuForSelection = selection
         if (taskMenu)
-            taskMenu.highlightStatus()
+            QmlCall.call(taskMenu, "highlightStatus")
     }
     /// The touch toolbar's task button held down: the menu right above the button (the toolbar
     /// is docked on the keyboard).
     function openTaskStatusMenuAbove(row: int, item: Item): void {
         if (!canHaveTaskStatus(row))
             return
-        if (!taskMenu)
-            taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
-        const y = -taskMenu.openHeight() - Theme.space1
+        taskMenuNow()
+        const y = -QmlCall.callNumber(taskMenu, "openHeight") - Theme.space1
         openTaskStatusMenu(row, item, 0, y)
         followToolbarWith(taskMenu, item, y)
     }
@@ -4158,7 +4186,7 @@ FocusScope {
     /// QuickDateMenu: Today, Tomorrow and Next week write the due date at once
     /// (PageController.setDateToken, one undo step), "Pick a date…" opens the date dialog. The block
     /// is tracked while the menu is open; the block being edited gets the keyboard back.
-    property QuickDateMenu quickDateMenu: null
+    property BMenu quickDateMenu: null
     property int quickDateBlock: -1
     /// The row whose menu is open (-1: none): its button stays shown meanwhile.
     property int quickDateRow: -1
@@ -4166,8 +4194,13 @@ FocusScope {
     function openQuickDateMenu(row: int, item: Item): void {
         if (!controller || row < 0 || row >= controller.blocks.count || readOnlyRefuses())
             return
-        if (!quickDateMenu)
-            quickDateMenu = quickDateMenuComponent.createObject(editor) as QuickDateMenu
+        if (!quickDateMenu) {
+            editor._popupValues = {}
+            quickDateMenu = editor.makePopup("QuickDateMenu.qml", editor) as BMenu
+            QmlCall.connect(quickDateMenu, "dateChosen", editor, "chooseQuickDate")
+            QmlCall.connect(quickDateMenu, "pickRequested", editor, "quickDatePick")
+            QmlCall.connect(quickDateMenu, "closed", editor, "quickDateClosed")
+        }
         menuAbove = null
         quickDateMenu.bottomMargin = menuBottomMargin()
         if (quickDateBlock >= 0)
@@ -4196,26 +4229,21 @@ FocusScope {
         if (row >= 0)
             controller.setDateToken(row, "due", date)
     }
-    Component {
-        id: quickDateMenuComponent
-        QuickDateMenu {
-            onDateChosen: (date) => editor.chooseQuickDate(date)
-            onPickRequested: {
-                const row = editor.takeQuickDateRow()
-                if (row >= 0)
-                    editor.dialogs.pickDate(row, "due")
-            }
-            onClosed: {
-                editor.takeQuickDateRow() // closed without a choice: the tracking ends too
-                editor.quickDateRow = -1
-                const back = editor.quickDateReturn
-                editor.quickDateReturn = false
-                // (Not when the date dialog took over: it gives the keyboard back itself.)
-                if (back && !editor.dialogs.anyOpen && editor.activeEditor && editor.controller
-                        && editor.activeEditor.row === editor.controller.editingRow)
-                    editor.activeEditor.ensureFocus()
-            }
-        }
+    /// The quick date menu's "Pick a date…".
+    function quickDatePick(): void {
+        const row = editor.takeQuickDateRow()
+        if (row >= 0)
+            QmlCall.call2(editor.dialogsNow(), "pickDate", row, "due")
+    }
+    function quickDateClosed(): void {
+        editor.takeQuickDateRow() // closed without a choice: the tracking ends too
+        editor.quickDateRow = -1
+        const back = editor.quickDateReturn
+        editor.quickDateReturn = false
+        // (Not when the date dialog took over: it gives the keyboard back itself.)
+        if (back && !editor.dialogsOpen() && editor.activeEditor && editor.controller
+                && editor.activeEditor.row === editor.controller.editingRow)
+            editor.activeEditor.ensureFocus()
     }
 
     /// The status of a block's task as the menu shows it ("" = none).
@@ -4272,13 +4300,18 @@ FocusScope {
         toggleTaskClock(row)
     }
     /// "Add dependency…": the picker for the task at `row`.
-    property TaskDependencyDialog dependencyDialog: null
+    property T.Popup dependencyDialog: null
     property int dependencyBlock: -1
     function openDependencyPicker(row: int): void {
         if (!controller || row < 0 || taskStatusOf(row) === "")
             return
-        if (!dependencyDialog)
-            dependencyDialog = dependencyDialogComponent.createObject(editor.Window.contentItem || editor) as TaskDependencyDialog
+        if (!dependencyDialog) {
+            editor._popupValues = {}
+            dependencyDialog = editor.makePopup("TaskDependencyDialog.qml", editor.Window.contentItem || editor) as T.Popup
+            QmlCall.connect(dependencyDialog, "searchRequested", editor, "dependencySearch")
+            QmlCall.connect(dependencyDialog, "chosen", editor, "dependencyChosen")
+            QmlCall.connect(dependencyDialog, "closed", editor, "dependencyClosed")
+        }
         if (dependencyBlock >= 0)
             controller.untrack(dependencyBlock)
         dependencyBlock = controller.trackBlock(row)
@@ -4292,51 +4325,61 @@ FocusScope {
         }
         openDependencyPicker(row)
     }
-    Component {
-        id: dependencyDialogComponent
-        TaskDependencyDialog {
-            id: dependencies
-            onSearchRequested: (text) => {
-                const row = editor.controller && editor.dependencyBlock >= 0
-                          ? editor.controller.trackedRow(editor.dependencyBlock) : -1
-                dependencies.items = row >= 0 ? editor.controller.dependencyCandidates(row, text) : []
-            }
-            onChosen: (path, line) => {
-                const row = editor.controller.trackedRow(editor.dependencyBlock)
-                if (row >= 0 && editor.controller.addTaskDependency(row, path, line))
-                    editor.notice(qsTr("Dependency added"), "success", null)
-            }
-            onClosed: {
-                if (editor.controller && editor.dependencyBlock >= 0)
-                    editor.controller.untrack(editor.dependencyBlock)
-                editor.dependencyBlock = -1
-            }
-        }
+    /// The dependency picker's search, choice and closing (TaskDependencyDialog's signals).
+    function dependencySearch(text: string): void {
+        const row = editor.controller && editor.dependencyBlock >= 0
+                  ? editor.controller.trackedRow(editor.dependencyBlock) : -1
+        if (row >= 0)
+            QmlCall.set(editor.dependencyDialog, "items", editor.controller.dependencyCandidates(row, text))
+        else
+            QmlCall.set(editor.dependencyDialog, "items", editor.noDependencies)
     }
-    Component {
-        id: taskMenuComponent
-        TaskStatusMenu {
-            onStatusChosen: (status) => editor.chooseTaskStatus(status)
-            onClockRequested: editor.toggleTaskClock(editor.takeTaskMenuRow())
-            onDependencyRequested: editor.openDependencyPicker(editor.takeTaskMenuRow())
-            // The menu had the keyboard: back to the block's text (the caret where it was) or to
-            // the selected block.
-            onClosed: {
-                const back = editor.taskMenuReturn
-                editor.taskMenuReturn = ""
-                if (back === "edit" && editor.activeEditor && editor.controller
-                        && editor.activeEditor.row === editor.controller.editingRow)
-                    editor.activeEditor.ensureFocus()
-                else if (back === "list")
-                    list.forceActiveFocus()
-            }
-        }
+    readonly property list<var> noDependencies: []
+    function dependencyChosen(path: string, line: int): void {
+        const row = editor.controller.trackedRow(editor.dependencyBlock)
+        if (row >= 0 && editor.controller.addTaskDependency(row, path, line))
+            editor.notice(qsTr("Dependency added"), "success", null)
+    }
+    function dependencyClosed(): void {
+        if (editor.controller && editor.dependencyBlock >= 0)
+            editor.controller.untrack(editor.dependencyBlock)
+        editor.dependencyBlock = -1
+    }
+    /// The task menu's choices (TaskStatusMenu's signals).
+    function taskMenuClock(): void {
+        const row = editor.takeTaskMenuRow()
+        editor.toggleTaskClock(row)
+    }
+    function taskMenuDependency(): void {
+        const row = editor.takeTaskMenuRow()
+        editor.openDependencyPicker(row)
+    }
+    /// The menu had the keyboard: back to the block's text (the caret where it was) or to the
+    /// selected block.
+    function taskMenuClosed(): void {
+        const back = editor.taskMenuReturn
+        editor.taskMenuReturn = ""
+        if (back === "edit" && editor.activeEditor && editor.controller
+                && editor.activeEditor.row === editor.controller.editingRow)
+            editor.activeEditor.ensureFocus()
+        else if (back === "list")
+            list.forceActiveFocus()
     }
 
-    EditorDialogs {
-        id: dialogsItem
-        editorItem: editor
-        controller: editor.controller
+    /// The editor's dialogs (EditorDialogs: dates, reminders, recurrence, pictures, files, QR
+    /// codes…), made the first time one of them is asked for (dialogsNow()); null until then.
+    property Item dialogs: null
+    function dialogsNow(): Item {
+        if (!dialogs) {
+            editor._popupValues = { editorItem: editor, controller: editor.controller }
+            dialogs = editor.makePopup("EditorDialogs.qml", editor) as Item
+            QmlCall.connect(dialogs, "applied", editor, "dialogApplied")
+        }
+        return dialogs
+    }
+    /// One of the editor's dialogs is open.
+    function dialogsOpen(): bool {
+        return editor.dialogs !== null && QmlCall.isTrue(QmlCall.get(editor.dialogs, "anyOpen"))
     }
 
     // The touch toolbar on the bottom edge of the dock host (the shell keeps it on the keyboard;
@@ -4345,25 +4388,30 @@ FocusScope {
     // Latched here, not in `active`'s own binding: the Loader loads synchronously inside that
     // binding, so an onLoaded that changed one of its inputs was a binding loop. The Loader is
     // the editor's (destroyed with it) even when it is shown in another item.
-    onToolbarVisibleChanged: if (toolbarVisible) toolbarLoader.active = true
+    onToolbarVisibleChanged: if (toolbarVisible) editor.loadToolbar()
     Component.onCompleted: {
         updateWholePage()
         if (toolbarVisible)
-            toolbarLoader.active = true
+            editor.loadToolbar()
     }
+    /// The touch toolbar (MobileEditToolbar) made from its file (docs/PERFORMANCE.md "QML files
+    /// loaded when first used"), once.
+    function loadToolbar(): void {
+        if (toolbarLoader.item !== null)
+            return
+        editor._popupValues = { editorItem: editor }
+        toolbarLoader.setSource(editor._toolbarSource, editor._popupValues)
+    }
+    readonly property url _toolbarSource: Qt.resolvedUrl("MobileEditToolbar.qml")
     Loader {
         id: toolbarLoader
         objectName: "editToolbarSlot"
         parent: editor.dockHost
-        active: false
         visible: editor.toolbarVisible
         y: editor.dockHost.height - height
         width: editor.dockHost.width
         height: editor.toolbarHeight
         z: 10
-        sourceComponent: MobileEditToolbar {
-            editorItem: editor
-        }
     }
 
     // ---- The selection's tools on desktops ---------------------------------------------------------
@@ -4393,21 +4441,28 @@ FocusScope {
                 color: Theme.bgElevated
                 border.width: 1
                 border.color: Theme.border
-                SelectionToolbar {
+                // (SelectionToolbar, loaded from its file: docs/PERFORMANCE.md "QML files loaded when
+                // first used".)
+                Loader {
                     id: tools
-                    objectName: "floatingSelectionTools"
                     x: Theme.space1
                     y: Theme.space1
                     height: Theme.controlHeight
-                    editorItem: editor
+                    Component.onCompleted: {
+                        editor._popupValues = { objectName: "floatingSelectionTools", editorItem: editor }
+                        tools.setSource(editor._selectionToolsSource, editor._popupValues)
+                    }
                 }
             }
         }
     }
 
+    readonly property url _selectionToolsSource: Qt.resolvedUrl("SelectionToolbar.qml")
+    readonly property url _propertiesSource: Qt.resolvedUrl("PropertiesPanel.qml")
+
     // ---- The AI in the editor (docs/UI.md "AI in the editor") ------------------------------------------
     /// The writing assistant's dialog (WritingDialog), made when first asked.
-    property WritingDialog writingDialog: null
+    property T.Popup writingDialog: null
     /// The AI may be asked here: the assistant is on and the page can be changed.
     readonly property bool writingAvailable: AppSettings.assistantEnabled && controller !== null && !controller.readOnly
     /// `action` ("rewrite" | "continue" | "summarize"; a rewrite after `preset`, or "" to choose one)
@@ -4427,9 +4482,10 @@ FocusScope {
             notice(qsTr("Reading mode: the page is not changed"), "info", null)
             return false
         }
-        if (!writingDialog)
-            writingDialog = writingComponent.createObject(editor) as WritingDialog
-        const dialog = writingDialog
+        if (!writingDialog) {
+            editor._popupValues = { editorItem: editor }
+            writingDialog = editor.makePopup("WritingDialog.qml", editor) as T.Popup
+        }
         // (What it works on is what an extension's ctx.selection reads: pointedAt().)
         const pointed = pointedAt()
         if (controller.sourceMode && pointed !== "source")
@@ -4440,7 +4496,7 @@ FocusScope {
             const text = "" + EditorInput.plainText(source.textDocument)
             const from = source.selectionStart + 0
             const to = source.selectionEnd + 0
-            return dialog.startSource(action, preset, text, from, to)
+            return QmlCall.isTrue(QmlCall.call5(editor.writingDialog, "startSource", action, preset, text, from, to))
         }
         if (pointed === "edit") {
             const edit = activeEditor
@@ -4449,14 +4505,14 @@ FocusScope {
             const text = "" + edit.plain()
             const from = (action === "continue" ? edit.cursorPosition : edit.selectionStart) + 0
             const to = (action === "continue" ? edit.cursorPosition : edit.selectionEnd) + 0
-            return dialog.startInline(action, preset, r, text, from, to)
+            return QmlCall.isTrue(QmlCall.call6(editor.writingDialog, "startInline", action, preset, r, text, from, to))
         }
         if (pointed === "blocks") {
             const markdown = "" + controller.selectionMarkdown()
             const first = controller.selectionFirstRow + 0
             const last = controller.selectionLastRow + 0
             if (Js.trim(markdown) !== "")
-                return dialog.startBlocks(action, preset, markdown, first, last)
+                return QmlCall.isTrue(QmlCall.call5(editor.writingDialog, "startBlocks", action, preset, markdown, first, last))
         }
         const row = currentRow()
         if (row >= 0) {
@@ -4464,7 +4520,8 @@ FocusScope {
             const text = "" + AppController.routeText(writingHeld.map, "editText")
             const length = Js.trim(text) !== "" ? text.length : -1
             if (length >= 0)
-                return dialog.startInline(action, preset, row, text, action === "continue" ? length : 0, length)
+                return QmlCall.isTrue(QmlCall.call6(editor.writingDialog, "startInline", action, preset, row, text,
+                                                    action === "continue" ? length : 0, length))
         }
         notice(qsTr("Select text, or put the caret in a block, first"), "info", null)
         return false
@@ -4492,12 +4549,6 @@ FocusScope {
             return
         EditorInput.replaceRange(sourceTextEdit.textDocument, from, to, text)
         sourceTextEdit.select(from, from + text.length)
-    }
-    Component {
-        id: writingComponent
-        WritingDialog {
-            editorItem: editor
-        }
     }
     /// The writing assistant's menu of the touch toolbar and the selection tools (its button with
     /// the sparkles): Rewrite… and its most asked presets, Continue writing, Summarize. Made when
@@ -4879,14 +4930,19 @@ FocusScope {
     // ---- Encrypted text (docs/UI.md "Encrypted notes") -----------------------------------------
     /// The fragment dialog (EncryptedTextDialog), made when first opened. The block it is about is
     /// tracked while it is open (PageController.trackBlock): the page may change meanwhile.
-    property EncryptedTextDialog encryptedDialog: null
+    property T.Popup encryptedDialog: null
     property int encryptedHandle: -1
     /// The fragment's range in the block's body ("unlock"), or the selection's in its edit text ("new").
     property int encryptedFrom: 0
     property int encryptedTo: 0
     function ensureEncryptedDialog(): void {
-        if (!encryptedDialog)
-            encryptedDialog = encryptedDialogComponent.createObject(editor) as EncryptedTextDialog
+        if (encryptedDialog)
+            return
+        editor._popupValues = {}
+        encryptedDialog = editor.makePopup("EncryptedTextDialog.qml", editor) as T.Popup
+        QmlCall.connect(encryptedDialog, "fragmentSaved", editor, "saveEncrypted")
+        QmlCall.connect(encryptedDialog, "fragmentCreated", editor, "insertEncryptedText")
+        QmlCall.connect(encryptedDialog, "closed", editor, "encryptedClosed")
     }
     function trackEncrypted(row: int): void {
         if (encryptedHandle >= 0)
@@ -4910,7 +4966,7 @@ FocusScope {
         encryptedFrom = from
         encryptedTo = to
         ensureEncryptedDialog()
-        encryptedDialog.openFragment(controller.path, fragment)
+        QmlCall.call2(encryptedDialog, "openFragment", controller.path, fragment)
     }
     /// "Encrypt selection…": the selection of the edited text `edit` becomes a fragment.
     function encryptSelection(edit: InlineEditor): void {
@@ -4927,7 +4983,8 @@ FocusScope {
         encryptedFrom = from
         encryptedTo = to
         ensureEncryptedDialog()
-        encryptedDialog.openNew(controller.path, "" + edit.selectedText, true)
+        const selected = "" + edit.selectedText
+        QmlCall.call3(encryptedDialog, "openNew", controller.path, selected, true)
     }
     /// "Insert encrypted text" (the slash command, the palette): a new fragment at `cursor` of `row`.
     function insertEncrypted(row: int, cursor: int): void {
@@ -4937,7 +4994,7 @@ FocusScope {
         encryptedFrom = cursor
         encryptedTo = cursor
         ensureEncryptedDialog()
-        encryptedDialog.openNew(controller.path, "", false)
+        QmlCall.call3(encryptedDialog, "openNew", controller.path, "", false)
     }
     /// The palette's "Encrypt selection": the edited text's selection, else the caret's new fragment.
     function encryptAtCursor(): void {
@@ -4950,17 +5007,10 @@ FocusScope {
         else
             notice(qsTr("Place the cursor in a block first"), "info", null)
     }
-    Component {
-        id: encryptedDialogComponent
-        EncryptedTextDialog {
-            onFragmentSaved: (fragment, text, decrypted) => editor.saveEncrypted(fragment, text, decrypted)
-            onFragmentCreated: (text) => editor.insertEncryptedText(text)
-            onClosed: {
-                if (editor.encryptedHandle >= 0 && editor.controller)
-                    editor.controller.untrack(editor.encryptedHandle)
-                editor.encryptedHandle = -1
-            }
-        }
+    function encryptedClosed(): void {
+        if (editor.encryptedHandle >= 0 && editor.controller)
+            editor.controller.untrack(editor.encryptedHandle)
+        editor.encryptedHandle = -1
     }
     function saveEncrypted(fragment: string, text: string, decrypted: bool): void {
         const row = encryptedHandle >= 0 && controller ? controller.trackedRow(encryptedHandle) + 0 : -1
@@ -5115,8 +5165,5 @@ FocusScope {
         }
     }
 
-    /// The dialogs (for tests and the playground's scripted states). (final: looked into through
-    /// `editor` by the touch toolbar and the views.)
-    final property EditorDialogs dialogs: dialogsItem
     final property ListView listView: list
 }
