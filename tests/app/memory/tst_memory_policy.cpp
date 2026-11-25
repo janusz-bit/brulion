@@ -39,6 +39,13 @@ class TestMemoryPolicy : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase()
+    {
+        // (A run that sets the policy's times for the whole suite: this test sets its own.)
+        for (const char *name : {"BRULION_IDLE_MS", "BRULION_AWAY_MS", "BRULION_HIDDEN_VIEW_MS"})
+            qunsetenv(name);
+    }
+
     void defaults()
     {
         MemoryPolicy policy;
