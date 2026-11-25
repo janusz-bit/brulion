@@ -5765,8 +5765,10 @@ have, or what is used only now and then, is created when needed: block and task 
 open, the block editor's dialogs, autocomplete popup, merge dialog, drop hint and touch toolbar on
 first use, a block's fold arrow / bullet / number / checkbox only when it has one, a text block's
 text without a Loader, a table cell's tooltip when it shows, a table's buttons when they show, a
-task box's icon for "done" / "deferred" only; `BIcon` creates no image without a name (an
-`Image` without a source; Qt's `IconImage` without one searched the icon theme on disk). The shell
+task box's icon for "done" / "deferred" only; `BIcon` creates no image without a name or before
+it is first visible (Qt's `IconImage` without a source searched the icon theme on disk);
+`BFocusRing` (`src/app/ui/focusring.h`) makes its ring (`BFocusRingShape.qml`) the first time it
+shows; a button's spinner exists while it is busy. The shell
 does the same (docs/PERFORMANCE.md "L10"): its dialogs and menus, the journal's "Go to day", the
 side panel and the update banner are made the first time they open or show — the four popups
 used most are built ahead in the background after the notebook is ready —, a phone's drawer
@@ -7318,9 +7320,13 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   New icons: copy from `lucide-static`, normalise like the others, re-run CMake. They render
   everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
   on the CPU, no shader effect).
-  `BIcon` is an `Item` with one `Image` (no Loader, no `IconImage`; not an `Image` itself, whose
-  implicit size is read-only and its picture's): the image's source is `Icons.source(name, color)`,
-  "image://bicon/<colour>/<name>" (`src/app/ui/iconprovider.h`, library `brulion_ui_icons`), whose
+  `BIcon` is a C++ item (`src/app/ui/iconprovider.h`, library `brulion_ui_icons`; until 2026-11
+  `BIcon.qml`, an `Item` with an `Image` and nine bindings) that makes one Qt Quick `Image` as its
+  child the first time it is visible with a name, and sets its properties itself — no bindings, no
+  `Accessible` attached object (icons are decorative: not accessible items), no QML context of its
+  own; its `size` and `color` are `Theme.iconSize` and `Theme.fg` until set. Not an `Image`
+  itself, whose implicit size is read-only and its picture's: the image's source is
+  `Icons.sourceUrl(name, color)`, "image://bicon/<colour>/<name>", whose
   provider rasterises the SVG at the requested size (size × the device pixel ratio) and fills it
   with the colour in `SourceIn` — exactly what Qt's `IconImage` drew; Qt Quick's pixmap cache then
   shares one image and one texture among every icon of that name, size and colour (an
