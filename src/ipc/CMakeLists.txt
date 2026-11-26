@@ -1,7 +1,8 @@
 # brulion_ipc — the desktop's sockets (QLocalServer/QLocalSocket): the single-instance socket — one
 # Brulion per user session, and the messages a second launch or brulion-cli (`app open …`) sends to
 # the running app (appmessage.h) — and the remote control of the running app (controlprotocol.h:
-# JSON lines on a socket of its own; the app's ControlServer, brulion-cli's ControlClient) — and the
+# JSON lines on a socket of its own; the app's ControlServer, brulion-cli's ControlClient, and
+# AsyncControlClient for a server of brulion-cli the app starts: acp serve's agent sharing) — and the
 # app's names they and the settings depend on (profile.h: BRULION_PROFILE). QtCore +
 # QtNetwork; not built for the browser. Android uses the remote control's protocol and its replies in
 # process (RemoteControl::dispatch(): an AI agent on another computer); nothing listens there.
@@ -11,6 +12,7 @@ qt_add_library(brulion_ipc STATIC
     controlprotocol.h controlprotocol.cpp
     controlserver.h controlserver.cpp
     controlclient.h controlclient.cpp
+    asynccontrolclient.h asynccontrolclient.cpp
     profile.h profile.cpp
 )
 target_include_directories(brulion_ipc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

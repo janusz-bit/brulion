@@ -263,6 +263,14 @@ void ControlServer::readLines(QLocalSocket *socket)
                                           u"chatWait …), not %1"_s.arg(request->method)));
             continue;
         }
+        // The agent sharing's grant: nothing but the methods a device needs of the chat.
+        const bool shareOnly = peer.granted && peer.scope == GrantScope::Share;
+        if (shareOnly && !hello && (!spec || !spec->share)) {
+            writeLine(socket, encodeError(request->id, QString::fromLatin1(ControlError::Unauthorized),
+                                          u"This grant covers the agent sharing's methods only (chats, chatLive, "
+                                          u"chatSend, chatAnswer …), not %1"_s.arg(request->method)));
+            continue;
+        }
         // The webhooks' grant: nothing but its method — which no other connection may call.
         const bool hookOnly = peer.granted && peer.scope == GrantScope::Hook;
         if (!hello && spec && spec->hook != hookOnly) {
@@ -278,6 +286,7 @@ void ControlServer::readLines(QLocalSocket *socket)
         request->grant = peer.granted ? peer.token : QString();
         request->chatOnly = chatOnly;
         request->hookOnly = hookOnly;
+        request->shareOnly = shareOnly;
         const ControlReply reply(socket, request->id);
         if (m_handler)
             m_handler(*request, reply);
