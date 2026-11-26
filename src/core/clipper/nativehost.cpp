@@ -30,6 +30,14 @@ QString joined(const QString &folder, const QString &name)
     return folder.endsWith(u'/') ? QString(folder + name) : QString(folder + u'/' + name);
 }
 
+/// A folder of the system (`path` absolute) under env.systemRoot.
+QString systemPath(const Environment &env, const QString &path)
+{
+    if (env.systemRoot.isEmpty())
+        return path;
+    return env.systemRoot.endsWith(u'/') ? QString(env.systemRoot.chopped(1) + path) : QString(env.systemRoot + path);
+}
+
 } // namespace
 
 QString hostName()
@@ -167,16 +175,18 @@ HostLocation hostLocation(Browser browser, Os os, Scope scope, const Environment
     }
     if (os == Os::MacOs) {
         const QString support = scope == Scope::User ? joined(env.home, u"Library/Application Support"_s)
-                                                     : u"/Library/Application Support"_s;
+                                                     : systemPath(env, u"/Library/Application Support"_s);
         QString folder;
         switch (browser) {
         case Browser::Chrome:
-            folder = scope == Scope::User ? joined(support, u"Google/Chrome"_s) : u"/Library/Google/Chrome"_s;
+            folder = scope == Scope::User ? joined(support, u"Google/Chrome"_s)
+                                          : systemPath(env, u"/Library/Google/Chrome"_s);
             break;
         case Browser::Chromium: folder = joined(support, u"Chromium"_s); break;
         case Browser::Brave: folder = joined(support, u"BraveSoftware/Brave-Browser"_s); break;
         case Browser::Edge:
-            folder = scope == Scope::User ? joined(support, u"Microsoft Edge"_s) : u"/Library/Microsoft/Edge"_s;
+            folder = scope == Scope::User ? joined(support, u"Microsoft Edge"_s)
+                                          : systemPath(env, u"/Library/Microsoft/Edge"_s);
             break;
         case Browser::Firefox: folder = joined(support, u"Mozilla"_s); break;
         }
@@ -187,13 +197,15 @@ HostLocation hostLocation(Browser browser, Os os, Scope scope, const Environment
     }
     // Linux (and the other Unix systems these browsers run on).
     if (scope == Scope::System) {
+        QString folder;
         switch (browser) {
-        case Browser::Chrome: l.manifestPath = u"/etc/opt/chrome/native-messaging-hosts/"_s + file; break;
-        case Browser::Chromium: l.manifestPath = u"/etc/chromium/native-messaging-hosts/"_s + file; break;
-        case Browser::Brave: l.manifestPath = u"/etc/opt/brave/native-messaging-hosts/"_s + file; break;
-        case Browser::Edge: l.manifestPath = u"/etc/opt/edge/native-messaging-hosts/"_s + file; break;
-        case Browser::Firefox: l.manifestPath = u"/usr/lib/mozilla/native-messaging-hosts/"_s + file; break;
+        case Browser::Chrome: folder = u"/etc/opt/chrome/native-messaging-hosts/"_s; break;
+        case Browser::Chromium: folder = u"/etc/chromium/native-messaging-hosts/"_s; break;
+        case Browser::Brave: folder = u"/etc/opt/brave/native-messaging-hosts/"_s; break;
+        case Browser::Edge: folder = u"/etc/opt/edge/native-messaging-hosts/"_s; break;
+        case Browser::Firefox: folder = u"/usr/lib/mozilla/native-messaging-hosts/"_s; break;
         }
+        l.manifestPath = systemPath(env, folder + file);
         return l;
     }
     const QString config = env.xdgConfigHome.isEmpty() ? joined(env.home, u".config"_s) : env.xdgConfigHome;

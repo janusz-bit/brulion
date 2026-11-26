@@ -79,6 +79,13 @@ Rectangle {
     function showMode(): void {
         if (mode === "")
             return
+        // Another tool set starts at its beginning, not where the last one was scrolled to: the
+        // block's "Select", at the end of its tools, left the selection's (wider than a phone with
+        // the AI's button) scrolled by as much, its first tool, Done, out of sight.
+        if (mode !== shownMode) {
+            flick.cancelFlick()
+            flick.contentX = 0
+        }
         shownMode = mode
         if (mode === "block")
             blockLoader.active = true

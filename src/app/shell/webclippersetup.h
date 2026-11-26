@@ -7,6 +7,8 @@
 // (the NixOS module, `clip install --system`) count as connected and are never touched here.
 #pragma once
 
+#include "clipper/nativehost.h"
+
 #include <QObject>
 #include <QString>
 #include <QVariantList>
@@ -28,7 +30,10 @@ class WebClipperSetup : public QObject {
     Q_PROPERTY(bool messageIsError READ messageIsError NOTIFY changed FINAL)
 
 public:
+    /// The folders of this process's environment (clipper::currentEnvironment()).
     explicit WebClipperSetup(QObject *parent = nullptr);
+    /// The folders of `env` instead (tests: a private home and a private system's folders).
+    explicit WebClipperSetup(const clipper::Environment &env, QObject *parent = nullptr);
 
     bool available() const;
     QVariantList browsers() const { return m_browsers; }
@@ -48,6 +53,7 @@ Q_SIGNALS:
     void changed();
 
 private:
+    clipper::Environment m_env;
     QVariantList m_browsers;
     int m_connected = 0;
     QString m_program;

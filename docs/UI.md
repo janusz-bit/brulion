@@ -696,8 +696,10 @@ everything near the bottom, the same way on Android, in the browser and with a s
   the tools at the bottom, on phones right on the bottom navigation).
   Taps beside the buttons stay on the bar. The slot is one Loader per editor (`editToolbarSlot`,
   created on the first use) and each mode's row is made the first time it is used, then kept
-  (hidden between edits, where it was scrolled): another tool set docks the same way as another
-  mode with its own row, a new button goes into its mode's row.
+  (hidden between edits, where it was scrolled; another mode's row starts at its beginning — the
+  block's Select, at the end of its row, left the selection's Done scrolled out of sight): another
+  tool set docks the same way as another mode with its own row, a new button goes into its mode's
+  row.
 * **Form fields** (single-line fields and text areas: settings, sync and import forms,
   onboarding, dialogs) have no toolbar; nothing pans the window to them any more (Android:
   `adjustResize`), so `BKeyboardFocusKeeper` (once in `Main.qml`) scrolls the Flickables around
@@ -728,7 +730,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   the keys, so the system hides the keyboard and the toolbar drops onto the bottom navigation
   (to the bottom on a wide window): the menu
   follows it (`BlockEditor.followToolbarWith`), with the room the keyboard left — every item
-  shown, "Delete block" no longer scrolled away — until something in it is pressed or scrolled
+  shown, "Delete block" no longer scrolled away; a menu taller than that room takes all of it, from
+  below the status bar, and scrolls — until something in it is pressed or scrolled
   (`BMenu.touched`): it never moves away from a finger aiming at it. Autocomplete is placed above
   the toolbar (`BlockEditor.visibleBottom()`); toasts above the keyboard, the bottom navigation
   and the toolbar (`AppShell.toastClearance`), except while text is typed — the keyboard up, or a toolbar

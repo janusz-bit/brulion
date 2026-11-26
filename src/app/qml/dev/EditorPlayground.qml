@@ -3481,10 +3481,22 @@ ApplicationWindow {
         const button = writing ? findItem(writing, "toolbarTask") : null
         return editor.toolbarVisible && button !== null && button.width > 0
     }
-    /// The block menu is right above the toolbar, every item shown (blocklinks).
+    /// The block menu is right above the toolbar in the room the keyboard left: every item shown,
+    /// or — a menu taller than that room — all of it, from right below the status bar (blocklinks;
+    /// the desktop run's 800 px window has 683 px there for 783 px of touch-sized items).
     function menuFollowsToolbar(): bool {
         const menu = editor.blockMenu
-        return menu.visible && menuGap() >= 0 && menuGap() < 24 && !(menu.contentItem as Flickable).interactive
+        if (!menu.visible || menuGap() < 0 || menuGap() >= 24)
+            return false
+        return !(menu.contentItem as Flickable).interactive || Math.abs(menuTop(menu) - menu.topMargin) < 1
+    }
+    /// The block menu's last item, "Delete block": from its top to its bottom in the window.
+    function deleteItemTop(): real {
+        return window.windowY(menuItemNamed(editor.blockMenu, "blockMenuDelete"), 0, 0)
+    }
+    function deleteItemBottom(): real {
+        const item = menuItemNamed(editor.blockMenu, "blockMenuDelete")
+        return window.windowY(item, 0, item.height)
     }
     /// Steps of the menu gesture on the bullet of `row`: a right-click, or a finger held down until
     /// the block menu opened (a bullet's long press) and lifted. (A fixed hold could be lifted too
@@ -3733,12 +3745,21 @@ ApplicationWindow {
         if (window.at()) KeyboardInsets.simulated = 0
         if (window.at() && !window.waiting(window.menuFollowsToolbar()))
             window.checkWait("the untouched menu follows the toolbar down when the keyboard goes, right above it, every "
-                  + "item shown (none scrolled away): " + menuGap() + " px above it (" + window.menuGapBefore
-                  + " before), scrolls " + (editor.blockMenu.contentItem as Flickable).interactive)
-        if (window.at()) check(window.windowY(menuItemNamed(editor.blockMenu, "blockMenuDelete"), 0, 0)
-                    + menuItemNamed(editor.blockMenu, "blockMenuDelete").height
-                    <= window.windowY(findItem(editor, "toolbarMore"), 0, 0),
-                    "“Usuń blok”, its last item, is on screen above the toolbar")
+                  + "item shown (none scrolled away) or, taller than the room, all of it below the status bar: "
+                  + menuGap() + " px above it (" + window.menuGapBefore + " before), scrolls "
+                  + (editor.blockMenu.contentItem as Flickable).interactive + ", " + editor.blockMenu.height + " of "
+                  + editor.blockMenu.implicitHeight + " px high from y " + menuTop(editor.blockMenu) + " (top margin "
+                  + editor.blockMenu.topMargin + ") in a window of " + window.height)
+        if (window.at()) {
+            // (A menu that scrolls: its end scrolled to, as a finger would.)
+            if ((editor.blockMenu.contentItem as Flickable).interactive)
+                (editor.blockMenu.contentItem as ListView).positionViewAtEnd()
+            const toolbarTop = window.windowY(findItem(editor, "toolbarMore"), 0, 0)
+            check(window.deleteItemTop() >= menuTop(editor.blockMenu) - 1 && window.deleteItemBottom() <= toolbarTop,
+                  "“Usuń blok”, its last item, is on screen above the toolbar: " + window.deleteItemTop() + "–"
+                  + window.deleteItemBottom() + " in the menu from " + menuTop(editor.blockMenu) + ", the toolbar at "
+                  + toolbarTop)
+        }
         copySteps("copyBlockLink", "“Link to block” copies [[Page#^id]]",
                      "[[" + doc + "#^" + info(window.targetRow).blockId + "]]")
         if (window.at()) {

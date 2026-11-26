@@ -878,10 +878,17 @@ QtObject {
         if (window.at()) window.waitStep(editor.selectionMode && page.selectedRow === test.rowA && page.editingRow < 0, "Zaznacz selects the edited block (the selection mode)")
         if (window.at()) {
             const done = shown(toolbar(), "selectionDone")
-            check(done !== null && windowX(done) < 60, "Gotowe is the bar's first tool")
+            // On screen at the bar's start — the bar's tools were scrolled to "Zaznacz", at their end:
+            // the selection's tools (wider than the phone) kept that place, Done at x -37.
+            const flick = window.findItem(editor, "editToolbarFlick") as Flickable
+            check(done !== null && windowX(done) >= 0 && windowX(done) < 60,
+                  "Gotowe is the bar's first tool, on screen: " + (done ? windowX(done) : -1) + " (the tools scrolled by "
+                  + flick.contentX + " of " + flick.contentWidth + " in " + flick.width + ")")
             tap(done)
         }
-        if (window.at()) window.waitStep(!editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode")
+        if (window.at() && !window.waiting(!editor.selectionMode && page.selectionCount === 0))
+            window.checkWait("Gotowe leaves the selection mode: " + editor.selectionMode + ", " + page.selectionCount
+                             + " selected, tools " + editor.toolbarMode)
         // ---- A keyboard on a touch UI: Esc and Shift+↓ give the selection its tools -------------------
         if (window.at()) editor.startEditing(rowOf("Skuć"), -1)
         if (window.at()) window.waitStep(editing(rowOf("Skuć")), "Skuć is edited")
