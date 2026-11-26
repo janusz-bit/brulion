@@ -4,7 +4,17 @@
 // signals, programs that cannot be started, terminate() of a `sleep 100` with its background job
 // and of one that ignores SIGHUP, a large paste into a slow reader — and every child reaped (no
 // zombies), also when the Pty is deleted while its program runs.
+//
+// Windows (ConPTY): the same through pty_probe (tests/platform/pty_probe.cpp: a console program that
+// prints what it sees) and cmd.exe, the output read as the screen ConPTY paints — through the
+// emulator, which also answers ConPTY's queries — the command line's quoting and cmd.exe's native
+// arguments, the environment block, no inherited handle, terminate() of a process tree (a child on
+// the console, one without a console, one that holds the console's close up), a program that ends
+// by itself leaving a child without a console running, deletion while running, a large paste and a
+// flood of output.
 #include "pty.h"
+
+#include "term/terminal.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -19,6 +29,12 @@
 #include <csignal>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #endif
 
 using namespace Qt::StringLiterals;
@@ -75,6 +91,77 @@ bool reaped(qint64 pid)
 #endif
 }
 
+#ifdef Q_OS_WIN
+/// Whether the process `pid` has ended (waiting up to `ms` for it).
+bool processEnded(qint64 pid, int ms = 0)
+{
+    const HANDLE process = ::OpenProcess(SYNCHRONIZE, FALSE, DWORD(pid));
+    if (!process)
+        return true; // (no such process any more)
+    const bool ended = ::WaitForSingleObject(process, DWORD(ms)) == WAIT_OBJECT_0;
+    ::CloseHandle(process);
+    return ended;
+}
+
+void killProcess(qint64 pid)
+{
+    if (const HANDLE process = ::OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, DWORD(pid))) {
+        ::TerminateProcess(process, 1);
+        ::WaitForSingleObject(process, 5000);
+        ::CloseHandle(process);
+    }
+}
+#endif
+
+/// A Pty whose output goes through the emulator, as in a terminal session: ConPTY paints a screen
+/// (its output is the sequences that draw it, not the program's bytes), and its queries are answered.
+struct ScreenRun : Run {
+    static constexpr int Columns = 200;
+    static constexpr int Rows = 50;
+    brulion::term::Terminal terminal{Columns, Rows, 2000};
+
+    ScreenRun()
+    {
+        QObject::connect(&pty, &Pty::dataReceived, &pty, [this](const QByteArray &data) { terminal.feed(data); });
+        QObject::connect(&terminal, &brulion::term::Terminal::reply, &pty,
+                         [this](const QByteArray &data) { pty.write(data); });
+    }
+    /// The scrollback and the screen, a line each, trailing spaces dropped.
+    QString text() const
+    {
+        const brulion::term::Screen &screen = terminal.screen();
+        QStringList lines;
+        for (int i = -screen.historySize(); i < screen.rows(); ++i)
+            lines.append(screen.lineText(i));
+        return lines.join(u'\n');
+    }
+    bool probe(const QStringList &arguments, const QString &cwd = QString(),
+               const QStringList &environment = Pty::defaultEnvironment())
+    {
+#ifdef BRULION_TEST_PTY_PROBE
+        return start(QString::fromUtf8(BRULION_TEST_PTY_PROBE), arguments, cwd, environment, Columns, Rows);
+#else
+        Q_UNUSED(arguments)
+        Q_UNUSED(cwd)
+        Q_UNUSED(environment)
+        return false;
+#endif
+    }
+    /// The number after "<word> " in the text ("child 1234"), 0 when there is none yet.
+    qint64 numberAfter(const QString &word) const
+    {
+        const QString all = text();
+        const qsizetype at = all.indexOf(word + u' ');
+        if (at < 0)
+            return 0;
+        const QString rest = all.mid(at + word.size() + 1);
+        qsizetype end = 0;
+        while (end < rest.size() && rest.at(end).isDigit())
+            ++end;
+        return end > 0 && end < rest.size() ? rest.left(end).toLongLong() : 0;
+    }
+};
+
 } // namespace
 
 class TestPty : public QObject {
@@ -97,19 +184,38 @@ private Q_SLOTS:
     void largePaste();
     void notRunning();
 
+    // Windows (ConPTY)
+    void conptyOutput();
+    void conptyExitCodes();
+    void conptyArguments();
+    void conptySizeAndResize();
+    void conptyInput();
+    void conptyWorkingDirectory();
+    void conptyEnvironment();
+    void conptyNoInheritedHandles();
+    void conptyCannotStart();
+    void conptyTerminateTree();
+    void conptyTerminateIgnoringClose();
+    void conptyChildWithoutConsoleStays();
+    void conptyDeletedWhileRunning();
+    void conptyLargePaste();
+    void conptyFlood();
+
 private:
     bool m_posix = false;
+    bool m_conpty = false;
 };
 
 void TestPty::initTestCase()
 {
     m_posix = QByteArrayView(BRULION_TEST_PTY_BACKEND) == "posix";
+    m_conpty = QByteArrayView(BRULION_TEST_PTY_BACKEND) == "conpty";
 }
 
 void TestPty::availability()
 {
-    QCOMPARE(Pty::available(), m_posix);
-    if (!m_posix) {
+    QCOMPARE(Pty::available(), m_posix || m_conpty);
+    if (!m_posix && !m_conpty) {
         Pty pty;
         QString error;
         QVERIFY(!pty.start(u"/bin/sh"_s, {}, {}, {}, 80, 24, &error));
@@ -379,6 +485,389 @@ void TestPty::notRunning()
     QVERIFY(!pty.resize(80, 24));
     pty.terminate(); // nothing to do
     QCOMPARE(pty.processId(), 0);
+}
+
+// ---- Windows (ConPTY) ----------------------------------------------------------------------------
+
+void TestPty::conptyOutput()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    ScreenRun run;
+    QVERIFY(run.probe({u"print"_s, u"zażółć gęślą jaźń"_s, u"ZAŻÓŁĆ GĘŚLĄ"_s}));
+    QVERIFY(run.pty.isRunning());
+    const qint64 pid = run.pty.processId();
+    QVERIFY(pid > 0);
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QVERIFY2(run.text().contains(u"zażółć gęślą jaźń\nZAŻÓŁĆ GĘŚLĄ"_s), qPrintable(run.text()));
+    QCOMPARE(run.exitCode, 0);
+    QVERIFY(!run.crashed);
+    QVERIFY(!run.pty.isRunning());
+    QCOMPARE(run.pty.processId(), 0);
+#ifdef Q_OS_WIN
+    QVERIFY(processEnded(pid));
+#endif
+}
+
+void TestPty::conptyExitCodes()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    ScreenRun three;
+    QVERIFY(three.probe({u"exit"_s, u"3"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(three.done, Timeout);
+    QCOMPARE(three.exitCode, 3);
+    QVERIFY(!three.crashed);
+    // An NTSTATUS: a crash, the code as it is.
+    ScreenRun crash;
+    QVERIFY(crash.probe({u"crash"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(crash.done, Timeout);
+    QCOMPARE(crash.exitCode, int(0xC0000005u));
+    QVERIFY(crash.crashed);
+    // cmd.exe found on PATH, its argument quoted.
+    ScreenRun cmd;
+    QVERIFY(cmd.start(u"cmd.exe"_s, {u"/d"_s, u"/c"_s, u"exit 7"_s}, {}, Pty::defaultEnvironment(), ScreenRun::Columns,
+                      ScreenRun::Rows));
+    QTRY_VERIFY_WITH_TIMEOUT(cmd.done, Timeout);
+    QCOMPARE(cmd.exitCode, 7);
+    QVERIFY(!cmd.crashed);
+}
+
+void TestPty::conptyArguments()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    // Read back by the C runtime as they were given: spaces, quotes, backslashes before quotes and
+    // at the end, an empty one, cmd.exe's characters (nothing here is a shell).
+    const QStringList arguments = {u"zażółć"_s,
+                                   u"dwa słowa"_s,
+                                   u"\"cytat\""_s,
+                                   u"a\\b"_s,
+                                   u"koniec\\"_s,
+                                   u"spacja i koniec\\"_s,
+                                   QString(),
+                                   u"100%"_s,
+                                   u"a&b|c<d>e^f"_s,
+                                   u"\\\\serwer\\udział\\"_s,
+                                   u"\"\\\"\""_s,
+                                   u"%PATH%"_s};
+    ScreenRun run;
+    QVERIFY(run.probe(QStringList{u"args"_s} + arguments));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QString expected;
+    for (const QString &argument : arguments)
+        expected += u'[' + argument + u"]\n"_s;
+    expected += u"args done"_s;
+    QVERIFY2(run.text().contains(expected), qPrintable(run.text()));
+
+    // cmd.exe's /c takes the rest of the line by its own rules: native arguments, as they are.
+    ScreenRun cmd;
+    cmd.pty.setNativeArguments(u"/d /s /c \"echo \"zażółć\" a^&b & exit 4\""_s);
+    QCOMPARE(cmd.pty.nativeArguments(), u"/d /s /c \"echo \"zażółć\" a^&b & exit 4\""_s);
+    QVERIFY(cmd.start(u"cmd.exe"_s, {}, {}, Pty::defaultEnvironment(), ScreenRun::Columns, ScreenRun::Rows));
+    QTRY_VERIFY_WITH_TIMEOUT(cmd.done, Timeout);
+    QVERIFY2(cmd.text().contains(u"\"zażółć\" a&b"_s), qPrintable(cmd.text()));
+    QCOMPARE(cmd.exitCode, 4);
+}
+
+void TestPty::conptySizeAndResize()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    ScreenRun run;
+    QVERIFY(run.probe({u"size"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(run.text().contains(u"size 50 200"_s), Timeout);
+    const qsizetype before = run.output.size();
+    run.terminal.resize(132, 43);
+    QVERIFY(run.pty.resize(132, 43));
+    // (The size goes to conhost on a pipe of its own: input sent at once could come first. ConPTY
+    // paints the new screen once it has it.)
+    (void)QTest::qWaitFor([&] { return run.output.size() > before; }, 3000);
+    QVERIFY(run.pty.write("\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(run.text().contains(u"size 43 132"_s), Timeout);
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QCOMPARE(run.exitCode, 0);
+}
+
+void TestPty::conptyInput()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    ScreenRun run;
+    QVERIFY(run.probe({u"echo"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(run.text().contains(u"ready"_s), Timeout);
+    QVERIFY(run.pty.write(u"zażółć gęślą\r"_s.toUtf8()));
+    QTRY_VERIFY_WITH_TIMEOUT(run.text().contains(u"got: zażółć gęślą"_s), Timeout);
+    // The console's echo of the line above the program's copy of it.
+    QVERIFY2(run.text().contains(u"zażółć gęślą\ngot: zażółć gęślą"_s), qPrintable(run.text()));
+    QVERIFY(run.pty.write("quit\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QCOMPARE(run.exitCode, 0);
+    QVERIFY(!run.pty.write("lost"));
+}
+
+void TestPty::conptyWorkingDirectory()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString folder = dir.filePath(u"projekt żółw"_s);
+    QVERIFY(QDir().mkpath(folder));
+    ScreenRun run;
+    QVERIFY(run.probe({u"cwd"_s}, folder));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    const QString expected = u"cwd "_s + QDir::toNativeSeparators(QDir(folder).absolutePath());
+    QVERIFY2(run.text().contains(expected, Qt::CaseInsensitive), qPrintable(run.text() + u" / "_s + expected));
+    // A missing folder: the home folder.
+    ScreenRun home;
+    QVERIFY(home.probe({u"cwd"_s}, dir.filePath(u"missing"_s)));
+    QTRY_VERIFY_WITH_TIMEOUT(home.done, Timeout);
+    QVERIFY2(home.text().contains(u"cwd "_s + QDir::toNativeSeparators(QDir::homePath()), Qt::CaseInsensitive),
+             qPrintable(home.text()));
+}
+
+void TestPty::conptyEnvironment()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    QStringList env = Pty::defaultEnvironment();
+    env << u"COLUMNS=5"_s << u"Lines=5"_s << u"TERM=dumb"_s << u"WT_SESSION=abc"_s << u"COLORTERM=no"_s
+        << u"BRULION_TEST_VAR=ąęż żółw"_s << u"brulion_dup=1"_s << u"BRULION_DUP=2"_s;
+    ScreenRun run;
+    QVERIFY(run.probe({u"env"_s, u"TERM"_s, u"COLORTERM"_s, u"COLUMNS"_s, u"LINES"_s, u"WT_SESSION"_s,
+                       u"BRULION_TEST_VAR"_s, u"BRULION_DUP"_s, u"SystemRoot"_s},
+                      {}, env));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    const QString text = run.text();
+    for (const QString &line : {u"TERM unset"_s, u"COLORTERM=truecolor"_s, u"COLUMNS unset"_s, u"LINES unset"_s,
+                                u"WT_SESSION unset"_s, u"BRULION_TEST_VAR=ąęż żółw"_s, u"BRULION_DUP=2"_s})
+        QVERIFY2(text.contains(line), qPrintable(line + u" in:\n"_s + text));
+    // The rest of the app's environment is there.
+    QVERIFY2(text.contains(u"SystemRoot="_s + qEnvironmentVariable("SystemRoot"), Qt::CaseInsensitive),
+             qPrintable(text));
+}
+
+void TestPty::conptyNoInheritedHandles()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+#ifdef Q_OS_WIN
+    QTemporaryDir dir;
+    const QString marker = dir.filePath(u"brulion-pty-marker.txt"_s);
+    {
+        QFile file(marker);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("marker");
+    }
+    // An inheritable handle of the app's: the program must not get it.
+    SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    const HANDLE handle = ::CreateFileW(reinterpret_cast<const wchar_t *>(QDir::toNativeSeparators(marker).utf16()),
+                                        GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                        &inheritable, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    QVERIFY(handle != INVALID_HANDLE_VALUE);
+    ScreenRun run;
+    QVERIFY(run.probe({u"handle"_s, QString::number(quintptr(handle), 16), u"brulion-pty-marker"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    ::CloseHandle(handle);
+    QVERIFY2(run.text().contains(u"handle not inherited"_s), qPrintable(run.text()));
+#endif
+}
+
+void TestPty::conptyCannotStart()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    Pty pty;
+    QSignalSpy finished(&pty, &Pty::finished);
+    QString error;
+    const QStringList env = Pty::defaultEnvironment();
+    QVERIFY(!pty.start(u"C:\\nonexistent\\program.exe"_s, {}, {}, env, 80, 24, &error));
+    QVERIFY2(error.contains(u"program.exe"_s), qPrintable(error));
+    error.clear();
+    QVERIFY(!pty.start(u"brulion-no-such-program-xyz"_s, {}, {}, env, 80, 24, &error));
+    QVERIFY(!error.isEmpty());
+    // Not a program: CreateProcess says why.
+    QTemporaryDir dir;
+    const QString junk = dir.filePath(u"junk.exe"_s);
+    {
+        QFile file(junk);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("MZ garbage that is not a program");
+    }
+    error.clear();
+    QVERIFY(!pty.start(junk, {}, {}, env, 80, 24, &error));
+    QVERIFY2(error.contains(u"junk"_s), qPrintable(error));
+    // A batch file is cmd.exe's to run.
+    const QString batch = dir.filePath(u"skrypt.cmd"_s);
+    {
+        QFile file(batch);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("@echo off\r\nexit 1\r\n");
+    }
+    error.clear();
+    QVERIFY(!pty.start(batch, {}, {}, env, 80, 24, &error));
+    QVERIFY2(error.contains(u"cmd.exe"_s), qPrintable(error));
+    QVERIFY(!pty.isRunning());
+    QCOMPARE(finished.size(), 0);
+#ifdef BRULION_TEST_PTY_PROBE
+    // The Pty still works afterwards, and again after its program ended; one program at a time.
+    const QString probe = QString::fromUtf8(BRULION_TEST_PTY_PROBE);
+    QVERIFY(pty.start(probe, {u"exit"_s, u"7"_s}, {}, env, 80, 24, &error));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, Timeout);
+    QCOMPARE(finished.at(0).at(0).toInt(), 7);
+    QVERIFY(pty.start(probe, {u"exit"_s, u"8"_s}, {}, env, 80, 24, &error));
+    QVERIFY(!pty.start(probe, {}, {}, env, 80, 24, &error));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, Timeout);
+    QCOMPARE(finished.at(1).at(0).toInt(), 8);
+#endif
+}
+
+void TestPty::conptyTerminateTree()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+#ifdef Q_OS_WIN
+    // A child on the console: the console's close (CTRL_CLOSE_EVENT) ends both, long before the
+    // grace period is over.
+    ScreenRun run;
+    QVERIFY(run.probe({u"spawn"_s, u"console"_s}));
+    const qint64 pid = run.pty.processId();
+    QTRY_VERIFY_WITH_TIMEOUT(run.numberAfter(u"child"_s) > 0, Timeout);
+    const qint64 child = run.numberAfter(u"child"_s);
+    QElapsedTimer timer;
+    timer.start();
+    run.pty.terminate(8000);
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QVERIFY2(run.crashed, qPrintable(QString::number(quint32(run.exitCode), 16)));
+    QVERIFY2(timer.elapsed() < 6000 * BRULION_TEST_SLOWDOWN, "the console's close ended it, not the job");
+    QVERIFY(processEnded(pid));
+    QVERIFY(processEnded(child, Timeout));
+
+    // A child without a console gets no close: the job ends it.
+    ScreenRun detached;
+    QVERIFY(detached.probe({u"spawn"_s, u"detached"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(detached.numberAfter(u"child"_s) > 0, Timeout);
+    const qint64 orphan = detached.numberAfter(u"child"_s);
+    QVERIFY(!processEnded(orphan));
+    detached.pty.terminate(8000);
+    QTRY_VERIFY_WITH_TIMEOUT(detached.done, Timeout);
+    QVERIFY(processEnded(orphan, Timeout));
+#endif
+}
+
+void TestPty::conptyTerminateIgnoringClose()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    ScreenRun run;
+    QVERIFY(run.probe({u"ignore-close"_s}));
+    const qint64 pid = run.pty.processId();
+    QTRY_VERIFY_WITH_TIMEOUT(run.text().contains(u"ready"_s), Timeout);
+    QElapsedTimer timer;
+    timer.start();
+    run.pty.terminate(300);
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QVERIFY(run.crashed);
+    QCOMPARE(run.exitCode, int(0xC000013Au)); // the job's end
+    // (Windows itself gives a close handler 5 s.)
+    QVERIFY2(timer.elapsed() < 4500 * BRULION_TEST_SLOWDOWN, "the job ended it after the grace period");
+#ifdef Q_OS_WIN
+    QVERIFY(processEnded(pid));
+#else
+    Q_UNUSED(pid)
+#endif
+}
+
+void TestPty::conptyChildWithoutConsoleStays()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+#ifdef Q_OS_WIN
+    // The program ends by itself: what it started without a console (an editor, a browser) stays…
+    ScreenRun run;
+    QVERIFY(run.probe({u"spawn"_s, u"detached"_s, u"exit"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QCOMPARE(run.exitCode, 0);
+    const qint64 child = run.numberAfter(u"child"_s);
+    QVERIFY2(child > 0, qPrintable(run.text()));
+    QVERIFY(!processEnded(child, 500));
+    killProcess(child);
+    // … what it left on the console gets the console's close.
+    ScreenRun console;
+    QVERIFY(console.probe({u"spawn"_s, u"console"_s, u"exit"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(console.done, Timeout);
+    const qint64 attached = console.numberAfter(u"child"_s);
+    QVERIFY2(attached > 0, qPrintable(console.text()));
+    const bool ended = processEnded(attached, Timeout);
+    if (!ended)
+        killProcess(attached);
+    QVERIFY(ended);
+#endif
+}
+
+void TestPty::conptyDeletedWhileRunning()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+#if defined(Q_OS_WIN) && defined(BRULION_TEST_PTY_PROBE)
+    const QString probe = QString::fromUtf8(BRULION_TEST_PTY_PROBE);
+    auto *pty = new Pty;
+    QVERIFY(pty->start(probe, {u"sleep"_s}, {}, Pty::defaultEnvironment(), 80, 24));
+    const qint64 pid = pty->processId();
+    QVERIFY(pid > 0);
+    delete pty;
+    QVERIFY(processEnded(pid)); // the destructor waited for it
+
+    // One that holds the console's close up: the job ends it.
+    auto *stubborn = new Pty;
+    QByteArray out;
+    connect(stubborn, &Pty::dataReceived, this, [&out](const QByteArray &data) { out += data; });
+    QVERIFY(stubborn->start(probe, {u"ignore-close"_s}, {}, Pty::defaultEnvironment(), 80, 24));
+    const qint64 stubbornPid = stubborn->processId();
+    QTRY_VERIFY_WITH_TIMEOUT(out.contains("ready"), Timeout);
+    QElapsedTimer timer;
+    timer.start();
+    delete stubborn;
+    QVERIFY(processEnded(stubbornPid));
+    QVERIFY(timer.elapsed() < 3000 * BRULION_TEST_SLOWDOWN);
+#endif
+}
+
+void TestPty::conptyLargePaste()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    ScreenRun run;
+    QVERIFY(run.probe({u"count"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(run.text().contains(u"ready"_s), Timeout);
+    // 200 KB in lines of 100: more than the pipe holds, written by the writer thread as conhost
+    // takes it.
+    QByteArray paste;
+    for (int i = 0; i < 2000; ++i)
+        paste += QByteArray(99, 'a') + '\r';
+    QVERIFY(run.pty.write(paste));
+    QVERIFY(run.pty.write("end\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout * 4);
+    QVERIFY2(run.text().contains(u"count 198000"_s), qPrintable(run.text().right(400)));
+    QCOMPARE(run.exitCode, 0);
+}
+
+void TestPty::conptyFlood()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    ScreenRun run;
+    int reads = 0;
+    connect(&run.pty, &Pty::dataReceived, this, [&reads] { ++reads; });
+    QElapsedTimer timer;
+    timer.start();
+    QVERIFY(run.probe({u"flood"_s, u"200000"_s}));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout * 4);
+    qInfo("200000 lines through ConPTY: %lld ms, %d deliveries, %lld bytes", timer.elapsed(), reads,
+          qint64(run.output.size()));
+    QVERIFY2(run.text().contains(u"y\nflood done"_s), qPrintable(run.text().right(400)));
+    QCOMPARE(run.exitCode, 0);
 }
 
 QTEST_GUILESS_MAIN(TestPty)

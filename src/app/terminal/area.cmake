@@ -7,8 +7,9 @@
 #   TerminalSessionModel  the panel's tabs: the sessions it owns
 #   TerminalView          the screen painted (dirty rows only, once a frame), keys, mouse, selection,
 #                         the clipboard, the input method
-# The emulator is the core module term (src/core/term), the pty src/platform/pty.h (POSIX; none on
-# Windows, Android and in the browser: `available` false and the panel says so). Tests:
+#   shellLaunch()         how Windows' shells (PowerShell, cmd, Git Bash) start and run a command
+# The emulator is the core module term (src/core/term), the pty src/platform/pty.h (POSIX, ConPTY on
+# Windows; none on Android and in the browser: `available` false and the panel says so). Tests:
 # tests/app/terminal. QML: qml/terminal/TerminalPanel.qml (tabs, the view, "Process exited",
 # run(command, label) for a project's scripts) and its TerminalTab.
 
@@ -18,6 +19,7 @@ qt_add_library(brulion_terminal STATIC
     ${_brulion_terminal_dir}/terminalsession.h ${_brulion_terminal_dir}/terminalsession.cpp
     ${_brulion_terminal_dir}/terminalsessionmodel.h ${_brulion_terminal_dir}/terminalsessionmodel.cpp
     ${_brulion_terminal_dir}/terminalview.h ${_brulion_terminal_dir}/terminalview.cpp
+    ${_brulion_terminal_dir}/shelllaunch.h ${_brulion_terminal_dir}/shelllaunch.cpp
 )
 target_include_directories(brulion_terminal PUBLIC ${_brulion_terminal_dir})
 target_link_libraries(brulion_terminal

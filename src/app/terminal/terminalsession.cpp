@@ -2,6 +2,9 @@
 
 #include "pty.h"
 #include "term/keys.h"
+#ifdef Q_OS_WIN
+#include "shelllaunch.h"
+#endif
 
 #include <QFileInfo>
 
@@ -80,11 +83,21 @@ QString TerminalSession::programName() const
         return line;
     }
     const QString shell = platform::Pty::userShell();
+#ifdef Q_OS_WIN
+    return shell.isEmpty() ? tr("Terminal") : QFileInfo(shell).completeBaseName(); // "pwsh"
+#else
     return shell.isEmpty() ? tr("Terminal") : QFileInfo(shell).fileName();
+#endif
 }
 
 QString TerminalSession::title() const
 {
+#ifdef Q_OS_WIN
+    // Every console has a title (ConPTY reports it; cmd.exe adds the command it runs): a tab's own
+    // name comes first there.
+    if (!m_label.isEmpty())
+        return m_label;
+#endif
     const QString own = m_terminal.title().trimmed();
     if (!own.isEmpty())
         return own;
@@ -123,6 +136,12 @@ bool TerminalSession::start()
     QStringList arguments;
     if (!m_command.isEmpty())
         arguments = {u"-lc"_s, m_command};
+#ifdef Q_OS_WIN
+    // PowerShell, cmd.exe or Git Bash, each with its own way to take a command (shelllaunch.h).
+    const ShellLaunch launch = shellLaunch(shellKind(shell), m_command);
+    arguments = launch.arguments;
+    m_pty->setNativeArguments(launch.nativeArguments);
+#endif
     QStringList environment = platform::Pty::defaultEnvironment();
     environment.removeIf(appImageVariable);
     QString error;
@@ -132,6 +151,8 @@ bool TerminalSession::start()
         return false;
     }
     m_commandLine = QStringList{shell} + arguments;
+    if (!m_pty->nativeArguments().isEmpty())
+        m_commandLine.append(m_pty->nativeArguments());
     setError(QString());
     m_running = true;
     m_exited = false;
@@ -187,7 +208,13 @@ void TerminalSession::onFinished(int exitCode, bool crashed)
 {
     m_running = false;
     m_exited = true;
+#ifdef Q_OS_WIN
+    // (A process's own code there: an NTSTATUS — a crash, the console's close — is negative.)
+    Q_UNUSED(crashed)
+    m_exitCode = exitCode;
+#else
     m_exitCode = crashed ? 128 + exitCode : exitCode;
+#endif
     Q_EMIT runningChanged();
     Q_EMIT exited(m_exitCode);
 }

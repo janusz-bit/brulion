@@ -3,10 +3,16 @@
 // size the program sees, the title it sets, stop and restart, exit codes —, the tabs' model, and
 // TerminalView in a window: keys into the program (Ctrl+C is ^C; Ctrl+Shift+C copies), the input
 // method's text, selection by dragging and by double and triple clicks, copying, the scrollback
-// and its keys and wheel, mouse reporting, painting at odd sizes and in both palettes.
+// and its keys and wheel, mouse reporting, painting at odd sizes and in both palettes. Windows
+// (ConPTY): the user's shell — PowerShell or cmd.exe — in its folder, commands run through it with
+// their exit codes (a native program's own, a failing cmdlet's 1), a tab's label over the console's
+// title, stop and restart.
+#include "shelllaunch.h"
 #include "terminalsession.h"
 #include "terminalsessionmodel.h"
 #include "terminalview.h"
+
+#include "pty.h"
 
 #include "term/screen.h"
 
@@ -126,23 +132,31 @@ private Q_SLOTS:
     void viewLayout();
     void viewFlood();
 
+    // Windows (ConPTY)
+    void windowsShellInFolder();
+    void windowsCommands();
+    void windowsStopAndRestart();
+
 private:
     bool m_posix = false;
+    bool m_conpty = false;
     ulong m_time = 1000;
 };
 
 void TestTerminal::initTestCase()
 {
     m_posix = QByteArrayView(BRULION_TEST_PTY_BACKEND) == "posix";
-    // A shell whose startup prints nothing of the user's own.
+    m_conpty = QByteArrayView(BRULION_TEST_PTY_BACKEND) == "conpty";
+    // A shell whose startup prints nothing of the user's own (Windows: not a path there, so
+    // PowerShell or cmd.exe).
     qputenv("SHELL", "/bin/sh");
 }
 
 void TestTerminal::availability()
 {
-    QCOMPARE(TerminalSession::available(), m_posix);
-    QCOMPARE(TerminalSessionModel::available(), m_posix);
-    if (!m_posix) {
+    QCOMPARE(TerminalSession::available(), m_posix || m_conpty);
+    QCOMPARE(TerminalSessionModel::available(), m_posix || m_conpty);
+    if (!m_posix && !m_conpty) {
         TerminalSession session;
         QVERIFY(!session.start());
         QVERIFY(!session.errorString().isEmpty());
@@ -320,7 +334,7 @@ void TestTerminal::sessionModel()
     model.at(1)->setLabel(u"Echo"_s);
     QCOMPARE(changed.size(), 1);
     QCOMPARE(model.data(model.index(1), TerminalSessionModel::TitleRole).toString(), u"Echo"_s);
-    if (m_posix) {
+    if (m_posix || m_conpty) {
         QVERIFY(model.at(1)->start());
         QTRY_VERIFY_WITH_TIMEOUT(model.data(model.index(1), TerminalSessionModel::HasExitedRole).toBool(), Timeout);
         QCOMPARE(model.data(model.index(1), TerminalSessionModel::ExitCodeRole).toInt(), 0);
@@ -715,6 +729,127 @@ void TestTerminal::viewFlood()
         big.paint(&painter);
     }
     qInfo("a 200 x 60 screen of colourful text: %.1f ms a paint", paintTimer.nsecsElapsed() / 1e7);
+}
+
+// ---- Windows (ConPTY) ----------------------------------------------------------------------------
+
+namespace {
+
+using brulion::terminal::ShellKind;
+
+ShellKind userShellKind()
+{
+    return brulion::terminal::shellKind(brulion::platform::Pty::userShell());
+}
+
+/// The screen and the scrollback, as one text.
+QString allText(const TerminalSession &session)
+{
+    const brulion::term::Screen &screen = session.terminal().screen();
+    QStringList lines;
+    for (int i = -screen.historySize(); i < screen.rows(); ++i)
+        lines.append(screen.lineText(i));
+    return lines.join(u'\n');
+}
+
+} // namespace
+
+void TestTerminal::windowsShellInFolder()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString folder = QDir(dir.path()).absoluteFilePath(u"projekt żółw"_s);
+    QVERIFY(QDir().mkpath(folder));
+    const ShellKind kind = userShellKind();
+    QVERIFY(kind != ShellKind::Posix); // (SHELL is not a path of Windows: PowerShell or cmd.exe)
+    TerminalSession session;
+    session.setFolder(folder);
+    QSignalSpy exited(&session, &TerminalSession::exited);
+    QVERIFY(session.start());
+    QVERIFY(!session.title().isEmpty());
+    QCOMPARE(session.commandLine().value(0), brulion::platform::Pty::userShell());
+    if (kind == ShellKind::PowerShell)
+        QCOMPARE(session.commandLine().mid(1), QStringList{u"-NoLogo"_s});
+    // The folder on a line of its own (the prompt names it too).
+    session.write(kind == ShellKind::PowerShell ? u"(Get-Location).Path\r"_s : u"cd\r"_s);
+    const QString line = u'\n' + QDir::toNativeSeparators(folder) + u'\n';
+    QTRY_VERIFY2_WITH_TIMEOUT(allText(session).contains(line, Qt::CaseInsensitive), qPrintable(allText(session)),
+                              Timeout);
+    session.write(u"exit 5\r"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(exited.size(), 1, Timeout);
+    QCOMPARE(session.exitCode(), 5);
+}
+
+void TestTerminal::windowsCommands()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    const bool powerShell = userShellKind() == ShellKind::PowerShell;
+    // Output and an exit of its own; the tab's label over the console's title.
+    TerminalSession echo;
+    echo.setCommand(powerShell ? u"echo 'zażółć gęślą'; exit 3"_s : u"echo zażółć gęślą& exit 3"_s);
+    echo.setLabel(u"Skrypt"_s);
+    QSignalSpy exited(&echo, &TerminalSession::exited);
+    QVERIFY(echo.start());
+    if (powerShell)
+        QCOMPARE(echo.commandLine().value(2), u"-EncodedCommand"_s);
+    else
+        QCOMPARE(echo.commandLine().last(), u"/d /s /c \""_s + echo.command() + u'"');
+    QTRY_COMPARE_WITH_TIMEOUT(exited.size(), 1, Timeout);
+    QVERIFY2(allText(echo).contains(u"zażółć gęślą"_s), qPrintable(allText(echo)));
+    QCOMPARE(echo.exitCode(), 3);
+    QCOMPARE(echo.title(), u"Skrypt"_s);
+
+    // A native program's exit code comes through the shell as it is.
+    TerminalSession native;
+    native.setCommand(u"cmd /d /c exit 5"_s);
+    QSignalSpy nativeExited(&native, &TerminalSession::exited);
+    QVERIFY(native.start());
+    QTRY_COMPARE_WITH_TIMEOUT(nativeExited.size(), 1, Timeout);
+    QCOMPARE(native.exitCode(), 5);
+
+    // A command that is not there fails; one that works ends with 0.
+    TerminalSession missing;
+    missing.setCommand(u"brulion-no-such-command-xyz"_s);
+    QSignalSpy missingExited(&missing, &TerminalSession::exited);
+    QVERIFY(missing.start());
+    QTRY_COMPARE_WITH_TIMEOUT(missingExited.size(), 1, Timeout);
+    QVERIFY(missing.exitCode() != 0);
+    if (powerShell)
+        QCOMPARE(missing.exitCode(), 1);
+    TerminalSession fine;
+    fine.setCommand(u"echo gotowe"_s);
+    QSignalSpy fineExited(&fine, &TerminalSession::exited);
+    QVERIFY(fine.start());
+    QTRY_COMPARE_WITH_TIMEOUT(fineExited.size(), 1, Timeout);
+    QCOMPARE(fine.exitCode(), 0);
+}
+
+void TestTerminal::windowsStopAndRestart()
+{
+    if (!m_conpty)
+        QSKIP("ConPTY: Windows only");
+    const bool powerShell = userShellKind() == ShellKind::PowerShell;
+    TerminalSession session;
+    session.setCommand(powerShell ? u"echo started; Start-Sleep 100"_s : u"echo started& ping -n 100 127.0.0.1 >NUL"_s);
+    QSignalSpy exited(&session, &TerminalSession::exited);
+    QVERIFY(session.start());
+    QTRY_VERIFY_WITH_TIMEOUT(allText(session).contains(u"started"_s), Timeout);
+    QElapsedTimer timer;
+    timer.start();
+    session.stop();
+    QTRY_COMPARE_WITH_TIMEOUT(exited.size(), 1, Timeout);
+    QVERIFY(timer.elapsed() < 6000 * BRULION_TEST_SLOWDOWN);
+    QVERIFY(session.hasExited());
+    QVERIFY(session.exitCode() != 0);
+    // Restart: a clean screen, the same command again.
+    QVERIFY(session.start());
+    QTRY_VERIFY_WITH_TIMEOUT(allText(session).contains(u"started"_s), Timeout);
+    QCOMPARE(allText(session).count(u"started"_s), 1);
+    session.stop();
+    QTRY_COMPARE_WITH_TIMEOUT(exited.size(), 2, Timeout);
 }
 
 QTEST_MAIN(TestTerminal)

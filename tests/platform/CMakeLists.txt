@@ -61,11 +61,22 @@ brulion_add_test(tst_ocr SOURCES tst_ocr.cpp LIBS brulion_platform brulion_core_
 target_compile_definitions(tst_ocr PRIVATE BRULION_FONTS_DIR="${PROJECT_SOURCE_DIR}/assets/fonts")
 # Tesseract reads a page in seconds; under the sanitizers much longer.
 set_tests_properties(tst_ocr PROPERTIES TIMEOUT 600)
-# A program on a pseudo-terminal (pty.h) with this build's backend (POSIX; "none" elsewhere: only
-# available() is checked): /bin/sh's output read, input written to cat, `stty size` before and
+# A program on a pseudo-terminal (pty.h) with this build's backend (POSIX, ConPTY; "none" elsewhere:
+# only available() is checked): /bin/sh's output read, input written to cat, `stty size` before and
 # after a resize, the working directory and environment the child gets (TERM, no COLUMNS, no
 # descriptors of the parent), exit codes and signals, a program that cannot be started, a
 # terminated `sleep 100` and its jobs, the child reaped every time (no zombies), a paste larger
-# than the pty's buffer.
-brulion_add_test(tst_pty SOURCES tst_pty.cpp LIBS brulion_platform)
+# than the pty's buffer. Windows: the same through pty_probe (a console program that prints what it
+# sees) and cmd.exe, ConPTY's output read through the emulator (term) as the screen it paints,
+# the command line's quoting, terminate() of a process tree, a flood.
+brulion_add_test(tst_pty SOURCES tst_pty.cpp LIBS brulion_platform brulion_core_term)
 target_compile_definitions(tst_pty PRIVATE BRULION_TEST_PTY_BACKEND="${BRULION_PTY_BACKEND_USED}")
+if(WIN32)
+    add_executable(pty_probe pty_probe.cpp)
+    brulion_set_warnings(pty_probe)
+    if(MINGW)
+        target_link_options(pty_probe PRIVATE -municode)
+    endif()
+    add_dependencies(tst_pty pty_probe)
+    target_compile_definitions(tst_pty PRIVATE BRULION_TEST_PTY_PROBE="$<TARGET_FILE:pty_probe>")
+endif()
