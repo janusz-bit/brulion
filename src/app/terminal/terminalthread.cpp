@@ -106,13 +106,14 @@ void TerminalThread::setAutoOpen(bool on)
     Q_EMIT autoOpenChanged();
 }
 
-TerminalSession *TerminalThread::makeSession(const QString &folder, const QString &command, const QString &label)
+TerminalSession *TerminalThread::makeSession(const QString &folder, const QString &command, const QString &label,
+                                             int pending)
 {
     if (!TerminalSession::available()) {
         setError(tr("There is no terminal on this device."));
         return nullptr;
     }
-    if (m_registry && !m_registry->makeRoom(this)) {
+    if (m_registry && !m_registry->makeRoom(this, pending)) {
         setError(tr("%n terminal(s) are open already: close some of them first.", "", m_registry->maxSessions()));
         return nullptr;
     }
@@ -224,7 +225,8 @@ bool TerminalThread::restoreTab(const QList<Restored> &terminals, Qt::Orientatio
             break;
         const QString folder = !r.folder.isEmpty() && QFileInfo(r.folder).isDir() ? r.folder : m_folder;
         // (A command's tab: its shell, the command typed and waiting for Enter — never run by itself.)
-        TerminalSession *session = makeSession(folder, QString(), r.label.isEmpty() ? r.command : r.label);
+        TerminalSession *session = makeSession(folder, QString(), r.label.isEmpty() ? r.command.simplified().left(80) : r.label,
+                                               group->count());
         if (!session)
             break;
         group->insert(group->count(), session);

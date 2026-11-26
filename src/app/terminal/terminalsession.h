@@ -114,7 +114,8 @@ public:
     Q_INVOKABLE void checkBusy();
 
     /// `text` typed into the program once it printed something (its prompt: the line editor reads
-    /// it then, its echo after the prompt) — a restored tab's command, waiting for Enter.
+    /// it then, its echo after the prompt) — a restored tab's command, waiting for Enter; one of
+    /// several lines is not typed (its line breaks would run it).
     void typeWhenReady(const QString &text);
     /// What typeWhenReady() typed (a restored tab's command: kept in its layout again).
     QString typedCommand() const { return m_typedCommand; }

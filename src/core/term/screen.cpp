@@ -982,53 +982,75 @@ void Screen::resize(int columns, int rows)
 
 void Screen::reflowMain(int columns, int rows)
 {
+    // Where the cursor and the saved cursor (DECSC) stand, as offsets in their lines of text.
+    struct Tracker {
+        int row = -1; // its row on the screen before (-1: none)
+        qsizetype offset = 0;
+        int line = -1;
+        int outRow = 0;
+        int outColumn = 0;
+        bool placed = false;
+    };
+    Tracker cursor;
+    cursor.row = m_cursor.row;
+    Tracker saved;
+    if (m_hasSavedMain)
+        saved.row = m_savedMain.row;
+
     // The scrollback and the screen as lines of text: rows joined where the text wrapped. Blank
-    // rows under the cursor and the last text are left out (they are padding, not lines).
-    int lastRow = m_cursor.row;
+    // rows under the cursors and the last text are left out (they are padding, not lines).
+    int lastRow = std::max(cursor.row, saved.row);
     for (int row = m_rows - 1; row > lastRow; --row) {
         if (std::ranges::any_of(m_mainLines[row].cells, [](const Cell &c) { return !c.isPlainBlank(); })) {
             lastRow = row;
             break;
         }
     }
+    QList<const Line *> source;
+    source.reserve(m_historyCount + lastRow + 1);
+    for (int i = 0; i < m_historyCount; ++i)
+        source.append(&historyLine(i));
+    for (int row = 0; row <= lastRow; ++row)
+        source.append(&m_mainLines[row]);
+    const int firstScreenRow = m_historyCount;
+
     QList<Line> logical;
-    int cursorLine = -1;
-    qsizetype cursorOffset = 0;
     bool open = false;
-    auto append = [&](const Line &row, bool isCursorRow) {
-        if (!open) {
+    for (int i = 0; i < source.size(); ++i) {
+        const Line &row = *source.at(i);
+        if (!open)
             logical.append(Line());
-            open = true;
-        }
         Line &into = logical.last();
         const qsizetype base = into.cells.size();
-        if (isCursorRow) {
-            cursorLine = int(logical.size()) - 1;
-            cursorOffset = base + m_cursor.column + (m_cursor.pendingWrap ? 1 : 0);
+        const int screenRow = i - firstScreenRow;
+        for (Tracker *t : {&cursor, &saved}) {
+            if (t->row >= 0 && screenRow == t->row) {
+                const CursorState &state = t == &cursor ? m_cursor : m_savedMain;
+                t->line = int(logical.size()) - 1;
+                t->offset = base + state.column + (state.pendingWrap ? 1 : 0);
+            }
         }
-        into.cells += row.cells;
-        for (auto it = row.clusters.cbegin(); it != row.clusters.cend(); ++it)
-            into.clusters.insert(int(base) + it.key(), it.value());
+        qsizetype take = row.cells.size();
+        // The blank a wide character left at the margin when it wrapped is no text of the line.
+        if (row.wrapped && take > 0 && i + 1 < source.size() && row.cells.at(take - 1).isPlainBlank()
+            && !source.at(i + 1)->cells.isEmpty() && source.at(i + 1)->cells.first().isWide())
+            --take;
+        into.cells += row.cells.first(take);
+        for (auto it = row.clusters.cbegin(); it != row.clusters.cend(); ++it) {
+            if (it.key() < take)
+                into.clusters.insert(int(base) + it.key(), it.value());
+        }
         open = row.wrapped;
-    };
-    for (int i = 0; i < m_historyCount; ++i)
-        append(historyLine(i), false);
-    // (A scrollback line that wrapped into the screen goes on in its first row.)
-    for (int row = 0; row <= lastRow; ++row)
-        append(m_mainLines[row], row == m_cursor.row);
+    }
 
     // Wrapped again at the new width.
     QList<Line> rowsOut;
-    int cursorRowOut = 0;
-    int cursorColumnOut = 0;
     for (int index = 0; index < logical.size(); ++index) {
         Line &line = logical[index];
         qsizetype end = line.cells.size();
         while (end > 0 && line.cells.at(end - 1).isPlainBlank())
             --end;
-        const bool hasCursor = index == cursorLine;
         qsizetype pos = 0;
-        bool placed = false;
         do {
             Line row;
             row.cells.reserve(columns);
@@ -1065,25 +1087,27 @@ void Screen::reflowMain(int columns, int rows)
                 row.cells.append(cell);
                 ++pos;
             }
-            if (hasCursor && !placed && (cursorOffset < pos || pos >= end)) {
-                // (The cursor may stand after the text: on this row, or the rows it would fill.)
-                qsizetype column = cursorOffset - start;
+            for (Tracker *t : {&cursor, &saved}) {
+                if (t->line != index || t->placed || !(t->offset < pos || pos >= end))
+                    continue;
+                // (The cursor may stand after the text: on this row, or the rows it would fill —
+                // made for it; the saved one stays at this row's end.)
+                qsizetype column = t->offset - start;
                 int extraRows = 0;
-                while (column >= columns && pos >= end) {
+                while (column >= columns && pos >= end && t == &cursor) {
                     column -= columns;
                     ++extraRows;
                 }
-                cursorRowOut = int(rowsOut.size()) + extraRows;
-                cursorColumnOut = int(std::clamp<qsizetype>(column, 0, columns - 1));
-                placed = true;
+                t->outRow = int(rowsOut.size()) + extraRows;
+                t->outColumn = int(std::clamp<qsizetype>(column, 0, columns - 1));
+                t->placed = true;
             }
             row.wrapped = pos < end;
             row.cells.resize(columns);
             rowsOut.append(std::move(row));
         } while (pos < end);
-        if (hasCursor) {
-            const int needed = cursorRowOut + 1;
-            while (int(rowsOut.size()) < needed)
+        if (cursor.line == index) {
+            while (int(rowsOut.size()) <= cursor.outRow)
                 rowsOut.append(blankLine());
         }
     }
@@ -1092,10 +1116,10 @@ void Screen::reflowMain(int columns, int rows)
     // grew (blank rows under it take them; more push the top rows into the scrollback), up when
     // the rows under it would not fit; above the screen, the scrollback.
     const int total = int(rowsOut.size());
-    const int grown = cursorRowOut - (m_historyCount + m_cursor.row);
-    const int below = std::min(total - 1 - cursorRowOut, rows - 1);
+    const int grown = cursor.outRow - (m_historyCount + m_cursor.row);
+    const int below = std::min(total - 1 - cursor.outRow, rows - 1);
     const int cursorRow = std::clamp(m_cursor.row + std::max(0, grown), 0, rows - 1 - std::max(0, below));
-    const int top = std::max(0, cursorRowOut - cursorRow);
+    const int top = std::max(0, cursor.outRow - cursorRow);
     clearHistory();
     for (int i = 0; i < top; ++i)
         pushHistory(std::move(rowsOut[i]));
@@ -1105,9 +1129,15 @@ void Screen::reflowMain(int columns, int rows)
     const Line blank = blankLine();
     while (m_mainLines.size() < rows)
         m_mainLines.append(blank);
-    m_cursor.row = std::clamp(cursorRowOut - top, 0, rows - 1);
-    m_cursor.column = cursorColumnOut;
+    m_cursor.row = std::clamp(cursor.outRow - top, 0, rows - 1);
+    m_cursor.column = cursor.outColumn;
     m_cursor.pendingWrap = false;
+    if (saved.placed) {
+        // (resize() clamps it to the screen afterwards.)
+        m_savedMain.row = saved.outRow - top;
+        m_savedMain.column = saved.outColumn;
+        m_savedMain.pendingWrap = false;
+    }
     m_scrolledIntoHistory = 0;
 }
 

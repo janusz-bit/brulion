@@ -163,20 +163,20 @@ void TerminalRegistry::enforceThreadLimit()
     }
 }
 
-bool TerminalRegistry::makeRoom(const TerminalThread *asking)
+bool TerminalRegistry::makeRoom(const TerminalThread *asking, int pending)
 {
-    if (sessionCount() < m_maxSessions)
+    if (sessionCount() + pending < m_maxSessions)
         return true;
     for (TerminalThread *thread : leastRecentFirst(asking)) {
         for (TerminalSession *session : thread->sessions()) {
             if (session->isBusy())
                 continue;
             thread->closeSession(session, false);
-            if (sessionCount() < m_maxSessions)
+            if (sessionCount() + pending < m_maxSessions)
                 return true;
         }
     }
-    return sessionCount() < m_maxSessions;
+    return sessionCount() + pending < m_maxSessions;
 }
 
 void TerminalRegistry::setLimits(int maxThreads, int maxSessions)

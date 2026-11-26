@@ -21,6 +21,9 @@ Rectangle {
     /// The terminal searched (the panel's focused one).
     property TerminalView view: null
     property bool matchCase: false
+    /// The bar is open (shown while it is; the panel hidden with it open keeps its matches).
+    property bool open: false
+    visible: bar.open
 
     signal closeRequested()
 
@@ -33,7 +36,7 @@ Rectangle {
     function search(): void {
         if (bar.searched !== null && bar.searched !== bar.view)
             bar.searched.clearFind()
-        bar.searched = bar.visible ? bar.view : null
+        bar.searched = bar.open ? bar.view : null
         if (bar.searched !== null)
             bar.searched.find(field.text, bar.matchCase)
     }
@@ -64,8 +67,10 @@ Rectangle {
     // Another terminal shown: the query goes on there (only while the bar is open).
     onViewChanged: bar.search()
     onMatchCaseChanged: bar.search()
-    onVisibleChanged: {
-        if (!bar.visible)
+    onOpenChanged: {
+        if (bar.open)
+            bar.search()
+        else
             bar.clear()
     }
 

@@ -910,6 +910,23 @@ void TestTerm::resizeReflows()
     QVERIFY(wide.cell(1, 0).isWide());
     QVERIFY(wide.cell(1, 1).isWideTail());
 
+    // The blank a wide character left at the margin when it wrapped is no space of the line.
+    Term padded(5, 3, 10);
+    padded.feed(QString::fromUcs4(U"abcd\x597D").toUtf8());
+    QVERIFY(padded.screen().line(0).wrapped);
+    QCOMPARE(logicalLine(padded.screen(), 0, false).text, QString::fromUcs4(U"abcd\x597D"));
+    padded.t.resize(10, 3);
+    QCOMPARE(padded.screen().line(0).trimmedText(), QString::fromUcs4(U"abcd\x597D"));
+    QCOMPARE(padded.screen().cursorColumn(), 6);
+
+    // The saved cursor (DECSC) stays on its character too.
+    Term saved(10, 5, 10);
+    saved.feed("abc\x1b" "7defgh\r\n$ ");
+    saved.t.resize(4, 5);
+    saved.feed("\x1b" "8X");
+    QCOMPARE(saved.screen().line(0).trimmedText(), u"abcX"_s);
+    QCOMPARE(saved.screen().line(1).trimmedText(), u"efgh"_s);
+
     // Combining marks and links go with their characters.
     Term marks(6, 3, 10);
     marks.feed("abcde\xcc\x81" "f\x1b]8;;https://x.pl\x07LINK\x1b]8;;\x07");

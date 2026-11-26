@@ -143,6 +143,7 @@ private Q_SLOTS:
     void viewFind();
     void viewClear();
     void viewReflow();
+    void viewAttachesAfterOutput();
     void viewContextMenu();
     void chatBlock_data();
     void chatBlock();
@@ -722,6 +723,28 @@ void TestTerminal::registryLayouts()
     QVERIFY(broken.thread(u"b"_s, QDir::tempPath())->count() == 1);
     broken.setLayouts(QJsonObject());
     QCOMPARE(broken.savedCount(), 0);
+    // A tab of four within a limit of three: three come back; a command of several lines is not
+    // typed (its line breaks would run it), and kept.
+    TerminalRegistry limited;
+    limited.setLimits(10, 3);
+    const QString tmp = QDir::tempPath();
+    QJsonArray four;
+    four.append(QJsonObject{{u"folder"_s, tmp}, {u"label"_s, QString()}, {u"command"_s, u"echo raz\necho dwa"_s}});
+    for (int i = 0; i < 3; ++i)
+        four.append(QJsonObject{{u"folder"_s, tmp}, {u"label"_s, QString()}, {u"command"_s, QString()}});
+    limited.setLayouts(QJsonObject{
+            {u"threads"_s, QJsonArray{QJsonObject{
+                                   {u"key"_s, u"c"_s},
+                                   {u"tabs"_s, QJsonArray{QJsonObject{{u"split"_s, u"right"_s}, {u"terminals"_s, four}}}}}}}});
+    TerminalThread *three = limited.thread(u"c"_s, tmp);
+    QCOMPARE(limited.sessionCount(), 3);
+    QCOMPARE(three->group(0)->count(), 3);
+    TerminalSession *script = three->group(0)->at(0);
+    QCOMPARE(script->label(), u"echo raz echo dwa"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(!screenText(*script).trimmed().isEmpty(), Timeout);
+    QTest::qWait(200);
+    QVERIFY(!screenText(*script).contains(u"echo raz"_s));
+    QCOMPARE(script->typedCommand(), u"echo raz\necho dwa"_s);
 }
 
 void TestTerminal::viewTerminalKeys()
@@ -912,6 +935,28 @@ void TestTerminal::viewReflow()
     w.view->setWidth(w.window.width());
     QTRY_COMPARE(w.view->columns(), columns);
     QCOMPARE(session.terminal().screen().line(1).trimmedText(), QString(10, u'x'));
+}
+
+void TestTerminal::viewAttachesAfterOutput()
+{
+    // Output while no view shows the session (another tab, another thread): a view shown then and
+    // scrolled back keeps its lines when the next one comes.
+    TerminalSession session;
+    QByteArray lines;
+    for (int i = 0; i < 2000; ++i)
+        lines += "wiersz " + QByteArray::number(i) + "\r\n";
+    show(session, lines);
+    Window w;
+    w.view->setSession(&session);
+    w.view->scrollLines(5);
+    const QString before = w.view->visibleText();
+    show(session, "jeszcze jeden\r\n");
+    QCOMPARE(w.view->scrollOffset(), 6);
+    QCOMPARE(w.view->visibleText(), before);
+    // A selection made now survives the next line.
+    w.view->selectAll();
+    show(session, "i jeszcze\r\n");
+    QVERIFY(w.view->hasSelection());
 }
 
 void TestTerminal::viewContextMenu()

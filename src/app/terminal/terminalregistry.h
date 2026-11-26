@@ -91,9 +91,10 @@ public:
     /// before —; deleting the registry, a child of the application, reaps them).
     void hangUpAll();
 
-    /// Room for one more terminal of `asking`: true below MaxSessions, after ending idle terminals
-    /// of the least recently shown other threads when needed.
-    bool makeRoom(const TerminalThread *asking);
+    /// Room for one more terminal of `asking` (`pending` more made and not counted yet: a tab
+    /// being brought back): true below MaxSessions, after ending idle terminals of the least
+    /// recently shown other threads when needed.
+    bool makeRoom(const TerminalThread *asking, int pending = 0);
     /// Other limits than MaxThreads and MaxSessions (tests).
     void setLimits(int maxThreads, int maxSessions);
     int maxSessions() const { return m_maxSessions; }

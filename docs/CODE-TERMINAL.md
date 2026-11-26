@@ -70,8 +70,10 @@ execute, ESC, CSI and OSC actions.
 * Another width on the main screen **reflows** it (`reflow()`, on by default): the scrollback's and
   the screen's lines of text — rows joined where they wrapped — are wrapped again at the new width
   (a wide character that does not fit at the margin wraps first; combining marks, colours and links
-  go with their cells); blank rows under the cursor and the last text are padding, not lines. The
-  cursor stays on its character, on the row it was on, moved down by as many rows as the text above
+  go with their cells; the blank a wide character left at the margin when it wrapped is dropped
+  when the rows join); blank rows under the cursor and the last text are padding, not lines. The
+  cursor — and the saved one (DECSC), which a prompt's right part goes back to — stays on its
+  character, on the row it was on, moved down by as many rows as the text above
   it grew (the blank rows under it take them; beyond, the top rows go into the scrollback) and up
   when the rows under it would not fit. A split halving a terminal's width cuts nothing.
 * Otherwise — the alternate screen (its program redraws it on SIGWINCH), the main screen under it, a
@@ -246,7 +248,9 @@ again; the registry is not.
   the limits; read back with `setLayouts()`, anything malformed skipped). After a restart a thread's
   layout comes back the first time its terminals are asked for (the panel shows it): shells in
   those folders (a missing one: the thread's), a command's tab its shell with the command typed —
-  after the shell's first output, so its line editor has it — and not run: Enter runs it again.
+  after the shell's first output, so its line editor has it — and not run: Enter runs it again (a
+  command of several lines is not typed: its line breaks would run it; the tab keeps it for the
+  next restart either way). A tab of more terminals than there is room for comes back with fewer.
   Layouts not asked for yet are kept (after the live ones), follow a renamed thread and go with a
   deleted or archived one.
 * **Limits**: `MaxThreads` = 10 threads with terminals, `MaxSessions` = 40 terminals in all. When a
@@ -373,7 +377,7 @@ the view, a scroll bar over the scrollback (drag the thumb, click beside it), "J
 scrolled back, and once its program ended (or could not start) "Process exited with code N" with
 Restart and ×. The find bar (`TerminalFindBar`, top right): the query, "3 of 12", Aa, older /
 newer, × — Enter the older match, Shift+Enter the newer, Esc closes it (the keyboard back to the
-terminal); another terminal focused: its matches. The context menu (right click; a long press on a
+terminal); another terminal focused: its matches (the panel hidden with the bar open: kept). The context menu (right click; a long press on a
 touch screen): Add to chat, Copy, Paste, Select all, Find…, Jump to latest, Clear, Split right,
 Split down, Close terminal. Closing a terminal or a tab in which a program runs asks first ("Close
 the terminal?"). "No terminals open" with "New terminal" when a thread has none, and "No terminal on

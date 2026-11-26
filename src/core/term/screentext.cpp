@@ -9,10 +9,14 @@ namespace brulion::term {
 namespace {
 
 /// Row `index`'s text appended to `out` (to `cells` / `widths` too when given); `trim`: without its
-/// trailing spaces.
-void appendRow(const Line &line, int index, bool trim, QString &out, QList<CellPos> *cells, QList<quint8> *widths)
+/// trailing spaces; `dropLast`: without its last cell (the blank a wide character left at the margin
+/// when it wrapped).
+void appendRow(const Line &line, int index, bool trim, bool dropLast, QString &out, QList<CellPos> *cells,
+               QList<quint8> *widths)
 {
     int end = int(line.cells.size());
+    if (dropLast && end > 0)
+        --end;
     if (trim) {
         while (end > 0 && line.cells.at(end - 1).ch == U' ')
             --end;
@@ -74,9 +78,16 @@ LogicalLine logicalLine(const Screen &screen, int line, bool withCells)
         ++last;
     out.first = first;
     out.last = last;
-    for (int index = first; index <= last; ++index)
-        appendRow(screen.lineAt(index), index, index == last, out.text, withCells ? &out.cells : nullptr,
+    for (int index = first; index <= last; ++index) {
+        const Line &row = screen.lineAt(index);
+        bool dropLast = false;
+        if (index < last && !row.cells.isEmpty() && row.cells.last().isPlainBlank()) {
+            const Line &next = screen.lineAt(index + 1);
+            dropLast = !next.cells.isEmpty() && next.cells.first().isWide();
+        }
+        appendRow(row, index, index == last, dropLast, out.text, withCells ? &out.cells : nullptr,
                   withCells ? &out.widths : nullptr);
+    }
     return out;
 }
 

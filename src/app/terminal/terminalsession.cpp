@@ -264,8 +264,9 @@ void TerminalSession::resize(int columns, int rows)
 
 void TerminalSession::typeWhenReady(const QString &text)
 {
-    m_typeWhenReady = text;
     m_typedCommand = text;
+    // A command of several lines is not typed: its line breaks would be Enter (it would run).
+    m_typeWhenReady = text.contains(u'\n') || text.contains(u'\r') ? QString() : text;
 }
 
 void TerminalSession::onData(const QByteArray &data)

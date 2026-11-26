@@ -132,7 +132,7 @@ Q_SIGNALS:
     void sessionsChanged();
 
 private:
-    TerminalSession *makeSession(const QString &folder, const QString &command, const QString &label);
+    TerminalSession *makeSession(const QString &folder, const QString &command, const QString &label, int pending = 0);
     void insertGroup(int index, TerminalGroup *group);
     void removeGroup(int index);
     void groupChanged(TerminalGroup *group);

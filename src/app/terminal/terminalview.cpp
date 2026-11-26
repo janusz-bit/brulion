@@ -192,6 +192,8 @@ void TerminalView::setSession(TerminalSession *session)
         if (m_columns > 0 && m_rows > 0)
             session->resize(m_columns, m_rows);
         applyColorsToSession();
+        // (What scrolled while no view showed it is no movement of what this one shows.)
+        session->terminal().screen().clearDirty();
         session->terminal().screen().markAllDirty();
         m_lastHistorySize = session->terminal().screen().historySize();
     }
@@ -1546,7 +1548,13 @@ void TerminalView::clear()
 
 void TerminalView::onResized()
 {
-    // Another width wraps the text again (Screen::resize): the lines counted before are others now.
+    // Another width wraps the text again (Screen::resize): the lines counted before are others now,
+    // found again here — not moved once more by what the resize pushed into the scrollback.
+    if (m_session) {
+        term::Screen &s = m_session->terminal().screen();
+        s.clearDirty();
+        s.markAllDirty();
+    }
     clearSelection();
     clearLink();
     m_noLink = {{1, 0}, {0, 0}};

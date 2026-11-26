@@ -50,7 +50,7 @@ FocusScope {
     readonly property bool available: TerminalRegistry.available
     /// The focused terminal of the shown tab (null: none).
     readonly property TerminalSession currentSession: root.thread !== null ? root.thread.currentSession : null
-    readonly property bool findOpen: findBar.visible
+    readonly property bool findOpen: findBar.open
     /// Chords of the panel's commands (Settings → Keyboard shortcuts): theirs inside the terminal too.
     readonly property list<string> appShortcuts: [
         ShortcutMap.sequences["terminal.toggle"] || "",
@@ -158,7 +158,8 @@ FocusScope {
 
     // ---- Closing (a program running in it: asked first) ------------------------------------------
     property TerminalSession pendingClose: null
-    property int pendingTab: -1
+    /// (The tab itself, not its index: tabs may come and go while the dialog asks.)
+    property TerminalGroup pendingTab: null
     /// Closes tab `index` (its programs are hung up on).
     function closeTab(index: int): void {
         if (root.thread === null)
@@ -168,7 +169,7 @@ FocusScope {
             return
         if (group.busy) {
             root.pendingClose = null
-            root.pendingTab = index
+            root.pendingTab = group
             closeConfirm.subject = group.title
             closeConfirm.open()
             return
@@ -181,7 +182,7 @@ FocusScope {
             return
         if (session.busy) {
             root.pendingClose = session
-            root.pendingTab = -1
+            root.pendingTab = null
             closeConfirm.subject = session.title
             closeConfirm.open()
             return
@@ -201,12 +202,11 @@ FocusScope {
 
     // ---- Find ------------------------------------------------------------------------------------
     function openFind(): void {
-        findBar.visible = true
+        findBar.open = true
         findBar.focusField()
-        findBar.search()
     }
     function closeFind(): void {
-        findBar.visible = false
+        findBar.open = false
     }
 
     // ---- The context menu ------------------------------------------------------------------------
@@ -314,10 +314,10 @@ FocusScope {
                     size: "small"
                     label: qsTr("Find in terminal")
                     shortcut: "Ctrl+Shift+F"
-                    checked: findBar.visible
+                    checked: findBar.open
                     enabled: root.group !== null
                     onClicked: {
-                        if (findBar.visible) {
+                        if (findBar.open) {
                             root.closeFind()
                             root.focusTerminal()
                         } else {
@@ -396,7 +396,6 @@ FocusScope {
                 anchors.topMargin: Theme.space2
                 anchors.rightMargin: Theme.space3
                 width: Math.min(implicitWidth, parent.width - 2 * Theme.space2)
-                visible: false
                 z: 2
                 view: root.currentView()
                 onCloseRequested: {
@@ -551,17 +550,18 @@ FocusScope {
         onAccepted: {
             if (root.thread === null)
                 return
+            // (Gone meanwhile, or another thread's now: nothing is closed.)
             if (root.pendingClose !== null)
                 root.thread.closeSession(root.pendingClose, true)
-            else if (root.pendingTab >= 0)
-                root.thread.closeTab(root.pendingTab, true)
+            else if (root.pendingTab !== null && root.thread.indexOf(root.pendingTab) >= 0)
+                root.thread.closeTab(root.thread.indexOf(root.pendingTab), true)
             root.pendingClose = null
-            root.pendingTab = -1
+            root.pendingTab = null
             focusLater.restart()
         }
         onRejected: {
             root.pendingClose = null
-            root.pendingTab = -1
+            root.pendingTab = null
         }
     }
 }
