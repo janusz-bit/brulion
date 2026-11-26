@@ -1534,6 +1534,18 @@ docs/CODE-TERMINAL.md "Drawn by Atrament"); shown where agents run).
   what that computer's git says (`RemoteProjects.requestChanges` / `requestDiff`), refreshed when the
   thread's page changes. Local / New worktree work as for this device's projects: the worktree is made
   there.
+* **What the desktop app there is doing** (docs/CODE.md "The computer's own turns on the phone";
+  `ChatComputerList`, `qml/views/ChatComputerList.qml`, `chatComputers`): "On your computers" above the
+  projects (and above ChatView's list of conversations) while a computer's app runs, waits on or asks
+  something in a conversation, or ended one in the last 10 minutes — a row a conversation
+  (`chatComputer_<name>`: a `laptop` icon with a spinner while it runs, `circle-help` while it asks,
+  "Asks on nixos: …", "On nixos: Reading …", "Finished on nixos", "Failed on nixos"); a row opens it.
+  Its view follows that turn (`ChatTurn.remoteHost`): "Running on nixos — answer, stop or write from
+  here: your messages wait there." above the field (`chatOnComputer`, `chatOnComputerText`), its
+  question's buttons, Stop and the field go there, and its waiting messages are that computer's
+  ("waits on nixos", without Send now / Edit / Remove). A new thread of such a project starts in the
+  app there: "Starting the thread on nixos…" (a spinner in `chatOnComputer`) until it is made; refused,
+  its text goes back into the field and a toast says why.
 
 ## Notifications
 

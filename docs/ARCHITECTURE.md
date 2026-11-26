@@ -434,7 +434,9 @@ QML smoke tests and screenshot scripts that run the real app headless).
   sessions given this notebook and Brulion's MCP server, the agent's files and terminals served
   here, devices paired with one-time codes; `hostsync.h`: the notebook kept in sync with Nextcloud
   by core `sync`'s engine, the one sync of the command line — docs/CLI.md "AI agents for other
-  devices"; core `acp/remote.h` is the app's side), `brulion-cli acp agent` (`acpagent.h`: the
+  devices"; core `acp/remote.h` is the app's side; with the desktop app's grant it also hands the
+  app's own conversations to the devices — core `acp/appchats.h`, the app's `shell/computerchats.h`
+  —, so a phone follows and steers the turns the desktop app runs), `brulion-cli acp agent` (`acpagent.h`: the
   built-in AI assistant as an ACP agent for an editor — the protocol's agent side over core
   `acp`'s `Connection`, the assistant run in an extension engine over the notebook, its `b.ai`
   sent through core `ai` with the app's settings and key, its questions as
