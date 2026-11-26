@@ -266,7 +266,24 @@ at::AnyElement PageView::renderRow(std::size_t row)
     const markdown::RenderedText &text = *rendered.d;
     const std::vector<at::TextSpan> spans = renderedSpans(text, m_palette);
     const bool closed = task == u"done" || task == u"cancelled";
-    at::Text body = at::text(u16View(text.text)).spans(spans);
+    at::Text body = at::text(u16View(text.text)).id(u"text").spans(spans);
+    // Each link a hit region of the text (adjacent runs of one href are one link).
+    PageView *self = this;
+    for (qsizetype i = 0; i < text.runs.size();) {
+        const QString &href = text.runs[i].href;
+        qsizetype j = i + 1;
+        while (j < text.runs.size() && text.runs[j].href == href && text.runs[j].from == text.runs[j - 1].to)
+            ++j;
+        if (!href.isEmpty()) {
+            // (The listener lives in the frame arena, which destroys it — the href with it.)
+            std::move(body).link(at::Range{int(text.runs[i].from), int(text.runs[j - 1].to)},
+                                 [self, row, href](const at::ClickEvent &, at::Window &, at::App &) {
+                                     if (self->onLink)
+                                         self->onLink(int(row), href);
+                                 });
+        }
+        i = j;
+    }
 
     at::Div content = at::div().flexRow().itemsStart().pl(textX - marker);
     if (view == u"heading") {
@@ -285,7 +302,13 @@ at::AnyElement PageView::renderRow(std::size_t row)
                               .borderColor(m_palette.muted)
                               .role(at::Role::CheckBox)
                               .checked(closed)
-                              .ariaLabel(u16View(text.text));
+                              .ariaLabel(u16View(text.text))
+                              .cursorPointer()
+                              .id(u"task")
+                              .onClick([self, row](const at::ClickEvent &, at::Window &, at::App &) {
+                                  if (self->onToggleTask)
+                                      self->onToggleTask(int(row));
+                              });
         if (closed)
             std::move(box).bg(m_palette.muted);
         std::move(content).child(at::div()

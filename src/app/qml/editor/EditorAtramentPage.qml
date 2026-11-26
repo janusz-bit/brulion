@@ -30,6 +30,14 @@ AtramentView {
     guideColor: Theme.guide
     backgroundColor: Theme.bg
     view: "page"
+    onLinkActivated: (row, link) => {
+        if (root.editor)
+            root.editor.activateLink(row, link)
+    }
+    onTaskToggled: row => {
+        if (root.editor && root.editor.controller)
+            root.editor.controller.toggleTask(row)
+    }
     activeFocusOnTab: true
     Accessible.name: qsTr("Page")
 }

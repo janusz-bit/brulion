@@ -8,3 +8,5 @@ brulion_add_test(tst_atrament_touch SOURCES tst_atrament_touch.cpp LIBS brulion_
 target_compile_definitions(tst_atrament_touch PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_atrament_list SOURCES tst_atrament_list.cpp LIBS brulion_atrament_ui)
 target_compile_definitions(tst_atrament_list PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+brulion_add_test(tst_atrament_links SOURCES tst_atrament_links.cpp LIBS brulion_atrament_ui)
+target_compile_definitions(tst_atrament_links PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

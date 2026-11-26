@@ -154,6 +154,18 @@ void AtramentView::attachView()
         }
         m_page = std::make_unique<Page>();
         m_page->entity = r.app.newEntity<brulion::editor::atr::PageView>(model);
+        QPointer<AtramentView> guard = this;
+        m_page->entity.update(
+                r.app, [guard](brulion::editor::atr::PageView &page, at::Context<brulion::editor::atr::PageView> &) {
+                    page.onLink = [guard](int row, const QString &href) {
+                        if (guard)
+                            Q_EMIT guard->linkActivated(row, href);
+                    };
+                    page.onToggleTask = [guard](int row) {
+                        if (guard)
+                            Q_EMIT guard->taskToggled(row);
+                    };
+                });
         applyStyle();
         attach(r.app, at::AnyView{m_page->entity.id(), &at::renderView<brulion::editor::atr::PageView>});
         m_attached = true;

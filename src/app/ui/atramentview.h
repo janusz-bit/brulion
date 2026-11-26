@@ -58,6 +58,9 @@ public:
 Q_SIGNALS:
     void viewChanged();
     void pageModelChanged();
+    // "page": a link of row `row` clicked or tapped (BlockEditor.activateLink), a task's box.
+    void linkActivated(int row, const QString &link);
+    void taskToggled(int row);
     void styleChanged();
 
 protected:

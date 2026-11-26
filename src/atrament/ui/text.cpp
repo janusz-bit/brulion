@@ -40,6 +40,24 @@ Text &&Text::spans(std::span<const TextSpan> spans) &&
     return std::move(*this);
 }
 
+// Which link is hovered and pressed, kept across frames.
+struct Text::LinkState {
+    int hovered = -1;
+    int pressed = -1;
+    MouseDownEvent down;
+};
+
+Text &&Text::link(Range range, TextLink::ClickListener onClick) &&
+{
+    m_links.push_back(TextLink{range, onClick});
+    return std::move(*this);
+}
+
+int Text::hoveredLink() const
+{
+    return m_linkState ? m_linkState->hovered : -1;
+}
+
 Text &&Text::span(Range range, TextStyleRefinement style) &&
 {
     m_spans.push_back(TextSpan { range, std::move(style) });
@@ -65,8 +83,9 @@ void Text::buildRuns(Window &window)
         m_runs.push_back(std::move(r));
     };
     const int length = int(m_text.size());
-    if (m_spans.empty()) {
+    if (m_spans.empty() && m_links.empty()) {
         m_paint.push_back(paintStyle(base));
+        m_pieces.push_back(Range{0, length});
         run(length, base, 0);
         return;
     }
@@ -78,6 +97,11 @@ void Text::buildRuns(Window &window)
     for (const TextSpan &s : m_spans) {
         cuts.push_back(std::clamp(s.range.start, 0, length));
         cuts.push_back(std::clamp(s.range.end, 0, length));
+    }
+    // A link's ends cut too: its pieces get the hover underline of their own.
+    for (const TextLink &l : m_links) {
+        cuts.push_back(std::clamp(l.range.start, 0, length));
+        cuts.push_back(std::clamp(l.range.end, 0, length));
     }
     std::sort(cuts.begin(), cuts.end());
     cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
@@ -91,6 +115,7 @@ void Text::buildRuns(Window &window)
         }
         const auto index = std::uint32_t(m_paint.size());
         m_paint.push_back(paintStyle(style));
+        m_pieces.push_back(Range{a, b});
         run(b - a, style, index);
     }
 }
@@ -130,12 +155,31 @@ NodeId Text::requestLayout(Window &window, App &app)
             });
 }
 
-void Text::prepaint(Rect bounds, Window &, App &)
+void Text::prepaint(Rect bounds, Window &window, App &)
 {
     // The layout's last measure may have been at another width (min-content while sizing).
     const bool wraps = m_whiteSpace != WhiteSpace::NoWrap;
     if (!m_layout || (wraps && (!m_layout->wrapWidth() || std::abs(*m_layout->wrapWidth() - bounds.width()) > 0.01f)))
         m_layout = layoutAt(wraps ? std::optional<float>(bounds.width()) : std::nullopt);
+    if (m_links.empty() || !m_layout)
+        return;
+    m_linkState = &window.elementState<LinkState>();
+    for (std::size_t k = 0; k < m_links.size(); ++k) {
+        for (const Rect &r : m_layout->selectionRects(m_links[k].range)) {
+            const HitboxId hitbox =
+                    window.insertHitbox(Rect{{bounds.left() + r.left(), bounds.top() + r.top()}, r.size});
+            window.setCursorStyle(hitbox, CursorStyle::PointingHand);
+            m_linkHitboxes.push_back(hitbox);
+            m_hitboxLink.push_back(std::uint32_t(k));
+        }
+    }
+    // The hovered link underlined (its pieces' paint styles; the layout stays).
+    if (const int h = m_linkState->hovered; h >= 0 && std::size_t(h) < m_links.size()) {
+        const Range link = m_links[std::size_t(h)].range;
+        for (std::size_t i = 0; i < m_pieces.size(); ++i)
+            if (m_pieces[i].start >= link.start && m_pieces[i].end <= link.end && !m_paint[i].underline)
+                m_paint[i].underline = UnderlineStyle{};
+    }
 }
 
 void Text::paint(Rect bounds, Window &window, App &)
@@ -146,6 +190,73 @@ void Text::paint(Rect bounds, Window &window, App &)
         return;
     window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()),
             m_align, bounds.width());
+    if (m_links.empty() || !m_linkState)
+        return;
+
+    Text *self = this; // in the frame arena, as the listeners are
+    if (window.accessibilityEnabled()) {
+        // One link node per link, named by its text, activated as a click.
+        for (std::size_t k = 0; k < m_links.size(); ++k) {
+            const Range range = m_links[k].range;
+            Rect box;
+            bool first = true;
+            for (const Rect &r : m_layout->selectionRects(range)) {
+                const Rect at{{bounds.left() + r.left(), bounds.top() + r.top()}, r.size};
+                box = first ? at : box.united(at);
+                first = false;
+            }
+            AccessibilityNode *node = window.beginAccessibilityNode(Role::Link, box, hashCombine(0x6c696e6bull, k) | 1);
+            if (!node)
+                continue;
+            const int from = std::clamp(range.start, 0, int(m_text.size()));
+            const int to = std::clamp(range.end, from, int(m_text.size()));
+            node->name = std::u16string_view(m_text.data() + from, std::size_t(to - from));
+            node->actions |= actionBit(AccessibilityAction::Click);
+            node->handler = [self, k](const AccessibilityActionRequest &r, Window &w, App &app) {
+                if (r.action != AccessibilityAction::Click)
+                    return false;
+                ClickEvent click;
+                click.fromAccessibility = true;
+                self->m_links[k].onClick(click, w, app);
+                return true;
+            };
+            window.endAccessibilityNode();
+        }
+    }
+
+    window.onMouseEvent([self](const PlatformInput &input, DispatchPhase phase, Window &w, App &app) {
+        LinkState &st = *self->m_linkState;
+        int under = -1;
+        for (std::size_t i = 0; i < self->m_linkHitboxes.size() && under < 0; ++i)
+            if (w.isHovered(self->m_linkHitboxes[i]))
+                under = int(self->m_hitboxLink[i]);
+        if (phase == DispatchPhase::Capture) {
+            if (std::holds_alternative<KeyDownEvent>(input) || std::holds_alternative<KeyUpEvent>(input))
+                return;
+            if (under != st.hovered) {
+                st.hovered = under;
+                w.refresh();
+            }
+            return;
+        }
+        if (const auto *down = std::get_if<MouseDownEvent>(&input)) {
+            st.pressed = down->button == MouseButton::Left ? under : -1;
+            if (under >= 0)
+                st.down = *down;
+            return;
+        }
+        if (const auto *up = std::get_if<MouseUpEvent>(&input)) {
+            const int pressed = st.pressed;
+            st.pressed = -1;
+            if (up->button != MouseButton::Left || pressed < 0 || pressed != under)
+                return;
+            ClickEvent click;
+            click.down = st.down;
+            click.up = *up;
+            self->m_links[std::size_t(pressed)].onClick(click, w, app);
+            w.stopPropagation(); // the link takes the click, not the row around it
+        }
+    });
 }
 
 } // namespace brulion::atrament

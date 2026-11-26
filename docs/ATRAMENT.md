@@ -522,7 +522,11 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   checkbox) the line layout reserves room for — what `RenderedBackground` and `RenderedObject`
   ask for.
 * **Hit regions in text**: the range of a span reported under the pointer (a link's `href`, a
-  chip), its hover look, and a link node per span in the accessibility tree (`Role::Link`).
+  chip), its hover look, and a link node per span in the accessibility tree (`Role::Link`). **Built**:
+  `Text::link(range, onClick)` (`src/atrament/ui/text.h`, `tests/atrament/ui/tst_atrament_links`)
+  — a hitbox per line of the range, the pointing hand, an underline while hovered (the range's
+  pieces get paint styles of their own), the click (or a tap) runs `onClick` and stops there,
+  a link node named by the range's text that a screen reader activates.
 * **A styled `TextInput`**: the input's text with spans from a callback (the edited block's
   Markdown highlighted: markers dimmed, bold bold, code in its face), so editing keeps the look of
   `InlineEditor.qml`'s `MarkdownHighlighter`.
@@ -584,9 +588,10 @@ scrolling, `tst_atrament_editor`) before the next:
    `ListView`'s rows when Settings → Editor → "Draw the editor with Atrament"
    (`AppSettings.editorAtrament`, shown where `DeviceInfo.atrament`) is on; tested by
    `tests/atrament/editor/tst_atrament_editor`. **Not yet**: foreign rows are placeholders of their
-   height (no QML delegate placed over them), callouts are foreign, links / chips / task boxes are
-   not clickable (hit regions in text come first), a tap does not edit a block, the page's title
-   and properties above the blocks are not shown.
+   height (no QML delegate placed over them), callouts are foreign, a tap does not edit a block,
+   the page's title and properties above the blocks are not shown. Links, chips and tags open
+   (`AtramentView.linkActivated` → `BlockEditor.activateLink`) and a task's box toggles it
+   (`taskToggled` → `PageController.toggleTask`), through the hit regions below.
 2. **Editing text rows.** The styled input in the edited row: typing, the keymaps, Enter / Backspace
    / Tab through `PageController`, input methods as in M1 (composition is one undo step), the caret
    kept above the keyboard, suggestions, input rules, slash commands.

@@ -96,6 +96,7 @@ private Q_SLOTS:
     void drawnAndForeignRows();
     void headingsAndLists();
     void taskForScreenReaders();
+    void linksAndTaskBoxesClick();
     void longPageLaysOutWhatIsShown();
     void foldAboveKeepsTheScreen();
     void narrowerWindowReflows();
@@ -242,6 +243,42 @@ void TestAtramentEditor::taskForScreenReaders()
     }
     QCOMPARE(checked, 1);
     QCOMPARE(unchecked, 1);
+}
+
+void TestAtramentEditor::linksAndTaskBoxesClick()
+{
+    Harness h(u"Zobacz [[Strona główna]] i #projekt\n- [ ] Zadzwonić do Łucji\n"_s);
+    int linkRow = -1;
+    QString href;
+    int toggled = -1;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onLink = [&](int row, const QString &link) {
+            linkRow = row;
+            href = link;
+        };
+        v.onToggleTask = [&](int row) { toggled = row; };
+    });
+    h.window->setAccessibilityEnabled(true);
+    h.tw.settle();
+    const at::AccessibilityNode *page = nullptr;
+    const at::AccessibilityNode *tag = nullptr;
+    const at::AccessibilityNode *box = nullptr;
+    for (const at::AccessibilityNode *n : h.window->accessibilityTree().nodes()) {
+        if (n->role == at::Role::Link && n->name.find(u"Strona") != std::u16string_view::npos)
+            page = n;
+        if (n->role == at::Role::Link && n->name.find(u"projekt") != std::u16string_view::npos)
+            tag = n;
+        if (n->role == at::Role::CheckBox)
+            box = n;
+    }
+    QVERIFY(page && tag && box);
+    h.tw.simulateClick(page->bounds.center());
+    QCOMPARE(linkRow, 0);
+    QVERIFY2(href.contains(u"Strona"_s), qPrintable(href));
+    h.tw.simulateClick(tag->bounds.center());
+    QVERIFY2(href.contains(u"projekt"_s), qPrintable(href));
+    h.tw.simulateClick(box->bounds.center());
+    QCOMPARE(toggled, 1);
 }
 
 void TestAtramentEditor::longPageLaysOutWhatIsShown()

@@ -22,6 +22,7 @@
 #include <QMetaObject>
 #include <QPointer>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -81,6 +82,10 @@ public:
     void setStyle(const PageMetrics &metrics, const PagePalette &palette);
     const PageMetrics &metrics() const { return m_metrics; }
     const PagePalette &palette() const { return m_palette; }
+    // What a click asks of the editor: a link of row `row` (its href: `page:`, `tag:`, a URL…)
+    // activated, a task's box toggled.
+    std::function<void(int row, const QString &href)> onLink;
+    std::function<void(int row)> onToggleTask;
     const PageRows &rows() const { return *m_rows; }
     atrament::ListHandle &handle() { return m_handle; }
     const atrament::ListHandle &handle() const { return m_handle; }
