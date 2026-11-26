@@ -94,6 +94,9 @@ public:
 
     // Set by the element when it is laid out and painted.
     void setLaidOut(std::shared_ptr<const TextLayout> layout, Rect bounds);
+    // Whether the caret is to be scrolled into view in this frame (focused, and the focus, caret,
+    // text or window size changed since the last frame); remembers the state.
+    bool revealWanted(bool focused, Size viewport);
 
 private:
     struct Snapshot {
@@ -125,6 +128,14 @@ private:
     Rect m_bounds;
     bool m_dragging = false;
     int m_dragAnchor = 0;
+    struct RevealKey {
+        bool focused = false;
+        int caret = 0;
+        std::size_t length = 0;
+        Size viewport;
+        bool operator==(const RevealKey &) const = default;
+    };
+    RevealKey m_revealKey;
 };
 
 } // namespace brulion::atrament

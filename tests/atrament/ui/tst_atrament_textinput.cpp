@@ -75,6 +75,8 @@ private Q_SLOTS:
     void mouseSelectsWords();
     void caretBlinksOnlyWhenFocused();
     void imeBoundsFollowCaret();
+    void caretStaysInView();
+    void fingerDragsNoSelection();
 };
 
 void TestAtramentTextInput::typesPolishText()
@@ -262,6 +264,94 @@ void TestAtramentTextInput::imeBoundsFollowCaret()
     QVERIFY(end->left() > start->left() + 20);
     QCOMPARE(handler->textForRange({ 1, 3 }), std::u16string(u"ww"));
     QCOMPARE(handler->textLength(), 4);
+}
+
+namespace {
+
+// A field below a tall block in a scrolling column: an on-screen keyboard (a shorter window) must
+// not hide it while it has the focus.
+struct Tall {
+    Entity<TextInput> field;
+    ScrollHandle scroll;
+    explicit Tall(Context<Tall> &cx)
+        : field(cx.newEntity<TextInput>(TextInputOptions{u"Notatka", true, InputHandler::Purpose::Multiline, {}, {}}))
+    { }
+    AnyElement render(Window &, Context<Tall> &)
+    {
+        return div()
+                .sizeFull()
+                .flexCol()
+                .overflowYScroll()
+                .trackScroll(scroll)
+                .textSize(16)
+                .child(div().h(150).flexShrink0().child(u"Zażółć gęślą jaźń"))
+                .child(div().w(200).flexShrink0().child(field))
+                .child(div().h(300).flexShrink0());
+    }
+};
+
+} // namespace
+
+void TestAtramentTextInput::caretStaysInView()
+{
+    auto platform = std::make_shared<TestPlatform>();
+    App app{platform, loadFonts()};
+    TestWindow &tw = platform->newWindow({300, 200});
+    Entity<Tall> tall = app.newEntity<Tall>();
+    Window &window = app.openWindow(tw, tall);
+    tw.settle();
+    // Tapped where it shows: the focus, nothing to scroll.
+    QVERIFY(tw.simulateClick({20, 160}));
+    tw.settle();
+    QVERIFY(tw.inputHandler());
+    QCOMPARE(tall.read(app).scroll.offset().y, 0.0f);
+    // The keyboard comes up: the window is 120 px shorter, the caret goes up into what is left.
+    tw.resize({300, 80});
+    tw.settle();
+    const float offset = tall.read(app).scroll.offset().y;
+    QVERIFY(offset > 60);
+    const std::optional<Rect> caret = tw.inputHandler()->boundsForRange({0, 0});
+    QVERIFY(caret);
+    QVERIFY(caret->top() >= 0 && caret->bottom() <= 80);
+    // Scrolled away by hand, it stays where it was until the caret moves or the text changes.
+    tall.read(app).scroll.shared()->offset = {};
+    window.refresh();
+    tw.settle();
+    QCOMPARE(tall.read(app).scroll.offset().y, 0.0f);
+    tw.simulateTyping(u"ą");
+    tw.settle();
+    QVERIFY(tall.read(app).scroll.offset().y > 60);
+}
+
+void TestAtramentTextInput::fingerDragsNoSelection()
+{
+    Harness h;
+    h.tw.simulateTyping(u"Zażółć gęślą");
+    // A finger presses and holds: the caret goes there; the input method's long press then selects
+    // the word, and the finger moving a little while held must not undo it.
+    MouseDownEvent down;
+    down.position = {20, 20};
+    down.pointer = PointerKind::Touch;
+    h.tw.simulateInput(down);
+    const int caret = h.sel().focus;
+    QVERIFY(caret < 6);
+    h.tw.inputHandler()->setSelection({0, 6});
+    MouseMoveEvent move;
+    move.position = {24, 21};
+    move.pressedButton = MouseButton::Left;
+    move.pointer = PointerKind::Touch;
+    h.tw.simulateInput(move);
+    QCOMPARE(h.sel(), (InputHandler::Selection{0, 6}));
+    MouseUpEvent up;
+    up.position = {24, 21};
+    up.pointer = PointerKind::Touch;
+    h.tw.simulateInput(up);
+    QCOMPARE(h.sel(), (InputHandler::Selection{0, 6}));
+    // A mouse still drags a selection.
+    h.tw.simulateMouseDown({20, 20});
+    h.tw.simulateMouseMove({120, 20}, MouseButton::Left);
+    h.tw.simulateMouseUp({120, 20});
+    QVERIFY(h.sel().anchor != h.sel().focus);
 }
 
 QTEST_GUILESS_MAIN(TestAtramentTextInput)

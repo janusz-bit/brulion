@@ -59,10 +59,14 @@ public:
                 });
     }
 
-    void prepaint(Rect bounds, Window &, App &) override
+    void prepaint(Rect bounds, Window &window, App &) override
     {
         m_layout = layoutAt(bounds.width());
         m_input->setLaidOut(m_layout, bounds);
+        // The caret stays in view: when the field takes the focus, when it moves or the text
+        // changes, and when the window gets another size (an on-screen keyboard came up).
+        if (m_input->revealWanted(m_input->focusHandle().isFocused(window), window.viewportSize()))
+            window.revealRect(m_layout->caretRect(m_input->selection().focus).translated(bounds.origin).dilated(8));
     }
 
     void paint(Rect bounds, Window &window, App &) override
@@ -276,6 +280,14 @@ std::optional<int> TextInput::offsetForPoint(Point point) const
     if (!m_layout)
         return std::nullopt;
     return m_layout->offsetAt(point - m_origin);
+}
+
+bool TextInput::revealWanted(bool focused, Size viewport)
+{
+    const RevealKey key{focused, m_selection.focus, m_text.size(), viewport};
+    const bool want = focused && !(key == m_revealKey);
+    m_revealKey = key;
+    return want;
 }
 
 void TextInput::pushUndo()
@@ -702,7 +714,10 @@ AnyElement TextInput::render(Window &window, Context<TextInput> &cx)
                              } else {
                                  t.moveCaret(*at, e.modifiers.shift, c);
                              }
-                             t.m_dragging = true;
+                             // A finger drags no selection: a touch platform selects by a long
+                             // press and the handles (Android's input method sets the selection);
+                             // a drag selecting from the press undid it.
+                             t.m_dragging = e.pointer != PointerKind::Touch;
                              t.m_dragAnchor = t.m_selection.anchor;
                          }))
             .onMouseMove(cx.listener([](TextInput &t, const MouseMoveEvent &e, Window &, Context<TextInput> &c) {

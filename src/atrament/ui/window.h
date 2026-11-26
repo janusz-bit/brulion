@@ -169,6 +169,16 @@ public:
     void pushTextStyle(const TextStyleRefinement &refinement);
     void popTextStyle();
 
+    // The scroll containers around what is prepainted now (a scrolling Div pushes itself around its
+    // children; `viewport` in window coordinates).
+    void pushScrollFrame(ScrollState &state, Rect viewport, bool x, bool y);
+    void popScrollFrame();
+    // During prepaint: after this frame the scroll containers around the current element scroll
+    // the least that shows `rect` (window coordinates; the last request of a frame wins) — a
+    // focused field's caret when the window gets shorter (an on-screen keyboard) or the caret
+    // moves out of view.
+    void revealRect(Rect rect);
+
     HitboxId insertHitbox(Rect bounds, HitboxBehavior behavior = HitboxBehavior::Normal);
     // Under the pointer in the frame being built (after prepaint) or on screen (between frames).
     bool isHovered(HitboxId hitbox) const;
@@ -324,6 +334,16 @@ private:
     std::vector<float> m_opacity;
     std::vector<TextStyle> m_textStyles;
     std::vector<int> m_dispatchStack;
+    struct ScrollFrame {
+        ScrollState *state = nullptr;
+        Rect viewport;
+        bool x = false;
+        bool y = false;
+    };
+    std::vector<ScrollFrame> m_scrollFrames;
+    std::vector<ScrollFrame> m_revealFrames; // revealRect's containers, innermost last
+    std::optional<Rect> m_reveal;
+    bool revealPending();
     std::unordered_map<std::uint64_t, std::unique_ptr<AnyState>> m_states;
     std::uint64_t m_focused = 0;
     std::uint64_t m_drawnFocus = 0; // m_focused when the frame on screen was built

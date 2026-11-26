@@ -174,9 +174,14 @@ void TestAtramentQtInput::enabledOnlyInAField()
     QCOMPARE(f.query(Qt::ImEnabled).toBool(), true);
     QVERIFY(f.item->flags() & QQuickItem::ItemAcceptsInputMethod);
     QCOMPARE(f.query(Qt::ImHints).toInt(), int(Qt::ImhNone));
+    // Qt's Android input context drops the keyboard's calls to a focus object without this property.
+    QVERIFY(f.item->property("inputMethodHints").isValid());
     QCOMPARE(f.query(Qt::ImReadOnly).toBool(), false);
+    QSignalSpy hints(f.item, SIGNAL(inputMethodHintsChanged()));
     f.click(kNote);
     QCOMPARE(f.query(Qt::ImHints).toInt(), int(Qt::ImhMultiLine));
+    QCOMPARE(f.item->property("inputMethodHints").value<Qt::InputMethodHints>(), Qt::ImhMultiLine);
+    QCOMPARE(hints.count(), 1);
     // Without a field the item has nothing to say to an input method; it does not eat its events.
     f.atrament().blur();
     f.draw();

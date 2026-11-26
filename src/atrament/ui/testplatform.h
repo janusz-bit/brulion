@@ -74,6 +74,8 @@ public:
     bool simulateComposition(std::u16string_view preedit);
     bool simulateCommit(std::u16string_view text);
     void simulateMouseExit();
+    // Any input as a platform gives it (a finger's pointer kind, a pen…); settles afterwards.
+    bool simulateInput(const PlatformInput &input) { return send(input); }
 
     const RasterTarget &image() const { return m_target; }
     Pixel pixel(int x, int y) const; // device pixels

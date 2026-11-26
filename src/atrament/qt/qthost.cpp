@@ -667,13 +667,14 @@ void AtramentItem::inputStateChanged()
         const bool hadField = m_imeFocus != 0;
         m_imeFocus = field;
         m_imeState = state;
+        Q_EMIT inputMethodHintsChanged();
         im->update(Qt::ImQueryAll);
         Q_EMIT cursorPositionChanged();
         // The virtual keyboard for the field that took the focus (again with its hints: one line
         // or many), away when none has it.
-        if (h)
+        if (h && !m_accessibilityFocusing)
             im->show();
-        else if (hadField)
+        else if (!h && hadField)
             im->hide();
         return;
     }
@@ -682,6 +683,28 @@ void AtramentItem::inputStateChanged()
         im->update(Qt::ImQueryInput | Qt::ImCursorRectangle | Qt::ImAnchorRectangle | Qt::ImInputItemClipRectangle);
         Q_EMIT cursorPositionChanged();
     }
+}
+
+Qt::InputMethodHints AtramentItem::inputMethodHints() const
+{
+    InputHandler *h = inputHandler();
+    if (!h)
+        return Qt::ImhNone;
+    switch (h->purpose()) {
+    case InputHandler::Purpose::Url: return Qt::ImhUrlCharactersOnly;
+    case InputHandler::Purpose::Email: return Qt::ImhEmailCharactersOnly;
+    case InputHandler::Purpose::Number: return Qt::ImhFormattedNumbersOnly;
+    case InputHandler::Purpose::Password: return Qt::ImhHiddenText | Qt::ImhSensitiveData | Qt::ImhNoPredictiveText;
+    case InputHandler::Purpose::Multiline: return Qt::ImhMultiLine;
+    case InputHandler::Purpose::Text: break;
+    }
+    return Qt::ImhNone;
+}
+
+void AtramentItem::showInputPanel()
+{
+    if (inputHandler() && hasActiveFocus())
+        QGuiApplication::inputMethod()->show();
 }
 
 void AtramentItem::showInputPanelAt(Point p)
@@ -927,29 +950,7 @@ QVariant AtramentItem::inputMethodQuery(Qt::InputMethodQuery query, const QVaria
         return toQString(text.substr(std::size_t(c), std::size_t(std::min(n - c, want))));
     }
     case Qt::ImReadOnly: return false; // Android shows the caret's handle only for a field that says so
-    case Qt::ImHints: {
-        Qt::InputMethodHints hints = Qt::ImhNone;
-        switch (h->purpose()) {
-        case InputHandler::Purpose::Url:
-            hints = Qt::ImhUrlCharactersOnly;
-            break;
-        case InputHandler::Purpose::Email:
-            hints = Qt::ImhEmailCharactersOnly;
-            break;
-        case InputHandler::Purpose::Number:
-            hints = Qt::ImhFormattedNumbersOnly;
-            break;
-        case InputHandler::Purpose::Password:
-            hints = Qt::ImhHiddenText | Qt::ImhSensitiveData | Qt::ImhNoPredictiveText;
-            break;
-        case InputHandler::Purpose::Multiline:
-            hints = Qt::ImhMultiLine;
-            break;
-        case InputHandler::Purpose::Text:
-            break;
-        }
-        return int(hints);
-    }
+    case Qt::ImHints: return int(inputMethodHints());
     default:
         return QQuickItem::inputMethodQuery(query);
     }

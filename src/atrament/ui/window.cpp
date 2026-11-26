@@ -111,6 +111,8 @@ void Window::draw()
         m_opacity.assign(1, 1.0f);
         m_textStyles.assign(1, TextStyle {});
         m_dispatchStack.clear();
+        m_scrollFrames.clear();
+        m_reveal.reset();
         frame.dispatchNodes.push_back(DispatchNode {});
         m_dispatchStack.push_back(0);
         m_app.atlas().beginFrame();
@@ -135,6 +137,8 @@ void Window::draw()
         m_drawnFocus = m_focused;
         m_building = nullptr;
         m_drawing = false;
+        if (revealPending())
+            refresh(); // the next frame shows it
 
         // Element state nobody asked for in this frame is gone with its element.
         for (auto it = m_states.begin(); it != m_states.end();) {
@@ -344,6 +348,57 @@ bool Window::scrollIntoView(const AccessibilityTree &tree, const AccessibilityNo
     }
     if (moved)
         refresh();
+    return moved;
+}
+
+void Window::pushScrollFrame(ScrollState &state, Rect viewport, bool x, bool y)
+{
+    m_scrollFrames.push_back(ScrollFrame{&state, viewport, x, y});
+}
+
+void Window::popScrollFrame()
+{
+    if (!m_scrollFrames.empty())
+        m_scrollFrames.pop_back();
+}
+
+void Window::revealRect(Rect rect)
+{
+    m_reveal = rect;
+    m_revealFrames = m_scrollFrames;
+}
+
+bool Window::revealPending()
+{
+    if (!m_reveal)
+        return false;
+    // As scrollIntoView: from the innermost container out, each the least that shows the rest.
+    Rect target = *m_reveal;
+    m_reveal.reset();
+    bool moved = false;
+    for (auto it = m_revealFrames.rbegin(); it != m_revealFrames.rend(); ++it) {
+        const Rect vp = it->viewport;
+        Point delta;
+        if (it->y) {
+            if (target.top() < vp.top() || target.height() > vp.height())
+                delta.y = target.top() - vp.top();
+            else if (target.bottom() > vp.bottom())
+                delta.y = target.bottom() - vp.bottom();
+        }
+        if (it->x) {
+            if (target.left() < vp.left() || target.width() > vp.width())
+                delta.x = target.left() - vp.left();
+            else if (target.right() > vp.right())
+                delta.x = target.right() - vp.right();
+        }
+        const Point before = it->state->offset;
+        it->state->scrollBy(delta);
+        const Point applied = it->state->offset - before;
+        if (!(applied == Point{}))
+            moved = true;
+        target = target.translated(-applied);
+    }
+    m_revealFrames.clear();
     return moved;
 }
 

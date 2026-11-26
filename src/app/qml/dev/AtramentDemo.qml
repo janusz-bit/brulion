@@ -17,11 +17,15 @@ ApplicationWindow {
     font.pixelSize: Theme.textBase
 
     header: Rectangle {
-        implicitHeight: 48
+        id: bar
+
+        // Below the status bar of an edge-to-edge window (Android).
+        implicitHeight: 48 + bar.SafeArea.margins.top
         color: Theme.bgSunken
 
         Row {
             anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: bar.SafeArea.margins.top / 2
             anchors.left: parent.left
             anchors.leftMargin: 16
             spacing: 12
@@ -34,11 +38,34 @@ ApplicationWindow {
         }
     }
 
-    // Above the on-screen keyboard (Android, the browser), as the app's views end at its top.
+    // Above the on-screen keyboard (Android, the browser), as the app's views end at its top: by
+    // what of it the keyboard covers (Qt's safe area may already have lifted the window's content
+    // by the keyboard's height).
     AtramentView {
+        id: atrament
+
+        property real keyboardCover: 0
+        // Its top in the window (a method's point result is read through a typed property).
+        property point _top
+
+        function placeAboveKeyboard(): void {
+            atrament._top = atrament.mapToItem(null, 0, 0)
+            const bottom = atrament._top.y + atrament.height + atrament.keyboardCover
+            atrament.keyboardCover = Math.max(0, bottom - (window.height - KeyboardInsets.overlap))
+        }
+
         anchors.fill: parent
-        anchors.bottomMargin: KeyboardInsets.overlap
+        anchors.bottomMargin: keyboardCover
         view: "gallery"
         focus: true
+        onHeightChanged: placeAboveKeyboard()
+
+        Connections {
+            target: KeyboardInsets
+
+            function onOverlapChanged(): void {
+                atrament.placeAboveKeyboard()
+            }
+        }
     }
 }

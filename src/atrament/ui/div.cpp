@@ -419,8 +419,14 @@ void Div::prepaint(Rect bounds, Window &window, App &app)
     if (pushText)
         window.pushTextStyle(m_style.text);
     window.pushElementOffset(-scroll);
+    if (m_scrollState)
+        window.pushScrollFrame(*m_scrollState, bounds.inset(m_style.layout.border),
+                               m_style.layout.overflowX == Overflow::Scroll,
+                               m_style.layout.overflowY == Overflow::Scroll);
     for (AnyElement &c : m_children)
         c.prepaint(window, app);
+    if (m_scrollState)
+        window.popScrollFrame();
     window.popElementOffset();
     if (pushText)
         window.popTextStyle();

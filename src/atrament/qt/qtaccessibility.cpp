@@ -701,8 +701,20 @@ private:
         // it is used afterwards.
         AtramentAccessibility *bridge = m_bridge;
         Window *w = bridge->window();
-        if (w && w->performAccessibilityAction(m_id, request))
+        AtramentItem *item = bridge->item();
+        // A screen reader moving its focus onto a field (TalkBack sets the input focus with it)
+        // opens no keyboard; activating the field (a double tap: Click) does.
+        const bool focusOnly = request.action == AccessibilityAction::Focus;
+        if (item && focusOnly)
+            item->setAccessibilityFocusing(true);
+        const bool done = w && w->performAccessibilityAction(m_id, request);
+        if (done)
             bridge->flush();
+        if (item) {
+            item->setAccessibilityFocusing(false);
+            if (done && request.action == AccessibilityAction::Click)
+                item->showInputPanel();
+        }
     }
 
     // The unit of text around an offset.

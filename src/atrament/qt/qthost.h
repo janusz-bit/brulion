@@ -67,6 +67,10 @@ int addQtFonts(FontCollection &fonts, const QStringList &paths);
 
 class AtramentItem : public QQuickItem, public PlatformWindow {
     Q_OBJECT
+    // The focused field's hints. Qt's Android input context talks only to a focus object that has
+    // this property (as Qt Quick's text fields do): without it every call of the keyboard's
+    // InputConnection was dropped.
+    Q_PROPERTY(Qt::InputMethodHints inputMethodHints READ inputMethodHints NOTIFY inputMethodHintsChanged FINAL)
 public:
     explicit AtramentItem(QQuickItem *parent = nullptr);
     ~AtramentItem() override;
@@ -95,6 +99,13 @@ public:
     // Whether frames go to the GPU renderer (decided at each frame from the window's graphics API).
     bool usesGpuRenderer() const { return m_gpu; }
 
+    Qt::InputMethodHints inputMethodHints() const;
+    // The virtual keyboard for the focused field, if there is one and the item has Qt's focus.
+    void showInputPanel();
+    // While an assistive technology moves the focus (not a deliberate activation): a field that
+    // takes it opens no keyboard (the accessibility bridge sets it around its Focus action).
+    void setAccessibilityFocusing(bool on) { m_accessibilityFocusing = on; }
+
 protected:
     void updatePolish() override;
     QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *) override;
@@ -122,6 +133,7 @@ Q_SIGNALS:
     // The focused field's caret, selection, composition or text changed (Qt's Android input context
     // connects to a signal of this name and tells the input method).
     void cursorPositionChanged();
+    void inputMethodHintsChanged();
 
 protected:
     void focusInEvent(QFocusEvent *event) override;
@@ -174,6 +186,7 @@ private:
     ImeState m_imeState;
     bool m_imeComposing = false;  // the field's marked text is the input method's composition
     bool m_imeForgetting = false; // its events change nothing while it drops a composition
+    bool m_accessibilityFocusing = false;
 };
 
 // A key event as Atrament's keystroke ("ctrl-shift-a", keyChar the text it types).
