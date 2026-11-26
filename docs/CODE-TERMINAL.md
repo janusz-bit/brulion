@@ -233,8 +233,8 @@ again; the registry is not.
   folder)` (made when missing), `find(key)`, `shown(key)` (the panel shows it: the most recently
   shown), `rekey(from, to)`, `close(key)`, `closeIdle(key)`, `isBusy(key)`, `closeAll()`;
   properties `keys` (threads with terminals, the most recently shown first), `busyKeys`,
-  `sessionCount`, `available`; signal `busyChanged(key, busy)` — for the sidebar's "a program
-  runs" mark (not wired into CodeSidebar by this branch).
+  `sessionCount`, `available`; signal `busyChanged(key, busy)` — CodeSidebar's thread rows mark the
+  busy ones (`codeThreadTerminalBusy`: "a program runs in its terminal").
 * It follows the notebook (`terminalwiring.cpp`, made with the QML singleton): a thread renamed or
   moved (`Workspace::pathRenamed`) — `rekey()`; deleted, to the trash or by another program
   (`Workspace::pathRemoved`) — `close()`; archived (`WorkspaceChats::archivedChanged`, also the
@@ -474,8 +474,6 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
   and `currentDirectory()` (false / "" are valid answers).
 * Resizable splits (they share the tab equally); a split's own direction inside another (a tab is
   all side by side or all stacked).
-* The sidebar's "a program runs in its terminal" mark (`TerminalRegistry.busyKeys` /
-  `busyChanged(key, busy)` are there for it).
 * Grapheme clustering of emoji ZWJ sequences, flags and skin tones (widths follow wcwidth()).
 * Shell integration (OSC 133 / 633 prompts and command marks), OSC 4 palette queries, DECRQSS,
   XTGETTCAP, the kitty keyboard protocol, sixel / kitty graphics.

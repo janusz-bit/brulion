@@ -1411,8 +1411,9 @@ Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
   filter and the order) and "No threads yet" / "No thread matches". **A thread's row**: its state by
   priority (`codeThreadState`: a plan to approve — `list-checks` and "Plan" —, an approval asked for —
   `circle-help` and "Approve" —, a spinner while it works, the alert and "Failed" in the danger colour, an
-  accent dot while its answer is unread), the title (semibold unread or current), a pin, `git-branch`
-  for a worktree of its own (its branch in a tooltip), when; the current one selected; "⋯"
+  accent dot while its answer is unread), the title (semibold unread or current), a pin, `terminal`
+  while a program runs in its terminal (`codeThreadTerminalBusy`: TerminalRegistry.isBusy, T3 Code's
+  "Terminal process running"), `git-branch` for a worktree of its own (its branch in a tooltip), when; the current one selected; "⋯"
   `codeThreadMore` on hover, a right click / long press: Rename… (`codeThreadRename`: a dialog
   `codeRenameThreadDialog` / `codeRenameThreadField`), Pin / Unpin, Mark unread, New thread in this
   worktree (or in the project's folder) `codeThreadNewHere`, Open in editor, Copy path / Copy branch /
@@ -1489,6 +1490,10 @@ Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
   takes the first), and a link of an answer or a tool call's file (`chatToolFile`) to a file of the
   folder opens it in the Files tab at its line (ChatView's `filesFolder`, `fileLinkActivated(path,
   line)` → `CodeView.openFileInViewer(path, line)`).
+* **Narrow** (CodeView's `narrow`: under 640 px — a phone, a narrow window): the header keeps the
+  project, where the thread works and the toggles — no title (the top bar has it), no "Open in…", the
+  scripts only in their menu (`codeScriptsMenuButton`) —; the changes' toggle (and Ctrl+D) shows the
+  right panel in the thread's place and goes back to the thread, not kept (`remoteChangesShown`).
 * **CodeProjectDialog** (`codeProjectDialog`): the name `codeProjectName`, the icon (an emoji,
   `codeProjectIconField`), new threads' agent (`codeProjectAgent`) and environment (`codeProjectEnv`:
   Default / Local / New worktree), and the scripts (`CodeScriptsEditor`, `codeProjectScripts`; rows of

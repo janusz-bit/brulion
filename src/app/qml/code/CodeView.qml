@@ -63,7 +63,8 @@ FocusScope {
                                                     : Workspace.projects.isRemote(root.project)
     readonly property string host: root.path !== "" ? AppController.routeText(root.place, "host")
                                                     : AppController.routeText(Workspace.projects.project(root.project), "host")
-    /// Narrow (a phone): the other computer's changes under the thread, only when asked for.
+    /// Narrow (a phone): the other computer's changes under the thread — or this device's right
+    /// panel in the thread's place —, only when asked for (not kept).
     property bool remoteChangesShown: false
     /// The branch checked out in the folder now (the Changes panel's git).
     readonly property string currentBranch: changes.git.branch
@@ -74,6 +75,10 @@ FocusScope {
     property bool makingWorktree: false
     readonly property string title: root.path !== "" ? chat.title : root.projectName !== "" ? qsTr("New thread") : qsTr("Code")
     readonly property bool wide: root.width >= 900
+    /// A phone or a narrow window: the header keeps the project, where the thread works and the
+    /// toggles (the scripts in their menu, no title — the top bar has it); the right panel, when
+    /// shown, takes the thread's place (its toggle goes back).
+    readonly property bool narrow: root.width < 640
 
     // ---- where a new thread works (T3 Code's environment) -------------------------------------------
     /// "local" (the project's folder), "worktree" (a new one, made before the first message) or
@@ -132,7 +137,9 @@ FocusScope {
             root.filesWanted = true
         else if (tab === "search")
             root.searchWanted = true
-        if (!root.changesOpen)
+        if (root.narrow)
+            root.remoteChangesShown = true
+        else if (!root.changesOpen)
             root.setChangesOpen(true)
     }
     /// Open `path` (relative to the thread's folder, or absolute inside it) in the Files tab, at
@@ -586,7 +593,12 @@ FocusScope {
                     envMenu.openBelow(envChip)
                 break
             case "code:openInEditor": openIn.open(openIn.current); break
-            case "code:toggleChanges": root.setChangesOpen(!root.changesOpen); break
+            case "code:toggleChanges":
+                if ((root.remote && !root.wide) || root.narrow)
+                    root.remoteChangesShown = !root.remoteChangesShown
+                else
+                    root.setChangesOpen(!root.changesOpen)
+                break
             }
         }
     }
@@ -693,6 +705,7 @@ FocusScope {
             }
             CodeThreadTitle {
                 id: titleItem
+                visible: !root.narrow
                 Layout.fillWidth: true
                 Layout.minimumWidth: 60
                 path: root.path
@@ -758,7 +771,7 @@ FocusScope {
                 spacing: Theme.space1
                 // The project's first scripts as buttons, all of them in the menu beside.
                 Repeater {
-                    model: root.remote ? 0 : root.scripts.length > 3 ? 2 : root.scripts.length
+                    model: root.remote || root.narrow ? 0 : root.scripts.length > 3 ? 2 : root.scripts.length
                     delegate: BButton {
                         id: scriptButton
                         required property int index
@@ -778,7 +791,7 @@ FocusScope {
                 BIconButton {
                     id: scriptsMore
                     objectName: "codeScriptsMenuButton"
-                    visible: root.scripts.length > 3 && !root.remote
+                    visible: (root.scripts.length > 3 || (root.narrow && root.scripts.length > 0)) && !root.remote
                     size: "small"
                     iconName: "play"
                     label: qsTr("Scripts")
@@ -787,7 +800,7 @@ FocusScope {
                 }
                 CodeOpenIn {
                     id: openIn
-                    visible: !root.remote
+                    visible: !root.remote && !root.narrow
                     folder: root.folder
                 }
                 BIconButton {
@@ -801,12 +814,12 @@ FocusScope {
                 BIconButton {
                     objectName: "codeChangesToggle"
                     iconName: "git-compare"
-                    readonly property bool shown: root.remote && !root.wide ? root.remoteChangesShown : root.changesOpen
+                    readonly property bool shown: (root.remote && !root.wide) || root.narrow ? root.remoteChangesShown : root.changesOpen
                     label: shown ? qsTr("Hide the changes") : qsTr("Show the changes")
                     shortcut: ShortcutMap.sequence("code.toggleChanges")
                     checked: shown
                     onClicked: {
-                        if (root.remote && !root.wide)
+                        if ((root.remote && !root.wide) || root.narrow)
                             root.remoteChangesShown = !root.remoteChangesShown
                         else
                             root.setChangesOpen(!root.changesOpen)
@@ -845,6 +858,7 @@ FocusScope {
 
             C.SplitView {
                 id: column
+                visible: !(root.narrow && rightPanel.visible)
                 C.SplitView.fillWidth: true
                 C.SplitView.minimumWidth: 320
                 orientation: Qt.Vertical
@@ -940,9 +954,9 @@ FocusScope {
             ColumnLayout {
                 id: rightPanel
                 objectName: "codeRightPanel"
-                visible: root.changesOpen && root.folder !== "" && !root.remote
-                C.SplitView.preferredWidth: root.wide ? 420 : 320
-                C.SplitView.minimumWidth: 260
+                visible: (root.narrow ? root.remoteChangesShown : root.changesOpen) && root.folder !== "" && !root.remote
+                C.SplitView.preferredWidth: root.narrow ? root.width : root.wide ? 420 : 320
+                C.SplitView.minimumWidth: root.narrow ? 0 : 260
                 spacing: 0
                 CodePanelTabs {
                     objectName: "codePanelTabs"

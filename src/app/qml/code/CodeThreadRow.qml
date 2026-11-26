@@ -118,6 +118,16 @@ Item {
             size: Theme.iconSizeSm
             color: Theme.fgFaint
         }
+        // A program runs in its terminal (T3 Code's "Terminal process running"): a dev server, the tests.
+        BIcon {
+            objectName: "codeThreadTerminalBusy"
+            visible: TerminalRegistry.busyKeys.length > 0 && TerminalRegistry.isBusy(thread.path)
+            name: "terminal"
+            size: Theme.iconSizeSm
+            color: Theme.fgFaint
+            BToolTip { visible: busyHover.hovered; text: qsTr("A program runs in its terminal") }
+            HoverHandler { id: busyHover; enabled: !Theme.touchUi }
+        }
         BIcon {
             visible: thread.worktree !== ""
             name: "git-branch"
