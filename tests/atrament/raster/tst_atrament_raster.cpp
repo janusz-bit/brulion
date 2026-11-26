@@ -1445,7 +1445,14 @@ void TestAtramentRaster::uiFrameTime()
     // docs/ATRAMENT.md M0's gate is < 4 ms a frame at -O2 on a desktop core (≈ 4 ms measured on the
     // development machine, see raster.cpp). The limit here leaves a CI runner's room (a slower
     // core, a sibling thread) and still catches a fast path gone (a Debug build takes ~25 ms).
-    QVERIFY2(cpuMs < 12.0 * BRULION_TEST_SLOWDOWN, qPrintable(QStringLiteral("%1 ms").arg(cpuMs)));
+    // MSVC's code is slower than Clang's and GCC's here (11.4 ms the fastest frame on the Windows
+    // runner, 12.5 ms of CPU), hence its own limit.
+#if defined(_MSC_VER) && !defined(__clang__)
+    constexpr double kLimitMs = 20.0;
+#else
+    constexpr double kLimitMs = 12.0;
+#endif
+    QVERIFY2(cpuMs < kLimitMs * BRULION_TEST_SLOWDOWN, qPrintable(QStringLiteral("%1 ms").arg(cpuMs)));
 #endif
 }
 
