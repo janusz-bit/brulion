@@ -18,7 +18,10 @@ done in the repository simply disappears from the list.
   own (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
   the phone through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and
   the terminal from the phone, a worktree from another base, projects of two computers with the same
-  id; t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
+  id; for a turn the desktop app runs, followed from the phone (docs/CODE.md "The computer's own turns
+  on the phone"): pictures sent to it, its agent's options changed from the phone, a message held there
+  after Stop shown and resumed on the phone, its conversations that ended before the app shared them;
+  t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
   multi-repository projects and custom worktree layouts; an AI-made branch name for a new worktree;
   automatic worktree cleanup (by age, merged pull requests); settling and snoozing threads,
   "Regenerate title", files dropped on a thread's row, scratch threads without a project; in the file
