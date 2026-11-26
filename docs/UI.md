@@ -1414,8 +1414,9 @@ mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first butt
   (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
 * **Another computer's projects** (docs/CODE.md "Threads on the phone"; `CodeProjects`' remote ones, from
   `Workspace.projects.remote`): CodeSidebar lists them after this device's, a `laptop` icon and "on
-  <computer>" (`codeProjectHost_<id>`) beside the name, the menu only New thread; it asks the computers for
-  their lists again whenever it is shown. CodeView shows the computer (`codeHost`) in the header, no
+  <computer>" (`codeProjectHost_<id>`) beside the name, no "⋯" (a long press: only New thread); it asks the computers for
+  their lists again whenever it is shown. CodeView names the computer in the project's chip ("Sklep · nixos",
+a `laptop` icon), no
   terminal, editor or script buttons, and **CodeRemoteChanges** (`qml/code/CodeRemoteChanges.qml`,
   `codeRemoteChanges`) in place of the Changes panel — beside the thread when wide (`code/changesOpen`),
   under it when narrow, shown with the changes' toggle (not kept): "Changes and the terminal are on

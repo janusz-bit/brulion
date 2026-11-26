@@ -9,7 +9,6 @@ brulion::shell::RemoteProjects	No computer of yours has this project.	Żaden z T
 brulion::shell::AgentShare	Cannot write the projects' list (%1)	Nie można zapisać listy projektów (%1)	
 brulion::shell::AgentShare	Cannot write the projects' list: %1	Nie można zapisać listy projektów: %1	
 CodeSidebar	on %1	na %1	a project of another computer: the computer's name
-CodeView	On %1	Na %1	the computer a project's threads run on
 CodeRemoteChanges	This turn	Ta tura	
 CodeRemoteChanges	All changes	Wszystkie zmiany	
 CodeRemoteChanges	Changes and the terminal are on %1: here they are read-only.	Zmiany i terminal są na %1: tutaj tylko do odczytu.	

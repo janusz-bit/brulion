@@ -1692,6 +1692,10 @@ private Q_SLOTS:
         QCOMPARE(code400(u"projects/zolw/diff?path=..%2F..%2Fetc%2Fpasswd"_s), 400);
         QCOMPARE(code400(u"projects/zolw/diff?path=.git%2Fconfig"_s), 400);
         QCOMPARE(code400(u"projects/zolw/diff?path=%2Fetc%2Fpasswd"_s), 400);
+        // A folder of the project that is a link out of it: nothing read through it.
+        QVERIFY(QFile::link(m_tmp.path(), repo + u"/na-zewnatrz"_s));
+        QCOMPARE(code400(u"projects/zolw/diff?path=na-zewnatrz%2Fagent.log"_s), 400);
+        QVERIFY(QFile::remove(repo + u"/na-zewnatrz"_s));
         QCOMPARE(code400(u"projects/zolw/changes?worktree=wzgledny"_s), 400);
         r = http("GET", u"projects/zolw/changes?worktree=%1"_s.arg(QString::fromLatin1(QUrl::toPercentEncoding(m_vault))),
                  {}, bearer(token));

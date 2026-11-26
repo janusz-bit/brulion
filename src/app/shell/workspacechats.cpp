@@ -192,6 +192,14 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
                 Q_EMIT agentHostPaired(ok, text);
             });
     connect(m_agents, &WorkspaceAgents::remembered, this, &WorkspaceChats::agentRemembered);
+    // A thread's page changed (synced from another device too): its newest checkpoint may be
+    // another one now (`checkpoint:`).
+    connect(m_workspace, &Workspace::filesChanged, this, [this](const QStringList &paths) {
+        if (std::ranges::none_of(paths, [](const QString &p) { return chat::inFolder(p); }))
+            return;
+        ++m_checkpointSerial;
+        Q_EMIT checkpointsChanged();
+    });
     // A thread of another computer's project: the checkpoint that computer took before its turn.
     connect(m_agents, &WorkspaceAgents::checkpointMade, this, [this](const QString &path, const QString &id) {
         bool ok = false;
@@ -1515,7 +1523,16 @@ QString WorkspaceChats::partnerOf(const QString &path) const
         return {};
     bool ok = false;
     const QString content = m_workspace->read(path, &ok);
-    return ok ? chat::parse(content).partner : QString();
+    if (!ok)
+        return {};
+    // (A thread is answered where its project is: the agent that answers it on this device — its
+    // page may name one of another device of the notebook.)
+    const chat::Conversation c = chat::parse(content);
+    if (!c.project.isEmpty() && WorkspaceAgents::isAgent(c.partner) && m_workspace->projects()->contains(c.project)) {
+        if (const QString here = m_agents->threadPartnerFor(c.project, c.partner); !here.isEmpty())
+            return here;
+    }
+    return c.partner;
 }
 
 bool WorkspaceChats::setPartner(const QString &path, const QString &partner)

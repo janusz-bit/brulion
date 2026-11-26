@@ -1056,7 +1056,7 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | `GET projects` | | `{projects [{id, name, path}]}` — Code mode's projects of this computer (below); 404 `no_projects` without `--projects` |
 | `POST projects/<id>/worktrees` | `{title, base?}` | 201 `{folder, branch}`: a git worktree made for a new thread; 400 `bad_title`, `bad_base`; 404 `unknown_project`; 409 `git_failed` |
 | `GET projects/<id>/changes` | `?worktree=F&since=C` | `{changes [{path, oldPath?, change, additions, deletions, binary}], truncated}` — the files changed since the checkpoint `C` (none: since the last commit) in the project's folder or its worktree `F`; 400 `bad_checkpoint`, `bad_worktree`; 403 `not_a_worktree` |
-| `GET projects/<id>/diff` | `?worktree=F&since=C&path=P&oldPath=O` | `{path, oldText, newText, oldExists, newExists, binary, tooLarge}`; 400 `bad_path` (not a path of the work tree: absolute, `..`, `.git`) |
+| `GET projects/<id>/diff` | `?worktree=F&since=C&path=P&oldPath=O` | `{path, oldText, newText, oldExists, newExists, binary, tooLarge}`; 400 `bad_path` (not a path of the work tree: absolute, `..`, `.git`, or through a folder that links out of it) |
 
 Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a
 paired one). Errors are `{error: {code, message}}`. A stream of another device, or one that ended

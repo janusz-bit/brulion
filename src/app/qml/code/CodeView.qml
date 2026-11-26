@@ -213,6 +213,8 @@ FocusScope {
             id: header
             objectName: "codeHeader"
             Layout.fillWidth: true
+            // (Never wider than the view: on a phone it would push the thread out of the window.)
+            Layout.maximumWidth: root.width - 2 * Theme.space3
             Layout.leftMargin: Theme.space3
             Layout.rightMargin: Theme.space3
             Layout.topMargin: Theme.space2
@@ -222,8 +224,11 @@ FocusScope {
             BChip {
                 id: projectChip
                 objectName: "codeProjectChip"
-                iconName: "folder"
-                text: root.projectName !== "" ? root.projectName : qsTr("No project")
+                // (Another computer's project: that computer's name with it.)
+                iconName: root.remote ? "laptop" : "folder"
+                text: root.projectName === "" ? qsTr("No project")
+                      : root.remote && root.host !== "" && root.path !== "" ? root.projectName + " · " + root.host
+                      : root.projectName
                 interactive: root.path === ""
                 Accessible.name: qsTr("Project: %1").arg(projectChip.text)
                 onClicked: projectMenu.popup(projectChip, 0, projectChip.height)
@@ -248,14 +253,6 @@ FocusScope {
                     root.useWorktree = value === "worktree"
                     AppSettings.setValue("code/newWorktree", root.useWorktree)
                 }
-            }
-            // Another computer's project: where its threads run.
-            BChip {
-                objectName: "codeHost"
-                visible: root.remote
-                iconName: "laptop"
-                text: root.host
-                Accessible.name: qsTr("On %1").arg(root.host)
             }
             BSpinner {
                 visible: root.makingWorktree

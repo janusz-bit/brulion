@@ -2650,6 +2650,13 @@ void AcpHost::diff(const QString &project, const http::Request &request, const h
                          reply.send(refusal);
                          return;
                      }
+                     // (A folder of the path that leads out of the project — a link git never names
+                     // a file under: the file is read from disk.)
+                     const QString dir = QFileInfo(path).path();
+                     if (codeFilePath(place.folder, dir == u"." ? place.folder : dir, false).isEmpty()) {
+                         reply.send(apiError(400, u"bad_path"_s, u"That is no path of the project"_s));
+                         return;
+                     }
                      gitcli::FileTextsRequest r;
                      r.path = path;
                      r.oldPath = oldPath;

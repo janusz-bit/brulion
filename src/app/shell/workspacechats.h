@@ -504,7 +504,8 @@ public:
     /// notebook is ready and when the agents change.
     void recoverAgentTurns();
     bool agentPairing() const { return m_agentPairing; }
-    /// The conversation's partner (its page's `partner:`, "" the built-in assistant).
+    /// The conversation's partner (its page's `partner:`, "" the built-in assistant) — of a thread,
+    /// the agent that answers it on this device (WorkspaceAgents::threadPartnerFor()).
     Q_INVOKABLE QString partnerOf(const QString &path) const;
     /// Sets who answers the conversation from now on (its page's frontmatter; "" the assistant).
     Q_INVOKABLE bool setPartner(const QString &path, const QString &partner);

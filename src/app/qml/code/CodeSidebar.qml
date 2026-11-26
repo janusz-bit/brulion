@@ -207,6 +207,8 @@ Rectangle {
                 }
                 BText {
                     Layout.fillWidth: true
+                    // (The name first: the computer's after it gives way.)
+                    Layout.minimumWidth: Math.min(implicitWidth, projectRow.width * 0.45)
                     text: section.projectName
                     font.weight: Theme.weightSemiBold
                     elide: Text.ElideRight
@@ -214,7 +216,7 @@ Rectangle {
                 BText {
                     objectName: "codeProjectHost_" + section.projectId
                     visible: section.remote
-                    Layout.maximumWidth: projectRow.width * 0.35
+                    Layout.maximumWidth: projectRow.width * 0.3
                     text: qsTr("on %1").arg(section.host)
                     variant: "small"
                     color: Theme.fgFaint
@@ -230,6 +232,8 @@ Rectangle {
                 BIconButton {
                     id: projectMore
                     objectName: "codeProjectMore_" + section.projectId
+                    // (Another computer's project: nothing but a new thread, the "+" before it.)
+                    visible: !section.remote
                     size: "small"
                     iconName: "ellipsis"
                     label: qsTr("More: %1").arg(section.projectName)
