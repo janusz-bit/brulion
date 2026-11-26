@@ -128,7 +128,7 @@ private Q_SLOTS:
         server.setLaunchEnvironment({});
         seen.clear();
         server.setProgram(QStringLiteral(FAKE_SERVER),
-                          {u"--announce"_s, u"http://x"_s, u"--env"_s, u"BRULION_TEST_TOKEN"_s});
+                                         {u"--announce"_s, u"http://x"_s, u"--env"_s, u"BRULION_TEST_TOKEN"_s});
         server.start();
         QTRY_COMPARE_WITH_TIMEOUT(seen.size(), 1, kTimeoutMs);
         QCOMPARE(seen.first(), u"stary"_s);

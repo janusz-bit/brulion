@@ -86,9 +86,9 @@ private:
 
 /// What a grant lets its connection do.
 enum class GrantScope {
-    Full, ///< every method (an AI agent let change the app) but the webhooks'
-    Chat, ///< hello and the chat's methods (MethodSpec::chat)
-    Hook, ///< hello and the webhooks' method (MethodSpec::hook)
+    Full,  ///< every method (an AI agent let change the app) but the webhooks'
+    Chat,  ///< hello and the chat's methods (MethodSpec::chat)
+    Hook,  ///< hello and the webhooks' method (MethodSpec::hook)
     Share, ///< hello and the agent sharing's methods (MethodSpec::share)
 };
 

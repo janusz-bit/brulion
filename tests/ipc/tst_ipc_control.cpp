@@ -848,11 +848,10 @@ private Q_SLOTS:
             if (m.chat)
                 chatMethods << m.name;
         }
-        QCOMPARE(chatMethods,
-                 (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s, u"chatStop"_s,
-                              u"chatPartners"_s, u"chatLive"_s, u"chatSchedules"_s, u"chatScheduleAdd"_s,
-                              u"chatScheduleSet"_s, u"chatScheduleRemove"_s, u"chatScheduleRun"_s,
-                              u"chatRequestSecret"_s, u"chatNotify"_s}));
+        QCOMPARE(chatMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s,
+                                           u"chatStop"_s, u"chatPartners"_s, u"chatLive"_s, u"chatSchedules"_s,
+                                           u"chatScheduleAdd"_s, u"chatScheduleSet"_s, u"chatScheduleRemove"_s,
+                                           u"chatScheduleRun"_s, u"chatRequestSecret"_s, u"chatNotify"_s}));
         // A secret asked for: its parameters checked before the app sees them.
         r = exchange(script,
                      R"({"id":2,"method":"chatRequestSecret","params":{"label":"Token GitHuba","delivery":"value"}})");
@@ -1009,13 +1008,12 @@ private Q_SLOTS:
                 QVERIFY(!result(r).value(u"chatOnly"_s).toBool());
                 QCOMPARE(result(r).value(u"client"_s).toString(), u"agent sharing"_s);
             }
-            for (const char *line : {R"({"id":11,"method":"chatSchedules"})",
-                                     R"({"id":12,"method":"chatScheduleRun","params":{"id":"s1"}})",
-                                     R"({"id":13,"method":"chatRequestSecret","params":{"label":"PIN"}})",
-                                     R"({"id":14,"method":"chatNotify","params":{"text":"Gotowe"}})",
-                                     R"({"id":15,"method":"state"})",
-                                     R"({"id":16,"method":"eval","params":{"code":"return 1"}})",
-                                     R"({"id":17,"method":"quit"})"}) {
+            for (const char *line :
+                 {R"({"id":11,"method":"chatSchedules"})",
+                  R"({"id":12,"method":"chatScheduleRun","params":{"id":"s1"}})",
+                  R"({"id":13,"method":"chatRequestSecret","params":{"label":"PIN"}})",
+                  R"({"id":14,"method":"chatNotify","params":{"text":"Gotowe"}})", R"({"id":15,"method":"state"})",
+                  R"({"id":16,"method":"eval","params":{"code":"return 1"}})", R"({"id":17,"method":"quit"})"}) {
                 r = exchange(sharing, line);
                 QCOMPARE(code(r), u"unauthorized"_s);
                 QVERIFY(r.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"agent sharing"_s));
@@ -1027,7 +1025,8 @@ private Q_SLOTS:
                      u"bad_params"_s);
             QCOMPARE(code(exchange(sharing, R"({"id":20,"method":"chatLive","params":{"since":-2}})")),
                      u"bad_params"_s);
-            QCOMPARE(code(exchange(sharing, R"({"id":21,"method":"chatSend","params":{"path":"a","text":"x","mode":"teraz"}})")),
+            QCOMPARE(code(exchange(sharing,
+                                   R"({"id":21,"method":"chatSend","params":{"path":"a","text":"x","mode":"teraz"}})")),
                      u"bad_params"_s);
             QCOMPARE(code(exchange(sharing, R"({"id":22,"method":"chatAnswer","params":{"path":"AI/a.md"}})")),
                      u"bad_params"_s);

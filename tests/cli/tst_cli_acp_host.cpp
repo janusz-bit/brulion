@@ -1559,27 +1559,28 @@ private Q_SLOTS:
         qint64 revision = 1000;
         const QString path = u"AI/2026-11-26 Popraw testy.md"_s;
         const auto answer = [&revision, &path](const QJsonObject &params) {
-            QJsonObject o{{u"revision"_s, double(revision)},
-                          {u"chats"_s,
-                           QJsonArray{QJsonObject{{u"path"_s, path},
-                                                  {u"name"_s, u"Popraw testy"_s},
-                                                  {u"partner"_s, u"acp:claude"_s},
-                                                  {u"partnerName"_s, u"Claude Code"_s},
-                                                  {u"state"_s, u"running"_s},
-                                                  {u"status"_s, u"Czytam „Dom”…"_s},
-                                                  {u"project"_s, u"brulion"_s},
-                                                  {u"messages"_s, 3},
-                                                  {u"waiting"_s, 1}},
-                                      // (Passed on only as the device's side takes them: these go.)
-                                      QJsonObject{{u"path"_s, u"../poza.md"_s}, {u"state"_s, u"running"_s}},
-                                      QJsonObject{{u"path"_s, u"AI/Inna.md"_s}, {u"state"_s, u"wybucha"_s}}}}};
+            QJsonObject o{
+                    {u"revision"_s, double(revision)},
+                    {u"chats"_s, QJsonArray{QJsonObject{{u"path"_s, path},
+                                                        {u"name"_s, u"Popraw testy"_s},
+                                                        {u"partner"_s, u"acp:claude"_s},
+                                                        {u"partnerName"_s, u"Claude Code"_s},
+                                                        {u"state"_s, u"running"_s},
+                                                        {u"status"_s, u"Czytam „Dom”…"_s},
+                                                        {u"project"_s, u"brulion"_s},
+                                                        {u"messages"_s, 3},
+                                                        {u"waiting"_s, 1}},
+                                            // (Passed on only as the device's side takes them: these go.)
+                                            QJsonObject{{u"path"_s, u"../poza.md"_s}, {u"state"_s, u"running"_s}},
+                                            QJsonObject{{u"path"_s, u"AI/Inna.md"_s}, {u"state"_s, u"wybucha"_s}}}}};
             if (params.value(u"path"_s).toString() == path)
-                o.insert(u"detail"_s, QJsonObject{{u"path"_s, path},
-                                                  {u"state"_s, u"asking"_s},
-                                                  {u"partial"_s, QString(u"Początek "_s + QString(70000, u'ż'))},
-                                                  {u"question"_s, QJsonObject{{u"text"_s, u"Zapisać Zgoda.md?"_s},
-                                                                              {u"options"_s, QJsonArray{u"Allow"_s, u"Reject"_s}}}},
-                                                  {u"messages"_s, 3}});
+                o.insert(u"detail"_s,
+                         QJsonObject{{u"path"_s, path},
+                                     {u"state"_s, u"asking"_s},
+                                     {u"partial"_s, QString(u"Początek "_s + QString(70000, u'ż'))},
+                                     {u"question"_s, QJsonObject{{u"text"_s, u"Zapisać Zgoda.md?"_s},
+                                                                 {u"options"_s, QJsonArray{u"Allow"_s, u"Reject"_s}}}},
+                                     {u"messages"_s, 3}});
             return o;
         };
         app->setHandler([&](const ipc::ControlRequest &request, ipc::ControlReply reply) {
@@ -1738,11 +1739,13 @@ private Q_SLOTS:
         const qsizetype before = heard.size();
         QCOMPARE(http("GET", u"chats"_s).status, 401);
         QCOMPARE(http("GET", u"chats"_s, {}, bearer(u"bat_nieznany"_s)).status, 401);
-        QCOMPARE(http("POST", u"chats/answer"_s, R"({"path":"AI/a.md","option":"Allow"})", bearer(u"zly"_s)).status, 401);
-        QCOMPARE(http("GET", u"chats"_s, {}, {{"Authorization"_ba, "Bearer "_ba + token.toUtf8()},
-                                              {"Origin"_ba, "https://zly.example.com"_ba}})
-                         .status,
-                 403);
+        QCOMPARE(http("POST", u"chats/answer"_s, R"({"path":"AI/a.md","option":"Allow"})", bearer(u"zly"_s)).status,
+                 401);
+        QCOMPARE(
+                http("GET", u"chats"_s, {},
+                     {{"Authorization"_ba, "Bearer "_ba + token.toUtf8()}, {"Origin"_ba, "https://zly.example.com"_ba}})
+                        .status,
+                403);
         QCOMPARE(heard.size(), before);
 
         // The device's requests, each as the app hears it.
@@ -1798,7 +1801,8 @@ private Q_SLOTS:
         QVERIFY(!err.failed());
         QCOMPARE(heard.last().first, u"chatStop"_s);
         QCOMPARE(heard.last().second, (QJsonObject{{u"path"_s, path}}));
-        err = done([&](auto cb) { acp::answerRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Allow"_s, cb); });
+        err = done(
+                [&](auto cb) { acp::answerRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Allow"_s, cb); });
         QVERIFY(!err.failed());
         QCOMPARE(heard.last().first, u"chatAnswer"_s);
         QCOMPARE(heard.last().second, (QJsonObject{{u"path"_s, path}, {u"option"_s, u"Allow"_s}}));
@@ -1827,10 +1831,10 @@ private Q_SLOTS:
                      {u"chats/start"_s, R"({"text":"x"})", 400, u"bad_request"_s},
                      {u"chats/start"_s, R"({"project":"p","text":"x","worktree":7})", 400, u"bad_request"_s},
                      {u"chats/answer"_s, R"({"path":"AI/a.md"})", 400, u"bad_option"_s},
-                 }) {
+             }) {
             r = http("POST", m.endpoint, m.body, bearer(token));
-            QVERIFY2(r.status == m.status, qPrintable(m.endpoint + u' ' + QString::fromUtf8(m.body) + u" → "_s
-                                                       + QString::number(r.status)));
+            QVERIFY2(r.status == m.status,
+                     qPrintable(m.endpoint + u' ' + QString::fromUtf8(m.body) + u" → "_s + QString::number(r.status)));
             QCOMPARE(r.json.value(u"error"_s).toObject().value(u"code"_s).toString(), m.code);
         }
         r = http("POST", u"chats/send"_s, R"({"path":"AI/Zajęta.md","text":"x"})", bearer(token));

@@ -44,8 +44,7 @@ AsyncControlClient::Response responseOf(const QJsonObject &o)
 
 } // namespace
 
-AsyncControlClient::AsyncControlClient(const QString &key, const QString &token, const QString &client,
-                                       QObject *parent)
+AsyncControlClient::AsyncControlClient(const QString &key, const QString &token, const QString &client, QObject *parent)
     : QObject(parent), m_key(key), m_token(token.trimmed()), m_client(cleanClientName(client))
 {
     m_retry = new QTimer(this);
