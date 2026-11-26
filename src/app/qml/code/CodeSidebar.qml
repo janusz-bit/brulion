@@ -308,6 +308,14 @@ Rectangle {
                 width: flick.width
                 spacing: Theme.space1
 
+                // What the desktop app on the user's other computers is doing (its threads, its
+                // conversations with agents): followed and steered from here.
+                ChatComputerList {
+                    Layout.fillWidth: true
+                    current: sidebar.routePath
+                    onOpened: (path) => sidebar.go({ view: "code", path: path })
+                }
+
                 // Clones running, and those that failed (CodeProjects.clones).
                 Repeater {
                     model: Workspace.projects.clones

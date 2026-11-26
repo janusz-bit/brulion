@@ -51,6 +51,17 @@ ChatMessageModel::ChatMessageModel(QObject *parent)
     : WorkspaceListModel(parent)
 {
     setRefreshDelay(60);
+    // A conversation another computer's app runs: its page as that computer has it, while this
+    // device's copy lags behind the notebook's sync (WorkspaceChats::computerPage()).
+    connect(this, &WorkspaceListModel::workspaceChanged, this, [this] {
+        disconnect(m_computerPage);
+        if (shell::Workspace *ws = workspace())
+            m_computerPage = connect(ws->chats(), &shell::WorkspaceChats::computerPageChanged, this,
+                                     [this](const QString &path) {
+                                         if (path.compare(m_path, Qt::CaseInsensitive) == 0)
+                                             scheduleRefresh();
+                                     });
+    });
 }
 
 void ChatMessageModel::setPath(const QString &path)
@@ -349,9 +360,10 @@ void ChatMessageModel::refresh()
     bool exists = false;
     int omitted = 0;
     shell::Workspace *ws = workspace();
-    if (ws && ws->isOpen() && !m_path.isEmpty() && ws->exists(m_path)) {
-        bool ok = false;
-        const QString content = ws->read(m_path, &ok);
+    const QString theirs = ws && ws->isOpen() && !m_path.isEmpty() ? ws->chats()->computerPage(m_path) : QString();
+    if (ws && ws->isOpen() && !m_path.isEmpty() && (ws->exists(m_path) || !theirs.isEmpty())) {
+        bool ok = !theirs.isEmpty();
+        const QString content = ok ? theirs : ws->read(m_path, &ok);
         const chat::Conversation conversation = ok ? chat::parse(content) : chat::Conversation();
         exists = !conversation.messages.isEmpty();
         page = conversation.page;

@@ -97,6 +97,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/notificationcenter.h ${_brulion_shell_dir}/notificationcenter.cpp
     ${_brulion_shell_dir}/codeprojects.h ${_brulion_shell_dir}/codeprojects.cpp
     ${_brulion_shell_dir}/remoteprojects.h ${_brulion_shell_dir}/remoteprojects.cpp
+    ${_brulion_shell_dir}/computerchats.h ${_brulion_shell_dir}/computerchats.cpp
     ${_brulion_shell_dir}/codeconfig.cpp ${_brulion_shell_dir}/codeworktrees.cpp ${_brulion_shell_dir}/codeeditors.cpp
     ${_brulion_shell_dir}/codeclones.cpp
     ${_brulion_shell_dir}/codescriptsmodel.h ${_brulion_shell_dir}/codescriptsmodel.cpp

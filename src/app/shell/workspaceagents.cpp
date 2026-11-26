@@ -3,6 +3,7 @@
 #include "chatlineage.h"
 #include "chattools.h"
 #include "codeprojects.h"
+#include "computerchats.h"
 #include "remoteprojects.h"
 #include "workspace.h"
 
@@ -218,6 +219,9 @@ WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
     // device's (CodeProjects), their last lists kept in the notebook's device state.
     m_remoteProjects = new RemoteProjects(this);
     m_remoteProjects->setTransport([this] { return transport(); });
+    // The conversations the app on those computers runs (WorkspaceChats follows them).
+    m_computerChats = new ComputerChats(this);
+    m_computerChats->setTransport([this] { return transport(); });
     m_remoteProjects->setStorage(
             [this]() -> QByteArray {
                 LocalStore *local = m_workspace && m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
@@ -717,11 +721,15 @@ void WorkspaceAgents::setAgents(const QList<AgentConfig> &agents)
     m_agents = agents;
     // (The computers of the agents paired here: their projects asked for.)
     QList<RemoteProjects::Computer> computers;
+    QList<ComputerChats::Computer> apps;
     for (const AgentConfig &a : m_agents) {
-        if (a.isRemote() && !a.token.isEmpty())
+        if (a.isRemote() && !a.token.isEmpty()) {
             computers.append({a.url, a.token, a.host});
+            apps.append({a.url, a.token, a.host});
+        }
     }
     m_remoteProjects->setComputers(computers);
+    m_computerChats->setComputers(apps);
     Q_EMIT sessionChanged(QString());
 }
 

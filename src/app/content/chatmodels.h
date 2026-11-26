@@ -169,6 +169,7 @@ protected:
     int rows() const override { return int(m_rows.size()); }
 
 private:
+    QMetaObject::Connection m_computerPage;
     struct Row {
         QString role;
         QString text;

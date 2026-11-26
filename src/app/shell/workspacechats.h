@@ -49,6 +49,8 @@
 #include "chatsecrets.h"
 #include "hookserver.h"
 
+#include "acp/appchats.h"
+
 #include <QElapsedTimer>
 #include <QHash>
 #include <QJsonArray>
@@ -118,6 +120,10 @@ class ChatTurn : public QObject {
     /// status}) as they go; [] otherwise.
     Q_PROPERTY(QVariantList tools READ tools NOTIFY activityChanged FINAL)
     Q_PROPERTY(QVariantList plan READ plan NOTIFY activityChanged FINAL)
+    /// The computer whose app runs this turn ("" this device): a conversation the desktop app on
+    /// another computer of the user's runs, followed here as it works (ComputerChats) — its question
+    /// answered, Stop and the next message go there.
+    Q_PROPERTY(QString remoteHost READ remoteHost NOTIFY stateChanged FINAL)
 
 public:
     explicit ChatTurn(const QString &path, QObject *parent = nullptr);
@@ -137,6 +143,7 @@ public:
     QString speed() const { return m_speed; }
     QVariantList tools() const { return m_tools; }
     QVariantList plan() const { return m_plan; }
+    QString remoteHost() const { return m_remoteHost; }
 
 Q_SIGNALS:
     void stateChanged();
@@ -168,6 +175,9 @@ private:
     QString m_speed;
     QVariantList m_tools;
     QVariantList m_plan;
+    QString m_remoteHost;       // another computer's turn: that computer's name (WorkspaceChats::mirror)
+    QString m_remoteQuestion;   // … what it asks, as one string (a change: questionsMoved)
+    QStringList m_remoteWaiting; // … the messages waiting there
     bool m_asking = false; // its question was seen (questionsMoved)
     qint64 m_cameBack = 0; // when its failure or question came (ms since the epoch), 0 none
     QString m_nextPartial; // what comes, said by m_partialTimer
@@ -251,6 +261,9 @@ class WorkspaceChats : public QObject {
     /// Who answers a new conversation (setDefaultPartner()): the device's choice while it answers
     /// here (one of partners()), else "" — the built-in assistant.
     Q_PROPERTY(QString defaultPartner READ defaultPartner NOTIFY defaultPartnerChanged FINAL)
+    /// Changes whenever the conversations the app on another computer runs change (computerChats()
+    /// asks again).
+    Q_PROPERTY(int computerSerial READ computerSerial NOTIFY computerChatsChanged FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -404,6 +417,18 @@ public:
     /// of its turn is then answered there, not in the dialog (ShellExtensionQuestion). Counted: a
     /// tab and the side panel may both show it.
     Q_INVOKABLE void showing(const QString &path, bool shown);
+
+    // ---- the conversations the app on the user's other computers runs (computerchats.h) ---------
+    int computerSerial() const { return m_computerSerial; }
+    /// The conversations whose turn runs, waits or asks in the desktop app on another computer of the
+    /// user's (its agent sharing on: docs/CODE.md "The computer's own turns on the phone"), and those
+    /// that ended there lately, the running ones first: [{path, name, state ("running" | "queued" |
+    /// "asking" | "failed" | "idle"), host, question, failure, status, project, partnerName, here (this
+    /// device has its page)}]. Each one's turn here follows it (ChatTurn.remoteHost).
+    Q_INVOKABLE QVariantList computerChats(int serial = 0) const;
+    /// The page of `path` as the computer running it has it, while its messages outnumber this
+    /// device's copy (the notebook's sync is slower) — ChatMessageModel shows it —, else "".
+    Q_INVOKABLE QString computerPage(const QString &path) const;
     /// A chat view shows the conversation `path`.
     Q_INVOKABLE bool isShown(const QString &path) const;
 
@@ -499,7 +524,11 @@ public:
     void setNotifyMode(const QString &mode);
     QString notifyMode() const { return m_notifyMode; }
     /// Whether the app is active now (tests; default: QGuiApplication::applicationState()).
-    void setAppActive(std::function<bool()> active) { m_appActive = std::move(active); }
+    void setAppActive(std::function<bool()> active)
+    {
+        m_appActive = std::move(active);
+        updateFollowing();
+    }
 
     // ---- who answers a new conversation ---------------------------------------------------------
     /// The device's default partner (AppSettings::aiDefaultPartner: "" the assistant, `acp:<id>`,
@@ -765,6 +794,10 @@ Q_SIGNALS:
     void workLogChanged();
     void draftsChanged();
     void questionsChanged();
+    /// computerChats() changed.
+    void computerChatsChanged();
+    /// computerPage(`path`) changed.
+    void computerPageChanged(const QString &path);
     void agentsChanged();
     void queueChanged();
     /// rewind() took messages out of `path`: AppController offers Undo (undoRewind()).
@@ -840,6 +873,20 @@ private:
     void setStatus(const QString &key, const QString &text);
     void setWriting(const QString &key, const QString &text, const QString &thoughts, int tokens, qint64 writingMs);
     void questionsMoved();
+    /// The conversation `path` as the computer running it said last (ComputerChats): its turn here
+    /// follows it, or ends with it.
+    void mirror(const QString &path);
+    /// Another computer's turn runs for `path` (mirror()).
+    bool remote(const QString &path) const;
+    /// The computers are asked while the app is in front, or while a turn of theirs runs here.
+    void updateFollowing();
+    /// How many messages this device's copy of `path` has.
+    int localMessages(const QString &path) const;
+    /// The page of a turn that ended there came (computerPage()): its notification, its view.
+    void computerPageCame(const QString &path);
+    /// `text` to another computer's turn of `path` (queued there, or steered in); false (said in a
+    /// toast) for pictures, which do not go there yet.
+    bool sendToComputer(const QString &path, const QString &text, const QStringList &pictures, acp::SendMode mode);
     void setFailure(ChatTurn *turn, const QString &failure);
     void endTurn(ChatTurn *turn);
     void updateRunningShown();
@@ -855,6 +902,11 @@ private:
     WorkspaceExtensions *m_extensions = nullptr;
     WorkspaceAgents *m_agents = nullptr;
     int m_questionSerial = 0;
+    int m_computerSerial = 0;
+    QString m_lastShown; ///< the conversation a chat view showed last (showing())
+    /// Turns that ended on another computer whose answer is not here yet (its notification waits for
+    /// the page), by path in lower case.
+    QSet<QString> m_remoteEnded;
     int m_draftSerial = 0;
     int m_agentSerial = 0;
     bool m_agentPairing = false;

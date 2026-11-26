@@ -96,6 +96,7 @@ class QTimer;
 
 namespace brulion::shell {
 
+class ComputerChats;
 class RemoteProjects;
 class Workspace;
 
@@ -239,6 +240,9 @@ public:
     QList<AgentConfig> agents() const { return m_agents; }
     /// Code mode's projects of the computers whose agents are paired here (Workspace.projects.remote).
     RemoteProjects *remoteProjects() const { return m_remoteProjects; }
+    /// The conversations the app on those computers runs, followed and steered from here
+    /// (computerchats.h: WorkspaceChats mirrors them).
+    ComputerChats *computerChats() const { return m_computerChats; }
     /// The partner ("acp:<id>") that answers a thread of `project` when `partner` is asked for: it,
     /// when it is an agent of the computer that has the project (this device's for one of its own);
     /// else the same agent there, else that computer's first; "" none.
@@ -590,6 +594,7 @@ private:
     QHash<QString, ChatGrant> m_chatGrants;
     AppControl m_appControl;
     RemoteProjects *m_remoteProjects = nullptr;
+    ComputerChats *m_computerChats = nullptr;
     /// The folder each thread's session works in (another one now: a new session there).
     QHash<QString, QString> m_threadFolders;
 };

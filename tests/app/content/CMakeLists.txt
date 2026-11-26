@@ -121,3 +121,11 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         endif()
     endif()
 endif()
+# The conversations the desktop app on another computer runs, followed and steered from this device
+# (tst_content_computerchats.cpp: shell/computerchats.h, WorkspaceChats' mirror), the computer's
+# `acp serve` played over a fake transport: a turn there running here, its whole turn for the one
+# shown, its question answered there, Stop and the next message sent there, what waits there, its
+# end with the answer from the computer's page (the messages' model, a notification), a failure,
+# a page not here yet, the app gone there, an older computer, a device unpaired, a computer restarted.
+brulion_add_test(tst_content_computerchats SOURCES tst_content_computerchats.cpp
+    LIBS brulion_content brulion_shell brulion_core_acp brulion_core_chat Qt6::Gui Qt6::Network)
