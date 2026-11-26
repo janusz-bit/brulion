@@ -1866,9 +1866,11 @@ FocusScope {
                                     onTapped: (eventPoint, button) => {
                                         const at = eventPoint.position
                                         const link = message.linkAt(at)
-                                        if (link !== "" && !Js.startsWith(link, "task:") && !root.openFileLink(link))
-                                            tools.openLink(link, root.path, false)
-                                        else if (message.inParts)
+                                        if (link !== "" && !Js.startsWith(link, "task:")) {
+                                            // (A thread's link to a file of its folder: the file viewer.)
+                                            if (!root.openFileLink(link))
+                                                tools.openLink(link, root.path, false)
+                                        } else if (message.inParts)
                                             parts.openAt(message.linkPoint.x, message.linkPoint.y) // (a drawing opens large)
                                     }
                                     onLongPressed: message.openMenu(leftTap.point.position)

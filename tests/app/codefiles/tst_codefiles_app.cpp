@@ -240,6 +240,9 @@ private Q_SLOTS:
         QTRY_COMPARE(doc.lineCount(), 1);
         QVERIFY(writeFile(dir.filePath(u"README.md"_s), "# A\n\nB\n"));
         doc.reload();
+        // (Its lines stay shown meanwhile: no "loading" for the same file.)
+        QCOMPARE(doc.kind(), u"text"_s);
+        QCOMPARE(doc.lineCount(), 1);
         QTRY_COMPARE(doc.lineCount(), 3);
     }
 

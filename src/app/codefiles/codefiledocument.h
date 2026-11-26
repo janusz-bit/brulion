@@ -9,8 +9,9 @@
 // Roles: number (1-based), html (the line as StyledText: escaped, tabs as spaces, each span in its
 // palette colour; at most 2 000 characters of a line), text (the line as it is). `palette` maps
 // codeTokenName()s to colours (a kind without one: the text's colour). `kind`: "" nothing,
-// "loading", "text", "picture", "binary", "missing", "folder", "unreadable", "outside" (a path
-// that leaves the folder: never read). A path is relative to `folder`, "/"-separated; one that
+// "loading" (another file being read: the same one read again keeps its rows until the new ones
+// come), "text", "picture", "binary", "missing", "folder", "unreadable", "outside" (a path that
+// leaves the folder: never read). A path is relative to `folder`, "/"-separated; one that
 // leaves it is refused.
 #pragma once
 
@@ -102,6 +103,8 @@ private:
 
     QString m_folder;
     QString m_path;
+    /// The absolute path the rows are of ("" none).
+    QString m_loadedPath;
     QVariantMap m_palette;
     QHash<int, QString> m_colours;
     int m_tabWidth = 4;

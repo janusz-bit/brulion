@@ -13,6 +13,7 @@ using namespace Qt::StringLiterals;
 namespace brulion::codefiles {
 
 struct CodeFileDocument::Loaded {
+    QString path;
     QString kind;
     bool truncated = false;
     qint64 size = 0;
@@ -213,7 +214,8 @@ void CodeFileDocument::load()
         apply(refused);
         return;
     }
-    if (m_kind != u"loading") {
+    // (The same file read again keeps its lines shown until the new ones are there.)
+    if (m_kind != u"loading" && abs != m_loadedPath) {
         m_kind = u"loading"_s;
         Q_EMIT loaded();
     }
@@ -222,6 +224,7 @@ void CodeFileDocument::load()
             this,
             [abs, tabWidth] {
                 Loaded l;
+                l.path = abs;
                 const ViewerFile file = readForViewer(abs);
                 l.kind = kindName(file.kind);
                 l.truncated = file.truncated;
@@ -261,6 +264,7 @@ void CodeFileDocument::load()
 void CodeFileDocument::apply(Loaded l)
 {
     beginResetModel();
+    m_loadedPath = l.path;
     m_kind = l.kind;
     m_truncated = l.truncated;
     m_size = l.size;
