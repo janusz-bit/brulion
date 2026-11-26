@@ -2133,7 +2133,14 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   K7QM-2XRP · valid until 10:42, once" (`acpShareCode`) and the address; **Unpair all**
   (`acpShareUnpair`: `acp revoke --all`). In a tailnet it writes its offer into the notebook's
   config.json (above; never over a config.json that is no JSON object) and removes it when turned
-  off.
+  off. Each process of the server gets the app's grant (`RemoteControl::shareGrant()`, the remote
+  control's agent sharing: `AgentShare::setAppGrants()` from `main.cpp`, `ServerProcess`'s
+  `setLaunchEnvironment()` — a new one each start, also after a crash, revoked when it ends; the
+  socket listens for it with the remote control's setting off): its control socket and token in
+  `BRULION_APP_SOCKET` / `BRULION_APP_SHARE_TOKEN` of its environment alone, with which it follows the
+  conversations this app runs — its agents, Code mode's threads — and steers them for the phone, as
+  the user (`ChatControl`'s `chatLive`, `chatAnswer`, `chatSend` with mode steer, `chatStart` in a
+  worktree; docs/CLI.md "AI agents for other devices" → "The app's own conversations").
 * **Who answers**: an agent is offered among the partners (`acp:<id>`, its name, "AI agent") and the
   conversation's page keeps it (`partner: acp:claude`, docs/SYNTAX.md §14); an agent not set up on
   this device fails the turn with what to do. It may answer every new conversation: Settings →

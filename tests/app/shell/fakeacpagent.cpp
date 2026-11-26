@@ -6,6 +6,8 @@
 //                     "cancelled": ends the turn with that stop reason. "… później …" too: it asks
 //                     1.5 s later (the device may be gone by then)
 //   "… czekaj …"      answers nothing until the turn is cancelled (session/cancel)
+//   "… długo …"       "Długo: " and 70 000 × "ż" as the answer being written, then nothing until the
+//                     turn is cancelled (an answer longer than a device is given at once)
 //   "… powoli …"      a tool call ("Read Dom.md"), "Powoli: ", 1.5 s later "gotowe."
 //   "… koniec …"      writes "fake agent: koniec" to its standard error and exits with code 3
 //   "… czytaj …"      reads the first line of Dom.md through the client (fs/read_text_file):
@@ -374,6 +376,12 @@ int main(int argc, char **argv)
                 say(session, u"Powoli: "_s);
                 QThread::msleep(1500);
                 end(u"gotowe."_s);
+                continue;
+            }
+            if (text.contains(u"długo"_s)) {
+                waiting = id;
+                waitingSession = session;
+                say(session, u"Długo: "_s + QString(70000, u'ż'));
                 continue;
             }
             if (text.contains(u"czekaj"_s)) {

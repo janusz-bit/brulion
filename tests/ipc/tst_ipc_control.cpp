@@ -11,8 +11,14 @@
 // refused also while it is open, a grant's client name sticks, closing drops the connections
 // without one, a revoked grant drops its connections; a grant of the chat alone serves only the
 // chat's methods (the handler learns its token), a grant of the webhooks only chatHook, which nobody
-// else may call; ControlClient's identity (setIdentity(),
-// BRULION_APP_TOKEN / BRULION_APP_CLIENT) sent in a hello first.
+// else may call, a grant of the agent sharing only the methods a device needs (chatLive, chatAnswer
+// … — never the schedules, secrets, notifications, the webhooks' or the app's); ControlClient's
+// identity (setIdentity(), BRULION_APP_TOKEN / BRULION_APP_CLIENT) sent in a hello first; the
+// asynchronous client of a server the app starts (asynccontrolclient.h): ready once its hello is
+// accepted, calls multiplexed and answered in any order, never inside call(), the calls waiting failed
+// when the link drops, a call without an answer in time, a refused token, connected again with a
+// backoff once the server listens again, nothing sent before it is ready.
+#include "asynccontrolclient.h"
 #include "controlclient.h"
 #include "controlprotocol.h"
 #include "controlserver.h"
@@ -842,10 +848,10 @@ private Q_SLOTS:
             if (m.chat)
                 chatMethods << m.name;
         }
-        QCOMPARE(chatMethods,
-                 (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s, u"chatStop"_s,
-                              u"chatPartners"_s, u"chatSchedules"_s, u"chatScheduleAdd"_s, u"chatScheduleSet"_s,
-                              u"chatScheduleRemove"_s, u"chatScheduleRun"_s, u"chatRequestSecret"_s, u"chatNotify"_s}));
+        QCOMPARE(chatMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s,
+                                           u"chatStop"_s, u"chatPartners"_s, u"chatLive"_s, u"chatSchedules"_s,
+                                           u"chatScheduleAdd"_s, u"chatScheduleSet"_s, u"chatScheduleRemove"_s,
+                                           u"chatScheduleRun"_s, u"chatRequestSecret"_s, u"chatNotify"_s}));
         // A secret asked for: its parameters checked before the app sees them.
         r = exchange(script,
                      R"({"id":2,"method":"chatRequestSecret","params":{"label":"Token GitHuba","delivery":"value"}})");
@@ -948,6 +954,230 @@ private Q_SLOTS:
         }
         QCOMPARE(hookMethods, QStringList{u"chatHook"_s});
         server.close();
+    }
+
+    // A grant of the agent sharing (the app's `brulion-cli acp serve`, for the user's phone): hello and
+    // the methods marked share — reading, starting, sending, stopping, waiting, chatLive, chatAnswer —,
+    // nothing else (no schedules, secrets, notifications, webhooks, live changes); chatAnswer is no
+    // method of an agent's chat grant; the handler learns that it is such a grant.
+    void shareGrants()
+    {
+        const QString k = key(u"brulion-test-sharegrants"_s);
+        ControlServer server;
+        server.setHandler([](const ControlRequest &request, ControlReply reply) {
+            reply.ok(QJsonObject{{u"method"_s, request.method},
+                                 {u"shareOnly"_s, request.shareOnly},
+                                 {u"chatOnly"_s, request.chatOnly},
+                                 {u"granted"_s, request.granted},
+                                 {u"client"_s, request.client}});
+        });
+        QVERIFY(server.listen(k));
+        const QString share = server.addGrant(u"agent sharing"_s, GrantScope::Share);
+        const QString chat = server.addGrant(u"Claude Code"_s, GrantScope::Chat);
+        const auto code = [](const QJsonObject &response) {
+            return response.value(u"error"_s).toObject().value(u"code"_s).toString();
+        };
+        const auto result = [](const QJsonObject &response) { return response.value(u"result"_s).toObject(); };
+        const auto hello = [](const QString &token) {
+            return QJsonDocument(QJsonObject{{u"id"_s, 1},
+                                             {u"method"_s, u"hello"_s},
+                                             {u"params"_s, QJsonObject{{u"token"_s, token}}}})
+                    .toJson(QJsonDocument::Compact);
+        };
+        for (const bool open : {false, true}) {
+            server.setOpen(open);
+            QLocalSocket sharing;
+            sharing.connectToServer(k);
+            QVERIFY(sharing.waitForConnected(1000));
+            QJsonObject r = exchange(sharing, hello(share));
+            QVERIFY(r.value(u"ok"_s).toBool());
+            QVERIFY(result(r).value(u"shareOnly"_s).toBool());
+            for (const char *line :
+                 {R"({"id":2,"method":"chats"})", R"({"id":3,"method":"chatRead","params":{"path":"AI/a.md"}})",
+                  R"({"id":4,"method":"chatLive","params":{"since":-1,"timeout":0,"path":"AI/Żółw.md"}})",
+                  R"({"id":5,"method":"chatSend","params":{"path":"AI/a.md","text":"Dalej","mode":"steer"}})",
+                  R"({"id":6,"method":"chatStart","params":{"text":"Popraw testy","project":"p1","worktree":"/w"}})",
+                  R"({"id":7,"method":"chatStop","params":{"path":"AI/a.md"}})",
+                  R"({"id":8,"method":"chatWait","params":{"path":"AI/a.md","ms":0}})",
+                  R"({"id":9,"method":"chatPartners"})",
+                  R"({"id":10,"method":"chatAnswer","params":{"path":"AI/a.md","option":"Zezwól"}})"}) {
+                r = exchange(sharing, line);
+                QVERIFY2(r.value(u"ok"_s).toBool(), line);
+                QVERIFY(result(r).value(u"shareOnly"_s).toBool());
+                QVERIFY(result(r).value(u"granted"_s).toBool());
+                QVERIFY(!result(r).value(u"chatOnly"_s).toBool());
+                QCOMPARE(result(r).value(u"client"_s).toString(), u"agent sharing"_s);
+            }
+            for (const char *line :
+                 {R"({"id":11,"method":"chatSchedules"})",
+                  R"({"id":12,"method":"chatScheduleRun","params":{"id":"s1"}})",
+                  R"({"id":13,"method":"chatRequestSecret","params":{"label":"PIN"}})",
+                  R"({"id":14,"method":"chatNotify","params":{"text":"Gotowe"}})", R"({"id":15,"method":"state"})",
+                  R"({"id":16,"method":"eval","params":{"code":"return 1"}})", R"({"id":17,"method":"quit"})"}) {
+                r = exchange(sharing, line);
+                QCOMPARE(code(r), u"unauthorized"_s);
+                QVERIFY(r.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"agent sharing"_s));
+            }
+            QCOMPARE(code(exchange(sharing, R"({"id":18,"method":"chatHook","params":{"token":"t"}})")),
+                     u"unauthorized"_s);
+            // (Its requests are checked as anyone's.)
+            QCOMPARE(code(exchange(sharing, R"({"id":19,"method":"chatLive","params":{"timeout":60001}})")),
+                     u"bad_params"_s);
+            QCOMPARE(code(exchange(sharing, R"({"id":20,"method":"chatLive","params":{"since":-2}})")),
+                     u"bad_params"_s);
+            QCOMPARE(code(exchange(sharing,
+                                   R"({"id":21,"method":"chatSend","params":{"path":"a","text":"x","mode":"teraz"}})")),
+                     u"bad_params"_s);
+            QCOMPARE(code(exchange(sharing, R"({"id":22,"method":"chatAnswer","params":{"path":"AI/a.md"}})")),
+                     u"bad_params"_s);
+        }
+        // An agent's chat grant reads chatLive, but never answers the user's questions.
+        QLocalSocket agent;
+        agent.connectToServer(k);
+        QVERIFY(agent.waitForConnected(1000));
+        QVERIFY(exchange(agent, hello(chat)).value(u"ok"_s).toBool());
+        QVERIFY(exchange(agent, R"({"id":2,"method":"chatLive"})").value(u"ok"_s).toBool());
+        QCOMPARE(code(exchange(agent, R"({"id":3,"method":"chatAnswer","params":{"path":"AI/a.md","option":"Tak"}})")),
+                 u"unauthorized"_s);
+        // The agent sharing's methods, as the protocol lists them.
+        QStringList shareMethods;
+        for (const MethodSpec &m : controlMethods()) {
+            if (m.share)
+                shareMethods << m.name;
+            QVERIFY2(!(m.share && m.hook), qPrintable(m.name));
+        }
+        QCOMPARE(shareMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s,
+                                            u"chatStop"_s, u"chatPartners"_s, u"chatLive"_s, u"chatAnswer"_s}));
+        // Revoked: its connection dropped, a new hello refused.
+        QLocalSocket again;
+        again.connectToServer(k);
+        QVERIFY(again.waitForConnected(1000));
+        QVERIFY(exchange(again, hello(share)).value(u"ok"_s).toBool());
+        QVERIFY(server.revokeGrant(share));
+        QTRY_VERIFY(again.state() != QLocalSocket::ConnectedState);
+        QLocalSocket late;
+        late.connectToServer(k);
+        QVERIFY(late.waitForConnected(1000));
+        QCOMPARE(code(exchange(late, hello(share))), u"unauthorized"_s);
+        server.close();
+    }
+
+    // The asynchronous client of a server the app starts (acp serve's agent sharing): connected again
+    // and again until the app listens, ready once its hello with the token is accepted; calls
+    // multiplexed (answered in any order), answered never inside call(); a call without an answer
+    // in time; every call waiting failed when the link drops; nothing goes out while it is down; a
+    // refused token keeps it down; the link back once the server listens again.
+    void asyncClient()
+    {
+        const QString k = key(u"brulion-test-async"_s);
+        auto server = std::make_unique<ControlServer>();
+        server->setOpen(false);
+        QList<ControlReply> held;
+        QStringList heard;
+        const auto handler = [&held, &heard](const ControlRequest &request, ControlReply reply) {
+            if (request.method == u"hello")
+                return reply.ok(QJsonObject{{u"protocol"_s, 1}, {u"granted"_s, request.granted}});
+            heard << request.method + u' ' + request.params.value(u"text"_s).toString();
+            if (request.method == u"chatWait")
+                return held.append(reply); // (answered later, or never)
+            if (request.method == u"chatStop")
+                return reply.fail(u"not_found"_s, u"Nie ma takiej rozmowy"_s, {{u"param"_s, u"path"_s}});
+            reply.ok(QJsonObject{{u"echo"_s, request.params.value(u"text"_s)}, {u"shareOnly"_s, request.shareOnly}});
+        };
+        server->setHandler(handler);
+        const QString token = server->addGrant(u"agent sharing"_s, GrantScope::Share);
+
+        // Nothing listens yet: down, a call fails at once (later, from the event loop).
+        AsyncControlClient client(k, token, u"agent sharing"_s);
+        client.setRetryDelays({50, 100});
+        QSignalSpy ready(&client, &AsyncControlClient::readyChanged);
+        client.start();
+        QVERIFY(!client.isReady());
+        bool answered = false;
+        AsyncControlClient::Response early;
+        client.call(u"chats"_s, {}, 1000, [&](const AsyncControlClient::Response &r) {
+            early = r;
+            answered = true;
+        });
+        QVERIFY(!answered); // (never inside call())
+        QTRY_VERIFY(answered);
+        QVERIFY(early.transportError);
+        QCOMPARE(early.code, u"disconnected"_s);
+        QVERIFY(heard.isEmpty());
+
+        // The app listens: the link comes up by itself.
+        QVERIFY(server->listen(k));
+        QTRY_VERIFY_WITH_TIMEOUT(client.isReady(), 10000 * BRULION_TEST_SLOWDOWN);
+        QCOMPARE(ready.count(), 1);
+        QVERIFY(client.hello().value(u"granted"_s).toBool());
+
+        // Multiplexed: a held call does not keep the next one waiting.
+        QList<std::pair<QString, AsyncControlClient::Response>> answers;
+        const auto note = [&answers](const QString &name) {
+            return [&answers, name](const AsyncControlClient::Response &r) { answers.append({name, r}); };
+        };
+        client.call(u"chatWait"_s, {{u"path"_s, u"AI/a.md"_s}}, 30000, note(u"wait"_s));
+        client.call(u"chatSend"_s, {{u"path"_s, u"AI/a.md"_s}, {u"text"_s, u"Zażółć gęślą jaźń"_s}}, 30000,
+                    note(u"send"_s));
+        client.call(u"chatStop"_s, {{u"path"_s, u"AI/b.md"_s}}, 30000, note(u"stop"_s));
+        QTRY_COMPARE(answers.size(), 2);
+        QCOMPARE(answers.at(0).first, u"send"_s);
+        QVERIFY(answers.at(0).second.ok);
+        QCOMPARE(answers.at(0).second.result.toObject().value(u"echo"_s).toString(), u"Zażółć gęślą jaźń"_s);
+        QVERIFY(answers.at(0).second.result.toObject().value(u"shareOnly"_s).toBool());
+        QCOMPARE(answers.at(1).first, u"stop"_s);
+        QVERIFY(!answers.at(1).second.ok);
+        QVERIFY(!answers.at(1).second.transportError);
+        QCOMPARE(answers.at(1).second.code, u"not_found"_s);
+        QCOMPARE(answers.at(1).second.message, u"Nie ma takiej rozmowy"_s);
+        QCOMPARE(answers.at(1).second.details.value(u"param"_s).toString(), u"path"_s);
+        QCOMPARE(client.pending(), 1);
+        // The held one answered late, in its own time.
+        QCOMPARE(held.size(), 1);
+        held.takeFirst().ok(QJsonObject{{u"state"_s, u"idle"_s}});
+        QTRY_COMPARE(answers.size(), 3);
+        QCOMPARE(answers.at(2).first, u"wait"_s);
+        QCOMPARE(answers.at(2).second.result.toObject().value(u"state"_s).toString(), u"idle"_s);
+
+        // No answer in time.
+        answers.clear();
+        client.call(u"chatWait"_s, {{u"path"_s, u"AI/a.md"_s}}, 100, note(u"slow"_s));
+        QTRY_COMPARE(answers.size(), 1);
+        QVERIFY(answers.at(0).second.transportError);
+        QCOMPARE(answers.at(0).second.code, u"no_answer"_s);
+        // (Its late answer is dropped.)
+        QTRY_COMPARE(held.size(), 1);
+        held.takeFirst().ok(QJsonObject{});
+        QTest::qWait(50);
+        QCOMPARE(answers.size(), 1);
+
+        // The app goes: the calls waiting fail, it is down — and comes back by itself.
+        answers.clear();
+        client.call(u"chatWait"_s, {{u"path"_s, u"AI/a.md"_s}}, 30000, note(u"gone"_s));
+        QTRY_COMPARE(held.size(), 1);
+        held.clear();
+        server->close();
+        QTRY_COMPARE(answers.size(), 1);
+        QVERIFY(answers.at(0).second.transportError);
+        QCOMPARE(answers.at(0).second.code, u"disconnected"_s);
+        QVERIFY(!client.isReady());
+        QCOMPARE(ready.count(), 2);
+        QVERIFY(server->listen(k));
+        QTRY_VERIFY_WITH_TIMEOUT(client.isReady(), 10000 * BRULION_TEST_SLOWDOWN);
+        answers.clear();
+        client.call(u"chatSend"_s, {{u"path"_s, u"AI/a.md"_s}, {u"text"_s, u"Znowu"_s}}, 30000, note(u"back"_s));
+        QTRY_COMPARE(answers.size(), 1);
+        QCOMPARE(answers.at(0).second.result.toObject().value(u"echo"_s).toString(), u"Znowu"_s);
+
+        // The grant revoked: dropped, and a hello with it refused from then on (it stays down).
+        QVERIFY(server->revokeGrant(token));
+        QTRY_VERIFY(!client.isReady());
+        QTRY_VERIFY_WITH_TIMEOUT(client.lastError().contains(u"refused"_s), 10000 * BRULION_TEST_SLOWDOWN);
+        QTest::qWait(300); // (tried again meanwhile: still refused)
+        QVERIFY(!client.isReady());
+        QCOMPARE(ready.count(), 4);
+        client.stop();
+        server->close();
     }
 
     // ControlClient says who it is in a hello first: setIdentity(), else the environment.

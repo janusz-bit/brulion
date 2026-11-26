@@ -35,7 +35,9 @@
 // chatSchedule*, chatRequestSecret) are ChatControl's; every agent the app starts with Brulion's
 // tools reaches them with a grant of the chat alone for its conversation (chatGrant()). The
 // webhooks' server (HookServer) passes each hook on as chatHook with a grant of its own
-// (hookGrant()), which calls nothing else and which nothing else may call.
+// (hookGrant()), which calls nothing else and which nothing else may call. The agent sharing's
+// `acp serve` (AgentShare) reaches the chat with one of its own (shareGrant(): the methods a device
+// needs to follow and steer the app's conversations — chatLive, chatAnswer … —, as the user).
 //
 // In process (dispatch(), no socket): an AI agent on another computer, whose tools there reach this
 // app through that computer's `brulion-cli acp serve` and the agent's stream (core acp/apptunnel.h,
@@ -105,6 +107,11 @@ public:
     /// A grant of the webhooks alone (hello and chatHook: HookServer's `brulion-cli app hooks
     /// serve`, BRULION_APP_HOOK_TOKEN of its environment). The socket listens while one exists.
     QString hookGrant();
+    /// A grant of the agent sharing (hello and the chat's methods a device needs, MethodSpec::share:
+    /// AgentShare's `brulion-cli acp serve`, BRULION_APP_SHARE_TOKEN of its environment), which
+    /// follows and steers the app's conversations for the user's phone acting as the user — never
+    /// as an agent limited to its sub-conversations. The socket listens while one exists.
+    QString shareGrant();
     /// Ends the grant of `token` (the agent stopped) and drops its connections.
     void revokeGrant(const QString &token);
     /// A grant answered in process (dispatch(); the socket does not listen for it): an AI agent on

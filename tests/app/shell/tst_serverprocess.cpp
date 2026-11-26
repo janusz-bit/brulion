@@ -3,10 +3,14 @@
 // its log lines without their time), stopped by the end of its standard input (and terminated when
 // it ignores that), started again after a crash with the waits growing and a long run forgetting
 // them, a refusal (exit 2) or a program that does not start left Failed with the server's words, an
-// end with exit 5 tried again, start() with new arguments, and the destructor stopping it.
+// end with exit 5 tried again, start() with new arguments, and the destructor stopping it; the
+// environment each process gets (setLaunchEnvironment(): a new value for each start, also one after a
+// crash, over the environment set).
 #include "serverprocess.h"
 
 #include <QFile>
+#include <QJsonObject>
+#include <QProcessEnvironment>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -95,6 +99,40 @@ private Q_SLOTS:
         const qsizetype seen = announced.size();
         QTest::qWait(500);
         QCOMPARE(announced.size(), seen); // (stopped: not started again)
+    }
+
+    void environmentOfEachStart()
+    {
+        ServerProcess server(u"Z sekretem"_s);
+        server.setRetryDelays({100});
+        QProcessEnvironment base;
+        base.insert(u"PATH"_s, qEnvironmentVariable("PATH"));
+        base.insert(u"BRULION_TEST_TOKEN"_s, u"stary"_s);
+        server.setEnvironment(base);
+        int starts = 0;
+        server.setLaunchEnvironment([&starts](QProcessEnvironment &env) {
+            QCOMPARE(env.value(u"BRULION_TEST_TOKEN"_s), u"stary"_s); // (the environment set, each time)
+            env.insert(u"BRULION_TEST_TOKEN"_s, u"żeton-%1"_s.arg(++starts));
+        });
+        server.setProgram(QStringLiteral(FAKE_SERVER), {u"--announce"_s, u"http://x"_s, u"--env"_s,
+                                                        u"BRULION_TEST_TOKEN"_s, u"--crash-after"_s, u"300"_s});
+        QStringList seen;
+        connect(&server, &ServerProcess::announced, this,
+                [&seen](const QJsonObject &result) { seen << result.value(u"env"_s).toString(); });
+        server.start();
+        QTRY_VERIFY_WITH_TIMEOUT(seen.size() >= 2, kTimeoutMs);
+        QCOMPARE(seen.at(0), u"żeton-1"_s);
+        QCOMPARE(seen.at(1), u"żeton-2"_s);
+        server.stop();
+        // Without one: the environment as set.
+        server.setLaunchEnvironment({});
+        seen.clear();
+        server.setProgram(QStringLiteral(FAKE_SERVER),
+                                         {u"--announce"_s, u"http://x"_s, u"--env"_s, u"BRULION_TEST_TOKEN"_s});
+        server.start();
+        QTRY_COMPARE_WITH_TIMEOUT(seen.size(), 1, kTimeoutMs);
+        QCOMPARE(seen.first(), u"stary"_s);
+        server.stop();
     }
 
     void longRunForgetsFailures()

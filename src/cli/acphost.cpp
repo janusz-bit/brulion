@@ -3,10 +3,13 @@
 #include "acphost.h"
 
 #include "acptrust.h"
+#include "asynccontrolclient.h"
+#include "controlclient.h"
 #include "controlprotocol.h"
 #include "controlserver.h"
 
 #include "acp/acp.h"
+#include "acp/appchats.h"
 #include "acp/apptunnel.h"
 #include "acp/remote.h"
 #include "automation/uri.h"
@@ -75,6 +78,11 @@ constexpr QLatin1StringView kCodeAlphabet{"ABCDEFGHJKMNPQRSTUVWXYZ23456789"};
 constexpr int kMaxAppGrants = 64;
 /// The biggest file of a project a thread's agent reads through this server.
 constexpr qint64 kMaxCodeFileBytes = 16LL * 1024 * 1024;
+/// How long a request of the app's conversations waits for the app beyond its own wait.
+constexpr int kAppCallMarginMs = 15000;
+/// The bodies of chats/send and chats/start (a message), and of chats/stop and chats/answer.
+constexpr qint64 kMaxChatMessageBody = 256 * 1024;
+constexpr qint64 kMaxChatSmallBody = 16 * 1024;
 
 void logLine(const QString &line)
 {
@@ -647,6 +655,8 @@ AcpHost::AcpHost(Context &context, notebook::Notebook *notebook, AcpHostOptions 
 
 AcpHost::~AcpHost()
 {
+    // (The app's answers still on their way are dropped with the link.)
+    m_app.reset();
     for (Stream *s : std::as_const(m_streams)) {
         failAppCalls(s, QString::fromLatin1(ipc::ControlError::NotReady), u"acp serve stopped"_s);
         endTerminals(s);
@@ -846,6 +856,22 @@ bool AcpHost::start(QString *error)
         }
     }
 
+    // The app that started this server shares its own conversations with the devices: a lasting
+    // link to its control socket with the grant it gave (acp/appchats.h).
+    if (!m_options.appSocket.isEmpty() && !m_options.appToken.isEmpty()) {
+        m_app = std::make_unique<ipc::AsyncControlClient>(m_options.appSocket, m_options.appToken, u"agent sharing"_s);
+        connect(m_app.get(), &ipc::AsyncControlClient::readyChanged, this, [this](bool ready) {
+            if (ready)
+                say(u"the app's conversations are shared with the devices (its control socket answers)"_s);
+            else
+                say(u"the app does not answer (%1): its conversations are not shared until it does"_s.arg(
+                        m_app->lastError()));
+        });
+        m_app->start();
+        m_pollCheck = new QTimer(this);
+        m_pollCheck->setInterval(1000);
+        connect(m_pollCheck, &QTimer::timeout, this, &AcpHost::dropLeftPolls);
+    }
     if (!m_options.projectsFile.isEmpty()) {
         m_projects = std::make_unique<HostProjectsStore>(m_options.projectsFile);
         m_projects->log = [this](const QString &line) { say(line); };
@@ -985,6 +1011,21 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
         *maxBody = head.method == "POST" ? 4096 : 0;
         return std::nullopt;
     }
+    // The app's own conversations (acp/appchats.h).
+    if (parts.at(0) == u"chats") {
+        const bool list = parts.size() == 1;
+        const bool page = parts.size() == 2 && parts.at(1) == u"page";
+        const bool action = parts.size() == 2
+                            && (parts.at(1) == u"send" || parts.at(1) == u"start" || parts.at(1) == u"stop"
+                                || parts.at(1) == u"answer");
+        if (!list && !page && !action)
+            return apiError(404, u"not_found"_s, u"Not found"_s);
+        if (head.method != (action ? "POST"_ba : "GET"_ba))
+            return apiError(405, u"method"_s, u"Method not allowed"_s);
+        if (action)
+            *maxBody = parts.at(1) == u"send" || parts.at(1) == u"start" ? kMaxChatMessageBody : kMaxChatSmallBody;
+        return std::nullopt;
+    }
     // Code mode's projects (acp/codehost.h).
     if (parts.at(0) == u"projects") {
         const bool list = parts.size() == 1;
@@ -1056,6 +1097,10 @@ void AcpHost::onRequest(const http::Request &request, const http::Reply &rawRepl
     }
     if (parts.at(0) == u"projects") {
         projectsRequest(parts, request, reply);
+        return;
+    }
+    if (parts.at(0) == u"chats") {
+        chatsRequest(who, parts, request, reply);
         return;
     }
     Stream *s = parts.size() >= 2 ? m_streams.value(parts.at(1)) : nullptr;
@@ -1210,6 +1255,8 @@ http::Response AcpHost::info() const
         features.append(QString(acp::AppFeature));
     if (m_projects)
         features.append(QString(acp::CodeFeature));
+    if (appLinked())
+        features.append(QString(acp::ChatsFeature));
     QJsonArray agents;
     for (const HostAgent &a : m_options.agents)
         agents.append(QJsonObject{{u"id"_s, a.id}, {u"name"_s, a.name}, {u"command"_s, a.command}});
@@ -1806,6 +1853,237 @@ void AcpHost::maintain()
 }
 
 // ---- The app's calls of the agents' tools (acp/apptunnel.h) -------------------------------------------
+
+// ---- The app's own conversations (acp/appchats.h) -------------------------------------------------
+
+namespace {
+
+/// The device's answer to an error of the app (its code kept, its message passed on).
+http::Response appError(const ipc::ControlClient::Response &r)
+{
+    if (r.transportError)
+        return apiError(503, u"app_unavailable"_s, u"The app on this computer does not answer: %1"_s.arg(r.message));
+    int status = 502;
+    if (r.code == u"not_found")
+        status = 404;
+    else if (r.code == u"busy" || r.code == u"no_question")
+        status = 409;
+    else if (r.code == u"bad_option" || r.code == u"bad_params" || r.code == u"ambiguous_ref")
+        status = 400;
+    else if (r.code == u"refused" || r.code == u"unauthorized")
+        status = 403;
+    else if (r.code == u"not_ready")
+        status = 503;
+    return apiError(status, r.code.isEmpty() ? u"failed"_s : r.code, r.message.left(2000));
+}
+
+http::Response appUnavailable()
+{
+    return apiError(503, u"app_unavailable"_s,
+                    u"The app on this computer does not answer (it shares its conversations while it runs)"_s);
+}
+
+/// A query's value (nullopt: not given; a malformed query: no value at all).
+std::optional<QString> queryValue(const http::Request &request, const QString &name)
+{
+    const std::optional<QList<std::pair<QString, QString>>> form = http::parseForm(request.query);
+    if (!form)
+        return std::nullopt;
+    for (const auto &[key, value] : *form) {
+        if (key == name)
+            return value;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+bool AcpHost::appLinked() const
+{
+    return m_app && m_app->isReady();
+}
+
+void AcpHost::relay(const QString &method, const QJsonObject &params, int timeoutMs, const http::Reply &reply,
+                    std::function<http::Response(const QJsonObject &result)> answer)
+{
+    if (!appLinked()) {
+        reply.send(appUnavailable());
+        return;
+    }
+    m_app->call(method, params, timeoutMs, [reply, answer](const ipc::ControlClient::Response &r) {
+        if (!reply.alive())
+            return; // (the device left meanwhile)
+        reply.send(r.ok ? answer(r.result.toObject()) : appError(r));
+    });
+}
+
+void AcpHost::dropLeftPolls()
+{
+    m_chatPolls.removeIf([](QHash<quint64, ChatPoll>::iterator it) { return !it->reply.alive(); });
+    if (m_chatPolls.isEmpty())
+        m_pollCheck->stop();
+}
+
+http::Response AcpHost::chatPage(const http::Request &request) const
+{
+    const QString path = queryValue(request, u"path"_s).value_or(QString());
+    if (!acp::isRemoteChatPath(path) || markdown::isEncryptedNotePath(path))
+        return apiError(400, u"bad_path"_s, u"A conversation's page in the notebook's AI folder is needed"_s);
+    const QString vaultPath = notebookPath(path);
+    if (vaultPath.isEmpty())
+        return apiError(400, u"bad_path"_s, u"A conversation's page in the notebook's AI folder is needed"_s);
+    const QFileInfo file(QDir(m_root).filePath(vaultPath));
+    if (file.exists() && file.size() > acp::MaxRemotePageBytes)
+        return apiError(413, u"too_large"_s, u"The page is larger than %1 bytes"_s.arg(acp::MaxRemotePageBytes));
+    const notebook::Notebook::Current current = m_notebook->read(vaultPath);
+    if (!current.exists)
+        return apiError(404, u"not_found"_s, u"No such conversation here: %1"_s.arg(vaultPath));
+    if (current.bytes.size() > acp::MaxRemotePageBytes)
+        return apiError(413, u"too_large"_s, u"The page is larger than %1 bytes"_s.arg(acp::MaxRemotePageBytes));
+    return http::Response::json(200, QJsonObject{{u"path"_s, vaultPath}, {u"text"_s, current.text}});
+}
+
+void AcpHost::chatsRequest(const PairedDevice &device, const QStringList &parts, const http::Request &request,
+                           const http::Reply &reply)
+{
+    if (!appLinked()) {
+        reply.send(appUnavailable());
+        return;
+    }
+    if (parts.size() == 2 && parts.at(1) == u"page") {
+        reply.send(chatPage(request));
+        return;
+    }
+    if (parts.size() == 1) {
+        // GET chats?since=&wait=&path=: the app's chatLive, a long poll of `wait` seconds at most.
+        if (!http::parseForm(request.query)) {
+            reply.send(apiError(400, u"bad_request"_s, u"The query is malformed"_s));
+            return;
+        }
+        bool ok = true;
+        const QString sinceText = queryValue(request, u"since"_s).value_or(u"-1"_s);
+        const qint64 since = sinceText.toLongLong(&ok);
+        if (!ok || since < -1 || since > 1e15) {
+            reply.send(apiError(400, u"bad_request"_s, u"since is a revision of an answer before (-1: none)"_s));
+            return;
+        }
+        const int wait =
+                std::clamp(queryValue(request, u"wait"_s).value_or(u"0"_s).toInt(), 0, m_options.maxWaitSeconds);
+        const QString path = queryValue(request, u"path"_s).value_or(QString());
+        if (!path.isEmpty() && !acp::isRemoteChatPath(path)) {
+            reply.send(apiError(400, u"bad_path"_s, u"A conversation's page in the notebook's AI folder is needed"_s));
+            return;
+        }
+        int mine = 0;
+        for (const ChatPoll &p : std::as_const(m_chatPolls))
+            mine += p.device == device.id ? 1 : 0;
+        if (int(m_chatPolls.size()) >= m_options.maxChatPolls || mine >= m_options.maxChatPollsPerDevice) {
+            reply.send(apiError(429, u"too_many_requests"_s, u"Too many requests wait for the app's conversations"_s));
+            return;
+        }
+        QJsonObject params{{u"since"_s, double(since)}, {u"timeout"_s, wait * 1000}};
+        if (!path.isEmpty())
+            params.insert(u"path"_s, path);
+        const quint64 serial = m_nextPoll++;
+        m_chatPolls.insert(serial, ChatPoll{device.id, reply});
+        if (!m_pollCheck->isActive())
+            m_pollCheck->start();
+        const QPointer<AcpHost> self(this);
+        m_app->call(u"chatLive"_s, params, wait * 1000 + kAppCallMarginMs,
+                    [self, serial, reply](const ipc::ControlClient::Response &r) {
+                        if (self)
+                            self->m_chatPolls.remove(serial);
+                        if (!reply.alive())
+                            return; // (its device left: dropped)
+                        if (!r.ok) {
+                            reply.send(appError(r));
+                            return;
+                        }
+                        // (Passed on bounded: only what the device's side takes.)
+                        const std::optional<acp::RemoteChats> chats = acp::RemoteChats::fromJson(r.result.toObject());
+                        reply.send(chats ? http::Response::json(200, chats->toJson())
+                                         : apiError(502, u"bad_answer"_s, u"The app's answer holds no revision"_s));
+                    });
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(request.body);
+    if (!doc.isObject()) {
+        reply.send(apiError(400, u"bad_request"_s, u"A JSON object is needed"_s));
+        return;
+    }
+    const QJsonObject body = doc.object();
+    const QString action = parts.at(1);
+    const QString path = body.value(u"path"_s).toString();
+    if (action != u"start" && !acp::isRemoteChatPath(path)) {
+        reply.send(apiError(400, u"bad_path"_s, u"A conversation's page in the notebook's AI folder is needed"_s));
+        return;
+    }
+    const int timeout = m_options.appCallTimeoutMs + kAppCallMarginMs;
+    const auto pathOf = [path](const QJsonObject &result) {
+        const QString p = result.value(u"path"_s).toString();
+        return http::Response::json(200, QJsonObject{{u"path"_s, p.isEmpty() ? path : p}});
+    };
+    if (action == u"send") {
+        const QJsonValue text = body.value(u"text"_s);
+        const QString mode = body.value(u"mode"_s).toString();
+        if (!text.isString() || text.toString().trimmed().isEmpty()) {
+            reply.send(apiError(400, u"bad_request"_s, u"The message (text) is needed"_s));
+            return;
+        }
+        if (!mode.isEmpty() && mode != u"queue" && mode != u"steer") {
+            reply.send(apiError(400, u"bad_mode"_s, u"mode is \"\", \"queue\" or \"steer\""_s));
+            return;
+        }
+        QJsonObject params{{u"path"_s, path}, {u"text"_s, text.toString()}};
+        if (!mode.isEmpty())
+            params.insert(u"mode"_s, mode);
+        say(u"%1 (%2) sends a message to %3%4"_s.arg(device.name, device.id, path,
+                                                     mode.isEmpty() ? QString() : u" (" + mode + u')'));
+        relay(u"chatSend"_s, params, timeout, reply, pathOf);
+    } else if (action == u"start") {
+        const QString project = body.value(u"project"_s).toString().trimmed();
+        const QJsonValue text = body.value(u"text"_s);
+        if (project.isEmpty() || !text.isString() || text.toString().trimmed().isEmpty()) {
+            reply.send(apiError(400, u"bad_request"_s, u"The project and the first message (text) are needed"_s));
+            return;
+        }
+        QJsonObject params{{u"project"_s, project}, {u"text"_s, text.toString()}};
+        for (const QString &key : {u"partner"_s, u"worktree"_s, u"branch"_s}) {
+            const QJsonValue v = body.value(key);
+            if (!v.isUndefined() && !v.isNull() && !v.isString()) {
+                reply.send(apiError(400, u"bad_request"_s, u"%1 is a string"_s.arg(key)));
+                return;
+            }
+            if (!v.toString().trimmed().isEmpty())
+                params.insert(key, v.toString().trimmed());
+        }
+        say(u"%1 (%2) starts a thread of %3 in the app"_s.arg(device.name, device.id, project));
+        relay(u"chatStart"_s, params, timeout, reply, [](const QJsonObject &result) {
+            const QString p = result.value(u"path"_s).toString();
+            return acp::isRemoteChatPath(p)
+                           ? http::Response::json(200, QJsonObject{{u"path"_s, p}})
+                           : apiError(502, u"bad_answer"_s, u"The app's answer names no conversation"_s);
+        });
+    } else if (action == u"stop") {
+        say(u"%1 (%2) stops the turn of %3"_s.arg(device.name, device.id, path));
+        relay(u"chatStop"_s, {{u"path"_s, path}}, timeout, reply, [path](const QJsonObject &result) {
+            return http::Response::json(200, QJsonObject{{u"path"_s, result.value(u"path"_s).toString(path)},
+                                                         {u"stopped"_s, result.value(u"stopped"_s).toBool()}});
+        });
+    } else {
+        const QJsonValue option = body.value(u"option"_s);
+        if (!option.isString() || option.toString().isEmpty()) {
+            reply.send(apiError(400, u"bad_option"_s, u"One of the question's options is needed"_s));
+            return;
+        }
+        say(u"%1 (%2) answers the question of %3"_s.arg(device.name, device.id, path));
+        relay(u"chatAnswer"_s, {{u"path"_s, path}, {u"option"_s, option.toString()}}, timeout, reply,
+              [path](const QJsonObject &result) {
+                  return http::Response::json(
+                          200, QJsonObject{{u"path"_s, result.value(u"path"_s).toString(path)}, {u"answered"_s, true}});
+              });
+    }
+}
 
 QString AcpHost::tunnelSocket() const
 {
@@ -3346,12 +3624,21 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
         return output(&command, r);
     };
     context.serving = true;
+    // The app that started it (its agent sharing) shares its own conversations: its control socket
+    // and grant, taken out of the environment at once — the agents and their terminals never see them.
+    AcpHostOptions options;
+    if (const QString token = qEnvironmentVariable(ipc::ControlClient::ShareTokenVariable).trimmed();
+        !token.isEmpty()) {
+        options.appToken = token;
+        options.appSocket = qEnvironmentVariable(ipc::ControlClient::SocketVariable).trimmed();
+        qunsetenv(ipc::ControlClient::ShareTokenVariable);
+        qunsetenv(ipc::ControlClient::SocketVariable);
+    }
     if (auto e = context.resolveVault()) {
         Result r;
         r.error = e;
         return output(&command, r);
     }
-    AcpHostOptions options;
     const bool tailnet = args.value(u"tailscale"_s).toBool();
     const bool behindServe = args.value(u"tailscaleServe"_s).toBool();
     if (tailnet && behindServe)
@@ -3525,19 +3812,21 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
             {u"ok"_s, true},
             {u"command"_s, command.id},
             {u"vault"_s, context.vaultRoot()},
-            {u"result"_s, QJsonObject{{u"url"_s, host.publicUrl()},
-                                      {u"endpoint"_s, host.endpoint()},
-                                      {u"port"_s, host.port()},
-                                      {u"address"_s, options.address.toString()},
-                                      {u"tls"_s, host.server()->tls()},
-                                      {u"agents"_s, agents},
-                                      {u"tools"_s, options.tools},
-                                      {u"appTools"_s, !host.tunnelSocket().isEmpty()},
-                                      {u"sync"_s, sync != nullptr},
-                                      {u"projects"_s, options.projectsFile.isEmpty() ? QJsonValue()
-                                                                                     : QJsonValue(options.projectsFile)},
-                                      {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue() : QJsonValue(tailnetInfo)},
-                                      {u"stateFile"_s, options.stateFile}}},
+            {u"result"_s,
+             QJsonObject{
+                     {u"url"_s, host.publicUrl()},
+                     {u"endpoint"_s, host.endpoint()},
+                     {u"port"_s, host.port()},
+                     {u"address"_s, options.address.toString()},
+                     {u"tls"_s, host.server()->tls()},
+                     {u"agents"_s, agents},
+                     {u"tools"_s, options.tools},
+                     {u"appTools"_s, !host.tunnelSocket().isEmpty()},
+                     {u"appChats"_s, !options.appSocket.isEmpty()},
+                     {u"sync"_s, sync != nullptr},
+                     {u"projects"_s, options.projectsFile.isEmpty() ? QJsonValue() : QJsonValue(options.projectsFile)},
+                     {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue() : QJsonValue(tailnetInfo)},
+                     {u"stateFile"_s, options.stateFile}}},
             {u"warnings"_s, QJsonArray()}};
     const QByteArray line = QJsonDocument(started).toJson(QJsonDocument::Compact) + '\n';
     std::fwrite(line.constData(), 1, size_t(line.size()), stdout);

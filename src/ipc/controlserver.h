@@ -23,9 +23,13 @@
 // conversation) lets its connection call hello and the chat's methods (MethodSpec::chat) only:
 // anything else is answered `unauthorized`. A grant of the webhooks alone (GrantScope::Hook: the
 // app's `brulion-cli app hooks serve`) lets its connection call hello and chatHook (MethodSpec::hook)
-// only — and chatHook is answered `unauthorized` to every other connection. The handler learns the
-// token a request came with (ControlRequest::grant), and whether it is such a grant (chatOnly,
-// hookOnly).
+// only — and chatHook is answered `unauthorized` to every other connection. A grant of the agent
+// sharing (GrantScope::Share: the app's `brulion-cli acp serve`, which follows and steers the app's
+// conversations for the user's phone) lets its connection call hello and the methods marked
+// MethodSpec::share only — the chat's reading, starting, sending, stopping, waiting and answering,
+// never the schedules, secrets, notifications or anything that changes the app. The handler learns
+// the token a request came with (ControlRequest::grant), and whether it is such a grant (chatOnly,
+// hookOnly, shareOnly).
 #pragma once
 
 #include "controlprotocol.h"
@@ -82,9 +86,10 @@ private:
 
 /// What a grant lets its connection do.
 enum class GrantScope {
-    Full, ///< every method (an AI agent let change the app) but the webhooks'
-    Chat, ///< hello and the chat's methods (MethodSpec::chat)
-    Hook, ///< hello and the webhooks' method (MethodSpec::hook)
+    Full,  ///< every method (an AI agent let change the app) but the webhooks'
+    Chat,  ///< hello and the chat's methods (MethodSpec::chat)
+    Hook,  ///< hello and the webhooks' method (MethodSpec::hook)
+    Share, ///< hello and the agent sharing's methods (MethodSpec::share)
 };
 
 class ControlServer : public QObject {

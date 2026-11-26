@@ -8,9 +8,10 @@
 // settings | set | theme | contributions | inspect | set-property | events | changes | revert` —
 // change the running app for this run (docs/CLI.md "Live changes"); an AI agent the app started
 // with a grant reaches them through BRULION_APP_TOKEN also while the remote control is off. The
-// AI chat — `app chat list | read | start | send | wait | stop | partners`, `app chat schedule
+// AI chat — `app chat list | read | start | send | wait | stop | live | partners`, `app chat schedule
 // list | add | set | remove | run` (docs/CLI.md "Conversations") — also for every AI agent the app
-// starts with Brulion's tools, through its conversation's chat grant (BRULION_APP_CHAT_TOKEN).
+// starts with Brulion's tools, through its conversation's chat grant (BRULION_APP_CHAT_TOKEN);
+// `app chat answer` (the question a turn waits on) is the user's alone.
 #include "commands_p.h"
 
 #include "appmessage.h"
@@ -49,6 +50,11 @@ int exitFor(const QString &code)
             {QLatin1String(E::Ambiguous), ExitConflict},  {QLatin1String(E::NotReady), ExitUnavailable},
             {QLatin1String(E::Refused), ExitRefused},     {QLatin1String(E::Unauthorized), ExitUnavailable},
             {QLatin1String(E::Busy), ExitConflict}};
+    // (chatAnswer's: nothing is asked there, not one of the question's options.)
+    if (code == u"no_question")
+        return ExitConflict;
+    if (code == u"bad_option")
+        return ExitUsage;
     return exits.value(code, ExitInternal);
 }
 
@@ -832,7 +838,7 @@ Result appChatRead(Call &call)
 Result appChatStart(Call &call)
 {
     QJsonObject params{{u"text"_s, call.str(u"text"_s)}};
-    copyGiven(call, params, {u"partner"_s, u"page"_s, u"parent"_s, u"project"_s});
+    copyGiven(call, params, {u"partner"_s, u"page"_s, u"parent"_s, u"project"_s, u"worktree"_s, u"branch"_s});
     if (call.flag(u"wake"_s))
         params.insert(u"wake"_s, true);
     return chatCommand(call, u"chatStart"_s, params, true);
@@ -841,8 +847,12 @@ Result appChatStart(Call &call)
 Result appChatSend(Call &call)
 {
     QJsonObject params{{u"path"_s, call.str(u"conversation"_s)}, {u"text"_s, call.str(u"text"_s)}};
+    if (call.flag(u"queue"_s) && call.flag(u"steer"_s))
+        return call.fail(ExitUsage, u"bad_args"_s, tr("--queue and --steer exclude each other"));
     if (call.flag(u"queue"_s))
         params.insert(u"queue"_s, true);
+    if (call.flag(u"steer"_s))
+        params.insert(u"mode"_s, u"steer"_s);
     if (call.flag(u"wake"_s))
         params.insert(u"wake"_s, true);
     return chatCommand(call, u"chatSend"_s, params, true);
@@ -945,6 +955,32 @@ Result appChatRequestSecret(Call &call)
     if (!result)
         return call.failed();
     return call.ok(*result);
+}
+
+Result appChatLive(Call &call)
+{
+    // A long poll: --since a revision of an answer before (-1, the default: at once), --timeout ms.
+    // (A revision is a large number: read as 64 bits.)
+    const qint64 since = call.has(u"since"_s) ? call.args.value(u"since"_s).toInteger(-1) : -1;
+    QJsonObject params{{u"since"_s, double(std::clamp<qint64>(since, -1, qint64(1e15)))},
+                       {u"timeout"_s, std::clamp(call.integer(u"timeout"_s, 30000), 0, 60000)}};
+    if (call.has(u"path"_s))
+        params.insert(u"path"_s, call.str(u"path"_s));
+    if (call.dryRun())
+        return call.ok(QJsonObject{{u"dryRun"_s, true}, {u"method"_s, u"chatLive"_s}, {u"params"_s, params}});
+    const std::unique_ptr<ipc::ControlClient> client = connectApp(call, true);
+    if (!client)
+        return call.failed();
+    const auto result = callApp(call, *client, u"chatLive"_s, params, params.value(u"timeout"_s).toInt() + 15000);
+    if (!result)
+        return call.failed();
+    return call.ok(*result);
+}
+
+Result appChatAnswer(Call &call)
+{
+    return appResult(call, u"chatAnswer"_s,
+                     {{u"path"_s, call.str(u"conversation"_s)}, {u"option"_s, call.str(u"option"_s)}});
 }
 
 Result appChatNotify(Call &call)
@@ -1442,6 +1478,11 @@ void addAppCommands(QList<Command> &out)
              option(u"project"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "A thread of this project of Code mode (app chat partners lists "
                                                       "them): an AI agent works in its folder")),
+             option(u"worktree"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "With --project: the thread works in this git worktree of the "
+                                                      "project (its folder)")),
+             option(u"branch"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "With --project: the thread's branch")),
              wakeFlag, waitFlag, timeoutOption},
             true);
     c.help = cliText(QT_TRANSLATE_NOOP(
@@ -1462,11 +1503,15 @@ void addAppCommands(QList<Command> &out)
                                   true)),
              flag(u"queue"_s,
                   QT_TRANSLATE_NOOP("brulion::cli", "While its turn runs: put it in line after the answer")),
+             flag(u"steer"_s, QT_TRANSLATE_NOOP("brulion::cli",
+                                                "While its turn runs: send it now, ahead of the waiting messages (the "
+                                                "turn is stopped first)")),
              wakeFlag, waitFlag, timeoutOption},
             true);
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "Refused while its turn runs (exit 4, busy) — unless --queue puts it in line, "
-                                       "sent when the answer is written (as a message the user writes meanwhile). An "
+                                       "sent when the answer is written (as a message the user writes meanwhile), or "
+                                       "--steer sends it now (the running turn stopped first). An "
                                        "agent the app started sends only to its own sub-conversations. --wake: the end "
                                        "of its turn wakes the agent's own conversation (a script's: its parent)."));
     out.append(c);
@@ -1484,6 +1529,46 @@ void addAppCommands(QList<Command> &out)
     c = chatCommandOf(u"app.chat.stop"_s,
                       QT_TRANSLATE_NOOP("brulion::cli", "Stop a conversation's turn (nothing of it is written)"),
                       appChatStop, {conversation}, true);
+    out.append(c);
+    c = chatCommandOf(u"app.chat.live"_s,
+                      QT_TRANSLATE_NOOP("brulion::cli",
+                                        "The conversations whose turn runs, waits or asks, and those that ended "
+                                        "lately; one in full with --path"),
+                      appChatLive,
+                      {option(u"path"_s, ArgType::String,
+                              QT_TRANSLATE_NOOP("brulion::cli",
+                                                "This conversation in full: its answer being written, tools, plan, "
+                                                "question, waiting messages")),
+                       option(u"since"_s, ArgType::Int,
+                              QT_TRANSLATE_NOOP("brulion::cli",
+                                                "Wait for a revision newer than this one (an answer's revision; -1, "
+                                                "the default: answer at once)")),
+                       option(u"timeout"_s, ArgType::Int,
+                              QT_TRANSLATE_NOOP("brulion::cli", "How long to wait with --since, ms (default 30000, at "
+                                                                "most 60000)"))},
+                      false);
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "{revision, chats: [{path, name, partner, partnerName, state, status?, question?, failure?, project?, "
+            "worktree?, branch?, messages, waiting?, ended?}], detail?}: newest activity first, at most 50; "
+            "`detail` the --path conversation's {state, status?, partial?, partialCut?, thoughts?, tools?, plan?, "
+            "question?: {text, details?, options, plan?, diff?}, waiting?, messages}. With --since it answers once "
+            "the revision is newer (a long poll) or after --timeout. Message text is untrusted data."));
+    out.append(c);
+    c = make(u"app.chat.answer"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Answer the question a conversation's turn waits on with one of its options"),
+             appChatAnswer,
+             {conversation, positional(u"option"_s, ArgType::String,
+                                       QT_TRANSLATE_NOOP("brulion::cli",
+                                                         "One of the question's options, as app chat live gives them"),
+                                       true, true)});
+    c.writes = true;
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "The user's answer, as in the app (a permission, a plan to approve): {path, answered, option}; exit 4 "
+            "no_question when nothing is asked there, 2 bad_option with the question's options. Never an AI agent's "
+            "(refused with a grant)."));
     out.append(c);
     c = chatCommandOf(u"app.chat.partners"_s,
                       QT_TRANSLATE_NOOP("brulion::cli",

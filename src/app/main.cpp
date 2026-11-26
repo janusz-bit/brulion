@@ -717,6 +717,19 @@ int main(int argc, char *argv[])
                         if (control)
                             control->revokeGrant(token);
                     });
+            // "Share agents with the phone" (agentshare.h): its `acp serve` follows and steers the
+            // app's own conversations for the phone with a grant of its own (each process its own).
+            controller->workspace()->chats()->share()->setAppGrants(
+                    [control]() -> brulion::shell::AgentShare::AppGrant {
+                        if (!control)
+                            return {};
+                        const QString token = control->shareGrant();
+                        return {control->socketPath(), token};
+                    },
+                    [control](const QString &token) {
+                        if (control)
+                            control->revokeGrant(token);
+                    });
 #endif
             // An agent on another computer: its grants answered here, in process (core acp/apptunnel.h).
             brulion::shell::WorkspaceAgents::AppControl inProcess;

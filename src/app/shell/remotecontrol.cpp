@@ -332,6 +332,18 @@ QString RemoteControl::hookGrant()
     return token;
 }
 
+QString RemoteControl::shareGrant()
+{
+    const QString token = m_server.addGrant(u"agent sharing"_s, ipc::GrantScope::Share);
+    qCInfo(lcApp) << "Remote control: a grant for the agent sharing (acp serve, for the phone)";
+    // (The chat's control follows the turns from now on: one that ends before the phone first asks
+    // is still listed for a while.)
+    if (!m_chat)
+        m_chat = new ChatControl(m_app->workspace(), this);
+    apply();
+    return token;
+}
+
 QString RemoteControl::grant(const QString &client)
 {
     const QString token = m_server.addGrant(client);
@@ -525,9 +537,10 @@ void RemoteControl::chatRequest(const ipc::ControlRequest &request, const ipc::C
     if (!m_chat)
         m_chat = new ChatControl(m_app->workspace(), this);
     ChatControl::Caller caller;
-    caller.granted = request.granted;
+    // (The agent sharing acts for the user's phone: as the user, not as an agent's grant.)
+    caller.granted = request.granted && !request.shareOnly;
     caller.client = request.client;
-    if (request.granted)
+    if (caller.granted)
         caller.conversation = m_app->workspace()->chats()->agents()->grantConversation(request.grant);
     ChatControl::Reply answer;
     answer.ok = [reply](const QJsonObject &result) { reply.ok(result); };
@@ -569,7 +582,7 @@ QJsonObject RemoteControl::hello(const ipc::ControlRequest &request) const
     QJsonArray methods;
     for (const ipc::MethodSpec &m : ipc::controlMethods()) {
         // (Each grant's own; the webhooks' method only for its server.)
-        if (request.hookOnly ? m.hook : (!m.hook && (m.chat || !request.chatOnly)))
+        if (request.hookOnly ? m.hook : request.shareOnly ? m.share : (!m.hook && (m.chat || !request.chatOnly)))
             methods.append(m.name);
     }
     return {{u"protocol"_s, ipc::ControlProtocolVersion},

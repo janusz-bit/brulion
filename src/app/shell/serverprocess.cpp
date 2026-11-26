@@ -185,8 +185,13 @@ void ServerProcess::launch()
     m_announcement = {};
     auto *p = new QProcess(this);
     m_process = p;
-    if (m_ownEnvironment)
+    if (m_prepare) {
+        QProcessEnvironment env = m_ownEnvironment ? m_environment : QProcessEnvironment::systemEnvironment();
+        m_prepare(env);
+        p->setProcessEnvironment(env);
+    } else if (m_ownEnvironment) {
         p->setProcessEnvironment(m_environment);
+    }
     p->setProgram(m_program);
     p->setArguments(m_arguments);
     connect(p, &QProcess::readyReadStandardOutput, this, &ServerProcess::readOutput);

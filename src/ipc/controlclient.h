@@ -40,6 +40,10 @@ public:
     /// instead of the running app's own; and the device's name, for the words.
     static constexpr auto SocketVariable = "BRULION_APP_SOCKET";
     static constexpr auto DeviceVariable = "BRULION_APP_DEVICE";
+    /// The grant of the app's agent sharing (GrantScope::Share) in the environment of the `acp serve`
+    /// the app starts, next to its control socket in SocketVariable (docs/CLI.md "AI agents for other
+    /// devices" → "The app's own conversations"); acp serve takes both out of its environment at once.
+    static constexpr auto ShareTokenVariable = "BRULION_APP_SHARE_TOKEN";
     /// The tunnel's socket from the environment ("" none: the app of this desktop).
     static QString tunnelSocket();
     /// Who connect() says it is (default: the environment's); "" sends nothing of it.

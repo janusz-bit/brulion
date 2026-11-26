@@ -35,6 +35,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 class QProcess;
 class QTimer;
 
@@ -67,6 +69,13 @@ public:
     {
         m_environment = environment;
         m_ownEnvironment = true;
+    }
+    /// Called as each process is started — the first and every one started again after a crash —
+    /// with the environment it gets (the one set, else the app's read then): what is only that
+    /// process's goes in here (the agent sharing's grant of the app: a new one each start).
+    void setLaunchEnvironment(std::function<void(QProcessEnvironment &environment)> prepare)
+    {
+        m_prepare = std::move(prepare);
     }
     /// The waits before it is started again, after the first, second … failure in a row (the
     /// last repeats). Default 2, 5, 10, 30, 60 s.
@@ -118,6 +127,7 @@ private:
     QStringList m_arguments;
     QProcessEnvironment m_environment;
     bool m_ownEnvironment = false;
+    std::function<void(QProcessEnvironment &)> m_prepare;
     QList<int> m_delays{2000, 5000, 10000, 30000, 60000};
     qint64 m_stableMs = 60000;
     int m_stopMs = 3000;
