@@ -388,6 +388,21 @@ static QList<Command> buildCommands(const AppController *app)
              u"folder-plus"_s,
              {},
              ready},
+            // A project's files (docs/CODE-FILES.md): the file picker and the project search of
+            // the thread on screen (CodeView's uiActions; in Code mode Print page's key and
+            // Search's key run them, AppShell.runShortcut).
+            {u"code.findFile"_s,
+             CommandModel::tr("Go to file…"),
+             CommandModel::tr("Code mode: a file of the project by its name"),
+             u"file-text"_s,
+             {},
+             ready && view == u"code"},
+            {u"code.search"_s,
+             CommandModel::tr("Search in the project"),
+             CommandModel::tr("Code mode: text in the project's files"),
+             u"search"_s,
+             {},
+             ready && view == u"code"},
             {u"go.notifications"_s,
              CommandModel::tr("Notifications"),
              CommandModel::tr("Reminders, AI answers, agents and extensions that told you something"),
@@ -922,6 +937,10 @@ bool CommandModel::run(const QString &id)
     } else if (id == u"code.addProject") {
         m_app->settings()->setAppMode(u"code"_s);
         m_app->navigate({{u"view"_s, u"code"_s}, {u"addProject"_s, true}});
+    } else if (id == u"code.findFile") {
+        m_app->requestUiAction(u"code:findFile"_s);
+    } else if (id == u"code.search") {
+        m_app->requestUiAction(u"code:search"_s);
     } else if (id == u"ai.newChat") {
         const QString path = m_app->currentRoute().value(u"path"_s).toString();
         m_app->navigate({{u"view"_s, u"chat"_s},

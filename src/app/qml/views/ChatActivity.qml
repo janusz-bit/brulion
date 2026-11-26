@@ -17,6 +17,10 @@ Rectangle {
 
     property list<var> tools
     property list<var> plan
+    /// A thread's folder (docs/CODE-FILES.md): the files a call works on are listed under it, a tap
+    /// opens one (fileActivated: its path relative to the folder).
+    property string filesFolder
+    signal fileActivated(string path)
     /// AppSettings.chatToolCalls: "all" | "hideFinished" | "hideAll".
     property string shown: AppSettings.chatToolCalls
     /// The list of calls is open (else only the running and the failed ones); a tap on the summary.
@@ -41,6 +45,7 @@ Rectangle {
     radius: Theme.radiusLg
     color: Theme.bgSunken
 
+    readonly property list<string> noFiles: []
     function stateIcon(status: string): string {
         return status === "completed" ? "check" : status === "failed" ? "circle-x" : status === "in_progress" ? "terminal" : "circle"
     }
@@ -168,6 +173,10 @@ Rectangle {
                 readonly property string status: AppController.routeText(call.modelData, "status")
                 readonly property string output: AppController.routeText(call.modelData, "output")
                 readonly property bool hasDiff: AppController.routeText(call.modelData, "diffPath") !== ""
+                /// The files it works on inside the thread's folder, relative to it.
+                readonly property list<string> files: card.filesFolder !== ""
+                                                      ? CodeFiles.relativePaths(card.filesFolder, AppController.routeStrings(call.modelData, "paths"))
+                                                      : card.noFiles
                 /// Its change is shown (a tap on "Show the change").
                 property bool diffOpen: false
                 objectName: "chatToolCall"
@@ -191,6 +200,33 @@ Rectangle {
                         elide: Text.ElideRight
                         maximumLineCount: 2
                         wrapMode: Text.Wrap
+                    }
+                }
+                // (A thread's files the call works on: a tap opens one in the file viewer.)
+                Flow {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 14 + Theme.space2
+                    visible: card.filesFolder !== "" && call.files.length > 0
+                    spacing: Theme.space2
+                    Repeater {
+                        model: card.filesFolder !== "" ? call.files : card.noFiles
+                        delegate: BText {
+                            id: callFile
+                            required property string modelData
+                            objectName: "chatToolFile"
+                            text: callFile.modelData
+                            textFormat: Text.PlainText
+                            color: Theme.link
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.textXs
+                            Accessible.role: Accessible.Link
+                            TapHandler {
+                                onTapped: card.fileActivated(callFile.modelData)
+                            }
+                            HoverHandler {
+                                cursorShape: Qt.PointingHandCursor
+                            }
+                        }
                     }
                 }
                 BText {

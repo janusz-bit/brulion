@@ -844,6 +844,20 @@ private Q_SLOTS:
         QVERIFY(written.open(QIODevice::ReadOnly));
         QCOMPARE(written.readAll(), QByteArray("- od agenta\n"));
         QVERIFY(!ws->exists(u"Od agenta.md"_s)); // (not in the notebook)
+        // Its files named with "@" (docs/CODE-FILES.md): each one there also goes as a link to it —
+        // not a folder, not one that is not there, not one outside the folder.
+        QVERIFY(QDir(folder).mkpath(u"src"_s));
+        QCOMPARE(chats->send(path, u"Popraw @Dom.md, @src/ i @brak.md oraz @../poza.md"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 20000);
+        const QJsonArray mentioned = promptOf(logged(u"session/prompt"_s).last());
+        QStringList links;
+        for (const QJsonValue &block : mentioned) {
+            if (block.toObject().value(u"type"_s).toString() == u"resource_link"_s)
+                links << block.toObject().value(u"uri"_s).toString();
+        }
+        QCOMPARE(links, QStringList{QUrl::fromLocalFile(QDir(folder).filePath(u"Dom.md"_s)).toString(QUrl::FullyEncoded)});
+        QCOMPARE(mentioned.first().toObject().value(u"text"_s).toString(),
+                 u"Popraw @Dom.md, @src/ i @brak.md oraz @../poza.md"_s);
         // A worktree of its own: set, and gone — the turn says so.
         QVERIFY(chats->setThreadWorktree(path, m_tmp.filePath(u"drzewo"_s), u"brulion/drzewo"_s));
         place = chats->threadPlace(path);
