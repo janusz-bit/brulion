@@ -1,6 +1,9 @@
 #include "terminalview.h"
 
 #include "terminalsession.h"
+#ifdef BRULION_TERMINAL_ATRAMENT
+#include "terminalatrament.h"
+#endif
 
 #include "term/charwidth.h"
 #include "term/keys.h"
@@ -11,16 +14,17 @@
 #include <QClipboard>
 #include <QDir>
 #include <QFileInfo>
-#include <QKeySequence>
-#include <QUrl>
 #include <QFontDatabase>
+#include <QFontInfo>
 #include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QPainter>
 #include <QQuickWindow>
 #include <QStyleHints>
+#include <QUrl>
 #include <QtMath>
 
 #include <algorithm>
@@ -105,7 +109,7 @@ TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent)
     setOpaquePainting(true);
     m_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     m_palette = defaultAnsiColors(m_dark);
-    setFillColor(background());
+    applyFill();
 
     m_blinkTimer.setInterval(BlinkInterval);
     connect(&m_blinkTimer, &QTimer::timeout, this, [this] {
@@ -140,6 +144,10 @@ TerminalView::~TerminalView()
 {
     if (m_session && m_shown)
         m_session->setShown(false);
+#ifdef BRULION_TERMINAL_ATRAMENT
+    delete m_atrament;
+    m_atrament = nullptr;
+#endif
 }
 
 const term::Screen *TerminalView::screen() const
@@ -184,7 +192,7 @@ void TerminalView::setSession(TerminalSession *session)
             m_link = HoverLink();
             m_matches.clear();
             m_findCurrent = -1;
-            update();
+            repaint();
             Q_EMIT sessionChanged();
             Q_EMIT scrollChanged();
             Q_EMIT findChanged();
@@ -202,7 +210,7 @@ void TerminalView::setSession(TerminalSession *session)
     updateShown();
     if (!m_findText.isEmpty())
         runFind(false);
-    update();
+    repaint();
     Q_EMIT sessionChanged();
     Q_EMIT scrollChanged();
     Q_EMIT selectionChanged();
@@ -261,9 +269,9 @@ void TerminalView::setDark(bool dark)
     m_dark = dark;
     if (m_ansi.size() < 16)
         m_palette = defaultAnsiColors(m_dark);
-    setFillColor(background());
+    applyFill();
     applyColorsToSession();
-    update();
+    repaint();
     Q_EMIT colorsChanged();
 }
 
@@ -278,7 +286,7 @@ void TerminalView::setForeground(const QColor &color)
         return;
     m_foreground = color;
     applyColorsToSession();
-    update();
+    repaint();
     Q_EMIT colorsChanged();
 }
 
@@ -297,9 +305,9 @@ void TerminalView::setBackground(const QColor &color)
     if (color == m_background)
         return;
     m_background = color;
-    setFillColor(background());
+    applyFill();
     applyColorsToSession();
-    update();
+    repaint();
     Q_EMIT colorsChanged();
 }
 
@@ -339,7 +347,7 @@ void TerminalView::setSelectionColor(const QColor &color)
         return;
     m_selectionColor = color;
     if (m_hasSelection)
-        update();
+        repaint();
     Q_EMIT colorsChanged();
 }
 
@@ -359,7 +367,7 @@ void TerminalView::setAnsiColors(const QList<QColor> &colors)
         return;
     m_ansi = colors;
     m_palette = m_ansi.size() >= 16 ? m_ansi.first(16) : defaultAnsiColors(m_dark);
-    update();
+    repaint();
     Q_EMIT colorsChanged();
 }
 
@@ -375,7 +383,7 @@ void TerminalView::setPadding(qreal padding)
         return;
     m_padding = padding;
     updateLayout();
-    update();
+    repaint();
     Q_EMIT layoutChanged();
 }
 
@@ -385,7 +393,7 @@ void TerminalView::setScrollOffset(int lines)
     if (lines == m_scrollOffset)
         return;
     m_scrollOffset = lines;
-    update();
+    repaint();
     Q_EMIT scrollChanged();
 }
 
@@ -457,6 +465,23 @@ QColor TerminalView::resolve(quint32 rawColor, bool isForeground) const
 void TerminalView::updateMetrics()
 {
     const qreal dpr = window() ? window()->effectiveDevicePixelRatio() : 1.0;
+#ifdef BRULION_TERMINAL_ATRAMENT
+    if (m_atrament) {
+        // Atrament draws with its own fonts: the grid is theirs.
+        const qreal pixelSize = m_font.pixelSize() > 0 ? qreal(m_font.pixelSize()) : QFontInfo(m_font).pixelSize();
+        const TerminalCellMetrics m = m_atrament->metrics(m_font.family(), pixelSize, dpr);
+        m_cellWidth = m.cellWidth;
+        m_cellHeight = m.cellHeight;
+        m_ascent = m.ascent;
+        m_underlinePos = m.underlinePos;
+        m_lineWidth = m.lineWidth;
+        m_strikePos = m.strikePos;
+        updateLayout();
+        repaint();
+        Q_EMIT layoutChanged();
+        return;
+    }
+#endif
     QFont base = m_font;
     base.setKerning(false);
     base.setStyleHint(QFont::Monospace, QFont::PreferDefault);
@@ -481,7 +506,7 @@ void TerminalView::updateMetrics()
         m_fonts[i] = font;
     }
     updateLayout();
-    update();
+    repaint();
     Q_EMIT layoutChanged();
 }
 
@@ -498,7 +523,7 @@ void TerminalView::updateLayout()
     m_rows = rows;
     if (m_session)
         m_session->resize(columns, rows);
-    update();
+    repaint();
     Q_EMIT layoutChanged();
 }
 
@@ -507,6 +532,10 @@ void TerminalView::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
     QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() == oldGeometry.size())
         return;
+#ifdef BRULION_TERMINAL_ATRAMENT
+    if (m_atrament)
+        m_atrament->setSize(newGeometry.width(), newGeometry.height());
+#endif
     // Once a frame however often a window resize asks: the program redraws on each SIGWINCH.
     if (window())
         polish();
@@ -552,7 +581,7 @@ void TerminalView::updateRows(int first, int last)
 {
     if (first > last)
         return;
-    update(QRectF(0, m_padding + first * m_cellHeight, width(), (last - first + 1) * m_cellHeight).toAlignedRect());
+    repaint(QRectF(0, m_padding + first * m_cellHeight, width(), (last - first + 1) * m_cellHeight).toAlignedRect());
 }
 
 void TerminalView::updateCursorArea()
@@ -565,7 +594,7 @@ void TerminalView::updateCursorArea()
         area = area.isEmpty() ? (m_preedit.isEmpty() ? now : row) : area.united(m_preedit.isEmpty() ? now : row);
     }
     if (!area.isEmpty())
-        update(area.adjusted(-1, -1, 1, 1).toAlignedRect());
+        repaint(area.adjusted(-1, -1, 1, 1).toAlignedRect());
 }
 
 void TerminalView::updateBlinking()
@@ -672,7 +701,7 @@ void TerminalView::onContentChanged()
         Q_EMIT scrollChanged();
     }
     if (all) {
-        update();
+        repaint();
     } else {
         int first = -1;
         for (int row = 0; row < s.rows(); ++row) {
@@ -707,6 +736,8 @@ void TerminalView::onModesChanged()
 void TerminalView::paint(QPainter *painter)
 {
     m_paintedCursor = QRectF();
+    if (m_atrament)
+        return; // (Atrament's item draws: this item's texture is a transparent pixel)
     const term::Screen *s = screen();
     if (!s)
         return;
@@ -926,6 +957,104 @@ void TerminalView::paintCursor(QPainter *painter)
         painter->fillRect(QRectF(rect.left(), rect.top(), 2, rect.height()), cursorColor());
         break;
     }
+}
+
+// ---- Atrament ----------------------------------------------------------------------------------
+
+bool TerminalView::atramentAvailable()
+{
+#ifdef BRULION_TERMINAL_ATRAMENT
+    return TerminalAtrament::available();
+#else
+    return false;
+#endif
+}
+
+void TerminalView::setAtrament(bool on)
+{
+#ifdef BRULION_TERMINAL_ATRAMENT
+    on = on && atramentAvailable();
+    if (on == (m_atrament != nullptr))
+        return;
+    if (on) {
+        m_atrament = new TerminalAtrament(this, this);
+        if (!m_atrament->item()) {
+            delete m_atrament;
+            m_atrament = nullptr;
+            return;
+        }
+        // The painted item keeps a transparent pixel for a texture.
+        setTextureSize(QSize(1, 1));
+        setOpaquePainting(false);
+    } else {
+        delete m_atrament;
+        m_atrament = nullptr;
+        setTextureSize(QSize());
+        setOpaquePainting(true);
+    }
+    applyFill();
+    updateMetrics();
+    QQuickPaintedItem::update();
+    Q_EMIT atramentChanged();
+#else
+    Q_UNUSED(on)
+#endif
+}
+
+void TerminalView::repaint()
+{
+#ifdef BRULION_TERMINAL_ATRAMENT
+    if (m_atrament) {
+        m_atrament->refresh();
+        return;
+    }
+#endif
+    update();
+}
+
+void TerminalView::repaint(const QRect &rect)
+{
+#ifdef BRULION_TERMINAL_ATRAMENT
+    if (m_atrament) {
+        m_atrament->refresh();
+        return;
+    }
+#endif
+    update(rect);
+}
+
+void TerminalView::applyFill()
+{
+    setFillColor(m_atrament ? QColor(Qt::transparent) : background());
+}
+
+void TerminalView::terminalPicture(TerminalPicture &p) const
+{
+    p.screen = screen();
+    p.scrollOffset = m_scrollOffset;
+    p.padding = m_padding;
+    p.metrics = {m_cellWidth, m_cellHeight, m_ascent, m_underlinePos, m_lineWidth, m_strikePos};
+    p.fontFamily = m_font.family();
+    p.fontPixelSize = m_font.pixelSize() > 0 ? qreal(m_font.pixelSize()) : QFontInfo(m_font).pixelSize();
+    p.foreground = foreground().rgba();
+    p.background = background().rgba();
+    p.cursor = cursorColor().rgba();
+    p.selection = selectionColor().rgba();
+    p.matchColor = matchColor(m_dark).rgba();
+    p.currentMatchColor = currentMatchColor(m_dark).rgba();
+    for (int i = 0; i < 16; ++i)
+        p.palette[std::size_t(i)] = m_palette.value(i).rgba();
+    p.hasSelection = m_hasSelection;
+    p.selectionStart = {m_selStart.line, m_selStart.column};
+    p.selectionStop = {m_selStop.line, m_selStop.column};
+    p.matches = &m_matches;
+    p.currentMatch = m_findCurrent;
+    p.hasLink = m_link.valid;
+    p.link = m_link.range;
+    p.preedit = m_preedit;
+    p.focused = hasActiveFocus();
+    p.blinkOn = m_blinkOn;
+    p.running = m_session && m_session->isRunning();
 }
 
 // ---- Keyboard and input method ------------------------------------------------------------------
@@ -1500,7 +1629,7 @@ void TerminalView::runFind(bool keepPlace)
         }
     }
     if (had || !m_matches.isEmpty())
-        update();
+        repaint();
     Q_EMIT findChanged();
 }
 
@@ -1524,7 +1653,7 @@ void TerminalView::findOlder()
     const int n = int(m_matches.size());
     m_findCurrent = ((m_findCurrent - 1) % n + n) % n;
     revealMatch(m_findCurrent);
-    update();
+    repaint();
     Q_EMIT findChanged();
 }
 
@@ -1534,7 +1663,7 @@ void TerminalView::findNewer()
         return;
     m_findCurrent = (m_findCurrent + 1) % int(m_matches.size());
     revealMatch(m_findCurrent);
-    update();
+    repaint();
     Q_EMIT findChanged();
 }
 
@@ -1562,7 +1691,7 @@ void TerminalView::onResized()
     m_lastHistorySize = historySize();
     if (!m_findText.isEmpty())
         runFind(true);
-    update();
+    repaint();
     Q_EMIT scrollChanged();
 }
 
@@ -1574,7 +1703,7 @@ void TerminalView::onCleared()
     m_lastHistorySize = 0;
     if (!m_findText.isEmpty())
         runFind(false);
-    update();
+    repaint();
     Q_EMIT scrollChanged();
 }
 
@@ -1668,7 +1797,7 @@ void TerminalView::setSelection(TextPos anchor, TextPos end, SelectionUnit unit)
     m_selStart = std::min(anchor, end);
     m_selStop = std::max(anchor, end);
     m_hasSelection = !(m_selStart == m_selStop);
-    update();
+    repaint();
     Q_EMIT selectionChanged();
 }
 
@@ -1710,7 +1839,7 @@ void TerminalView::extendSelection(TextPos to)
     m_selStart = start;
     m_selStop = stop;
     m_hasSelection = has;
-    update();
+    repaint();
     Q_EMIT selectionChanged();
 }
 
@@ -1808,7 +1937,7 @@ void TerminalView::clearSelection()
     if (!m_hasSelection)
         return;
     m_hasSelection = false;
-    update();
+    repaint();
     Q_EMIT selectionChanged();
 }
 

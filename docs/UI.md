@@ -1385,7 +1385,9 @@ mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first butt
 the custom command, the file manager —, the custom command `codeEditorSetting`, "New threads work"
 `codeNewThreadEnvSetting` (As t3.json says / Local / New worktree), the branch prefix
 `codeBranchPrefixSetting`, "Worktrees of deleted threads" `codeDeletedWorktreesSetting` (Ask / Delete /
-Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
+Keep), the worktrees' folder `codeWorktreesSetting`, "Draw terminals with Atrament"
+`codeTerminalAtramentSetting` (`AppSettings.terminalAtrament`, experimental, where Atrament is built:
+docs/CODE-TERMINAL.md "Drawn by Atrament"); shown where agents run).
 
 * **In Code mode** the rail shows only "Code" (`sidebarNav_code`, route `code`; `ShellRail.shows()`), the
   page panel is `CodeSidebar` (AppShell's loaders choose it by the mode, wide and in the drawer) and the

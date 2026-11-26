@@ -2845,6 +2845,16 @@ Item {
                         onEditingFinished: Workspace.projects.worktreesRoot = text
                     }
                 }
+                // Experimental: terminals drawn by Atrament, Brulion's own UI framework
+                // (docs/CODE-TERMINAL.md "Drawn by Atrament", docs/ATRAMENT.md M3).
+                SettingSwitch {
+                    objectName: "codeTerminalAtramentSetting"
+                    visible: TerminalRegistry.atramentAvailable
+                    text: qsTr("Draw terminals with Atrament")
+                    description: qsTr("Experimental: Brulion's own renderer draws the terminal on the graphics card instead of Qt. Keys, the mouse and selection work as before.")
+                    checked: AppSettings.terminalAtrament
+                    onToggled: AppSettings.terminalAtrament = checked
+                }
             }
 
             // Scheduled conversations (shell/chatschedules.h): kept on this device per notebook.

@@ -1804,7 +1804,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3370"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3380"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1812,7 +1812,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3235"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3245"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1852,7 +1852,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3059"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3069"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1860,7 +1860,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3237"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3247"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>

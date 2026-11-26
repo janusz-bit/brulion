@@ -50,6 +50,8 @@ class TerminalRegistry : public QObject {
     Q_PROPERTY(int sessionCount READ sessionCount NOTIFY threadsChanged FINAL)
     /// Whether this device can run a terminal (platform::Pty::available()).
     Q_PROPERTY(bool available READ available CONSTANT FINAL)
+    /// Whether terminals can be drawn by Atrament here (TerminalView::atramentAvailable()).
+    Q_PROPERTY(bool atramentAvailable READ atramentAvailable CONSTANT FINAL)
 
 public:
     /// Threads whose terminals are kept while not shown, at most (idle ones beyond end).
@@ -67,6 +69,7 @@ public:
     QStringList busyKeys() const { return m_busy; }
     int sessionCount() const;
     static bool available();
+    static bool atramentAvailable();
 
     /// The terminals of `key` — made (without terminals) when there are none yet; `folder` where
     /// its new terminals start ("" leaves it as it is). Null for an empty key.

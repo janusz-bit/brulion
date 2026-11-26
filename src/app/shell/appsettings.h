@@ -218,6 +218,10 @@ class AppSettings : public QObject {
     /// copy, the file and the export have none).
     Q_PROPERTY(bool codeLineNumbers READ codeLineNumbers WRITE setCodeLineNumbers NOTIFY codeLineNumbersChanged
                        FINAL)
+    /// Code mode's terminals drawn by Atrament (docs/CODE-TERMINAL.md "Drawn by Atrament"; default
+    /// off; where Atrament is built: TerminalRegistry.atramentAvailable). This device's.
+    Q_PROPERTY(
+            bool terminalAtrament READ terminalAtrament WRITE setTerminalAtrament NOTIFY terminalAtramentChanged FINAL)
     /// Task status history (docs/SYNTAX.md §5 "Time tracking and status history"; default off):
     /// a status change adds a `State "DONE" from "TODO" [time]` line to the task's `:LOGBOOK:`, and
     /// "In progress" starts its clock (leaving it stops the clock), as Logseq does. Pushed into the
@@ -528,6 +532,8 @@ public:
     void setLightPictureBacking(bool on);
     bool codeLineNumbers() const;
     void setCodeLineNumbers(bool on);
+    bool terminalAtrament() const;
+    void setTerminalAtrament(bool on);
     QString exportWebPictures() const;
     void setExportWebPictures(const QString &mode);
     bool spellCheck() const;
@@ -749,6 +755,7 @@ Q_SIGNALS:
     void pictureFramesChanged();
     void lightPictureBackingChanged();
     void codeLineNumbersChanged();
+    void terminalAtramentChanged();
     void exportWebPicturesChanged();
     void spellCheckChanged();
     void taskStatusHistoryChanged();
