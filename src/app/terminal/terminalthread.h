@@ -98,6 +98,16 @@ public:
     /// The focus `delta` terminals on, through the panes of the shown tab, then the next tab's
     /// (wrapping around).
     Q_INVOKABLE void focusNext(int delta);
+    /// A terminal of a tab brought back after a restart (TerminalRegistry's layouts).
+    struct Restored {
+        QString folder;
+        QString label;
+        QString command;
+    };
+    /// A tab at the end with these terminals (shells in their folders — a missing one: the
+    /// thread's —, a command typed into its shell, not run), side by side or stacked, `focus`
+    /// focused. False when none could be made.
+    bool restoreTab(const QList<Restored> &terminals, Qt::Orientation orientation, int focus);
     /// Ends the terminals in which no program runs (busy ones stay); how many ended.
     int closeIdle();
     /// Ends all of them now.

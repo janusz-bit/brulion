@@ -3,8 +3,13 @@
 #include "terminalqml.h"
 
 #include "appcontroller.h"
+#include "appsettings.h"
 #include "workspace.h"
 #include "workspacechats.h"
+
+#include <QPointer>
+
+using namespace Qt::StringLiterals;
 
 namespace brulion::terminal {
 
@@ -23,6 +28,14 @@ TerminalRegistry *registryForQml()
     QObject::connect(workspace, &shell::Workspace::pathRemoved, registry, &TerminalRegistry::pathRemoved);
     if (shell::WorkspaceChats *chats = workspace->chats())
         QObject::connect(chats, &shell::WorkspaceChats::archivedChanged, registry, &TerminalRegistry::archived);
+    // Each thread's layout (tabs, splits, folders, commands) over a restart: this device's.
+    const QPointer<shell::AppSettings> settings = app->settings();
+    registry->setLayoutStorage(
+            [settings] { return settings ? settings->value(u"code/terminalLayouts"_s).toString().toUtf8() : QByteArray(); },
+            [settings](const QByteArray &json) {
+                if (settings)
+                    settings->setValue(u"code/terminalLayouts"_s, QString::fromUtf8(json));
+            });
     return registry;
 }
 

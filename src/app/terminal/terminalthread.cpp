@@ -4,6 +4,8 @@
 #include "terminalregistry.h"
 #include "terminalsession.h"
 
+#include <QFileInfo>
+
 #include <algorithm>
 
 namespace brulion::terminal {
@@ -211,6 +213,40 @@ TerminalSession *TerminalThread::split(Qt::Orientation orientation)
     updateBusy();
     Q_EMIT sessionsChanged();
     return session;
+}
+
+bool TerminalThread::restoreTab(const QList<Restored> &terminals, Qt::Orientation orientation, int focus)
+{
+    auto *group = new TerminalGroup(this);
+    QList<std::pair<TerminalSession *, QString>> started;
+    for (const Restored &r : terminals) {
+        if (group->count() >= TerminalGroup::MaxSessions)
+            break;
+        const QString folder = !r.folder.isEmpty() && QFileInfo(r.folder).isDir() ? r.folder : m_folder;
+        // (A command's tab: its shell, the command typed and waiting for Enter — never run by itself.)
+        TerminalSession *session = makeSession(folder, QString(), r.label.isEmpty() ? r.command : r.label);
+        if (!session)
+            break;
+        group->insert(group->count(), session);
+        started.append({session, r.command});
+    }
+    if (group->count() == 0) {
+        delete group;
+        return false;
+    }
+    group->setOrientation(orientation);
+    group->setFocusIndex(focus);
+    insertGroup(count(), group);
+    if (m_current < 0)
+        setCurrentIndex(0);
+    for (const auto &[session, command] : std::as_const(started)) {
+        if (!command.isEmpty())
+            session->typeWhenReady(command);
+        session->start();
+    }
+    updateBusy();
+    Q_EMIT sessionsChanged();
+    return true;
 }
 
 void TerminalThread::endSession(TerminalSession *session)

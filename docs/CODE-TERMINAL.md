@@ -205,7 +205,9 @@ properties' changes. C++: `terminal()`, `writeBytes()`, `commandLine()`, `setSho
   becomes busy only after input or with output, so nothing polls then.
 * `activity` / `bellRung`: output came, or the program rang the bell, while no view showed the
   session (`setShown()`: TerminalView counts itself while it is visible in a window; two views
-  may show one for a moment). Both go when a view shows it again; output while shown sets none.
+  may show one for a moment). Both go when a view shows it again; output while shown sets none, nor
+  what the program prints in its first half second (a shell's first prompt: a tab opened or brought
+  back without being shown).
 
 The program: `command` empty → the user's shell (`$SHELL` when it is an executable file, else the
 account's login shell, else `/bin/sh`) as an interactive, non-login shell with no arguments;
@@ -237,6 +239,16 @@ again; the registry is not.
   automatic archiving of untouched threads) — `closeIdle()`, as T3 Code's settling closes a thread's
   idle terminals; the app quitting (`aboutToQuit`) — `hangUpAll()`: SIGHUP to every program at once,
   and the application's end deletes the registry (its child), which reaps them; the waits overlap.
+* **Layouts over a restart**: what each thread had — its tabs, their splits and focus, every
+  terminal's folder (where its shell is now), label and command; not the programs — is written to
+  this device's settings (`code/terminalLayouts`, through `setLayoutStorage()` in the wiring) 2 s
+  after a change and when the app quits (`layouts()`: the most recently shown threads first, within
+  the limits; read back with `setLayouts()`, anything malformed skipped). After a restart a thread's
+  layout comes back the first time its terminals are asked for (the panel shows it): shells in
+  those folders (a missing one: the thread's), a command's tab its shell with the command typed —
+  after the shell's first output, so its line editor has it — and not run: Enter runs it again.
+  Layouts not asked for yet are kept (after the live ones), follow a renamed thread and go with a
+  deleted or archived one.
 * **Limits**: `MaxThreads` = 10 threads with terminals, `MaxSessions` = 40 terminals in all. When a
   thread is shown beyond the first, the least recently shown other threads' idle terminals end;
   when a new terminal would be the 41st, idle ones of the least recently shown other threads end,
@@ -455,8 +467,8 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
 
 * Windows: a ConPTY backend (`pty_conpty.cpp`) behind `platform::Pty` — with `hasForegroundJob()`
   and `currentDirectory()` (false / "" are valid answers).
-* A thread's terminal layout (tabs, splits, folders, commands — not the processes) restored after a
-  restart; resizable splits (they share the tab equally).
+* Resizable splits (they share the tab equally); a split's own direction inside another (a tab is
+  all side by side or all stacked).
 * The sidebar's "a program runs in its terminal" mark (`TerminalRegistry.busyKeys` /
   `busyChanged(key, busy)` are there for it).
 * Grapheme clustering of emoji ZWJ sequences, flags and skin tones (widths follow wcwidth()).
@@ -484,7 +496,9 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
   sizes, titles, OSC 7, stop and restart, exit codes, busy with a job and with its command, marks
   while not shown, the current directory), tabs and splits (four at most, the direction, focus
   through every terminal, closing), the registry (keys, rekeying, renames, archiving leaving the
-  busy terminal, deletion, quitting, the limits — never ending a running program), TerminalView in a
+  busy terminal, deletion, quitting, the limits — never ending a running program —, layouts written,
+  brought back after a restart with a command typed and not run, renamed, deleted, malformed),
+  TerminalView in a
   window (keys, Ctrl+C, copy, the terminal's Ctrl+Shift chords, the app's shortcuts left alone, the
   input method, selection by drag / double / triple click, wrapped lines, the scrollback with keys
   and wheel, mouse reporting, links under Ctrl and Ctrl+click, the find bar's matches through new

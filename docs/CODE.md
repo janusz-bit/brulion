@@ -110,7 +110,8 @@ The Terminal panel (`TerminalPanel`, `TerminalSession`, `TerminalView`, `Termina
 `src/app/terminal`; core `src/core/term`; `src/platform/pty.h`) is described in
 **docs/CODE-TERMINAL.md**: each thread's terminals, kept — running, with their scrollback — while
 another thread is shown (`TerminalRegistry`, keyed by the thread's page; a new thread's by its folder
-until its first message), ended when the thread is deleted, their idle ones when it is archived;
+until its first message), ended when the thread is deleted, their idle ones when it is archived,
+their layout (tabs, splits, folders, commands typed, not run) back after a restart;
 tabs of up to four terminals side by side or stacked, the project's scripts in new tabs; a find bar
 over the scrollback, a context menu with Add to chat (the selection or the screen into the
 thread's field), URLs and file paths (`path:line:column`) opened with Ctrl+click, marks on tabs
@@ -124,8 +125,7 @@ not yet).
 * Windows: the terminal (ConPTY); everything else of Code mode is untried there.
 * Staging or discarding single files or hunks, stash, merge conflicts, pull requests from forks or to
   another base in the UI (docs/CODE-GIT.md).
-* The sidebar's mark of a thread whose terminal runs a program (`TerminalRegistry.busyKeys`), a
-  thread's terminal layout restored after a restart.
+* The sidebar's mark of a thread whose terminal runs a program (`TerminalRegistry.busyKeys`).
 * Threads on the phone: a thread's agent runs on this computer only (an agent on another computer
   answers the notebook's conversations, docs/UI.md "AI agents (ACP)").
 * Tried with the protocol's fake agent and real git, not yet with a real Claude Code and Codex in a

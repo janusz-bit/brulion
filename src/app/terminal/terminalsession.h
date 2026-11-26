@@ -17,11 +17,13 @@
 // `vim`; Pty::hasForegroundJob()), or the session's own command. Looked at a moment after output
 // and input, and every two seconds while one runs. `activity` / `bellRung`: output came, or
 // the program rang the bell, while no view showed the session (TerminalView says when it does:
-// setShown()); both go when one shows it again.
+// setShown()); both go when one shows it again. What a program prints in its first half second
+// (a shell's prompt: a tab opened or brought back without being shown) is no activity.
 #pragma once
 
 #include "term/terminal.h"
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -111,6 +113,9 @@ public:
     /// Whether a program runs, looked at now (busy follows).
     Q_INVOKABLE void checkBusy();
 
+    /// `text` typed into the program once it printed something (its prompt: the line editor reads
+    /// it then, its echo after the prompt) — a restored tab's command, waiting for Enter.
+    void typeWhenReady(const QString &text);
     /// Raw input bytes (keys already encoded by term::encodeKey()).
     void writeBytes(const QByteArray &bytes);
     term::Terminal &terminal() { return m_terminal; }
@@ -165,6 +170,8 @@ private:
     bool m_activity = false;
     bool m_bellRung = false;
     int m_shownBy = 0;
+    QElapsedTimer m_startedAt;
+    QString m_typeWhenReady;
     QTimer m_busySoon; // a moment after output or input
     QTimer m_busyPoll; // while a program runs
 };

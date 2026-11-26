@@ -4,8 +4,12 @@
 #include "terminalthread.h"
 
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
 
 #include <algorithm>
+
+using namespace Qt::StringLiterals;
 
 namespace brulion::terminal {
 
@@ -13,6 +17,9 @@ namespace {
 
 /// Threads without terminals remembered (their "closed by the user"), at most.
 constexpr int MaxEmptyThreads = 2 * TerminalRegistry::MaxThreads;
+
+/// Layouts are written this long after a change (and when the app quits).
+constexpr int SaveDelay = 2000;
 
 QPointer<TerminalRegistry> &theInstance()
 {
@@ -22,7 +29,13 @@ QPointer<TerminalRegistry> &theInstance()
 
 } // namespace
 
-TerminalRegistry::TerminalRegistry(QObject *parent) : QObject(parent) { }
+TerminalRegistry::TerminalRegistry(QObject *parent) : QObject(parent)
+{
+    m_saveTimer.setSingleShot(true);
+    m_saveTimer.setInterval(SaveDelay);
+    connect(&m_saveTimer, &QTimer::timeout, this, &TerminalRegistry::saveLayouts);
+    connect(this, &TerminalRegistry::threadsChanged, this, &TerminalRegistry::layoutChanged);
+}
 
 TerminalRegistry::~TerminalRegistry()
 {
@@ -37,11 +50,15 @@ TerminalRegistry *TerminalRegistry::instance()
     QPointer<TerminalRegistry> &registry = theInstance();
     if (!registry) {
         registry = new TerminalRegistry(QCoreApplication::instance());
-        // Quitting hangs up on every program at once, before the window goes; the application's
-        // end deletes the registry with its threads, which reaps them.
-        if (QCoreApplication::instance())
-            connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, registry.data(),
-                    &TerminalRegistry::hangUpAll);
+        // Quitting keeps the layouts and hangs up on every program at once, before the window goes;
+        // the application's end deletes the registry with its threads, which reaps them.
+        if (QCoreApplication::instance()) {
+            TerminalRegistry *r = registry.data();
+            connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, r, [r] {
+                r->saveLayouts();
+                r->hangUpAll();
+            });
+        }
     }
     return registry;
 }
@@ -79,8 +96,17 @@ TerminalThread *TerminalRegistry::thread(const QString &key, const QString &fold
         thread = new TerminalThread(key, this);
         connect(thread, &TerminalThread::busyChanged, this, [this, thread] { updateBusy(thread); });
         connect(thread, &TerminalThread::sessionsChanged, this, &TerminalRegistry::threadsChanged);
+        connect(thread, &TerminalThread::currentChanged, this, &TerminalRegistry::layoutChanged);
         m_threads.insert(key, thread);
         m_order.prepend(key);
+        if (!folder.isEmpty())
+            thread->setFolder(folder);
+        // What it had before the app was restarted.
+        if (m_saved.contains(key)) {
+            const QJsonObject layout = m_saved.take(key);
+            m_savedOrder.removeAll(key);
+            restore(thread, layout);
+        }
         Q_EMIT threadsChanged();
     }
     if (!folder.isEmpty())
@@ -281,17 +307,167 @@ void TerminalRegistry::pathRenamed(const QString &oldPath, const QString &newPat
 {
     if (m_threads.contains(oldPath))
         rekey(oldPath, newPath);
+    if (m_saved.contains(oldPath) && !m_saved.contains(newPath)) {
+        QJsonObject layout = m_saved.take(oldPath);
+        layout.insert(u"key"_s, newPath);
+        m_saved.insert(newPath, layout);
+        const qsizetype at = m_savedOrder.indexOf(oldPath);
+        if (at >= 0)
+            m_savedOrder[at] = newPath;
+        layoutChanged();
+    }
 }
 
 void TerminalRegistry::pathRemoved(const QString &path)
 {
     close(path);
+    if (m_saved.remove(path) > 0) {
+        m_savedOrder.removeAll(path);
+        layoutChanged();
+    }
 }
 
 void TerminalRegistry::archived(const QString &path, bool on)
 {
-    if (on)
-        closeIdle(path);
+    if (!on)
+        return;
+    closeIdle(path);
+    if (m_saved.remove(path) > 0) {
+        m_savedOrder.removeAll(path);
+        layoutChanged();
+    }
+}
+
+// ---- Layouts kept over a restart --------------------------------------------------------------
+
+void TerminalRegistry::setLayoutStorage(std::function<QByteArray()> load,
+                                        std::function<void(const QByteArray &)> save)
+{
+    m_save = std::move(save);
+    if (load)
+        setLayouts(QJsonDocument::fromJson(load()).object());
+}
+
+void TerminalRegistry::layoutChanged()
+{
+    if (m_save)
+        m_saveTimer.start();
+}
+
+void TerminalRegistry::saveLayouts()
+{
+    m_saveTimer.stop();
+    if (m_save)
+        m_save(QJsonDocument(layouts()).toJson(QJsonDocument::Compact));
+}
+
+QJsonObject TerminalRegistry::layouts() const
+{
+    QJsonArray threads;
+    int sessions = 0;
+    for (const QString &key : m_order) {
+        const TerminalThread *thread = m_threads.value(key);
+        if (!thread || thread->sessionCount() == 0)
+            continue;
+        if (threads.size() >= m_maxThreads)
+            break;
+        QJsonArray tabs;
+        for (int g = 0; g < thread->count(); ++g) {
+            const TerminalGroup *group = thread->group(g);
+            QJsonArray terminals;
+            for (const TerminalSession *session : group->sessions()) {
+                if (sessions >= m_maxSessions)
+                    break;
+                terminals.append(QJsonObject{
+                        {u"folder"_s, session->isRunning() ? session->currentDirectory() : session->folder()},
+                        {u"label"_s, session->label()},
+                        {u"command"_s, session->command()}});
+                ++sessions;
+            }
+            if (terminals.isEmpty())
+                continue;
+            tabs.append(QJsonObject{{u"split"_s, group->orientation() == Qt::Vertical ? u"down"_s : u"right"_s},
+                                    {u"focus"_s, group->focusIndex()},
+                                    {u"terminals"_s, terminals}});
+        }
+        if (!tabs.isEmpty())
+            threads.append(QJsonObject{{u"key"_s, key}, {u"current"_s, thread->currentIndex()}, {u"tabs"_s, tabs}});
+    }
+    // Those from before whose threads were not shown since: kept, after them.
+    for (const QString &key : m_savedOrder) {
+        if (threads.size() >= m_maxThreads)
+            break;
+        const TerminalThread *live = m_threads.value(key);
+        if (live && live->sessionCount() > 0)
+            continue;
+        const QJsonObject layout = m_saved.value(key);
+        int count = 0;
+        for (const QJsonValue &tab : layout.value(u"tabs"_s).toArray())
+            count += int(tab.toObject().value(u"terminals"_s).toArray().size());
+        if (sessions + count > m_maxSessions)
+            continue;
+        sessions += count;
+        threads.append(layout);
+    }
+    return QJsonObject{{u"threads"_s, threads}};
+}
+
+void TerminalRegistry::setLayouts(const QJsonObject &layouts)
+{
+    m_saved.clear();
+    m_savedOrder.clear();
+    int sessions = 0;
+    for (const QJsonValue &value : layouts.value(u"threads"_s).toArray()) {
+        const QJsonObject thread = value.toObject();
+        const QString key = thread.value(u"key"_s).toString();
+        if (key.isEmpty() || m_saved.contains(key) || m_savedOrder.size() >= m_maxThreads)
+            continue;
+        // Only what a layout is made of, checked: the settings come from anywhere.
+        QJsonArray tabs;
+        for (const QJsonValue &tabValue : thread.value(u"tabs"_s).toArray()) {
+            const QJsonObject tab = tabValue.toObject();
+            QJsonArray terminals;
+            for (const QJsonValue &t : tab.value(u"terminals"_s).toArray()) {
+                const QJsonObject terminal = t.toObject();
+                if (!t.isObject() || terminals.size() >= TerminalGroup::MaxSessions || sessions >= m_maxSessions)
+                    continue;
+                terminals.append(QJsonObject{{u"folder"_s, terminal.value(u"folder"_s).toString()},
+                                             {u"label"_s, terminal.value(u"label"_s).toString().left(200)},
+                                             {u"command"_s, terminal.value(u"command"_s).toString()}});
+                ++sessions;
+            }
+            if (terminals.isEmpty())
+                continue;
+            tabs.append(QJsonObject{
+                    {u"split"_s, tab.value(u"split"_s).toString() == u"down" ? u"down"_s : u"right"_s},
+                    {u"focus"_s, std::clamp(tab.value(u"focus"_s).toInt(), 0, int(terminals.size()) - 1)},
+                    {u"terminals"_s, terminals}});
+        }
+        if (tabs.isEmpty())
+            continue;
+        m_saved.insert(key, QJsonObject{{u"key"_s, key},
+                                        {u"current"_s, std::clamp(thread.value(u"current"_s).toInt(), 0,
+                                                                  int(tabs.size()) - 1)},
+                                        {u"tabs"_s, tabs}});
+        m_savedOrder.append(key);
+    }
+}
+
+void TerminalRegistry::restore(TerminalThread *thread, const QJsonObject &layout)
+{
+    for (const QJsonValue &tabValue : layout.value(u"tabs"_s).toArray()) {
+        const QJsonObject tab = tabValue.toObject();
+        QList<TerminalThread::Restored> terminals;
+        for (const QJsonValue &t : tab.value(u"terminals"_s).toArray()) {
+            const QJsonObject terminal = t.toObject();
+            terminals.append({terminal.value(u"folder"_s).toString(), terminal.value(u"label"_s).toString(),
+                              terminal.value(u"command"_s).toString()});
+        }
+        if (!thread->restoreTab(terminals, tab.value(u"split"_s).toString() == u"down" ? Qt::Vertical : Qt::Horizontal,
+                                tab.value(u"focus"_s).toInt()))
+            break; // (no room: the rest neither)
+    }
+    thread->setCurrentIndex(layout.value(u"current"_s).toInt());
 }
 
 } // namespace brulion::terminal

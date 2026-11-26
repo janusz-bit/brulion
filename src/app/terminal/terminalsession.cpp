@@ -31,6 +31,8 @@ constexpr int MaxTitleLength = 80;
 constexpr int BusyCheckDelay = 120;
 /// … and this often while one runs (a job that prints nothing would end unseen otherwise).
 constexpr int BusyPollInterval = 2000;
+/// Output this soon after the start is no activity (a shell's first prompt).
+constexpr int QuietStart = 500;
 
 } // namespace
 
@@ -215,6 +217,7 @@ bool TerminalSession::start()
     m_running = true;
     m_exited = false;
     m_exitCode = -1;
+    m_startedAt.start();
     Q_EMIT runningChanged();
     Q_EMIT titleChanged();
     Q_EMIT started();
@@ -259,10 +262,20 @@ void TerminalSession::resize(int columns, int rows)
     Q_EMIT contentChanged();
 }
 
+void TerminalSession::typeWhenReady(const QString &text)
+{
+    m_typeWhenReady = text;
+}
+
 void TerminalSession::onData(const QByteArray &data)
 {
     m_terminal.feed(data);
-    if (m_shownBy == 0 && !m_activity)
+    if (!m_typeWhenReady.isEmpty()) {
+        // (Its line editor set the terminal up before it printed the prompt: the text is its.)
+        writeBytes(term::encodeText(m_typeWhenReady));
+        m_typeWhenReady.clear();
+    }
+    if (m_shownBy == 0 && !m_activity && (!m_startedAt.isValid() || m_startedAt.elapsed() >= QuietStart))
         setMarks(true, m_bellRung);
     checkBusySoon();
     Q_EMIT contentChanged();

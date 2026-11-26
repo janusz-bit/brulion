@@ -24,6 +24,9 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QInputMethodEvent>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPainter>
 #include <QPointer>
 #include <QQuickWindow>
@@ -133,6 +136,7 @@ private Q_SLOTS:
     void tabsAndSplits();
     void registryKeys();
     void registryLimits();
+    void registryLayouts();
     void viewKeys();
     void viewTerminalKeys();
     void viewLinks();
@@ -361,6 +365,11 @@ void TestTerminal::marksWhileNotShown()
     session.setCommand(u"cat"_s);
     QSignalSpy marks(&session, &TerminalSession::marksChanged);
     QVERIFY(session.start());
+    // What it prints in its first half second (a shell's prompt) is no activity.
+    session.write(u"start\r"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(screenText(session).count(u"start"_s), 2, Timeout);
+    QVERIFY(!session.hasActivity() || BRULION_TEST_SLOWDOWN > 1);
+    QTest::qWait(600);
     // Output while no view shows it: activity; a bell: rung.
     session.write(u"zażółć\r"_s);
     QTRY_VERIFY_WITH_TIMEOUT(session.hasActivity(), Timeout);
@@ -627,6 +636,87 @@ void TestTerminal::registryLimits()
     QCOMPARE(next->openTab(QString(), QString()), nullptr);
     QVERIFY(!next->error().isEmpty());
     QCOMPARE(busy.sessionCount(), 2);
+}
+
+void TestTerminal::registryLayouts()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    QTemporaryDir dir;
+    QVERIFY(QDir(dir.path()).mkpath(u"zażółć"_s));
+    const QString inner = dir.path() + u"/zażółć"_s;
+    QByteArray stored;
+    int saves = 0;
+    {
+        TerminalRegistry before;
+        before.setLayoutStorage([] { return QByteArray(); },
+                                [&stored, &saves](const QByteArray &json) {
+                                    stored = json;
+                                    ++saves;
+                                });
+        TerminalThread *thread = before.thread(u"AI/Wątek.md"_s, dir.path());
+        before.shown(u"AI/Wątek.md"_s);
+        QVERIFY(thread->openTab(QString(), QString()));
+        QVERIFY(thread->split(Qt::Vertical));
+        QVERIFY(thread->openTab(u"echo gotowe-$((40+2)); sleep 100"_s, u"Serwer"_s));
+        thread->setCurrentIndex(0);
+        // A moment after the change, written.
+        QTRY_VERIFY_WITH_TIMEOUT(saves > 0, Timeout);
+        thread->setFolder(inner);
+        TerminalThread *other = before.thread(u"AI/Inny.md"_s, inner);
+        QVERIFY(other->openTab(QString(), QString()));
+        before.shown(u"AI/Wątek.md"_s);
+        before.saveLayouts();
+        const QJsonObject layouts = QJsonDocument::fromJson(stored).object();
+        const QJsonArray threads = layouts.value(u"threads"_s).toArray();
+        QCOMPARE(threads.size(), 2);
+        // The most recently shown first.
+        QCOMPARE(threads.at(0).toObject().value(u"key"_s).toString(), u"AI/Wątek.md"_s);
+        const QJsonArray tabs = threads.at(0).toObject().value(u"tabs"_s).toArray();
+        QCOMPARE(tabs.size(), 2);
+        QCOMPARE(tabs.at(0).toObject().value(u"split"_s).toString(), u"down"_s);
+        QCOMPARE(tabs.at(0).toObject().value(u"terminals"_s).toArray().size(), 2);
+        QCOMPARE(tabs.at(1).toObject().value(u"terminals"_s).toArray().at(0).toObject().value(u"label"_s).toString(),
+                 u"Serwer"_s);
+    }
+    // After a restart: the thread's tabs and splits come back when its terminals are asked for.
+    TerminalRegistry after;
+    after.setLayoutStorage([&stored] { return stored; }, {});
+    QCOMPARE(after.savedCount(), 2);
+    QCOMPARE(after.sessionCount(), 0); // nothing runs before it is asked for
+    TerminalThread *thread = after.thread(u"AI/Wątek.md"_s, dir.path());
+    QCOMPARE(after.savedCount(), 1);
+    QCOMPARE(thread->count(), 2);
+    QCOMPARE(thread->currentIndex(), 0);
+    QCOMPARE(thread->group(0)->count(), 2);
+    QCOMPARE(thread->group(0)->orientation(), Qt::Vertical);
+    TerminalSession *server = thread->group(1)->at(0);
+    QCOMPARE(server->label(), u"Serwer"_s);
+    // The command typed into its shell, not run: Enter runs it again.
+    QVERIFY(server->command().isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(screenText(*server).contains(u"echo gotowe-$((40+2)); sleep 100"_s), Timeout);
+    QVERIFY(!screenText(*server).contains(u"gotowe-42"_s));
+    QVERIFY(!server->isBusy());
+    server->write(u""_s);
+    // Kept while not asked for: the other one is still in the layouts.
+    const QJsonArray threads = after.layouts().value(u"threads"_s).toArray();
+    QCOMPARE(threads.size(), 2);
+    QCOMPARE(threads.at(1).toObject().value(u"key"_s).toString(), u"AI/Inny.md"_s);
+    // Renamed and deleted threads: their layouts follow, and go.
+    after.pathRenamed(u"AI/Inny.md"_s, u"AI/Nowa nazwa.md"_s);
+    QCOMPARE(after.layouts().value(u"threads"_s).toArray().at(1).toObject().value(u"key"_s).toString(),
+             u"AI/Nowa nazwa.md"_s);
+    after.pathRemoved(u"AI/Nowa nazwa.md"_s);
+    QCOMPARE(after.savedCount(), 0);
+    // Malformed settings: skipped, nothing breaks.
+    TerminalRegistry broken;
+    broken.setLayouts(QJsonDocument::fromJson(
+                              R"({"threads": [1, {"key": ""}, {"key": "a", "tabs": "x"}, {"key": "b", "tabs": [{"terminals": [{"folder": 5}]}]}]})")
+                              .object());
+    QCOMPARE(broken.savedCount(), 1);
+    QVERIFY(broken.thread(u"b"_s, QDir::tempPath())->count() == 1);
+    broken.setLayouts(QJsonObject());
+    QCOMPARE(broken.savedCount(), 0);
 }
 
 void TestTerminal::viewTerminalKeys()
