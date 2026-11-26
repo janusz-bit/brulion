@@ -25,6 +25,9 @@
 // `folder` is a work tree's top-level folder (repository() finds it from any folder inside). The
 // paths of the results are relative to it, '/'-separated, as git writes them.
 //
+// Cloning (clone.cpp): clone() — `git clone --progress` with its stages as they come, stoppable by
+// its tag (stop()) — and repositoryList(), `gh repo list` of the user signed in to gh.
+//
 // Beyond those: history and comparisons (log(), changesBetween(), mergeBase(), defaultBranch()),
 // remotes and gh (pullRequestTarget() for forks, pullRequestFor(), publish(), initRepository()),
 // single files and hunks (stage(), unstage(), discard(), resolve(), applyHunk()), commits of chosen
@@ -84,6 +87,10 @@ struct RunOptions {
     int timeoutMs = 0;
     /// Standard output kept at most (the run is stopped beyond it, `outputCut`); 0: 256 MiB.
     qsizetype maxOutput = 0;
+    /// Each piece of standard error as it comes (git's progress: `clone --progress`).
+    std::function<void(const QByteArray &chunk)> onError;
+    /// A name for the run: stop(tag) ends it ("" none).
+    QString tag;
 };
 
 /// The result of an action (commit, push, a branch, a checkpoint …).
@@ -305,8 +312,13 @@ public:
     void setNetworkTimeoutMs(int ms) { m_networkTimeoutMs = ms; }
     int networkTimeoutMs() const { return m_networkTimeoutMs; }
     void setCommitTimeoutMs(int ms) { m_commitTimeoutMs = ms; }
+    /// A clone's (default an hour: a large repository over a slow line).
+    void setCloneTimeoutMs(int ms) { m_cloneTimeoutMs = ms; }
+    int cloneTimeoutMs() const { return m_cloneTimeoutMs; }
     /// Runs going on.
     int running() const;
+    /// Stops the runs named `tag` (RunOptions::tag): each ends as failed, "Stopped". False none ran.
+    bool stop(const QString &tag);
 
     using Done = std::function<void(const RunResult &result)>;
     /// `git -C <folder> <arguments>`.
@@ -410,6 +422,21 @@ public:
     /// GitHub repository for a folder without a remote, pushed (Outcome::url its address).
     void publish(const QString &folder, const QString &name, bool isPublic, std::function<void(const Outcome &)> done);
 
+    // ---- Cloning (clone.cpp) -----------------------------------------------------------------------------
+
+    /// `git clone --progress -- <url> <destination>` (its parent folder made first; `destination`
+    /// must be missing or an empty folder): `progress` as git says it (parseCloneProgress()), then
+    /// `done` (Outcome::value the destination). `tag` names the run for stop() ("" none). A clone
+    /// that failed or was stopped leaves no folder it made behind. Never a submodule, never a hook
+    /// of the repository (a clone has none); ssh asks only through an askpass program
+    /// (SSH_ASKPASS_REQUIRE=force), never on a terminal.
+    void clone(const QString &url, const QString &destination, const QString &tag,
+               std::function<void(const CloneProgress &)> progress, std::function<void(const Outcome &)> done);
+    /// `gh repo list --limit <limit> --json <repositoryListFields()>`: the signed-in user's
+    /// repositories, the most recently pushed first (`error` "" fine: gh missing, signed out …).
+    void repositoryList(int limit,
+                        std::function<void(const QList<HostedRepository> &repositories, const QString &error)> done);
+
     // ---- Files, hunks, commits (client_files.cpp) --------------------------------------------------------
 
     /// `git add` of the paths (a deleted file's deletion too).
@@ -481,6 +508,7 @@ private:
     int m_localTimeoutMs = 60000;
     int m_networkTimeoutMs = 180000;
     int m_commitTimeoutMs = 300000;
+    int m_cloneTimeoutMs = 3600000;
     QList<std::shared_ptr<Run>> m_runs;
 };
 

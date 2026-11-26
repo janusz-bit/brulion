@@ -1,11 +1,15 @@
 # git for the "Code" mode (brulion_core_gitcli). tst_gitcli: the parsers without git — status
 # --porcelain=v2 (branch headers, every kind of entry, paths with spaces, newlines and Polish
 # letters), diff --numstat / --raw, worktree list, branch --format, gh's pull request URL, the
-# rules for names, ids and paths; garbage and truncated records. tst_gitcli_repo: Client with real
+# rules for names, ids and paths; what is typed to clone (addresses, pages, refused options and
+# transports), ssh ↔ https, git's clone progress, `gh repo list`'s JSON; garbage and truncated
+# records. tst_gitcli_repo: Client with real
 # git in temporary repositories (skipped without git on PATH; package.nix's nativeCheckInputs has
 # it): status, a file's texts, commit, push / pull with a bare remote, branches, worktrees, pull
 # requests through a fake gh (fake_gh.cpp), checkpoints (the index, HEAD and stash untouched; restore of
-# modified, added, deleted, renamed files, folders, modes, links; ignored files left), time limits.
+# modified, added, deleted, renamed files, folders, modes, links; ignored files left), clones (from
+# this computer, into an empty folder, refused into a full one, a failure leaving nothing, stopped),
+# `gh repo list` through the fake gh, time limits.
 brulion_add_test(tst_gitcli SOURCES tst_gitcli.cpp LIBS brulion_core_gitcli)
 brulion_add_test(tst_gitcli_repo SOURCES tst_gitcli_repo.cpp LIBS brulion_core_gitcli)
 set_tests_properties(tst_gitcli_repo PROPERTIES TIMEOUT 300)

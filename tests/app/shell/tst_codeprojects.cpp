@@ -3,7 +3,9 @@
 // (editors found on a PATH of fakes, the arguments that open a file at a line), pull request
 // references, and — where git is — worktrees from a base branch, branches, a pull request checked
 // out without gh and with a fake one, a worktree checked, removed and made again, a deleted thread's
-// Undo.
+// Undo; cloning a repository — what is typed read, the picker's rows and offers, default folders,
+// a clone from this computer added as a project, a failure kept with Retry and Dismiss, a clone
+// stopped, a second try over https after ssh could not sign in.
 #include "codeprojects.h"
 #include "codescriptsmodel.h"
 
@@ -17,6 +19,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrl>
 
 using namespace Qt::StringLiterals;
 using brulion::shell::CodeProjects;
@@ -841,6 +844,194 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(pr.size(), 2, 30000);
         QVERIFY(pr.at(1).at(5).toString().contains(u"no pull requests found"_s));
         QVERIFY(!QFileInfo::exists(QDir(projects.worktreesRoot()).filePath(id + u"/pr-13"_s)));
+    }
+    // ---- cloning a repository --------------------------------------------------------------------
+
+    void cloneRows()
+    {
+        CodeProjects projects;
+        QVariantMap s = projects.cloneSource(u"janusz-bit/brulion"_s);
+        QVERIFY(s.value(u"ok"_s).toBool());
+        QCOMPARE(s.value(u"title"_s).toString(), u"janusz-bit/brulion"_s);
+        QCOMPARE(s.value(u"url"_s).toString(), u"https://github.com/janusz-bit/brulion.git"_s);
+        QCOMPARE(s.value(u"name"_s).toString(), u"brulion"_s);
+        s = projects.cloneSource(u"https://ja:tajne@gitlab.com/grupa/projekt/-/tree/main"_s);
+        QVERIFY(s.value(u"ok"_s).toBool());
+        QCOMPARE(s.value(u"url"_s).toString(), u"https://gitlab.com/grupa/projekt"_s); // (no login shown)
+        QCOMPARE(s.value(u"title"_s).toString(), u"gitlab.com/grupa/projekt"_s);
+        s = projects.cloneSource(u"janusz-bit"_s);
+        QVERIFY(!s.value(u"ok"_s).toBool());
+        QVERIFY(!s.value(u"error"_s).toString().isEmpty());
+        QVERIFY(projects.cloneSource(QString()).value(u"error"_s).toString().isEmpty());
+
+        const QVariantList repos{QVariantMap{{u"nameWithOwner"_s, u"ja/notatki"_s},
+                                             {u"description"_s, u"Zażółć"_s},
+                                             {u"isPrivate"_s, true}},
+                                 QVariantMap{{u"nameWithOwner"_s, u"ja/widelec"_s}, {u"isFork"_s, true}},
+                                 QVariantMap{{u"description"_s, u"bez nazwy"_s}}};
+        const QVariantList items = projects.repositoryItems(repos);
+        QCOMPARE(items.size(), 2);
+        const QVariantMap first = items.at(0).toMap();
+        QCOMPARE(first.value(u"title"_s).toString(), u"ja/notatki"_s);
+        QCOMPARE(first.value(u"subtitle"_s).toString(), u"private · Zażółć"_s);
+        QCOMPARE(first.value(u"icon"_s).toString(), u"lock"_s);
+        QCOMPARE(first.value(u"source"_s).toString(), u"ja/notatki"_s);
+        QCOMPARE(first.value(u"kind"_s).toString(), u"repo"_s);
+        QCOMPARE(items.at(1).toMap().value(u"subtitle"_s).toString(), u"fork"_s);
+
+        // An offer for what is typed when it is none of the listed ones.
+        QVERIFY(projects.cloneOffers(u"ja/notatki"_s, repos).isEmpty());
+        QVERIFY(projects.cloneOffers(u"JA/Notatki"_s, repos).isEmpty());
+        QVERIFY(projects.cloneOffers(u"notatki"_s, repos).isEmpty()); // (a search word)
+        QVERIFY(projects.cloneOffers(QString(), repos).isEmpty());
+        QVariantList offers = projects.cloneOffers(u"ja/inne"_s, repos);
+        QCOMPARE(offers.size(), 1);
+        QCOMPARE(offers.at(0).toMap().value(u"kind"_s).toString(), u"clone"_s);
+        QCOMPARE(offers.at(0).toMap().value(u"source"_s).toString(), u"ja/inne"_s);
+        QVERIFY(offers.at(0).toMap().value(u"title"_s).toString().contains(u"ja/inne"_s));
+        QCOMPARE(offers.at(0).toMap().value(u"subtitle"_s).toString(), u"https://github.com/ja/inne.git"_s);
+        offers = projects.cloneOffers(u"https://x:y@example.com/a/b.git"_s, repos);
+        QCOMPARE(offers.at(0).toMap().value(u"subtitle"_s).toString(), u"https://example.com/a/b.git"_s);
+        QVERIFY(projects.cloneProblem(u"notatki"_s).isEmpty());
+        QVERIFY(projects.cloneProblem(u"ja/repo"_s).isEmpty());
+        QVERIFY(!projects.cloneProblem(u"janusz-bit/"_s).isEmpty());
+        QVERIFY(!projects.cloneProblem(u"ftp://example.com/a/b"_s).isEmpty());
+    }
+
+    void cloneFolders()
+    {
+        QByteArray stored;
+        CodeProjects projects;
+        projects.setStorage([&stored] { return stored; }, [&stored](const QByteArray &b) { stored = b; });
+        QVERIFY(projects.clonesRoot().endsWith(u".brulion/projects"_s));
+        const QString root = fresh(u"klony"_s);
+        projects.setClonesRoot(root);
+        QCOMPARE(projects.clonesRoot(), QDir::cleanPath(root));
+        QCOMPARE(projects.cloneFolder(u"ja/notatki"_s, QString()), QDir::cleanPath(root + u"/notatki"_s));
+        // Taken (a folder that is not empty): the next free name; an empty folder is free.
+        QVERIFY(writeFile(root + u"/notatki/x.txt"_s, "x\n"));
+        QVERIFY(QDir().mkpath(root + u"/notatki-2"_s));
+        QCOMPARE(projects.cloneFolder(u"ja/notatki"_s, QString()), QDir::cleanPath(root + u"/notatki-2"_s));
+        // In a folder chosen (a path or a file: URL); an empty one of the repository's name is the folder itself.
+        const QString other = fresh(u"inne"_s);
+        QCOMPARE(projects.cloneFolder(u"ja/notatki"_s, other), QDir::cleanPath(other + u"/notatki"_s));
+        QCOMPARE(projects.cloneFolder(u"ja/notatki"_s, QUrl::fromLocalFile(other).toString()),
+                 QDir::cleanPath(other + u"/notatki"_s));
+        const QString named = fresh(u"wybrany"_s) + u"/notatki"_s;
+        QVERIFY(QDir().mkpath(named));
+        QCOMPARE(projects.cloneFolder(u"ja/notatki"_s, named), QDir::cleanPath(named));
+        QVERIFY(projects.cloneFolder(u"janusz-bit"_s, QString()).isEmpty());
+        QCOMPARE(projects.cleanFolder(u"~/x"_s), QDir::cleanPath(QDir::home().filePath(u"x"_s)));
+        // A device setting.
+        CodeProjects again;
+        again.setStorage([&stored] { return stored; }, [](const QByteArray &) {});
+        QCOMPARE(again.clonesRoot(), QDir::cleanPath(root));
+    }
+
+    void cloneRepository()
+    {
+        if (!m_git)
+            QSKIP("no git");
+        const QString origin = fresh(u"źródło"_s);
+        QVERIFY(QDir().mkpath(origin));
+        QCOMPARE(git(origin, {u"init"_s, u"-q"_s}), 0);
+        QVERIFY(writeFile(origin + u"/README.md"_s, "# Zażółć gęślą jaźń\n"));
+        QCOMPARE(git(origin, {u"add"_s, u"-A"_s}), 0);
+        QCOMPARE(git(origin, {u"commit"_s, u"-qm"_s, u"start"_s}), 0);
+
+        CodeProjects projects;
+        projects.setPrograms(QStandardPaths::findExecutable(u"git"_s), QString());
+        projects.setClonesRoot(fresh(u"klony"_s));
+        QSignalSpy cloned(&projects, &CodeProjects::cloned);
+        const QString folder = projects.cloneFolder(origin, QString());
+        QVERIFY(folder.endsWith(u"-źródło"_s));
+        QCOMPARE(projects.cloneRepository(origin, folder), QString());
+        QCOMPARE(projects.clones().size(), 1);
+        QCOMPARE(projects.cloneOf(folder).value(u"phase"_s).toString(), u"running"_s);
+        QVERIFY(!projects.cloneOf(folder).value(u"status"_s).toString().isEmpty());
+        QVERIFY(!projects.cloneRepository(origin, folder).isEmpty()); // (running into it already)
+        QTRY_COMPARE_WITH_TIMEOUT(cloned.size(), 1, 30000);
+        QVERIFY2(cloned.at(0).at(2).toString().isEmpty(), qPrintable(cloned.at(0).at(2).toString()));
+        QVERIFY(!cloned.at(0).at(3).toBool());
+        const QString id = cloned.at(0).at(1).toString();
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(projects.folderOf(id), folder);
+        QVERIFY(QFileInfo(folder + u"/README.md"_s).isFile());
+        QVERIFY(projects.clones().isEmpty());
+        QVERIFY(projects.cloneOf(folder).isEmpty());
+        // Refused at once: the folder is taken now, nothing to clone.
+        QVERIFY(projects.cloneRepository(origin, folder).contains(u"not an empty folder"_s));
+        QVERIFY(!projects.cloneRepository(u"janusz-bit"_s, fresh(u"x"_s)).isEmpty());
+        QVERIFY(!projects.cloneRepository(origin, QString()).isEmpty());
+
+        // A failure stays on the list with its error; Retry once the repository is there.
+        const QString missing = fresh(u"brak.git"_s);
+        const QString into = fresh(u"cel"_s);
+        QCOMPARE(projects.cloneRepository(missing, into), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(cloned.size(), 2, 30000);
+        QVERIFY(!cloned.at(1).at(2).toString().isEmpty());
+        QCOMPARE(projects.clones().size(), 1);
+        QCOMPARE(projects.cloneOf(into).value(u"phase"_s).toString(), u"failed"_s);
+        QCOMPARE(projects.cloneOf(into).value(u"status"_s).toString(), cloned.at(1).at(2).toString());
+        QVERIFY(!QFileInfo::exists(into));
+        QCOMPARE(git(m_tmp.path(), {u"clone"_s, u"-q"_s, u"--bare"_s, origin, missing}), 0);
+        QVERIFY(projects.retryClone(into));
+        QTRY_COMPARE_WITH_TIMEOUT(cloned.size(), 3, 30000);
+        QVERIFY2(cloned.at(2).at(2).toString().isEmpty(), qPrintable(cloned.at(2).at(2).toString()));
+        QCOMPARE(projects.folderOf(cloned.at(2).at(1).toString()), QDir::cleanPath(into));
+        QVERIFY(projects.clones().isEmpty());
+
+        // A failed one dismissed.
+        const QString gone = fresh(u"cel2"_s);
+        QCOMPARE(projects.cloneRepository(fresh(u"brak2"_s), gone), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(cloned.size(), 4, 30000);
+        QCOMPARE(projects.clones().size(), 1);
+        QVERIFY(!projects.retryClone(fresh(u"nic"_s)));
+        projects.dismissClone(gone);
+        QVERIFY(projects.clones().isEmpty());
+    }
+
+    void cloneStoppedAndRetriedOverHttps()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("the fake git is a shell script");
+#endif
+        // A git that never ends: the clone stopped, its row gone.
+        const QString sleeper = fresh(u"git-sleeps"_s);
+        QVERIFY(writeFile(sleeper, "#!/bin/sh\nexec sleep 30\n"));
+        QFile(sleeper).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        CodeProjects projects;
+        projects.setPrograms(sleeper, QString());
+        QSignalSpy cloned(&projects, &CodeProjects::cloned);
+        const QString into = fresh(u"przerwany"_s);
+        QCOMPARE(projects.cloneRepository(u"https://example.com/a/b.git"_s, into), QString());
+        projects.cancelClone(into);
+        QTRY_COMPARE_WITH_TIMEOUT(cloned.size(), 1, 10000);
+        QVERIFY(cloned.at(0).at(3).toBool());
+        QVERIFY(cloned.at(0).at(2).toString().isEmpty());
+        QVERIFY(projects.clones().isEmpty());
+        QVERIFY(!QFileInfo::exists(into));
+
+        // ssh cannot sign in: the same repository over https (the git notes each address).
+        const QString log = fresh(u"adresy.txt"_s);
+        const QString fakeGit = fresh(u"git-ssh-fails"_s);
+        QVERIFY(writeFile(
+                fakeGit,
+                "#!/bin/sh\nfor a do url=$dest; dest=$a; done\necho \"$url\" >> '" + log.toUtf8()
+                        + "'\ncase \"$url\" in git@*) echo 'git@github.com: Permission denied (publickey).' >&2;"
+                          " echo 'fatal: Could not read from remote repository.' >&2; exit 128;; esac\n"
+                          "mkdir -p \"$dest\" && echo x > \"$dest/README.md\"\n"));
+        QFile(fakeGit).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        projects.setPrograms(fakeGit, QString());
+        const QString target = fresh(u"repo"_s);
+        QCOMPARE(projects.cloneRepository(u"git@github.com:ja/repo.git"_s, target), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(cloned.size(), 2, 10000);
+        QVERIFY2(cloned.at(1).at(2).toString().isEmpty(), qPrintable(cloned.at(1).at(2).toString()));
+        QFile l(log);
+        QVERIFY(l.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(l.readAll()).split(u'\n', Qt::SkipEmptyParts),
+                 (QStringList{u"git@github.com:ja/repo.git"_s, u"https://github.com/ja/repo.git"_s}));
+        QCOMPARE(projects.folderOf(cloned.at(1).at(1).toString()), QDir::cleanPath(target));
     }
 };
 

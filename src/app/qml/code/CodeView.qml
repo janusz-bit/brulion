@@ -17,6 +17,7 @@ import Brulion
 //   {view: "code", new: true, project, worktree, branch, pr?}   … in that worktree (on that pull request)
 //   {view: "code", path: "AI/….md"}                  a thread
 //   {view: "code", addProject: true}                 … and the folder picker (the palette's "Add a project…")
+//   {view: "code", cloneRepository: true}            … and "Clone a repository…" (CodeCloneDialog)
 //
 // The header: the project (for a new thread a menu of them), the thread's name (editable: a double
 // click, F2), where it works — a thread: its branch (the branch picker, Ctrl+Shift+G: switch, create,
@@ -561,6 +562,8 @@ FocusScope {
         }
         if (AppController.routeFlag(root.route, "addProject"))
             folderPicker.open()
+        if (AppController.routeFlag(root.route, "cloneRepository"))
+            cloner.start()
     }
     // (After ChatView took the route too: its new thread's partner and place.)
     Later {
@@ -574,6 +577,8 @@ FocusScope {
         root.followFolder()
         if (AppController.routeFlag(root.route, "addProject"))
             folderPicker.open()
+        if (AppController.routeFlag(root.route, "cloneRepository"))
+            cloner.start()
     }
     // The palette's and the shortcuts' Code mode commands (CommandModel: "code:<what>").
     Connections {
@@ -662,6 +667,15 @@ FocusScope {
             iconName: "folder-plus"
             text: qsTr("Add a project…")
             onClicked: folderPicker.open()
+        }
+        BButton {
+            objectName: "codeEmptyClone"
+            Layout.alignment: Qt.AlignHCenter
+            visible: Workspace.projects.gitAvailable
+            variant: "ghost"
+            iconName: "download"
+            text: qsTr("Clone a repository…")
+            onClicked: cloner.start()
         }
         BButton {
             Layout.alignment: Qt.AlignHCenter
@@ -1076,6 +1090,17 @@ FocusScope {
             iconName: "folder-plus"
             onTriggered: folderPicker.open()
         }
+        BMenuItem {
+            text: qsTr("Clone a repository…")
+            iconName: "download"
+            enabled: Workspace.projects.gitAvailable
+            onTriggered: cloner.start()
+        }
+    }
+
+    CodeCloneDialog {
+        id: cloner
+        onAdded: (project) => AppController.replaceRoute({ view: "code", new: true, project: project })
     }
 
     // Where a new thread works: Local, a new worktree, or one of the project's worktrees.

@@ -12,9 +12,18 @@
 //   Workspace.projects.setPinned / setIcon / setDefaults(id, agent, env)
 //   Workspace.projects.createWorktree(id, title, base) / listBranches(folder) / switchBranch …
 //   Workspace.projects.editors / openInEditor(path[, line]) / openWith(editor, path, line)
+//   Workspace.projects.cloneRepository(source, folder) / clones / cancelClone / retryClone …
 //
 // The files: codeprojects.cpp (the list, settings, scripts), codeconfig.cpp (t3.json),
-// codeworktrees.cpp (git and gh: worktrees, branches, pull requests), codeeditors.cpp ("Open in…").
+// codeworktrees.cpp (git and gh: worktrees, branches, pull requests), codeeditors.cpp ("Open in…"),
+// codeclones.cpp (a project cloned from GitHub or any git address, as T3 Code's "Clone a repository").
+//
+// Cloning (docs/CODE.md "Cloning a repository"): what the user typed — "owner/name", an https or
+// ssh address, a repository's page — is read by gitcli::parseCloneSource(); the clone runs in the
+// background (`git clone --progress`, listed in `clones` with its stage and percent while it runs,
+// with its error when it failed: Retry, Dismiss); a clone that cannot sign in is tried once more
+// over the other protocol (ssh ↔ https); done, its folder is added as a project (cloned()). The
+// user's repositories on GitHub come from `gh repo list` (listRepositories()) where gh is signed in.
 //
 // t3.json (T3 Code's project file, docs/CODE.md "t3.json"): read from the project's root when the
 // project is added or loaded and again when it changes (a file system watcher), never written.
@@ -39,10 +48,13 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include "gitcli/gitcli.h"
+
 #include <functional>
 
 namespace brulion::gitcli {
 class Client;
+struct Outcome;
 }
 
 namespace brulion::shell {
@@ -87,6 +99,14 @@ class CodeProjects : public QObject {
     /// How the sidebar orders a project's threads: "activity" (what needs the user, then the last
     /// change: the default), "created" (the newest thread first). A device setting.
     Q_PROPERTY(QString threadSort READ threadSort WRITE setThreadSort NOTIFY changed FINAL)
+    /// Where a cloned repository goes by default: <clonesRoot>/<its name> ("" the default:
+    /// ~/.brulion/projects). A device setting.
+    Q_PROPERTY(QString clonesRoot READ clonesRoot WRITE setClonesRoot NOTIFY changed FINAL)
+    /// The clones running, and those that failed until dismissed: [{folder (the key), source (as
+    /// typed), url (without a login), name ("owner/name", the folder's name for a local one),
+    /// phase ("running" | "failed"), stage (gitcli::cloneStageName()), percent (-1 not said), detail,
+    /// status (the stage, percent and detail in words), error ("" none)}], oldest first.
+    Q_PROPERTY(QVariantList clones READ clones NOTIFY clonesChanged FINAL)
     /// git and gh are on this computer (branches, worktrees, pull requests).
     Q_PROPERTY(bool gitAvailable READ gitAvailable CONSTANT FINAL)
     Q_PROPERTY(bool ghAvailable READ ghAvailable CONSTANT FINAL)
@@ -296,6 +316,47 @@ public:
     /// worktreeRestored(folder, ok, message).
     Q_INVOKABLE bool restoreWorktree(const QString &id, const QString &folder, const QString &branch);
 
+    // ---- cloning a repository (codeclones.cpp) -------------------------------------------------------
+    QString clonesRoot() const;
+    void setClonesRoot(const QString &root);
+    QVariantList clones() const;
+    /// What `source` (as typed) names: {ok, url (what is cloned, without a login), name (the
+    /// default folder's name), title ("owner/name" on GitHub, "host/path" elsewhere, the folder of a
+    /// local one), error (why not ok; "" when nothing was typed)}.
+    Q_INVOKABLE QVariantMap cloneSource(const QString &source) const;
+    /// The default folder of a clone of `source` in `parent` (a path or a file: URL; "" clonesRoot()):
+    /// <parent>/<name>, "<name>-2", "-3" … when it is taken (a folder that is not empty, a file, a
+    /// clone running into it); `parent` itself when it is an empty folder of the repository's name
+    /// — "" when `source` names nothing.
+    Q_INVOKABLE QString cloneFolder(const QString &source, const QString &parent) const;
+    /// The row of clones() of the clone into `folder` ({} none).
+    Q_INVOKABLE QVariantMap cloneOf(const QString &folder) const;
+    /// The folder `folder` (a path, "~/…" or a file: URL) as a clone's key: absolute, clean.
+    Q_INVOKABLE QString cleanFolder(const QString &folder) const;
+    /// Starts cloning `source` into `folder` (missing, or an empty folder): "" when it started —
+    /// clones() lists it, cloned() says how it ended — else why not (nothing to clone, the folder
+    /// is taken, a clone into it runs already, no git, at most MaxProjects projects).
+    Q_INVOKABLE QString cloneRepository(const QString &source, const QString &folder);
+    /// Stops the clone into `folder` (what it cloned so far is taken away; it leaves the list).
+    Q_INVOKABLE void cancelClone(const QString &folder);
+    /// A failed clone into `folder` started again / taken off the list.
+    Q_INVOKABLE bool retryClone(const QString &folder);
+    Q_INVOKABLE void dismissClone(const QString &folder);
+    /// `gh repo list` of the user signed in to gh: repositoriesListed() (false: gh is not here).
+    Q_INVOKABLE bool listRepositories();
+    /// The repositories as last listed (none yet: empty).
+    Q_INVOKABLE QVariantList knownRepositories() const { return m_repositories; }
+    /// The clone picker's rows (BPalette items) of `repositories` (repositoriesListed()): {title
+    /// ("owner/name"), subtitle (private, fork, archived and its description, in words), icon,
+    /// source ("owner/name"), kind: "repo"}.
+    Q_INVOKABLE QVariantList repositoryItems(const QVariantList &repositories) const;
+    /// The picker's offer for what is typed: "Clone “x”" ({kind: "clone", source, title, subtitle:
+    /// the address, icon}) when it names a repository none of `repositories` is; none else.
+    Q_INVOKABLE QVariantList cloneOffers(const QString &query, const QVariantList &repositories) const;
+    /// Why what is typed names no repository when it looks like an address (a '/', ':' or '@' in
+    /// it): "Type the whole owner/repository name." …; "" for a search word or a good address.
+    Q_INVOKABLE QString cloneProblem(const QString &query) const;
+
     // ---- a deleted thread's Undo -------------------------------------------------------------------
     /// The toast `toast` (AppController::toastWithAction) undoes the deletion of a thread: its pages
     /// back from the trash (`trashPaths`) and — when `removed` — its worktree made again from
@@ -367,6 +428,13 @@ Q_SIGNALS:
     void worktreeChecked(const QString &folder, int changes, const QString &branch, const QString &error);
     void worktreeRemoved(const QString &folder, bool ok, const QString &message);
     void worktreeRestored(const QString &folder, bool ok, const QString &message);
+    void clonesChanged();
+    /// A clone into `folder` ended: `project` the new project's id, or `error` ("" fine; a
+    /// stopped one: cancelled true, no error shown).
+    void cloned(const QString &folder, const QString &project, const QString &error, bool cancelled);
+    /// listRepositories() ended: [{nameWithOwner, description, url, sshUrl, isPrivate, isFork,
+    /// isArchived, updatedAt}], or `error` (gh missing, signed out …).
+    void repositoriesListed(const QVariantList &repositories, const QString &error);
 
 private:
     QList<Project> m_projects;
@@ -398,6 +466,32 @@ private:
         bool removed = false;
     };
     QHash<int, Undo> m_undos;
+    QString m_clonesRoot;
+    struct Clone {
+        QString folder;
+        QString source;
+        /// What git is given now (the other protocol on the second try).
+        QString url;
+        QString name;
+        bool running = false;
+        /// The other protocol was tried already.
+        bool retried = false;
+        bool cancelled = false;
+        /// The folder was there (empty) before: it stays when the clone fails.
+        bool existed = false;
+        gitcli::CloneProgress progress;
+        QString error;
+    };
+    QList<Clone> m_clones;
+    QVariantList m_repositories;
+    bool m_listing = false;
+    /// clonesChanged() at most a few times a second while git reports progress.
+    QTimer m_cloneTimer;
+
+    int cloneIndex(const QString &folder) const;
+    void startClone(int index);
+    void cloneEnded(const QString &folder, const gitcli::Outcome &outcome);
+    void cloneProgressed(const QString &folder, const gitcli::CloneProgress &progress);
 
     int indexOf(const QString &id) const;
     QList<Project> displayed() const;

@@ -104,6 +104,10 @@ struct Client::Run {
     RunResult result;
     Done done;
     qsizetype maxOutput = DefaultMaxOutput;
+    std::function<void(const QByteArray &)> onError;
+    QString tag;
+    /// stop() asked for it (killed as soon as it runs).
+    bool stopRequested = false;
     bool ended = false;
 };
 
@@ -147,6 +151,29 @@ int Client::running() const
     return int(m_runs.size());
 }
 
+bool Client::stop(const QString &tag)
+{
+    if (tag.isEmpty())
+        return false;
+    bool any = false;
+#if QT_CONFIG(process)
+    const QList<std::shared_ptr<Run>> runs = m_runs;
+    for (const std::shared_ptr<Run> &run : runs) {
+        if (run->tag != tag || run->ended || !run->process)
+            continue;
+        any = true;
+        if (run->result.failure.isEmpty())
+            run->result.failure = GitMessages::tr("Stopped");
+        // finished() follows, and with it the callback; a process still starting is killed once it
+        // runs (a kill before that would be lost).
+        run->stopRequested = true;
+        if (run->process->state() == QProcess::Running)
+            run->process->kill();
+    }
+#endif
+    return any;
+}
+
 void Client::later(std::function<void()> done)
 {
     QMetaObject::invokeMethod(this, [done = std::move(done)] { done(); }, Qt::QueuedConnection);
@@ -183,6 +210,8 @@ void Client::start(const QString &program, const QString &folder, const QStringL
     auto run = std::make_shared<Run>();
     run->done = std::move(done);
     run->maxOutput = options.maxOutput > 0 ? options.maxOutput : DefaultMaxOutput;
+    run->onError = options.onError;
+    run->tag = options.tag;
     auto *process = new QProcess(this);
     run->process = process;
 
@@ -265,6 +294,8 @@ void Client::start(const QString &program, const QString &folder, const QStringL
         const QByteArray chunk = r->process->readAllStandardError();
         if (r->result.err.size() < MaxErrorBytes)
             r->result.err.append(QString::fromUtf8(chunk.left(MaxErrorBytes - r->result.err.size())));
+        if (r->onError && !chunk.isEmpty())
+            r->onError(chunk);
     });
     connect(process, &QProcess::finished, process, [weak, finish, name](int code, QProcess::ExitStatus status) {
         const std::shared_ptr<Run> r = weak.lock();
@@ -282,10 +313,17 @@ void Client::start(const QString &program, const QString &folder, const QStringL
         const QByteArray rest = r->process->readAllStandardError();
         if (r->result.err.size() < MaxErrorBytes)
             r->result.err.append(QString::fromUtf8(rest.left(MaxErrorBytes - r->result.err.size())));
+        if (r->onError && !rest.isEmpty())
+            r->onError(rest);
         r->result.exitCode = code;
         if (status == QProcess::CrashExit && r->result.failure.isEmpty())
             r->result.failure = GitMessages::tr("%1 stopped unexpectedly").arg(name);
         finish();
+    });
+    connect(process, &QProcess::started, process, [weak] {
+        const std::shared_ptr<Run> r = weak.lock();
+        if (r && !r->ended && r->process && r->stopRequested)
+            r->process->kill();
     });
     connect(process, &QProcess::errorOccurred, process, [weak, finish, name](QProcess::ProcessError error) {
         const std::shared_ptr<Run> r = weak.lock();

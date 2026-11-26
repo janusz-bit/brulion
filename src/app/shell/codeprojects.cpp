@@ -86,9 +86,28 @@ CodeProjects::CodeProjects(QObject *parent) : QObject(parent)
         if (any)
             Q_EMIT changed();
     });
+    // (git reports progress many times a second: the list follows a few times a second.)
+    m_cloneTimer.setSingleShot(true);
+    m_cloneTimer.setInterval(250);
+    connect(&m_cloneTimer, &QTimer::timeout, this, &CodeProjects::clonesChanged);
 }
 
-CodeProjects::~CodeProjects() = default;
+CodeProjects::~CodeProjects()
+{
+    // A clone still running when the app quits: stopped (the client waits for git), and the
+    // folder it made so far taken away — never one that was there before.
+    bool running = false;
+    for (const Clone &c : std::as_const(m_clones))
+        running = running || c.running;
+    if (!running)
+        return;
+    delete m_git;
+    m_git = nullptr;
+    for (const Clone &c : std::as_const(m_clones)) {
+        if (c.running && !c.existed)
+            QDir(c.folder).removeRecursively();
+    }
+}
 
 void CodeProjects::setStorage(std::function<QByteArray()> load, std::function<void(const QByteArray &)> save)
 {
@@ -613,6 +632,7 @@ void CodeProjects::load()
             break;
     }
     m_worktreesRoot = all.value(u"worktreesRoot"_s).toString();
+    m_clonesRoot = all.value(u"clonesRoot"_s).toString();
     m_editor = all.value(u"editor"_s).toString();
     m_preferredEditor = all.value(u"preferredEditor"_s).toString();
     m_branchPrefix = all.contains(u"branchPrefix"_s) ? all.value(u"branchPrefix"_s).toString() : u"brulion/"_s;
@@ -654,6 +674,8 @@ void CodeProjects::save()
     QJsonObject all{{u"projects"_s, projects}};
     if (!m_worktreesRoot.isEmpty())
         all.insert(u"worktreesRoot"_s, m_worktreesRoot);
+    if (!m_clonesRoot.isEmpty())
+        all.insert(u"clonesRoot"_s, m_clonesRoot);
     if (!m_editor.isEmpty())
         all.insert(u"editor"_s, m_editor);
     if (!m_preferredEditor.isEmpty())

@@ -368,7 +368,9 @@ endif()
 math(EXPR _agentshare_timeout "180 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_shell_agentshare PROPERTIES TIMEOUT ${_agentshare_timeout})
 # Code mode's projects beyond the list (codeprojects.h, codeconfig.cpp, codeworktrees.cpp,
-# codeeditors.cpp): t3.json, merged scripts, pins, icons, defaults, "Open in…" with fake editors on a
-# PATH of their own, pull request references, and with git: worktrees from a base branch, branches,
-# pull requests checked out without gh and with a fake one, worktrees checked, removed and made again.
+# codeeditors.cpp, codeclones.cpp): t3.json, merged scripts, pins, icons, defaults, "Open in…" with
+# fake editors on a PATH of their own, pull request references, the clone picker's rows and default
+# folders, and with git: worktrees from a base branch, branches, pull requests checked out without gh
+# and with a fake one, worktrees checked, removed and made again, clones added as projects, retried,
+# dismissed, stopped and tried again over https.
 brulion_add_test(tst_shell_codeprojects SOURCES tst_codeprojects.cpp LIBS brulion_shell)

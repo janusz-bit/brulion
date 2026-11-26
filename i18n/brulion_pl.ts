@@ -6271,6 +6271,120 @@
     </message>
 </context>
 <context>
+    <name>CodeCloneDialog</name>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>Clone %1</source>
+        <translation>Sklonuj %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>Clone</source>
+        <translation>Sklonuj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>Hide</source>
+        <translation>Ukryj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>Cancel</source>
+        <translation>Anuluj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>The folder it goes into</source>
+        <translation>Folder docelowy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>The folder the repository goes into</source>
+        <translation>Folder, do którego trafi repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>Choose…</source>
+        <translation>Wybierz…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>A new folder, or an empty one. A thread of the new project works there, or in a worktree of its own.</source>
+        <translation>Nowy albo pusty folder. Wątek nowego projektu pracuje w nim albo we własnym worktree.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>You can close this window: the clone goes on, and the project is added when it is done.</source>
+        <translation>Możesz zamknąć to okno: klonowanie trwa dalej, a projekt zostanie dodany, gdy się skończy.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>Choose where the repository goes</source>
+        <translation>Wybierz, gdzie trafi repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>The repository could not be cloned: %1</source>
+        <translation>Nie udało się sklonować repozytorium: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneDialog.qml" line="1"/>
+        <source>Cloned %1: it is a project now.</source>
+        <translation>Sklonowano %1: to teraz projekt.</translation>
+    </message>
+</context>
+<context>
+    <name>CodeClonePicker</name>
+    <message>
+        <location filename="../src/app/qml/code/CodeClonePicker.qml" line="1"/>
+        <source>Reading your repositories on GitHub…</source>
+        <translation>Wczytywanie Twoich repozytoriów z GitHuba…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeClonePicker.qml" line="1"/>
+        <source>No repository of yours matches: type owner/name or paste its address</source>
+        <translation>Żadne z Twoich repozytoriów nie pasuje: wpisz właściciel/nazwa albo wklej jego adres</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeClonePicker.qml" line="1"/>
+        <source>Type owner/name, or paste a git address or a repository’s page</source>
+        <translation>Wpisz właściciel/nazwa albo wklej adres gita lub strony repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeClonePicker.qml" line="1"/>
+        <source>With the GitHub CLI (gh) signed in, your repositories on GitHub are listed here.</source>
+        <translation>Gdy GitHub CLI (gh) jest zalogowane, tu są Twoje repozytoria z GitHuba.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeClonePicker.qml" line="1"/>
+        <source>Your repositories could not be listed: %1</source>
+        <translation>Nie udało się wczytać Twoich repozytoriów: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeClonePicker.qml" line="1"/>
+        <source>owner/name, a git address or a repository’s page…</source>
+        <translation>właściciel/nazwa, adres gita albo strony repozytorium…</translation>
+    </message>
+</context>
+<context>
+    <name>CodeCloneRow</name>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneRow.qml" line="1"/>
+        <source>Try the clone again</source>
+        <translation>Spróbuj sklonować jeszcze raz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneRow.qml" line="1"/>
+        <source>Dismiss</source>
+        <translation>Odrzuć</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeCloneRow.qml" line="1"/>
+        <source>Stop the clone</source>
+        <translation>Przerwij klonowanie</translation>
+    </message>
+</context>
+<context>
     <name>CodeFilePicker</name>
     <message>
         <location filename="../src/app/qml/codefiles/CodeFilePicker.qml" line="34"/>
@@ -7301,6 +7415,16 @@
         <source>Delete the worktree too</source>
         <translation>Usuń też worktree</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeSidebar.qml" line="1"/>
+        <source>Clone a repository…</source>
+        <translation>Sklonuj repozytorium…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeSidebar.qml" line="1"/>
+        <source>Open a folder…</source>
+        <translation>Otwórz folder…</translation>
+    </message>
 </context>
 <context>
     <name>CodeThreadRow</name>
@@ -7672,6 +7796,11 @@
         <location filename="../src/app/qml/code/CodeView.qml" line="1181"/>
         <source>That folder could not be added.</source>
         <translation>Nie udało się dodać tego folderu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1"/>
+        <source>Clone a repository…</source>
+        <translation>Sklonuj repozytorium…</translation>
     </message>
 </context>
 <context>
@@ -14254,6 +14383,71 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/core/gitcli/client_operations.cpp" line="218"/>
         <source>Dropped the stash</source>
         <translation>Usunięto odłożone zmiany</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>“%1” is no repository’s address.</source>
+        <translation>„%1” nie jest adresem repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>The address has a control character.</source>
+        <translation>Adres zawiera znak sterujący.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>“%1” is no folder of this computer.</source>
+        <translation>„%1” nie jest folderem tego komputera.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>Type the whole owner/repository name.</source>
+        <translation>Wpisz całą nazwę właściciel/repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>“%1” is no repository’s address: type owner/name, an https or ssh address, or a repository’s page.</source>
+        <translation>„%1” nie jest adresem repozytorium: wpisz właściciel/nazwa, adres https lub ssh albo adres strony repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>Brulion clones over https and ssh, not “%1”.</source>
+        <translation>Brulion klonuje przez https i ssh, nie przez „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>“%1” names no repository.</source>
+        <translation>„%1” nie wskazuje żadnego repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>“%1” names no repository: an address of one is host/owner/name.</source>
+        <translation>„%1” nie wskazuje żadnego repozytorium: adres repozytorium to host/właściciel/nazwa.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>Stopped</source>
+        <translation>Przerwano</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>Nothing to clone</source>
+        <translation>Nie ma czego klonować</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>“%1” is there already and is not an empty folder.</source>
+        <translation>„%1” już istnieje i nie jest pustym folderem.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>The folder “%1” could not be made.</source>
+        <translation>Nie udało się utworzyć folderu „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/clone.cpp" line="1"/>
+        <source>Cloned into %1</source>
+        <translation>Sklonowano do %1</translation>
     </message>
 </context>
 <context>
@@ -24584,6 +24778,16 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2712"/>
         <source>Its tools on that computer may also change this app live while it answers (Luau, extensions for this run, the theme, settings, the window&apos;s items); the top bar shows what it changed, and you can undo all of it.</source>
         <translation>Jego narzędzia na tamtym komputerze mogą też zmieniać tę aplikację na żywo, gdy odpowiada (Luau, rozszerzenia do końca tego uruchomienia, motyw, ustawienia, elementy okna); górny pasek pokazuje, co zmienił, a Ty możesz to wszystko cofnąć.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Cloned repositories</source>
+        <translation>Sklonowane repozytoria</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Where “Clone a repository…” puts a repository unless you choose another folder: a folder of its name in it. Empty: %1.</source>
+        <translation>Gdzie „Sklonuj repozytorium…” zapisuje repozytorium, jeśli nie wybierzesz innego folderu: folder o jego nazwie w tym folderze. Puste: %1.</translation>
     </message>
 </context>
 <context>
@@ -42866,6 +43070,96 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <source>File manager</source>
         <translation>Menedżer plików</translation>
     </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Connecting…</source>
+        <translation>Łączenie…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Counting objects</source>
+        <translation>Liczenie obiektów</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Receiving objects</source>
+        <translation>Pobieranie obiektów</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Resolving deltas</source>
+        <translation>Rozwiązywanie delt</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Checking out files</source>
+        <translation>Zapisywanie plików</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>%1%</source>
+        <translation>%1%</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Type owner/name, a git address or a repository’s page.</source>
+        <translation>Wpisz właściciel/nazwa, adres gita albo adres strony repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Choose the folder the repository goes into.</source>
+        <translation>Wybierz folder, do którego trafi repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>git is not on this computer.</source>
+        <translation>Na tym komputerze nie ma gita.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>A clone into this folder is running already.</source>
+        <translation>Klonowanie do tego folderu już trwa.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>“%1” is there already and is not an empty folder.</source>
+        <translation>„%1” już istnieje i nie jest pustym folderem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>No more projects can be added: %1 is the most.</source>
+        <translation>Nie można dodać więcej projektów: najwięcej %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>git could not clone the repository.</source>
+        <translation>Git nie mógł sklonować repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>The clone is in %1, but it could not be added as a project.</source>
+        <translation>Klon jest w %1, ale nie udało się dodać go jako projektu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>private</source>
+        <translation>prywatne</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>fork</source>
+        <translation>fork</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>archived</source>
+        <translation>zarchiwizowane</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeclones.cpp" line="1"/>
+        <source>Clone “%1”</source>
+        <translation>Sklonuj „%1”</translation>
+    </message>
 </context>
 <context>
     <name>brulion::shell::CommandModel</name>
@@ -43962,6 +44256,16 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/commandmodel.cpp" line="303"/>
         <source>Or save it as PDF</source>
         <translation>Albo zapisz jako PDF</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>Clone a repository…</source>
+        <translation>Sklonuj repozytorium…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>Code mode: a project from GitHub or any git address</source>
+        <translation>Tryb kodu: projekt z GitHuba albo z dowolnego adresu gita</translation>
     </message>
 </context>
 <context>

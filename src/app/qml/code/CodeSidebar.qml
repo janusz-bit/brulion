@@ -17,7 +17,9 @@ import Brulion
 // (CodeThreadRow) renames it, pins it, marks it unread, copies its path, branch or link, starts a
 // new thread in its worktree, archives or deletes it — a thread with a worktree of its own that no
 // other thread uses asks first whether the worktree goes too (CodeProjects.deletedWorktrees); Undo
-// brings both back. "Add a project…" picks a folder. AppShell shows it in place of ShellSidebar
+// brings both back. "Add a project…" picks a folder or clones a repository (CodeCloneDialog: your
+// repositories on GitHub, "owner/name" or any git address); a clone running or failed is a row above
+// the projects (CodeCloneRow: its progress, Cancel; Retry, Dismiss). AppShell shows it in place of ShellSidebar
 // while AppSettings.appMode is "code"; on phones it is the drawer's content.
 // The projects of the user's other computers (CodeProjects' remote ones: their threads run there)
 // follow this device's, with the computer's name and only their threads' entries in the menu; their
@@ -254,11 +256,12 @@ Rectangle {
                 onClicked: sortMenu.popup(sortButton, 0, sortButton.height)
             }
             BIconButton {
+                id: addButton
                 objectName: "codeAddProject"
                 size: "small"
                 iconName: "folder-plus"
                 label: qsTr("Add a project…")
-                onClicked: folderPicker.open()
+                onClicked: addMenu.popup(addButton, 0, addButton.height)
             }
         }
         BSearchField {
@@ -290,6 +293,12 @@ Rectangle {
                 id: projectsColumn
                 width: flick.width
                 spacing: Theme.space1
+
+                // Clones running, and those that failed (CodeProjects.clones).
+                Repeater {
+                    model: Workspace.projects.clones
+                    delegate: CodeCloneRow {}
+                }
 
                 Repeater {
                     id: projectsRepeater
@@ -341,6 +350,15 @@ Rectangle {
                         text: qsTr("Add a project…")
                         onClicked: folderPicker.open()
                     }
+                    BButton {
+                        objectName: "codeCloneEmpty"
+                        visible: Workspace.projects.gitAvailable
+                        size: "small"
+                        variant: "ghost"
+                        iconName: "download"
+                        text: qsTr("Clone a repository…")
+                        onClicked: cloner.start()
+                    }
                 }
             }
             // Where a dragged project goes.
@@ -382,6 +400,29 @@ Rectangle {
             checked: Workspace.projects.threadSort === "created"
             onTriggered: Workspace.projects.threadSort = "created"
         }
+    }
+
+    BMenu {
+        id: addMenu
+        objectName: "codeAddProjectMenu"
+        BMenuItem {
+            objectName: "codeAddFolder"
+            text: qsTr("Open a folder…")
+            iconName: "folder-open"
+            onTriggered: folderPicker.open()
+        }
+        BMenuItem {
+            objectName: "codeAddClone"
+            text: qsTr("Clone a repository…")
+            iconName: "download"
+            enabled: Workspace.projects.gitAvailable
+            onTriggered: cloner.start()
+        }
+    }
+
+    CodeCloneDialog {
+        id: cloner
+        onAdded: (project) => sidebar.go({ view: "code", new: true, project: project })
     }
 
     // ---- a project's menu ------------------------------------------------------------------------------

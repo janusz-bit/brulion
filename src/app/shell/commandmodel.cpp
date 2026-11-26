@@ -396,19 +396,21 @@ static QList<Command> buildCommands(const AppController *app)
              u"notebook-pen"_s,
              {},
              ready && app->settings()->appMode() == u"code"},
-            {u"code.newThread"_s,
-             CommandModel::tr("New thread"),
-             CommandModel::tr("Code mode: an AI agent's new thread in a project"),
-             u"plus"_s,
-             u"Ctrl+Shift+O"_s,
-             ready && app->workspace()->projects()->count() > 0,
-             u"code"_s},
+            {u"code.newThread"_s, CommandModel::tr("New thread"),
+             CommandModel::tr("Code mode: an AI agent's new thread in a project"), u"plus"_s, u"Ctrl+Shift+O"_s,
+             ready && app->workspace()->projects()->count() > 0, u"code"_s},
             {u"code.addProject"_s,
              CommandModel::tr("Add a project…"),
              CommandModel::tr("Code mode: a folder AI agents work in"),
              u"folder-plus"_s,
              {},
              ready},
+            {u"code.cloneRepository"_s,
+             CommandModel::tr("Clone a repository…"),
+             CommandModel::tr("Code mode: a project from GitHub or any git address"),
+             u"download"_s,
+             {},
+             ready && app->workspace()->projects()->gitAvailable()},
             // A project's files (docs/CODE-FILES.md): the file picker and the project search of
             // the thread on screen (CodeView's uiActions; in Code mode Print page's key and
             // Search's key run them, AppShell.runShortcut).
@@ -1055,13 +1057,14 @@ bool CommandModel::run(const QString &id)
         if (id == u"code.newLocalThread")
             route.insert(u"env"_s, u"local"_s);
         m_app->navigate(route);
+    } else if (id == u"code.addProject" || id == u"code.cloneRepository") {
+        // (Before the "code." actions below, which would take them.)
+        m_app->settings()->setAppMode(u"code"_s);
+        m_app->navigate({{u"view"_s, u"code"_s}, {id.mid(5), true}});
     } else if (id.startsWith(u"code.script.")) {
         m_app->requestUiAction(u"code:script:"_s + id.section(u'.', 3));
     } else if (id.startsWith(u"code.")) {
         m_app->requestUiAction(u"code:"_s + id.mid(5));
-    } else if (id == u"code.addProject") {
-        m_app->settings()->setAppMode(u"code"_s);
-        m_app->navigate({{u"view"_s, u"code"_s}, {u"addProject"_s, true}});
     } else if (id == u"code.findFile") {
         m_app->requestUiAction(u"code:findFile"_s);
     } else if (id == u"code.search") {

@@ -1395,8 +1395,12 @@ Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
   Shortcut of a command that is everywhere is off in Code mode while a Code mode command has its key).
 * **CodeSidebar** (`qml/code/CodeSidebar.qml`): "Projects" with the threads' order (`codeThreadSort`,
   `codeThreadSortMenu`: Last activity first `codeSortActivity` / Newest first `codeSortCreated`;
-  CodeProjects.threadSort, this device's) and "Add a project…" (`codeAddProject`, a folder picker
-  `codeProjectFolderDialog`; with none: a note and `codeAddProjectEmpty`), a filter over the threads'
+  CodeProjects.threadSort, this device's) and "Add a project…" (`codeAddProject`, a menu
+  `codeAddProjectMenu`: "Open a folder…" `codeAddFolder` — the folder picker `codeProjectFolderDialog` —
+  and "Clone a repository…" `codeAddClone` — `CodeCloneDialog`, docs/CODE.md "Cloning a repository";
+  with none: a note, `codeAddProjectEmpty` and `codeCloneEmpty`), the clones running or failed
+  (`CodeCloneRow` `codeCloneRow`: the name, `codeCloneStatus`, a bar, `codeCloneRetry` after a failure,
+  `codeCloneCancel`), a filter over the threads'
   titles and branches (`codeThreadFilter`: ChatListModel.filter), then a section per project
   (`CodeProjectSection`; pinned projects first): its row (`codeProject_<id>`: a click folds it — kept in
   `code/collapsed` —, its icon `codeProjectIcon` — the user's emoji, t3.json's iconPath picture, a
@@ -1424,12 +1428,21 @@ Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
   (`CodeProjects.checkWorktree`), "Delete the worktree too" (checked when nothing would be lost). The toast's
   Undo brings the thread back, and the worktree from its branch when it went (`CodeProjects.keepUndo`).
   Archiving keeps the worktree.
+* **Clone a repository…** (`qml/code/CodeCloneDialog.qml`, in CodeSidebar and CodeView: `start()`):
+  first `CodeClonePicker` (`codeClonePicker`, a BPalette: the user's repositories on GitHub, "Clone
+  “x”" for what is typed, why it is no address as its empty text), then a BDialog (`codeCloneDialog`:
+  the repository as its title, its address as the subtitle, the folder `codeCloneFolder` with
+  "Choose…" `codeCloneChooseFolder` — a folder picker `codeCloneFolderPicker` —, while it clones a bar
+  `codeCloneProgress` and git's stage `codeCloneStatus`, an error `codeCloneError`). Clone starts it;
+  closing the dialog ("Hide" while it clones) leaves it running. Done while shown: `added(project)` —
+  a new thread of it; hidden: a toast.
 * **CodeView** (`qml/code/CodeView.qml`, route `code`: `{}` a new thread of the last project used —
   `code/lastProject` — or the first; `{new: true, project, env?}`; `{new: true, project, worktree, branch,
   pr?}` a new thread in that worktree (on that pull request); `{path}` a thread; `{addProject: true}` the
-  folder picker): no project yet — an empty state (`codeEmpty`) with "Add a project…" and, without an
+  folder picker; `{cloneRepository: true}` "Clone a repository…"): no project yet — an empty state
+  (`codeEmpty`) with "Add a project…", "Clone a repository…" (`codeEmptyClone`) and, without an
   agent, "Set up an AI agent". A header (`codeHeader`): the project (`codeProjectChip`; for a new thread a
-  menu of the projects, `codeProjectPick`, and "Add a project…"), the thread's name (`CodeThreadTitle`,
+  menu of the projects, `codeProjectPick`, "Add a project…" and "Clone a repository…"), the thread's name (`CodeThreadTitle`,
   `codeThreadTitle`: a double click or F2 makes it a field `codeThreadTitleField`, Enter renames the
   thread — WorkspaceChats.rename —, Esc keeps it), then where it works — **a thread**: its folder's branch
   (`codeWhere`: `git-branch` for a worktree of its own, `hard-drive` for the project's folder; the folder

@@ -18,10 +18,13 @@
 //   parsePatch(), hunksTouching(), patchOf(), hasConflictMarkers()   one file's unified diff, the
 //                     hunks that change some lines, a patch of some of them, git's conflict
 //                     markers (patch.cpp)
+//   parseCloneSource(), cloneUrlForProtocol(), parseCloneProgress(), parseRepositoryList()   what
+//                     the user typed to clone ("owner/name", an address, a web page), ssh ↔ https,
+//                     `git clone --progress`'s stages, `gh repo list`'s JSON (clone.cpp)
 //
 // and small rules the client and the app share (isValidBranchName(), isValidCheckpointId(),
-// isSafeRelativePath(), isSafeRevision(), isValidRepositoryName(), looksBinary(), subjectOf()). Malformed input never crashes a parser: a
-// record that does not read is skipped, a truncated one at the end dropped. Paths are git's bytes
+// isSafeRelativePath(), isSafeRevision(), isValidRepositoryName(), looksBinary(), subjectOf()). Malformed input never
+// crashes a parser: a record that does not read is skipped, a truncated one at the end dropped. Paths are git's bytes
 // as UTF-8 (with -z git never quotes them: spaces, newlines and any letters come through as they
 // are).
 //
@@ -305,6 +308,95 @@ PullRequestInfo parsePullRequestView(QByteArrayView json);
 /// A name `gh repo create` takes: "name" or "owner/name", each of 1–100 of [A-Za-z0-9._-], not
 /// "." or "..".
 bool isValidRepositoryName(QStringView name);
+
+// ---- Cloning (clone.cpp) -----------------------------------------------------------------------
+
+/// What the user typed to clone a repository, read (parseCloneSource()).
+struct CloneSource {
+    /// What `git clone` is given ("" when the text names nothing to clone: `error` says why).
+    QString url;
+    /// The repository's host ("github.com"; "" for one on this computer) and its path there
+    /// ("owner/name"; GitLab's subgroups "group/sub/name").
+    QString host;
+    QString path;
+    /// The folder a clone gets by default: the repository's name, safe as a folder name.
+    QString name;
+    /// "owner/name" was typed: the address was made up (https on github.com), so a clone that
+    /// cannot sign in tries ssh.
+    bool shorthand = false;
+    /// A repository on this computer (an absolute path or a file: URL).
+    bool local = false;
+    /// Why `url` is empty ("" when it is not, or nothing was typed).
+    QString error;
+    bool isValid() const { return !url.isEmpty(); }
+    /// For the user: "owner/name" on github.com, "host/path" elsewhere, the folder of a local one.
+    QString displayName() const;
+};
+
+/// Reads `text` as T3 Code's "Clone a repository" does: "owner/name" (GitHub), "github.com/owner/name",
+/// an https or ssh address ("https://host/owner/name[.git]", "ssh://git@host[:port]/owner/name.git",
+/// "git@host:owner/name.git"), a repository's web page ("…/owner/name/tree/main/src", "…/pull/12",
+/// "…/blob/…", GitLab's "…/-/…") — cut to the repository — or a repository on this computer (an
+/// absolute path, a file: URL). Never anything git would read as an option, another transport
+/// (`ext::`, `fd::`) or a relative path.
+CloneSource parseCloneSource(QStringView text);
+
+/// `url` over the other protocol (`ssh` true: "git@host:path.git", false: "https://host/path.git") —
+/// the computer may have only ssh keys, or only a credential helper; "" when it cannot be rewritten
+/// (a custom port, a local path, anything else).
+QString cloneUrlForProtocol(QStringView url, bool ssh);
+
+/// An http(s) address without what can carry a login (the user and password or token before '@',
+/// the query); any other address as it is.
+QString withoutUrlCredentials(QStringView url);
+
+/// What `git clone --progress` is doing.
+enum class CloneStage : quint8 {
+    Connecting, ///< nothing said yet
+    Counting,   ///< the remote enumerates, counts and compresses its objects
+    Receiving,  ///< "Receiving objects"
+    Resolving,  ///< "Resolving deltas"
+    Checkout,   ///< "Updating files": the work tree is written
+};
+
+struct CloneProgress {
+    CloneStage stage = CloneStage::Connecting;
+    /// 0–100, -1 not said.
+    int percent = -1;
+    /// What git adds after the counts: "12.40 MiB | 3.10 MiB/s" ("" none).
+    QString detail;
+};
+
+/// The progress the last progress line of `err` (git's standard error so far: lines end with '\r'
+/// while they are rewritten, '\n' when done) says; Connecting when none.
+CloneProgress parseCloneProgress(QStringView err);
+
+/// "connecting", "counting", "receiving", "resolving", "checkout".
+QString cloneStageName(CloneStage stage);
+
+/// The failure (git's standard error) is one of signing in: ssh's "Permission denied (publickey)",
+/// "Host key verification failed", https's "Authentication failed", "could not read Username" (no
+/// credential and no prompt), "terminal prompts disabled".
+bool isAuthenticationFailure(QStringView error);
+
+/// A repository as `gh repo list --json <repositoryListFields()>` gives it.
+struct HostedRepository {
+    QString nameWithOwner;
+    QString description;
+    QString url;
+    QString sshUrl;
+    bool isPrivate = false;
+    bool isFork = false;
+    bool isArchived = false;
+    /// ISO 8601 ("2026-11-26T12:00:00Z"; "" not said).
+    QString updatedAt;
+};
+
+/// The fields asked of `gh repo list --json`.
+QString repositoryListFields();
+
+/// gh's JSON array; entries without a valid nameWithOwner are left out, the rest in gh's order.
+QList<HostedRepository> parseRepositoryList(QByteArrayView json);
 
 // ---- Patches -----------------------------------------------------------------------------------
 

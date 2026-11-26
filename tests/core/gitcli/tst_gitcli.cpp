@@ -103,6 +103,21 @@ private Q_SLOTS:
     void repositoryNames_data();
     void repositoryNames();
 
+    // cloning
+    void cloneSources_data();
+    void cloneSources();
+    void cloneSourcesRefused_data();
+    void cloneSourcesRefused();
+    void cloneProtocols_data();
+    void cloneProtocols();
+    void urlCredentials_data();
+    void urlCredentials();
+    void cloneProgress_data();
+    void cloneProgress();
+    void authenticationFailures_data();
+    void authenticationFailures();
+    void repositoryList();
+
     // patches
     void patchHunks();
     void patchTouching_data();
@@ -995,6 +1010,257 @@ void TestGitCli::repositoryNames()
 {
     QFETCH(QString, name);
     QTEST(isValidRepositoryName(name), "ok");
+}
+
+// ---- cloning -----------------------------------------------------------------------------------
+
+void TestGitCli::cloneSources_data()
+{
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<QString>("url");
+    QTest::addColumn<QString>("host");
+    QTest::addColumn<QString>("path");
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<bool>("shorthand");
+
+    QTest::newRow("owner/name") << u"janusz-bit/brulion"_s << u"https://github.com/janusz-bit/brulion.git"_s
+                                << u"github.com"_s << u"janusz-bit/brulion"_s << u"brulion"_s << true;
+    QTest::newRow("owner/name.git, spaces") << u"  Org/My.Repo.git "_s << u"https://github.com/Org/My.Repo.git"_s
+                                            << u"github.com"_s << u"Org/My.Repo"_s << u"My.Repo"_s << true;
+    QTest::newRow("no scheme") << u"github.com/ja/notatki"_s << u"https://github.com/ja/notatki.git"_s
+                               << u"github.com"_s << u"ja/notatki"_s << u"notatki"_s << false;
+    QTest::newRow("https") << u"https://github.com/ja/repo"_s << u"https://github.com/ja/repo.git"_s << u"github.com"_s
+                           << u"ja/repo"_s << u"repo"_s << false;
+    QTest::newRow("https .git") << u"https://github.com/ja/repo.git"_s << u"https://github.com/ja/repo.git"_s
+                                << u"github.com"_s << u"ja/repo"_s << u"repo"_s << false;
+    QTest::newRow("www") << u"https://www.github.com/ja/repo"_s << u"https://github.com/ja/repo.git"_s
+                         << u"github.com"_s << u"ja/repo"_s << u"repo"_s << false;
+    QTest::newRow("a page: tree") << u"https://github.com/ja/repo/tree/main/src/core"_s
+                                  << u"https://github.com/ja/repo.git"_s << u"github.com"_s << u"ja/repo"_s << u"repo"_s
+                                  << false;
+    QTest::newRow("a page: pull") << u"https://github.com/ja/repo/pull/12/files?diff=split#x"_s
+                                  << u"https://github.com/ja/repo.git"_s << u"github.com"_s << u"ja/repo"_s << u"repo"_s
+                                  << false;
+    QTest::newRow("a page: query") << u"https://github.com/ja/repo?tab=readme"_s << u"https://github.com/ja/repo.git"_s
+                                   << u"github.com"_s << u"ja/repo"_s << u"repo"_s << false;
+    QTest::newRow("gitlab subgroups") << u"https://gitlab.com/grupa/podgrupa/projekt"_s
+                                      << u"https://gitlab.com/grupa/podgrupa/projekt"_s << u"gitlab.com"_s
+                                      << u"grupa/podgrupa/projekt"_s << u"projekt"_s << false;
+    QTest::newRow("gitlab page") << u"https://gitlab.com/grupa/projekt/-/tree/main"_s
+                                 << u"https://gitlab.com/grupa/projekt"_s << u"gitlab.com"_s << u"grupa/projekt"_s
+                                 << u"projekt"_s << false;
+    QTest::newRow("codeberg page") << u"https://codeberg.org/ja/repo/src/branch/main/README.md"_s
+                                   << u"https://codeberg.org/ja/repo"_s << u"codeberg.org"_s << u"ja/repo"_s
+                                   << u"repo"_s << false;
+    QTest::newRow("https with a token") << u"https://ja:ghp_x@github.com/ja/repo.git"_s
+                                        << u"https://ja:ghp_x@github.com/ja/repo.git"_s << u"github.com"_s
+                                        << u"ja/repo"_s << u"repo"_s << false;
+    QTest::newRow("https port") << u"https://git.example.com:8443/zespół/repo.git"_s
+                                << u"https://git.example.com:8443/zesp%C3%B3%C5%82/repo.git"_s << u"git.example.com"_s
+                                << u"zespół/repo"_s << u"repo"_s << false;
+    QTest::newRow("scp") << u"git@github.com:ja/repo.git"_s << u"git@github.com:ja/repo.git"_s << u"github.com"_s
+                         << u"ja/repo"_s << u"repo"_s << false;
+    QTest::newRow("scp without user") << u"example.org:team/tool"_s << u"example.org:team/tool"_s << u"example.org"_s
+                                      << u"team/tool"_s << u"tool"_s << false;
+    QTest::newRow("ssh url") << u"ssh://git@github.com/ja/repo.git"_s << u"ssh://git@github.com/ja/repo.git"_s
+                             << u"github.com"_s << u"ja/repo"_s << u"repo"_s << false;
+    QTest::newRow("ssh port") << u"ssh://git@host.example:2222/a/b.git"_s << u"ssh://git@host.example:2222/a/b.git"_s
+                              << u"host.example"_s << u"a/b"_s << u"b"_s << false;
+    QTest::newRow("Polish name") << u"https://gitlab.com/ja/żółć"_s
+                                 << u"https://gitlab.com/ja/%C5%BC%C3%B3%C5%82%C4%87"_s << u"gitlab.com"_s
+                                 << u"ja/żółć"_s << u"żółć"_s << false;
+    QTest::newRow("percent-encoded") << u"https://gitlab.com/ja/%C5%BC%C3%B3%C5%82%C4%87"_s
+                                     << u"https://gitlab.com/ja/%C5%BC%C3%B3%C5%82%C4%87"_s << u"gitlab.com"_s
+                                     << u"ja/żółć"_s << u"żółć"_s << false;
+}
+
+void TestGitCli::cloneSources()
+{
+    QFETCH(QString, text);
+    const CloneSource s = parseCloneSource(text);
+    QVERIFY2(s.isValid(), qPrintable(s.error));
+    QTEST(s.url, "url");
+    QTEST(s.host, "host");
+    QTEST(s.path, "path");
+    QTEST(s.name, "name");
+    QTEST(s.shorthand, "shorthand");
+    QVERIFY(!s.local);
+    QVERIFY(s.error.isEmpty());
+    QCOMPARE(s.displayName(), s.host == u"github.com" ? s.path : s.host + u'/' + s.path);
+}
+
+void TestGitCli::cloneSourcesRefused_data()
+{
+    QTest::addColumn<QString>("text");
+    QTest::newRow("an option") << u"--upload-pack=touch /tmp/x"_s;
+    QTest::newRow("an option after spaces") << u"  -u x"_s;
+    QTest::newRow("ext transport") << u"ext::sh -c touch% /tmp/pwned"_s;
+    QTest::newRow("fd transport") << u"fd::17"_s;
+    QTest::newRow("host:: helper") << u"github.com::ja/repo"_s;
+    QTest::newRow("ftp") << u"ftp://example.com/a/b"_s;
+    QTest::newRow("owner only") << u"janusz-bit"_s;
+    QTest::newRow("owner/") << u"janusz-bit/"_s;
+    QTest::newRow("github owner page") << u"https://github.com/janusz-bit"_s;
+    QTest::newRow("no path") << u"https://github.com"_s;
+    QTest::newRow("dot dot") << u"https://example.com/a/../b"_s;
+    QTest::newRow("scp dot dot") << u"git@example.com:../../etc"_s;
+    QTest::newRow("a space in the path") << u"https://example.com/a b/c"_s;
+    QTest::newRow("a newline") << u"https://github.com/ja/repo\n--upload-pack=x"_s;
+    QTest::newRow("relative path") << u"../repo"_s;
+    QTest::newRow("words") << u"zażółć gęślą jaźń"_s;
+    QTest::newRow("bad port") << u"https://example.com:x/a/b"_s;
+    QTest::newRow("bad host") << u"https://exa_mple!/a/b"_s;
+}
+
+void TestGitCli::cloneSourcesRefused()
+{
+    QFETCH(QString, text);
+    const CloneSource s = parseCloneSource(text);
+    QVERIFY2(!s.isValid(), qPrintable(s.url));
+    QVERIFY(!s.error.isEmpty());
+    QVERIFY(!parseCloneSource(u""_s).isValid());
+    QVERIFY(parseCloneSource(u"   "_s).error.isEmpty()); // (nothing typed: nothing to say)
+}
+
+void TestGitCli::cloneProtocols_data()
+{
+    QTest::addColumn<QString>("url");
+    QTest::addColumn<bool>("ssh");
+    QTest::addColumn<QString>("expected");
+    QTest::newRow("https → ssh") << u"https://github.com/ja/repo.git"_s << true << u"git@github.com:ja/repo.git"_s;
+    QTest::newRow("shorthand → ssh") << u"ja/repo"_s << true << u"git@github.com:ja/repo.git"_s;
+    QTest::newRow("shorthand stays https") << u"ja/repo"_s << false << u"https://github.com/ja/repo.git"_s;
+    QTest::newRow("scp → https") << u"git@github.com:ja/repo.git"_s << false << u"https://github.com/ja/repo.git"_s;
+    QTest::newRow("ssh url → https") << u"ssh://git@gitlab.com/g/s/p.git"_s << false
+                                     << u"https://gitlab.com/g/s/p.git"_s;
+    QTest::newRow("Polish → https") << u"git@gitlab.com:ja/żółć.git"_s << false
+                                    << u"https://gitlab.com/ja/%C5%BC%C3%B3%C5%82%C4%87.git"_s;
+    QTest::newRow("same protocol") << u"git@github.com:ja/repo.git"_s << true << u"git@github.com:ja/repo.git"_s;
+    QTest::newRow("custom port") << u"ssh://git@host.example:2222/a/b.git"_s << false << QString();
+    QTest::newRow("https port") << u"https://host.example:8443/a/b.git"_s << true << QString();
+    QTest::newRow("local") << u"/srv/git/repo.git"_s << true << QString();
+    QTest::newRow("git protocol") << u"git://example.com/a/b.git"_s << true << QString();
+    QTest::newRow("garbage") << u"--x"_s << true << QString();
+}
+
+void TestGitCli::cloneProtocols()
+{
+    QFETCH(QString, url);
+    QFETCH(bool, ssh);
+    QTEST(cloneUrlForProtocol(url, ssh), "expected");
+}
+
+void TestGitCli::urlCredentials_data()
+{
+    QTest::addColumn<QString>("url");
+    QTest::addColumn<QString>("expected");
+    QTest::newRow("token") << u"https://ja:ghp_tajne@github.com/ja/repo.git"_s << u"https://github.com/ja/repo.git"_s;
+    QTest::newRow("user only") << u"http://ja@example.com/a/b"_s << u"http://example.com/a/b"_s;
+    QTest::newRow("query") << u"https://example.com/a/b.git?token=x#top"_s << u"https://example.com/a/b.git#top"_s;
+    QTest::newRow("plain") << u"https://github.com/ja/repo"_s << u"https://github.com/ja/repo"_s;
+    QTest::newRow("ssh keeps its user") << u"git@github.com:ja/repo.git"_s << u"git@github.com:ja/repo.git"_s;
+    QTest::newRow("ssh url") << u"ssh://git@github.com/ja/repo.git"_s << u"ssh://git@github.com/ja/repo.git"_s;
+}
+
+void TestGitCli::urlCredentials()
+{
+    QFETCH(QString, url);
+    QTEST(withoutUrlCredentials(url), "expected");
+}
+
+void TestGitCli::cloneProgress_data()
+{
+    QTest::addColumn<QString>("err");
+    QTest::addColumn<int>("stage");
+    QTest::addColumn<int>("percent");
+    QTest::addColumn<QString>("detail");
+    const auto stage = [](CloneStage s) { return int(s); };
+    QTest::newRow("nothing") << QString() << stage(CloneStage::Connecting) << -1 << QString();
+    QTest::newRow("cloning into") << u"Cloning into 'repo'...\n"_s << stage(CloneStage::Connecting) << -1 << QString();
+    QTest::newRow("enumerating") << u"Cloning into 'repo'...\nremote: Enumerating objects: 1234, done.\n"_s
+                                 << stage(CloneStage::Counting) << -1 << QString();
+    QTest::newRow("counting") << u"remote: Counting objects:  45% (5/11)\r"_s << stage(CloneStage::Counting) << 45
+                              << QString();
+    QTest::newRow("receiving") << u"remote: Total 1000\nReceiving objects:  12% (120/1000)\rReceiving objects:  "
+                                  "45% (450/1000), 12.40 MiB | 3.10 MiB/s\r"_s
+                               << stage(CloneStage::Receiving) << 45 << u"12.40 MiB | 3.10 MiB/s"_s;
+    QTest::newRow("received") << u"Receiving objects: 100% (1000/1000), 30.00 MiB | 4.00 MiB/s, done.\n"_s
+                              << stage(CloneStage::Receiving) << 100 << u"30.00 MiB | 4.00 MiB/s"_s;
+    QTest::newRow("resolving") << u"Receiving objects: 100% (10/10), done.\nResolving deltas:  30% (3/10)\r"_s
+                               << stage(CloneStage::Resolving) << 30 << QString();
+    QTest::newRow("resolved") << u"Resolving deltas: 100% (10/10), done.\n"_s << stage(CloneStage::Resolving) << 100
+                              << QString();
+    QTest::newRow("checkout") << u"Resolving deltas: 100% (10/10), done.\nUpdating files:  71% (500/700)\r"_s
+                              << stage(CloneStage::Checkout) << 71 << QString();
+    QTest::newRow("a broken line") << u"Receiving objects:  4"_s << stage(CloneStage::Receiving) << -1 << QString();
+    QTest::newRow("garbage") << u"\r\r\n%%%: 999%\n"_s << stage(CloneStage::Connecting) << -1 << QString();
+}
+
+void TestGitCli::cloneProgress()
+{
+    QFETCH(QString, err);
+    const CloneProgress p = parseCloneProgress(err);
+    QTEST(int(p.stage), "stage");
+    QTEST(p.percent, "percent");
+    QTEST(p.detail, "detail");
+    QVERIFY(!cloneStageName(p.stage).isEmpty());
+}
+
+void TestGitCli::authenticationFailures_data()
+{
+    QTest::addColumn<QString>("error");
+    QTest::addColumn<bool>("auth");
+    QTest::newRow("publickey")
+            << u"git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository."_s
+            << true;
+    QTest::newRow("host key") << u"Host key verification failed.\nfatal: Could not read from remote repository."_s
+                              << true;
+    QTest::newRow("no prompt")
+            << u"fatal: could not read Username for 'https://github.com': terminal prompts disabled"_s << true;
+    QTest::newRow("bad token")
+            << u"remote: Invalid username or password.\nfatal: Authentication failed for 'https://github.com/ja/r.git/'"_s
+            << true;
+    QTest::newRow("403") << u"fatal: unable to access 'https://x/': The requested URL returned error: 403"_s << true;
+    QTest::newRow("not found")
+            << u"remote: Repository not found.\nfatal: repository 'https://github.com/ja/nie.git/' not found"_s
+            << false;
+    QTest::newRow("no host") << u"fatal: unable to access 'https://nie.example/': Could not resolve host: nie.example"_s
+                             << false;
+    QTest::newRow("empty") << QString() << false;
+}
+
+void TestGitCli::authenticationFailures()
+{
+    QFETCH(QString, error);
+    QTEST(isAuthenticationFailure(error), "auth");
+}
+
+void TestGitCli::repositoryList()
+{
+    const QByteArray json = R"([
+        {"nameWithOwner":"janusz-bit/brulion","description":"Notatki  w\nMarkdown","url":"https://github.com/janusz-bit/brulion",
+         "sshUrl":"git@github.com:janusz-bit/brulion.git","isPrivate":false,"isFork":false,"isArchived":false,
+         "updatedAt":"2026-11-26T12:00:00Z"},
+        {"nameWithOwner":"janusz-bit/prywatne","description":"","isPrivate":true,"isFork":true,"isArchived":true},
+        {"nameWithOwner":"bez-nazwy"},
+        {"nameWithOwner":"../../etc/passwd"},
+        {"description":"no name"},
+        7
+    ])";
+    const QList<HostedRepository> list = parseRepositoryList(json);
+    QCOMPARE(list.size(), 2);
+    QCOMPARE(list.at(0).nameWithOwner, u"janusz-bit/brulion"_s);
+    QCOMPARE(list.at(0).description, u"Notatki w Markdown"_s);
+    QCOMPARE(list.at(0).sshUrl, u"git@github.com:janusz-bit/brulion.git"_s);
+    QCOMPARE(list.at(0).updatedAt, u"2026-11-26T12:00:00Z"_s);
+    QVERIFY(!list.at(0).isPrivate);
+    QVERIFY(list.at(1).isPrivate);
+    QVERIFY(list.at(1).isFork);
+    QVERIFY(list.at(1).isArchived);
+    QVERIFY(parseRepositoryList("{}").isEmpty());
+    QVERIFY(parseRepositoryList("[").isEmpty());
+    QVERIFY(parseRepositoryList("").isEmpty());
+    QVERIFY(repositoryListFields().contains(u"nameWithOwner"_s));
 }
 
 // ---- patches -----------------------------------------------------------------------------------

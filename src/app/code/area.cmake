@@ -15,6 +15,9 @@ qt_target_qml_sources(brulion
         qml/code/CodeScriptsEditor.qml
         qml/code/CodeBranchPicker.qml
         qml/code/CodePullRequestDialog.qml
+        qml/code/CodeClonePicker.qml
+        qml/code/CodeCloneDialog.qml
+        qml/code/CodeCloneRow.qml
         qml/code/CodeSetupBanner.qml
         qml/code/CodeOpenIn.qml
         qml/code/CodeThreadTitle.qml

@@ -2845,6 +2845,19 @@ Item {
                         onEditingFinished: Workspace.projects.worktreesRoot = text
                     }
                 }
+                ShellSettingRow {
+                    title: qsTr("Cloned repositories")
+                    description: qsTr("Where “Clone a repository…” puts a repository unless you choose another folder: a folder of its name in it. Empty: %1.").arg("~/.brulion/projects")
+                    BTextField {
+                        objectName: "codeClonesSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: Workspace.projects.clonesRoot
+                        accessibleName: qsTr("Cloned repositories")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                        onEditingFinished: Workspace.projects.clonesRoot = text
+                    }
+                }
             }
 
             // Scheduled conversations (shell/chatschedules.h): kept on this device per notebook.

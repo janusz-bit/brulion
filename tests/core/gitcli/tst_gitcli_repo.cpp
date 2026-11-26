@@ -21,6 +21,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrl>
 
 #include <optional>
 
@@ -216,6 +217,15 @@ private Q_SLOTS:
     void noGit();
     void timeLimit();
     void noCallbackAfterDestruction();
+
+    // Cloning
+    void cloneFromThisComputer();
+    void cloneIntoAnEmptyFolder();
+    void cloneRefusesAFullFolder();
+    void cloneFailureLeavesNothing();
+    void cloneStopped();
+    void cloneSaysWhySigningInFailed();
+    void repositoryListThroughGh();
 
     // History, comparisons, remotes, gh
     void logOfCommits();
@@ -1163,6 +1173,207 @@ void TestGitCliRepo::noCallbackAfterDestruction()
     }
     QTest::qWait(300);
     QVERIFY(!called);
+}
+
+// ---- Cloning -------------------------------------------------------------------------------------
+
+void TestGitCliRepo::cloneFromThisComputer()
+{
+    // A repository with a few commits, cloned by its path and by a file: URL into a folder whose
+    // parents are not there yet; the progress comes as git says it.
+    Repo source;
+    source.write(u"README.md"_s, "# Zażółć gęślą jaźń\n");
+    source.write(u"src/main.cpp"_s, "int main() { return 0; }\n");
+    source.commitAll(u"Pierwszy"_s);
+    source.write(u"notatki/żółw.md"_s, "żółw\n");
+    source.commitAll(u"Drugi"_s);
+
+    QTemporaryDir target;
+    const QString dest = target.filePath(u"projekty/nowy folder/repo"_s);
+    Client client;
+    QList<CloneProgress> steps;
+    const Outcome o = await<Outcome>([&](auto done) {
+        client.clone(source.root, dest, u"t1"_s, [&steps](const CloneProgress &p) { steps << p; }, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(o.value, QDir::cleanPath(dest));
+    QVERIFY(QFileInfo::exists(dest + u"/README.md"_s));
+    QVERIFY(QFileInfo::exists(dest + u"/notatki/żółw.md"_s));
+    QCOMPARE(Repo::runIn(dest, {u"rev-list"_s, u"--count"_s, u"HEAD"_s}).trimmed(), QByteArray("2"));
+    // (A local clone says little: the checkout at least, when git reports progress at all.)
+    for (const CloneProgress &p : std::as_const(steps))
+        QVERIFY(p.percent >= -1 && p.percent <= 100);
+    QCOMPARE(client.running(), 0);
+
+    const QString viaUrl = target.filePath(u"z adresu"_s);
+    const Outcome u = await<Outcome>([&](auto done) {
+        client.clone(QUrl::fromLocalFile(source.root).toString(), viaUrl, QString(), nullptr, done);
+    });
+    QVERIFY2(u.ok, qPrintable(u.message));
+    QVERIFY(QFileInfo::exists(viaUrl + u"/src/main.cpp"_s));
+}
+
+void TestGitCliRepo::cloneIntoAnEmptyFolder()
+{
+    Repo source;
+    source.write(u"a.txt"_s, "a\n");
+    source.commitAll(u"a"_s);
+    QTemporaryDir target;
+    const QString dest = target.filePath(u"pusty"_s);
+    QVERIFY(QDir().mkpath(dest));
+    Client client;
+    const Outcome o = await<Outcome>([&](auto done) { client.clone(source.root, dest, QString(), nullptr, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QVERIFY(QFileInfo::exists(dest + u"/a.txt"_s));
+}
+
+void TestGitCliRepo::cloneRefusesAFullFolder()
+{
+    Repo source;
+    source.write(u"a.txt"_s, "a\n");
+    source.commitAll(u"a"_s);
+    QTemporaryDir target;
+    const QString dest = target.filePath(u"zajęty"_s);
+    QVERIFY(QDir().mkpath(dest));
+    QFile mine(dest + u"/moje.txt"_s);
+    QVERIFY(mine.open(QIODevice::WriteOnly));
+    mine.write("moje\n");
+    mine.close();
+    Client client;
+    const Outcome o = await<Outcome>([&](auto done) { client.clone(source.root, dest, QString(), nullptr, done); });
+    QVERIFY(!o.ok);
+    QVERIFY2(o.message.contains(u"not an empty folder"_s), qPrintable(o.message));
+    QVERIFY(QFileInfo::exists(dest + u"/moje.txt"_s)); // (left as it was)
+    QVERIFY(!QFileInfo::exists(dest + u"/a.txt"_s));
+    // A file where the folder would be.
+    const Outcome f = await<Outcome>(
+            [&](auto done) { client.clone(source.root, dest + u"/moje.txt"_s, QString(), nullptr, done); });
+    QVERIFY(!f.ok);
+    // Nothing to clone, or an option.
+    QVERIFY(!await<Outcome>([&](auto done) { client.clone(QString(), dest, QString(), nullptr, done); }).ok);
+    QVERIFY(!await<Outcome>([&](auto done) { client.clone(u"--upload-pack=x"_s, dest, QString(), nullptr, done); }).ok);
+}
+
+void TestGitCliRepo::cloneFailureLeavesNothing()
+{
+    QTemporaryDir target;
+    const QString dest = target.filePath(u"nic"_s);
+    Client client;
+    const Outcome o = await<Outcome>([&](auto done) {
+        client.clone(target.filePath(u"nie ma takiego repozytorium"_s), dest, QString(), nullptr, done);
+    });
+    QVERIFY(!o.ok);
+    QVERIFY(!o.message.isEmpty());
+    QVERIFY(!QFileInfo::exists(dest));
+    // An empty folder that was there stays, empty.
+    QVERIFY(QDir().mkpath(dest));
+    const Outcome e = await<Outcome>([&](auto done) {
+        client.clone(target.filePath(u"nie ma takiego repozytorium"_s), dest, QString(), nullptr, done);
+    });
+    QVERIFY(!e.ok);
+    QVERIFY(QFileInfo(dest).isDir());
+    QVERIFY(QDir(dest).isEmpty(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden));
+}
+
+void TestGitCliRepo::cloneStopped()
+{
+    // A clone that never finishes (the fake gh asleep as git), stopped by its tag.
+    qputenv("FAKE_GH_MODE", "slow");
+    QTemporaryDir target;
+    const QString dest = target.filePath(u"przerwany"_s);
+    Client client;
+    client.setGitProgram(QString::fromUtf8(FAKE_GH));
+    std::optional<Outcome> outcome;
+    client.clone(u"https://example.com/a/b.git"_s, dest, u"klon"_s, nullptr,
+                 [&outcome](const Outcome &o) { outcome = o; });
+    QTest::qWait(100);
+    QVERIFY(!client.stop(u"inny"_s));
+    QVERIFY(client.stop(u"klon"_s));
+    QTRY_VERIFY_WITH_TIMEOUT(outcome.has_value(), brulion::test::kRoomyMs);
+    qunsetenv("FAKE_GH_MODE");
+    QVERIFY(!outcome->ok);
+    QCOMPARE(outcome->message, u"Stopped"_s);
+    QVERIFY(!QFileInfo::exists(dest));
+    QCOMPARE(client.running(), 0);
+    QVERIFY(!client.stop(u"klon"_s));
+}
+
+void TestGitCliRepo::cloneSaysWhySigningInFailed()
+{
+#ifdef Q_OS_UNIX
+    // ssh's reason comes before git's "fatal:" line: the outcome says both.
+    QTemporaryDir dir;
+    const QString script = dir.filePath(u"git"_s);
+    QFile s(script);
+    QVERIFY(s.open(QIODevice::WriteOnly));
+    s.write("#!/bin/sh\necho \"Cloning into 'x'...\" >&2\necho 'git@github.com: Permission denied (publickey).' >&2\n"
+            "echo 'fatal: Could not read from remote repository.' >&2\necho >&2\n"
+            "echo 'Please make sure you have the correct access rights' >&2\nexit 128\n");
+    s.close();
+    QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    Client client;
+    client.setGitProgram(script);
+    const Outcome o = await<Outcome>([&](auto done) {
+        client.clone(u"git@github.com:ja/repo.git"_s, dir.filePath(u"repo"_s), QString(), nullptr, done);
+    });
+    QVERIFY(!o.ok);
+    QVERIFY2(o.message.contains(u"Permission denied (publickey)"_s), qPrintable(o.message));
+    QVERIFY2(o.message.contains(u"Could not read from remote repository"_s), qPrintable(o.message));
+    QVERIFY(isAuthenticationFailure(o.message));
+#else
+    QSKIP("the fake git is a shell script");
+#endif
+}
+
+void TestGitCliRepo::repositoryListThroughGh()
+{
+    QTemporaryDir argsDir;
+    const QString argsFile = argsDir.filePath(u"args"_s);
+    qputenv("FAKE_GH_ARGS", argsFile.toUtf8());
+    qputenv("FAKE_GH_JSON", R"([{"nameWithOwner":"ja/notatki","description":"Zażółć","isPrivate":true}])");
+    Client client;
+    client.setGhProgram(QString::fromUtf8(FAKE_GH));
+    std::optional<QList<HostedRepository>> list;
+    QString error;
+    client.repositoryList(50, [&](const QList<HostedRepository> &r, const QString &e) {
+        list = r;
+        error = e;
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(list.has_value(), brulion::test::kRoomyMs);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(list->size(), 1);
+    QCOMPARE(list->at(0).nameWithOwner, u"ja/notatki"_s);
+    QCOMPARE(list->at(0).description, u"Zażółć"_s);
+    QFile a(argsFile);
+    QVERIFY(a.open(QIODevice::ReadOnly));
+    const QList<QByteArray> args = a.readAll().split('\0');
+    QVERIFY(args.size() >= 6);
+    QCOMPARE(args.at(0), QByteArray("repo"));
+    QCOMPARE(args.at(1), QByteArray("list"));
+    QCOMPARE(args.at(3), QByteArray("50"));
+    QCOMPARE(args.at(5), repositoryListFields().toUtf8());
+
+    qputenv("FAKE_GH_MODE", "signed-out");
+    list.reset();
+    client.repositoryList(50, [&](const QList<HostedRepository> &r, const QString &e) {
+        list = r;
+        error = e;
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(list.has_value(), brulion::test::kRoomyMs);
+    QVERIFY(list->isEmpty());
+    QVERIFY2(error.contains(u"gh auth login"_s), qPrintable(error));
+    qunsetenv("FAKE_GH_MODE");
+    qunsetenv("FAKE_GH_ARGS");
+    qunsetenv("FAKE_GH_JSON");
+
+    client.setGhProgram(QString());
+    list.reset();
+    client.repositoryList(50, [&](const QList<HostedRepository> &r, const QString &e) {
+        list = r;
+        error = e;
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(list.has_value(), brulion::test::kRoomyMs);
+    QVERIFY2(error.contains(u"not installed"_s), qPrintable(error));
 }
 
 // ---- History, comparisons, remotes, gh ---------------------------------------------------------

@@ -8,6 +8,8 @@
 //   signed-out    gh's "gh auth login" advice, exit 4
 //   slow          sleeps 30 s (a git or gh that never finishes)
 //
+// `gh repo list` prints $FAKE_GH_JSON ("[]" unset) on stdout (signed-out: the advice, exit 4).
+//
 // `gh pr view` (the panel asks for the branch's pull request after a push) finds none — "no pull
 // requests found", exit 1 — and records nothing (the arguments of `pr create` stay readable).
 #include <QCoreApplication>
@@ -57,6 +59,11 @@ int main(int argc, char **argv)
     if (mode == QLatin1String("signed-out")) {
         std::fputs("To get started with GitHub CLI, please run:  gh auth login\n", stderr);
         return 4;
+    }
+    if (arguments.size() >= 2 && arguments.at(0) == QLatin1String("repo") && arguments.at(1) == QLatin1String("list")) {
+        const QByteArray json = qgetenv("FAKE_GH_JSON");
+        std::fputs(json.isEmpty() ? "[]\n" : json.constData(), stdout);
+        return 0;
     }
     std::fputs("Creating pull request for x into main in ja/repo\n", stderr);
     std::fputs("https://github.com/ja/repo/pull/17\n", stdout);

@@ -25,7 +25,7 @@ bottom navigation is gone. Reminders, sync, notifications and the rest of the no
 settings, `codeconfig.cpp` t3.json, `codeworktrees.cpp` git and gh, `codeeditors.cpp` "Open in…"):
 this device's projects, kept in its settings (`code/projects`, JSON: `{projects: [{id, name, path,
 pinned?, icon?, agent?, env?, scripts?: [{name, command, icon, shortcut?, runOnWorktreeCreate?,
-wait?}]}], worktreesRoot?, editor?, preferredEditor?, branchPrefix?, deletedWorktrees?, newThreadEnv?,
+wait?}]}], worktreesRoot?, clonesRoot?, editor?, preferredEditor?, branchPrefix?, deletedWorktrees?, newThreadEnv?,
 threadSort?}`) — **never in the notebook**: a path is this device's, and a synced file must never point
 an agent at a folder.
 
@@ -53,6 +53,50 @@ an agent at a folder.
   [], remote true, host, remotePath}`, read-only, `folderOf()` "" — when a computer that shares its
   agents with this device offers them ("Threads on the phone" below). `isRemote(id)`; a project id of
   this device's own hides one of a computer, and of two computers the first one's is listed.
+
+### Cloning a repository
+
+"Clone a repository…" (T3 Code's Add project → clone; the sidebar's add menu `codeAddProjectMenu`,
+the empty states, the header's project menu, the palette's `code.cloneRepository` — route
+`{view: "code", cloneRepository: true}`) makes a project of a repository that is not on the device
+yet. `codeclones.cpp` over core `gitcli` (`clone.cpp`):
+
+* **What is typed** — `gitcli::parseCloneSource()`, T3 Code's rules: `owner/name` is GitHub
+  (`https://github.com/owner/name.git`, `shorthand`), `github.com/owner/name`, https / http / ssh /
+  git:// addresses and scp-like `git@host:owner/name.git`, a repository's **web page** cut to the
+  repository (GitHub: the first two segments; elsewhere at `/-/`, `/tree/`, `/blob/`, `/src/`,
+  `/pull/`, `/issues` …; the query and fragment dropped, percent escapes read), a repository on this
+  computer (an absolute path, a `file:` URL). Refused: anything starting with `-` (an option to git),
+  another transport (`ext::`, `fd::`, `host::…`), `.` / `..` segments, spaces or control characters,
+  a host that is no host name, an owner without a name ("Type the whole owner/repository name.").
+  The default folder's name is the repository's (safe on every platform, `repository` else).
+* **The picker** (`CodeClonePicker`, a BPalette): the user's repositories from `gh repo list --limit
+  200 --json nameWithOwner,description,url,sshUrl,isPrivate,isFork,isArchived,updatedAt` (only where
+  gh is; `CodeProjects.listRepositories()` → `repositoriesListed()`, the last list shown at once while
+  gh is asked again; rows `repositoryItems()`: private · fork · archived · the description, a lock on
+  private ones), and `cloneOffers()`: "Clone “x”" for what is typed when it names a repository none of
+  them is; `cloneProblem()` says why it is none when it looks like an address (a `/`, `:` or `@`).
+* **The folder** (`CodeCloneDialog`): `cloneFolder(source, parent)` — `<clonesRoot>/<name>`
+  (`clonesRoot` default `~/.brulion/projects`, Settings → Extensions → Code mode → "Cloned
+  repositories", `codeClonesSetting`), `-2`, `-3` … while the folder is taken (not empty, a file, a
+  clone running into it); a folder chosen in the picker gets `<chosen>/<name>`, unless it is an empty
+  folder of the repository's name itself. A clone goes only into a missing or empty folder.
+* **The clone** — `cloneRepository(source, folder)` ("" started, else why not) runs
+  `git clone --progress -- <url> <folder>` (`gitcli::Client::clone()`: the parent made first, an hour's
+  limit, ssh asks only through an askpass program — `SSH_ASKPASS_REQUIRE=force` unless the user set
+  it —, https never: `GIT_TERMINAL_PROMPT=0`; no submodules, no hooks). Its progress
+  (`gitcli::parseCloneProgress()`: counting, receiving, resolving, checkout, the percent, git's
+  "12.4 MiB | 3.1 MiB/s") is a row of `clones` — `[{folder, source, url (no login), name, phase
+  running | failed, stage, percent, detail, status, error}]`, `clonesChanged()` at most four times a
+  second — shown by the dialog and by `CodeCloneRow` above the projects (Cancel `cancelClone()`: the
+  run stopped by its tag, `Client::stop()`, what it cloned taken away). When signing in fails
+  (`isAuthenticationFailure()`: publickey, host key, "could not read Username", 401 / 403) the clone is
+  tried once more over the other protocol (`cloneUrlForProtocol()`: ssh ↔ https on the same host and
+  path; not with a custom port). Done, the folder is added (`add()`) and `cloned(folder, project, "",
+  false)` — the dialog, if still shown, opens a new thread of it; hidden, a toast says so. Failed, the
+  row stays with git's message (`retryClone()` the address as typed again, `dismissClone()`); a
+  folder git made is never left behind, an empty folder that was there stays. Quitting the app stops
+  a running clone and takes away the folder it made.
 
 ### t3.json
 
@@ -348,6 +392,11 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   sparse checkouts, multi-repository projects and custom worktree layouts; a branch name the AI makes
   up for a new worktree (the prefix and the first message's slug only); automatic worktree cleanup
   (by age, merged pull requests).
+* Cloning: other hosts' repository lists (GitLab, Forgejo, Bitbucket — their addresses clone, their
+  lists are not shown), T3 Code's "Clone into host folders" (`<host>/<owner>/<repo>`), a new project
+  made from nothing (`git init` with a README, a GitHub repository published for it), copying a
+  project's ignored files (`.env`) to a clone on another computer, cloning on a computer that shares
+  its agents from the phone.
 * Settling and snoozing threads, "Regenerate title", dropping files on a thread's row, scratch threads
   without a project.
 * Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within

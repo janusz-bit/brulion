@@ -8,9 +8,11 @@
 # requests, history, stashes, merges and rebases in progress, single files and hunks staged or
 # thrown away — and checkpoints (checkpoints.cpp): snapshots of the work tree through a temporary
 # index, kept by refs/brulion/checkpoints/<id>, the changes since one, the work tree put back to one.
+# clone.cpp: Code mode's "Clone a repository" — what the user typed read as an address ("owner/name",
+# https, ssh, a repository's page), ssh ↔ https, `git clone --progress`, `gh repo list`.
 brulion_add_core_module(gitcli
     SOURCES
         gitcli.h parse.cpp history.cpp patch.cpp
         client.h client.cpp client_history.cpp client_files.cpp client_operations.cpp
-        checkpoints.cpp
+        checkpoints.cpp clone.cpp
         messages_p.h)
