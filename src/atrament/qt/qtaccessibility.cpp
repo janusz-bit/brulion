@@ -95,6 +95,16 @@ std::u16string_view textOf(const AccessibilityNode &n)
     return n.role == Role::TextInput ? n.value : n.name;
 }
 
+// Something around the node can scroll it into view (its content is larger than it).
+bool insideScrolling(const AccessibilityTree &tree, const AccessibilityNode &n)
+{
+    for (const AccessibilityNode *s = tree.node(n.scrollAncestor); s; s = tree.node(s->scrollAncestor)) {
+        if (has(*s, AccessibilityAction::ScrollForward) || has(*s, AccessibilityAction::ScrollBackward))
+            return true;
+    }
+    return false;
+}
+
 // One step: the states that changed, each in an event of its own (AT-SPI reads one per event).
 std::vector<QAccessible::State> splitStates(const AccessibilityStates &c)
 {
@@ -415,7 +425,7 @@ public:
             names << (n->scrollY ? scrollDownAction() : scrollRightAction());
         if (has(*n, AccessibilityAction::ScrollBackward))
             names << (n->scrollY ? scrollUpAction() : scrollLeftAction());
-        if (n->scrollAncestor >= 0)
+        if (insideScrolling(*m_bridge->tree(), *n))
             names << showOnScreenAction();
         return names;
     }
