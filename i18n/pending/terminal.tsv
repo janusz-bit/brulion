@@ -4,7 +4,6 @@ brulion::terminal::TerminalThread	A tab holds %n terminal(s) at most.	Karta mie�
 brulion::terminal::TerminalView	Terminal output (%1):	Wyjście terminala (%1):	The heading of terminal output added to the chat: the terminal's title
 brulion::terminal::TerminalView	Terminal output (%1, in %2):	Wyjście terminala (%1, w %2):	The heading of terminal output added to the chat: the terminal's title, its folder
 brulion::shell::CommandModel	Show or hide the terminal	Pokaż lub ukryj terminal	
-brulion::shell::CommandModel	Code mode	Tryb kodu	
 brulion::shell::CommandModel	New terminal	Nowy terminal	
 brulion::shell::CommandModel	Code mode: a shell in the thread's folder	Tryb kodu: powłoka w folderze wątku	
 brulion::shell::CommandModel	Split terminal right	Podziel terminal w prawo	
