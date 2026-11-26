@@ -43,13 +43,18 @@ Item {
         dialog.open()
     }
     function startClone(): void {
-        const folder = Js.trim(folderField.text)
-        cloner.error = Workspace.projects.cloneRepository(cloner.source, folder)
-        if (cloner.error !== "") {
+        // (Every argument as plain text before the calls: compiled code reads no shadowable result
+        // again after a call — docs/UI.md "Compiled QML", "Side effects".)
+        const source = "" + cloner.source
+        const folder = "" + Js.trim(folderField.text)
+        const clean = "" + Workspace.projects.cleanFolder(folder)
+        const error = "" + Workspace.projects.cloneRepository(source, folder)
+        cloner.error = error
+        if (error !== "") {
             cloner.refused = true
             return
         }
-        cloner.cloning = Workspace.projects.cleanFolder(folder)
+        cloner.cloning = clean
         cloner.follow()
         dialog.busy = true
     }
