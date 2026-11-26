@@ -1013,6 +1013,46 @@ QVariantMap WorkspaceChats::workLog(const QString &path, int number, int serial)
     return {};
 }
 
+QString WorkspaceChats::checkpointOf(const QString &path, int number, int serial) const
+{
+    if (number <= 0 || path.isEmpty() || !m_workspace->exists(path))
+        return {};
+    bool ok = false;
+    const chat::Conversation conversation = chat::parse(m_workspace->read(path, &ok));
+    if (!ok || number > conversation.messages.size() || conversation.messages.at(number - 1).role != chat::Role::User)
+        return {};
+    // (A checkpoint names its turn by how many of the user's messages the page had then.)
+    const auto upTo = conversation.messages.cbegin() + number;
+    const int turn = int(std::count_if(conversation.messages.cbegin(), upTo,
+                                       [](const chat::Message &m) { return m.role == chat::Role::User; }));
+    for (const QVariant &v : checkpoints(path, serial)) {
+        const QVariantMap c = v.toMap();
+        if (c.value(u"message"_s).toInt() == turn)
+            return c.value(u"id"_s).toString();
+    }
+    return {};
+}
+
+bool WorkspaceChats::restoreCheckpoint(const QString &path, const QString &id)
+{
+    const QString folder = threadFolder(path);
+    if (folder.isEmpty() || id.isEmpty() || !gitcli::isValidCheckpointId(id))
+        return false;
+    if (!m_git)
+        m_git = new gitcli::Client(this);
+    const QPointer<WorkspaceChats> self(this);
+    m_git->restore(folder, id, [self, path](const gitcli::RestoreReport &r) {
+        if (!self)
+            return;
+        const QString message =
+                !r.ok ? tr("The files could not be put back: %1").arg(r.error)
+                      : tr("The files are back as they were before that message (%n file(s) changed).", "",
+                           int(r.restored.size() + r.removed.size()));
+        Q_EMIT self->checkpointRestored(path, r.ok, message);
+    });
+    return true;
+}
+
 QString WorkspaceChats::lastCheckpoint(const QString &path, int serial) const
 {
     // (The page's names the newest turn's, whichever device ran it.)

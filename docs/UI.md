@@ -1696,7 +1696,11 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   (`WorkspaceChats.rewind()`, core `chat::truncated`: the page before it byte for byte), its turn
   and its waiting messages stop, its text and pictures go back into the field; an AI agent's next
   turn is a new session with what is left; a toast's **Undo** puts the page back while it did not
-  change since — `undoRewind()`, AppController's `m_rewindToasts`) and **Fork from here**
+  change since — `undoRewind()`, AppController's `m_rewindToasts`; in a thread of Code mode whose turn
+  of that message has a checkpoint, a dialog first, `chatEditFromHereDialog`, with T3 Code's "Revert
+  files too": "Also put the project's files back as they were before this message" —
+  `WorkspaceChats.checkpointOf(path, number)` / `restoreCheckpoint(path, id)` →
+  `checkpointRestored(path, ok, message)`, a toast) and **Fork from here**
   (`chatMessageFork`: a new conversation, today's, a copy of this one up to that message —
   `WorkspaceChats.fork()`, core `chat::forked`, its journal line too — that goes on by itself with
   the same partner and a session of its own; its frontmatter's `fork:` names the source,

@@ -287,7 +287,9 @@ refs dropped), `lastCheckpoint(path)` the newest — CodeView gives the list to 
 working tree; "Revert this turn…" takes that turn out, "Revert to before turn N…" puts checkpoint N
 back). While the agent works the panel polls git every 2 s; each answer written refreshes it. The
 panel's review comments go into the thread's composer (`ChatView.addToComposer`); its Open in editor
-uses `Workspace.projects.openInEditor` for the file.
+uses `Workspace.projects.openInEditor` for the file. "Edit from here" on a message of a thread
+offers to put the files back to the checkpoint of that message's turn (`checkpointOf(path, number)`: the page's message number → the
+turn, `restoreCheckpoint(path, id)` → `checkpointRestored(path, ok, message)`; docs/UI.md "AI chat").
 
 **Where a thread's checkpoints live**: the list is this device's (device state, above: when, which
 message, which folder — what the device ran or heard of), and **the newest turn's id is also in the

@@ -872,6 +872,20 @@ private Q_SLOTS:
         QVERIFY(written.open(QIODevice::ReadOnly));
         QCOMPARE(written.readAll(), QByteArray("- od agenta\n"));
         QVERIFY(!ws->exists(u"Od agenta.md"_s)); // (not in the notebook)
+        if (git) {
+            // "Edit from here" with the files back: the checkpoint before that message's turn.
+            written.close();
+            QVERIFY(chats->checkpointOf(path, 2).isEmpty()); // (an answer has none)
+            const QString before = chats->checkpointOf(path, 5);
+            QVERIFY(!before.isEmpty());
+            QVERIFY(!chats->restoreCheckpoint(path, u"nie-ma/../x"_s));
+            QSignalSpy restored(chats, &WorkspaceChats::checkpointRestored);
+            QVERIFY(chats->restoreCheckpoint(path, before));
+            QTRY_COMPARE_WITH_TIMEOUT(restored.size(), 1, 20000);
+            QVERIFY2(restored.first().at(1).toBool(), qPrintable(restored.first().at(2).toString()));
+            QVERIFY(!QFile::exists(folder + u"/Od agenta.md"_s));
+            QVERIFY(QFile::exists(folder + u"/Dom.md"_s));
+        }
         // Its files named with "@" (docs/CODE-FILES.md): each one there also goes as a link to it —
         // not a folder, not one that is not there, not one outside the folder.
         QVERIFY(QDir(folder).mkpath(u"src"_s));

@@ -593,6 +593,21 @@ FocusScope {
         input.cursorPosition = input.length
         input.forceActiveFocus()
     }
+    /// "Edit from here" on the message at `line` (its number in the page `number`): in a thread whose
+    /// turn of that message has a checkpoint, the dialog offers to put the project's files back too
+    /// (T3 Code's "Revert files too"); else at once.
+    function editFromHere(line: int, number: int): void {
+        const checkpoint = root.codeThread && root.path !== ""
+                           ? root.chats.checkpointOf(root.path, number, root.chats.checkpointSerial) : ""
+        if (checkpoint === "") {
+            root.rewindTo(line)
+            return
+        }
+        editDialog.line = line
+        editDialog.checkpoint = checkpoint
+        editDialog.checked = false
+        editDialog.open()
+    }
     /// "Edit from here": the message and those after it out of the conversation, its text back in
     /// the field (Undo in the toast).
     function rewindTo(line: int): void {
@@ -1084,6 +1099,30 @@ FocusScope {
         onActivated: {
             searchField.forceActiveFocus()
             searchField.selectAll()
+        }
+    }
+    // "Edit from here" in a thread: the files back too, if asked (editFromHere).
+    BConfirmDialog {
+        id: editDialog
+        objectName: "chatEditFromHereDialog"
+        property int line: -1
+        property string checkpoint
+        title: qsTr("Edit from here?")
+        message: qsTr("This message and the ones after it come out of the conversation; its text comes back into the field to edit.")
+        checkText: qsTr("Also put the project's files back as they were before this message")
+        confirmText: qsTr("Edit from here")
+        onAccepted: {
+            const back = editDialog.checked
+            root.rewindTo(editDialog.line)
+            if (back && !root.chats.restoreCheckpoint(root.path, editDialog.checkpoint))
+                AppController.toast(qsTr("The files could not be put back: the thread's folder is not on this device."), "error")
+        }
+    }
+    Connections {
+        target: root.chats
+        function onCheckpointRestored(path: string, ok: bool, message: string) {
+            if (path === root.path)
+                AppController.toast(message, ok ? "success" : "error")
         }
     }
     // … and where the list is not shown, find in the conversation.
@@ -2043,7 +2082,7 @@ FocusScope {
                                         text: qsTr("Edit from here")
                                         hint: qsTr("this and what follows come out")
                                         iconName: "pencil"
-                                        onTriggered: root.rewindTo(message.line)
+                                        onTriggered: root.editFromHere(message.line, message.number)
                                     }
                                     BMenuItem {
                                         objectName: "chatMessageFork"

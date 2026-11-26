@@ -336,6 +336,14 @@ public:
     Q_INVOKABLE QVariantList checkpoints(const QString &path, int serial = 0) const;
     /// The newest one's id ("" none).
     Q_INVOKABLE QString lastCheckpoint(const QString &path, int serial = 0) const;
+    /// The checkpoint taken before the turn of the thread's message `number` (the user's, counted
+    /// from 1 as in the page; "" none): "Edit from here" can put the files back to it.
+    Q_INVOKABLE QString checkpointOf(const QString &path, int number, int serial = 0) const;
+    /// Puts the thread's folder back as checkpoint `id` had it (gitcli::Client::restore: its files
+    /// back, the ones added since deleted; HEAD, the index and the branch stay) without waiting:
+    /// checkpointRestored(path, ok, message). False when it cannot start (no folder of this device,
+    /// an unknown checkpoint).
+    Q_INVOKABLE bool restoreCheckpoint(const QString &path, const QString &id);
     static constexpr int MaxCheckpoints = 30;
     int checkpointSerial() const { return m_checkpointSerial; }
     /// What an AI agent's turn did, kept once it answered (as T3 Code's "Worked for …"): the answer
@@ -729,6 +737,8 @@ Q_SIGNALS:
     /// defaultPartner() may have changed.
     void defaultPartnerChanged();
     void checkpointsChanged();
+    /// restoreCheckpoint() ended: `message` for the user.
+    void checkpointRestored(const QString &path, bool ok, const QString &message);
     void workLogChanged();
     void draftsChanged();
     void questionsChanged();
