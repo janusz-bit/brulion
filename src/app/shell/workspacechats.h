@@ -887,6 +887,10 @@ private:
     /// `text` to another computer's turn of `path` (queued there, or steered in); false (said in a
     /// toast) for pictures, which do not go there yet.
     bool sendToComputer(const QString &path, const QString &text, const QStringList &pictures, acp::SendMode mode);
+    /// The address of the computer whose app runs the turns of the thread `path` — a thread of a
+    /// project of that computer whose app shares its conversations now —, "" none (this device runs
+    /// them, through that computer's shared agent).
+    QString threadComputer(const QString &path) const;
     void setFailure(ChatTurn *turn, const QString &failure);
     void endTurn(ChatTurn *turn);
     void updateRunningShown();
@@ -904,6 +908,9 @@ private:
     int m_questionSerial = 0;
     int m_computerSerial = 0;
     QString m_lastShown; ///< the conversation a chat view showed last (showing())
+    /// Threads whose message is on its way to the app of their project's computer: their address.
+    QHash<QString, QString> m_routing;
+    bool m_sendHere = false; ///< sendMessage() runs the turn here (that computer's app did not take it)
     /// Turns that ended on another computer whose answer is not here yet (its notification waits for
     /// the page), by path in lower case.
     QSet<QString> m_remoteEnded;

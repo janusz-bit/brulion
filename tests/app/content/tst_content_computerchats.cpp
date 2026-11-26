@@ -10,6 +10,7 @@
 // a failure there, a page this device does not have yet, the app gone there (503) and an older
 // computer (404), asked again later.
 #include "chatmodels.h"
+#include "codeprojects.h"
 #include "computerchats.h"
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -444,6 +445,67 @@ private Q_SLOTS:
         QTest::qWait(200);
         QVERIFY(!m_computer.waiting(u"chats"_s)); // (asked no more)
         QVERIFY(!c->isRunning(Path));
+    }
+
+    void idleThreadRunsThere_data()
+    {
+        QTest::addColumn<int>("status");
+        QTest::addColumn<QString>("code");
+        QTest::newRow("taken") << 200 << QString();
+        QTest::newRow("page not there yet") << 404 << u"not_found"_s;
+        QTest::newRow("its turn runs") << 409 << u"busy"_s;
+    }
+    void idleThreadRunsThere()
+    {
+        QFETCH(int, status);
+        QFETCH(QString, code);
+        // A thread of a project of that computer, idle: its next turn runs in the app there.
+        auto ws = open();
+        WorkspaceChats *c = ws->chats();
+        QTRY_VERIFY(m_computer.waiting(u"projects"_s));
+        m_computer.take(u"projects"_s)
+                ->done(FakeComputer::json(200, QJsonObject{{u"projects"_s, QJsonArray{QJsonObject{
+                                                                               {u"id"_s, u"brulion"_s},
+                                                                               {u"name"_s, u"Brulion"_s},
+                                                                               {u"path"_s, u"/home/ala/brulion"_s}}}}}));
+        QTRY_VERIFY(ws->projects()->isRemote(u"brulion"_s));
+        QVERIFY(c->threadPlace(Path).value(u"remote"_s).toBool());
+        poll(chats(1, {}));
+        QTRY_VERIFY(c->agents()->computerChats()->attached(Url));
+        QCOMPARE(c->send(Path, u"Dalej: dokumentacja"_s), Path);
+        std::optional<FakeComputer::Pending> sent = m_computer.take(u"chats/send"_s);
+        QVERIFY(sent);
+        QCOMPARE(sent->body(), (QJsonObject{{u"path"_s, Path}, {u"text"_s, u"Dalej: dokumentacja"_s}}));
+        // (Nothing written here: the app there writes it.)
+        bool ok = false;
+        QCOMPARE(chat::parse(ws->read(Path, &ok)).messages.size(), 1);
+        // A second one meanwhile: in line there.
+        QVERIFY(c->queue(Path, u"I testy"_s));
+        std::optional<FakeComputer::Pending> second = m_computer.take(u"chats/send"_s);
+        QVERIFY(second);
+        QCOMPARE(second->body().value(u"mode"_s).toString(), u"queue"_s);
+        second->done(FakeComputer::json(200, QJsonObject{{u"path"_s, Path}}));
+        if (status == 200) {
+            sent->done(FakeComputer::json(200, QJsonObject{{u"path"_s, Path}}));
+            QTRY_VERIFY(m_computer.waiting(u"chats"_s, 0)); // (asked at once how it goes)
+            m_computer.take(u"chats"_s, 0)->done(FakeComputer::json(200, chats(2, {row(u"running"_s, 2)})));
+            QTRY_VERIFY(c->isRunning(Path));
+            QCOMPARE(c->turn(Path)->remoteHost(), u"nixos"_s);
+            QVERIFY(!m_computer.waiting(u"streams"_s));
+        } else if (code == u"busy") {
+            sent->done(FakeComputer::error(409, code, u"Its turn runs"_s));
+            std::optional<FakeComputer::Pending> again = m_computer.take(u"chats/send"_s);
+            QVERIFY(again);
+            QCOMPARE(again->body().value(u"mode"_s).toString(), u"queue"_s);
+            QCOMPARE(again->body().value(u"text"_s).toString(), u"Dalej: dokumentacja"_s);
+        } else {
+            // Refused there: the turn runs from here, through that computer's shared agent.
+            sent->done(FakeComputer::error(404, code, u"No such conversation"_s));
+            QTRY_COMPARE(chat::parse(ws->read(Path, &ok)).messages.size(), 2);
+            QTRY_VERIFY(m_computer.waiting(u"streams"_s));
+            QVERIFY(c->isRunning(Path));
+            QCOMPARE(c->turn(Path)->remoteHost(), QString());
+        }
     }
 
     void restartedComputerCountsAnew()

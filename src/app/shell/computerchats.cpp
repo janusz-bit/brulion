@@ -508,19 +508,30 @@ QString ComputerChats::errorText(const QString &host, const acp::RemoteError &er
 
 void ComputerChats::send(const QString &path, const QString &text, acp::SendMode mode, Done done)
 {
-    Poll *p = pollListing(path);
-    sync::HttpTransport *t = transport();
-    if (!p || !t)
+    const Poll *p = pollListing(path);
+    if (!p)
         return done(tr("This conversation does not run on another computer now."));
-    const QString url = p->computer.url;
+    sendTo(p->computer.url, path, text, mode, [done](const acp::RemoteError &, const QString &words) { done(words); });
+}
+
+void ComputerChats::sendTo(const QString &url, const QString &path, const QString &text, acp::SendMode mode,
+                           std::function<void(const acp::RemoteError &, const QString &)> done)
+{
+    Poll *p = pollOf(url);
+    sync::HttpTransport *t = transport();
+    if (!p || !t) {
+        const acp::RemoteError none{acp::RemoteError::Kind::Refused, 0, u"not_paired"_s, QString()};
+        return done(none, tr("This device is not paired with that computer."));
+    }
+    const QString base = p->computer.url;
     const QString host = hostOf(p);
     std::weak_ptr<bool> alive = m_alive;
-    acp::sendRemoteChat(t, QUrl(url), p->computer.token, path, text, mode,
-                        [this, alive, url, host, done](const acp::RemoteError &error) {
+    acp::sendRemoteChat(t, QUrl(base), p->computer.token, path, text, mode,
+                        [this, alive, base, host, done](const acp::RemoteError &error) {
                             if (alive.expired())
                                 return;
-                            done(errorText(host, error));
-                            if (Poll *poll = pollOf(url))
+                            done(error, errorText(host, error));
+                            if (Poll *poll = pollOf(base))
                                 askNow(poll);
                         });
 }
