@@ -49,8 +49,12 @@ int exitFor(const QString &code)
             {QLatin1String(E::OffScreen), ExitNotFound},  {QLatin1String(E::StaleHandle), ExitConflict},
             {QLatin1String(E::Ambiguous), ExitConflict},  {QLatin1String(E::NotReady), ExitUnavailable},
             {QLatin1String(E::Refused), ExitRefused},     {QLatin1String(E::Unauthorized), ExitUnavailable},
-            {QLatin1String(E::Busy), ExitConflict},       {u"no_question"_s, ExitConflict},
-            {u"bad_option"_s, ExitUsage}};
+            {QLatin1String(E::Busy), ExitConflict}};
+    // (chatAnswer's: nothing is asked there, not one of the question's options.)
+    if (code == u"no_question")
+        return ExitConflict;
+    if (code == u"bad_option")
+        return ExitUsage;
     return exits.value(code, ExitInternal);
 }
 
@@ -1558,10 +1562,10 @@ void addAppCommands(QList<Command> &out)
              QT_TRANSLATE_NOOP("brulion::cli",
                                "Answer the question a conversation's turn waits on with one of its options"),
              appChatAnswer,
-             {conversation,
-              positional(u"option"_s, ArgType::String,
-                         QT_TRANSLATE_NOOP("brulion::cli", "One of the question's options, as app chat live gives them"),
-                         true, true)});
+             {conversation, positional(u"option"_s, ArgType::String,
+                                       QT_TRANSLATE_NOOP("brulion::cli",
+                                                         "One of the question's options, as app chat live gives them"),
+                                       true, true)});
     c.writes = true;
     c.help = cliText(QT_TRANSLATE_NOOP(
             "brulion::cli",

@@ -859,8 +859,7 @@ bool AcpHost::start(QString *error)
     // The app that started this server shares its own conversations with the devices: a lasting
     // link to its control socket with the grant it gave (acp/appchats.h).
     if (!m_options.appSocket.isEmpty() && !m_options.appToken.isEmpty()) {
-        m_app = std::make_unique<ipc::AsyncControlClient>(m_options.appSocket, m_options.appToken,
-                                                          u"agent sharing"_s);
+        m_app = std::make_unique<ipc::AsyncControlClient>(m_options.appSocket, m_options.appToken, u"agent sharing"_s);
         connect(m_app.get(), &ipc::AsyncControlClient::readyChanged, this, [this](bool ready) {
             if (ready)
                 say(u"the app's conversations are shared with the devices (its control socket answers)"_s);
@@ -1968,7 +1967,8 @@ void AcpHost::chatsRequest(const PairedDevice &device, const QStringList &parts,
             reply.send(apiError(400, u"bad_request"_s, u"since is a revision of an answer before (-1: none)"_s));
             return;
         }
-        const int wait = std::clamp(queryValue(request, u"wait"_s).value_or(u"0"_s).toInt(), 0, m_options.maxWaitSeconds);
+        const int wait =
+                std::clamp(queryValue(request, u"wait"_s).value_or(u"0"_s).toInt(), 0, m_options.maxWaitSeconds);
         const QString path = queryValue(request, u"path"_s).value_or(QString());
         if (!path.isEmpty() && !acp::isRemoteChatPath(path)) {
             reply.send(apiError(400, u"bad_path"_s, u"A conversation's page in the notebook's AI folder is needed"_s));
@@ -2038,7 +2038,7 @@ void AcpHost::chatsRequest(const PairedDevice &device, const QStringList &parts,
         if (!mode.isEmpty())
             params.insert(u"mode"_s, mode);
         say(u"%1 (%2) sends a message to %3%4"_s.arg(device.name, device.id, path,
-                                                    mode.isEmpty() ? QString() : u" (" + mode + u')'));
+                                                     mode.isEmpty() ? QString() : u" (" + mode + u')'));
         relay(u"chatSend"_s, params, timeout, reply, pathOf);
     } else if (action == u"start") {
         const QString project = body.value(u"project"_s).toString().trimmed();
@@ -2079,8 +2079,8 @@ void AcpHost::chatsRequest(const PairedDevice &device, const QStringList &parts,
         say(u"%1 (%2) answers the question of %3"_s.arg(device.name, device.id, path));
         relay(u"chatAnswer"_s, {{u"path"_s, path}, {u"option"_s, option.toString()}}, timeout, reply,
               [path](const QJsonObject &result) {
-                  return http::Response::json(200, QJsonObject{{u"path"_s, result.value(u"path"_s).toString(path)},
-                                                               {u"answered"_s, true}});
+                  return http::Response::json(
+                          200, QJsonObject{{u"path"_s, result.value(u"path"_s).toString(path)}, {u"answered"_s, true}});
               });
     }
 }
@@ -3812,20 +3812,21 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
             {u"ok"_s, true},
             {u"command"_s, command.id},
             {u"vault"_s, context.vaultRoot()},
-            {u"result"_s, QJsonObject{{u"url"_s, host.publicUrl()},
-                                      {u"endpoint"_s, host.endpoint()},
-                                      {u"port"_s, host.port()},
-                                      {u"address"_s, options.address.toString()},
-                                      {u"tls"_s, host.server()->tls()},
-                                      {u"agents"_s, agents},
-                                      {u"tools"_s, options.tools},
-                                      {u"appTools"_s, !host.tunnelSocket().isEmpty()},
-                                      {u"appChats"_s, !options.appSocket.isEmpty()},
-                                      {u"sync"_s, sync != nullptr},
-                                      {u"projects"_s, options.projectsFile.isEmpty() ? QJsonValue()
-                                                                                     : QJsonValue(options.projectsFile)},
-                                      {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue() : QJsonValue(tailnetInfo)},
-                                      {u"stateFile"_s, options.stateFile}}},
+            {u"result"_s,
+             QJsonObject{
+                     {u"url"_s, host.publicUrl()},
+                     {u"endpoint"_s, host.endpoint()},
+                     {u"port"_s, host.port()},
+                     {u"address"_s, options.address.toString()},
+                     {u"tls"_s, host.server()->tls()},
+                     {u"agents"_s, agents},
+                     {u"tools"_s, options.tools},
+                     {u"appTools"_s, !host.tunnelSocket().isEmpty()},
+                     {u"appChats"_s, !options.appSocket.isEmpty()},
+                     {u"sync"_s, sync != nullptr},
+                     {u"projects"_s, options.projectsFile.isEmpty() ? QJsonValue() : QJsonValue(options.projectsFile)},
+                     {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue() : QJsonValue(tailnetInfo)},
+                     {u"stateFile"_s, options.stateFile}}},
             {u"warnings"_s, QJsonArray()}};
     const QByteArray line = QJsonDocument(started).toJson(QJsonDocument::Compact) + '\n';
     std::fwrite(line.constData(), 1, size_t(line.size()), stdout);

@@ -582,9 +582,7 @@ QJsonObject RemoteControl::hello(const ipc::ControlRequest &request) const
     QJsonArray methods;
     for (const ipc::MethodSpec &m : ipc::controlMethods()) {
         // (Each grant's own; the webhooks' method only for its server.)
-        if (request.hookOnly    ? m.hook
-            : request.shareOnly ? m.share
-                                : (!m.hook && (m.chat || !request.chatOnly)))
+        if (request.hookOnly ? m.hook : request.shareOnly ? m.share : (!m.hook && (m.chat || !request.chatOnly)))
             methods.append(m.name);
     }
     return {{u"protocol"_s, ipc::ControlProtocolVersion},

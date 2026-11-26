@@ -123,8 +123,8 @@ private:
     void live(const QJsonObject &params, const Reply &reply);
     void answerQuestion(const QJsonObject &params, const Caller &caller, const Reply &reply);
     /// chatStart's thread once its worktree is known to be the project's.
-    void startThreadNow(const QString &project, const QString &text, const QString &partner,
-                        const QString &worktree, const QString &branch, const Reply &reply);
+    void startThreadNow(const QString &project, const QString &text, const QString &partner, const QString &worktree,
+                        const QString &branch, const Reply &reply);
 
     // ---- chatLive
     /// acp::RemoteChats' JSON now: the conversations, `path`'s in full ("" none).
@@ -168,9 +168,9 @@ private:
     QTimer m_clientCheck; // (waits of clients that left are dropped)
 
     qint64 m_revision = 0;
-    QTimer m_liveTimer;          // the revision's next change (at most every LiveIntervalMs)
+    QTimer m_liveTimer;            // the revision's next change (at most every LiveIntervalMs)
     QElapsedTimer m_sinceRevision; // since it last changed
-    QTimer m_pruneTimer;         // conversations that ended lately leave the list
+    QTimer m_pruneTimer;           // conversations that ended lately leave the list
     QList<std::shared_ptr<LiveWait>> m_liveWaits;
     QSet<ChatTurn *> m_watched; // the turns whose changes are followed
     QSet<ChatTurn *> m_active;  // those that run, wait or ask
@@ -181,7 +181,7 @@ private:
     QHash<QString, Ended> m_ended;     // lower-case path: turns that ended lately
     QHash<QString, qint64> m_activity; // lower-case path → the order of its last change
     qint64 m_activitySerial = 0;
-    QHash<QString, Facts> m_facts;     // lower-case path
+    QHash<QString, Facts> m_facts; // lower-case path
 };
 
 } // namespace brulion::shell

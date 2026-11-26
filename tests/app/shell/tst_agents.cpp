@@ -2651,7 +2651,8 @@ private Q_SLOTS:
         // Sent while it runs: refused, in line (mode or the old flag) — or now, steered in.
         a = ask(control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Nie teraz"_s}, {u"mode"_s, u"now"_s}});
         QCOMPARE(a->code, u"busy"_s);
-        a = ask(control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Po drugie: gęślą"_s}, {u"mode"_s, u"queue"_s}});
+        a = ask(control, u"chatSend"_s,
+                {{u"path"_s, path}, {u"text"_s, u"Po drugie: gęślą"_s}, {u"mode"_s, u"queue"_s}});
         QVERIFY2(a->ok, qPrintable(a->message));
         QVERIFY(a->result.value(u"queued"_s).toBool());
         QCOMPARE(chats->queued(path).size(), 2);
@@ -2730,7 +2731,8 @@ private Q_SLOTS:
                     && !seen.detail->question.isEmpty());
         QCOMPARE(seen.detail->question.plan, u"# Porządki\n\n1. Połączyć notatki\n2. Usunąć duplikaty"_s);
         QVERIFY(seen.detail->question.file.isEmpty());
-        QVERIFY2(ask(control, u"chatAnswer"_s, {{u"path"_s, asking}, {u"option"_s, u"Yes"_s}})->ok, "the plan approved");
+        QVERIFY2(ask(control, u"chatAnswer"_s, {{u"path"_s, asking}, {u"option"_s, u"Yes"_s}})->ok,
+                 "the plan approved");
         QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(asking), 20000);
 
         // An answer longer than a device is given: its end, cut.
@@ -2788,14 +2790,17 @@ private Q_SLOTS:
                 qWarning() << "chatStart did not answer";
             return a;
         };
-        auto a = start({{u"text"_s, u"Popraw testy"_s}, {u"project"_s, id}, {u"worktree"_s, listed},
+        auto a = start({{u"text"_s, u"Popraw testy"_s},
+                        {u"project"_s, id},
+                        {u"worktree"_s, listed},
                         {u"branch"_s, u"brulion/obok"_s}});
         QVERIFY2(a->ok, qPrintable(a->message));
         const QString inListed = a->result.value(u"path"_s).toString();
         QCOMPARE(chats->threadPlace(inListed).value(u"worktree"_s).toString(), QDir::cleanPath(listed));
         QCOMPARE(chats->threadPlace(inListed).value(u"branch"_s).toString(), u"brulion/obok"_s);
         QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(inListed), 20000);
-        QCOMPARE(QDir::cleanPath(logged(u"session/new"_s).last().value(u"params"_s).toObject().value(u"cwd"_s).toString()),
+        QCOMPARE(QDir::cleanPath(
+                         logged(u"session/new"_s).last().value(u"params"_s).toObject().value(u"cwd"_s).toString()),
                  QDir::cleanPath(listed));
         // Its row says where it works.
         const std::optional<acp::RemoteChats> seen =
@@ -2825,7 +2830,8 @@ private Q_SLOTS:
         }
         a = start({{u"text"_s, u"Bez projektu"_s}, {u"worktree"_s, listed}});
         QCOMPARE(a->code, u"bad_params"_s);
-        a = start({{u"text"_s, u"Jako dziecko"_s}, {u"project"_s, id}, {u"worktree"_s, listed}, {u"parent"_s, inListed}});
+        a = start(
+                {{u"text"_s, u"Jako dziecko"_s}, {u"project"_s, id}, {u"worktree"_s, listed}, {u"parent"_s, inListed}});
         QCOMPARE(a->code, u"bad_params"_s);
     }
 

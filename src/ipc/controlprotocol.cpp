@@ -563,9 +563,9 @@ const QList<MethodSpec> &controlMethods()
                      param(u"page"_s, ParamType::String), param(u"path"_s, ParamType::String)}));
         // The user's answer to the question a conversation's turn waits on (the phone's, through the
         // agent sharing; a script's): never an AI agent's — not one of the chat grant's methods.
-        MethodSpec answer = method(u"chatAnswer"_s,
-                                   u"Answer the question a conversation's turn waits on with one of its options"_s,
-                                   {param(u"path"_s, ParamType::String, true), param(u"option"_s, ParamType::String, true)});
+        MethodSpec answer =
+                method(u"chatAnswer"_s, u"Answer the question a conversation's turn waits on with one of its options"_s,
+                       {param(u"path"_s, ParamType::String, true), param(u"option"_s, ParamType::String, true)});
         answer.share = true;
         out.append(std::move(answer));
         // A webhook's request (docs/CLI.md "Webhooks"): only for the app's own hook server.
