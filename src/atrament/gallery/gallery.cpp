@@ -104,31 +104,31 @@ AnyElement Gallery::render(Window &window, Context<Gallery> &cx)
             .fontFamily(u"Brulion Inter")
             .textColor(t.text)
             .textSize(14)
-            .child(div()
-                            .flexRow()
-                            .flex1()
-                            .minH(0)
-                            .child(sidebar(window, cx))
-                            .child(div()
-                                            .id(u"content")
-                                            .flex1()
-                                            .minW0()
-                                            .flexCol()
-                                            .overflowYScroll()
-                                            .p(28)
-                                            .gap(20)
-                                            .child(std::move(content))))
+            .child(div().flexRow()
+                           .flex1()
+                           .minH(0)
+                           .child(sidebar(window, cx))
+                           .child(div().id(u"content")
+                                          .flex1()
+                                          .minW0()
+                                          .flexCol()
+                                          .overflowYScroll()
+                                          .p(window.viewportSize().width < 640 ? 12 : 28)
+                                          .gap(20)
+                                          .child(std::move(content))))
             .child(footer(window, cx));
 }
 
-AnyElement Gallery::sidebar(Window &, Context<Gallery> &cx)
+AnyElement Gallery::sidebar(Window &window, Context<Gallery> &cx)
 {
     const Theme &t = theme();
+    // A phone's width: the sections as icons only (their names stay their accessible names).
+    const bool compact = window.viewportSize().width < 640;
     ArenaVector<AnyElement> items;
     for (int i = 0; i < 4; ++i) {
         const bool selected = section == i;
-        items.push_back(div()
-                        .id(ElementId(u"section", std::uint64_t(i)))
+        items.push_back(
+                div().id(ElementId(u"section", std::uint64_t(i)))
                         .flexRow()
                         .itemsCenter()
                         .gap(10)
@@ -145,8 +145,27 @@ AnyElement Gallery::sidebar(Window &, Context<Gallery> &cx)
                         }))
                         .role(Role::Tab)
                         .selected(selected)
-                        .child(div().ariaHidden().w(22).textCenter().textColor(selected ? t.accent : t.faint).child(kSectionIcons[i]))
-                        .child(div().fontMedium().child(kSections[i])));
+                        .when(compact, [&](Div &&d) { return std::move(d).ariaLabel(kSections[i]); })
+                        .child(div().ariaHidden()
+                                       .w(22)
+                                       .textCenter()
+                                       .textColor(selected ? t.accent : t.faint)
+                                       .child(kSectionIcons[i]))
+                        .when(!compact,
+                              [&](Div &&d) { return std::move(d).child(div().fontMedium().child(kSections[i])); }));
+    }
+    if (compact) {
+        return div()
+                .w(48)
+                .flexShrink0()
+                .flexCol()
+                .gap(4)
+                .py(14)
+                .px(1)
+                .bg(t.surface)
+                .borderR(1)
+                .borderColor(t.border)
+                .child(div().flexCol().gap(4).role(Role::TabList).ariaLabel(u"Sekcje").children(items));
     }
     return div()
             .w(220)
@@ -530,6 +549,7 @@ AnyElement Gallery::footer(Window &window, Context<Gallery> &)
             .ariaHidden()
             .flexRow()
             .itemsCenter()
+            .overflowHidden()
             .gap(18)
             .px(16)
             .h(30)

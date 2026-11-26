@@ -7,6 +7,14 @@
 //                   turns Qt's mouse, wheel, key, hover and input-method events into Atrament's,
 //                   answering the input method's queries from the focused element's InputHandler.
 //
+// The input method sees a field as Qt's own controls show it: the composition (Atrament's marked
+// text, which is part of the text) is not in the text Qt is told about, it sits at the caret, and
+// Qt's events (a commit with a replacement range, a selection, a new preedit) act on that text.
+// The item converts both ways, keeps the input method told about every change of the caret, the
+// selection and the text (Android: InputMethodManager.updateSelection, through the
+// cursorPositionChanged() signal), makes it forget a composition that ended without it, shows the
+// virtual keyboard for a field and hides it when no field has the focus.
+//
 // Frames are built on the GUI thread (in updatePolish), never on Qt Quick's render thread. They are
 // drawn by the GPU renderer (qrhirenderer.h) in a QSGRenderNode, inside Qt Quick's own render pass,
 // where Qt Quick runs on QRhi; by the CPU renderer into a texture where it does not (the software
@@ -102,12 +110,27 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void inputMethodEvent(QInputMethodEvent *event) override;
+
+public:
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
+    // The queries with an argument (QInputMethod::queryFocusObject): Qt::ImCursorPosition at a
+    // point (Android's selection handles, a tap while composing), Qt::ImTextBeforeCursor /
+    // Qt::ImTextAfterCursor of a length.
+    Q_INVOKABLE QVariant inputMethodQuery(Qt::InputMethodQuery query, const QVariant &argument) const;
+
+Q_SIGNALS:
+    // The focused field's caret, selection, composition or text changed (Qt's Android input context
+    // connects to a signal of this name and tells the input method).
+    void cursorPositionChanged();
+
+protected:
     void focusInEvent(QFocusEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
 
 private:
     bool send(const PlatformInput &input);
+    InputHandler *inputHandler() const;
+    void showInputPanelAt(Point p);
     int clickCountFor(Point p, MouseButton button);
     bool gpuAvailable() const;
     void checkGpuRenderer();
@@ -139,6 +162,18 @@ private:
     MouseButton m_lastClickButton = MouseButton::Left;
     int m_clickCount = 0;
     std::unique_ptr<AtramentAccessibility> m_accessibility;
+    // The input method's view of the focused field, as last told (inputStateChanged).
+    struct ImeState {
+        std::u16string text;
+        InputHandler::Selection selection;
+        std::optional<Range> marked;
+        std::optional<Rect> bounds;
+        bool operator==(const ImeState &) const = default;
+    };
+    std::uint64_t m_imeFocus = 0; // the focused field the input method knows (Window::focusedId)
+    ImeState m_imeState;
+    bool m_imeComposing = false;  // the field's marked text is the input method's composition
+    bool m_imeForgetting = false; // its events change nothing while it drops a composition
 };
 
 // A key event as Atrament's keystroke ("ctrl-shift-a", keyChar the text it types).

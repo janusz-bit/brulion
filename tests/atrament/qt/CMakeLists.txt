@@ -12,3 +12,8 @@ endforeach()
 brulion_add_test(tst_atrament_qt_accessibility SOURCES tst_atrament_qt_accessibility.cpp
     LIBS brulion_atrament_qt Qt6::Quick)
 target_compile_definitions(tst_atrament_qt_accessibility PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+# The Qt host's input-method bridge: Qt's queries and QInputMethodEvents (the sequences of Qt's
+# Android input context for Gboard, a desktop preedit) against Atrament's text inputs.
+brulion_add_test(tst_atrament_qt_input SOURCES tst_atrament_qt_input.cpp
+    LIBS brulion_atrament_qt Qt6::Quick)
+target_compile_definitions(tst_atrament_qt_input PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

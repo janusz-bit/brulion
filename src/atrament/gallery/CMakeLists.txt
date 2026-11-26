@@ -11,6 +11,13 @@ target_link_libraries(brulion_atrament_gallery PUBLIC brulion_atrament_qt Qt6::Q
 brulion_set_warnings(brulion_atrament_gallery)
 set_target_properties(brulion_atrament_gallery PROPERTIES QT_EXCLUDE_FROM_TRANSLATION ON)
 
+# The developer app: desktop only (the phone and the browser show the gallery in Brulion itself,
+# `--atrament`). Its finalizer walks the host's private Qt modules: they are known here too.
+if(ANDROID OR EMSCRIPTEN)
+    return()
+endif()
+set(QT_NO_PRIVATE_MODULE_WARNING ON)
+find_package(Qt6 REQUIRED COMPONENTS GuiPrivate QuickPrivate)
 qt_add_executable(atrament-gallery main.cpp)
 target_link_libraries(atrament-gallery PRIVATE brulion_atrament_gallery Qt6::Quick)
 file(GLOB _atrament_gallery_fonts CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/fonts/ui/*.ttf)

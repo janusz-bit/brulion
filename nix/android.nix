@@ -90,6 +90,8 @@ let
       qtdeclarative
       qtsvg
       qttools
+      # qsb: the shaders of Atrament's GPU renderer (docs/ATRAMENT.md).
+      qtshadertools
     ];
   };
 

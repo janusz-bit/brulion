@@ -62,7 +62,7 @@ public:
     void prepaint(Rect bounds, Window &, App &) override
     {
         m_layout = layoutAt(bounds.width());
-        m_input->setLaidOut(m_layout, bounds.origin);
+        m_input->setLaidOut(m_layout, bounds);
     }
 
     void paint(Rect bounds, Window &window, App &) override
@@ -193,6 +193,7 @@ private:
         }
         std::optional<Rect> boundsForRange(Range r) override { return input() ? input()->boundsForRange(r) : std::nullopt; }
         std::optional<int> offsetForPoint(Point p) override { return input() ? input()->offsetForPoint(p) : std::nullopt; }
+        std::optional<Rect> inputBounds() override { return input() ? input()->bounds() : std::nullopt; }
         Purpose purpose() override { return input() && input()->multiline() ? Purpose::Multiline : Purpose::Text; }
     };
 
@@ -251,10 +252,11 @@ int TextInput::clampOffset(int offset) const
     return std::clamp(offset, 0, int(m_text.size()));
 }
 
-void TextInput::setLaidOut(std::shared_ptr<const TextLayout> layout, Point origin)
+void TextInput::setLaidOut(std::shared_ptr<const TextLayout> layout, Rect bounds)
 {
     m_layout = std::move(layout);
-    m_origin = origin;
+    m_origin = bounds.origin;
+    m_bounds = bounds;
 }
 
 std::optional<Rect> TextInput::boundsForRange(Range range) const
@@ -486,8 +488,13 @@ void TextInput::setMarkedText(std::optional<Range> range, std::u16string_view te
     const Range r = range ? *range : (m_marked ? *m_marked : m_selection.range());
     const int a = clampOffset(std::min(r.start, r.end));
     const int b = clampOffset(std::max(r.start, r.end));
-    if (!m_marked && !text.empty()) {
-        pushUndo(); // a composition is one undo step
+    if (!m_marked)
+        m_compositionUndo = false;
+    // A composition is one undo step, from its first change of the text: an input method that
+    // marks a word already there (Android's setComposingRegion) changes nothing yet.
+    if (!m_compositionUndo && !text.empty()
+        && std::u16string_view(m_text).substr(std::size_t(a), std::size_t(b - a)) != text) {
+        pushUndo();
         m_compositionUndo = true;
     }
     m_text.replace(std::size_t(a), std::size_t(b - a), text);
@@ -521,7 +528,7 @@ void TextInput::commitText(std::optional<Range> range, std::u16string_view text,
     const Range r = range ? *range : *m_marked;
     const int a = clampOffset(std::min(r.start, r.end));
     const int b = clampOffset(std::max(r.start, r.end));
-    if (!m_compositionUndo)
+    if (!m_compositionUndo && std::u16string_view(m_text).substr(std::size_t(a), std::size_t(b - a)) != text)
         pushUndo();
     m_text.replace(std::size_t(a), std::size_t(b - a), text);
     m_marked.reset();
@@ -656,6 +663,12 @@ AnyElement TextInput::render(Window &window, Context<TextInput> &cx)
         m_blink = {};
         m_caretVisible = true;
     }
+    // A composition ends with the focus, as it stands (an input method's commit could no longer
+    // reach this field).
+    if (!focused && m_marked) {
+        m_marked.reset();
+        m_compositionUndo = false;
+    }
 
     TextInputElement element(cx.app(), cx.entityId(), this);
     element.m_placeholder = m_options.placeholder;
@@ -678,6 +691,9 @@ AnyElement TextInput::render(Window &window, Context<TextInput> &cx)
                              if (!at)
                                  return;
                              t.m_focus.focus(w);
+                             // A press ends the composition as it stands (the host has asked the
+                             // input method to commit it first, where it can).
+                             t.unmark(c);
                              if (e.clickCount >= 3) {
                                  t.selectAll(c);
                              } else if (e.clickCount == 2) {

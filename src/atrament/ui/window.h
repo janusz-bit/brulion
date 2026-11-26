@@ -92,6 +92,9 @@ public:
     bool focusWithin(std::uint64_t focusId) const;
     // The input handler of the focused element, or nullptr (the platform's IME asks).
     InputHandler *inputHandler() const;
+    // The frame on screen was built with the focus where it is now (inputHandler() is the focused
+    // element's); false between a change of focus and its frame.
+    bool focusDrawn() const { return m_drawnFocus == m_focused; }
     // Dispatches an action by name along the focused path, as a key binding would.
     bool dispatchAction(std::u16string_view action);
 
@@ -323,6 +326,7 @@ private:
     std::vector<int> m_dispatchStack;
     std::unordered_map<std::uint64_t, std::unique_ptr<AnyState>> m_states;
     std::uint64_t m_focused = 0;
+    std::uint64_t m_drawnFocus = 0; // m_focused when the frame on screen was built
     std::vector<Keystroke> m_pendingKeys;
     std::uint64_t m_frameCount = 0;
     bool m_propagate = true;

@@ -11,6 +11,7 @@
 #include <QCursor>
 #include <QFile>
 #include <QGuiApplication>
+#include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -95,6 +96,114 @@ std::u16string toU16(const QString &s)
 QString toQString(std::u16string_view s)
 {
     return QString(reinterpret_cast<const QChar *>(s.data()), qsizetype(s.size()));
+}
+
+// A field as Qt's input methods see it (qthost.h): the text without the composition, the caret
+// and anchor where the composition is (it sits at the caret), offsets in that text.
+struct QtField {
+    std::u16string text;
+    int cursor = 0;
+    int anchor = 0;
+    bool composing = false;
+};
+
+QtField qtField(InputHandler &h)
+{
+    QtField f;
+    f.text = h.textForRange({0, h.textLength()});
+    const InputHandler::Selection sel = h.selection().value_or(InputHandler::Selection{});
+    const std::optional<Range> marked = h.markedRange();
+    if (marked && !marked->isEmpty()) {
+        const int n = int(f.text.size());
+        const int a = std::clamp(marked->start, 0, n);
+        const int b = std::clamp(marked->end, a, n);
+        f.text.erase(std::size_t(a), std::size_t(b - a));
+        f.cursor = f.anchor = a;
+        f.composing = true;
+    } else {
+        f.cursor = sel.focus;
+        f.anchor = sel.anchor;
+    }
+    return f;
+}
+
+// A QInputMethodEvent applied as Qt's own text controls apply it (QQuickTextInput): the preedit
+// they show is not in their text, so the old one goes first; the commit replaces the range at
+// replacementStart / replacementLength around the caret (or the selection, which typing deletes);
+// a Selection attribute then sets the caret and anchor; the new preedit is shown at the caret,
+// with the Cursor attribute's position inside it. Here the preedit is the field's marked text,
+// which is part of its text: the common cases map onto one call each (so that a composition stays
+// one undo step), the rest takes the composition out first.
+void applyInputMethodEvent(InputHandler &h, const QInputMethodEvent &e)
+{
+    const std::u16string commit = toU16(e.commitString());
+    const std::u16string preedit = toU16(e.preeditString());
+    const int rs = e.replacementStart();
+    const int rl = std::max(0, e.replacementLength());
+    std::optional<Range> preeditCursor;
+    std::optional<InputHandler::Selection> selection;
+    for (const QInputMethodEvent::Attribute &a : e.attributes()) {
+        if (a.type == QInputMethodEvent::Cursor) {
+            const int at = std::clamp(a.start, 0, int(preedit.size()));
+            preeditCursor = Range{at, at};
+        } else if (a.type == QInputMethodEvent::Selection) {
+            selection = InputHandler::Selection{a.start, a.start + a.length};
+        }
+    }
+    const bool replaces = !commit.empty() || rl > 0;
+    bool committed = false;
+    if (h.markedRange()) {
+        if (!replaces && !selection && !preedit.empty()) {
+            // The composition changes (typing in it, moving its caret).
+            h.replaceAndMarkText(std::nullopt, preedit, preeditCursor);
+            return;
+        }
+        if (!commit.empty() && rl == 0 && rs == 0) {
+            // Committed where it was.
+            h.replaceText(std::nullopt, commit);
+            committed = true;
+        } else {
+            // Qt's text never had it: out it goes (with its undo step), the rest acts on that text.
+            h.replaceAndMarkText(std::nullopt, u"", std::nullopt);
+        }
+    }
+    if (replaces && !committed) {
+        const InputHandler::Selection sel = h.selection().value_or(InputHandler::Selection{});
+        const Range selected = sel.range();
+        if (!selected.isEmpty() && rl == 0 && rs == 0) {
+            h.replaceText(selected, commit); // typing over a selection
+        } else {
+            int caret = sel.focus;
+            if (!selected.isEmpty()) {
+                h.replaceText(selected, u"");
+                caret = selected.start;
+            }
+            const int now = h.textLength();
+            const int start = std::clamp(caret + rs, 0, now);
+            const Range range{start, std::clamp(start + rl, start, now)};
+            if (commit.empty() && !preedit.empty() && !selection) {
+                // A range of the text becomes the composition (Android's setComposingRegion, then
+                // the composing text), in one step.
+                h.replaceAndMarkText(range, preedit, preeditCursor);
+                return;
+            }
+            h.replaceText(range, commit);
+            // Where Qt leaves the caret: after what was committed, else where it was less what
+            // went before it.
+            const int qtCaret = !commit.empty() ? start + int(commit.size())
+                                : rs <= 0       ? caret - std::min(-rs, rl)
+                                                : caret;
+            const auto after = h.selection();
+            if (after && (after->focus != qtCaret || after->anchor != qtCaret))
+                h.setSelection({qtCaret, qtCaret});
+        }
+    }
+    if (selection) {
+        const int n = h.textLength();
+        h.setSelection({std::clamp(selection->anchor, 0, n), std::clamp(selection->focus, 0, n)});
+    }
+    if (!preedit.empty())
+        h.replaceAndMarkText(std::nullopt, preedit, preeditCursor);
 }
 
 Modifiers modifiersFromQt(Qt::KeyboardModifiers m)
@@ -507,12 +616,82 @@ void AtramentItem::setCursor(CursorStyle cursor)
     QQuickItem::setCursor(QCursor(cursorToQt(cursor)));
 }
 
+InputHandler *AtramentItem::inputHandler() const
+{
+    return m_callbacks.inputHandler ? m_callbacks.inputHandler() : nullptr;
+}
+
 void AtramentItem::inputStateChanged()
 {
-    InputHandler *handler = m_callbacks.inputHandler ? m_callbacks.inputHandler() : nullptr;
-    setFlag(ItemAcceptsInputMethod, handler != nullptr);
-    if (hasActiveFocus())
-        QGuiApplication::inputMethod()->update(Qt::ImQueryAll);
+    // Between a change of focus and its frame the new element's handler is not there yet: the
+    // frame asks again (no keyboard hidden and shown again for a move from field to field).
+    if (m_window && !m_window->focusDrawn())
+        return;
+    InputHandler *h = inputHandler();
+    setFlag(ItemAcceptsInputMethod, h != nullptr);
+    const std::uint64_t field = h && m_window ? m_window->focusedId() : 0;
+    if (!hasActiveFocus()) {
+        // Qt's focus is elsewhere: the input method follows that item; this one starts afresh.
+        m_imeFocus = field;
+        m_imeState = {};
+        m_imeComposing = false;
+        return;
+    }
+    QInputMethod *im = QGuiApplication::inputMethod();
+    ImeState state;
+    if (h) {
+        state.text = h->textForRange({0, h->textLength()});
+        state.selection = h->selection().value_or(InputHandler::Selection{});
+        state.marked = h->markedRange();
+        state.bounds = h->inputBounds();
+    }
+    // A composition that ended without the input method (the field lost the focus, a press in it,
+    // undo): it forgets its own, which must not reach the text again.
+    const bool forget = field != m_imeFocus || (m_imeComposing && !state.marked);
+    if (forget) {
+        m_imeForgetting = true;
+        im->reset();
+        m_imeForgetting = false;
+        m_imeComposing = false;
+    }
+    if (state.bounds) {
+        // Where a touch edits the field (Android shows its handles for a touch there) — Qt Quick
+        // gives the whole item.
+        const Rect &b = *state.bounds;
+        const QRectF rect(b.left(), b.top(), b.width(), b.height());
+        if (im->inputItemRectangle() != rect)
+            im->setInputItemRectangle(rect);
+    }
+    if (field != m_imeFocus) {
+        const bool hadField = m_imeFocus != 0;
+        m_imeFocus = field;
+        m_imeState = state;
+        im->update(Qt::ImQueryAll);
+        Q_EMIT cursorPositionChanged();
+        // The virtual keyboard for the field that took the focus (again with its hints: one line
+        // or many), away when none has it.
+        if (h)
+            im->show();
+        else if (hadField)
+            im->hide();
+        return;
+    }
+    if (h && state != m_imeState) {
+        m_imeState = std::move(state);
+        im->update(Qt::ImQueryInput | Qt::ImCursorRectangle | Qt::ImAnchorRectangle | Qt::ImInputItemClipRectangle);
+        Q_EMIT cursorPositionChanged();
+    }
+}
+
+void AtramentItem::showInputPanelAt(Point p)
+{
+    // A tap in the focused field brings the keyboard back (after the user put it away).
+    InputHandler *h = inputHandler();
+    if (!h || !hasActiveFocus())
+        return;
+    const std::optional<Rect> bounds = h->inputBounds();
+    if (!bounds || bounds->contains(p))
+        QGuiApplication::inputMethod()->show();
 }
 
 bool AtramentItem::send(const PlatformInput &input)
@@ -544,6 +723,10 @@ void AtramentItem::mousePressEvent(QMouseEvent *event)
     }
     if (!hasActiveFocus())
         forceActiveFocus(Qt::MouseFocusReason);
+    // A press ends a composition: the input method commits it first, as Qt's own fields have it
+    // (Android does on its own at a touch elsewhere).
+    if (InputHandler *h = inputHandler(); h && h->markedRange())
+        QGuiApplication::inputMethod()->commit();
     MouseDownEvent e;
     e.button = *button;
     e.position = { float(event->position().x()), float(event->position().y()) };
@@ -574,6 +757,8 @@ void AtramentItem::mouseReleaseEvent(QMouseEvent *event)
     e.pointer = pointerFromQt(event);
     m_mouse = e.position;
     send(e);
+    if (e.button == MouseButton::Left)
+        showInputPanelAt(e.position);
 }
 
 void AtramentItem::mouseMoveEvent(QMouseEvent *event)
@@ -664,69 +849,83 @@ void AtramentItem::keyReleaseEvent(QKeyEvent *event)
 
 void AtramentItem::inputMethodEvent(QInputMethodEvent *event)
 {
-    InputHandler *h = m_callbacks.inputHandler ? m_callbacks.inputHandler() : nullptr;
-    if (!h) {
-        event->ignore();
+    InputHandler *h = inputHandler();
+    if (!h || m_imeForgetting) {
+        // Nothing takes text, or the input method drops a composition the field already ended.
+        if (m_imeForgetting)
+            event->accept();
+        else
+            event->ignore();
         return;
     }
-    m_app->update([&] {
-        // Qt: the commit replaces the preedit (or the selection), the replacement range is
-        // relative to the caret; then the preedit becomes the new marked text.
-        const std::optional<Range> marked = h->markedRange();
-        if (!event->commitString().isEmpty() || event->replacementLength() > 0) {
-            std::optional<Range> range = marked;
-            if (event->replacementLength() > 0 || event->replacementStart() != 0) {
-                const auto sel = h->selection();
-                const int caret = sel ? sel->focus : 0;
-                const int start = std::max(0, caret + event->replacementStart());
-                range = Range { start, std::min(h->textLength(), start + event->replacementLength()) };
-            }
-            h->replaceText(range, toU16(event->commitString()));
-        }
-        const QString preedit = event->preeditString();
-        if (!preedit.isEmpty()) {
-            std::optional<Range> cursor;
-            for (const QInputMethodEvent::Attribute &a : event->attributes()) {
-                if (a.type == QInputMethodEvent::Cursor)
-                    cursor = Range { a.start, a.start };
-            }
-            h->replaceAndMarkText(std::nullopt, toU16(preedit), cursor);
-        } else if (h->markedRange() && event->commitString().isEmpty()) {
-            h->replaceText(std::nullopt, u""); // the composition was cancelled
-        }
-    });
+    m_app->update([&] { applyInputMethodEvent(*h, *event); });
+    // Whatever the field marks now is the input method's composition.
+    if (InputHandler *now = inputHandler())
+        m_imeComposing = now->markedRange().has_value();
     event->accept();
 }
 
 QVariant AtramentItem::inputMethodQuery(Qt::InputMethodQuery query) const
 {
-    InputHandler *h = m_callbacks.inputHandler ? m_callbacks.inputHandler() : nullptr;
+    return inputMethodQuery(query, QVariant());
+}
+
+QVariant AtramentItem::inputMethodQuery(Qt::InputMethodQuery query, const QVariant &argument) const
+{
+    InputHandler *h = inputHandler();
     if (query == Qt::ImEnabled)
         return h != nullptr;
     if (!h)
         return QQuickItem::inputMethodQuery(query);
-    const auto sel = h->selection();
-    const int focus = sel ? sel->focus : 0;
-    const int anchor = sel ? sel->anchor : 0;
+    const InputHandler::Selection sel = h->selection().value_or(InputHandler::Selection{});
     switch (query) {
     case Qt::ImCursorRectangle:
     case Qt::ImAnchorRectangle: {
-        const int at = query == Qt::ImCursorRectangle ? focus : anchor;
+        // The caret on screen (inside the composition while there is one).
+        const int at = query == Qt::ImCursorRectangle ? sel.focus : sel.anchor;
         const std::optional<Rect> r = h->boundsForRange({ at, at });
         return r ? QRectF(r->left(), r->top(), std::max(1.0f, r->width()), r->height()) : QRectF();
     }
-    case Qt::ImSurroundingText:
-        return toQString(h->textForRange({ 0, h->textLength() }));
     case Qt::ImCursorPosition:
-        return focus;
-    case Qt::ImAnchorPosition:
-        return anchor;
-    case Qt::ImCurrentSelection:
-        return sel ? toQString(h->textForRange(sel->range())) : QString();
+        if (argument.typeId() == QMetaType::QPointF || argument.typeId() == QMetaType::QPoint) {
+            // The offset under a point, in the input method's own coordinates (the composition
+            // included, which are the field's).
+            const QPointF p = argument.toPointF();
+            const std::optional<int> at = h->offsetForPoint({float(p.x()), float(p.y())});
+            return at ? QVariant(*at) : QVariant();
+        }
+        return qtField(*h).cursor;
+    case Qt::ImAnchorPosition: return qtField(*h).anchor;
+    case Qt::ImAbsolutePosition: // one block: the whole field
+        return qtField(*h).cursor;
+    case Qt::ImSurroundingText: return toQString(qtField(*h).text);
+    case Qt::ImCurrentSelection: {
+        const QtField f = qtField(*h);
+        const int a = std::min(f.cursor, f.anchor);
+        const int b = std::max(f.cursor, f.anchor);
+        return toQString(std::u16string_view(f.text).substr(std::size_t(a), std::size_t(b - a)));
+    }
     case Qt::ImTextBeforeCursor:
-        return toQString(h->textForRange({ std::max(0, focus - 256), focus }));
-    case Qt::ImTextAfterCursor:
-        return toQString(h->textForRange({ focus, std::min(h->textLength(), focus + 256) }));
+    case Qt::ImTextAfterCursor: {
+        // Without a length: all of it (QQuickTextInput's answer).
+        const QtField f = qtField(*h);
+        const int n = int(f.text.size());
+        int want = n;
+        if (argument.isValid()) {
+            bool ok = false;
+            const int length = argument.toInt(&ok);
+            if (ok)
+                want = std::clamp(length, 0, n);
+        }
+        const int c = std::clamp(f.cursor, 0, n);
+        const std::u16string_view text(f.text);
+        if (query == Qt::ImTextBeforeCursor) {
+            const int from = std::max(0, c - want);
+            return toQString(text.substr(std::size_t(from), std::size_t(c - from)));
+        }
+        return toQString(text.substr(std::size_t(c), std::size_t(std::min(n - c, want))));
+    }
+    case Qt::ImReadOnly: return false; // Android shows the caret's handle only for a field that says so
     case Qt::ImHints: {
         Qt::InputMethodHints hints = Qt::ImhNone;
         switch (h->purpose()) {
@@ -758,6 +957,10 @@ QVariant AtramentItem::inputMethodQuery(Qt::InputMethodQuery query) const
 void AtramentItem::focusInEvent(QFocusEvent *event)
 {
     QQuickItem::focusInEvent(event);
+    // The input method meets this item afresh (Qt reset it for the item it now follows).
+    m_imeFocus = 0;
+    m_imeState = {};
+    m_imeComposing = false;
     inputStateChanged();
     if (m_callbacks.activeChanged)
         m_callbacks.activeChanged(true);

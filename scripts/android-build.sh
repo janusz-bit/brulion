@@ -49,6 +49,8 @@
 #                                access" and USE_EXACT_ALARM, no check for a newer version; an AAB
 #                                too unless BRULION_ANDROID_AAB=0. Its APK installs beside the
 #                                release (a package of its own): brulion-<version>-<abis>-play.apk / .aab
+#   BRULION_ATRAMENT=OFF         an APK without Atrament, the own UI framework (CMake option
+#                                BRULION_ATRAMENT, default ON: docs/ATRAMENT.md) — to measure its size
 #   BRULION_UPDATE_CHECK=OFF     no check for a newer version on GitHub, no message or switch about
 #                                it (CMake option BRULION_UPDATE_CHECK, default ON): for builds that a
 #                                store updates (F-Droid, IzzyOnDroid; docs/ANDROID.md)
@@ -129,8 +131,10 @@ if [[ -e /etc/NIXOS && -z ${BRULION_ANDROID_IN_NIX_SHELL:-} ]]; then
     die "NixOS without nix-ld: the NDK, aqt's Qt host tools and Gradle's aapt2 are prebuilt binaries. Enable programs.nix-ld (or run this script under steam-run)."
   info "NixOS: entering nix shell (ccache, JDK 21) with nix-ld libraries for Qt's host tools"
   # Qt's prebuilt host tools (moc, rcc, qmlcachegen, androiddeployqt, ...) link glib, krb5,
-  # brotli: add them to nix-ld's search path for this build only.
-  libs=$(nix build --no-link --print-out-paths nixpkgs#glib.out nixpkgs#krb5.lib nixpkgs#brotli.lib nixpkgs#keyutils.lib) ||
+  # brotli; qsb (Qt Shader Tools: Atrament's shaders) links QtGui, and with it xkbcommon, GL, X11,
+  # fontconfig, FreeType and D-Bus: add them to nix-ld's search path for this build only.
+  libs=$(nix build --no-link --print-out-paths nixpkgs#glib.out nixpkgs#krb5.lib nixpkgs#brotli.lib nixpkgs#keyutils.lib \
+    nixpkgs#libxkbcommon nixpkgs#libGL nixpkgs#libx11 nixpkgs#fontconfig.lib nixpkgs#freetype nixpkgs#dbus.lib) ||
     die "nix build of the host-tool libraries failed"
   ld_path=
   for p in $libs; do ld_path+="$p/lib:"; done
@@ -316,25 +320,41 @@ aqt() {
 }
 
 QT_HOST_PATH=${QT_HOST_PATH:-$QT_ROOT/$QT_VERSION/gcc_64}
+# The add-on modules: Qt Multimedia (audio and video in notes, voice notes; its Android backend —
+# the FFmpeg one is left out of the APK: src/app/media/area.cmake) and Qt Shader Tools (the shaders
+# of Atrament's GPU renderer, compiled by the host's qsb: docs/ATRAMENT.md "The GPU renderer").
+# A Qt installed before without one of them gets it now (--noarchives: only the module).
+QT_ADDONS=(qtmultimedia qtshadertools)
 for abi in "${ABIS[@]}"; do
   arch=$(qt_arch "$abi")
-  # With Qt Multimedia (audio and video in notes, voice notes; its Android backend — the FFmpeg one
-  # is left out of the APK: src/app/media/area.cmake); a Qt installed before without it gets it now.
-  if [[ ! -f $QT_ROOT/$QT_VERSION/$arch/lib/cmake/Qt6/qt.toolchain.cmake
-    || ( $QT_SOURCE == aqt && ! -f $QT_ROOT/$QT_VERSION/$arch/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake ) ]]; then
-    [[ $QT_SOURCE == aqt ]] || die "$QT_ROOT/$QT_VERSION/$arch has no Qt for Android (scripts/android-qt-from-source.sh failed?)"
-    info "Installing Qt $QT_VERSION $arch with qtmultimedia (aqt) into $QT_ROOT"
+  prefix=$QT_ROOT/$QT_VERSION/$arch
+  if [[ ! -f $prefix/lib/cmake/Qt6/qt.toolchain.cmake ]]; then
+    [[ $QT_SOURCE == aqt ]] || die "$prefix has no Qt for Android (scripts/android-qt-from-source.sh failed?)"
+    info "Installing Qt $QT_VERSION $arch with ${QT_ADDONS[*]} (aqt) into $QT_ROOT"
     mkdir -p "$QT_ROOT"
-    aqt install-qt all_os android "$QT_VERSION" "$arch" -O "$QT_ROOT" -m qtmultimedia
+    aqt install-qt all_os android "$QT_VERSION" "$arch" -O "$QT_ROOT" -m "${QT_ADDONS[@]}"
+  elif [[ $QT_SOURCE == aqt ]]; then
+    missing=()
+    [[ -f $prefix/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake ]] || missing+=(qtmultimedia)
+    [[ -f $prefix/lib/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake ]] || missing+=(qtshadertools)
+    if ((${#missing[@]})); then
+      info "Adding ${missing[*]} to Qt $QT_VERSION $arch (aqt)"
+      aqt install-qt all_os android "$QT_VERSION" "$arch" -O "$QT_ROOT" --noarchives -m "${missing[@]}"
+    fi
   fi
 done
 if [[ ! -x $QT_HOST_PATH/libexec/moc ]]; then
   [[ $QT_HOST_PATH == "$QT_ROOT/$QT_VERSION/gcc_64" && $QT_SOURCE == aqt ]] || die "QT_HOST_PATH=$QT_HOST_PATH has no libexec/moc"
-  info "Installing the host Qt $QT_VERSION linux_gcc_64 (aqt) into $QT_ROOT"
-  aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_ROOT"
+  info "Installing the host Qt $QT_VERSION linux_gcc_64 with qtshadertools (aqt) into $QT_ROOT"
+  aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_ROOT" -m qtshadertools
+elif [[ $QT_SOURCE == aqt && $QT_HOST_PATH == "$QT_ROOT/$QT_VERSION/gcc_64"
+  && ! -f $QT_HOST_PATH/lib/cmake/Qt6ShaderToolsTools/Qt6ShaderToolsToolsConfig.cmake ]]; then
+  info "Adding qtshadertools (qsb) to the host Qt $QT_VERSION linux_gcc_64 (aqt)"
+  aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_ROOT" --noarchives -m qtshadertools
 fi
 # Fail early and readably when a prebuilt host tool cannot start (missing shared libraries).
-for tool in libexec/moc libexec/rcc libexec/qmlcachegen libexec/qmlimportscanner bin/androiddeployqt; do
+for tool in libexec/moc libexec/rcc libexec/qmlcachegen libexec/qmlimportscanner bin/androiddeployqt bin/qsb; do
+  [[ $tool != bin/qsb || -e $QT_HOST_PATH/$tool ]] || continue
   out=$("$QT_HOST_PATH/$tool" --help 2>&1 || true)
   if grep -q 'error while loading shared libraries' <<<"$out"; then
     die "Qt host tool $QT_HOST_PATH/$tool does not start: $(head -n 1 <<<"$out")"
@@ -427,6 +447,7 @@ cmake_args=(
   -DBRULION_WERROR="${BRULION_WERROR:-OFF}"
   -DBRULION_ANDROID_VERSION_CODE="${BRULION_ANDROID_VERSION_CODE:-}"
   -DBRULION_UPDATE_CHECK="${BRULION_UPDATE_CHECK:-ON}"
+  -DBRULION_ATRAMENT="${BRULION_ATRAMENT:-ON}"
   -DBRULION_PLAY="$( ((PLAY)) && echo ON || echo OFF)"
   -DBRULION_AI_REPORT_EMAIL="${BRULION_AI_REPORT_EMAIL:-}"
 )

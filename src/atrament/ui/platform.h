@@ -52,6 +52,7 @@ public:
         int anchor = 0;
         int focus = 0;
         Range range() const { return { std::min(anchor, focus), std::max(anchor, focus) }; }
+        bool operator==(const Selection &) const = default;
     };
     virtual std::optional<Selection> selection() = 0;
     // The text being composed (shown underlined), if any.
@@ -69,6 +70,9 @@ public:
     virtual std::optional<Rect> boundsForRange(Range range) = 0;
     // The offset under a point (window logical px), or nullopt when it is outside the text.
     virtual std::optional<int> offsetForPoint(Point point) = 0;
+    // The element's own rectangle (window logical px): where a touch edits it, where a virtual
+    // keyboard must not cover it.
+    virtual std::optional<Rect> inputBounds() { return std::nullopt; }
     // Hints for a virtual keyboard.
     enum class Purpose : std::uint8_t { Text, Url, Email, Number, Password, Multiline };
     virtual Purpose purpose() { return Purpose::Multiline; }

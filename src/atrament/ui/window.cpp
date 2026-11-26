@@ -132,6 +132,7 @@ void Window::draw()
         }
         std::sort(frame.views.begin(), frame.views.end());
         m_renderedIndex = buildIndex;
+        m_drawnFocus = m_focused;
         m_building = nullptr;
         m_drawing = false;
 

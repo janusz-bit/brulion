@@ -5,7 +5,8 @@
     "qtbase",
     "qtdeclarative",
     "qtsvg",
-    "qtmultimedia"
+    "qtmultimedia",
+    "qtshadertools"
   ],
   "abis": {
     "arm64-v8a": {
@@ -27,6 +28,10 @@
         "qtmultimedia": {
           "path": "all_os/android/qt6_6120/qt6_6120_arm64_v8a/qt.qt6.6120.addons.qtmultimedia.android_arm64_v8a/6.12.0-0-202609280346qtmultimedia-MacOS-MacOS_15-Clang-Android-Android_ANY-ARM64.7z",
           "hash": "sha256-FW9b5dLnpQOZ/x/VyjG5uSFPSDza104cohHAPgHkAVo="
+        },
+        "qtshadertools": {
+          "path": "all_os/android/qt6_6120/qt6_6120_arm64_v8a/qt.qt6.6120.addons.qtshadertools.android_arm64_v8a/6.12.0-0-202609280346qtshadertools-MacOS-MacOS_15-Clang-Android-Android_ANY-ARM64.7z",
+          "hash": "sha256-SFBGFPXaQKbd+U/3LUK5csQYPOKJZDtG/ytFIrUgP5A="
         }
       }
     },
@@ -49,6 +54,10 @@
         "qtmultimedia": {
           "path": "all_os/android/qt6_6120/qt6_6120_armv7/qt.qt6.6120.addons.qtmultimedia.android_armv7/6.12.0-0-202609280346qtmultimedia-Windows-Windows_11_24H2-Clang-Android-Android_ANY-ARMv7.7z",
           "hash": "sha256-7xKcDBomWVz6/CA0he9zqVI4oOqESF/BTwKVO0nDRPM="
+        },
+        "qtshadertools": {
+          "path": "all_os/android/qt6_6120/qt6_6120_armv7/qt.qt6.6120.addons.qtshadertools.android_armv7/6.12.0-0-202609280346qtshadertools-Windows-Windows_11_24H2-Clang-Android-Android_ANY-ARMv7.7z",
+          "hash": "sha256-ZXeqYEP8/ZMVQGRvyuYLlvqwaBDrS69CitrtEScIOWs="
         }
       }
     },
@@ -71,6 +80,10 @@
         "qtmultimedia": {
           "path": "all_os/android/qt6_6120/qt6_6120_x86_64/qt.qt6.6120.addons.qtmultimedia.android_x86_64/6.12.0-0-202609280346qtmultimedia-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86_64.7z",
           "hash": "sha256-nasAR+dUiai1JUxUT1IRbpnR68e/9eW/Jac8Zy6cn/0="
+        },
+        "qtshadertools": {
+          "path": "all_os/android/qt6_6120/qt6_6120_x86_64/qt.qt6.6120.addons.qtshadertools.android_x86_64/6.12.0-0-202609280346qtshadertools-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86_64.7z",
+          "hash": "sha256-p4A+3LiHFJHPOWcPIa7u2IKY5q8sr6+GsMeCWmg4NEc="
         }
       }
     },
@@ -93,6 +106,10 @@
         "qtmultimedia": {
           "path": "all_os/android/qt6_6120/qt6_6120_x86/qt.qt6.6120.addons.qtmultimedia.android_x86/6.12.0-0-202609280346qtmultimedia-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86.7z",
           "hash": "sha256-LZyoBqeiTAr/YwRXlD9J7/qnwlu/4SP66DUAcOS3lyU="
+        },
+        "qtshadertools": {
+          "path": "all_os/android/qt6_6120/qt6_6120_x86/qt.qt6.6120.addons.qtshadertools.android_x86/6.12.0-0-202609280346qtshadertools-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86.7z",
+          "hash": "sha256-477KIFhT+TeeqZkbfkeFmY+5gk3WdGg5VjQdIJxxUPE="
         }
       }
     }

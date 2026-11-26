@@ -79,14 +79,14 @@ jobs:
           path: |
             ~/.cache/brulion-emsdk
             ~/.cache/brulion-qt/${{ env.QT_VERSION }}/wasm_singlethread
-          key: wasm-qt-${{ env.QT_VERSION }}-emsdk-${{ env.EMSDK_VERSION }}-aqt${{ env.AQT_VERSION }}
+          key: wasm-qt-${{ env.QT_VERSION }}-emsdk-${{ env.EMSDK_VERSION }}-aqt${{ env.AQT_VERSION }}-shadertools
 
-      # The host Qt (moc, rcc, qmlcachegen, lrelease…) is shared with android.yml.
+      # The host Qt (moc, rcc, qmlcachegen, lrelease, qsb…) is shared with android.yml.
       - name: Cache the host Qt
         uses: actions/cache@v6
         with:
           path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/gcc_64
-          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-aqt${{ env.AQT_VERSION }}
+          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-aqt${{ env.AQT_VERSION }}-shadertools
 
       - name: Build (installs emsdk and Qt when not cached)
         run: |

@@ -34,8 +34,10 @@ ApplicationWindow {
         }
     }
 
+    // Above the on-screen keyboard (Android, the browser), as the app's views end at its top.
     AtramentView {
         anchors.fill: parent
+        anchors.bottomMargin: KeyboardInsets.overlap
         view: "gallery"
         focus: true
     }

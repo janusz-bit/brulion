@@ -89,10 +89,11 @@ public:
     // Where things are (window logical px), from the last frame.
     std::optional<Rect> boundsForRange(Range range) const;
     std::optional<int> offsetForPoint(Point point) const;
+    std::optional<Rect> bounds() const { return m_layout ? std::optional<Rect>(m_bounds) : std::nullopt; }
     bool caretVisible() const { return m_caretVisible; }
 
     // Set by the element when it is laid out and painted.
-    void setLaidOut(std::shared_ptr<const TextLayout> layout, Point origin);
+    void setLaidOut(std::shared_ptr<const TextLayout> layout, Rect bounds);
 
 private:
     struct Snapshot {
@@ -121,6 +122,7 @@ private:
     float m_preferredX = -1; // for ↑/↓ across lines of different widths
     std::shared_ptr<const TextLayout> m_layout;
     Point m_origin;
+    Rect m_bounds;
     bool m_dragging = false;
     int m_dragAnchor = 0;
 };
