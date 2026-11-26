@@ -66,6 +66,7 @@ private Q_SLOTS:
     // ---- worktrees ----
     void worktreesNul();
     void worktreesNewlines();
+    void worktreesWindows();
     void worktreesMalformed();
 
     // ---- branches ----
@@ -536,6 +537,25 @@ void TestGitCli::worktreesNewlines()
     QVERIFY(w.at(1).lockReason.isEmpty());
 }
 
+void TestGitCli::worktreesWindows()
+{
+    // git for Windows: drive letters and '/' (-z), CRLF where a tool in between made them.
+    const QByteArray nul = z({"worktree C:/Users/Łucja/projekt", "HEAD e7d0f3081712448569561c1efb757927caf94140",
+                              "branch refs/heads/main", "", "worktree C:/Users/Łucja/.brulion/worktrees/projekt/żółw",
+                              "HEAD 6178079823bf7b4fc6ddbb1af1d5bf9a5e5e9e2c", "branch refs/heads/brulion/żółw", ""});
+    const QList<Worktree> w = parseWorktrees(nul);
+    QCOMPARE(w.size(), 2);
+    QCOMPARE(w.at(0).path, u"C:/Users/Łucja/projekt"_s);
+    QCOMPARE(w.at(1).path, u"C:/Users/Łucja/.brulion/worktrees/projekt/żółw"_s);
+    QCOMPARE(w.at(1).branch, u"brulion/żółw"_s);
+    const QList<Worktree> crlf =
+            parseWorktrees("worktree D:/repo z spacją\r\nHEAD 61780798\r\ndetached\r\nlocked w użyciu\r\n\r\n");
+    QCOMPARE(crlf.size(), 1);
+    QCOMPARE(crlf.at(0).path, u"D:/repo z spacją"_s);
+    QVERIFY(crlf.at(0).detached);
+    QCOMPARE(crlf.at(0).lockReason, u"w użyciu"_s);
+}
+
 void TestGitCli::worktreesMalformed()
 {
     QVERIFY(parseWorktrees(QByteArray()).isEmpty());
@@ -619,6 +639,8 @@ void TestGitCli::pullRequestUrl_data()
     QTest::newRow("last of two") << u"https://github.com/a/b/pull/1 then https://github.com/a/b/pull/2"_s
                                  << u"https://github.com/a/b/pull/2"_s;
     QTest::newRow("issue, not a pull") << u"https://github.com/a/b/issues/3"_s << QString();
+    QTest::newRow("CRLF (Windows)") << u"Creating pull request\r\n\r\nhttps://github.com/ja/projekt/pull/8\r\n"_s
+                                    << u"https://github.com/ja/projekt/pull/8"_s;
     QTest::newRow("none") << u"GraphQL: Head sha can't be blank"_s << QString();
     QTest::newRow("empty") << QString() << QString();
 }
@@ -711,6 +733,15 @@ void TestGitCli::safePaths_data()
     QTest::newRow("git folder any case") << u"sub/.GIT/hooks/x"_s << false;
     QTest::newRow("backslash") << u"a\\b"_s << false;
     QTest::newRow("drive") << u"C:/Windows"_s << false;
+    QTest::newRow("drive, backslash") << u"C:\\Windows"_s << false;
+    QTest::newRow("drive-relative") << u"c:plik"_s << false;
+    QTest::newRow("UNC") << u"//serwer/udział/plik"_s << false;
+    QTest::newRow("git folder with a dot (NTFS)") << u".git./config"_s << false;
+    QTest::newRow("git folder with a space (NTFS)") << u"a/.GIT /hooks/x"_s << false;
+    QTest::newRow("git folder's short name") << u"GIT~1/config"_s << false;
+    QTest::newRow("short name of another folder") << u"git~2/plik"_s << true;
+    QTest::newRow("gitignore") << u"a/.gitignore"_s << true;
+    QTest::newRow("dots in a name") << u"wersja 1.2./plik"_s << true;
     QTest::newRow("double slash") << u"a//b"_s << false;
     QTest::newRow("trailing slash") << u"a/"_s << false;
     QTest::newRow("NUL") << QStringView(u"a\0b", 3).toString() << false;

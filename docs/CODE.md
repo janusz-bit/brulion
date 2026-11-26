@@ -41,9 +41,13 @@ an agent at a folder.
   `env`, else the device's `newThreadEnvDefault` (Settings → Extensions → Code mode → "New threads
   work"), else t3.json's `defaultThreadEnvMode`, else `local` (T3 Code's order: the project's override,
   the device's setting, the repository's file, the built-in default).
-* `worktreesRoot` (default `~/.brulion/worktrees`), `branchPrefix` (default `brulion/`; only what a
+* `worktreesRoot` (default `~/.brulion/worktrees`; Windows `%USERPROFILE%\.brulion\worktrees`), `branchPrefix` (default `brulion/`; only what a
   branch may start with), `deletedWorktrees` (`ask` | `delete` | `keep`), `threadSort` (`activity` |
-  `created`), `projectOfFolder(folder)`.
+  `created`), `projectOfFolder(folder)`. On Windows a folder added in another case is the same
+  project; an editor's command is split by Windows' rules (`splitWindowsCommand()`, a path's
+  backslashes kept) and an editor that is a batch file — VS Code's and Cursor's `code.cmd` — runs
+  through `cmd.exe /d /v:off /s /c` with every argument quoted (`batchCommandLine()`, which refuses a
+  quote, `%` or a line break; `startEditor()`).
 * **Projects of the user's other computers** (`remote`, `shell/remoteprojects.h`, QML
   `Workspace.projects.remote`): listed after this device's — `{id, name, path "", exists false, scripts
   [], remote true, host, remotePath}`, read-only, `folderOf()` "" — when a computer that shares its
@@ -315,8 +319,8 @@ over the scrollback, a context menu with Add to chat (the selection or the scree
 thread's field), URLs and file paths (`path:line:column`) opened with Ctrl+click, marks on tabs
 (new output, a bell, the exit code), shortcuts (Ctrl+J shows or hides it); a real pseudo-terminal
 and an xterm emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8 links,
-OSC 52 ignored). POSIX desktops; Windows, Android and the browser say there is no terminal (ConPTY:
-not yet).
+OSC 52 ignored). POSIX desktops and Windows 10 1809+ (ConPTY: PowerShell 7, Windows PowerShell or
+cmd.exe); Android and the browser say there is no terminal.
 
 ## Files
 
@@ -331,7 +335,9 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
 
 ## What is not there yet
 
-* Windows: the terminal (ConPTY); everything else of Code mode is untried there.
+* Windows: Code mode's tests run there (CI: the terminal on ConPTY, git and gh with Windows paths,
+  the Changes panel), not yet a session by hand with a real agent; a worktree of a repository whose
+  paths pass 260 characters needs git's `core.longpaths`; a terminal before Windows 10 1809.
 * A pull request's text written by AI (the commit message is: "Write with AI"), and the rest of
   docs/CODE-GIT.md "Not done (yet)".
 * Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and

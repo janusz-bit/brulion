@@ -783,7 +783,7 @@ private Q_SLOTS:
         QCOMPARE(ask(*t, u"AI/Pliki.md"_s, u"czytaj Dom"_s), u"Przeczytano: - pierwsza linia: żółta ćma"_s);
         QCOMPARE(ask(*t, u"AI/Pliki.md"_s, u"zapisz coś"_s), u"Zapisano przez klienta; poza notatnikiem: -32602"_s);
         QCOMPARE(fileText(m_vault + u"/Od agenta.md"_s), u"- od agenta\n"_s);
-        QVERIFY(!QFile::exists(u"/etc/brulion-test-outside"_s));
+        QVERIFY(!QFile::exists(QDir::cleanPath(m_vault) + u"-outside.txt"_s));
         // A command in a terminal here.
         QCOMPARE(ask(*t, u"AI/Terminal.md"_s, u"terminal"_s), u"Wyjście (4): ąę|drugi"_s);
 

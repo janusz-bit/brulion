@@ -255,8 +255,13 @@ QString CodeProjects::add(const QString &folder)
     if (path.isEmpty() || !QFileInfo(path).isDir())
         return {};
     path = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+#ifdef Q_OS_WIN
+    constexpr Qt::CaseSensitivity paths = Qt::CaseInsensitive; // (C:/Projekty and c:/projekty)
+#else
+    constexpr Qt::CaseSensitivity paths = Qt::CaseSensitive;
+#endif
     for (const Project &p : std::as_const(m_projects))
-        if (QDir::cleanPath(p.path) == path)
+        if (QDir::cleanPath(p.path).compare(path, paths) == 0)
             return p.id;
     if (m_projects.size() >= MaxProjects)
         return {};

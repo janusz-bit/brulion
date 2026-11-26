@@ -8,9 +8,9 @@ done in the repository simply disappears from the list.
 * **Code mode: what is still missing** — projects, AI agents' threads in a project's folder or a
   worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
   the terminal and the project's files — picker, viewer, search, @-mentions — are there
-  (docs/CODE.md; tried with a real Claude Code and Codex: tst_shell_agents realAgentThread). Missing:
-  the terminal on Windows (ConPTY) and Code mode tried on Windows and macOS at all; the terminal's
-  resizable splits;
+  (docs/CODE.md; tried with a real Claude Code and Codex: tst_shell_agents realAgentThread; its tests
+  run on Windows too: the ConPTY terminal, git, gh). Missing: Code mode tried by hand on Windows and on
+  macOS at all; a terminal on Windows before 10 1809; the terminal's resizable splits;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
   a pull request's text written by AI (the commit message is: "Write with AI", AiAsk), a turn's
   changes without what the user changed between turns, `--skip` while rebasing, `git fetch` of its

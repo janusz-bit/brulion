@@ -132,7 +132,7 @@ std::optional<QString> blockTextById(const VaultIndex &index, const QString &id)
     const ParsedNote *note = index.note(ref->path);
     if (!note || ref->blockIndex < 0 || ref->blockIndex >= note->blocks.size())
         return std::nullopt;
-    return note->blocks.at(ref->blockIndex).text;
+    return note->blocks.at(ref->blockIndex).text.toString();
 }
 
 } // namespace
@@ -190,7 +190,7 @@ markdown::RenderContext renderContext(const VaultIndex *index, const VaultPath &
             if (!note)
                 return std::nullopt;
             if (const int i = note->blockIds.value(id, -1); i >= 0 && i < note->blocks.size())
-                return note->blocks.at(i).text;
+                return note->blocks.at(i).text.toString();
             return blockTextById(*index, id);
         };
     }

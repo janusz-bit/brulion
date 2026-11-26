@@ -10,3 +10,8 @@ set_tests_properties(tst_codegit PROPERTIES TIMEOUT 300)
 # The panel's pure rows (gitdiffrows.h): diff hunks, split rows, word changes, whitespace, found
 # rows and their rich text, the file tree, review comments for the chat.
 brulion_add_test(tst_gitdiffrows SOURCES tst_gitdiffrows.cpp LIBS brulion_gitpanel)
+# The fake gh of tests/core/gitcli (a program on every platform).
+if(TARGET fake_gh)
+    add_dependencies(tst_codegit fake_gh)
+    target_compile_definitions(tst_codegit PRIVATE FAKE_GH="$<TARGET_FILE:fake_gh>")
+endif()

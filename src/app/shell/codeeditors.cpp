@@ -160,20 +160,57 @@ bool CodeProjects::openWith(const QString &editor, const QString &path, int line
     if (editor == u"files")
         return openFolder(target);
 #if QT_CONFIG(process)
+#ifdef Q_OS_WIN
+    // (Windows: the path in its native form; a command split by Windows' rules.)
+    const QString native = QDir::toNativeSeparators(target);
+    const QStringList parts = splitWindowsCommand(m_editor);
+#else
+    const QString &native = target;
+    const QStringList parts = splitCommand(m_editor);
+#endif
     if (editor == u"custom") {
-        const QStringList parts = splitCommand(m_editor);
         if (parts.isEmpty())
             return false;
         const QString program = QStandardPaths::findExecutable(parts.first(), m_editorPaths);
-        return !program.isEmpty() && QProcess::startDetached(program, parts.mid(1) << target, workDir);
+        return !program.isEmpty() && startEditor(program, parts.mid(1) << native, workDir);
     }
     scanEditors();
     const auto it = std::ranges::find_if(m_found, [&editor](const auto &e) { return e.first == editor; });
     if (it == m_found.cend())
         return false;
-    return QProcess::startDetached(it->second, editorArguments(editor, target, line), workDir);
+    return startEditor(it->second, editorArguments(editor, native, line), workDir);
 #else
     Q_UNUSED(line)
+    return false;
+#endif
+}
+
+bool CodeProjects::startEditor(const QString &program, const QStringList &arguments, const QString &workDir)
+{
+#if QT_CONFIG(process)
+#ifdef Q_OS_WIN
+    // A batch file (findExecutable() finds `code` as code.cmd): CreateProcess would hand it to
+    // cmd.exe with arguments cmd.exe reads by rules of its own; quoted for them here instead.
+    const QString suffix = QFileInfo(program).suffix().toLower();
+    if (suffix == u"cmd" || suffix == u"bat") {
+        const QString line = batchCommandLine(QDir::toNativeSeparators(program), arguments);
+        QString cmd = qEnvironmentVariable("ComSpec");
+        if (cmd.isEmpty() || !QFileInfo(cmd).isFile())
+            cmd = QStandardPaths::findExecutable(u"cmd.exe"_s);
+        if (line.isEmpty() || cmd.isEmpty())
+            return false;
+        QProcess process;
+        process.setProgram(cmd);
+        process.setNativeArguments(line);
+        process.setWorkingDirectory(workDir);
+        return process.startDetached();
+    }
+#endif
+    return QProcess::startDetached(program, arguments, workDir);
+#else
+    Q_UNUSED(program)
+    Q_UNUSED(arguments)
+    Q_UNUSED(workDir)
     return false;
 #endif
 }
@@ -219,6 +256,77 @@ QStringList CodeProjects::splitCommand(const QString &command)
     if (inPart)
         out << part;
     return out;
+}
+
+QStringList CodeProjects::splitWindowsCommand(const QString &command)
+{
+    QStringList out;
+    QString part;
+    bool inPart = false;
+    bool quoted = false;
+    for (qsizetype i = 0; i < command.size();) {
+        const QChar c = command.at(i);
+        if (c == u'\\') {
+            qsizetype backslashes = 0;
+            while (i < command.size() && command.at(i) == u'\\') {
+                ++backslashes;
+                ++i;
+            }
+            if (i < command.size() && command.at(i) == u'"') {
+                // 2n backslashes and a quote: n and the quote's own meaning; 2n + 1: n and a quote.
+                part += QString(backslashes / 2, u'\\');
+                if (backslashes % 2) {
+                    part += u'"';
+                    ++i;
+                }
+            } else {
+                part += QString(backslashes, u'\\');
+            }
+            inPart = true;
+        } else if (c == u'"') {
+            if (quoted && i + 1 < command.size() && command.at(i + 1) == u'"') {
+                part += u'"'; // ("" inside quotes: a quote, as the C runtime reads it)
+                i += 2;
+            } else {
+                quoted = !quoted;
+                ++i;
+            }
+            inPart = true;
+        } else if (!quoted && (c == u' ' || c == u'\t')) {
+            if (inPart)
+                out << std::exchange(part, {});
+            inPart = false;
+            ++i;
+        } else {
+            part += c;
+            inPart = true;
+            ++i;
+        }
+    }
+    if (inPart)
+        out << part;
+    return out;
+}
+
+QString CodeProjects::batchCommandLine(const QString &batch, const QStringList &arguments)
+{
+    QString line = u"/d /v:off /s /c \""_s;
+    const QStringList all = QStringList{batch} + arguments;
+    for (qsizetype i = 0; i < all.size(); ++i) {
+        QString argument = all.at(i);
+        if (argument.contains(u'"') || argument.contains(u'%') || argument.contains(u'\n') || argument.contains(u'\r')
+            || argument.contains(QChar(0)))
+            return {};
+        // (The program the batch file runs reads "C:\" as C: and a quote.)
+        qsizetype trailing = 0;
+        while (trailing < argument.size() && argument.at(argument.size() - 1 - trailing) == u'\\')
+            ++trailing;
+        argument += QString(trailing, u'\\');
+        if (i > 0)
+            line += u' ';
+        line += u'"' + argument + u'"';
+    }
+    return line + u'"';
 }
 
 } // namespace brulion::shell

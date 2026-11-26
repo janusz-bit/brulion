@@ -11,10 +11,16 @@
 if(TARGET brulion_terminal)
     brulion_add_test(tst_terminal
         SOURCES tst_terminal.cpp
-        LIBS brulion_terminal brulion_core_term Qt6::Quick)
+        LIBS brulion_terminal brulion_core_term brulion_platform Qt6::Quick)
     target_compile_definitions(tst_terminal PRIVATE BRULION_TEST_PTY_BACKEND="${BRULION_PTY_BACKEND_USED}")
     math(EXPR _terminal_function_timeout "300000 * ${BRULION_TEST_SLOWDOWN}")
     set_tests_properties(tst_terminal PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QTEST_FUNCTION_TIMEOUT=${_terminal_function_timeout}"
         TIMEOUT 180)
+endif()
+# How a session starts Windows' shells (shelllaunch.h), pure, so tested on every platform: the kind
+# of a shell by its name, PowerShell's -EncodedCommand and the line that keeps a command's exit code,
+# cmd.exe's /d /s /c "<command>" as native arguments, a POSIX shell's -lc and -i -l.
+if(TARGET brulion_terminal)
+    brulion_add_test(tst_terminal_shell SOURCES tst_terminal_shell.cpp LIBS brulion_terminal)
 endif()

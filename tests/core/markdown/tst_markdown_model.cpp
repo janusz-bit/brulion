@@ -182,7 +182,7 @@ private Q_SLOTS:
         QVERIFY(block < note.blocks.size());
         const BlockText &t = note.blocks[block].text;
         QCOMPARE(t.toString(), text);
-        QCOMPARE(QString(t), text);
+        QCOMPARE(t.operator QString(), text);
         QCOMPARE(t.view(), QStringView(text));
         QCOMPARE(t.size(), text.size());
         QCOMPARE(t.isEmpty(), text.isEmpty());

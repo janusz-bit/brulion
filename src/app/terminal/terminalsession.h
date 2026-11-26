@@ -10,8 +10,11 @@
 // non-login shell. Otherwise the command runs through that shell as `$SHELL -lc command` — the shell
 // is the program, never a shell string of our own — and the session ends with it. start() after the
 // end runs it again on a clean screen. The child inherits the app's environment (with the pty's
-// TERM; pty.h) minus the AppImage runtime's own variables. Where there is no pty (`available`
-// false: Windows, Android, the browser) start() does nothing.
+// TERM; pty.h) minus the AppImage runtime's own variables. Windows: the shell is PowerShell 7,
+// Windows PowerShell or cmd.exe (Pty::userShell()), each running a command its own way
+// (shelllaunch.h), exit codes are the process's, and a tab's label comes before the console's title.
+// Where there is no pty (`available` false: Android, the browser, Windows before 10 1809) start()
+// does nothing.
 //
 // `busy`: a program runs in it — a job of the shell's in the terminal's foreground (`npm run dev`,
 // `vim`; Pty::hasForegroundJob()), or the session's own command. Looked at a moment after output
@@ -49,7 +52,8 @@ class TerminalSession : public QObject {
     Q_PROPERTY(bool running READ isRunning NOTIFY runningChanged FINAL)
     /// It ran and ended (the panel's "Process exited with code N" and its Restart).
     Q_PROPERTY(bool hasExited READ hasExited NOTIFY runningChanged FINAL)
-    /// The exit code; 128 + the signal's number when a signal ended it; -1 before it ended.
+    /// The exit code; 128 + the signal's number when a signal ended it (Windows: the process's own,
+    /// an NTSTATUS negative); -1 before it ended.
     Q_PROPERTY(int exitCode READ exitCode NOTIFY runningChanged FINAL)
     /// Why the last start() failed ("" when it did not).
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged FINAL)

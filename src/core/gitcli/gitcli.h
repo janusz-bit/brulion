@@ -360,8 +360,9 @@ bool isValidBranchName(QStringView name);
 /// A checkpoint's id (the last part of refs/brulion/checkpoints/<id>): 1–200 of [A-Za-z0-9_-],
 /// '/'-separated parts allowed (no empty part).
 bool isValidCheckpointId(QStringView id);
-/// A path inside the work tree as git writes it: relative, '/'-separated, no empty, ".", ".." or
-/// ".git" part (".git" in any case), no backslash, no NUL. What restore() deletes passes this.
+/// A path inside the work tree as git writes it: relative, '/'-separated, no drive ("C:"), no empty,
+/// ".", ".." or ".git" part (".git" in any case, and as NTFS also reads it: with trailing dots or
+/// spaces, or its short name "git~1"), no backslash, no NUL. What restore() deletes passes this.
 bool isSafeRelativePath(QStringView path);
 /// A revision the client hands git as an argument (a commit's id, a branch, "HEAD~1",
 /// "origin/main", a checkpoint's ref): not empty, no leading '-' (never an option), no space,

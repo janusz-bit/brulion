@@ -336,6 +336,17 @@ public:
     Q_INVOKABLE bool openFolder(const QString &folder) const;
     /// `command` split as a shell would (quotes, backslashes), no shell run (tests).
     static QStringList splitCommand(const QString &command);
+    /// `command` split as Windows programs read their command line (CommandLineToArgvW): a
+    /// backslash is a backslash except before a quote — "C:\Program Files\…\Code.exe" -n.
+    static QStringList splitWindowsCommand(const QString &command);
+    /// cmd.exe's arguments that run the batch file `batch` with `arguments`:
+    /// `/d /v:off /s /c ""<batch>" "<argument>" …"` — every one quoted, so & | < > ^ ( ) are text to
+    /// cmd.exe, and trailing backslashes doubled for the program the batch file hands them to. ""
+    /// when one of them holds what cmd.exe reads even inside quotes: a quote, %, a line break.
+    static QString batchCommandLine(const QString &batch, const QStringList &arguments);
+    /// Starts `program` with `arguments` in `workDir`, detached; Windows: a batch file through
+    /// cmd.exe (batchCommandLine()). False when it did not start.
+    static bool startEditor(const QString &program, const QStringList &arguments, const QString &workDir);
 
     /// "Mój Projekt (2)!" → "moj-projekt-2": lower-case ASCII letters, digits and dashes, at most
     /// 40 characters ("project" when nothing is left).
