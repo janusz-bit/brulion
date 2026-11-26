@@ -12,6 +12,7 @@
 #include "qrhirenderer.h"
 
 #include <QString>
+#include <QtGui/qtguiglobal.h>
 
 #include <memory>
 #include <optional>
@@ -36,7 +37,9 @@ public:
     ~OffscreenRhi();
 
     QRhi *rhi() const { return m_rhi.get(); }
+#if QT_CONFIG(vulkan)
     QVulkanInstance *vulkanInstance() const { return m_vulkan.get(); }
+#endif
     // "Vulkan: llvmpipe (LLVM 21.1.8, 256 bits)".
     QString description() const;
 
@@ -50,7 +53,9 @@ public:
 private:
     OffscreenRhi();
 
+#if QT_CONFIG(vulkan)
     std::unique_ptr<QVulkanInstance> m_vulkan;
+#endif
     std::unique_ptr<QOffscreenSurface> m_surface;
     std::unique_ptr<QRhi> m_rhi;
     std::unique_ptr<QRhiTexture> m_texture;

@@ -9,5 +9,5 @@ brulion_add_atrament_module(text
         textsystem.cpp textsystem.h
         unicode.cpp unicode.h
     DEPS scene
-    LIBS PkgConfig::BRULION_ATRAMENT_HARFBUZZ
+    LIBS brulion_harfbuzz
 )

@@ -23,7 +23,6 @@
   makeFontsConf,
   hunspell,
   hunspellDicts,
-  harfbuzz,
   tesseract,
   fetchurl,
   linkFarm,
@@ -127,8 +126,6 @@ stdenv.mkDerivation (finalAttrs: {
     # Spell checking in the editor (src/platform/spell_hunspell.cpp, docs/UI.md "Spell checking");
     # the dictionaries are found through BRULION_SPELL_DICTIONARY_DIRS below.
     hunspell
-    # Atrament, the own UI framework (docs/ATRAMENT.md): text shaping and glyph outlines.
-    harfbuzz
   ]
   ++ lib.optionals withMultimedia [ qtmultimedia ]
   ++ lib.optionals stdenv.hostPlatform.isLinux [

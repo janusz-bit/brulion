@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <numbers>
 
 namespace brulion::atrament::gallery {
 
@@ -504,9 +505,9 @@ AnyElement Gallery::drawing(Window &, Context<Gallery> &)
                                 const float r = std::min(b.width(), b.height()) / 2 - 4;
                                 const float parts[] = { 0.42f, 0.27f, 0.19f, 0.12f };
                                 const Color colors[] = { th.accent, th.success, th.warning, th.danger };
-                                float a = -float(M_PI) / 2;
+                                float a = -std::numbers::pi_v<float> / 2;
                                 for (int i = 0; i < 4; ++i) {
-                                    const float a1 = a + parts[i] * 2 * float(M_PI) - 0.04f;
+                                    const float a1 = a + parts[i] * 2 * std::numbers::pi_v<float> - 0.04f;
                                     w.paintPath(colors[i], [&](Window::PathPainter &p) {
                                         p.arcTo(c, r, a, a1);
                                         p.arcTo(c, r * 0.62f, a1, a);

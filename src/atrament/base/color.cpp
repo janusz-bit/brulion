@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace brulion::atrament {
 
@@ -45,7 +46,7 @@ Color Color::hsla(float hue, float saturation, float lightness, float alpha)
 Color Color::oklch(float lightness, float chroma, float hue, float alpha)
 {
     // Björn Ottosson's OKLab → linear sRGB.
-    const float hr = hue * float(M_PI) / 180.0f;
+    const float hr = hue * std::numbers::pi_v<float> / 180.0f;
     const float L = lightness;
     const float a = chroma * std::cos(hr);
     const float b = chroma * std::sin(hr);

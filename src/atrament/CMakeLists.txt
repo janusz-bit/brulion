@@ -6,8 +6,8 @@
 # in dependency order (the list below), so they never edit this file. None of them uses Qt
 # (docs/ATRAMENT.md D2) except `qt` (the Qt Quick host) and `gallery` (its developer app).
 #
-# HarfBuzz shapes the text and gives the glyphs' outlines (D7): pkg-config's `harfbuzz`
-# (BRULION_ATRAMENT_HARFBUZZ, found by the top-level CMakeLists.txt).
+# HarfBuzz shapes the text and gives the glyphs' outlines (D7): the vendored one, brulion_harfbuzz
+# (3rdparty/harfbuzz, added by the top-level CMakeLists.txt).
 
 set_directory_properties(PROPERTIES QT_EXCLUDE_FROM_TRANSLATION ON)
 

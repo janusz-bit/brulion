@@ -1,0 +1,8 @@
+{
+  "!comment": "HarfBuzz, which shapes Atrament's text and gives its glyphs' outlines (3rdparty/harfbuzz/CMakeLists.txt): one release, vendored — src/ holds the files of the release archive below that harfbuzz.cc needs, unchanged. `sha256` is the archive's. Update: scripts/harfbuzz-vendor.sh <tag>.",
+  "owner": "harfbuzz",
+  "repo": "harfbuzz",
+  "tag": "14.5.1",
+  "url": "https://github.com/harfbuzz/harfbuzz/archive/refs/tags/14.5.1.tar.gz",
+  "sha256": "a058ff4c32dad1e163cd62dce4bca81035f7fbc060bc52fc97f6079c4446ec44"
+}
