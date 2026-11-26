@@ -385,7 +385,7 @@ Never compute a hash yourself.
 | `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
 | `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
 | `mcp revoke [<connection>]` | `[--all] [--auth-file F]` | end a connection (`bgr_…`) or all of a client's (`bcl_…`, an https client ID); takes effect in a running server at once | |
-| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--question-wait S] [--tailscale \| --tailscale-serve] [--tailnet-user L] [--no-tailnet-trust] [--allow-http] [--stop-on-eof] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
+| `acp serve` | `(--agent SPEC \| --agents F) [--projects F] [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--question-wait S] [--tailscale \| --tailscale-serve] [--tailnet-user L] [--no-tailnet-trust] [--allow-http] [--stop-on-eof] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
 | `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url, link}` — 10 minutes, one device, five wrong tries; `--format text` shows the link as a QR code | |
 | `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
 | `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
@@ -899,7 +899,9 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
 * **From the desktop app**: Settings → Extensions → AI agents → **Share agents with the phone**
   runs this server for the notebook the app has open, with the agents set up there, while the app
   runs (docs/UI.md "AI agents (ACP)" → "Sharing them with the phone"): `brulion-cli --vault
-  <notebook> acp serve --agents <app data>/agent-share/agents.json --stop-on-eof` and, found by
+  <notebook> acp serve --agents <app data>/agent-share/agents.json --projects <app
+  data>/agent-share/projects.json --stop-on-eof` (Code mode's projects of this computer, written
+  again whenever they change — the server reads the file again by itself) and, found by
   itself, `--tailscale` (below) or this computer's address in its network (`--listen <address>
   --public-url http://<address>:8790 --allow-http`). No terminal, no copy of the notebook, no
   service to set up; its pairing code is a button there, shown as a QR code.
@@ -970,6 +972,10 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   `--allowed-origin https://notes.example.com` (comma-separated; CORS answers for it, also to
   Chrome's Private Network Access preflight: a public page that calls an address of your own
   network). Any other page is refused.
+* **Code mode's threads** (`--projects projects.json`: `[{id, name, path, worktreesRoot}]`, the
+  projects this computer's user added in Code mode — the desktop app's sharing writes it, below):
+  a device lists them (`GET projects`) and continues their threads here (docs/CODE.md "Threads on
+  the phone") — "Code mode's projects" below.
 * **Language**: English, as `mcp serve` — the app words the agent's ends and failures itself.
 * **`--stop-on-eof`**: the server stops when its standard input ends — how a program that runs it
   (the app's switch) stops it, its agents with it; and when that program ends anyhow, a crash too,
@@ -1039,7 +1045,7 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | Request | Body / query | Answer |
 |---|---|---|
 | `POST pair` | `{code, device}` (no token; without `code`: by the device's tailnet identity) | `{token, device: {id, name}}`; 403 `no_code`, `bad_code`, `code_needed`, `too_many_devices`; 429 `too_many_tries` |
-| `GET info` | | `{protocol: 1, version, host, root, tools, features, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` — `features: ["app"]` when the app's live tools are tunnelled (an older server names none) |
+| `GET info` | | `{protocol: 1, version, host, root, tools, features, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` — `features: ["app"]` when the app's live tools are tunnelled, `"code"` when it runs Code mode's threads (`--projects`; an older server names none) |
 | `POST streams` | `{agent, features}` | 201 `{stream, root, features}`; 404 `unknown_agent`, 429 `too_many_streams` — `features` what the device does besides the protocol (`["app"]`: it answers the app's calls of the agent's tools) and, in the answer, what of it this stream gets |
 | `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
 | `GET streams/<id>/receive` | `?after=N&wait=S` (S ≤ 30) | `{messages [{seq, message}], closed, why}` — the messages after `N` (those up to `N` are dropped here), at once or within S seconds; at most 4 MiB at a time |
@@ -1047,6 +1053,10 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | `GET sessions/<id>/turn` | `?wait=S` (S ≤ 30) | `{session, turn, state: running \| done \| failed, text, tools, stopReason, error, asking, question, started, ended}` (`turn`: the id the device gave the turn in its prompt's `_meta`, `brulion/turn`; `question` while one waits: `{id, toolCall, options}`) — the last turn of the device's session, at once or when it changes (it ends, the agent asks) within S seconds; 404 `no_turn` |
 | `POST sessions/<id>/turn` | `{question, optionId}` | the turn, as `GET` gives it — the device's answer to the question `question` waiting in it: `optionId` one of its options, anything else (`""`) `cancelled`; 404 `no_question` (it was answered, or it waited too long) |
 | `DELETE sessions/<id>/turn` | | 204: the agent stops that turn (`session/cancel`; its questions `cancelled`) |
+| `GET projects` | | `{projects [{id, name, path}]}` — Code mode's projects of this computer (below); 404 `no_projects` without `--projects` |
+| `POST projects/<id>/worktrees` | `{title, base?}` | 201 `{folder, branch}`: a git worktree made for a new thread; 400 `bad_title`, `bad_base`; 404 `unknown_project`; 409 `git_failed` |
+| `GET projects/<id>/changes` | `?worktree=F&since=C` | `{changes [{path, oldPath?, change, additions, deletions, binary}], truncated}` — the files changed since the checkpoint `C` (none: since the last commit) in the project's folder or its worktree `F`; 400 `bad_checkpoint`, `bad_worktree`; 403 `not_a_worktree` |
+| `GET projects/<id>/diff` | `?worktree=F&since=C&path=P&oldPath=O` | `{path, oldText, newText, oldExists, newExists, binary, tooLarge}`; 400 `bad_path` (not a path of the work tree: absolute, `..`, `.git`) |
 
 Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a
 paired one). Errors are `{error: {code, message}}`. A stream of another device, or one that ended
@@ -1056,6 +1066,51 @@ and was given up, is 404 `no_stream`.
 brulion-cli --vault ~/Notatki acp pair
 brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agent.example.com
 ```
+
+### Code mode's projects
+
+With `--projects <file>` the server also runs **threads of Code mode** for the devices
+(docs/CODE.md "Threads on the phone"; `src/core/acp/codehost.h`): the projects this computer's
+user added in Code mode — folders of this computer, git repositories usually — whose threads a
+phone continues while the agent works here, in the project, as on the desktop.
+
+* **The file** (`[{id, name, path, worktreesRoot}]`, at most 100; an entry without a valid id or an
+  absolute path left out) is read again whenever it changes: the desktop app writes it from its
+  projects (Settings → Extensions → AI agents → Share agents with the phone), a NixOS service from
+  its configuration. A missing or broken file: no projects (said in the log). A device gets `id`,
+  `name` and `path` of each (`GET projects`), never the worktrees' root.
+* **A thread's session**: a session request (`session/new`, `/load`, `/resume`) whose
+  `params._meta["brulion/code"]` is `{project, worktree?, branch?}` — the device's thread page names
+  them — works in that project: this server takes the key out (the agent never sees it), sets
+  `cwd` to the project's folder or to the worktree, and gives the session Brulion's MCP server as
+  the desktop gives a thread's (`brulion-cli mcp --no-notes`, with the app's tunnelled tools when
+  the session asks for them; none when it would have no tool). The project is one of the file's
+  (an id, never a folder a device names); a worktree is taken only when it is that project's — it
+  lies under `<worktreesRoot>/<id>/` (default `~/.brulion/worktrees`) or `git worktree list` of the
+  project names it —, compared as canonical paths, so no `..` or link leads elsewhere. Anything
+  else is refused before the agent hears of it: the device's request gets an error (`-32602`) with
+  why, and its turn fails so. The request waits for the check (git may have to answer); what the
+  device sends after it waits too.
+* **Its files and terminals** (`fs/read_text_file`, `fs/write_text_file`, `terminal/create`) are
+  answered in that folder: paths inside it (absolute or relative to it, no link out, nothing written
+  into its `.git`), a file of 16 MiB at most read, commands in the folder or a folder inside it —
+  written as files of the project, without the notebook's version history.
+* **Checkpoints**: before each prompt of a thread's session reaches the agent, the server takes a
+  git checkpoint of the folder (`refs/brulion/checkpoints/<id>`, through a temporary index — the
+  user's index, HEAD and stash never move; docs/CODE-GIT.md "Checkpoints"); the prompt waits for it
+  (a folder git refuses goes on without one). The device hears it first, a notification of its
+  own on the stream — `{"jsonrpc": "2.0", "method": "_brulion/checkpoint", "params": {sessionId,
+  turn, checkpoint: {id, at}}}` — and the turn kept carries it (`GET sessions/<id>/turn`:
+  `checkpoint`), so a device that lost the stream learns it too. A session keeps its last 30 here
+  (the older refs dropped).
+* **Worktrees and changes**: `POST projects/<id>/worktrees {title, base?}` makes a worktree for a
+  new thread as the desktop does (`git worktree add -b brulion/<slug> <root>/<id>/<slug> <base or
+  HEAD>`, a free name: `-2`, `-3` …); `GET …/changes` and `…/diff` give what changed since a
+  checkpoint (a turn's changes) or since the last commit, and a file's two texts (2 MiB each at
+  most), for the device's read-only changes list. Committing, pushing and the terminal stay this
+  computer's.
+* A stream that asks for the feature (`POST streams {features: ["code"]}`) is told the server has
+  it (`features` of the answer).
 
 ### The app's live tools
 
@@ -1122,6 +1177,10 @@ and the conversation's chat), this server carries the calls (`src/core/acp/apptu
 * The pairing link and its QR code carry the code: show them only to yourself, as the code.
 * Note text is untrusted data for the agent as for any model: a note can carry instructions. What
   an agent may do without asking is its own setting (its mode), as in the app.
+* **Code mode's threads** (`--projects`) let a paired device run an agent in the projects of this
+  computer the file names — only there: a worktree must be one of the project's, files and
+  terminals stay in its folder, and the device names an id, never a folder or a program. The
+  agent itself runs commands as the server's user all the same (above).
 * **The app's live tools** give an agent here what a granted agent of the device's desktop has —
   drive the UI, read what it shows, run Luau with every permission (so change notes) — on the device:
   the device lets only an agent the user marked do so, for its own process, and each change shows

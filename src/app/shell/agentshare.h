@@ -9,7 +9,9 @@
 //   its own, no sync of its own: the agents' changes are seen here at once — with the agents of
 //   this device (AppSettings::acpAgents, programs only), written to `<app data>/agent-share/
 //   agents.json`. Not for the documentation notebook. Changing the notebook, the agents or the
-//   settings starts it again.
+//   settings starts it again. Code mode's projects of this computer go to `projects.json` beside it
+//   (`--projects`, written again whenever they change — the server reads it again by itself, no
+//   restart): the devices' threads of them run here (docs/CODE.md "Threads on the phone").
 // * Where it is reached: by itself, Tailscale when tailscaled runs here — `--tailscale`, this
 //   computer's tailnet name (http://nixos.tail1ea20e.ts.net:8790), and the user's own devices
 //   there pair without a code (trust, the default; tailscaled vouches for them, docs/CLI.md "In a
@@ -138,6 +140,7 @@ public:
     struct Launch {
         QString root;       ///< the notebook
         QString agentsFile; ///< the agents' JSON ([{id, name, command}])
+        QString projectsFile{}; ///< Code mode's projects (acp/codehost.h; "" none)
         QString address;    ///< typed by the user ("": by itself)
         bool tailscale = false; ///< by itself: Tailscale runs here
         QString lan;            ///< by itself without Tailscale: this computer's address in its network
@@ -174,6 +177,8 @@ private:
     void serverChanged();
     void announced(const QJsonObject &result);
     QString writeAgentsFile(QString *error) const;
+    /// `<app data>/agent-share/projects.json`: this computer's projects of Code mode ("" not written).
+    QString writeProjectsFile(QString *error) const;
     /// Runs a command of brulion-cli for the notebook (`acp pair` …); `done` with its JSON result.
     void runCli(const QStringList &arguments, std::function<void(bool ok, const QJsonObject &json)> done);
     void countDevices();

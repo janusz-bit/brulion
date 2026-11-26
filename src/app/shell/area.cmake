@@ -96,6 +96,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/chatcontrol.h ${_brulion_shell_dir}/chatcontrol.cpp
     ${_brulion_shell_dir}/notificationcenter.h ${_brulion_shell_dir}/notificationcenter.cpp
     ${_brulion_shell_dir}/codeprojects.h ${_brulion_shell_dir}/codeprojects.cpp
+    ${_brulion_shell_dir}/remoteprojects.h ${_brulion_shell_dir}/remoteprojects.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
     ${_brulion_shell_dir}/chattools.h ${_brulion_shell_dir}/chattools.cpp
     ${_brulion_shell_dir}/agentshare.h ${_brulion_shell_dir}/agentshare.cpp

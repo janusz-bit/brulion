@@ -46,7 +46,8 @@
 //   turn at a time; several conversations answer at once.
 //
 // Requests of the agent the client does not offer are answered "method not found" — extension
-// methods ("_…") go to setExtensionHandler() when it is set. A line longer
+// methods ("_…") go to setExtensionHandler() when it is set, their notifications come as
+// extensionNotified(). A line longer
 // than MaxLineBytes is dropped. Everything here is pure protocol over a `send` function and
 // received() bytes (tests play the agent); the app's side starts the process, serves files and
 // terminals and words the failures for the user.
@@ -487,6 +488,10 @@ Q_SIGNALS:
     void authRequired(const QString &key, const QList<brulion::acp::AuthMethod> &methods, const QString &message);
     void finished(const QString &key, const QString &text, const QString &stopReason);
     void failed(const QString &key, const brulion::acp::Failure &failure);
+    /// A notification of an extension method (a name starting with "_": `_brulion/checkpoint`, a
+    /// computer relaying the protocol telling the app, acp/codehost.h): the conversation of its
+    /// params' `sessionId` ("" none known), its method and params.
+    void extensionNotified(const QString &key, const QString &method, const QJsonObject &params);
 
 private:
     struct Turn

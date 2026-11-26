@@ -302,7 +302,9 @@ public:
                             const QString &wakes);
     /// Where the thread `path` works: {project, projectName, worktree, branch, folder (the
     /// worktree's, else the project's), known (the project is on this device), exists (the folder
-    /// is there)}; {} for a conversation of the notebook.
+    /// is there)}; {} for a conversation of the notebook. A project of another computer (it runs
+    /// there): also remote true, host (the computer's name), remoteFolder (the folder there) —
+    /// folder "" and exists false (nothing of it is on this device).
     Q_INVOKABLE QVariantMap threadPlace(const QString &path) const;
     /// The folder the thread `path` works in ("" none: not a thread, or its project or worktree
     /// is not on this device).
@@ -317,7 +319,10 @@ public:
     /// before each of its agent's turns (gitcli checkpoints: the Changes panel shows what a turn
     /// changed and reverts it). Kept in the notebook's device state ("code/checkpoints"), at most
     /// MaxCheckpoints a thread (older ones dropped from git too). `serial` only makes a binding ask
-    /// again.
+    /// again. The newest turn's checkpoint also goes into the thread's page (`checkpoint:` in its
+    /// frontmatter), so every device of the notebook knows it — the one the turn ran on, or the
+    /// computer of a project of another computer (WorkspaceAgents::checkpointMade()): a checkpoint
+    /// of the page not in this device's list is listed last (`at` "").
     Q_INVOKABLE QVariantList checkpoints(const QString &path, int serial = 0) const;
     /// The newest one's id ("" none).
     Q_INVOKABLE QString lastCheckpoint(const QString &path, int serial = 0) const;
@@ -797,6 +802,9 @@ private:
     void checkpointThenRun(ChatTurn *t, const QString &folder, int message, const QString &partner,
                            const QVariantList &history, const QString &page);
     void keepCheckpoint(const QString &path, const QString &folder, const QString &id, int message);
+    /// The newest turn's checkpoint the thread's page names (`checkpoint:`; "" none) / sets it.
+    QString pageCheckpoint(const QString &path) const;
+    void notePageCheckpoint(const QString &path, const QString &id);
     /// The app is active now (m_appActive, else the application's state).
     bool appActive() const;
     QPointer<QObject> m_speech; // the recognizer connected to (platform::SpeechRecognizer)

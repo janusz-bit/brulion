@@ -1,5 +1,7 @@
 #include "codeprojects.h"
 
+#include "remoteprojects.h"
+
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
@@ -64,12 +66,54 @@ QVariantList CodeProjects::list() const
     QVariantList out;
     for (const Project &p : m_projects)
         out << project(p.id);
+    // (Then those of the user's other computers this device has no project of the id of.)
+    if (m_remote) {
+        for (const RemoteProjects::Project &r : m_remote->projects()) {
+            if (indexOf(r.id) < 0)
+                out << project(r.id);
+        }
+    }
     return out;
+}
+
+int CodeProjects::count() const
+{
+    int n = int(m_projects.size());
+    if (m_remote) {
+        for (const RemoteProjects::Project &r : m_remote->projects())
+            n += indexOf(r.id) < 0 ? 1 : 0;
+    }
+    return n;
+}
+
+void CodeProjects::setRemote(RemoteProjects *remote)
+{
+    if (m_remote == remote)
+        return;
+    if (m_remote)
+        m_remote->disconnect(this);
+    m_remote = remote;
+    if (m_remote) {
+        connect(m_remote, &RemoteProjects::changed, this, &CodeProjects::changed);
+        connect(m_remote, &RemoteProjects::worktreeCreated, this, &CodeProjects::worktreeCreated);
+    }
+    Q_EMIT changed();
+}
+
+bool CodeProjects::isRemote(const QString &id) const
+{
+    return indexOf(id) < 0 && m_remote && m_remote->find(id).has_value();
 }
 
 QVariantMap CodeProjects::project(const QString &id) const
 {
     const int i = indexOf(id);
+    if (i < 0 && m_remote) {
+        if (const std::optional<RemoteProjects::Project> r = m_remote->find(id))
+            return {{u"id"_s, r->id},       {u"name"_s, r->name},          {u"path"_s, QString()},
+                    {u"exists"_s, false},   {u"scripts"_s, QVariantList()}, {u"remote"_s, true},
+                    {u"host"_s, r->host},   {u"remotePath"_s, r->path}};
+    }
     if (i < 0)
         return {};
     const Project &p = m_projects.at(i);
@@ -92,12 +136,16 @@ QString CodeProjects::folderOf(const QString &id) const
 QString CodeProjects::nameOf(const QString &id) const
 {
     const int i = indexOf(id);
+    if (i < 0 && m_remote) {
+        if (const std::optional<RemoteProjects::Project> r = m_remote->find(id))
+            return r->name;
+    }
     return i < 0 ? QString() : m_projects.at(i).name;
 }
 
 bool CodeProjects::contains(const QString &id) const
 {
-    return indexOf(id) >= 0;
+    return indexOf(id) >= 0 || isRemote(id);
 }
 
 QString CodeProjects::add(const QString &folder)
@@ -255,6 +303,9 @@ QVariantMap CodeProjects::worktreeFor(const QString &id, const QString &title) c
 
 bool CodeProjects::createWorktree(const QString &id, const QString &title)
 {
+    // (Another computer's project: its worktree is made there, worktreeCreated() when it is.)
+    if (isRemote(id))
+        return m_remote->createWorktree(id, title);
 #if QT_CONFIG(process)
     const QString repo = folderOf(id);
     const QString git = QStandardPaths::findExecutable(u"git"_s);

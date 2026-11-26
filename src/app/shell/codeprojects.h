@@ -11,6 +11,11 @@
 //   Workspace.projects.folderOf(id) / nameOf(id) / project(id)
 //   Workspace.projects.worktreeFor(id, title) / worktreesRoot / editorCommand
 //
+// The projects of the user's other computers (RemoteProjects, `remote`: a computer that shares its
+// AI agents with this device) are listed after this device's own, read-only — {remote: true, host,
+// remotePath}, no folder here (folderOf() ""): their threads run on that computer, a new worktree is
+// made there (createWorktree()). A project id of this device's own hides one of a computer.
+//
 // Single-threaded (the GUI thread).
 
 #include <QList>
@@ -24,10 +29,14 @@
 
 namespace brulion::shell {
 
+class RemoteProjects;
+
 class CodeProjects : public QObject {
     Q_OBJECT
+    Q_MOC_INCLUDE("remoteprojects.h")
     /// The projects, in the user's order: [{id, name, path, exists, scripts: [{name, command,
-    /// icon}]}].
+    /// icon}]}], then those of other computers: {id, name, path "", exists false, scripts [],
+    /// remote true, host, remotePath}.
     Q_PROPERTY(QVariantList list READ list NOTIFY changed FINAL)
     Q_PROPERTY(int count READ count NOTIFY changed FINAL)
     /// Where new worktrees go: <worktreesRoot>/<project id>/<thread> ("" the default:
@@ -36,6 +45,8 @@ class CodeProjects : public QObject {
     /// The command "Open in editor" runs with the folder as its last argument ("" the default:
     /// the system's handler of the folder). A device setting: `code`, `zed`, `cursor`, `idea` …
     Q_PROPERTY(QString editorCommand READ editorCommand WRITE setEditorCommand NOTIFY changed FINAL)
+    /// The projects of the user's other computers (null: none here).
+    Q_PROPERTY(brulion::shell::RemoteProjects *remote READ remote CONSTANT FINAL)
 
 public:
     explicit CodeProjects(QObject *parent = nullptr);
@@ -63,8 +74,15 @@ public:
     void setStorage(std::function<QByteArray()> load, std::function<void(const QByteArray &)> save);
 
     QVariantList list() const;
-    int count() const { return int(m_projects.size()); }
+    int count() const;
+    /// This device's projects.
     QList<Project> projects() const { return m_projects; }
+
+    /// The projects of other computers listed after this device's (set once, by WorkspaceAgents).
+    void setRemote(RemoteProjects *remote);
+    RemoteProjects *remote() const { return m_remote; }
+    /// The project `id` is another computer's (not this device's).
+    Q_INVOKABLE bool isRemote(const QString &id) const;
 
     /// Adds the folder `folder` (a path or a file: URL) as a project: its id (that of the project
     /// it is already, "" for a folder that is not there).
@@ -98,7 +116,7 @@ public:
     Q_INVOKABLE QVariantMap worktreeFor(const QString &id, const QString &title) const;
     /// Makes a git worktree of project `id` for a new thread `title` (worktreeFor(): a new branch
     /// from the project's HEAD) without waiting: worktreeCreated() says how it went. False when it
-    /// could not start (no such project, no git).
+    /// could not start (no such project, no git). Another computer's project: made there.
     Q_INVOKABLE bool createWorktree(const QString &id, const QString &title);
     /// Opens `folder` in the editor (editorCommand, else the system's handler of folders).
     Q_INVOKABLE bool openInEditor(const QString &folder) const;
@@ -118,6 +136,7 @@ Q_SIGNALS:
 
 private:
     QList<Project> m_projects;
+    RemoteProjects *m_remote = nullptr;
     QString m_worktreesRoot;
     QString m_editor;
     std::function<QByteArray()> m_load;

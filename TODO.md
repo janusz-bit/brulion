@@ -11,8 +11,10 @@ done in the repository simply disappears from the list.
   real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
   mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
   staging and discarding single files or hunks, stash, merge conflicts, pull requests from forks or
-  to another base in the UI; a worktree removed with its thread; threads continued from the phone
-  through `acp serve` (a project's folder on that computer).
+  to another base in the UI; a worktree removed with its thread; for a thread of another computer's
+  project (continued from the phone through `acp serve --projects`): committing, pushing, pull requests,
+  reverting a turn and the terminal from the phone, a worktree from another base, projects of two
+  computers with the same id.
 
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
   Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and

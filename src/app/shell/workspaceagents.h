@@ -58,6 +58,15 @@
 // process (RemoteControl::dispatch(): no socket — Android has none), noted as "<agent> on <computer>"
 // in the live changes' journal and undone like any other.
 //
+// A thread of Code mode (docs/CODE.md) runs where its project is: with an agent of this device for
+// a project of its own, with the shared agent of the computer whose project it is for one of
+// another computer (RemoteProjects, remoteProjects(); acp/codehost.h) — its session's request names
+// the project and the worktree (`_meta` "brulion/code"), that computer works in that folder and
+// takes the turn's git checkpoint before the agent hears the prompt, and tells this device
+// (checkpointMade(): the thread's checkpoint list learns it). The thread's partner names the agent;
+// where it is no agent of the right computer, the same agent there (its id there) is taken, else
+// that computer's first.
+//
 //   agents->setAgents({{u"claude"_s, u"Claude Code"_s, u"npx -y @agentclientprotocol/claude-agent-acp"_s}});
 //   agents->run(path, u"acp:claude"_s, history, u"Dom"_s);  // → answered / failed / status / partial
 //
@@ -87,6 +96,7 @@ class QTimer;
 
 namespace brulion::shell {
 
+class RemoteProjects;
 class Workspace;
 
 /// An agent the user set up on this device (AppSettings::acpAgents).
@@ -219,6 +229,12 @@ public:
 
     void setAgents(const QList<AgentConfig> &agents);
     QList<AgentConfig> agents() const { return m_agents; }
+    /// Code mode's projects of the computers whose agents are paired here (Workspace.projects.remote).
+    RemoteProjects *remoteProjects() const { return m_remoteProjects; }
+    /// The partner ("acp:<id>") that answers a thread of `project` when `partner` is asked for: it,
+    /// when it is an agent of the computer that has the project (this device's for one of its own);
+    /// else the same agent there, else that computer's first; "" none.
+    QString threadPartnerFor(const QString &project, const QString &partner) const;
     /// Who may answer: {id "acp:<id>", label, extension ("AI agent")} of each agent set up.
     QVariantList partners() const;
     /// An agent's name ("" for no agent set up here).
@@ -373,6 +389,9 @@ Q_SIGNALS:
     void paired(bool ok, const QString &text, const QList<brulion::shell::AgentConfig> &agents);
     /// A pairing without a code: the computer at `address` wants its code (pair()).
     void codeNeeded(const QString &address);
+    /// The computer of a thread's project took the checkpoint `id` (at `at`, ISO time) before its
+    /// turn of `path` (acp/codehost.h): the thread's checkpoints learn it.
+    void checkpointMade(const QString &path, const QString &id, const QString &at);
 
 private:
     struct Process;
@@ -423,8 +442,16 @@ private:
         QString folder;
         QString branch;
         QString error;
+        /// A project of another computer (RemoteProjects): its address and name; `folder` is the
+        /// project's or the worktree's there, `worktree` as the page names it.
+        bool remote = false;
+        QString url{};
+        QString host{};
+        QString worktree{};
     };
     CodePlace codePlace(const QString &path) const;
+    /// The agent that answers a thread at `code` when `id` is asked for (threadPartnerFor()).
+    const AgentConfig *threadAgent(const CodePlace &code, const QString &id) const;
     /// `file` (absolute, or relative to `folder`) as a clean absolute path ("" none).
     static QString codeFile(const QString &folder, const QString &file);
     /// The grants of `p`'s process end (it stopped): its own and its conversations' chat grants.
@@ -480,6 +507,8 @@ private:
         /// The computer's id of the question answered here last (a poll that crossed the answer
         /// does not ask it again).
         QString answered{};
+        /// The turn's checkpoint heard of (checkpointMade() once).
+        QString checkpoint{};
     };
     void pollRecovery(const QString &path);
     void recovered(const QString &path, const acp::RemoteTurn &turn, const acp::RemoteError &error);
@@ -539,6 +568,9 @@ private:
     };
     QHash<QString, ChatGrant> m_chatGrants;
     AppControl m_appControl;
+    RemoteProjects *m_remoteProjects = nullptr;
+    /// The folder each thread's session works in (another one now: a new session there).
+    QHash<QString, QString> m_threadFolders;
 };
 
 } // namespace brulion::shell

@@ -34,6 +34,7 @@
 #include "controlprotocol.h"
 
 #include "acp/apptunnel.h"
+#include "acp/codehost.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -44,6 +45,7 @@
 #include <QLocalSocket>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -141,7 +143,35 @@ struct Talk {
     QHash<QString, QString> answers;
     QHash<QString, QString> failures;
     QList<std::pair<QString, acp::Permission>> questions;
+    /// The checkpoints the host told of (a thread's turns), with their conversations.
+    QList<std::pair<QString, acp::RemoteCheckpoint>> checkpoints;
 };
+
+/// git in `folder` (its exit code; -1 not run).
+int git(const QString &folder, const QStringList &args)
+{
+    return QProcess::execute(u"git"_s, QStringList{u"-C"_s, folder, u"-c"_s, u"user.name=Ala"_s, u"-c"_s,
+                                                    u"user.email=ala@example.com"_s, u"-c"_s,
+                                                    u"commit.gpgsign=false"_s} + args);
+}
+
+/// A git repository at `folder` with Dom.md committed.
+bool gitRepo(const QString &folder, const QByteArray &readme = "# README żółwia\n")
+{
+    QDir().mkpath(folder);
+    QFile f(folder + u"/Dom.md"_s);
+    if (!f.open(QIODevice::WriteOnly))
+        return false;
+    f.write(readme);
+    f.close();
+    return git(folder, {u"init"_s, u"-q"_s, u"-b"_s, u"main"_s}) == 0 && git(folder, {u"add"_s, u"-A"_s}) == 0
+           && git(folder, {u"commit"_s, u"-qm"_s, u"start"_s}) == 0;
+}
+
+QString canonical(const QString &path)
+{
+    return QFileInfo(path).canonicalFilePath();
+}
 
 } // namespace
 
@@ -341,8 +371,41 @@ class TestCliAcpHost : public QObject {
                 [raw](const QString &key, const acp::Failure &failure) { raw->failures.insert(key, failure.detail); });
         connect(client, &acp::Client::permissionAsked, this,
                 [raw](const QString &key, const acp::Permission &p) { raw->questions.append({key, p}); });
+        connect(client, &acp::Client::extensionNotified, this,
+                [raw](const QString &key, const QString &method, const QJsonObject &params) {
+                    if (method == acp::CheckpointMethod)
+                        if (const std::optional<acp::RemoteCheckpoint> c = acp::readCheckpoint(params))
+                            raw->checkpoints.append({key, *c});
+                });
         t->stream->start();
         return t;
+    }
+
+    /// Options of a host whose projects are in `file` (Code mode's threads).
+    AcpHostOptions projectOptions(const QString &file) const
+    {
+        AcpHostOptions o = options();
+        o.projectsFile = file;
+        return o;
+    }
+
+    /// A turn of a thread: its session works in `code`'s project there.
+    static acp::TurnInput codeTurn(const QString &text, const acp::CodeSession &code)
+    {
+        acp::TurnInput input = turn(text);
+        input.sessionMeta = QJsonObject{{acp::CodeMetaKey, code.toJson()}};
+        return input;
+    }
+
+    QString askCode(Talk &t, const QString &key, const QString &text, const acp::CodeSession &code)
+    {
+        t.answers.remove(key);
+        t.failures.remove(key);
+        if (!t.client->prompt(key, codeTurn(text, code)))
+            return u"(not started)"_s;
+        if (!QTest::qWaitFor([&] { return t.answers.contains(key) || t.failures.contains(key); }, kTimeoutMs))
+            return u"(no answer)"_s;
+        return t.answers.contains(key) ? t.answers.value(key) : u"(failed) "_s + t.failures.value(key);
     }
 
     /// A turn as the app sends it: the phone's own folder and no MCP server, which the host replaces.
@@ -1445,6 +1508,316 @@ private Q_SLOTS:
         QVERIFY(!lastServerArgs().contains(u"--app-control"_s));
         t.reset();
         m_host.reset();
+    }
+
+    // ---- Code mode's threads (acp/codehost.h) -------------------------------------------------------
+
+    void codeFilePaths_data()
+    {
+        QTest::addColumn<QString>("file");
+        QTest::addColumn<bool>("write");
+        QTest::addColumn<QString>("expected"); // relative to the folder; "-" refused
+        QTest::newRow("relative") << u"src/main.cpp"_s << true << u"src/main.cpp"_s;
+        QTest::newRow("absolute inside") << u"%1/Dom.md"_s << true << u"Dom.md"_s;
+        QTest::newRow("dot dot inside") << u"src/../Dom.md"_s << false << u"Dom.md"_s;
+        QTest::newRow("dot dot out") << u"../obcy/x"_s << false << u"-"_s;
+        QTest::newRow("absolute outside") << u"/etc/passwd"_s << false << u"-"_s;
+        QTest::newRow("a prefix of its name") << u"%1-inny/x"_s << false << u"-"_s;
+        QTest::newRow("a link out") << u"wyjscie/plik"_s << false << u"-"_s;
+        QTest::newRow(".git read") << u".git/config"_s << false << u".git/config"_s;
+        QTest::newRow(".git written") << u".git/config"_s << true << u"-"_s;
+        QTest::newRow(".GIT written") << u".GIT/hooks/x"_s << true << u"-"_s;
+        QTest::newRow("the folder written") << u"."_s << true << u"-"_s;
+        QTest::newRow("a NUL") << u"a\0b"_s << false << u"-"_s;
+        QTest::newRow("empty") << QString() << false << u"-"_s;
+    }
+    void codeFilePaths()
+    {
+        QFETCH(QString, file);
+        QFETCH(bool, write);
+        QFETCH(QString, expected);
+        const QString folder = canonical(m_tmp.path()) + u"/kod-sciezki"_s;
+        QDir().mkpath(folder + u"/src"_s);
+        QDir().mkpath(m_tmp.filePath(u"obcy"_s));
+        QFile::link(m_tmp.filePath(u"obcy"_s), folder + u"/wyjscie"_s);
+        const QString got = codeFilePath(folder, file.contains(u"%1"_s) ? file.arg(folder) : file, write);
+        QCOMPARE(got, expected == u"-" ? QString() : folder + u'/' + expected);
+    }
+
+    void codeProjects()
+    {
+        // The projects of the --projects file, to a paired device only; read again when it changes.
+        const QString repo = m_tmp.filePath(u"Projekt żółwia"_s);
+        QVERIFY(gitRepo(repo));
+        const QString file = m_tmp.filePath(u"projekty.json"_s);
+        writeFile(file, acp::hostProjectsJson({{u"zolw"_s, u"Projekt żółwia"_s, repo, m_tmp.filePath(u"drzewa"_s)}}));
+        startHost(*m_ctx, projectOptions(file));
+        QCOMPARE(http("GET", u"projects"_s).status, 401);
+        QCOMPARE(http("GET", u"projects"_s, {}, bearer(u"bat_nieznany"_s)).status, 401);
+        QCOMPARE(http("POST", u"projects/zolw/worktrees"_s, R"({"title":"x"})"_ba).status, 401);
+        QCOMPARE(http("GET", u"projects/zolw/changes"_s).status, 401);
+        const QString token = pair();
+        HttpResult r = http("GET", u"projects"_s, {}, bearer(token));
+        QCOMPARE(r.status, 200);
+        QJsonArray list = r.json.value(u"projects"_s).toArray();
+        QCOMPARE(list.size(), 1);
+        QCOMPARE(list.at(0).toObject().value(u"id"_s).toString(), u"zolw"_s);
+        QCOMPARE(list.at(0).toObject().value(u"name"_s).toString(), u"Projekt żółwia"_s);
+        QCOMPARE(list.at(0).toObject().value(u"path"_s).toString(), QDir::cleanPath(repo));
+        QVERIFY(!list.at(0).toObject().contains(u"worktreesRoot"_s)); // (nothing a device needs)
+        QVERIFY(http("GET", u"info"_s, {}, bearer(token)).json.value(u"features"_s).toArray().contains(u"code"_s));
+        QCOMPARE(http("POST", u"projects"_s, {}, bearer(token)).status, 405);
+        QCOMPARE(http("GET", u"projects/zolw"_s, {}, bearer(token)).status, 404);
+        // A stream that asks for threads hears that this server runs them.
+        r = http("POST", u"streams"_s, R"({"agent":"fake","features":["code"]})"_ba, bearer(token));
+        QCOMPARE(r.status, 201);
+        QCOMPARE(r.json.value(u"features"_s).toArray(), QJsonArray{u"code"_s});
+        // Through the app's side.
+        QList<acp::RemoteProject> got;
+        acp::RemoteError error;
+        bool done = false;
+        acp::fetchRemoteProjects(m_transport.get(), QUrl(m_base), token,
+                                 [&](const QList<acp::RemoteProject> &p, const acp::RemoteError &e) {
+                                     got = p;
+                                     error = e;
+                                     done = true;
+                                 });
+        QTRY_VERIFY_WITH_TIMEOUT(done, kTimeoutMs);
+        QVERIFY(!error.failed());
+        QCOMPARE(got, (QList<acp::RemoteProject>{{u"zolw"_s, u"Projekt żółwia"_s, QDir::cleanPath(repo)}}));
+        // A project added (the file written again): there at once; a broken file: none.
+        writeFile(file, acp::hostProjectsJson({{u"zolw"_s, u"Projekt żółwia"_s, repo, QString()},
+                                               {u"drugi"_s, u"Drugi"_s, m_tmp.filePath(u"drugi"_s), QString()}}));
+        QCOMPARE(http("GET", u"projects"_s, {}, bearer(token)).json.value(u"projects"_s).toArray().size(), 2);
+        writeFile(file, "to nie jest JSON");
+        QCOMPARE(http("GET", u"projects"_s, {}, bearer(token)).json.value(u"projects"_s).toArray().size(), 0);
+        QFile::remove(file);
+        QCOMPARE(http("GET", u"projects"_s, {}, bearer(token)).json.value(u"projects"_s).toArray().size(), 0);
+        // A server without --projects runs no threads.
+        startHost(*m_ctx, options());
+        const QString other = pair();
+        r = http("GET", u"projects"_s, {}, bearer(other));
+        QCOMPARE(r.status, 404);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"code"_s).toString(), u"no_projects"_s);
+        QVERIFY(!http("GET", u"info"_s, {}, bearer(other)).json.value(u"features"_s).toArray().contains(u"code"_s));
+        r = http("POST", u"streams"_s, R"({"agent":"fake","features":["code"]})"_ba, bearer(other));
+        QVERIFY(r.json.value(u"features"_s).toArray().isEmpty());
+        QCOMPARE(http("POST", u"projects/zolw/worktrees"_s, R"({"title":"x"})"_ba, bearer(other)).status, 404);
+    }
+
+    void codeThread()
+    {
+        // A thread's session works in its project's folder: its cwd, files and terminals there, a
+        // checkpoint before each turn, the changes since one; the notebook's conversations as before.
+        QFile::remove(m_agentLog);
+        const QString repo = m_tmp.filePath(u"Wątek żółwia"_s);
+        QVERIFY(gitRepo(repo));
+        const QString file = m_tmp.filePath(u"projekty-watek.json"_s);
+        writeFile(file, acp::hostProjectsJson({{u"zolw"_s, u"Wątek żółwia"_s, repo, QString()}}));
+        startHost(*m_ctx, projectOptions(file));
+        const auto [token, device] = pairDevice();
+        std::unique_ptr<Talk> t = talk(token);
+        const acp::CodeSession code{u"zolw"_s, QString(), QString()};
+        const QString key = u"AI/Wątek.md"_s;
+        const QString folder = canonical(repo);
+        QCOMPARE(askCode(*t, key, u"katalog"_s, code), u"Katalog: "_s + folder);
+        // The session: the project's cwd, no MCP server (no app tools asked: none of the notebook's
+        // either), and the request's project never reaching the agent.
+        const QJsonObject params = agentRead(u"session/new"_s).last().value(u"params"_s).toObject();
+        QCOMPARE(params.value(u"cwd"_s).toString(), folder);
+        QVERIFY(params.value(u"mcpServers"_s).toArray().isEmpty());
+        QVERIFY(!params.contains(u"_meta"_s));
+        // Its checkpoint, told to the device before the answer, kept with the turn, a ref in git.
+        QCOMPARE(t->checkpoints.size(), 1);
+        QCOMPARE(t->checkpoints.at(0).first, key);
+        const QString first = t->checkpoints.at(0).second.id;
+        QCOMPARE(git(repo, {u"rev-parse"_s, u"-q"_s, u"--verify"_s, u"refs/brulion/checkpoints/"_s + first}), 0);
+        const QString session = t->client->sessionId(key);
+        QCOMPARE(t->checkpoints.at(0).second.session, session);
+        QVERIFY(m_host->turn(device, session));
+        QCOMPARE(m_host->turn(device, session)->checkpoint, first);
+        QCOMPARE(fetchTurn(token, session, 0).first.checkpoint, first);
+        // Files: the project's read and written, outside the folder and inside .git refused.
+        QCOMPARE(askCode(*t, key, u"czytaj"_s, code), u"Przeczytano: # README żółwia"_s);
+        QFile::remove(m_vault + u"/Od agenta.md"_s);
+        QCOMPARE(askCode(*t, key, u"zapisz"_s, code), u"Zapisano przez klienta; poza notatnikiem: -32602"_s);
+        QCOMPARE(fileText(repo + u"/Od agenta.md"_s), u"- od agenta\n"_s);
+        QVERIFY(!QFile::exists(m_vault + u"/Od agenta.md"_s)); // (nothing in the notebook)
+        QCOMPARE(t->checkpoints.size(), 3);
+        const QString beforeWrite = t->checkpoints.at(2).second.id;
+        QCOMPARE(askCode(*t, key, u"do gita"_s, code), u"Do gita: -32602"_s);
+        QVERIFY(!QFile::exists(repo + u"/.git/brulion-test"_s));
+        // A terminal: in the project's folder, never elsewhere.
+        QCOMPARE(askCode(*t, key, u"pwd"_s, code), u"Pwd: %1 | /: -32602"_s.arg(folder));
+        // The changes since the checkpoint before "zapisz" (and since none: against HEAD).
+        HttpResult r = http("GET", u"projects/zolw/changes?since=%1"_s.arg(beforeWrite), {}, bearer(token));
+        QCOMPARE(r.status, 200);
+        QJsonArray changes = r.json.value(u"changes"_s).toArray();
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(changes.at(0).toObject().value(u"path"_s).toString(), u"Od agenta.md"_s);
+        QCOMPARE(changes.at(0).toObject().value(u"change"_s).toString(), u"added"_s);
+        r = http("GET", u"projects/zolw/changes?since=%1"_s.arg(t->checkpoints.at(3).second.id), {}, bearer(token));
+        QVERIFY(r.json.value(u"changes"_s).toArray().isEmpty());
+        r = http("GET", u"projects/zolw/changes"_s, {}, bearer(token));
+        QCOMPARE(r.json.value(u"changes"_s).toArray().at(0).toObject().value(u"change"_s).toString(), u"untracked"_s);
+        // Through the app's side: a file's two texts.
+        acp::RemoteDiff diff;
+        acp::RemoteError error;
+        bool done = false;
+        acp::fetchRemoteDiff(m_transport.get(), QUrl(m_base), token, u"zolw"_s, QString(), beforeWrite, u"Od agenta.md"_s,
+                             QString(), [&](const acp::RemoteDiff &d, const acp::RemoteError &e) {
+                                 diff = d;
+                                 error = e;
+                                 done = true;
+                             });
+        QTRY_VERIFY_WITH_TIMEOUT(done, kTimeoutMs);
+        QVERIFY2(!error.failed(), qPrintable(error.detail));
+        QCOMPARE(diff.newText, u"- od agenta\n"_s);
+        QVERIFY(!diff.oldExists);
+        QVERIFY(diff.newExists);
+        QList<acp::RemoteChange> since;
+        done = false;
+        acp::fetchRemoteChanges(m_transport.get(), QUrl(m_base), token, u"zolw"_s, QString(), beforeWrite,
+                                [&](const QList<acp::RemoteChange> &c, bool, const acp::RemoteError &e) {
+                                    since = c;
+                                    error = e;
+                                    done = true;
+                                });
+        QTRY_VERIFY_WITH_TIMEOUT(done, kTimeoutMs);
+        QCOMPARE(since.size(), 1);
+        QCOMPARE(since.at(0).path, u"Od agenta.md"_s);
+        // Refused: a checkpoint, a path or a worktree that is none, an unknown project.
+        const auto code400 = [&](const QString &endpoint) { return http("GET", endpoint, {}, bearer(token)).status; };
+        QCOMPARE(code400(u"projects/zolw/changes?since=..%2Fx"_s), 400);
+        QCOMPARE(code400(u"projects/zolw/diff?path=..%2F..%2Fetc%2Fpasswd"_s), 400);
+        QCOMPARE(code400(u"projects/zolw/diff?path=.git%2Fconfig"_s), 400);
+        QCOMPARE(code400(u"projects/zolw/diff?path=%2Fetc%2Fpasswd"_s), 400);
+        QCOMPARE(code400(u"projects/zolw/changes?worktree=wzgledny"_s), 400);
+        r = http("GET", u"projects/zolw/changes?worktree=%1"_s.arg(QString::fromLatin1(QUrl::toPercentEncoding(m_vault))),
+                 {}, bearer(token));
+        QCOMPARE(r.status, 403);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"code"_s).toString(), u"not_a_worktree"_s);
+        r = http("GET", u"projects/brak/changes"_s, {}, bearer(token));
+        QCOMPARE(r.status, 404);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"code"_s).toString(), u"unknown_project"_s);
+        // The same stream's conversations of the notebook: the notebook's folder, no checkpoint.
+        QCOMPARE(ask(*t, u"AI/Notatki.md"_s, u"katalog"_s), u"Katalog: "_s + QDir::cleanPath(m_vault));
+        QCOMPARE(t->checkpoints.size(), 5);
+        QCOMPARE(ask(*t, u"AI/Notatki.md"_s, u"pwd"_s), u"Pwd: %1 | /: /"_s.arg(canonical(m_vault)));
+    }
+
+    void codeWorktrees()
+    {
+        // A worktree made here for a device's new thread; a session in a worktree of the project
+        // (under its root, or one git lists) — and refused in anything else.
+        QFile::remove(m_agentLog);
+        const QString repo = m_tmp.filePath(u"Drzewa żółwia"_s);
+        QVERIFY(gitRepo(repo));
+        const QString root = m_tmp.filePath(u"korzeń drzew"_s);
+        const QString file = m_tmp.filePath(u"projekty-drzewa.json"_s);
+        writeFile(file, acp::hostProjectsJson({{u"zolw"_s, u"Drzewa żółwia"_s, repo, root}}));
+        startHost(*m_ctx, projectOptions(file));
+        const QString token = pair();
+        HttpResult r = http("POST", u"projects/zolw/worktrees"_s, QJsonDocument(QJsonObject{{u"title"_s, u"Napraw błąd #12"_s}}).toJson(), bearer(token));
+        QCOMPARE(r.status, 201);
+        const QString folder = r.json.value(u"folder"_s).toString();
+        QCOMPARE(folder, QDir::cleanPath(root + u"/zolw/napraw-blad-12"_s));
+        QCOMPARE(r.json.value(u"branch"_s).toString(), u"brulion/napraw-blad-12"_s);
+        QCOMPARE(fileText(folder + u"/Dom.md"_s), u"# README żółwia\n"_s);
+        QCOMPARE(git(repo, {u"rev-parse"_s, u"-q"_s, u"--verify"_s, u"refs/heads/brulion/napraw-blad-12"_s}), 0);
+        // The same title again: a free name; through the app's side.
+        acp::RemoteWorktree made;
+        acp::RemoteError error;
+        bool done = false;
+        acp::createRemoteWorktree(m_transport.get(), QUrl(m_base), token, u"zolw"_s, u"Napraw błąd #12"_s, QString(),
+                                  [&](const acp::RemoteWorktree &w, const acp::RemoteError &e) {
+                                      made = w;
+                                      error = e;
+                                      done = true;
+                                  });
+        QTRY_VERIFY_WITH_TIMEOUT(done, kTimeoutMs);
+        QVERIFY2(!error.failed(), qPrintable(error.detail));
+        QCOMPARE(made.folder, folder + u"-2"_s);
+        QCOMPARE(made.branch, u"brulion/napraw-blad-12-2"_s);
+        // From a branch: a base that is none refused; refusals of what a device sends.
+        const auto post = [&](const QByteArray &body, const QString &project = u"zolw"_s) {
+            return http("POST", u"projects/%1/worktrees"_s.arg(project), body, bearer(token));
+        };
+        QCOMPARE(post(R"({"title":"Z gałęzi","base":"main"})").status, 201);
+        QCOMPARE(post(R"({"title":"Zła","base":"a..b"})").json.value(u"error"_s).toObject().value(u"code"_s).toString(),
+                 u"bad_base"_s);
+        QCOMPARE(post(R"({"title":"Zła","base":"--upload-pack=x"})").status, 400);
+        QCOMPARE(post(R"({"title":"   "})").json.value(u"error"_s).toObject().value(u"code"_s).toString(), u"bad_title"_s);
+        QCOMPARE(post(QJsonDocument(QJsonObject{{u"title"_s, QString(201, u'x')}}).toJson()).status, 400);
+        QCOMPARE(post("[]").status, 400);
+        QCOMPARE(post(R"({"title":"x"})", u"brak"_s).status, 404);
+        QCOMPARE(http("GET", u"projects/zolw/worktrees"_s, {}, bearer(token)).status, 405);
+
+        std::unique_ptr<Talk> t = talk(token);
+        // A session in the worktree made: its cwd.
+        QCOMPARE(askCode(*t, u"AI/Drzewo.md"_s, u"katalog"_s, {u"zolw"_s, folder, u"brulion/napraw-blad-12"_s}),
+                 u"Katalog: "_s + canonical(folder));
+        QCOMPARE(t->checkpoints.size(), 1);
+        QCOMPARE(git(folder, {u"rev-parse"_s, u"-q"_s, u"--verify"_s, u"refs/brulion/checkpoints/"_s
+                                                                           + t->checkpoints.at(0).second.id}),
+                 0);
+        // One git lists outside the root: taken too.
+        const QString elsewhere = m_tmp.filePath(u"inne drzewo"_s);
+        QCOMPARE(git(repo, {u"worktree"_s, u"add"_s, u"-q"_s, u"-b"_s, u"inna"_s, elsewhere, u"HEAD"_s}), 0);
+        QCOMPARE(askCode(*t, u"AI/Inne.md"_s, u"katalog"_s, {u"zolw"_s, elsewhere, u"inna"_s}),
+                 u"Katalog: "_s + canonical(elsewhere));
+        // Refused, the agent never asked: a folder that is no worktree of the project, one reached
+        // through "..", a link out of the root, a folder that is not there, an unknown project, a
+        // project that is none.
+        const qsizetype sessions = agentRead(u"session/new"_s).size();
+        const QString stranger = m_tmp.filePath(u"obcy folder"_s);
+        QDir().mkpath(stranger);
+        QDir().mkpath(root + u"/zolw"_s);
+        QFile::link(stranger, root + u"/zolw/link"_s);
+        const QList<acp::CodeSession> refused{{u"zolw"_s, stranger, QString()},
+                                              {u"zolw"_s, root + u"/zolw/../../obcy folder"_s, QString()},
+                                              {u"zolw"_s, root + u"/zolw/link"_s, QString()},
+                                              {u"zolw"_s, root + u"/zolw/nie-ma"_s, QString()},
+                                              {u"zolw"_s, m_vault, QString()},
+                                              {u"brak"_s, QString(), QString()}};
+        for (qsizetype i = 0; i < refused.size(); ++i) {
+            const QString answer = askCode(*t, u"AI/Odmowa %1.md"_s.arg(i), u"katalog"_s, refused.at(i));
+            QVERIFY2(answer.startsWith(u"(failed) "_s), qPrintable(answer));
+        }
+        QVERIFY2(askCode(*t, u"AI/Zła.md"_s, u"katalog"_s, {u"../x"_s, QString(), QString()}).startsWith(u"(failed) "_s),
+                 "a project that is none");
+        QCOMPARE(agentRead(u"session/new"_s).size(), sessions);
+        QVERIFY(m_log.join(u'\n').contains(u"is no worktree of the project"_s));
+        // The stream goes on: the next thread's turn is answered.
+        QCOMPARE(askCode(*t, u"AI/Drzewo.md"_s, u"Dalej"_s, {u"zolw"_s, folder, u"brulion/napraw-blad-12"_s}),
+                 u"Odpowiedź na: Dalej"_s);
+        // A server without projects refuses a thread's session the same way.
+        startHost(*m_ctx, options());
+        std::unique_ptr<Talk> plain = talk(pair());
+        const QString answer = askCode(*plain, u"AI/Bez.md"_s, u"katalog"_s, {u"zolw"_s, QString(), QString()});
+        QVERIFY2(answer.startsWith(u"(failed) "_s) && answer.contains(u"--projects"_s), qPrintable(answer));
+    }
+
+    void codeThreadWithTheApp()
+    {
+        // A thread whose session asks for the app's tools: Brulion's tools without the notebook's.
+        QFile::remove(m_agentLog);
+        const QString repo = m_tmp.filePath(u"Z aplikacją"_s);
+        QVERIFY(gitRepo(repo));
+        const QString file = m_tmp.filePath(u"projekty-app.json"_s);
+        writeFile(file, acp::hostProjectsJson({{u"apka"_s, u"Z aplikacją"_s, repo, QString()}}));
+        AcpHostOptions o = projectOptions(file);
+        o.tunnelKey = m_tmp.filePath(u"tunel-kod"_s);
+        startHost(*m_ctx, o);
+        AppDevice device;
+        std::unique_ptr<Talk> t = talk(pair(), u"fake"_s, &device);
+        acp::TurnInput input = codeTurn(u"Cześć"_s, {u"apka"_s, QString(), QString()});
+        input.sessionMeta.insert(acp::AppMetaKey, acp::AppSession{u"h_kod"_s, false, true}.toJson());
+        QVERIFY(t->client->prompt(u"AI/Apka.md"_s, input));
+        QTRY_VERIFY_WITH_TIMEOUT(t->answers.contains(u"AI/Apka.md"_s), kTimeoutMs);
+        QCOMPARE(lastServerArgs(), (QStringList{u"mcp"_s, u"--no-notes"_s, u"--app-chat"_s}));
+        QVERIFY(lastServerEnv().contains(u"BRULION_APP_CHAT_TOKEN"_s));
+        QVERIFY(!agentRead(u"session/new"_s).last().value(u"params"_s).toObject().contains(u"_meta"_s));
     }
 };
 

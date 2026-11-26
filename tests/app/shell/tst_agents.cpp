@@ -53,6 +53,7 @@
 #include "chatschedules.h"
 #include "chatsecrets.h"
 #include "codeprojects.h"
+#include "remoteprojects.h"
 #include "workspace.h"
 #include "workspaceagents.h"
 #include "workspacechats.h"
@@ -811,6 +812,8 @@ private Q_SLOTS:
             QCOMPARE(QProcess::execute(u"git"_s, {u"-C"_s, folder, u"rev-parse"_s, u"-q"_s, u"--verify"_s,
                                                   u"refs/brulion/checkpoints/"_s + checkpoint}),
                      0);
+            // (… and its page names it, for the notebook's other devices.)
+            QVERIFY2(ws->read(path).contains(u"checkpoint: "_s + checkpoint), qPrintable(ws->read(path)));
         }
         const QString page = ws->read(path);
         QVERIFY2(page.contains(u"project: %1"_s.arg(id)) && page.contains(u"partner: acp:fake"_s), qPrintable(page));
@@ -2666,6 +2669,174 @@ private Q_SLOTS:
         ws.reset();
         host.kill(); // (terminate() does not end a console program on Windows)
         QVERIFY(host.waitForFinished(10000));
+#endif
+    }
+
+    // A thread of a project of another computer (docs/CODE.md "Threads on the phone"): the real
+    // brulion-cli acp serve with --projects and the fake agent — the computer's projects listed here
+    // with its name, a new thread answered by its agent in the project's folder there (the session's
+    // request naming the project, never reaching the agent), the checkpoint that computer took known
+    // here (the thread's list, its page), the turn's changes and a file's diff from there, a worktree
+    // made there for the next thread and its turns in it, a folder that is no worktree refused there.
+    void remoteThread()
+    {
+#ifndef BRULION_CLI
+        QSKIP("brulion-cli is not built here");
+#else
+        if (QStandardPaths::findExecutable(u"git"_s).isEmpty())
+            QSKIP("no git here");
+        const QString computer = m_tmp.filePath(u"komputer-kodu"_s);
+        writeRaw(computer + u"/Dom.md"_s, "- na komputerze\n");
+        const QString repo = m_tmp.filePath(u"komputer-projekt/Sklep żółwia"_s);
+        QVERIFY(writeRaw(repo + u"/Dom.md"_s, "# Sklep żółwia\n"));
+        for (const QStringList &args : {QStringList{u"init"_s, u"-q"_s}, QStringList{u"add"_s, u"-A"_s},
+                                        QStringList{u"-c"_s, u"user.name=Ala"_s, u"-c"_s, u"user.email=a@b.c"_s, u"-c"_s,
+                                                    u"commit.gpgsign=false"_s, u"commit"_s, u"-qm"_s, u"start"_s}})
+            QCOMPARE(QProcess::execute(u"git"_s, QStringList{u"-C"_s, repo} + args), 0);
+        const QString root = m_tmp.filePath(u"komputer-drzewa"_s);
+        const QString projectsFile = m_tmp.filePath(u"komputer-projekty.json"_s);
+        QVERIFY(writeRaw(projectsFile, QJsonDocument(QJsonArray{QJsonObject{{u"id"_s, u"sklep"_s},
+                                                                             {u"name"_s, u"Sklep żółwia"_s},
+                                                                             {u"path"_s, repo},
+                                                                             {u"worktreesRoot"_s, root}}})
+                                               .toJson()));
+        const QString stateFile = m_tmp.filePath(u"komputer-kodu-stan/acp-remote.json"_s);
+        auto ws = open({}); // (FAKE_ACP_LOG for the agent the computer starts)
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const char *name : {"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"})
+            env.insert(QString::fromLatin1(name), m_tmp.filePath(u"komputer-kodu-dom/"_s + QString::fromLatin1(name)));
+        const QStringList common{u"--vault"_s, computer, u"--state-dir"_s, m_tmp.filePath(u"komputer-kodu-urzadzenie"_s)};
+        QProcess host;
+        host.setProcessEnvironment(env);
+        host.setProgram(QStringLiteral(BRULION_CLI));
+        host.setArguments(common
+                          + QStringList{u"acp"_s, u"serve"_s, u"--agent"_s, u"fake:Fałszywy="_s + command(), u"--port"_s,
+                                        u"0"_s, u"--state-file"_s, stateFile, u"--projects"_s, projectsFile});
+        host.start();
+        QVERIFY(host.waitForStarted(10000));
+        auto stopHost = qScopeGuard([&host] {
+            host.kill();
+            host.waitForFinished(10000);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(host.canReadLine(), 20000);
+        const QJsonObject started = QJsonDocument::fromJson(host.readLine()).object();
+        const QString url = started.value(u"result"_s).toObject().value(u"url"_s).toString();
+        QCOMPARE(started.value(u"result"_s).toObject().value(u"projects"_s).toString(), QDir::cleanPath(projectsFile));
+        QProcess pairing;
+        pairing.setProcessEnvironment(env);
+        pairing.start(QStringLiteral(BRULION_CLI), common + QStringList{u"acp"_s, u"pair"_s, u"--state-file"_s, stateFile});
+        QVERIFY(pairing.waitForFinished(20000));
+        const QString code =
+                QJsonDocument::fromJson(pairing.readAllStandardOutput()).object().value(u"result"_s).toObject().value(u"code"_s).toString();
+        WorkspaceChats *chats = ws->chats();
+        QList<AgentConfig> paired;
+        connect(chats, &WorkspaceChats::agentsPaired, this, [&paired](const QList<AgentConfig> &agents) { paired = agents; });
+        chats->pairAgentHost(url, code);
+        QTRY_COMPARE_WITH_TIMEOUT(paired.size(), 1, 20000);
+        AgentConfig agent = paired.first();
+        agent.id = u"komputer-fake"_s;
+        chats->setAgents({agent});
+
+        // Its projects: listed here (this device has none), with the computer's name.
+        shell::CodeProjects *projects = ws->projects();
+        QTRY_VERIFY_WITH_TIMEOUT(projects->contains(u"sklep"_s), 20000);
+        QVERIFY(projects->isRemote(u"sklep"_s));
+        QCOMPARE(projects->count(), 1);
+        const QVariantMap entry = projects->project(u"sklep"_s);
+        QVERIFY(entry.value(u"remote"_s).toBool());
+        QCOMPARE(entry.value(u"host"_s).toString(), agent.host);
+        QCOMPARE(entry.value(u"remotePath"_s).toString(), QDir::cleanPath(repo));
+        QCOMPARE(projects->nameOf(u"sklep"_s), u"Sklep żółwia"_s);
+        QVERIFY(projects->folderOf(u"sklep"_s).isEmpty());
+        QCOMPARE(projects->list().size(), 1);
+        // A new thread there: answered by that computer's agent (another one asked for: the agent
+        // that computer has), in the project's folder there.
+        const QString path = chats->startThread(u"sklep"_s, u"katalog"_s, {}, u"acp:claude"_s);
+        QVERIFY2(!path.isEmpty(), qPrintable(chats->turn(QString())->failure()));
+        QVERIFY2(ws->read(path).contains(u"partner: acp:komputer-fake"_s), qPrintable(ws->read(path)));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 30000);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        const QString folder = QFileInfo(repo).canonicalFilePath();
+        QVERIFY2(ws->read(path).contains(u"- 🤖 Katalog: "_s + folder), qPrintable(ws->read(path)));
+        const QJsonObject params = logged(u"session/new"_s).last().value(u"params"_s).toObject();
+        QCOMPARE(params.value(u"cwd"_s).toString(), folder);
+        QVERIFY(!params.contains(u"_meta"_s));
+        const QString context = promptOf(logged(u"session/prompt"_s).last()).at(0).toObject().value(u"text"_s).toString();
+        QVERIFY2(context.contains(u"software project"_s) && context.contains(QDir::cleanPath(repo)), qPrintable(context));
+        QVERIFY(!context.contains(QDir::cleanPath(computer)));
+        // The checkpoint that computer took: this thread's, in its page too; a ref in that repository.
+        QTRY_COMPARE_WITH_TIMEOUT(chats->checkpoints(path).size(), 1, 20000);
+        const QString checkpoint = chats->lastCheckpoint(path);
+        QCOMPARE(QProcess::execute(u"git"_s, {u"-C"_s, repo, u"rev-parse"_s, u"-q"_s, u"--verify"_s,
+                                              u"refs/brulion/checkpoints/"_s + checkpoint}),
+                 0);
+        QVERIFY2(ws->read(path).contains(u"checkpoint: "_s + checkpoint), qPrintable(ws->read(path)));
+        // Where it works: there, nothing of it here.
+        QVariantMap place = chats->threadPlace(path);
+        QVERIFY(place.value(u"remote"_s).toBool());
+        QCOMPARE(place.value(u"host"_s).toString(), agent.host);
+        QCOMPARE(place.value(u"remoteFolder"_s).toString(), QDir::cleanPath(repo));
+        QVERIFY(place.value(u"folder"_s).toString().isEmpty());
+        QVERIFY(!place.value(u"exists"_s).toBool());
+        QVERIFY(chats->threadFolder(path).isEmpty());
+
+        // A file written there; the turn's changes and the file's diff from there.
+        QCOMPARE(chats->send(path, u"zapisz"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 30000);
+        QFile written(repo + u"/Od agenta.md"_s);
+        QVERIFY(written.open(QIODevice::ReadOnly));
+        QCOMPARE(written.readAll(), QByteArray("- od agenta\n"));
+        QTRY_COMPARE_WITH_TIMEOUT(chats->checkpoints(path).size(), 2, 20000);
+        shell::RemoteProjects *remote = projects->remote();
+        QSignalSpy ready(remote, &shell::RemoteProjects::changesReady);
+        const int serial = remote->requestChanges(u"sklep"_s, QString(), chats->lastCheckpoint(path));
+        QTRY_COMPARE_WITH_TIMEOUT(ready.size(), 1, 20000);
+        QCOMPARE(ready.first().at(0).toInt(), serial);
+        QCOMPARE(ready.first().at(3).toString(), QString());
+        const QVariantList changes = ready.first().at(1).toList();
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(changes.first().toMap().value(u"path"_s).toString(), u"Od agenta.md"_s);
+        QCOMPARE(changes.first().toMap().value(u"letter"_s).toString(), u"A"_s);
+        QCOMPARE(changes.first().toMap().value(u"name"_s).toString(), u"Od agenta.md"_s);
+        QSignalSpy diffed(remote, &shell::RemoteProjects::diffReady);
+        remote->requestDiff(u"sklep"_s, QString(), chats->lastCheckpoint(path), u"Od agenta.md"_s, QString());
+        QTRY_COMPARE_WITH_TIMEOUT(diffed.size(), 1, 20000);
+        QCOMPARE(diffed.first().at(3).toString(), u"- od agenta\n"_s);
+        QCOMPARE(diffed.first().at(6).toString(), QString());
+        // A project no computer has: said so.
+        remote->requestChanges(u"brak"_s, QString(), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(ready.size(), 2, 20000);
+        QVERIFY(!ready.last().at(3).toString().isEmpty());
+
+        // A worktree made there for the next thread, and its turns in it.
+        QSignalSpy created(projects, &shell::CodeProjects::worktreeCreated);
+        QVERIFY(projects->createWorktree(u"sklep"_s, u"Dodaj rabat 10%"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 1, 30000);
+        QCOMPARE(created.first().at(0).toString(), u"sklep"_s);
+        QCOMPARE(created.first().at(3).toString(), QString());
+        const QString tree = created.first().at(1).toString();
+        QCOMPARE(tree, QDir::cleanPath(root + u"/sklep/dodaj-rabat-10"_s));
+        QCOMPARE(created.first().at(2).toString(), u"brulion/dodaj-rabat-10"_s);
+        const QString threaded = chats->startThread(u"sklep"_s, u"katalog"_s, {}, QString(), tree, u"brulion/dodaj-rabat-10"_s);
+        QVERIFY(!threaded.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(threaded)->running(), 30000);
+        QVERIFY2(ws->read(threaded).contains(u"- 🤖 Katalog: "_s + QFileInfo(tree).canonicalFilePath()),
+                 qPrintable(ws->read(threaded)));
+        QCOMPARE(chats->threadPlace(threaded).value(u"remoteFolder"_s).toString(), tree);
+        QCOMPARE(chats->threadPlace(threaded).value(u"branch"_s).toString(), u"brulion/dodaj-rabat-10"_s);
+        // A folder that is no worktree of the project: refused there, the turn says why.
+        const QString stranger = m_tmp.filePath(u"obcy-folder"_s);
+        QVERIFY(QDir().mkpath(stranger));
+        QVERIFY(chats->setThreadWorktree(threaded, stranger, u"obca"_s));
+        QCOMPARE(chats->send(threaded, u"katalog"_s), threaded);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(threaded)->running(), 30000);
+        QVERIFY2(chats->turn(threaded)->failure().contains(u"no worktree"_s), qPrintable(chats->turn(threaded)->failure()));
+
+        // The computer's agents gone from this device: its projects too.
+        chats->setAgents({});
+        QVERIFY(!projects->contains(u"sklep"_s));
+        QCOMPARE(projects->count(), 0);
+        ws.reset();
 #endif
     }
 
