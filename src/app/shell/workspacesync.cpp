@@ -851,6 +851,15 @@ void WorkspaceSync::confirmDeletions(const QStringList &expectedPaths)
     m_scheduler->syncNowConfirmingDeletions();
 }
 
+void WorkspaceSync::downloadFromServer()
+{
+    if (!m_scheduler) {
+        syncNow(); // says why nothing syncs
+        return;
+    }
+    m_scheduler->syncNowStartingOver();
+}
+
 void WorkspaceSync::cancelSync()
 {
     if (m_engine && m_engine->isSyncing())

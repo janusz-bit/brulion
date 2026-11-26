@@ -260,6 +260,20 @@ void SyncScheduler::syncNowConfirmingDeletions(RunCallback done)
     syncNow(std::move(done), SyncTrigger::Confirmation);
 }
 
+void SyncScheduler::syncNowStartingOver(RunCallback done)
+{
+    m_startOver = true;
+    if (m_running) {
+        // The running sync still keeps the bookkeeping: start over once it is done.
+        if (done)
+            m_nextWaiters.append(std::move(done));
+        m_triggerAfterRun = true;
+        m_afterRunTrigger = SyncTrigger::Manual;
+        return;
+    }
+    syncNow(std::move(done), SyncTrigger::Manual);
+}
+
 void SyncScheduler::start()
 {
     if (m_started)
@@ -372,6 +386,7 @@ void SyncScheduler::trigger(SyncTrigger why)
     }
     // A confirmation is for this run only (never for a later automatic one).
     const bool confirmDeletions = std::exchange(m_confirmDeletions, false);
+    const bool startOver = std::exchange(m_startOver, false);
     if (!m_runner) {
         notifyWaiters(std::nullopt);
         return;
@@ -412,6 +427,7 @@ void SyncScheduler::trigger(SyncTrigger why)
     scheduleStallPoll();
     SyncRunOptions options;
     options.confirmDeletions = confirmDeletions;
+    options.startOver = startOver;
     options.trigger = why;
     options.onProgress = [guard = QPointer<SyncScheduler>(this)](const SyncProgress &progress) {
         if (guard && guard->m_running) {

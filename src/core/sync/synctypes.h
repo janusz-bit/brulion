@@ -277,6 +277,11 @@ struct SyncRunOptions {
     /// Apply deletions even when they trip the mass-deletion guard (the user confirmed the list
     /// from SyncReport::pendingDeletions). allowEmptySide implies it.
     bool confirmDeletions = false;
+    /// Forget the sync bookkeeping before this run (SyncEngine::resetState()), under the run's
+    /// lock: it follows the first sync's rules — a file on one side only is copied to the other,
+    /// one on both sides is merged, nothing is deleted. Brings back the files of a side that
+    /// looks empty (SyncErrorCode::LocalEmpty: "Download the files from the server").
+    bool startOver = false;
     /// Called with every progress update (in addition to SyncEngine::progress).
     std::function<void(const SyncProgress &)> onProgress;
     /// Why this run starts (reported back in SyncReport::trigger and the log).

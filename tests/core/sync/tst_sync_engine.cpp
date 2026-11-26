@@ -678,6 +678,39 @@ private Q_SLOTS:
         QCOMPARE(keys(server.files(kFolder)), (QStringList{u"a.md"_s, u"b.md"_s, u"c.md"_s}));
     }
 
+    void startingOverDownloadsTheNotesIntoAVaultThatLooksEmpty()
+    {
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s,
+                 {{u"a.md"_s, "a\n"}, {u"Zażółć/gęślą.md"_s, "jaźń\n"}, {u"journals/2026-10-13.md"_s, "- wczoraj\n"}});
+        a.sync();
+        // The vault storage was lost; the app has created today's journal.
+        QTemporaryDir other;
+        writeFileBehind(other.path(), u"journals/2026-10-14.md"_s, "- dziś\n");
+        Vault vault2(other.path(), QString());
+        QVERIFY(vault2.open());
+        SyncEngine engine2(&vault2, a.client.get(), a.store.get(), u"laptop"_s);
+        QVERIFY(Device::runSync(engine2).syncError.is(SyncErrorCode::LocalEmpty));
+        // "Download the notes from the server": the first sync's rules, nothing deleted anywhere.
+        SyncRunOptions options;
+        options.startOver = true;
+        const SyncReport r = Device::runSync(engine2, options);
+        QVERIFY(!r.syncError.isError());
+        QCOMPARE(counts(r), (Counts{.up = 1, .down = 3}));
+        const QMap<QString, QString> expected{{u"a.md"_s, u"a\n"_s},
+                                              {u"Zażółć/gęślą.md"_s, u"jaźń\n"_s},
+                                              {u"journals/2026-10-13.md"_s, u"- wczoraj\n"_s},
+                                              {u"journals/2026-10-14.md"_s, u"- dziś\n"_s}};
+        QCOMPARE(server.files(kFolder), expected);
+        QFile restored(other.path() + u"/Zażółć/gęślą.md"_s);
+        QVERIFY(restored.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(restored.readAll()), u"jaźń\n"_s);
+        // The bookkeeping is whole again: the next run has nothing to do, and a later deletion
+        // spreads as usual.
+        QCOMPARE(counts(Device::runSync(engine2)), Counts{});
+        QVERIFY(engine2.stateOf(u"a.md"_s).has_value());
+    }
+
     void needsAnOpenVault()
     {
         FakeWebDavServer server;

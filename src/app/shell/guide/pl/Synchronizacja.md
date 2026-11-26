@@ -34,6 +34,8 @@ Serwer i konto są wspólne, ale **włączenie synchronizacji i folder na serwer
 
 Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz — to zabezpieczenie przed pomyłką.
 
+Jeśli z folderu notatnika nagle znikną wszystkie wcześniej synchronizowane notatki (zgubiona karta pamięci, folder opróżniony przez inny program), Brulion wstrzymuje synchronizację, zamiast usunąć notatki także na serwerze: „Synchronizacja wstrzymana: folder notatnika wygląda na pusty”. Gdy foldery są właściwe, **Pobierz notatki z serwera** w centrum synchronizacji przywraca je — ta synchronizacja działa jak pierwsza: to, co jest tylko po jednej stronie, trafia na drugą, a nic nigdzie nie jest usuwane.
+
 ### Foldery
 - **Pusty folder** założony na jednym urządzeniu pojawia się na serwerze i na pozostałych urządzeniach.
 - **Usunięty folder** znika też po drugiej stronie, ale tylko wtedy, gdy nic w nim nie zostało. Folder, w którym jest notatka jeszcze niezsynchronizowana albo plik, którego Brulion nie synchronizuje (np. `.git`), zostaje na swoim miejscu.

@@ -15,7 +15,9 @@
 //              owner-only file). With a vault attached and complete settings the scheduler
 //              syncs at once, every intervalMinutes (0: about once a day), ~20 s after edits,
 //              when the network comes back and when the app returns to the foreground.
-//              Mass deletions wait for confirmDeletions() (needsConfirmation, pendingDeletions).
+//              Mass deletions wait for confirmDeletions() (needsConfirmation, pendingDeletions);
+//              a notebook folder that looks empty ("local-empty") is filled again by
+//              downloadFromServer().
 //   Syncthing  status of the Syncthing folder holding the vault (REST API with an API key from
 //              the settings, else — on the desktop — read from Syncthing's own config.xml),
 //              polled every minute while the app is in the foreground.
@@ -315,6 +317,10 @@ public:
     /// pendingDeletions paths the user confirmed — when the list has changed meanwhile nothing
     /// is confirmed (errorOccurred; the guard shows the new list). Empty: no check.
     Q_INVOKABLE void confirmDeletions(const QStringList &expectedPaths = {});
+    /// After "the notebook folder looks empty" (lastErrorCode "local-empty"): sync once more
+    /// forgetting what was synced before (SyncRunOptions::startOver), so the files on the server
+    /// (or in the device folder) are downloaded again; nothing is deleted on either side.
+    Q_INVOKABLE void downloadFromServer();
     /// Stop a running sync between two files (what is done stays synced; the rest follows with
     /// the next run).
     Q_INVOKABLE void cancelSync();
