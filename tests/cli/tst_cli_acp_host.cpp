@@ -19,6 +19,14 @@
 // calls in flight bounded, a late answer dropped, malformed answers and pictures, a path that is
 // none, the grants ended with the stream; an older device (no feature: plain tools) and a server
 // without the tunnel (--no-app-tools).
+// Code mode's threads (--projects, acp/codehost.h) with real git in temporary repositories: the
+// projects to a paired device only (the file read again, a broken one none), a thread's session in
+// its project (cwd, no notebook tools, the request's project never reaching the agent), files and
+// terminals there only (outside, .git and another folder refused), a checkpoint before each turn told
+// to the device and kept with the turn, the changes since one and a file's diff (paths that are none
+// and links out refused), worktrees made for new threads (a free name, a base, refusals), sessions in a
+// worktree under the root or one git lists, refused in anything else, a session resumed in a new
+// stream, and a server without projects refusing threads.
 #include "acphost.h"
 #include "cli_p.h"
 #include "hostsync.h"
@@ -1800,6 +1808,49 @@ private Q_SLOTS:
         std::unique_ptr<Talk> plain = talk(pair());
         const QString answer = askCode(*plain, u"AI/Bez.md"_s, u"katalog"_s, {u"zolw"_s, QString(), QString()});
         QVERIFY2(answer.startsWith(u"(failed) "_s) && answer.contains(u"--projects"_s), qPrintable(answer));
+    }
+
+    void codeThreadResumed()
+    {
+        // The app started again: the thread's session resumed in a new stream works in its project
+        // too (session/resume names it), with its checkpoint; resumed elsewhere, refused.
+        QFile::remove(m_agentLog);
+        const QString repo = m_tmp.filePath(u"Wznowiony"_s);
+        QVERIFY(gitRepo(repo));
+        const QString file = m_tmp.filePath(u"projekty-wznowione.json"_s);
+        writeFile(file, acp::hostProjectsJson({{u"wznow"_s, u"Wznowiony"_s, repo, QString()}}));
+        AcpHostOptions o = projectOptions(file);
+        o.agents.append({u"fake-resume"_s, u"Wznawia"_s, QString::fromUtf8(FAKE_ACP_AGENT) + u" --resume"_s});
+        startHost(*m_ctx, o);
+        const QString token = pair();
+        const acp::CodeSession code{u"wznow"_s, QString(), QString()};
+        const QString folder = canonical(repo);
+        const QString key = u"AI/Wznowiony wątek.md"_s;
+        std::unique_ptr<Talk> t = talk(token, u"fake-resume"_s);
+        QCOMPARE(askCode(*t, key, u"katalog"_s, code), u"Katalog: "_s + folder);
+        const QString session = t->client->sessionId(key);
+        QVERIFY(!session.isEmpty());
+        t.reset();
+        std::unique_ptr<Talk> again = talk(token, u"fake-resume"_s);
+        acp::TurnInput input = codeTurn(u"katalog"_s, code);
+        input.resume = session;
+        QVERIFY(again->client->prompt(key, input));
+        QTRY_VERIFY_WITH_TIMEOUT(again->answers.contains(key) || again->failures.contains(key), kTimeoutMs);
+        QCOMPARE(again->answers.value(key), u"Katalog: "_s + folder);
+        const QList<QJsonObject> resumed = agentRead(u"session/resume"_s);
+        QCOMPARE(resumed.size(), 1);
+        QCOMPARE(resumed.first().value(u"params"_s).toObject().value(u"cwd"_s).toString(), folder);
+        QCOMPARE(resumed.first().value(u"params"_s).toObject().value(u"sessionId"_s).toString(), session);
+        QCOMPARE(again->checkpoints.size(), 1);
+        QCOMPARE(again->checkpoints.first().second.session, session);
+        // Resumed naming a folder that is no worktree of the project: refused, the agent never asked.
+        std::unique_ptr<Talk> third = talk(token, u"fake-resume"_s);
+        acp::TurnInput foreign = codeTurn(u"katalog"_s, {u"wznow"_s, m_vault, QString()});
+        foreign.resume = session;
+        QVERIFY(third->client->prompt(key, foreign));
+        QTRY_VERIFY_WITH_TIMEOUT(third->answers.contains(key) || third->failures.contains(key), kTimeoutMs);
+        QVERIFY2(third->failures.contains(key), qPrintable(third->answers.value(key)));
+        QCOMPARE(agentRead(u"session/resume"_s).size(), 1);
     }
 
     void codeThreadWithTheApp()

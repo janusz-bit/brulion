@@ -50,8 +50,10 @@ set_tests_properties(tst_cli_import PROPERTIES TIMEOUT ${_cli_import_timeout})
 # acp/remote.h under acp::Client) and the agent of tests/app/shell/fakeacpagent.cpp as a program:
 # the rewriting on the way to the agent, a conversation, questions relayed, files and terminals
 # served here, pairing and its refusals, unpairing, idle streams, sends that come twice, the
-# notebook synced with an in-memory Nextcloud (tests/core/sync) before and after a turn, and the app's
-# live tools for the agent tunnelled to the device (the real brulion-cli mcp the agent starts).
+# notebook synced with an in-memory Nextcloud (tests/core/sync) before and after a turn, the app's
+# live tools for the agent tunnelled to the device (the real brulion-cli mcp the agent starts), and
+# Code mode's threads in a project's folder or worktree (--projects; real git in temporary
+# repositories): checkpoints, worktrees, changes, and every refusal.
 qt_add_executable(cli_fake_acp_agent ${PROJECT_SOURCE_DIR}/tests/app/shell/fakeacpagent.cpp)
 target_link_libraries(cli_fake_acp_agent PRIVATE Qt6::Core)
 brulion_set_warnings(cli_fake_acp_agent)

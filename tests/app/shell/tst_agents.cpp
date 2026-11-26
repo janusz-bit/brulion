@@ -47,6 +47,9 @@
 // card's fields, the conversation asking meanwhile, an owner-only file holding the value (never in
 // the page) deleted when the turn ends, the value itself when asked so, masked in the log while it
 // lives, Cancel, Stop and the time ending the card, a second request busy, a script's request.
+// A thread of another computer's project (the real acp serve --projects): its projects listed here, a
+// thread answered there in the project or a worktree made there, its checkpoint known here and in
+// its page, the turn's changes and a diff from there, a folder that is no worktree refused.
 #include "appsettings.h"
 #include "chatcontrol.h"
 #include "chatlineage.h"

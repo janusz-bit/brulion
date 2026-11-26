@@ -308,7 +308,8 @@ endif()
 # real program that speaks the Agent Client Protocol (fakeacpagent.cpp): a conversation answered,
 # the same session for the next message, the agent's question allowed, rejected and stopped, Stop,
 # an agent that dies and starts again with the conversation so far, signing in, an agent not set
-# up or not starting, the chat's partners, the settings' agents (malformed entries left out).
+# up or not starting, the chat's partners, the settings' agents (malformed entries left out); Code
+# mode's threads, also of a project of another computer through the real brulion-cli acp serve.
 qt_add_executable(fake_acp_agent fakeacpagent.cpp)
 target_link_libraries(fake_acp_agent PRIVATE Qt6::Core)
 brulion_set_warnings(fake_acp_agent)
