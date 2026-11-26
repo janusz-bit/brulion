@@ -321,6 +321,58 @@ and starts new ones there.
   diff, read-only (`GET projects/<id>/changes`, `…/diff`); committing, pushing and the terminal are at
   that computer.
 
+## The computer's own turns on the phone
+
+A turn the **desktop app** runs — a thread started there, any conversation with an agent there — is
+followed on the phone **live** and steered from it, as T3 Code's phone continues what its computer
+runs (core `acp/appchats.h`, `shell/computerchats.h`; the computer's side: docs/CLI.md "AI agents for
+other devices" → "The app's own conversations").
+
+* **How it reaches the phone**: the desktop app's agent sharing (`acp serve`, "Share agents with the
+  phone") gets a grant of the app's own chat (`BRULION_APP_SHARE_TOKEN`, ipc `GrantScope::Share`) and
+  hands the app's conversations on while the app runs (GET info's feature `chats`). The phone
+  (`ComputerChats`, owned by WorkspaceAgents, the computers of its paired agents) asks each computer
+  `GET chats` in a long poll — while the app is in front, or while a turn of a computer runs here
+  (`setActive`; a question that comes while the phone is in a pocket is a notification): the
+  conversations whose turn runs, waits or asks there and those that ended there in the last 10
+  minutes (`acp::RemoteChat`), and the one shown here in full (`watch()`, the conversation a chat
+  view showed last: its answer as it is written, tool calls, plan, the question with its options, its
+  plan to approve, the file change it asks for, the messages waiting — `acp::RemoteChatDetail`).
+  A computer whose app does not run answers 503 (asked again every 20 s), an older computer has no
+  such endpoint (every 10 minutes), a network gone keeps the last state for two minutes, a device
+  unpaired there asks no more.
+* **Mirrored into the turn** (`WorkspaceChats::mirror`): the conversation's `ChatTurn` runs here with
+  `remoteHost` the computer's name — its status, answer, thoughts, tool calls and plan as the
+  computer says them —, so everything that shows a turn shows it: the chat view (with "Running on
+  nixos — answer, stop or write from here: your messages wait there." above the field:
+  `chatOnComputer`), the list's states, Code mode's sidebar, the top bar's count. `asking()`,
+  `questionText()`, `questionOptions()`, `questionDiff()`, `questionPlan()` are the computer's, and
+  `answer()` goes there (POST chats/answer); Stop goes there (chats/stop); a message written while it
+  runs waits **there** (chats/send `mode: queue`; `steer()` sends it ahead, `mode: steer`) — the
+  waiting messages are the computer's (`queued()` gives them with `remote: true`: shown, not taken
+  back nor sent ahead from here); pictures do not go there yet (a toast says so). `stopAll()` and a
+  page deleted here stop none of the computer's turns. A turn of this device's own is never taken
+  over by a computer that lists the same conversation.
+* **Its end**: the turn here ends with it; the answer is in the computer's page, which the phone reads
+  (GET chats/page) whenever the computer's copy has more messages than this device's — the
+  notebook's sync is slower — and shows until its own copy catches up (`computerPage()`,
+  `ChatMessageModel`, `threadPlace()`); the answer's first line is a notification (as one of this
+  device's would be), the conversation is unread when not shown, a failure there is the turn's
+  failure here ("On nixos: …").
+* **"On your computers"** (`ChatComputerList`, `chatComputers`, `Workspace.chats.computerChats()`):
+  what the desktop app is doing — each conversation running, waiting, asking or lately ended there,
+  with the computer's name and what it does or asks — above the chat's list of conversations and in
+  Code mode's sidebar; a row opens it (also one this device has no page of yet: the computer's is
+  shown).
+* **One agent, both screens**: a thread of a project of a computer whose app shares its
+  conversations runs its next turn **in that app** (`threadComputer()`; POST chats/send) — its
+  agent, its session, seen on both screens — instead of a session of this device through the shared
+  agent; refused there (its copy of the notebook lacks the page yet, the app quit meanwhile), the turn
+  runs from here as before. A new thread of such a project starts there too (`startThreadThere()`:
+  POST chats/start with this device's agent's id there and the worktree that computer made;
+  "Starting the thread on nixos…", `threadStartedThere`), and the view follows it from the
+  computer's page until the notebook's sync brings it.
+
 ## The view
 
 `qml/code/CodeView.qml` (route `code`; its header's `CodeThreadTitle`, `CodeOpenIn`,
@@ -411,7 +463,9 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   paths pass 260 characters needs git's `core.longpaths`; a terminal before Windows 10 1809.
 * The rest of docs/CODE-GIT.md "Not done (yet)".
 * Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and
-  the terminal of a project of another computer (the phone shows its changes read-only); a new
+  the terminal of a project of another computer (the phone shows its changes read-only); pictures
+  for a turn the computer's app runs, its agent's options (model, mode) changed from the phone, a
+  waiting message taken back there; a new
   worktree there from another base than its HEAD in the UI; projects of two computers with the same id
   (the first computer's is listed).
 * t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl` (no in-app browser), `worktreeSubmodules`,
