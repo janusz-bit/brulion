@@ -80,12 +80,12 @@ void UniformList::prepaint(Rect bounds, Window &window, App &app)
     }
     m_kept = AnyElement();
     if (const std::optional<std::size_t> kept = m_focusState->row;
-            kept && window.focusedId() != 0 && *kept < m_count && (*kept < m_first || *kept >= last)) {
+        kept && window.focusedId() != 0 && *kept < m_count && (*kept < m_first || *kept >= last)) {
         m_keptIndex = *kept;
         m_kept = m_render(m_keptIndex, window, app);
         m_kept.setSiblingIndex(std::uint32_t(m_keptIndex));
-        m_kept.layoutAsRoot({ inner.width(), rowHeight }, window, app);
-        m_kept.prepaintAt({ inner.left(), inner.top() + float(m_keptIndex) * rowHeight - top }, window, app);
+        m_kept.layoutAsRoot({inner.width(), rowHeight}, window, app);
+        m_kept.prepaintAt({inner.left(), inner.top() + float(m_keptIndex) * rowHeight - top}, window, app);
     }
     window.popScrollFrame();
     if (pushText)

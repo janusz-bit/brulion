@@ -432,7 +432,8 @@ std::chrono::milliseconds QtPlatform::longPressInterval() const
 #ifdef Q_OS_ANDROID
     // Qt's own hint (800 ms) is not when Android's GestureDetector selects a word (400 ms, or
     // what the accessibility setting "Touch & hold delay" says).
-    static const int timeout = QJniObject::callStaticMethod<jint>("android/view/ViewConfiguration", "getLongPressTimeout");
+    static const int timeout =
+            QJniObject::callStaticMethod<jint>("android/view/ViewConfiguration", "getLongPressTimeout");
     if (timeout > 0)
         return std::chrono::milliseconds(timeout);
 #endif
@@ -801,8 +802,8 @@ int AtramentItem::clickCountFor(Point p, MouseButton button, PointerKind pointer
     const float distance = std::abs(p.x - m_lastClickPos.x) + std::abs(p.y - m_lastClickPos.y);
     // A finger lands less precisely than a mouse.
     const float near = pointer == PointerKind::Touch
-            ? float(std::max(6, QGuiApplication::styleHints()->touchDoubleTapDistance()))
-            : 6.0f;
+                               ? float(std::max(6, QGuiApplication::styleHints()->touchDoubleTapDistance()))
+                               : 6.0f;
     if (button == m_lastClickButton && now - m_lastClick <= interval && distance < near)
         ++m_clickCount;
     else
@@ -813,8 +814,7 @@ int AtramentItem::clickCountFor(Point p, MouseButton button, PointerKind pointer
     return m_clickCount;
 }
 
-void AtramentItem::pointerPressed(MouseButton button, Point p, Modifiers modifiers, PointerKind pointer,
-                                  EventTime time)
+void AtramentItem::pointerPressed(MouseButton button, Point p, Modifiers modifiers, PointerKind pointer, EventTime time)
 {
     if (!hasActiveFocus())
         forceActiveFocus(Qt::MouseFocusReason);
@@ -875,7 +875,7 @@ void AtramentItem::mousePressEvent(QMouseEvent *event)
         event->ignore();
         return;
     }
-    pointerPressed(*button, { float(event->position().x()), float(event->position().y()) },
+    pointerPressed(*button, {float(event->position().x()), float(event->position().y())},
                    modifiersFromQt(event->modifiers()), pointerFromQt(event), EventTime(event->timestamp()));
     event->accept(); // keep the grab, so the release comes here
 }
@@ -891,7 +891,7 @@ void AtramentItem::mouseReleaseEvent(QMouseEvent *event)
     const auto button = buttonFromQt(event->button());
     if (!button)
         return;
-    pointerReleased(*button, { float(event->position().x()), float(event->position().y()) },
+    pointerReleased(*button, {float(event->position().x()), float(event->position().y())},
                     modifiersFromQt(event->modifiers()), pointerFromQt(event), EventTime(event->timestamp()));
 }
 
@@ -911,7 +911,7 @@ void AtramentItem::touchEvent(QTouchEvent *event)
     }
     const Modifiers modifiers = modifiersFromQt(event->modifiers());
     for (const QEventPoint &point : event->points()) {
-        const Point p { float(point.position().x()), float(point.position().y()) };
+        const Point p{float(point.position().x()), float(point.position().y())};
         const EventTime time(point.timestamp() ? point.timestamp() : event->timestamp());
         if (m_touchId < 0) {
             // The first finger down is the pointer (until it lifts); more fingers are ignored.

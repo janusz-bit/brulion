@@ -815,7 +815,7 @@ bool Window::dispatchMouse(const PlatformInput &input)
     Frame &f = rendered();
     const auto *up = std::get_if<MouseUpEvent>(&input);
     if (std::holds_alternative<MouseExitEvent>(input) || (up && up->cancelled))
-        m_mouse = Point { -1e9f, -1e9f }; // a cancelled press ends over nothing
+        m_mouse = Point{-1e9f, -1e9f}; // a cancelled press ends over nothing
     else
         m_mouse = positionOf(input);
     std::visit(

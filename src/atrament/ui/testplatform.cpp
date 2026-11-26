@@ -57,7 +57,7 @@ int TestWindow::settle()
 
 void TestWindow::advance(std::chrono::milliseconds by)
 {
-    constexpr std::chrono::milliseconds kFrame { 16 };
+    constexpr std::chrono::milliseconds kFrame{16};
     while (by.count() > 0) {
         const std::chrono::milliseconds step = std::min(by, kFrame);
         m_platform.advanceClock(step);

@@ -14,12 +14,12 @@ namespace brulion::atrament {
 
 // Android's ViewConfiguration, in logical px (dp there): flings slower than the first do not
 // start, faster ones are capped at the second.
-inline constexpr float kMinFlingVelocity = 50; // px/s
+inline constexpr float kMinFlingVelocity = 50;   // px/s
 inline constexpr float kMaxFlingVelocity = 8000; // px/s
 // A press inside a container that can scroll waits this long before the elements see it (Android's
 // tap timeout): a drag that starts sooner is a scroll they never hear of, a tap is a press and a
 // release at once.
-inline constexpr std::chrono::milliseconds kTapTimeout { 100 };
+inline constexpr std::chrono::milliseconds kTapTimeout{100};
 
 // The velocity of a finger from its last positions: a least-squares quadratic over the last
 // 100 ms, its slope at the newest sample (Android's and Flutter's VelocityTracker), zero once the
@@ -42,7 +42,7 @@ private:
     };
     static constexpr int kCapacity = 20;
     const Sample &at(int i) const { return m_samples[std::size_t((m_head + kCapacity - 1 - i) % kCapacity)]; }
-    std::array<Sample, kCapacity> m_samples {};
+    std::array<Sample, kCapacity> m_samples{};
     int m_head = 0; // where the next sample goes
     int m_count = 0;
 };
@@ -56,7 +56,7 @@ public:
     FlingCurve() = default;
     explicit FlingCurve(float velocity); // px/s, signed; |v| < kMinFlingVelocity gives no fling
     bool isEmpty() const { return m_duration <= 0; }
-    float distance() const { return m_distance; } // signed px
+    float distance() const { return m_distance; }  // signed px
     double duration() const { return m_duration; } // seconds
     // The signed distance travelled after `seconds` (the whole distance from duration() on).
     float positionAt(double seconds) const;

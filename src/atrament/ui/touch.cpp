@@ -12,7 +12,7 @@ namespace brulion::atrament {
 
 namespace {
 
-constexpr double kHorizon = 0.100; // s: the samples a velocity is fitted to
+constexpr double kHorizon = 0.100;       // s: the samples a velocity is fitted to
 constexpr double kAssumeStopped = 0.040; // s: a pause this long means the finger rested
 
 // The slope at t = 0 of the least-squares quadratic through (t[i], x[i]) — t in ms, ≤ 0 — or of
@@ -50,7 +50,7 @@ double fittedSlope(const double *t, const double *x, int n)
 
 void VelocityTracker::add(double seconds, Point position)
 {
-    m_samples[std::size_t(m_head)] = Sample { seconds, position };
+    m_samples[std::size_t(m_head)] = Sample{seconds, position};
     m_head = (m_head + 1) % kCapacity;
     m_count = std::min(m_count + 1, kCapacity);
 }
@@ -78,7 +78,7 @@ Point VelocityTracker::velocity() const
     }
     if (n < 2)
         return {};
-    return { float(fittedSlope(t, x, n) * 1000.0), float(fittedSlope(t, y, n) * 1000.0) };
+    return {float(fittedSlope(t, x, n) * 1000.0), float(fittedSlope(t, y, n) * 1000.0)};
 }
 
 Point VelocityTracker::velocityAtRelease(double seconds) const
@@ -98,7 +98,7 @@ constexpr double kEndTension = 1.0;
 constexpr double kP1 = kStartTension * kInflexion;
 constexpr double kP2 = 1.0 - kEndTension * (1.0 - kInflexion);
 constexpr double kDecelerationRate = 2.358201815; // ln(0.78) / ln(0.9)
-constexpr double kFriction = 0.015; // ViewConfiguration.getScrollFriction()
+constexpr double kFriction = 0.015;               // ViewConfiguration.getScrollFriction()
 // Gravity in px/s² at Android's 160 px per inch, as OverScroller computes it for a density of 1.
 constexpr double kPhysicalCoeff = 9.80665 * 39.37 * 160.0 * 0.84;
 
@@ -198,7 +198,7 @@ bool Window::isTouchInput(const PlatformInput &input) const
         // A finger is over nothing unless it touches (no hover from a touch screen); a pen above
         // the screen hovers as a mouse does.
         return m->pointer == PointerKind::Touch
-                || (m->pointer == PointerKind::Pen && m_touch.phase != TouchPhaseState::None);
+               || (m->pointer == PointerKind::Pen && m_touch.phase != TouchPhaseState::None);
     }
     return false;
 }
@@ -281,8 +281,8 @@ bool Window::touchDown(const MouseDownEvent &down)
         m_touchScrolled = true;
         return true;
     }
-    m_touch.longPressTimer
-            = m_app.setTimeout(m_app.platform().longPressInterval(), [this](App &) { touchLongPressed(); });
+    m_touch.longPressTimer =
+            m_app.setTimeout(m_app.platform().longPressInterval(), [this](App &) { touchLongPressed(); });
     bool scrollable = false;
     for (const ScrollTarget &t : scrollTargetsAt(down.position)) {
         const Point max = t.state->maxOffset();
@@ -366,9 +366,9 @@ bool Window::beginTouchScroll(Point dragged)
         const Point offset = t.state->offset;
         const Point max = t.state->maxOffset();
         // The content moves against the finger: a finger going up scrolls towards the end.
-        const bool takes = vertical
-                ? t.y && (dragged.y < 0 ? max.y - offset.y > kScrollEpsilon : offset.y > kScrollEpsilon)
-                : t.x && (dragged.x < 0 ? max.x - offset.x > kScrollEpsilon : offset.x > kScrollEpsilon);
+        const bool takes =
+                vertical ? t.y && (dragged.y < 0 ? max.y - offset.y > kScrollEpsilon : offset.y > kScrollEpsilon)
+                         : t.x && (dragged.x < 0 ? max.x - offset.x > kScrollEpsilon : offset.x > kScrollEpsilon);
         if (!takes)
             continue;
         cancelTouchPress();
@@ -391,7 +391,7 @@ bool Window::beginTouchScroll(Point dragged)
         if (t.state->scrollBy(d))
             refresh();
         if (m_touchTrace)
-            m_touchTrace(TouchTrace { TouchTrace::Kind::Scroll, m_touch.last, t.state->offset, {}, {}, 0, 0 });
+            m_touchTrace(TouchTrace{TouchTrace::Kind::Scroll, m_touch.last, t.state->offset, {}, {}, 0, 0});
         return true;
     }
     return false;
@@ -416,12 +416,12 @@ void Window::touchHoverOff()
     // A finger is over nothing once it scrolls or lifts: no hover look follows the content under
     // it, or stays behind after a tap.
     m_defaultPrevented = false;
-    dispatchMouse(MouseExitEvent { m_touch.last, m_modifiers });
+    dispatchMouse(MouseExitEvent{m_touch.last, m_modifiers});
 }
 
 void Window::endTouch()
 {
-    m_touch = TouchGesture {};
+    m_touch = TouchGesture{};
 }
 
 bool Window::touchUp(const MouseUpEvent &up)
@@ -449,9 +449,9 @@ bool Window::touchUp(const MouseUpEvent &up)
             const Point v = m_touch.velocity.velocityAtRelease(t);
             startFling(st, m_touch.x, m_touch.y, -v);
             if (m_touchTrace) {
-                TouchTrace trace { TouchTrace::Kind::Release, up.position, st->offset, v, {}, 0, 0 };
+                TouchTrace trace{TouchTrace::Kind::Release, up.position, st->offset, v, {}, 0, 0};
                 if (m_fling.active) {
-                    trace.distance = { m_fling.x.distance(), m_fling.y.distance() };
+                    trace.distance = {m_fling.x.distance(), m_fling.y.distance()};
                     trace.seconds = std::max(m_fling.x.duration(), m_fling.y.duration());
                 }
                 m_touchTrace(trace);
@@ -493,8 +493,8 @@ void Window::stopFling()
     if (m_fling.active && m_touchTrace) {
         const ScrollState *st = liveScrollTarget(m_fling.target);
         const double ran = std::chrono::duration<double>(m_app.platform().now() - m_fling.start).count();
-        m_touchTrace(TouchTrace { TouchTrace::Kind::FlingEnd, m_touch.last, st ? st->offset : Point {}, {}, {}, ran,
-                m_fling.frames });
+        m_touchTrace(TouchTrace{
+                TouchTrace::Kind::FlingEnd, m_touch.last, st ? st->offset : Point{}, {}, {}, ran, m_fling.frames});
     }
     m_fling = {};
 }
@@ -507,7 +507,7 @@ void Window::stepFling()
         return;
     }
     const double t = std::chrono::duration<double>(m_app.platform().now() - m_fling.start).count();
-    const Point want { m_fling.x.positionAt(t), m_fling.y.positionAt(t) };
+    const Point want{m_fling.x.positionAt(t), m_fling.y.positionAt(t)};
     // By what the curve moved since the last frame: the container may have moved otherwise too
     // (the wheel, a revealed caret).
     const Point delta = want - m_fling.travelled;
@@ -521,8 +521,8 @@ void Window::stepFling()
         m_fling.x = {};
     if (std::abs(applied.y - delta.y) > 0.01f)
         m_fling.y = {};
-    const bool running = (!m_fling.x.isEmpty() && t < m_fling.x.duration())
-            || (!m_fling.y.isEmpty() && t < m_fling.y.duration());
+    const bool running =
+            (!m_fling.x.isEmpty() && t < m_fling.x.duration()) || (!m_fling.y.isEmpty() && t < m_fling.y.duration());
     if (!running)
         stopFling();
 }

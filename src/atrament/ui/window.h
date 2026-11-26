@@ -93,12 +93,12 @@ public:
     struct TouchTrace {
         enum class Kind : std::uint8_t { Scroll, Release, FlingEnd };
         Kind kind = Kind::Scroll;
-        Point position; // the finger's
-        Point offset; // the container's scroll offset
-        Point velocity; // Release: the finger's, px/s
-        Point distance; // Release: the fling's (zero: no fling)
+        Point position;     // the finger's
+        Point offset;       // the container's scroll offset
+        Point velocity;     // Release: the finger's, px/s
+        Point distance;     // Release: the fling's (zero: no fling)
         double seconds = 0; // Release: the fling's duration; FlingEnd: how long it ran
-        int frames = 0; // FlingEnd: the frames it moved in
+        int frames = 0;     // FlingEnd: the frames it moved in
     };
     void setTouchTrace(std::function<void(const TouchTrace &)> trace) { m_touchTrace = std::move(trace); }
     // Stops the event at the current listener (no further bubbling, no default action).
@@ -401,10 +401,10 @@ private:
     std::vector<ScrollFrame> m_revealFrames; // revealRect's containers, innermost last
     enum class TouchPhaseState : std::uint8_t {
         None,
-        Waiting, // down inside a container that can scroll: the elements do not have the press yet
-        Pressed, // the elements have the press; a drag past the slop may still scroll
+        Waiting,   // down inside a container that can scroll: the elements do not have the press yet
+        Pressed,   // the elements have the press; a drag past the slop may still scroll
         Scrolling, // the drag scrolls `target`; the elements' press was cancelled (or never given)
-        Held, // a long press in the focused field: it selects, the finger scrolls nothing
+        Held,      // a long press in the focused field: it selects, the finger scrolls nothing
     };
     struct TouchGesture {
         TouchPhaseState phase = TouchPhaseState::None;

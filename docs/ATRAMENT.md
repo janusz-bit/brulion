@@ -457,13 +457,145 @@ Each milestone ends with something running and measured; the gates decide whethe
 | Milestone | Content | Gate |
 |---|---|---|
 | **M0 Foundation** | base, scene, CPU raster, text (fonts, shaping, glyph raster, atlas, paragraph layout, hit tests), flex layout, ui (App, entities, window, div/text/canvas, events, hover, click, scroll, focus), test platform, Qt Quick host, gallery | The gallery runs in Brulion's Qt; every area has tests; a frame of the gallery in < 4 ms of CPU raster at 1280×800 (-O2). |
-| **M1 Editing** | text input element with selection, clipboard, undo hooks, the `InputHandler` through Qt (desktop + Android IME), virtualized lists (uniform and measured), images, keymaps, accessibility bridge | Polish text typed with Gboard (composition, autocorrect, gesture typing) and with a Linux IME into an Atrament field, TalkBack reads it. First check (2026-11-26, on the Android 16 emulator with Gboard — the phone was not connected): typing, gesture typing, a suggestion replacing the word (`replaceText`), Backspace, Enter in the multiline field, autocapitalisation, a long press selecting a word with Android's handles and Cut / Copy / Select all, the clipboard both ways (a Polish word cut and pasted from Gboard's clipboard), the caret kept above the keyboard, TalkBack's tree (tabs, buttons, a toggle, both fields with label and placeholder) and its focus following the field; three bugs found and fixed on the way (below). Gboard committed every letter there (no composition, so no autocorrect on space) — Qt Quick's own text fields alike: composition and Polish autocorrect still need the phone. Left: scrolling with a finger (Atrament has no touch scrolling or fling yet: a drag over a list does nothing), TalkBack's speech on a device, the tabs' selected state (not in Android's tree). |
-| **M2 First Brulion view** | the journal / page block editor in Atrament inside the QML shell, behind a setting; the QRhi GPU renderer (in place: every primitive kind, within 2 levels of the CPU renderer) | Memory per block < 2 KB (today 100–200 KB), scrolling a 1 000-block page at 120 fps on the desktop, the editor's existing behaviour tests pass against it. |
+| **M1 Editing** | text input element with selection, clipboard, undo hooks, the `InputHandler` through Qt (desktop + Android IME), virtualized lists (uniform and measured), images, keymaps, accessibility bridge | Polish text typed with Gboard (composition, autocorrect, gesture typing) and with a Linux IME into an Atrament field, TalkBack reads it. First check (2026-11-26, on the Android 16 emulator with Gboard — the phone was not connected): typing, gesture typing, a suggestion replacing the word (`replaceText`), Backspace, Enter in the multiline field, autocapitalisation, a long press selecting a word with Android's handles and Cut / Copy / Select all, the clipboard both ways (a Polish word cut and pasted from Gboard's clipboard), the caret kept above the keyboard, TalkBack's tree (tabs, buttons, a toggle, both fields with label and placeholder) and its focus following the field; three bugs found and fixed on the way (below). Gboard committed every letter there (no composition, so no autocorrect on space) — Qt Quick's own text fields alike: composition and Polish autocorrect still need the phone. Since then: scrolling with a finger and the fling ("Touch" above; tested on the test platform and through Qt's touch events), the tabs' selected state for TalkBack (a checked tab on Android), the focused row of a `uniformList` kept while scrolled away. Left, on the phone: composition and Polish autocorrect with Gboard, the fling's feel against native lists, TalkBack's speech. |
+| **M2 First Brulion view** | the journal / page block editor in Atrament inside the QML shell, behind a setting (design: "The block editor in Atrament" below); the QRhi GPU renderer (in place: every primitive kind, within 2 levels of the CPU renderer) | Memory per block < 2 KB (today 100–200 KB), scrolling a 1 000-block page at 120 fps on the desktop, the editor's existing behaviour tests pass against it. |
 | **M3 Views** | calendar, tasks, search, settings, Code mode (editor, terminal), the chat; the shell. First (2026-11-26, behind a setting): Code mode's terminal drawn by Atrament — `TerminalScreen` paints the grid, cursor, selection and matches from the shared glyph atlas while `TerminalView` keeps its Qt input (docs/CODE-TERMINAL.md "Drawn by Atrament"): a view's drawing can move before its input | No QML in the default journey. |
 | **M4 Own platforms** | Wayland (xdg-shell, layer-shell, text-input-v3, fractional scale), X11, Win32, Android (GameActivity + our own `InputConnection` in Kotlin), web (canvas + WebGPU / WebGL2, hidden textarea for the IME); the WebGPU renderer (Dawn) | The app runs with no QtGui/QtQuick loaded on Linux and Android. |
 | **M5 Qt Quick out** | QtGui, Qt Quick, QML, Controls, Svg, Pdf leave the build (PDF through PDFium/poppler into a picture) | APK < 20 MB, start-up memory < 60 MB, first browser visit < 6 MB. |
 
 The targets in M5 are estimates of what the change can reach, not measurements.
+
+## The block editor in Atrament (M2)
+
+The design of M2: the page and journal block editor drawn by Atrament, inside today's QML shell,
+behind a setting, replacing `BlockEditor.qml` one kind of row at a time. Nothing of it is built yet;
+this section is the plan its code follows (and changes first).
+
+### What stays
+
+Everything below the view is already C++ and stays as it is — the editor's behaviour lives there,
+and its tests (`tests/app/editor/tst_editor_*.cpp` over `FakeEditorHost`) keep testing it whatever
+draws the page:
+
+* **The model.** `BlockDocument` (src/core/markdown/blockdocument.h): the blocks of a page in
+  order, every structural edit (`split`, `mergeWithPrevious`, `indent`, `moveUp`, `toggleTask`…)
+  an `EditResult` of `BlockChange`s with the row and caret to focus; undo by `Delta`s.
+* **The controller.** `PageController` (src/app/editor/pagecontroller*.cpp): loading and saving
+  through `EditorHost`, the undo stack, the edited row and caret, folding, zoom, block selection,
+  find, properties, Vim. The Atrament view calls its C++ methods directly (not the QVariant API QML
+  uses) and follows `BlockListModel`'s row signals, as `PageRows` does.
+* **Rendered text without rich text.** `InlineRenderer::renderBlockRuns` gives a block's display
+  text as a `RenderedText` (src/core/markdown/renderedtext.h): plain text, flattened style runs
+  (bold, italic, code, colours, a pill or box background, a role: link, chip, tag…), inline
+  objects (an icon, a rule) and the display ↔ source map — the format the Z10 prototypes
+  (`RenderedTextItem`, `PageItem`, `JournalDayItem`) already draw, and exactly what Atrament's text
+  needs: `QString` is UTF-16 (D3), so the text passes as a `std::u16string_view` over the
+  `QString`'s data, and each run becomes a `TextSpan`. Links stay `href` schemes (`page:`, `tag:`,
+  `block:`, `task:toggle`, `date:…`) handled by the code that handles them today.
+* **Rows and heights.** `PageRows`, `RowHeightTree`, `ScrollAnchor` (pure QtCore): which rows are
+  shown, their summed heights, the scroll position as a row and an offset.
+* Suggestions (`SuggestionModel`'s logic), input rules, `blocktext.h` (token edits, slash
+  commands), spell checking, the Vim session — all logic the view calls.
+
+### What is new
+
+In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specific):
+
+* **`list()`, a measured list**: rows of different heights, virtualized like `uniformList`. The
+  list asks a `RowExtents` interface (row count, a row's height or its estimate, the row at an
+  offset, the offset of a row) and tells it the heights it measured; it scrolls by an anchor (a
+  row and an offset into it), so rows measured above the view never move what is on screen. The
+  editor's `RowExtents` is a thin adapter over `PageRows` / `RowHeightTree` on the app side (D2:
+  the list itself knows no Qt). Touch scrolling, the fling and the focused row kept in the frame
+  come from M1 as they are for `uniformList`.
+* **Inline boxes in text**: a `TextSpan` with a background shape (a pill, a box, rounded, padded)
+  drawn under its glyphs across line breaks, and an inline object of a given size (an icon, a
+  checkbox) the line layout reserves room for — what `RenderedBackground` and `RenderedObject`
+  ask for.
+* **Hit regions in text**: the range of a span reported under the pointer (a link's `href`, a
+  chip), its hover look, and a link node per span in the accessibility tree (`Role::Link`).
+* **A styled `TextInput`**: the input's text with spans from a callback (the edited block's
+  Markdown highlighted: markers dimmed, bold bold, code in its face), so editing keeps the look of
+  `InlineEditor.qml`'s `MarkdownHighlighter`.
+
+In the **app** (`src/app/editor/atrament/`, may use QtCore; only in builds with Atrament):
+
+* **`PageView`**, an Atrament entity over a `PageController`: renders the page as a `list()` of
+  rows; a row is a `div()` with its guides, bullet or number, fold arrow, task box, tag tint and
+  selection band drawn as quads and paths (no element survives the frame, no object per block),
+  and its text — a `Text` from the block's `RenderedText`, or, for the edited row, the styled
+  `TextInput` over the block's source.
+* **The highlighter as a pure function**: `MarkdownHighlighter` is a `QSyntaxHighlighter` over a
+  `QTextDocument`; its rules move into a function from a block's source to style ranges, used by
+  both the QML highlighter and the Atrament input (one set of rules, tested once).
+* **Keymaps**: the editor's keys (Enter splits, Backspace at the start merges, Tab / Shift+Tab
+  indent, Alt+↑/↓ move, Ctrl+Enter toggles the task…) as actions in a key context `BlockEditor`,
+  each one `PageController` call; the edited row's caret and the row to focus come from the
+  `EditResult`.
+* **Layout cache**: a block's laid-out text is kept by (uid, revision, width) while its row is
+  shown and one frame after (Atrament's generational caches); a row off screen costs its
+  `BlockEntry` and its height in the tree — the < 2 KB per block of the gate.
+
+### Hosting and the setting
+
+`AtramentView { view: "page" }` takes the place of the `ListView` inside `BlockEditor.qml` when
+the device setting **Settings → Editor → "Draw the editor with Atrament"**
+(`AppSettings.editorAtrament`, off by default, shown only in builds with Atrament) is on — the
+same pattern as `terminalAtrament` (docs/CODE-TERMINAL.md "Drawn by Atrament"). The QML around
+it stays: the toolbar, the find bar, the suggestion popup (placed from the input's
+`boundsForRange`), menus, dialogs, source mode. `BlockEditor.qml` hands the view its
+`PageController`; the view hands back what QML needs (the edited row, a link clicked, a context
+menu asked for at a point).
+
+### Rows Atrament does not draw yet
+
+Until every kind of block is Atrament's, a row it cannot draw is a **foreign row**: the list
+reserves the height the QML delegate reports and `AtramentItem` positions that delegate (today's
+`BlockDelegate`, made by `BlockParts`) over the row after each frame's layout, clipped to the
+view — what `PageItem` does with its "rich" rows. Foreign rows scroll with the list (their
+positions change in the same frame), take their own input, and leave the accessibility tree to
+Qt Quick's own nodes. Each step below turns kinds of foreign rows into Atrament rows.
+
+### Steps
+
+Each step ships behind the setting and is measured (memory per block, frame time while
+scrolling, `tst_atrament_editor`) before the next:
+
+1. **Reading.** Text rows whose `RenderedText` is `drawable` (paragraphs, list items, headings,
+   quotes, callouts, tasks shown) drawn by Atrament; everything else foreign. Links, chips and
+   task boxes clickable; touch scrolling and fling; the accessibility tree of the rows.
+2. **Editing text rows.** The styled input in the edited row: typing, the keymaps, Enter / Backspace
+   / Tab through `PageController`, input methods as in M1 (composition is one undo step), the caret
+   kept above the keyboard, suggestions, input rules, slash commands.
+3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
+   copy / cut / paste through `PageController`'s selection; on a phone the long press and the
+   handles.
+4. **Structure.** Folding, zoom into a block, drag to move, dates and reminders chips, the journal
+   — a stream of days as sections of one list (what `JournalDayItem` draws today).
+5. **Blocks with views.** Code (the input with the code highlighter), tables, math (Brulion Math's
+   glyphs through Atrament's text), charts and Mermaid (their core layouts painted as Atrament paths),
+   pictures (`img`), queries, transclusions, properties. When nothing is foreign, M2's gate is
+   measured; the QML delegates go in M3.
+
+### Tests
+
+* The C++ tests of `PageController` and `BlockListModel` stay as they are.
+* `tests/atrament/editor/tst_atrament_editor` (QtTest runner, `TestWindow` + `FakeEditorHost`): a
+  page drawn headless, typing, Enter splitting, Backspace merging, Tab, composition, a tap on a
+  link, a finger's scroll, golden frames of each row kind.
+* The QML scripts (`tst_editor_qml_*`: selftest, taskstatus, datechips, table, selection,
+  keyboard_touch…) drive the QML delegates and cannot run against Atrament; each script's checks
+  get their counterpart in `tst_atrament_editor` as its step lands — the gate's "the editor's
+  existing behaviour tests pass against it" is that list, complete.
+
+### Open questions
+
+* Vim mode's block cursor and visual selection: the input's caret shape and a selection drawn by
+  the view, or Vim stays on the QML editor until M3.
+* The find highlight (`withFindHighlight`) as spans of the `RenderedText` or as quads over its
+  selection rectangles.
+* Spell marks (`renderTraced` anchors) as wavy underlines (the scene has them) mapped through the
+  display ↔ source map.
 
 ## Risks
 

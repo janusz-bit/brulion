@@ -93,7 +93,7 @@ public:
     // Down at `from`, then `steps` moves evenly to `to` over `duration` (advance() between them:
     // the clock moves, frames are drawn), then up unless `release` is false.
     void simulateTouchDrag(Point from, Point to, std::chrono::milliseconds duration, int steps = 8,
-            bool release = true);
+                           bool release = true);
     // A finger's tap: down and up at once.
     bool simulateTap(Point p);
 
