@@ -176,6 +176,12 @@ void TestAtramentQt::initTestCase()
     QString why;
     for (const auto backend : {OffscreenRhi::Backend::Vulkan, OffscreenRhi::Backend::OpenGL}) {
         if (auto rhi = OffscreenRhi::create(backend, &why)) {
+            // A context the renderer cannot draw on (an OpenGL compatibility context of the
+            // offscreen platform on a desktop, say) is the CPU fallback's case, tested below.
+            if (!QRhiRenderer::supports(rhi->rhi())) {
+                qInfo("QRhi backend without what the renderer needs: %s", qPrintable(rhi->description()));
+                continue;
+            }
             qInfo("QRhi backend: %s", qPrintable(rhi->description()));
             m_backends.push_back(std::move(rhi));
         } else {

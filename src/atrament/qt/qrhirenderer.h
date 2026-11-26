@@ -46,6 +46,8 @@ namespace brulion::atrament {
 
 class QRhiRenderer {
 public:
+    // Whether this QRhi has what the renderer needs (instancing, texelFetch, R8 textures).
+    static bool supports(QRhi *rhi);
     enum class AtlasSlot : std::uint8_t { Atlas, Paths };
 
     QRhiRenderer();

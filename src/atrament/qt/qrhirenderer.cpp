@@ -145,11 +145,16 @@ void QRhiRenderer::syncAtlas(AtlasSlot slot, Atlas &atlas)
     }
 }
 
+bool QRhiRenderer::supports(QRhi *rhi)
+{
+    return rhi && rhi->isFeatureSupported(QRhi::Instancing) && rhi->isFeatureSupported(QRhi::TexelFetch)
+            && rhi->isTextureFormatSupported(QRhiTexture::R8);
+}
+
 bool QRhiRenderer::create(QRhi *rhi)
 {
     m_rhi = rhi;
-    if (!rhi->isFeatureSupported(QRhi::Instancing) || !rhi->isFeatureSupported(QRhi::TexelFetch)
-        || !rhi->isTextureFormatSupported(QRhiTexture::R8)) {
+    if (!supports(rhi)) {
         qCWarning(lcRenderer, "%s lacks instancing, texelFetch or R8 textures", rhi->backendName());
         return false;
     }
