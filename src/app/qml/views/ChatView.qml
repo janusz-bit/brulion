@@ -99,6 +99,26 @@ FocusScope {
     /// The computer whose app runs this turn ("" this device's own): followed here — its question
     /// answered, Stop and what is written go there (Workspace.chats.computerChats).
     readonly property string remoteHere: root.busyHere ? root.turn.remoteHost : ""
+    /// A new thread the app on its project's computer starts (Workspace.chats.startThreadThere): the
+    /// request on its way (0 none), its text (back in the field when it is refused) and the computer.
+    property int startRequest: 0
+    property string startText
+    property string startHost
+    Connections {
+        target: root.chats
+        function onThreadStartedThere(request: int, path: string, error: string) {
+            if (request !== root.startRequest)
+                return
+            root.startRequest = 0
+            if (path === "") {
+                if (Js.trim(input.typedText) === "")
+                    input.text = root.startText
+                AppController.toast(error, "error")
+                return
+            }
+            root.shown(path)
+        }
+    }
     /// It waits for the model on the device, which answers another conversation.
     readonly property bool queuedHere: root.busyHere && root.turn.queued
     /// The change the AI asks a yes for, in this conversation (shown here, or waiting behind
@@ -389,7 +409,7 @@ FocusScope {
             root.askAsideFromField()
             return
         }
-        const text = Js.trim(input.typedText)
+        const text = "" + Js.trim(input.typedText) // (plain text: read again after calls)
         if (text === "" && root.attached.length === 0)
             return
         // While a turn runs (or messages wait): it waits for the answer, then goes.
@@ -402,14 +422,38 @@ FocusScope {
             root.worktreeWanted(text)
             return
         }
+        // A thread of another computer's project whose app shares its conversations: that app starts
+        // it (its agent, its session, on both screens) and this device follows it.
+        if (root.path === "" && root.codeThread && root.newPullRequest === "" && root.attached.length === 0
+                && root.startRequest === 0 && root.chats.startsThere(root.project)) {
+            // (Its arguments as plain text before the call: compiled to C++.)
+            const project = "" + root.project
+            const partner = "" + root.newPartner
+            const worktree = "" + root.newWorktree
+            const branch = "" + root.newBranch
+            const host = "" + AppController.routeText(Workspace.projects.project(project), "host")
+            const request = root.chats.startThreadThere(project, text, root.noStrings, partner, worktree, branch)
+            if (request > 0) {
+                root.startRequest = request
+                root.startText = text
+                root.startHost = host
+                root.clearField()
+            }
+            return
+        }
         const sent = root.path === "" && root.codeThread
                      ? root.chats.startThread(root.project, text, root.attached, root.newPartner, root.newWorktree, root.newBranch,
                                               root.newPullRequest)
                      : root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
                                        root.path === "" ? root.newPartner : "")
-        if (sent === "")
+        const path = "" + sent // (plain text: read again after the field is cleared)
+        if (path === "")
             return
         root.clearField()
+        root.shown(path)
+    }
+    /// `sent`'s conversation shown (a new one's route replaced), at its end.
+    function shown(sent: string): void {
         root.following = true
         if (root.path === "") {
             root.path = sent
@@ -2970,9 +3014,16 @@ FocusScope {
                 RowLayout {
                     objectName: "chatOnComputer"
                     Layout.fillWidth: true
-                    visible: root.remoteHere !== ""
+                    visible: root.remoteHere !== "" || root.startRequest > 0
                     spacing: Theme.space2
+                    BSpinner {
+                        visible: root.startRequest > 0
+                        running: root.startRequest > 0 && root.visible
+                        size: Theme.iconSizeSm
+                        calm: true
+                    }
                     BIcon {
+                        visible: root.startRequest === 0
                         name: "laptop"
                         size: Theme.iconSizeSm
                         color: Theme.fgMuted
@@ -2980,7 +3031,9 @@ FocusScope {
                     BText {
                         objectName: "chatOnComputerText"
                         Layout.fillWidth: true
-                        text: qsTr("Running on %1 — answer, stop or write from here: your messages wait there.").arg(root.remoteHere)
+                        text: root.startRequest > 0
+                              ? qsTr("Starting the thread on %1…").arg(root.startHost)
+                              : qsTr("Running on %1 — answer, stop or write from here: your messages wait there.").arg(root.remoteHere)
                         variant: "caption"
                         color: Theme.fgMuted
                         wrapMode: Text.Wrap

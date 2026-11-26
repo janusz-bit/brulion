@@ -619,6 +619,13 @@ FocusScope {
             root.refreshRemoteChanges()
             root.filesChanged()
         }
+        // (A thread another computer's app runs: its page from there — where it works, what changed.)
+        function onComputerPageChanged(path: string) {
+            if (path !== root.path)
+                return
+            root.refreshPlace()
+            root.refreshRemoteChanges()
+        }
     }
     Connections {
         target: Workspace
