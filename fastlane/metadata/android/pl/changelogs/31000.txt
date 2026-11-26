@@ -1,0 +1,9 @@
+Nowości w 0.31.0:
+• Tryb Kod — Twoi agenci programiści w Twoich projektach
+• Zmiany, commity i pull requesty
+• Praca, którą widać
+• Wątki z telefonu
+• Trzecia część pamięci
+• Rozszerzenia z wiersza poleceń czytają ustawienia notatnika
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.31.0
