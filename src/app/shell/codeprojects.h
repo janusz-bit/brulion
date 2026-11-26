@@ -247,9 +247,10 @@ public:
     /// A row of `branches` is named `name` exactly (a local one, or "origin/<name>" for a remote one).
     Q_INVOKABLE bool hasBranch(const QVariantList &branches, const QString &name) const;
     /// The branch picker's rows (BPalette items) of `branches` (branchesListed()): {title (its name),
-    /// subtitle (its badges in words: current, default, remote, the worktree that has it), icon,
+    /// subtitle (its badges in words: current, default, remote, the worktree that has it — "in the
+    /// project's folder" for `projectFolder`), icon,
     /// name, remote, current, worktree, kind: "branch"}.
-    Q_INVOKABLE QVariantList branchItems(const QVariantList &branches) const;
+    Q_INVOKABLE QVariantList branchItems(const QVariantList &branches, const QString &projectFolder) const;
     /// The picker's offers for what is typed: "Check out pull request #123" ({kind: "pr", number})
     /// for a pull request's number or address, "Create branch “x”" ({kind: "create", name}) for a
     /// valid name no branch has when `canCreate`; none for anything else.

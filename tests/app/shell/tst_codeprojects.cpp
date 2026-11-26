@@ -581,6 +581,42 @@ private Q_SLOTS:
         QCOMPARE(CodeProjects::parsePullRequest(text), number);
     }
 
+    // The branch picker's rows (their badges in words) and its offers for what is typed.
+    void branchRows()
+    {
+        CodeProjects projects;
+        const QVariantList branches{
+                QVariantMap{{u"name"_s, u"main"_s}, {u"remote"_s, false}, {u"current"_s, true}, {u"isDefault"_s, true},
+                            {u"worktree"_s, u"/r"_s}, {u"ahead"_s, 0}, {u"behind"_s, 2}},
+                QVariantMap{{u"name"_s, u"feature/żółw"_s}, {u"remote"_s, false}, {u"current"_s, false},
+                            {u"isDefault"_s, false}, {u"worktree"_s, u"/t/k/zolw"_s}, {u"ahead"_s, 1}, {u"behind"_s, 0}},
+                QVariantMap{{u"name"_s, u"origin/pr7"_s}, {u"remote"_s, true}, {u"current"_s, false},
+                            {u"isDefault"_s, false}, {u"worktree"_s, QString()}, {u"ahead"_s, 0}, {u"behind"_s, 0}}};
+        QVariantList items = projects.branchItems(branches, u"/r"_s);
+        QCOMPARE(items.size(), 3);
+        QCOMPARE(items.at(0).toMap().value(u"subtitle"_s).toString(), u"current · default · ↓2"_s);
+        QCOMPARE(items.at(1).toMap().value(u"subtitle"_s).toString(), u"in the worktree zolw · ↑1"_s);
+        QCOMPARE(items.at(2).toMap().value(u"subtitle"_s).toString(), u"remote"_s);
+        QCOMPARE(items.at(2).toMap().value(u"icon"_s).toString(), u"globe"_s);
+        QCOMPARE(items.at(1).toMap().value(u"kind"_s).toString(), u"branch"_s);
+        items = projects.branchItems(branches, u"/t/k/zolw/"_s);
+        QCOMPARE(items.at(1).toMap().value(u"subtitle"_s).toString(), u"in the project's folder · ↑1"_s);
+        // Offers: a pull request (also where nothing may be created), a new valid name.
+        QVariantList offers = projects.branchOffers(u"#12"_s, branches, false);
+        QCOMPARE(offers.size(), 1);
+        QCOMPARE(offers.first().toMap().value(u"kind"_s).toString(), u"pr"_s);
+        QCOMPARE(offers.first().toMap().value(u"number"_s).toInt(), 12);
+        offers = projects.branchOffers(u" nowa-gałąź "_s, branches, true);
+        QCOMPARE(offers.first().toMap().value(u"kind"_s).toString(), u"create"_s);
+        QCOMPARE(offers.first().toMap().value(u"name"_s).toString(), u"nowa-gałąź"_s);
+        QVERIFY(projects.branchOffers(u"main"_s, branches, true).isEmpty());
+        QVERIFY(projects.branchOffers(u"pr7"_s, branches, true).isEmpty()); // (origin/pr7)
+        QVERIFY(projects.branchOffers(u"zła nazwa"_s, branches, true).isEmpty());
+        QVERIFY(projects.branchOffers(u"nowa"_s, branches, false).isEmpty());
+        QVERIFY(projects.branchOffers(QString(), branches, true).isEmpty());
+        QVERIFY(projects.hasBranch(branches, u"feature/żółw"_s));
+    }
+
     // ---- git: worktrees, branches, pull requests --------------------------------------------------------
 
     void worktreesAndBranches()

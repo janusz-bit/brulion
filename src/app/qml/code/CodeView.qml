@@ -371,11 +371,20 @@ FocusScope {
     }
     onRouteChanged: {
         root.refreshPlace()
-        chat.newWorktree = ""
-        chat.newBranch = ""
-        chat.newPullRequest = ""
-        root.resetEnvironment()
-        defaultsLater.restart()
+        // A new thread's route: where it works from the route or the project's default. A thread's
+        // (its first message just sent): the new thread's worktree stays this view's folder until
+        // `path` follows the route — `root.path` may still be the one before here — so its
+        // terminal, with the setup scripts in it, stays.
+        if (AppController.routeText(root.route, "path") === "") {
+            chat.newWorktree = ""
+            chat.newBranch = ""
+            chat.newPullRequest = ""
+            root.resetEnvironment()
+            defaultsLater.restart()
+        } else {
+            root.settingUp = ""
+            root.setupSession = null
+        }
         if (AppController.routeFlag(root.route, "addProject"))
             folderPicker.open()
     }
@@ -456,6 +465,10 @@ FocusScope {
     function followFolder(): void {
         if (root.terminalOpen)
             root.terminalWanted = true
+        // (No folder for a moment — a new thread's route replaced by its page's before its place is
+        // read —: the terminal stays, with the scripts running in it.)
+        if (root.folder === "")
+            return
         if (root.terminalWanted && root.terminalFolder !== root.folder) {
             root.terminalFolder = ""
             root.terminalFolder = root.folder
@@ -558,7 +571,7 @@ FocusScope {
             BChip {
                 id: baseChip
                 objectName: "codeBaseBranch"
-                visible: root.path === "" && root.project !== "" && root.envMode !== "existing"
+                visible: root.path === "" && root.project !== "" && root.envMode !== "existing" && root.madeWorktree === ""
                 iconName: "git-branch"
                 text: root.envMode === "worktree"
                       ? qsTr("From %1").arg(root.baseBranch !== "" ? root.baseBranch : root.currentBranch !== "" ? root.currentBranch : "HEAD")
@@ -834,6 +847,7 @@ FocusScope {
 
     CodeBranchPicker {
         id: branchPicker
+        projectFolder: root.projectFolder
         onBranchPicked: (name, remote, worktree) => root.branchPicked(name, remote, worktree)
         onCreateRequested: (name) => {
             const blocked = root.switchBlocked()

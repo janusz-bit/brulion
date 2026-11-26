@@ -208,3 +208,4 @@ brulion::shell::CommandModel	Show or hide the changes	Pokaż albo ukryj zmiany
 brulion::shell::CommandModel	Code mode: the Changes panel	Tryb kodu: panel Zmiany	
 brulion::shell::CommandModel	Code mode: %1	Tryb kodu: %1	a Code mode command in Settings → Keyboard shortcuts
 brulion::shell::CommandModel	Run: %1 — %2	Uruchom: %1 — %2	a project's script: its name — the project's name
+brulion::shell::CodeProjects	in the project's folder	w folderze projektu	a branch's badge

@@ -14,6 +14,8 @@ BPalette {
     id: picker
 
     property string folder
+    /// The project's own folder (a branch checked out there: "in the project's folder").
+    property string projectFolder
     /// "switch": the picked branch is checked out (a thread, a new Local one); "base": a new
     /// worktree starts from it.
     property string mode: "switch"
@@ -43,7 +45,7 @@ BPalette {
     }
 
     objectName: "codeBranchPicker"
-    items: Workspace.projects.branchItems(picker.branches)
+    items: Workspace.projects.branchItems(picker.branches, picker.projectFolder)
     extraResults: Workspace.projects.branchOffers(picker.query, picker.branches, picker.mode === "switch" && picker.blocked === "")
     defaultIcon: "git-branch"
     placeholderText: picker.mode === "base" ? qsTr("The branch the new worktree starts from…")

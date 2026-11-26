@@ -235,8 +235,9 @@ bool CodeProjects::hasBranch(const QVariantList &branches, const QString &name) 
     });
 }
 
-QVariantList CodeProjects::branchItems(const QVariantList &branches) const
+QVariantList CodeProjects::branchItems(const QVariantList &branches, const QString &projectFolder) const
 {
+    const QString own = QDir::cleanPath(projectFolder);
     QVariantList out;
     for (const QVariant &v : branches) {
         const QVariantMap b = v.toMap();
@@ -249,7 +250,9 @@ QVariantList CodeProjects::branchItems(const QVariantList &branches) const
             badges << tr("remote");
         const QString worktree = b.value(u"worktree"_s).toString();
         if (!worktree.isEmpty() && !b.value(u"current"_s).toBool())
-            badges << tr("in the worktree %1").arg(QFileInfo(worktree).fileName());
+            badges << (!projectFolder.isEmpty() && QDir::cleanPath(worktree) == own
+                               ? tr("in the project's folder")
+                               : tr("in the worktree %1").arg(QFileInfo(worktree).fileName()));
         const int ahead = b.value(u"ahead"_s).toInt(), behind = b.value(u"behind"_s).toInt();
         if (ahead > 0)
             badges << u"↑%1"_s.arg(ahead);
