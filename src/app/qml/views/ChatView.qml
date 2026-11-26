@@ -99,6 +99,8 @@ FocusScope {
     /// The computer whose app runs this turn ("" this device's own): followed here — its question
     /// answered, Stop and what is written go there (Workspace.chats.computerChats).
     readonly property string remoteHere: root.busyHere ? root.turn.remoteHost : ""
+    /// What the desktop app on the user's other computers runs (ChatComputerList's rows).
+    readonly property list<var> computerRows: root.chats.computerChats(root.chats.computerSerial)
     /// A new thread the app on its project's computer starts (Workspace.chats.startThreadThere): the
     /// request on its way (0 none), its text (back in the field when it is refused) and the computer.
     property int startRequest: 0
@@ -1501,6 +1503,7 @@ FocusScope {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: Theme.space8
                 visible: conversations.count === 0 && conversations.archivedCount === 0 && conversations.query === ""
+                         && root.computerRows.length === 0
                 compact: root.wide
                 iconName: "message-square"
                 title: qsTr("No conversations yet")

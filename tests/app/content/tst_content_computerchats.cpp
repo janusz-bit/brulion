@@ -560,6 +560,25 @@ private Q_SLOTS:
         QVERIFY(started.at(1).at(2).toString().contains(u"Not a worktree of it"_s));
     }
 
+    void endedThereContinuesThere()
+    {
+        // A conversation (no thread) the app there answered a minute ago, not here yet: its partner
+        // is this device's agent of that computer, and the next message goes to the app there.
+        auto ws = open(false);
+        WorkspaceChats *c = ws->chats();
+        const QString page = u"---\npartner: acp:claude\n---\n\n- 🧑 Co dalej?\n- 🤖 Testy.\n"_s;
+        poll(chats(1, {row(u"idle"_s, 2)}));
+        QTRY_VERIFY(m_computer.waiting(u"chats/page"_s));
+        m_computer.take(u"chats/page"_s)->done(FakeComputer::json(200, QJsonObject{{u"path"_s, Path}, {u"text"_s, page}}));
+        QTRY_COMPARE(c->computerPage(Path), page);
+        QCOMPARE(c->partnerOf(Path), u"acp:claude-nixos"_s);
+        QCOMPARE(c->send(Path, u"To napisz je"_s), Path);
+        std::optional<FakeComputer::Pending> sent = m_computer.take(u"chats/send"_s);
+        QVERIFY(sent);
+        QCOMPARE(sent->body().value(u"mode"_s).toString(), QString());
+        QVERIFY(!ws->exists(Path)); // (nothing written here)
+    }
+
     void restartedComputerCountsAnew()
     {
         auto ws = open();

@@ -338,9 +338,10 @@ other devices" → "The app's own conversations").
   Code mode's sidebar; a row opens it (also one this device has no page of yet: the computer's is
   shown).
 * **One agent, both screens**: a thread of a project of a computer whose app shares its
-  conversations runs its next turn **in that app** (`threadComputer()`; POST chats/send) — its
-  agent, its session, seen on both screens — instead of a session of this device through the shared
-  agent; refused there (its copy of the notebook lacks the page yet, the app quit meanwhile), the turn
+  conversations — and any conversation that app runs or ended lately — runs its next turn **in that
+  app** (`computerFor()`; POST chats/send) — its agent, its session, seen on both screens — instead of
+  a session of this device through the shared agent (its partner here is this device's agent of that
+  computer: `partnerOf()`); refused there (its copy of the notebook lacks the page yet, the app quit meanwhile), the turn
   runs from here as before. A new thread of such a project starts there too (`startThreadThere()`:
   POST chats/start with this device's agent's id there and the worktree that computer made;
   "Starting the thread on nixos…", `threadStartedThere`), and the view follows it from the

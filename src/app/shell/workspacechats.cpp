@@ -1275,7 +1275,7 @@ QString WorkspaceChats::sendMessage(const QString &path, const QString &text, co
     // app runs its turn — one agent, one session, seen on both screens — and this device follows it.
     // Refused there (its copy of the notebook lacks the page yet, the app quit meanwhile): the turn
     // runs from here through that computer's shared agent, as without it.
-    if (const QString url = sent.isEmpty() && !m_sendHere ? threadComputer(path) : QString(); !url.isEmpty()) {
+    if (const QString url = sent.isEmpty() && !m_sendHere ? computerFor(path) : QString(); !url.isEmpty()) {
         m_routing.insert(path.toLower(), url);
         const QPointer<WorkspaceChats> self(this);
         m_agents->computerChats()->sendTo(
@@ -1834,10 +1834,14 @@ bool WorkspaceChats::setMark(const QString &path, int mark, bool on)
 
 QString WorkspaceChats::partnerOf(const QString &path) const
 {
-    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+    if (path.isEmpty() || !m_workspace->ready())
         return {};
-    bool ok = false;
-    const QString content = m_workspace->read(path, &ok);
+    // (A conversation another computer's app runs: its page there while this device's lags behind.)
+    const QString theirs = computerPage(path);
+    if (theirs.isEmpty() && !m_workspace->exists(path))
+        return {};
+    bool ok = !theirs.isEmpty();
+    const QString content = ok ? theirs : m_workspace->read(path, &ok);
     if (!ok)
         return {};
     // (A thread is answered where its project is: the agent that answers it on this device — its
@@ -1846,6 +1850,16 @@ QString WorkspaceChats::partnerOf(const QString &path) const
     if (!c.project.isEmpty() && WorkspaceAgents::isAgent(c.partner) && m_workspace->projects()->contains(c.project)) {
         if (const QString here = m_agents->threadPartnerFor(c.project, c.partner); !here.isEmpty())
             return here;
+    }
+    // (One another computer's app runs or ran lately: its agent there is this device's agent of that
+    // computer of the same id there.)
+    if (const std::optional<ComputerChats::Computer> computer = m_agents->computerChats()->computerOf(path);
+        computer && WorkspaceAgents::isAgent(c.partner)) {
+        const QString there = c.partner.mid(4);
+        for (const AgentConfig &a : m_agents->agents()) {
+            if (a.isRemote() && a.remote == there && acp::normalizeRemoteBase(a.url).toString() == computer->url)
+                return u"acp:"_s + a.id;
+        }
     }
     return c.partner;
 }
@@ -2979,10 +2993,15 @@ int WorkspaceChats::startThreadThere(const QString &project, const QString &text
     return request;
 }
 
-QString WorkspaceChats::threadComputer(const QString &path) const
+QString WorkspaceChats::computerFor(const QString &path) const
 {
     if (path.isEmpty())
         return {};
+    // A conversation a computer's app runs or ended lately (its page may not be here yet) …
+    ComputerChats *computers = m_agents->computerChats();
+    if (const std::optional<ComputerChats::Computer> c = computers->computerOf(path); c && computers->attached(c->url))
+        return c->url;
+    // … or a thread of a project of a computer whose app shares its conversations.
     const QVariantMap place = threadPlace(path);
     if (!place.value(u"remote"_s).toBool())
         return {};
