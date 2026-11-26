@@ -13,4 +13,5 @@
 #include "ui/platform.h"
 #include "ui/style.h"
 #include "ui/text.h"
+#include "ui/textinput.h"
 #include "ui/window.h"

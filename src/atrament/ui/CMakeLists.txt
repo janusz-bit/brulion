@@ -11,6 +11,7 @@ brulion_add_atrament_module(ui
         style.cpp style.h
         testplatform.cpp testplatform.h
         text.cpp text.h
+        textinput.cpp textinput.h
         window.cpp window.h
     DEPS raster text layout scene base
 )

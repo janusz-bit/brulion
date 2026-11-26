@@ -8,6 +8,8 @@ Read before changing code:
 * `docs/SYNTAX.md` — the Markdown dialect (single source of truth for parsing/rendering).
 * `docs/ARCHITECTURE.md` — layers, modules, platform strategy.
 * `docs/UI.md` — QML UI, block editor, navigation, components.
+* `docs/ATRAMENT.md` — Atrament, the own GPU-first UI framework replacing Qt Quick view by view
+  (`src/atrament/`, no Qt outside its `qt/` host): its decisions, architecture and roadmap.
 * `docs/EXTENSIONS.md` — Luau extensions (scripting): the `b` API, extension pages, the sandbox.
   A change to `b` goes into its reference there and into the documentation notebook's "Extension
   API" page in both languages; `tst_extensions_docs` runs every ```` ```luau ```` example of the
