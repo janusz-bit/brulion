@@ -13769,70 +13769,70 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>GitMessages</name>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="81"/>
+        <location filename="../src/core/gitcli/client.cpp" line="94"/>
         <source>The command ended with code %1</source>
         <translation>Polecenie zakończyło się kodem %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="165"/>
+        <location filename="../src/core/gitcli/client.cpp" line="178"/>
         <location filename="../src/core/gitcli/client_history.cpp" line="189"/>
         <source>The GitHub CLI (gh) is not installed</source>
         <translation>Nie zainstalowano GitHub CLI (gh)</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="166"/>
+        <location filename="../src/core/gitcli/client.cpp" line="179"/>
         <source>git is not installed (it was not found on PATH)</source>
         <translation>git nie jest zainstalowany (nie znaleziono go w PATH)</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="229"/>
+        <location filename="../src/core/gitcli/client.cpp" line="242"/>
         <source>%1 did not finish within %2 s</source>
         <translation>Polecenie %1 nie zakończyło się w ciągu %2 s</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="242"/>
-        <location filename="../src/core/gitcli/client.cpp" line="266"/>
+        <location filename="../src/core/gitcli/client.cpp" line="255"/>
+        <location filename="../src/core/gitcli/client.cpp" line="279"/>
         <source>The output was too long</source>
         <translation>Wynik był za długi</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="274"/>
+        <location filename="../src/core/gitcli/client.cpp" line="287"/>
         <source>%1 stopped unexpectedly</source>
         <translation>Polecenie %1 nieoczekiwanie przestało działać</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="283"/>
+        <location filename="../src/core/gitcli/client.cpp" line="296"/>
         <source>The GitHub CLI (gh) could not be started: %1</source>
         <translation>Nie udało się uruchomić GitHub CLI (gh): %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="284"/>
+        <location filename="../src/core/gitcli/client.cpp" line="297"/>
         <source>git could not be started: %1</source>
         <translation>Nie udało się uruchomić gita: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="301"/>
+        <location filename="../src/core/gitcli/client.cpp" line="314"/>
         <source>This version of Brulion cannot run git</source>
         <translation>Ta wersja Brulionu nie może uruchamiać gita</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="312"/>
+        <location filename="../src/core/gitcli/client.cpp" line="325"/>
         <source>No folder</source>
         <translation>Brak folderu</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="312"/>
+        <location filename="../src/core/gitcli/client.cpp" line="325"/>
         <location filename="../src/core/gitcli/client_history.cpp" line="228"/>
         <source>The folder does not exist</source>
         <translation>Folder nie istnieje</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="328"/>
+        <location filename="../src/core/gitcli/client.cpp" line="341"/>
         <source>A bare repository has no working tree</source>
         <translation>Repozytorium bare nie ma drzewa roboczego</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="478"/>
+        <location filename="../src/core/gitcli/client.cpp" line="491"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="116"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="133"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="162"/>
@@ -13843,117 +13843,117 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>To nie jest ścieżka wewnątrz repozytorium: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="484"/>
+        <location filename="../src/core/gitcli/client.cpp" line="497"/>
         <location filename="../src/core/gitcli/client_history.cpp" line="42"/>
         <location filename="../src/core/gitcli/checkpoints.cpp" line="260"/>
         <source>Not a revision: %1</source>
         <translation>To nie jest rewizja: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="651"/>
+        <location filename="../src/core/gitcli/client.cpp" line="664"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="395"/>
         <source>Write a commit message first</source>
         <translation>Najpierw napisz opis commita</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="665"/>
+        <location filename="../src/core/gitcli/client.cpp" line="678"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="440"/>
         <source>Nothing to commit</source>
         <translation>Nie ma czego zatwierdzać</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="675"/>
+        <location filename="../src/core/gitcli/client.cpp" line="688"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="452"/>
         <source>Committed</source>
         <translation>Zatwierdzono</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="676"/>
+        <location filename="../src/core/gitcli/client.cpp" line="689"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="452"/>
         <source>Committed %1</source>
         <translation>Zatwierdzono %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="691"/>
+        <location filename="../src/core/gitcli/client.cpp" line="704"/>
         <source>HEAD is detached: switch to a branch to push it</source>
         <translation>HEAD jest odłączony: przełącz na gałąź, żeby wypchnąć zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="702"/>
-        <location filename="../src/core/gitcli/client.cpp" line="717"/>
+        <location filename="../src/core/gitcli/client.cpp" line="715"/>
+        <location filename="../src/core/gitcli/client.cpp" line="730"/>
         <source>Pushed %1 to %2</source>
         <translation>Wypchnięto %1 do %2</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="710"/>
+        <location filename="../src/core/gitcli/client.cpp" line="723"/>
         <source>The repository has no remote to push to</source>
         <translation>Repozytorium nie ma zdalnego repozytorium, do którego można wypchnąć zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="735"/>
+        <location filename="../src/core/gitcli/client.cpp" line="748"/>
         <source>Already up to date</source>
         <translation>Wszystko jest już aktualne</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="736"/>
+        <location filename="../src/core/gitcli/client.cpp" line="749"/>
         <source>Pulled</source>
         <translation>Pobrano zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="744"/>
         <location filename="../src/core/gitcli/client.cpp" line="757"/>
-        <location filename="../src/core/gitcli/client.cpp" line="791"/>
+        <location filename="../src/core/gitcli/client.cpp" line="770"/>
+        <location filename="../src/core/gitcli/client.cpp" line="804"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="408"/>
         <source>“%1” cannot be a branch&apos;s name</source>
         <translation>„%1” nie może być nazwą gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="749"/>
+        <location filename="../src/core/gitcli/client.cpp" line="762"/>
         <source>Created the branch %1</source>
         <translation>Utworzono gałąź %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="765"/>
+        <location filename="../src/core/gitcli/client.cpp" line="778"/>
         <source>Switched to %1</source>
         <translation>Przełączono na %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="792"/>
+        <location filename="../src/core/gitcli/client.cpp" line="805"/>
         <source>No folder for the worktree</source>
         <translation>Nie podano folderu dla worktree</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="803"/>
+        <location filename="../src/core/gitcli/client.cpp" line="816"/>
         <source>Added a worktree at %1</source>
         <translation>Dodano worktree w %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="818"/>
+        <location filename="../src/core/gitcli/client.cpp" line="831"/>
         <source>Removed the worktree %1</source>
         <translation>Usunięto worktree %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="826"/>
+        <location filename="../src/core/gitcli/client.cpp" line="839"/>
         <source>A pull request needs a title</source>
         <translation>Pull request wymaga tytułu</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="831"/>
+        <location filename="../src/core/gitcli/client.cpp" line="844"/>
         <source>The GitHub CLI (gh) is not installed: install it to create pull requests</source>
         <translation>Nie zainstalowano GitHub CLI (gh): bez niego nie można tworzyć pull requestów</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="851"/>
+        <location filename="../src/core/gitcli/client.cpp" line="864"/>
         <source>Created the pull request</source>
         <translation>Utworzono pull request</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="854"/>
+        <location filename="../src/core/gitcli/client.cpp" line="867"/>
         <source>A pull request for this branch exists already</source>
         <translation>Pull request dla tej gałęzi już istnieje</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="858"/>
+        <location filename="../src/core/gitcli/client.cpp" line="871"/>
         <location filename="../src/core/gitcli/client_history.cpp" line="30"/>
         <source>Sign in to GitHub first: run “gh auth login” in a terminal</source>
         <translation>Najpierw zaloguj się do GitHuba: uruchom „gh auth login” w terminalu</translation>
@@ -41364,11 +41364,13 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     <name>brulion::platform::Pty</name>
     <message>
         <location filename="../src/platform/pty_posix.cpp" line="432"/>
+        <location filename="../src/platform/pty_conpty.cpp" line="673"/>
         <source>A program is running already.</source>
         <translation>Program już działa.</translation>
     </message>
     <message>
         <location filename="../src/platform/pty_posix.cpp" line="443"/>
+        <location filename="../src/platform/pty_conpty.cpp" line="687"/>
         <source>Program not found: %1</source>
         <translation>Nie znaleziono programu: %1</translation>
     </message>
@@ -41376,6 +41378,10 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/platform/pty_posix.cpp" line="467"/>
         <location filename="../src/platform/pty_posix.cpp" line="473"/>
         <location filename="../src/platform/pty_posix.cpp" line="484"/>
+        <location filename="../src/platform/pty_conpty.cpp" line="707"/>
+        <location filename="../src/platform/pty_conpty.cpp" line="713"/>
+        <location filename="../src/platform/pty_conpty.cpp" line="723"/>
+        <location filename="../src/platform/pty_conpty.cpp" line="740"/>
         <source>Cannot open a pseudo-terminal: %1</source>
         <translation>Nie można otworzyć pseudoterminala: %1</translation>
     </message>
@@ -41387,8 +41393,24 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     <message>
         <location filename="../src/platform/pty_posix.cpp" line="521"/>
         <location filename="../src/platform/pty_posix.cpp" line="539"/>
+        <location filename="../src/platform/pty_conpty.cpp" line="764"/>
         <source>Cannot start %1: %2</source>
         <translation>Nie można uruchomić %1: %2</translation>
+    </message>
+    <message>
+        <location filename="../src/platform/pty_conpty.cpp" line="676"/>
+        <source>There is no terminal on this device: it needs Windows 10 version 1809 or later.</source>
+        <translation>Na tym urządzeniu nie ma terminala: potrzebny jest Windows 10 w wersji 1809 lub nowszej.</translation>
+    </message>
+    <message>
+        <location filename="../src/platform/pty_conpty.cpp" line="689"/>
+        <source>Cannot start %1: a batch file runs through cmd.exe /c</source>
+        <translation>Nie można uruchomić %1: plik wsadowy uruchamia się przez cmd.exe /c</translation>
+    </message>
+    <message>
+        <location filename="../src/platform/pty_conpty.cpp" line="697"/>
+        <source>Cannot start %1: the command line is too long</source>
+        <translation>Nie można uruchomić %1: wiersz polecenia jest za długi</translation>
     </message>
 </context>
 <context>
@@ -47811,12 +47833,13 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::terminal::TerminalSession</name>
     <message>
-        <location filename="../src/app/terminal/terminalsession.cpp" line="98"/>
+        <location filename="../src/app/terminal/terminalsession.cpp" line="102"/>
+        <location filename="../src/app/terminal/terminalsession.cpp" line="104"/>
         <source>Terminal</source>
         <translation>Terminal</translation>
     </message>
     <message>
-        <location filename="../src/app/terminal/terminalsession.cpp" line="195"/>
+        <location filename="../src/app/terminal/terminalsession.cpp" line="208"/>
         <source>There is no terminal on this device.</source>
         <translation>Na tym urządzeniu nie ma terminala.</translation>
     </message>

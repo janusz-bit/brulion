@@ -1,3 +1,0 @@
-brulion::platform::Pty	There is no terminal on this device: it needs Windows 10 version 1809 or later.	Na tym urządzeniu nie ma terminala: potrzebny jest Windows 10 w wersji 1809 lub nowszej.	
-brulion::platform::Pty	Cannot start %1: a batch file runs through cmd.exe /c	Nie można uruchomić %1: plik wsadowy uruchamia się przez cmd.exe /c	
-brulion::platform::Pty	Cannot start %1: the command line is too long	Nie można uruchomić %1: wiersz polecenia jest za długi	
