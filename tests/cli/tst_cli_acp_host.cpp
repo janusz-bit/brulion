@@ -1719,10 +1719,12 @@ private Q_SLOTS:
         QCOMPARE(code400(u"projects/zolw/diff?path=..%2F..%2Fetc%2Fpasswd"_s), 400);
         QCOMPARE(code400(u"projects/zolw/diff?path=.git%2Fconfig"_s), 400);
         QCOMPARE(code400(u"projects/zolw/diff?path=%2Fetc%2Fpasswd"_s), 400);
+#ifndef Q_OS_WIN // (QFile::link() makes a .lnk shortcut there, no symbolic link)
         // A folder of the project that is a link out of it: nothing read through it.
         QVERIFY(QFile::link(m_tmp.path(), repo + u"/na-zewnatrz"_s));
         QCOMPARE(code400(u"projects/zolw/diff?path=na-zewnatrz%2Fagent.log"_s), 400);
         QVERIFY(QFile::remove(repo + u"/na-zewnatrz"_s));
+#endif
         QCOMPARE(code400(u"projects/zolw/changes?worktree=wzgledny"_s), 400);
         r = http("GET", u"projects/zolw/changes?worktree=%1"_s.arg(QString::fromLatin1(QUrl::toPercentEncoding(m_vault))),
                  {}, bearer(token));
@@ -1734,7 +1736,13 @@ private Q_SLOTS:
         // The same stream's conversations of the notebook: the notebook's folder, no checkpoint.
         QCOMPARE(ask(*t, u"AI/Notatki.md"_s, u"katalog"_s), u"Katalog: "_s + QDir::cleanPath(m_vault));
         QCOMPARE(t->checkpoints.size(), 5);
-        QCOMPARE(fromMsys(ask(*t, u"AI/Notatki.md"_s, u"pwd"_s)), u"Pwd: %1 | /: /"_s.arg(canonical(m_vault)));
+        const QString notebookPwd = fromMsys(ask(*t, u"AI/Notatki.md"_s, u"pwd"_s));
+#ifdef Q_OS_WIN
+        // git for Windows' sh shows "/" as the drive it runs from ("/d"): the notebook's folder counts.
+        QVERIFY2(notebookPwd.startsWith(u"Pwd: %1 | /: /"_s.arg(canonical(m_vault))), qPrintable(notebookPwd));
+#else
+        QCOMPARE(notebookPwd, u"Pwd: %1 | /: /"_s.arg(canonical(m_vault)));
+#endif
     }
 
     void codeWorktrees()

@@ -7,6 +7,18 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.31.0 — November 26, 2026
+
+**New**
+- **Code mode — your coding agents in your projects** — Claude Code, Codex or OpenCode works in threads of a project of yours, as in T3 Code: a thread in its own git worktree from a branch you pick (a pull request too: `#123`), the project's scripts from its `t3.json`, a terminal for each thread with splits and search (PowerShell or cmd on Windows), Ctrl+P and search across the project's files, `@` to hand the agent a file, and a notification when a thread needs you. Switch with the rail's top button or the palette ([[Code mode]]).
+- **Changes, commits and pull requests** — the Changes panel shows what a turn, the uncommitted work, the branch or a commit changed; stage, unstage or discard a file or a hunk, commit the files you tick (the message written by AI if you like), push, open a pull request — also to another base or from a fork — and undo one turn or go back to before it.
+- **Work you can follow** — above an agent's answer a folded log ("Worked for 25 s · 1 file changed · 1 command run") opens to the plan and the tool calls with their results and diffs; Ctrl+F finds text in a thread; **Edit from here** can put the project's files back too.
+- **Threads from your phone** — a Code mode thread goes on from the phone through the computer that shares its agents: the turn runs there, in the project, and the phone shows its changes.
+
+**Changes**
+- **A third of the memory** — Brulion takes about 130 MB fifteen seconds after the start instead of about 400 MB, and about 140 MB with its window hidden; with 10,000 notes about 280 MB instead of 700 MB. Views, dialogs and menus are made when first used and let go when hidden, and the index is a third smaller.
+- **Extensions on the command line read the notebook's settings** — in `brulion-cli extension run`, `b.app.get` and `b.app.settings()` see the notebook's own settings.
+
 ## 0.30.0 — November 25, 2026
 
 **New**
