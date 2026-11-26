@@ -1344,8 +1344,9 @@ FocusScope {
     function shortcutEnabled(id: string): bool {
         switch (id) {
         case "panel.toggle": return !Theme.narrow || contextDrawer.available
-        case "page.rename":
-        case "page.print": return shell.currentView === "page"
+        case "page.rename": return shell.currentView === "page"
+        // (In Code mode Print page's key is the file picker's: docs/CODE-FILES.md "Keys".)
+        case "page.print": return shell.currentView === "page" || shell.currentView === "code"
         }
         return true
     }
@@ -1354,7 +1355,19 @@ FocusScope {
         switch (id) {
         case "palette": shell.openPalette(""); break
         case "page.switch": shell.openSwitcher(""); break
-        case "go.search": AppController.search(""); break
+        // (Code mode: the project search; Print page's key the file picker — CodeView's uiActions.)
+        case "go.search":
+            if (shell.currentView === "code")
+                AppController.requestUiAction("code:search")
+            else
+                AppController.search("")
+            break
+        case "page.print":
+            if (shell.currentView === "code")
+                AppController.requestUiAction("code:findFile")
+            else
+                CommandModel.run(id)
+            break
         case "page.new": shell.openNewPage(""); break
         case "capture": shell.openCapture(); break
         case "panel.toggle":

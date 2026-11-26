@@ -26,6 +26,9 @@ import Brulion
 // "code/changesOpen" Ctrl+D, "code/terminalOpen"). A new worktree is made before the first message
 // is sent; the project's scripts that run then run in its terminal, and those to wait for hold the
 // message (CodeSetupBanner) until they ended well — or the user sends it anyway.
+// The right panel has tabs (CodePanelTabs, kept in "code/rightTab"): Changes, Files (CodeFilesPanel:
+// the file viewer — openFileInViewer(path, line) opens a file there: the picker's, a search result's,
+// a link of the agent's answer, the other panels'), Search (CodeSearchPanel); docs/CODE-FILES.md.
 // A project of another computer (its threads run there, docs/CODE.md "Threads on the phone"): the
 // computer's name in the header, no terminal, editor or scripts here, and CodeRemoteChanges — that
 // computer's changes of the thread, read-only — in place of the Changes panel (under the thread
@@ -112,6 +115,97 @@ FocusScope {
     function setTerminalOpen(on: bool): void {
         root.terminalOpen = on
         AppSettings.setValue("code/terminalOpen", on)
+    }
+    // ---- The right panel's tabs, the file viewer, the picker, the search (docs/CODE-FILES.md) ----
+    /// "changes" | "files" | "search".
+    property string rightTab: "" + AppSettings.value("code/rightTab", "changes")
+    /// The Files and Search tabs are made once first shown.
+    property bool filesWanted: root.rightTab === "files"
+    property bool searchWanted: root.rightTab === "search"
+    /// A file to show once the Files tab is there.
+    property string pendingFile
+    property int pendingFileLine: 0
+    function showRightTab(tab: string): void {
+        root.rightTab = tab
+        AppSettings.setValue("code/rightTab", tab)
+        if (tab === "files")
+            root.filesWanted = true
+        else if (tab === "search")
+            root.searchWanted = true
+        if (!root.changesOpen)
+            root.setChangesOpen(true)
+    }
+    /// Open `path` (relative to the thread's folder, or absolute inside it) in the Files tab, at
+    /// `line` (0: the top) — the Changes panel's, the terminal's and the chat's links come here.
+    function openFileInViewer(path: string, line: int): void {
+        const relative = CodeFiles.relativePath(root.folder, path)
+        if (relative === "") {
+            AppController.toast(qsTr("That file is not in the thread's folder."), "warning")
+            return
+        }
+        root.pendingFile = relative
+        root.pendingFileLine = line
+        root.showRightTab("files")
+        root.applyPendingFile()
+    }
+    /// The thread's files may have changed (an answer was written): the index and the file shown
+    /// read again.
+    function filesChanged(): void {
+        CodeFiles.refresh(root.folder)
+        const panel = filesLoader.item as CodeFilesPanel
+        if (panel !== null)
+            panel.reload()
+    }
+    function applyPendingFile(): void {
+        const panel = filesLoader.item as CodeFilesPanel
+        if (panel === null || root.pendingFile === "")
+            return
+        panel.open(root.pendingFile, root.pendingFileLine)
+        root.pendingFile = ""
+    }
+    /// The file picker (Ctrl+P), `query` typed in it.
+    function openFilePicker(query: string): void {
+        if (root.folder === "")
+            return
+        pickerLoader.active = true
+        const picker = pickerLoader.item as CodeFilePicker
+        if (picker === null)
+            return
+        picker.recent = Js.nonEmptyStrings(Js.split("" + AppSettings.value(CodeFiles.recentKey(root.folder), ""), "\n"))
+        picker.openWith(query)
+    }
+    function openInEditorAt(path: string): void {
+        const abs = CodeFiles.absolutePath(root.folder, path)
+        if (abs === "" || !Workspace.projects.openInEditor(abs))
+            AppController.toast(qsTr("The editor could not be started: set its command in Settings → Extensions → Code mode."), "error")
+    }
+    /// The project search (Ctrl+Shift+F), its field focused.
+    function openSearch(): void {
+        if (root.folder === "")
+            return
+        root.showRightTab("search")
+        searchFocus.restart()
+    }
+    Later {
+        id: searchFocus
+        onTriggered: {
+            const panel = searchLoader.item as CodeSearchPanel
+            if (panel !== null)
+                panel.focusField("")
+        }
+    }
+    Connections {
+        target: AppController
+        // (The palette's and the keys' "Go to file…" and "Search in the project", AppShell.runShortcut;
+        // not while the terminal has the keyboard.)
+        function onUiActionRequested(action: string) {
+            if (!root.visible || terminalLoader.activeFocus)
+                return
+            if (action === "code:findFile")
+                root.openFilePicker("")
+            else if (action === "code:search")
+                root.openSearch()
+        }
     }
     /// The route's choice of where a new thread works, else the project's default (newThreadEnv).
     function resetEnvironment(): void {
@@ -452,6 +546,7 @@ FocusScope {
             root.refreshPlace()
             changes.git.refresh()
             root.refreshRemoteChanges()
+            root.filesChanged()
         }
     }
     Connections {
@@ -728,6 +823,9 @@ FocusScope {
                     routeView: "code"
                     showList: false
                     project: root.project
+                    // (A thread's @-mentions are the folder's files; its file links open the viewer.)
+                    filesFolder: root.folder
+                    onFileLinkActivated: (path, line) => root.openFileInViewer(path, line)
                     wantsWorktree: root.envMode === "worktree"
                     onWorktreeWanted: (text) => {
                         // (While it is made or set up the message waits; made already — its setup
@@ -789,31 +887,90 @@ FocusScope {
                     host: root.host
                 }
             }
-            GitChangesPanel {
-                id: changes
-                objectName: "codeChanges"
-                visible: root.changesOpen && root.folder !== ""
+            // The right panel: Changes | Files | Search.
+            ColumnLayout {
+                id: rightPanel
+                objectName: "codeRightPanel"
+                visible: root.changesOpen && root.folder !== "" && !root.remote
                 C.SplitView.preferredWidth: root.wide ? 420 : 320
                 C.SplitView.minimumWidth: 260
-                folder: root.folder
-                // The thread's turns' snapshots (WorkspaceChats.checkpoints): "Latest turn" / "Turn N"
-                // and their reverts.
-                checkpoints: root.path !== "" ? Workspace.chats.checkpoints(root.path, Workspace.chats.checkpointSerial)
-                                              : changes.noRows
-                // (While the agent works: its changes as they come.)
-                pollInterval: chat.busyHere ? 2000 : 0
-                onActionFinished: (action, ok, message, url) => {
-                    if (message !== "")
-                        AppController.toast(url !== "" ? message + "\n" + url : message, ok ? "success" : "error")
+                spacing: 0
+                CodePanelTabs {
+                    objectName: "codePanelTabs"
+                    Layout.fillWidth: true
+                    current: root.rightTab
+                    onChosen: (tab) => root.showRightTab(tab)
                 }
-                onOpenFile: (path, line) => Workspace.projects.openInEditor(path)
-                onAddToChat: (text) => chat.addToComposer(text)
-                onCopyText: (text) => {
-                    if (pageTools.copyText(text))
-                        AppController.toast(qsTr("Copied: %1").arg(text), "success")
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Theme.borderSubtle
                 }
-                onOpenUrl: (url) => Workspace.openUrl(url)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    GitChangesPanel {
+                        id: changes
+                        objectName: "codeChanges"
+                        anchors.fill: parent
+                        visible: root.rightTab === "changes"
+                        folder: root.folder
+                        // The thread's turns' snapshots (WorkspaceChats.checkpoints): "Latest turn" / "Turn N"
+                        // and their reverts.
+                        checkpoints: root.path !== "" ? Workspace.chats.checkpoints(root.path, Workspace.chats.checkpointSerial)
+                                                      : changes.noRows
+                        // (While the agent works: its changes as they come.)
+                        pollInterval: chat.busyHere ? 2000 : 0
+                        onActionFinished: (action, ok, message, url) => {
+                            if (message !== "")
+                                AppController.toast(url !== "" ? message + "\n" + url : message, ok ? "success" : "error")
+                        }
+                        onOpenFile: (path, line) => Workspace.projects.openInEditor(path, line)
+                        onAddToChat: (text) => chat.addToComposer(text)
+                        onCopyText: (text) => {
+                            if (pageTools.copyText(text))
+                                AppController.toast(qsTr("Copied: %1").arg(text), "success")
+                        }
+                        onOpenUrl: (url) => Workspace.openUrl(url)
+                    }
+                    Loader {
+                        id: filesLoader
+                        anchors.fill: parent
+                        visible: root.rightTab === "files"
+                        active: root.filesWanted
+                        onLoaded: root.applyPendingFile()
+                        sourceComponent: CodeFilesPanel {
+                            objectName: "codeFiles"
+                            folder: root.folder
+                            onAddToChat: (text) => chat.addToComposer(text)
+                            onPickRequested: (query) => root.openFilePicker(query)
+                        }
+                    }
+                    Loader {
+                        id: searchLoader
+                        anchors.fill: parent
+                        visible: root.rightTab === "search"
+                        active: root.searchWanted
+                        sourceComponent: CodeSearchPanel {
+                            objectName: "codeSearchPanel"
+                            folder: root.folder
+                            onOpenFile: (path, line) => root.openFileInViewer(path, line)
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    // The file picker (Ctrl+P), made when first asked for.
+    Loader {
+        id: pickerLoader
+        active: false
+        sourceComponent: CodeFilePicker {
+            objectName: "codeFilePicker"
+            folder: root.folder
+            onFileChosen: (path) => root.openFileInViewer(path, 0)
+            onEditorChosen: (path) => root.openInEditorAt(path)
         }
     }
 

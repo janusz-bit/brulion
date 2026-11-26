@@ -148,6 +148,8 @@ target_link_libraries(brulion_shell
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
 # src/app/pdf — its area is included before this one — and openexternal.h).
 target_link_libraries(brulion_shell PRIVATE brulion_platform brulion_pdfview)
+# A thread's @-mentioned files go to its agent as links (workspaceagents.cpp; core codefiles).
+target_link_libraries(brulion_shell PRIVATE brulion_core_codefiles)
 # Speech recognition and the recorder's clock (AppController.speech: src/app/media — its area is
 # included before this one); the slash commands this build cannot run (the editor's blocktext.h).
 target_link_libraries(brulion_shell PUBLIC brulion_media PRIVATE brulion_editor)

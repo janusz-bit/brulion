@@ -69,6 +69,10 @@ FocusScope {
     /// CodeView makes it, sets newWorktree / newBranch and sends again).
     property bool wantsWorktree: false
     signal worktreeWanted(string text)
+    /// A thread's folder (CodeView: the thread's): "@" names its files and folders instead of the
+    /// notebook's pages, and links of answers to its files open them (fileLinkActivated) — docs/CODE-FILES.md.
+    property string filesFolder
+    signal fileLinkActivated(string path, int line)
     /// The conversation shown: the route's, or the one its first message just started ("" none).
     property string path
     /// A new conversation's page (the chip; taken away before the first message: none).
@@ -534,16 +538,40 @@ FocusScope {
         input.cursorPosition = input.length
         return true
     }
-    /// A page named at the caret: its link in place of what was typed ("@Do" → "[[Dom]] ").
+    /// A page named at the caret: its link in place of what was typed ("@Do" → "[[Dom]] "); in a
+    /// thread a file of its folder: "@src/ma" → "@src/main.cpp ".
     function insertMention(title: string): void {
         const caret = 0 + input.cursorPosition
         const typed = "" + input.text
+        if (root.codeThread) {
+            const withFile = "" + CodeFiles.withMention(typed, caret, title)
+            if (withFile === "")
+                return
+            input.text = withFile
+            input.cursorPosition = CodeFiles.mentionEnd(typed, caret, title)
+            input.forceActiveFocus()
+            return
+        }
         const next = "" + root.chats.withMention(typed, caret, title)
         if (next === "")
             return
         input.text = next
         input.cursorPosition = root.chats.mentionEnd(typed, caret, title)
         input.forceActiveFocus()
+    }
+    /// A link of a thread's answer to a file of its folder: shown in the file viewer (true), else
+    /// false (the notebook's links, web addresses).
+    function openFileLink(link: string): bool {
+        const folder = root.codeThread ? root.filesFolder : ""
+        const href = link
+        if (folder === "")
+            return false
+        const path = "" + CodeFiles.linkPath(folder, href)
+        const line = 0 + CodeFiles.linkLine(folder, href)
+        if (path === "")
+            return false
+        root.fileLinkActivated(path, line)
+        return true
     }
     /// Text added to the field from elsewhere — Code mode's "Add to chat" of a terminal's selection
     /// or a diff's lines —, at its end after a blank line, the field focused (nothing is sent).
@@ -1885,6 +1913,9 @@ FocusScope {
                                     plan: message.workPlan
                                     seconds: AppController.routeInt(message.workLog, "seconds", 0)
                                     finished: true
+                                    // (A thread's: the files of its calls open in Code mode's viewer.)
+                                    filesFolder: root.codeThread ? root.filesFolder : ""
+                                    onFileActivated: (path) => root.fileLinkActivated(path, 0)
                                 }
                             }
 
@@ -1982,9 +2013,11 @@ FocusScope {
                                     onTapped: (eventPoint, button) => {
                                         const at = eventPoint.position
                                         const link = message.linkAt(at)
-                                        if (link !== "" && !Js.startsWith(link, "task:"))
-                                            tools.openLink(link, root.path, false)
-                                        else if (message.inParts)
+                                        if (link !== "" && !Js.startsWith(link, "task:")) {
+                                            // (A thread's link to a file of its folder: the file viewer.)
+                                            if (!root.openFileLink(link))
+                                                tools.openLink(link, root.path, false)
+                                        } else if (message.inParts)
                                             parts.openAt(message.linkPoint.x, message.linkPoint.y) // (a drawing opens large)
                                     }
                                     onLongPressed: message.openMenu(leftTap.point.position)
@@ -2265,6 +2298,8 @@ FocusScope {
                                 Layout.maximumWidth: 640
                                 tools: root.busyHere && !root.queuedHere ? root.turn.tools : root.noVars
                                 plan: root.busyHere && !root.queuedHere ? root.turn.plan : root.noVars
+                                filesFolder: root.codeThread ? root.filesFolder : ""
+                                onFileActivated: (path) => root.fileLinkActivated(path, 0)
                             }
 
                             // What the AI does now (not while its words come: they show it, and a
@@ -2841,10 +2876,20 @@ FocusScope {
 
                 // A page being named ("@Dom", "[[Do"): the pages it may be; a tap (or Tab: the
                 // first) writes its link — an AI agent gets the pages a message names.
+                // (In a thread: the files and folders of its folder, CodeFileIndex.)
+                CodeFileIndex {
+                    id: threadFiles
+                    folder: root.codeThread ? root.filesFolder : ""
+                    active: root.codeThread && CodeFiles.mentionStart(input.text, input.cursorPosition) >= 0
+                    query: threadFiles.active ? CodeFiles.mentionQuery(input.text, input.cursorPosition) : ""
+                    limit: 8
+                    markColor: Theme.link
+                }
                 Flow {
                     id: mentionList
                     objectName: "chatMentions"
-                    readonly property list<var> pages: root.chats.mentions(root.path, input.text, input.cursorPosition, 8)
+                    readonly property list<var> pages: root.codeThread ? threadFiles.rows
+                                                       : root.chats.mentions(root.path, input.text, input.cursorPosition, 8)
                     Layout.fillWidth: true
                     visible: mentionList.pages.length > 0
                     spacing: Theme.space1
@@ -2856,9 +2901,10 @@ FocusScope {
                             objectName: "chatMention"
                             size: "small"
                             interactive: true
-                            iconName: "file-text"
+                            iconName: root.codeThread ? AppController.routeText(mentionChip.modelData, "iconName") : "file-text"
                             text: AppController.routeText(mentionChip.modelData, "title")
-                            Accessible.name: qsTr("Name the page %1").arg(mentionChip.text)
+                            Accessible.name: root.codeThread ? qsTr("Name the file %1").arg(mentionChip.text)
+                                                             : qsTr("Name the page %1").arg(mentionChip.text)
                             onClicked: root.insertMention(mentionChip.text)
                         }
                     }
@@ -3003,6 +3049,11 @@ FocusScope {
                                     } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && control && root.busyHere) {
                                         event.accepted = true
                                         root.steer()
+                                    } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && root.codeThread
+                                               && mentionList.pages.length > 0) {
+                                        // (A thread's file being named: Enter takes the first, as Tab.)
+                                        event.accepted = true
+                                        root.insertMention(AppController.routeText(mentionList.pages[0], "title"))
                                     } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && !Theme.touchUi) {
                                         event.accepted = true
                                         root.send()

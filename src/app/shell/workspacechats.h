@@ -340,7 +340,7 @@ public:
     int checkpointSerial() const { return m_checkpointSerial; }
     /// What an AI agent's turn did, kept once it answered (as T3 Code's "Worked for …"): the answer
     /// `number` (the page's messages counted from 1) → {seconds, tools: [{title, kind, status,
-    /// output, diffPath, diffOld, diffNew}], plan: [{content, status}]} — {} when not known (no tool
+    /// output, paths, diffPath, diffOld, diffNew}], plan: [{content, status}]} — {} when not known (no tool
     /// call and no plan, another device's turn, older than what is kept). Kept in the notebook's
     /// device state ("chat/worklog"): MaxWorkLogTurns turns a conversation, MaxWorkLogConversations
     /// conversations, an output's last MaxWorkLogOutput characters, a change's texts up to

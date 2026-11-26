@@ -1,0 +1,72 @@
+CodePanelTabs	Changes	Zmiany	
+CodePanelTabs	Files	Pliki	
+CodePanelTabs	Search	Szukaj	
+CodeFileView	Lines of %1	Wiersze pliku %1	
+CodeFileView	Comment on lines %1–%2…	Skomentuj wiersze %1–%2…	
+CodeFileView	Comment on line %1…	Skomentuj wiersz %1…	
+CodeFileView	Copy the lines	Kopiuj wiersze	
+CodeFileView	Clear the selection	Usuń zaznaczenie	
+CodeFileView	Comment…	Skomentuj…	
+CodeFileView	Copy the path with the lines	Kopiuj ścieżkę z wierszami	
+CodeFilesPanel	Path copied	Skopiowano ścieżkę	
+CodeFilesPanel	The editor could not be started: set its command in Settings → Extensions → Code mode.	Nie udało się uruchomić edytora: ustaw jego polecenie w Ustawieniach → Rozszerzenia → Tryb kodu.	
+CodeFilesPanel	Recent files	Ostatnie pliki	
+CodeFilesPanel	Go to file…	Przejdź do pliku…	
+CodeFilesPanel	Copy path	Kopiuj ścieżkę	
+CodeFilesPanel	Open in editor	Otwórz w edytorze	
+CodeFilesPanel	Reload	Wczytaj ponownie	
+CodeFilesPanel	Only the first 2 MB of this %1 file are shown.	Widać tylko pierwsze 2 MB tego pliku (%1).	
+CodeFilesPanel	Copied	Skopiowano	
+CodeFilesPanel	Binary file	Plik binarny	
+CodeFilesPanel	Not there	Nie ma go	
+CodeFilesPanel	A folder	To folder	
+CodeFilesPanel	Outside the project	Poza projektem	
+CodeFilesPanel	Cannot be read	Nie da się go odczytać	
+CodeFilesPanel	Its contents are not text (%1).	Jego zawartość to nie tekst (%1).	
+CodeFilesPanel	This file is not in the folder (any more).	Tego pliku nie ma (już) w folderze.	
+CodeFilesPanel	Pick one of its files with Go to file….	Wybierz któryś z jego plików przez Przejdź do pliku….	
+CodeFilesPanel	Only the files of the thread's folder are shown here.	Tu widać tylko pliki z folderu wątku.	
+CodeFilesPanel	Brulion may not read this file.	Brulion nie ma dostępu do tego pliku.	
+CodeFilesPanel	No file open	Żaden plik nie jest otwarty	
+CodeFilesPanel	Open a file of the project to read it here: Go to file… (Ctrl+P), a search's result, a file an agent names.	Otwórz plik projektu, żeby przeczytać go tutaj: Przejdź do pliku… (Ctrl+P), wynik wyszukiwania, plik wskazany przez agenta.	
+CodeFilesPanel	Recent	Ostatnie	
+CodeFilesPanel	Comment on lines %1–%2	Komentarz do wierszy %1–%2	
+CodeFilesPanel	Comment on line %1	Komentarz do wiersza %1	
+CodeFilesPanel	Add to chat	Dodaj do czatu	
+CodeFilesPanel	What should the agent do here?	Co agent ma tu zrobić?	
+CodeFilesPanel	The lines and your comment go to the thread's message, to send with what else you write.	Wiersze z Twoim komentarzem trafią do wiadomości wątku — wyślesz je razem z resztą tego, co napiszesz.	
+CodeFilePicker	Close	Zamknij	
+CodeFilePicker	Go to file…	Przejdź do pliku…	
+CodeFilePicker	Reading the project's files…	Wczytuję pliki projektu…	
+CodeFilePicker	No files here	Nie ma tu plików	
+CodeFilePicker	No files found	Nie znaleziono plików	
+CodeFilePicker	The project has more files than Brulion lists (200,000).	Projekt ma więcej plików, niż Brulion pokazuje (200 000).	
+CodeFilePicker	navigate	nawigacja	
+CodeFilePicker	open	otwórz	
+CodeFilePicker	open in editor	otwórz w edytorze	
+CodeFilePicker	close	zamknij	
+CodeFilePicker	%n file(s)	%n plik | %n pliki | %n plików	
+CodeSearchPanel	Match case	Uwzględnij wielkość liter	
+CodeSearchPanel	Whole words	Całe słowa	
+CodeSearchPanel	Regular expression	Wyrażenie regularne	
+CodeSearchPanel	Search in the project	Szukaj w projekcie	
+CodeSearchPanel	Searching…	Szukam…	
+CodeSearchPanel	Nothing found	Nic nie znaleziono	
+CodeSearchPanel	The first %n result(s)	Pierwszy %n wynik | Pierwsze %n wyniki | Pierwszych %n wyników	
+CodeSearchPanel	%n result(s)	%n wynik | %n wyniki | %n wyników	
+CodeSearchPanel	%n file(s)	%n plik | %n pliki | %n plików	
+CodeSearchPanel	Brulion	Brulion	
+CodeSearchPanel	Stop	Zatrzymaj	
+CodeSearchPanel	Search results	Wyniki wyszukiwania	
+CodeSearchPanel	Line %1	Wiersz %1	
+CodeSearchPanel	No file of the project has “%1”.	Żaden plik projektu nie zawiera „%1”.	
+CodeSearchPanel	Search the project	Przeszukaj projekt	
+CodeSearchPanel	Text in every file of the project, ignored files left out. Ctrl+Shift+F comes here.	Tekst we wszystkich plikach projektu, bez ignorowanych. Ctrl+Shift+F prowadzi tutaj.	
+CodeView	That file is not in the thread's folder.	Tego pliku nie ma w folderze wątku.	
+ChatView	Name the file %1	Wskaż plik %1	
+brulion::codefiles::CodeSearch	This is no regular expression: %1	To nie jest wyrażenie regularne: %1	
+brulion::codefiles::CodeSearch	The search stopped.	Wyszukiwanie przerwane.	
+brulion::shell::CommandModel	Go to file…	Przejdź do pliku…	
+brulion::shell::CommandModel	Code mode: a file of the project by its name	Tryb kodu: plik projektu po jego nazwie	
+brulion::shell::CommandModel	Search in the project	Szukaj w projekcie	
+brulion::shell::CommandModel	Code mode: text in the project's files	Tryb kodu: tekst w plikach projektu	

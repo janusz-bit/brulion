@@ -39,6 +39,14 @@ Obok wątku panel **Zmiany** pokazuje zmiany projektu — które, wybierasz w je
 ## Na telefonie
 Komputer, który udostępnia telefonowi swoich agentów ([[AI#Agent na innym komputerze]]), udostępnia też swoje projekty: na telefonie tryb kodu pokazuje je z nazwą komputera. Napisz w wątku — zaczętym na komputerze albo nowym, **Lokalnie** albo w **nowym worktree** — a agent pracuje na tamtym komputerze, w projekcie, jakbyś przy nim siedział. Punkt kontrolny każdej tury powstaje tam, więc z powrotem przy komputerze panel **Zmiany** pokaże, co zmieniła tura z telefonu. Na telefonie widzisz pliki zmienione w ostatniej turze i ich różnice; commit, push i terminal są na komputerze.
 
+## Pliki i wyszukiwanie
+Panel obok wątku ma trzy karty: **Zmiany**, **Pliki** i **Szukaj**.
+- **Ctrl+P** (albo *Przejdź do pliku…* w palecie) znajduje plik projektu po kilku literach nazwy — `cvw` znajdzie `CodeView.qml`; Enter otwiera go w karcie **Pliki**, Ctrl+Enter w Twoim edytorze.
+- **Pliki** pokazują plik tylko do odczytu, z kolorami i numerami wierszy (obrazy jako obrazy). Kliknij wiersz — Shift+klik albo przeciągnięcie po numerach zaznacza więcej — i wybierz **Skomentuj…**: wiersze z Twoim komentarzem trafiają do wiadomości wątku, żeby agent się nimi zajął.
+- **Ctrl+Shift+F** szuka tekstu we wszystkich plikach projektu (bez ignorowanych); wynik otwiera plik w swoim wierszu. `Aa`, `ab` i `.*` to wielkość liter, całe słowa i wyrażenia regularne.
+- Wpisz **@** w wiadomości wątku, żeby wskazać plik albo folder projektu (`@src/main.cpp`); agent dostaje też same wskazane pliki.
+- Plik, do którego agent podlinkuje w odpowiedzi, otwiera się w karcie Pliki w swoim wierszu.
+
 ## Dla ciekawych
 - Agent wątku dostaje narzędzia czatu Brulionu — powiadomienie Cię, zapytanie innego agenta, prośbę o sekret — ale żadnych Twoich notatek ([[Wiersz poleceń i agenci AI]]).
 - Poproszony „daj znać, gdy testy przejdą”, może wysłać Ci własne powiadomienie ([[AI#Powiadomienia od agenta]]).

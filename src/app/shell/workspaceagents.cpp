@@ -8,6 +8,7 @@
 
 #include "acp/codehost.h"
 #include "chat/chat.h"
+#include "codefiles/viewer.h"
 #include "log/categories.h"
 #include "markdown/encrypted.h"
 #include "markdown/frontmatter.h"
@@ -1266,6 +1267,20 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         else
             input.prompt << acp::Block::link(url, QFileInfo(picture).fileName());
     }
+    // A thread's @-mentions (docs/CODE-FILES.md "@-mentions"): each file of its folder the message
+    // names ("@src/main.cpp") also goes as a link to it, at most 10; folders and files that are not
+    // there stay text.
+    if (!code.project.isEmpty()) {
+        int linked = 0;
+        for (const QString &named : codefiles::mentionedPaths(newest.value(u"content"_s).toString())) {
+            const QString relative = codefiles::relativeInside(code.folder, named);
+            if (relative.isEmpty() || !QFileInfo(QDir(code.folder).filePath(relative)).isFile())
+                continue;
+            if (++linked > 10)
+                break;
+            input.prompt << acp::Block::link(fileUrl(code.folder, relative), QFileInfo(relative).fileName());
+        }
+    }
     // The pages the message names ([[…]], as T3 Code's @-mentions): their text where the agent
     // takes it (at most 5, not the conversation itself nor the page it is about).
     const QString pagePath =
@@ -1846,7 +1861,8 @@ QVariantList WorkspaceAgents::tools(const QString &path) const
                                {u"output"_s, output},
                                {u"diffPath"_s, t.diff ? t.diff->path : QString()},
                                {u"diffOld"_s, t.diff ? t.diff->oldText : QString()},
-                               {u"diffNew"_s, t.diff ? t.diff->newText : QString()}});
+                               {u"diffNew"_s, t.diff ? t.diff->newText : QString()},
+                               {u"paths"_s, t.paths}});
     }
     return out;
 }

@@ -39,6 +39,14 @@ Beside the thread, the **Changes** panel shows the project's changes — pick wh
 ## On the phone
 A computer that shares its agents with your phone ([[AI#An agent on another computer]]) shares its projects too: on the phone, Code mode lists them with the computer's name. Write in a thread — one you started on the computer, or a new one, **Local** or in a **new worktree** — and the agent works on that computer, in the project, as if you were sitting at it. The checkpoint of each turn is taken there, so back at the computer the **Changes** panel shows what the phone's turn changed. On the phone you see the last turn's changed files and their diffs; committing, pushing and the terminal are at the computer.
 
+## Files and search
+The panel beside the thread has three tabs: **Changes**, **Files** and **Search**.
+- **Ctrl+P** (or *Go to file…* in the palette) finds a file of the project by a few letters of its name — `cvw` finds `CodeView.qml`; Enter opens it in the **Files** tab, Ctrl+Enter in your editor.
+- **Files** shows the file read-only, with colours and line numbers (pictures as pictures). Click a line — Shift+click or a drag over the numbers for more — and choose **Comment…**: the lines and your comment go into the thread's message, for the agent to act on.
+- **Ctrl+Shift+F** searches the text of every file of the project (ignored files left out); a result opens the file at its line. `Aa`, `ab` and `.*` match case, whole words and regular expressions.
+- Type **@** in a thread's message to name a file or folder of the project (`@src/main.cpp`); the agent also gets the named files themselves.
+- A file the agent links to in its answer opens in the Files tab at its line.
+
 ## For the curious
 - An agent of a thread gets Brulion's chat tools — notify you, ask another agent, ask for a secret — but none of your notes ([[Command line and AI agents]]).
 - Asked "let me know when the tests pass", it can send you a notification of its own ([[AI#Notifications from the agent]]).

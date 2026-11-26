@@ -928,6 +928,15 @@ QJsonObject WorkspaceChats::workLogEntry(int number, qint64 seconds, const QVari
                          {u"status"_s, m.value(u"status"_s).toString().left(20)}};
         if (const QString output = m.value(u"output"_s).toString(); !output.isEmpty())
             call.insert(u"output"_s, lastPart(output, MaxWorkLogOutput));
+        // The files it worked on (Code mode's viewer opens them from the log).
+        QJsonArray paths;
+        for (const QString &path : m.value(u"paths"_s).toStringList()) {
+            if (paths.size() >= 20)
+                break;
+            paths.append(path.left(1000));
+        }
+        if (!paths.isEmpty())
+            call.insert(u"paths"_s, paths);
         // A change of a file: its path, and its texts while they are small enough to keep.
         if (const QString diffPath = m.value(u"diffPath"_s).toString(); !diffPath.isEmpty()) {
             const QString oldText = m.value(u"diffOld"_s).toString();

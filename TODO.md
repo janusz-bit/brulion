@@ -7,7 +7,8 @@ done in the repository simply disappears from the list.
 
 * **Code mode: what is still missing** — projects, AI agents' threads in a project's folder or a
   worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
-  and the terminal are there (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
+  the terminal and the project's files — picker, viewer, search, @-mentions — are there
+  (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
   real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
   mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
@@ -20,7 +21,10 @@ done in the repository simply disappears from the list.
   id; t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
   multi-repository projects and custom worktree layouts; an AI-made branch name for a new worktree;
   automatic worktree cleanup (by age, merged pull requests); settling and snoozing threads,
-  "Regenerate title", files dropped on a thread's row, scratch threads without a project.
+  "Regenerate title", files dropped on a thread's row, scratch threads without a project; in the file
+  viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, find
+  within the file shown, the index following the disk through a file watcher; in a thread's composer:
+  mentions of threads, models and pull requests (`#`), review comments as chips instead of text.
 
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
   Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and
