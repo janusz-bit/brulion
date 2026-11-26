@@ -2269,7 +2269,7 @@
 <context>
     <name>SyncStatusPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="43"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="44"/>
         <source>in %n min</source>
         <translation>
             <numerusform>in %n min</numerusform>
@@ -2277,7 +2277,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="44"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="45"/>
         <source>in %n s</source>
         <translation>
             <numerusform>in %n s</numerusform>
@@ -2285,7 +2285,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="344"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="361"/>
         <source>%n file(s) could not be synced</source>
         <translation>
             <numerusform>%n file could not be synced</numerusform>
@@ -3276,7 +3276,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="966"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="975"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>

@@ -29558,23 +29558,23 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
 <context>
     <name>SyncStatusPanel</name>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="100"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="101"/>
         <source>Nextcloud</source>
         <translation>Nextcloud</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="101"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="102"/>
         <source>Not set up. Fill in the form below to start.</source>
         <translation>Nie skonfigurowano. Aby zacząć, wypełnij formularz poniżej.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="106"/>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="384"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="107"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="401"/>
         <source>Sync now</source>
         <translation>Synchronizuj teraz</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="43"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="44"/>
         <source>in %n min</source>
         <translation>
             <numerusform>za %n min</numerusform>
@@ -29583,7 +29583,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="44"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="45"/>
         <source>in %n s</source>
         <translation>
             <numerusform>za %n s</numerusform>
@@ -29592,158 +29592,178 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="100"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="101"/>
         <source>Folder “%1”</source>
         <translation>Folder „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="135"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="136"/>
         <source>You are working offline — changes will sync later.</source>
         <extracomment>Polish: &quot;Pracujesz offline — zmiany zsynchronizują się później.&quot;</extracomment>
         <translation>Pracujesz offline — zmiany zsynchronizują się później.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="148"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="149"/>
         <source>Enter a new app password below and save. Brulion keeps trying with the old one until then.</source>
         <translation>Wpisz poniżej nowe hasło aplikacji i zapisz. Do tego czasu Brulion będzie próbował ze starym.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="152"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="153"/>
         <source>Brulion tries again by itself; your notes stay safe on this device.</source>
         <translation>Brulion sam spróbuje ponownie; Twoje notatki są bezpieczne na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="153"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="154"/>
         <source>Choose the folder again above: Android asks once more whether Brulion may use it.</source>
         <translation>Wybierz folder jeszcze raz powyżej: Android ponownie zapyta, czy Brulion może z niego korzystać.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="154"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="155"/>
         <source>Brulion tries again by itself; your notes stay safe in the app&apos;s storage.</source>
         <translation>Brulion spróbuje ponownie sam; Twoje notatki są bezpieczne w pamięci aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="155"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="156"/>
         <source>Choose the folder again above.</source>
         <translation>Wybierz folder jeszcze raz powyżej.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="156"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="157"/>
         <source>Check the server folder below – or let the first sync create it.</source>
         <translation>Sprawdź folder na serwerze poniżej – albo pozwól, by utworzyła go pierwsza synchronizacja.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="159"/>
+        <source>Nothing was deleted. Check that the folder above is the right one, then sync again — or copy the notes from the folder into the notebook: nothing is deleted on either side.</source>
+        <translation>Nic nie zostało usunięte. Sprawdź, czy folder powyżej jest właściwy, a potem zsynchronizuj ponownie — albo skopiuj notatki z folderu do notatnika: nic nie zostanie usunięte po żadnej stronie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="160"/>
+        <source>Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again — or download the notes from the server into the notebook: nothing is deleted on either side.</source>
+        <translation>Nic nie zostało usunięte. Sprawdź, czy folder notatnika i folder na serwerze są właściwe, a potem zsynchronizuj ponownie — albo pobierz notatki z serwera do notatnika: nic nie zostanie usunięte po żadnej stronie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="162"/>
         <source>Nothing was deleted. Check that the folder above is the right one, then sync again.</source>
         <translation>Nic nie zostało usunięte. Sprawdź, czy powyżej wybrano właściwy folder, i zsynchronizuj ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="160"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="163"/>
         <source>Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again.</source>
         <translation>Nic nie zostało usunięte. Sprawdź, czy folder notatnika i folder na serwerze są właściwe, a potem zsynchronizuj ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="161"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="164"/>
         <source>Insert the card or connect the drive with the notebook, then sync again.</source>
         <translation>Włóż kartę lub podłącz dysk z notatnikiem, a potem zsynchronizuj ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="162"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="165"/>
         <source>Free some space on the phone; nothing is lost meanwhile.</source>
         <translation>Zwolnij trochę miejsca na telefonie; w międzyczasie nic nie przepadnie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="163"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="166"/>
         <source>Free some space on the server; nothing is lost meanwhile.</source>
         <translation>Zwolnij trochę miejsca na serwerze; do tego czasu nic nie zginie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="177"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="180"/>
+        <source>Copy the notes from the folder</source>
+        <translation>Skopiuj notatki z folderu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="180"/>
+        <source>Download the notes from the server</source>
+        <translation>Pobierz notatki z serwera</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="194"/>
         <source>Next attempt %1.</source>
         <translation>Kolejna próba %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="178"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="195"/>
         <source>Next attempt in a moment.</source>
         <translation>Kolejna próba za chwilę.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="184"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="201"/>
         <source>Try now</source>
         <translation>Spróbuj teraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="208"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="225"/>
         <source>Last run: %1 · %2</source>
         <translation>Ostatnio: %1 · %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="214"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="231"/>
         <source>Details</source>
         <translation>Szczegóły</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="241"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="258"/>
         <source>Last synced %1</source>
         <translation>Ostatnia synchronizacja: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="245"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="262"/>
         <source>next attempt %1</source>
         <translation>kolejna próba: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="246"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="263"/>
         <source>next sync %1</source>
         <translation>następna: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="76"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="77"/>
         <source>Sent</source>
         <translation>Wysłane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="77"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="78"/>
         <source>Downloaded</source>
         <translation>Pobrane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="78"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="79"/>
         <source>Merged</source>
         <translation>Scalone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="79"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="80"/>
         <source>Conflicts</source>
         <translation>Konflikty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="80"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="81"/>
         <source>Errors</source>
         <translation>Błędy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="306"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="323"/>
         <source>Deleted: %1 in this notebook (they are in its trash), %2 in the folder.</source>
         <translation>Usunięto: %1 w tym notatniku (są w jego koszu), %2 w folderze.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="307"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="324"/>
         <source>Deleted: %1 on this device, %2 on the server (they are in the trash or the server&apos;s deleted files).</source>
         <translation>Usunięte: %1 na tym urządzeniu, %2 na serwerze (są w koszu lub w usuniętych plikach serwera).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="327"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="344"/>
         <source>Both versions of the conflicting notes were kept – merge them in Conflicts.</source>
         <translation>Zachowano obie wersje sprzecznych notatek – scal je w zakładce Konflikty.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="332"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="349"/>
         <source>Show</source>
         <translation>Pokaż</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="344"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="361"/>
         <source>%n file(s) could not be synced</source>
         <translation>
             <numerusform>Nie udało się zsynchronizować %n pliku</numerusform>
@@ -47348,58 +47368,58 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Lista plików do usunięcia się zmieniła. Sprawdź ją ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="865"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="874"/>
         <source>Enter the server address and the user name.</source>
         <translation>Wpisz adres serwera i nazwę użytkownika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="873"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="882"/>
         <source>Enter an app password.</source>
         <translation>Wpisz hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="884"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="893"/>
         <source>Connected. The folder is ready for syncing.</source>
         <translation>Połączono. Folder jest gotowy do synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="889"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="898"/>
         <source>Connected. The folder will be created by the first sync.</source>
         <translation>Połączono. Folder utworzy pierwsza synchronizacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="924"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="933"/>
         <source>Shared with Syncthing. Add its API key to see the sync status.</source>
         <translation>Udostępniony w Syncthing. Dodaj klucz API, aby widzieć stan synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="956"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="993"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="965"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1002"/>
         <source>Syncthing is not running on this device.</source>
         <translation>Syncthing nie działa na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="958"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="967"/>
         <source>Syncthing reports errors in this folder.</source>
         <translation>Syncthing zgłasza błędy w tym folderze.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="960"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="969"/>
         <source>Syncthing is syncing (%1 %).</source>
         <translation>Syncthing synchronizuje (%1%).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="962"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="971"/>
         <source>Syncthing is scanning the folder.</source>
         <translation>Syncthing skanuje folder.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="964"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="973"/>
         <source>Up to date. No other device is connected right now.</source>
         <translation>Aktualne. Żadne inne urządzenie nie jest teraz połączone.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="966"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="975"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Aktualne z %n urządzeniem.</numerusform>
@@ -47408,28 +47428,28 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="968"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="977"/>
         <source>Up to date.</source>
         <translation>Aktualne.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="992"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1001"/>
         <source>Syncthing refused the API key.</source>
         <translation>Syncthing odrzucił klucz API.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="994"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1003"/>
         <source>This notebook folder is not shared in Syncthing.</source>
         <translation>Folder tego notatnika nie jest udostępniony w Syncthing.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1087"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1105"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1096"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1114"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1117"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1126"/>
         <source>Could not move the conflict copy to the trash: %1</source>
         <translation>Nie udało się przenieść kopii konfliktu do kosza: %1</translation>
     </message>

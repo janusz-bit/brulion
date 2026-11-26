@@ -7404,7 +7404,12 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   become such copies.
 * **Retry and decisions:** a failed run shows "Next attempt in 25 s" (a countdown) with
   "Try now"; held-back deletions and conflicts are "Waiting for your decision" / "Conflict in
-  … — merge the versions" (the deletion guard and the conflict list stay as before). Moving or renaming
+  … — merge the versions" (the deletion guard and the conflict list stay as before). A notebook
+  folder that lost every synced file ("local-empty": nothing was deleted on the server) offers
+  "Download the notes from the server" ("Copy the notes from the folder" for a device folder;
+  `WorkspaceSync.downloadFromServer`): one run that forgets the bookkeeping first
+  (`SyncRunOptions::startOver`), so the first sync's rules bring the files back and delete
+  nothing. Moving or renaming
   folders and pages never asks: content that arrives under a new path in the same run is a move,
   not a deletion (`SyncEngine`, docs/ARCHITECTURE.md "Sync guards").
 * **Folders** (Nextcloud): empty folders travel both ways, an emptied folder deleted on one side

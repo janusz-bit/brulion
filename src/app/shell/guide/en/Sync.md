@@ -34,6 +34,8 @@ The server and the account are shared, but **turning sync on and the folder on t
 
 Deletions are held back until you decide when they affect many files at once — a safeguard against mistakes.
 
+If every note that was synced before suddenly disappears from the notebook folder (a lost memory card, a folder emptied by another program), Brulion pauses sync instead of deleting the notes on the server too: “Sync paused: the notebook folder looks empty”. When the folders are the right ones, **Download the notes from the server** in the Sync center brings them back — that sync works like the very first one: whatever is only on one side is copied to the other, and nothing is deleted anywhere.
+
 ### Folders
 - An **empty folder** created on one device appears on the server and on the other devices.
 - A **deleted folder** disappears on the other side too, but only when nothing is left in it. A folder holding a note that isn't synced yet, or a file Brulion doesn't sync (e.g. `.git`), stays where it is.

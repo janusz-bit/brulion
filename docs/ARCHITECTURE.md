@@ -656,7 +656,10 @@ app; these guards keep data from being lost:
 * **Sync guards** (`SyncEngine`): a **mass-deletion guard** holds back every deletion of a run
   that would delete more than 25 % and at least 10 files of one side (or all of them) until the
   user confirms the list in the sync center (`needsConfirmation`, `pendingDeletions`); a side
-  on which every previously synced file vanished is never mirrored (`LocalEmpty`/`RemoteEmpty`);
+  on which every previously synced file vanished is never mirrored (`LocalEmpty`/`RemoteEmpty`;
+  for `LocalEmpty` the sync center offers a run with `SyncRunOptions::startOver` — the
+  bookkeeping reset under the run's lock, the first sync's rules: the files come back from the
+  server and nothing is deleted);
   no run while the vault storage is unavailable (`VaultUnavailable`). Moves are not deletions:
   a run transfers the paths without deletions first, and a deleted file whose content was
   uploaded or downloaded under a new path in the same run (matched one to one by content hash,

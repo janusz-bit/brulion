@@ -133,6 +133,10 @@ public:
     /// status().lastReport->pendingDeletions): SyncRunOptions::confirmDeletions for one run.
     /// While a sync is running, it runs right after it.
     void syncNowConfirmingDeletions(RunCallback done = {});
+    /// Sync now forgetting the bookkeeping first (SyncRunOptions::startOver for one run): the
+    /// files of a side that looks empty come back, nothing is deleted. While a sync is running, it
+    /// runs right after it.
+    void syncNowStartingOver(RunCallback done = {});
 
 public Q_SLOTS:
     /// Start automatic syncing: a first sync right away, then periodically. Idempotent.
@@ -207,6 +211,7 @@ private:
     SyncTrigger m_afterHoldTrigger = SyncTrigger::LocalChange;
     bool m_triggerAfterRun = false; ///< restarted while the cancelled run was still finishing
     bool m_confirmDeletions = false; ///< the next run confirms held-back deletions
+    bool m_startOver = false;        ///< the next run forgets the bookkeeping first
     bool m_networkConnected = false;
     bool m_reportedOnline = true; ///< last networkOnline() / networkOffline() (isOnline() fallback)
     int m_periodicTimer = 0;

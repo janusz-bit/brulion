@@ -6,7 +6,8 @@ import Brulion
 // SyncStatusPanel — the Nextcloud sync state (Workspace.sync), or a folder of the phone's when the
 // notebook syncs with one (WorkspaceSync.deviceFolder: its name, its words): what is happening now
 // (SyncLiveProgress: phase, n of N, files in flight, elapsed time, a stalled server), offline and
-// error explanations, a retry countdown with "Try now", "Sync now", when it last /
+// error explanations ("Download the notes from the server" when the notebook folder looks empty),
+// a retry countdown with "Try now", "Sync now", when it last /
 // next runs, the last run's result with "Details" and what it did (sent, downloaded, merged,
 // conflicts, errors — failed files listed with their explanation).
 //
@@ -154,7 +155,9 @@ IoCard {
             case "server": return panel.folder ? qsTr("Brulion tries again by itself; your notes stay safe in the app's storage.") : ""
             case "not-found": return panel.folder ? qsTr("Choose the folder again above.")
                                                   : qsTr("Check the server folder below – or let the first sync create it.")
-            case "local-empty":
+            case "local-empty": return panel.folder
+                                ? qsTr("Nothing was deleted. Check that the folder above is the right one, then sync again — or copy the notes from the folder into the notebook: nothing is deleted on either side.")
+                                : qsTr("Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again — or download the notes from the server into the notebook: nothing is deleted on either side.")
             case "remote-empty": return panel.folder
                                  ? qsTr("Nothing was deleted. Check that the folder above is the right one, then sync again.")
                                  : qsTr("Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again.")
@@ -163,6 +166,20 @@ IoCard {
                                                              : qsTr("Free some space on the server; nothing is lost meanwhile.")
             default: return ""
             }
+        }
+    }
+
+    // The notebook folder lost every synced file: bring them back from the other side.
+    RowLayout {
+        Layout.fillWidth: true
+        visible: panel.syncState === "error" && panel.sync.lastErrorCode === "local-empty"
+        spacing: Theme.space2
+        Item { Layout.fillWidth: true }
+        BButton {
+            objectName: "syncDownloadFromServer"
+            text: panel.folder ? qsTr("Copy the notes from the folder") : qsTr("Download the notes from the server")
+            iconName: "download"
+            onClicked: panel.sync.downloadFromServer()
         }
     }
 

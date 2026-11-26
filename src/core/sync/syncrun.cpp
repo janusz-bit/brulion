@@ -456,12 +456,16 @@ void SyncRun::abandon()
 
 void SyncRun::checkRemoteIdentity()
 {
-    // Reset the bookkeeping when the account / folder changed since the last sync.
+    // Reset the bookkeeping when the account / folder changed since the last sync, or when the
+    // user asked to start over (SyncRunOptions::startOver).
     const QJsonValue meta = store()->get(SyncEngine::metaKey());
     const QString identity = client()->identity();
-    if (meta.isObject() && meta.toObject().value(u"remote"_s).toString() == identity)
+    if (m_options.startOver) {
+        qCInfo(lcSync).noquote() << u"%1 starting over: sync bookkeeping reset on request (first-sync rules apply)"_s.arg(tag());
+        m_engine->resetState();
+    } else if (meta.isObject() && meta.toObject().value(u"remote"_s).toString() == identity) {
         return;
-    if (!meta.isUndefined()) {
+    } else if (!meta.isUndefined()) {
         qCInfo(lcSync).noquote()
                 << u"%1 account or folder changed: sync bookkeeping reset (first-sync rules apply)"_s.arg(tag());
         m_engine->resetState();

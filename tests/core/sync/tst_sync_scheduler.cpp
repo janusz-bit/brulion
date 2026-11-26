@@ -751,6 +751,45 @@ private Q_SLOTS:
         QVERIFY(confirmedDone);
     }
 
+    void startingOverAppliesToOneRunOnly()
+    {
+        Fixture f;
+        f.scheduler.syncNowStartingOver();
+        QCOMPARE(f.runner.calls, 1);
+        QVERIFY(f.runner.lastOptions.startOver);
+        QVERIFY(!f.runner.lastOptions.confirmDeletions);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Manual);
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 2);
+        QVERIFY(!f.runner.lastOptions.startOver);
+        // Offline: dropped, never used by a later automatic run.
+        f.online = false;
+        f.scheduler.syncNowStartingOver();
+        QCOMPARE(f.runner.calls, 2);
+        f.online = true;
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 3);
+        QVERIFY(!f.runner.lastOptions.startOver);
+    }
+
+    void startingOverDuringARunSyncsAgainAfterIt()
+    {
+        Fixture f;
+        f.runner.autoComplete = false;
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 1);
+        QVERIFY(!f.runner.lastOptions.startOver);
+        bool done = false;
+        f.scheduler.syncNowStartingOver([&](const std::optional<SyncReport> &r) { done = r.has_value(); });
+        QCOMPARE(f.runner.calls, 1);
+        f.runner.release();
+        QCOMPARE(f.runner.calls, 2);
+        QVERIFY(f.runner.lastOptions.startOver);
+        QVERIFY(!done);
+        f.runner.release();
+        QVERIFY(done);
+    }
+
     // ---- Triggers, runFinished, retry status, stall watchdog --------------------------------
 
     void reportsWhyEachRunStarted()

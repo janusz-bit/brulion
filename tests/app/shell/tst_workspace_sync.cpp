@@ -677,6 +677,45 @@ private Q_SLOTS:
         QVERIFY(!sync->needsConfirmation());
     }
 
+    void downloadsTheNotesIntoAFolderThatLooksEmpty()
+    {
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        QString root;
+        auto ws = open(&server,
+                       { { u"Zakupy.md"_s, u"- mleko\n"_s }, { u"Praca/Plan.md"_s, u"- żółw\n"_s },
+                         { u"Pomysły.md"_s, u"- książka\n"_s } },
+                       &root);
+        WorkspaceSync *sync = ws->sync();
+        sync->setNextcloud(account(server));
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(server.files(u"Brulion"_s).size(), 3);
+
+        // The notes vanish from the folder behind the app's back (a storage swap, another program).
+        for (const QString &name : { u"Zakupy.md"_s, u"Praca/Plan.md"_s, u"Pomysły.md"_s })
+            QVERIFY(QFile::remove(root + u'/' + name));
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(sync->state(), u"error"_s);
+        QCOMPARE(sync->lastErrorCode(), u"local-empty"_s);
+        QCOMPARE(server.files(u"Brulion"_s).size(), 3); // nothing deleted on the server
+
+        bool done = false;
+        connect(sync->scheduler(), &brulion::sync::SyncScheduler::synced, this, [&done] { done = true; });
+        sync->downloadFromServer();
+        QVERIFY(synctest::waitFor([&] { return done; }));
+        QCOMPARE(sync->state(), u"idle"_s);
+        QCOMPARE(sync->lastReport().value(u"downloaded"_s).toInt(), 3);
+        QCOMPARE(ws->readFile(u"Praca/Plan.md"_s), u"- żółw\n"_s);
+        QCOMPARE(ws->readFile(u"Pomysły.md"_s), u"- książka\n"_s);
+        QCOMPARE(server.files(u"Brulion"_s).size(), 3);
+
+        // The next run is an ordinary one again.
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(sync->state(), u"idle"_s);
+        QCOMPARE(sync->lastReport().value(u"downloaded"_s).toInt(), 0);
+    }
+
     void foldersTravelAndTheTreeFollows()
     {
         // Empty folders come down (the tree hears of them: folders make no Vault change of their
