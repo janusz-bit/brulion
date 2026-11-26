@@ -365,10 +365,12 @@ Never compute a hash yourself.
 | `app revert` | `[--who W]` | undo the live changes (one client's or all), newest first: `{undone, changes}` | yes |
 | `app chat list` | `[--parent C] [--limit N]` | the app's AI conversations, newest change first: `{conversations [{path, name, partner, partnerName, state, failure?, question?, parent?, messages, changed}], total}` ("Conversations" below) | |
 | `app chat read <conversation>` | `[--from N] [--limit N] [--offset N]` | its messages `{…, total, messages [{position, role, time?, text, length, offset?, cut?}], next?, partial?}`, 30 000 characters at once | |
-| `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--project ID] [--wake] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner (none: the default partner), its turn started (an agent the app started: a sub-conversation of its own); `--project`: a thread of Code mode in that project, answered by an AI agent working in its folder | yes |
-| `app chat send <conversation> <text>` | `[--queue] [--wait] [--timeout MS] [--stdin]` | its next message; exit 4 `busy` while its turn runs — `--queue` puts it in line instead, sent when the answer is written (docs/UI.md "AI chat": writing on while it answers; `--wait` then waits for the turn that runs) | yes |
+| `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--project ID] [--worktree DIR] [--branch B] [--wake] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner (none: the default partner), its turn started (an agent the app started: a sub-conversation of its own); `--project`: a thread of Code mode in that project, answered by an AI agent working in its folder — or, `--worktree`, in a git worktree of it (`--branch` its branch) | yes |
+| `app chat send <conversation> <text>` | `[--queue \| --steer] [--wait] [--timeout MS] [--stdin]` | its next message; exit 4 `busy` while its turn runs — `--queue` puts it in line instead, sent when the answer is written (docs/UI.md "AI chat": writing on while it answers; `--wait` then waits for the turn that runs), `--steer` sends it now (the running turn stopped first, ahead of the waiting ones) | yes |
 | `app chat wait <conversation>` | `[--timeout MS]` | until its turn ends: `{state, answer}`; exit 1 `turn_failed`, 5 `waiting_for_user`, 3 `timeout` | |
 | `app chat stop <conversation>` | | stop its turn: `{stopped}` | yes |
+| `app chat live` | `[--path C] [--since N] [--timeout MS]` | the conversations whose turn runs, waits or asks and those that ended lately, newest activity first: `{revision, chats [{path, name, partner, partnerName, state, status?, question?, failure?, project?, worktree?, branch?, messages, waiting?, ended?}], detail?}` — `--path` one in full (its answer being written, tools, plan, question, waiting messages); `--since` a long poll ("Conversations" below) | |
+| `app chat answer <conversation> <option>` | | answer the question its turn waits on with one of its options, as the user: `{path, answered, option}`; exit 4 `no_question`, 2 `bad_option` (with `options`) | yes |
 | `app chat partners` | | who may answer: `{partners [{id, name, kind, by, default?}], default, projects [{id, name}]}` (the default partner; Code mode's projects for `start --project`) | |
 | `app chat schedule list` | | the scheduled conversations of the open notebook with their next run | |
 | `app chat schedule add <prompt>` | `--when W [--title T] [--partner P] [--continue] [--disabled] [--stdin]` | schedule a conversation (`--when "codziennie o 7:30"`) | yes |
@@ -1039,6 +1041,34 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   `--allowed-origin https://notes.example.com` (comma-separated; CORS answers for it, also to
   Chrome's Private Network Access preflight: a public page that calls an address of your own
   network). Any other page is refused.
+* **The app's own conversations** (core `acp/appchats.h`): the desktop app's sharing starts the
+  server with a grant of the app's remote control of its own (the agent sharing's: the chat's methods
+  a phone needs — reading, `chatLive`, sending, starting, stopping, `chatAnswer` — never the
+  schedules, secrets, notifications or anything that changes the app; its caller acts as the user),
+  the control socket in `BRULION_APP_SOCKET` and the token in `BRULION_APP_SHARE_TOKEN` of its
+  environment — never on its command line or in a file, taken out of the environment at once: the
+  agents and their terminals never see them —, a new grant each time it starts, revoked when it
+  stops. The server keeps a link to the app over that socket (connected again, after a wait that grows
+  to 5 s, while the app does not answer; the log says when it comes and goes), and while it is up
+  `info`'s `features` name `chats` and a paired device follows every conversation the app runs — the
+  agents it runs for its AI chat and Code mode's threads — live, and steers them:
+  * `GET chats?since=R&wait=S&path=P` → `{revision, chats, detail?}` — the app's `chat live`
+    ("Conversations" above): at once when its revision is past `R` (`-1`: always), else when it
+    changes, `S` seconds at most (as `wait` of streams: 30 at most); `detail` the conversation `P`'s.
+    What the app answers is passed on bounded as the device takes it (unknown states, paths outside
+    `AI/`, a conversation twice left out). A long poll whose device left is dropped; 4 of a device
+    and 32 in all wait at once at most (then 429 `too_many_requests`).
+  * `GET chats/page?path=P` → `{path, text}`: the conversation's page as this computer has it (the
+    phone's copy may lag behind the notebook's sync) — a page of the notebook's `AI/` folder only,
+    never an encrypted one (400 `bad_path`), 4 MiB at most (413), 404 when it is not there.
+  * `POST chats/send {path, text, mode: "" | "queue" | "steer"}` → `{path}`; `POST chats/start
+    {project, text, partner?, worktree?, branch?}` → `{path}` — a new thread of Code mode in the app,
+    in the project's folder or a worktree of it; `POST chats/stop {path}` → `{path, stopped}`; `POST
+    chats/answer {path, option}` → `{path, answered}`.
+  * Errors: the app not linked — 503 `app_unavailable`; the app's own, with its message — `not_found`
+    404, `busy` 409 (a turn runs: send with mode `queue` or `steer`), `no_question` 409, `bad_option`,
+    `bad_params` and `ambiguous_ref` 400, `refused` 403, `not_ready` 503 (no notebook open there),
+    anything else 502; a request that is none: 400 (`bad_request`, `bad_path`, `bad_mode`).
 * **Code mode's threads** (`--projects projects.json`: `[{id, name, path, worktreesRoot}]`, the
   projects this computer's user added in Code mode — the desktop app's sharing writes it, below):
   a device lists them (`GET projects`) and continues their threads here (docs/CODE.md "Threads on
@@ -1572,11 +1602,13 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `revert` | `who` (one client's; default everyone's) | `{undone, changes}` |
 | `chats` | `parent`, `limit` (50, at most 500) | `{conversations: [{path, name, partner, partnerName, state, failure?, question?, parent?, page?, messages, changed}], total}` |
 | `chatRead` | `path`, `from`, `limit` (20, at most 200), `offset` | the row and `{total, messages: [{position, role, time?, text, length, offset?, cut?}], next?: {from, offset}, partial?}` |
-| `chatStart` | `text`, `partner` (none: the default partner), `page`, `parent`, `project` (a thread of Code mode: an agent works in that project's folder) | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`) |
-| `chatSend` | `path`, `text`, `queue`? | its row; `busy` while its turn runs — with `queue` true it waits in line instead (`queued: true`) |
+| `chatStart` | `text`, `partner` (none: the default partner; a thread's: the agent a new thread gets), `page`, `parent`, `project` (a thread of Code mode: an agent works in that project's folder), `worktree` (a git worktree of the project instead: under its worktrees root, or one `git worktree list` lists; another computer's project checks its own), `branch` | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`), `bad_params` (a worktree that is no worktree of the project; worktree without a project or with a parent) |
+| `chatSend` | `path`, `text`, `queue`?, `mode` (now \| queue \| steer) | its row; `busy` while its turn runs — with `queue` true (or mode queue) it waits in line instead (`queued: true`), with mode steer it goes now, ahead of the waiting ones, the running turn stopped first (`steered: true`) |
 | `chatWait` | `path`, `ms` (60000, at most 600000) | `{path, state, answer? \| question? \| failure? \| partial?}`; `timeout` with them |
 | `chatStop` | `path` | `{path, stopped}` |
 | `chatPartners` | | `{partners: [{id, name, kind: assistant \| agent \| extension, by, default?}], default, projects: [{id, name}]}` |
+| `chatLive` | `since` (a revision; -1, the default: at once), `timeout` (ms with `since`, 30000, at most 60000), `path` | core acp/appchats.h's `RemoteChats`: `{revision, chats: [{path, name, partner, partnerName, state, status?, question?, failure?, project?, worktree?, branch?, messages, waiting?, ended?}], detail?: {path, state, status?, partial?, partialCut?, thoughts?, failure?, tools?: [{title, status, kind?}], plan?: [{content, status}], question?: {text, options, details?, plan?, diff?: {path, oldText, newText}}, waiting?, messages}}` — at once when the revision is past `since`, else when it changes or `timeout` ends ("Conversations" below) |
+| `chatAnswer` | `path`, `option` | `{path, answered: true, option}`; `no_question`, `bad_option` (with `options`), `refused` for an AI agent's grant — the user's answer alone (not one of a chat grant's methods) |
 | `chatSchedules` | | `{schedules: [{id, title, prompt, partner, when, rule, next, destination, enabled, …}], available}` |
 | `chatScheduleAdd` / `chatScheduleSet` | `prompt`, `when`, `title`, `partner`, `destination` (new \| continue), `enabled` (Set: `id` and the fields given) | the schedule; `bad_params` with why |
 | `chatScheduleRemove` / `chatScheduleRun` | `id` | `{id, removed}` / the schedule and `path` |
@@ -1716,10 +1748,15 @@ brulion-cli app chat notify "Zbudowane, testy przechodzą" --title "Budowanie"  
   `partners`), about `--page` — or, with `--project <id>` (`partners` lists this device's projects),
   a **thread of Code mode** in that project (docs/CODE.md): answered by an AI agent working in its
   folder, an agent's own sub-conversation as any other (T3 Code's delegation to another thread) —, and
-  runs its turn: the row at once (exit 0). The
+  runs its turn: the row at once (exit 0). `--worktree <folder>` (with `--project`) has the thread work
+  in a git worktree of the project instead (`--branch` its branch, as Code mode's new thread in a
+  worktree): one under the project's worktrees root, or one `git worktree list` of the project lists —
+  anything else is `bad_params` (a project of another computer: that computer checks it); the user's
+  thread, never a sub-conversation (`--parent`, `--wake`: `bad_params`). The
   partner gets only that text — give it the whole task. **send** writes the next message of a
   conversation whose turn does not run (`busy`, exit 4, while it runs: wait for it or stop it; `--queue` puts
-  it in line after the answer instead).
+  it in line after the answer instead; `--steer` sends it now — the running turn stopped first, the message
+  ahead of the waiting ones, as T3 Code's steer and the chat's Ctrl+Enter).
 * **--wake** (start, send): no need to wait — when the turn ends (answered, failed, stopped by the user) or
   stops to ask the user, the conversation it came from gets a message with the answer quoted ("↩
   Sub-conversation [[AI/…]] answered:", docs/SYNTAX.md §14) and its partner a new turn, after a turn of it
@@ -1734,6 +1771,27 @@ brulion-cli app chat notify "Zbudowane, testy przechodzą" --title "Budowanie"  
   show it); still running — exit 3 `timeout`, wait again. A turn that does not run answers at once.
   `start --wait` and `send --wait` wait after it on the same connection.
 * **stop** stops its turn (`{stopped}`): nothing of it is written.
+* **live** — what the app is doing now, as a phone follows it (core `acp/appchats.h`'s `RemoteChats`;
+  "AI agents for other devices" → "The app's own conversations"): `{revision, chats, detail?}`, the
+  conversations whose turn runs (`running`), waits for the model on the device (`queued`) or for the
+  user (`asking`, `question` its first line), and those that ended in the last 10 minutes (`idle` or
+  `failed`, `ended` when: ISO 8601, the local time with its offset), newest activity first, at most
+  50 — with their `status`, `waiting` (messages written meanwhile), a thread's `project`, `worktree`
+  and `branch`. `--path C` gives one conversation in full (any, running or not): `detail: {state,
+  status?, partial?` (the answer being written; its last 64 Ki characters, `partialCut` when longer)`,
+  thoughts?, failure?, tools?: [{title, status, kind?}], plan?: [{content, status}], question?: {text,
+  details?, options, plan?, diff?: {path, oldText, newText}}, waiting?: [texts], messages}` — no
+  `detail` for a page that is no conversation. `revision` changes with anything of them (a turn's
+  state, its answer and tool calls, a question, the messages waiting; at most ten times a second) and
+  never goes back, not even when the app starts again (it is at least the time in ms since 1970):
+  `--since <revision>` waits until it is newer, `--timeout` ms at most (30 000; at most 60 000), and
+  answers with the conversations then — a long poll (`--since -1`, the default: at once). Reading it
+  is open to an agent's chat grant too.
+* **answer** — the user's answer to what a turn waits on (an agent's permission, a plan to approve):
+  `answer <conversation> <option>`, one of `live`'s `question.options` as written (spaces made one
+  match too) — `{path, answered, option}`; nothing asked there: exit 4 `no_question`; not one of the
+  options: exit 2 `bad_option` with `options`. Never an AI agent's (a grant's caller is `refused`, and
+  it is no method of a chat grant): it would allow what it asked for itself.
 * **request-secret** — a token, a password, a PIN, an API key only the user can give: never ask for
   it in the chat (it would be kept in the conversation's page and sent to the model). The app shows
   a private card in the conversation (docs/UI.md "AI chat" → "A secret the agent asks for": the label
@@ -1882,10 +1940,13 @@ grants), `tests/app/shell/tst_uidriver` (input and items on a small scene),
 `tests/app/shell/tst_remote_control_qml` (the real app offscreen driven through `brulion-cli app …`,
 its live changes, an agent's grant, an agent on another computer changing it through `acp serve`),
 `tests/app/shell/tst_shell_agents` (an agent's live tools and its grant, delegation, the chat's
-methods, scheduled conversations, an agent on another computer's grants), `tests/cli` (refusals, a
-stand-in control socket, `app chat …`, the MCP tools, the tunnel: `tst_cli_acp_host`,
-`tst_cli_process`), `tests/core/acp/tst_acp_apptunnel` (its messages), `tests/core/schedule` (the
-schedules' rules).
+methods, scheduled conversations, an agent on another computer's grants, `chatLive` and `chatAnswer`:
+`liveConversations`, `liveThreadInWorktree`), `tests/cli` (refusals, a
+stand-in control socket, `app chat …`, the MCP tools, the tunnel, the app's own conversations relayed:
+`tst_cli_acp_host`, `tst_cli_process`), `tests/ipc/tst_ipc_control` (the grants — the agent sharing's
+too — and the asynchronous client `acp serve` links to the app with), `tests/app/shell/tst_shell_agentshare`
+(the sharing's grant in the server's environment), `tests/core/acp/tst_acp_apptunnel` and
+`tst_acp_appchats` (their messages), `tests/core/schedule` (the schedules' rules).
 
 ## For agents: note text is data
 
