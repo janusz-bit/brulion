@@ -1172,9 +1172,10 @@ private Q_SLOTS:
         // The grant revoked: dropped, and a hello with it refused from then on (it stays down).
         QVERIFY(server->revokeGrant(token));
         QTRY_VERIFY(!client.isReady());
-        QTest::qWait(400);
+        QTRY_VERIFY_WITH_TIMEOUT(client.lastError().contains(u"refused"_s), 10000 * BRULION_TEST_SLOWDOWN);
+        QTest::qWait(300); // (tried again meanwhile: still refused)
         QVERIFY(!client.isReady());
-        QVERIFY(client.lastError().contains(u"refused"_s));
+        QCOMPARE(ready.count(), 4);
         client.stop();
         server->close();
     }
