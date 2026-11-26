@@ -31,9 +31,13 @@ never point an agent at a folder.
   `projekt-zolwia`), `-2`, `-3` … when taken; a folder added again gives its own id. At most 100.
 * `rename()`, `move()`, `remove()` (its folder and threads stay), `setScripts()` / `setScriptsText()`
   (a line each, `name: command`; a line without a short name is a command named after itself; at most 12).
-* `worktreesRoot` (default `~/.brulion/worktrees`) and `editorCommand` ("Open in editor": the command
-  split as a shell would — `splitCommand()` — with the folder as its last argument, started detached; empty:
-  the system's handler of folders).
+* `worktreesRoot` (default `~/.brulion/worktrees`; Windows `%USERPROFILE%\.brulion\worktrees`) and
+  `editorCommand` ("Open in editor": the command split as a shell would — `splitCommand()`; on Windows by
+  Windows' rules, `splitWindowsCommand()`, a path's backslashes kept — with the folder as its last
+  argument, started detached; an editor that is a batch file, VS Code's and Cursor's `code.cmd`, through
+  `cmd.exe /d /v:off /s /c` with every argument quoted — `batchCommandLine()`, which refuses a quote, `%`
+  or a line break; empty: the system's handler of folders, Explorer on Windows). On Windows a folder
+  added in another case is the same project.
 * `worktreeFor(id, title)`: `{folder: <worktreesRoot>/<id>/<slug of title>, branch: brulion/<slug>}`, a
   free folder; `createWorktree(id, title)` runs `git -C <project> worktree add -b <branch> <folder> HEAD`
   (no shell, `GIT_TERMINAL_PROMPT=0`) without waiting and signals `worktreeCreated(project, folder,
@@ -111,12 +115,14 @@ The Terminal panel (`TerminalPanel`, `TerminalSession`, `TerminalView`: `src/app
 project's scripts in tabs, in the thread's folder (CodeView makes the panel for the thread's folder
 when it is first shown, and again for another thread's folder), a real pseudo-terminal and an xterm
 emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8 links opened by
-Ctrl+click, OSC 52 ignored). POSIX desktops; Windows, Android and the browser say there is no
-terminal (ConPTY: not yet).
+Ctrl+click, OSC 52 ignored). POSIX desktops and Windows 10 1809+ (ConPTY: PowerShell 7, Windows
+PowerShell or cmd.exe); Android and the browser say there is no terminal.
 
 ## What is not there yet
 
-* Windows: the terminal (ConPTY); everything else of Code mode is untried there.
+* Windows: Code mode's tests run there (CI: the terminal on ConPTY, git and gh with Windows paths,
+  the Changes panel), not yet a session by hand with a real agent; a worktree of a repository whose
+  paths pass 260 characters needs git's `core.longpaths`.
 * Staging or discarding single files or hunks, stash, merge conflicts, pull requests from forks or to
   another base in the UI (docs/CODE-GIT.md).
 * A thread's terminals kept while another thread is shown (they end when the folder changes).

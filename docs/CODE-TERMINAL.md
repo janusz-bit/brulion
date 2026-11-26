@@ -6,8 +6,10 @@ model in core, a pseudo-terminal per platform, and a Qt Quick view that paints o
 
 ```
 src/core/term/        brulion::term — GUI-free (QtCore): Parser, Screen, Terminal, keys, widths
-src/platform/pty.h    brulion::platform::Pty — pty_posix.cpp (Linux, macOS, BSDs) / pty_none.cpp
-src/app/terminal/     brulion::terminal — TerminalSession, TerminalSessionModel, TerminalView
+src/platform/pty.h    brulion::platform::Pty — pty_posix.cpp (Linux, macOS, BSDs) / pty_conpty.cpp
+                      (Windows) / pty_none.cpp
+src/app/terminal/     brulion::terminal — TerminalSession, TerminalSessionModel, TerminalView,
+                      shellLaunch() (Windows' shells)
 src/app/qml/terminal/ TerminalPanel.qml (tabs, the view, "Process exited"), TerminalTab.qml
 ```
 
@@ -114,8 +116,11 @@ QtCore types, so this stays GUI-free.
 
 `platform::Pty` (QObject): `available()`, `defaultEnvironment()`, `userShell()`,
 `start(program, arguments, workingDirectory, environment, columns, rows, &error)`, `write()`,
-`resize()` (TIOCSWINSZ → SIGWINCH), `terminate(graceMs)`, `isRunning()`, `processId()`; signals
-`dataReceived(QByteArray)`, `finished(exitCode, crashed)`.
+`resize()` (TIOCSWINSZ → SIGWINCH; ResizePseudoConsole), `terminate(graceMs)`, `isRunning()`,
+`processId()`, `setNativeArguments()` (Windows: text after the quoted arguments, as it is — cmd.exe's
+`/c`); signals `dataReceived(QByteArray)`, `finished(exitCode, crashed)`.
+
+### POSIX
 
 * `pty_posix.cpp` (Linux, macOS, the BSDs): `posix_openpt()` / `grantpt()` / `unlockpt()` /
   `ptsname_r()` (no libutil, nothing to link). The termios gets IUTF8 (the line editor erases whole
@@ -137,10 +142,64 @@ QtCore types, so this stays GUI-free.
 * `terminate()`: SIGHUP and SIGCONT to the child's process group and to the terminal's foreground
   process group (a job the shell runs), SIGKILL after the grace period (3 s) if it is still there.
   The destructor does the same with a 200 ms grace and waits for the child.
-* `pty_none.cpp` (Windows, Android, the browser): `available()` is false, `start()` fails with
-  "There is no terminal on this device". A Windows backend would replace it with ConPTY
-  (`CreatePseudoConsole`, overlapped pipes, `ResizePseudoConsole`, a job object for terminate)
-  behind the same class; `src/platform/CMakeLists.txt` chooses the file.
+* `pty_none.cpp` (Android, the browser): `available()` is false, `start()` fails with "There is
+  no terminal on this device". `src/platform/CMakeLists.txt` chooses the file.
+
+### Windows: ConPTY (`pty_conpty.cpp`)
+
+```
+app ──input pipe──▶ conhost (the pseudo console) ◀──console API── the program and its children
+app ◀─output pipe── conhost: the screen rendered as UTF-8 VT
+```
+
+* `CreatePseudoConsole`, `ResizePseudoConsole` and `ClosePseudoConsole` are looked up in kernel32
+  at run time: Windows 10 1809 and later have them; on older Windows the app starts and
+  `available()` is false ("it needs Windows 10 version 1809 or later"). Nothing extra is linked.
+* The program: found by its full path (`PATH` searched with `.exe` / `.com`, never the current
+  folder, which CreateProcess's own search would try); a `.bat` / `.cmd` is refused ("runs through
+  cmd.exe /c" — CreateProcess would hand it to cmd.exe with arguments cmd.exe reads by rules of its
+  own). The command line: each argument quoted by the rules `CommandLineToArgvW` and the C runtime
+  read back (quotes when it holds white space or a quote, backslashes doubled before a quote and the
+  closing one), then `nativeArguments()` as it is; at most 32 766 characters.
+* `CreateProcessW` with `EXTENDED_STARTUPINFO_PRESENT`, `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`,
+  `CREATE_UNICODE_ENVIRONMENT` and suspended until it is in its job; `bInheritHandles` false and
+  `STARTF_USESTDHANDLES` with no handles — the program's standard handles are the console's even
+  when the app's are redirected (ctest, a service), and no handle of the app's reaches it. The
+  console's first title is the program's name (`pwsh`), as Windows Terminal starts one with its
+  profile's name.
+* The environment block: `environment` with one entry a name (names in any case; the last entry
+  wins), `COLORTERM=truecolor`, without `TERM` (the console is ConPTY's, as in Windows Terminal:
+  native programs use the console API, Cygwin / MSYS programs set their own), `COLUMNS`, `LINES`,
+  `TERMCAP`, `WT_SESSION`, `WT_PROFILE_ID`; sorted by name as CreateProcess wants it. The working
+  folder as on POSIX (missing: the home folder).
+* A job object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, `JOB_OBJECT_LIMIT_BREAKAWAY_OK`): every process
+  the program starts is in it, and a crash of the app ends them all.
+* Output: a reader thread (anonymous pipes have no overlapped I/O) reads 64 KB at a time into a
+  buffer the GUI thread takes through queued calls, 256 KB a delivery; the reader waits while 4 MB
+  are not taken, so a flood waits in ConPTY's pipe, not in memory. Input: a writer thread writes the
+  queue (at most 16 MB), so `WriteFile` blocking while conhost is busy never stops the GUI thread —
+  nor deadlocks with a program that writes while it is being written to.
+* The end, in the order Microsoft documents: the process handle signals (`QWinEventNotifier`) →
+  `ClosePseudoConsole` on a thread of its own (it waits for conhost, which can block until its last
+  frame is read) while the reader keeps draining → conhost exits, the output pipe breaks → the rest
+  of the output, then `finished()`. Programs the shell left on the console get `CTRL_CLOSE_EVENT`;
+  ones without a console (an editor, a browser started from the shell) stay — the job no longer
+  ends them, as a program started from a terminal on Linux outlives it. A console that does not
+  close within 10 s is given up (the rest of its output too).
+* `terminate(graceMs)`: the console closed at once (`CTRL_CLOSE_EVENT`: cmd, PowerShell, node end at
+  once), the job — the whole tree, also what has no console — ended after the grace period
+  (`TerminateJobObject`, exit code `0xC000013A`). The destructor does the same with 200 ms and
+  waits for the program up to 2 s more.
+* Exit codes are the process's own; an NTSTATUS (`0xC0000005` an access violation, `0xC000013A` the
+  console's close) is negative and `crashed`, as QProcess has it.
+* ConPTY answers the console API's queries itself and asks the terminal few: without
+  `PSEUDOCONSOLE_INHERIT_CURSOR` it never waits for a cursor position report (the emulator answers
+  DSR 6 anyway, and the session writes every reply back); it may ask for focus events (`?1004h`,
+  supported) and for win32-input-mode (`?9001h`), which the emulator ignores — keys stay VT
+  sequences, which ConPTY reads too. Brulion never asks for win32-input-mode.
+* `userShell()`: `$SHELL` when it names an existing `.exe` by its full path (Git Bash:
+  `C:\Program Files\Git\bin\bash.exe`; MSYS's own `/usr/bin/bash` is not one), else PowerShell 7
+  (`pwsh.exe` on `PATH`), else Windows PowerShell, else `%ComSpec%` (cmd.exe).
 
 ## The session, the view, the panel (`src/app/terminal`, `qml/terminal`)
 
@@ -162,6 +221,18 @@ builds a shell string of its own). The child gets the app's environment with `TE
 `COLORTERM=truecolor`, `PWD` = the folder, a UTF-8 `LC_CTYPE` when it names no locale at all;
 `COLUMNS`, `LINES`, `TERMCAP` and the AppImage runtime's own `APPIMAGE`, `APPDIR`, `ARGV0`, `OWD` are
 removed. A folder that does not exist: the home folder.
+
+Windows (`shelllaunch.h`, pure and tested on every platform): the shell is `Pty::userShell()`, each
+kind taking a command its own way —
+
+| Shell | By itself | A command (a project's script) |
+|---|---|---|
+| PowerShell (`pwsh`, `powershell`) | `-NoLogo` | `-NoLogo -EncodedCommand <base64 of UTF-16LE>`: the command, then a line `exit $(if ($?) { 0 } elseif ($LASTEXITCODE) { $LASTEXITCODE } else { 1 })` — no quoting between the user's text and PowerShell's parser, and a native program's own exit code (`-Command` alone makes every failure a 1); the profile loads (fnm, nvm set `PATH` there), as `-l` on POSIX |
+| cmd.exe | nothing | `/d /s /c "<command>"` as native arguments: `/s` takes the line between the outer quotes as it is, so quotes, `&` and `\|` are cmd's, as if typed; `/d` skips AutoRun |
+| anything else (Git Bash) | `-i -l` (Git Bash's own start) | `-lc <command>`, as on Linux |
+
+Exit codes are the process's own (no 128 + signal), and a tab's `label` comes before the console's
+title — every console has one, and cmd.exe adds the command it runs to it.
 
 ### TerminalSessionModel
 
@@ -249,11 +320,16 @@ objectNames: `terminalPanel`, `terminalTabs`, `terminalTab_<n>`, `terminalTabTit
   characters but TAB and line breaks. Without bracketed paste, a pasted line break is Enter, as in
   every terminal.
 * No shell strings: the program is execve()d with an argument vector; a command line reaches only
-  the user's own shell (`-lc`), which is what the user asked to run.
+  the user's own shell (`-lc`), which is what the user asked to run. Windows: the arguments are
+  quoted by the rules the program reads them back with, the program is named by its full path (no
+  search of the current folder), batch files are refused (cmd.exe would read their arguments by
+  its own rules), and a command reaches PowerShell base64-encoded and cmd.exe between `/s /c`'s
+  quotes — as the user typed it, never parsed or built by Brulion.
 * The child inherits no descriptor of the app (the vault's files, sockets, the remote control's
   socket) — tested —, default signal dispositions, an empty signal mask, a session of its own. It
   does inherit the app's environment (minus the AppImage's own variables), as programs started from
-  any terminal do.
+  any terminal do. Windows: no handle is inherited (tested with an inheritable one), and the program
+  with everything it starts is in a job object that ends with the app.
 * Replies to queries are fixed strings or the cursor position and size; nothing the program sends is
   echoed back to it.
 * Bounded memory under hostile output: 32 parameters, 4 KB OSC strings, 32-unit clusters, 4096
@@ -277,7 +353,10 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
 
 ## Not done yet
 
-* Windows: a ConPTY backend (`pty_conpty.cpp`) behind `platform::Pty`.
+* Windows: a terminal before Windows 10 1809 (no ConPTY: the panel says so); the scrollback holds
+  what ConPTY scrolls off its screen — a resize makes ConPTY paint its screen again rather than
+  reflow; programs started from a terminal (a GUI one too) end with it when its tab is closed while
+  the shell runs (the job), unless they break away from jobs.
 * Reflow of wrapped lines on resize (lines are cut / padded; `Line::wrapped` is already kept).
 * Grapheme clustering of emoji ZWJ sequences, flags and skin tones (widths follow wcwidth()).
 * Searching the scrollback, a scroll bar, links underlined on hover, a context menu, a bell
@@ -296,10 +375,22 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
 * `tests/platform/tst_pty`: output, `stty size` before and after a resize, input through `cat`,
   the working directory, the environment, no inherited descriptors, exit codes and signals,
   programs that cannot start, terminate with a background job and with SIGHUP ignored, deletion
-  while running, a 1 MB paste — every child reaped.
+  while running, a 1 MB paste — every child reaped. Windows (ConPTY): the same through `pty_probe`
+  (`tests/platform/pty_probe.cpp`, a console program that reports what it sees through the wide
+  console API) and cmd.exe, the output read through the emulator as the screen ConPTY paints —
+  Polish text both ways, the command line's quoting (spaces, quotes, trailing backslashes, `%`, `&`),
+  cmd.exe's native arguments, the environment block, no inherited handle, a crash's NTSTATUS,
+  terminate() of a child on the console and of one without a console, a program that holds the
+  console's close up, a child without a console left running when the program ends by itself,
+  deletion while running, a 200 KB paste and a flood of output.
+* `tests/app/terminal/tst_terminal_shell`: `shellLaunch()` — shells by name, PowerShell's
+  `-EncodedCommand` (Microsoft's example, Polish, characters beyond the BMP) and its exit line,
+  cmd.exe's `/d /s /c`, `-lc` and `-i -l`.
 * `tests/app/terminal/tst_terminal`: TerminalSession end to end (cat, the shell in its folder,
   sizes, titles, OSC 7, stop and restart, exit codes), the model, TerminalView in a window (keys,
   Ctrl+C, copy, the input method, selection by drag / double / triple click, wrapped lines, the
   scrollback with keys and wheel, mouse reporting, painting at 0×0, 1×1 and other odd sizes, colours
-  in both palettes, layout, a `yes` flood's paint count).
+  in both palettes, layout, a `yes` flood's paint count). Windows: the user's shell (PowerShell or
+  cmd.exe) in its folder, commands through it with their exit codes (a native program's, a missing
+  command's), a tab's label over the console's title, stop and restart.
 * `tst_qml_compiled`: the panel's QML is compiled to C++ in full.

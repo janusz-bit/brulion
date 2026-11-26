@@ -8,8 +8,9 @@ done in the repository simply disappears from the list.
 * **Code mode: what is still missing** — projects, AI agents' threads in a project's folder or a
   worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
   and the terminal are there (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
-  real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
-  mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
+  real project (the fake ACP agent and real git so far); Code mode tried by hand on Windows (its
+  tests run there: the ConPTY terminal, git, gh) and on macOS at all; a terminal on Windows before
+  10 1809; a thread's terminals kept while another thread shows;
   staging and discarding single files or hunks, stash, merge conflicts, pull requests from forks or
   to another base in the UI; a worktree removed with its thread; threads continued from the phone
   through `acp serve` (a project's folder on that computer).
