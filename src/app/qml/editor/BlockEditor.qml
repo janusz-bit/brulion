@@ -123,6 +123,11 @@ FocusScope {
     /// reader (the item's rows are no accessible items yet). The list stays, without rows, as the
     /// holder of the keyboard (docs/UI.md "One item per page (Z10 stage C)").
     readonly property bool usesPageItem: EditorInput.pageItem && !autoHeight && !DeviceInfo.screenReader
+    /// The page's rows drawn by Atrament (Settings → Editor, AppSettings.editorAtrament; where
+    /// Atrament is built: DeviceInfo.atrament; docs/ATRAMENT.md M2, step 1: reading): pages only, as
+    /// for the PageItem. The list stays, without rows, as the holder of the keyboard.
+    readonly property bool usesAtrament: DeviceInfo.atrament && AppSettings.editorAtrament && !autoHeight
+                                         && !usesPageItem
     /// The PageItemView while usesPageItem (null else).
     final property PageItemView pageView: pageViewLoader.item as PageItemView
 
@@ -2776,7 +2781,8 @@ FocusScope {
         anchors.topMargin: conflictBanner.y + conflictBanner.height + (conflictBanner.active ? Theme.space2 : 0)
         visible: (!editor.controller || !editor.controller.sourceMode) && !editor.rowsDrawn
         focus: true
-        model: editor.controller && !editor.usesPageItem && !editor.rowsDrawn ? editor.controller.blocks : null
+        model: editor.controller && !editor.usesPageItem && !editor.usesAtrament && !editor.rowsDrawn
+               ? editor.controller.blocks : null
         reuseItems: false
         readonly property int rowCache: editor.autoHeight ? 0 : editor.wholePage ? editor.wholePageCache : 1600
         cacheBuffer: rowCache
@@ -2843,7 +2849,7 @@ FocusScope {
             onHeightChanged: if (!list.userMoved && list.showsTop) list.positionViewAtBeginning()
             Loader {
                 width: parent.width
-                active: editor.header !== null && !editor.usesPageItem
+                active: editor.header !== null && !editor.usesPageItem && !editor.usesAtrament
                 sourceComponent: editor.header
             }
             // The first property of a page that shows none (addProperty()): only the add row.
@@ -2851,7 +2857,7 @@ FocusScope {
                 objectName: "propertyDraft"
                 x: editor.contentX
                 width: editor.contentWidth
-                active: editor.propertyDraft && editor.controller !== null && !editor.usesPageItem
+                active: editor.propertyDraft && editor.controller !== null && !editor.usesPageItem && !editor.usesAtrament
                 visible: active
                 sourceComponent: Rectangle {
                     implicitHeight: draftPanel.implicitHeight + 2 * Theme.space1
@@ -2876,7 +2882,7 @@ FocusScope {
             Loader {
                 x: editor.contentX
                 width: editor.contentWidth
-                active: editor.controller !== null && editor.controller.zoomBlock >= 0 && !editor.usesPageItem
+                active: editor.controller !== null && editor.controller.zoomBlock >= 0 && !editor.usesPageItem && !editor.usesAtrament
                 // An inactive Loader keeps the implicit height of the item it had (Qt 6.11): hidden,
                 // the Column leaves no room for it after zooming out.
                 visible: active
@@ -2892,7 +2898,7 @@ FocusScope {
 
         footer: Item {
             width: list.width
-            height: editor.usesPageItem ? 0 : editor.bottomSpace
+            height: editor.usesPageItem || editor.usesAtrament ? 0 : editor.bottomSpace
             TapHandler {
                 onTapped: {
                     // (Reading mode: a tap under the blocks, often the end of a scroll, does nothing.)
@@ -2974,6 +2980,21 @@ FocusScope {
         active: editor.usesPageItem && editor.controller !== null
         visible: active && !editor.controller.sourceMode
         sourceComponent: PageItemView { editorItem: editor }
+    }
+    // The page's rows drawn by Atrament (usesAtrament): loaded by file name — it exists only where
+    // Atrament is built.
+    Loader {
+        id: atramentLoader
+        anchors.fill: list
+        active: editor.usesAtrament && editor.controller !== null
+        visible: active && !editor.controller.sourceMode
+        source: active ? "EditorAtramentPage.qml" : ""
+    }
+    Binding {
+        target: atramentLoader.item
+        property: "editorItem"
+        value: editor
+        restoreMode: Binding.RestoreNone
     }
 
     // ---- Selecting blocks by dragging -------------------------------------------------------------

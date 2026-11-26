@@ -469,7 +469,8 @@ The targets in M5 are estimates of what the change can reach, not measurements.
 
 The design of M2: the page and journal block editor drawn by Atrament, inside today's QML shell,
 behind a setting, replacing `BlockEditor.qml` one kind of row at a time. This section is the plan
-its code follows (and changes first); built so far: `list()` (below).
+its code follows (and changes first); built so far: `list()` (below) and the first part of step 1
+"Reading" (its entry under "Steps").
 
 ### What stays
 
@@ -572,6 +573,20 @@ scrolling, `tst_atrament_editor`) before the next:
 1. **Reading.** Text rows whose `RenderedText` is `drawable` (paragraphs, list items, headings,
    quotes, callouts, tasks shown) drawn by Atrament; everything else foreign. Links, chips and
    task boxes clickable; touch scrolling and fling; the accessibility tree of the rows.
+   **Built** (2026-11-26): `src/app/editor/atrament/` (library `brulion_editor_atrament`, only
+   where Atrament is): `PageView` over `BlockListModel` (`PageExtents`: the list's `RowExtents` over
+   `PageRows`, folds hidden; the model's inserts, removals and moves told to the `ListHandle`), text,
+   heading and quote rows with drawable text — bullets, numbers, the task box (a checkbox for screen
+   readers), done tasks struck through, a document's and an outline's indents (`PageItem::textX`'s
+   geometry) —, `renderedSpans()` (a `RenderedText`'s runs as `TextSpan`s: bold, italic, strike,
+   code, links, chips, tags, highlights; `cssColor()` reads the renderer's colours). Hosted by
+   `AtramentView { view: "page" }` (qml/editor/EditorAtramentPage.qml) instead of the
+   `ListView`'s rows when Settings → Editor → "Draw the editor with Atrament"
+   (`AppSettings.editorAtrament`, shown where `DeviceInfo.atrament`) is on; tested by
+   `tests/atrament/editor/tst_atrament_editor`. **Not yet**: foreign rows are placeholders of their
+   height (no QML delegate placed over them), callouts are foreign, links / chips / task boxes are
+   not clickable (hit regions in text come first), a tap does not edit a block, the page's title
+   and properties above the blocks are not shown.
 2. **Editing text rows.** The styled input in the edited row: typing, the keymaps, Enter / Backspace
    / Tab through `PageController`, input methods as in M1 (composition is one undo step), the caret
    kept above the keyboard, suggestions, input rules, slash commands.

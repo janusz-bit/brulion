@@ -91,3 +91,8 @@ endif()
 target_link_libraries(brulion_editor PRIVATE brulion_platform)
 qt_extract_metatypes(brulion_editor)
 brulion_set_warnings(brulion_editor)
+
+# The editor drawn by Atrament (PageView; docs/ATRAMENT.md M2), where Atrament is built.
+if(TARGET brulion_atrament_ui)
+    add_subdirectory(atrament)
+endif()

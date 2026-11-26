@@ -8,8 +8,12 @@
 
 #include "qthost.h"
 
+#include <QColor>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QString>
+
+#include <memory>
 
 namespace brulion::atrament {
 class App;
@@ -18,27 +22,69 @@ class App;
 class AtramentView : public brulion::atrament::AtramentItem {
     Q_OBJECT
     QML_ELEMENT
-    // The view to show: "gallery" (the framework's gallery). Set once.
+    // The view to show: "gallery" (the framework's gallery) or "page" (the blocks of `pageModel`
+    // drawn by Atrament: editor/atrament/pageview.h, AppSettings.editorAtrament). Set once.
     Q_PROPERTY(QString view READ view WRITE setView NOTIFY viewChanged FINAL)
+    // "page": the editor's BlockListModel (a PageController's `blocks`), set before the view.
+    Q_PROPERTY(QObject *pageModel READ pageModel WRITE setPageModel NOTIFY pageModelChanged FINAL)
+    // "page": the editor's look (BlockEditor's metrics and Theme colours).
+    Q_PROPERTY(qreal fontSize MEMBER m_fontSize NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal lineHeight MEMBER m_lineHeight NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal indentStep MEMBER m_indentStep NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal gutter MEMBER m_gutter NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal bulletColumn MEMBER m_bulletColumn NOTIFY styleChanged FINAL)
+    Q_PROPERTY(bool documentMode MEMBER m_documentMode NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal listIndent MEMBER m_listIndent NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal contentX MEMBER m_contentX NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal contentWidth MEMBER m_contentWidth NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor textColor MEMBER m_textColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor mutedColor MEMBER m_mutedColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor linkColor MEMBER m_linkColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor guideColor MEMBER m_guideColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor backgroundColor MEMBER m_backgroundColor NOTIFY styleChanged FINAL)
 
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
+    ~AtramentView() override;
 
     QString view() const { return m_view; }
     void setView(const QString &view);
+    QObject *pageModel() const { return m_pageModel.data(); }
+    void setPageModel(QObject *model);
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();
 
 Q_SIGNALS:
     void viewChanged();
+    void pageModelChanged();
+    void styleChanged();
 
 protected:
     void componentComplete() override;
 
 private:
     void attachView();
+    void applyStyle();
 
     QString m_view;
     bool m_attached = false;
+    QPointer<QObject> m_pageModel;
+    // The "page" view's entity (editor/atrament/pageview.h), released after the window closes.
+    struct Page;
+    std::unique_ptr<Page> m_page;
+    qreal m_fontSize = 16;
+    qreal m_lineHeight = 24;
+    qreal m_indentStep = 26;
+    qreal m_gutter = 16;
+    qreal m_bulletColumn = 20;
+    bool m_documentMode = false;
+    qreal m_listIndent = 27;
+    qreal m_contentX = 0;
+    qreal m_contentWidth = 0;
+    QColor m_textColor{0x1f, 0x23, 0x28};
+    QColor m_mutedColor{0x6e, 0x77, 0x81};
+    QColor m_linkColor{0x3b, 0x5b, 0xdb};
+    QColor m_guideColor{0x8c, 0x95, 0x9f, 0x59};
+    QColor m_backgroundColor{Qt::white};
 };

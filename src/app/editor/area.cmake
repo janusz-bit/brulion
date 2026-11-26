@@ -79,6 +79,11 @@ qt_target_qml_sources(brulion
         qml/editor/WritingDialog.qml
         qml/editor/PageItemView.qml
 )
+# The page drawn by Atrament (AppSettings.editorAtrament; docs/ATRAMENT.md M2), where Atrament and
+# its AtramentView are built: BlockEditor loads it by its file name.
+if(TARGET brulion_editor_atrament AND TARGET brulion_atrament_gallery)
+    qt_target_qml_sources(brulion QML_FILES qml/editor/EditorAtramentPage.qml)
+endif()
 # Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads PageScript from its file
 # when `--editor-script` asks for it.
 if(BRULION_DEV_QML_ENABLED)

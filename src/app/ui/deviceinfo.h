@@ -24,6 +24,9 @@ class DeviceInfo : public QObject, public QAccessible::ActivationObserver {
     Q_PROPERTY(bool mobile READ mobile CONSTANT FINAL)
     /// A touch screen was attached at start-up.
     Q_PROPERTY(bool hasTouchScreen READ hasTouchScreen CONSTANT FINAL)
+    /// Atrament, Brulion's own UI framework, is built in (docs/ATRAMENT.md): views it draws can be
+    /// chosen in Settings (AppSettings.editorAtrament).
+    Q_PROPERTY(bool atrament READ atrament CONSTANT FINAL)
     /// The system's general UI font family.
     Q_PROPERTY(QString systemFontFamily READ systemFontFamily CONSTANT FINAL)
     /// The system's fixed-width font family (code, diffs, keyboard hints).
@@ -55,6 +58,7 @@ public:
     QString platform() const;
     bool mobile() const;
     bool hasTouchScreen() const;
+    bool atrament() const;
     QString systemFontFamily() const;
     QString fixedFontFamily() const;
     QString defaultUiFamily() const;

@@ -139,6 +139,15 @@ bool DeviceInfo::hasTouchScreen() const
     return std::ranges::find(devices, QInputDevice::DeviceType::TouchScreen, &QInputDevice::type) != devices.end();
 }
 
+bool DeviceInfo::atrament() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool DeviceInfo::focusPopupShown(QQuickItem *item) const
 {
     QQuickWindow *window = item ? item->window() : nullptr;

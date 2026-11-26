@@ -114,6 +114,7 @@ private Q_SLOTS:
     void rowsInsertedInFront();
     void fingerDrag();
     void accessibility();
+    void textStyleReachesMeasuredRows();
 };
 
 void TestAtramentList::rowHeights()
@@ -440,6 +441,33 @@ void TestAtramentList::accessibility()
     QCOMPARE(tree.child(*listNode, 0)->rowIndex, std::int64_t(0));
     QCOMPARE(tree.child(*listNode, 1)->rowIndex, std::int64_t(2));
     QCOMPARE(tree.child(*listNode, 1)->bounds.top(), 20.0f);
+}
+
+void TestAtramentList::textStyleReachesMeasuredRows()
+{
+    // The list's text size applies to its rows when they are measured (the first frame), not only
+    // when they are painted: 32 px text is taller than 12 px text.
+    struct Sized {
+        RowHeights heights{3, 10};
+        float size = 12;
+        AnyElement render(Window &, Context<Sized> &)
+        {
+            return div().sizeFull().child(
+                    list(u"sized", heights,
+                         [](std::size_t, Window &, App &) -> AnyElement { return div().child(u"Zażółć"); })
+                            .textSize(size)
+                            .hFull());
+        }
+    };
+    Harness small({200, 200});
+    Entity<Sized> a = small.app.newEntity<Sized>();
+    small.open(a);
+    Harness big({200, 200});
+    Entity<Sized> b = big.app.newEntity<Sized>();
+    b.update(big.app, [](Sized &s, Context<Sized> &) { s.size = 32; });
+    big.open(b);
+    QVERIFY2(b.read(big.app).heights.heightOf(0) > a.read(small.app).heights.heightOf(0) * 2,
+             qPrintable(QStringLiteral("%1 vs %2") .arg(a.read(small.app).heights.heightOf(0)).arg(b.read(big.app).heights.heightOf(0))));
 }
 
 QTEST_GUILESS_MAIN(TestAtramentList)

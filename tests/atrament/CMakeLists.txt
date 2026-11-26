@@ -6,3 +6,7 @@ foreach(_area base scene raster text layout ui qt)
         add_subdirectory(${_area})
     endif()
 endforeach()
+# The block editor drawn by Atrament (src/app/editor/atrament): the app's editor library with it.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/editor/CMakeLists.txt AND TARGET brulion_editor_atrament)
+    add_subdirectory(editor)
+endif()

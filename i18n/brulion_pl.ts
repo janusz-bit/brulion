@@ -23629,6 +23629,16 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Eksperymentalne: terminal rysuje na karcie graficznej własny renderer Brulionu zamiast Qt. Klawisze, mysz i zaznaczanie działają jak dotąd.</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Draw the editor with Atrament</source>
+        <translation>Rysuj edytor Atramentem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Experimental: Brulion&apos;s own renderer draws pages instead of Qt. For reading only so far: text is drawn, other blocks are placeholders, and blocks cannot be edited.</source>
+        <translation>Eksperymentalne: strony rysuje własny renderer Brulionu zamiast Qt. Na razie tylko do czytania: tekst jest rysowany, inne bloki to zaślepki, a bloków nie da się edytować.</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2871"/>
         <source>claude.ai and ChatGPT</source>
         <translation>claude.ai i ChatGPT</translation>
@@ -47921,6 +47931,14 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/main.cpp" line="809"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
+    </message>
+</context>
+<context>
+    <name>EditorAtramentPage</name>
+    <message>
+        <location filename="../src/app/qml/editor/EditorAtramentPage.qml" line="1"/>
+        <source>Page</source>
+        <translation>Strona</translation>
     </message>
 </context>
 </TS>

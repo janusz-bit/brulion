@@ -450,6 +450,11 @@ target_link_libraries(brulion PRIVATE brulion_core brulion_platform Qt6::Quick Q
 if(TARGET brulion_atrament_gallery)
     target_link_libraries(brulion PRIVATE brulion_atrament_gallery)
     target_compile_definitions(brulion PRIVATE BRULION_HAS_ATRAMENT)
+    # Pages drawn by Atrament (AtramentView { view: "page" }, AppSettings.editorAtrament).
+    if(TARGET brulion_editor_atrament)
+        target_link_libraries(brulion PRIVATE brulion_editor_atrament)
+        target_compile_definitions(brulion PRIVATE BRULION_HAS_ATRAMENT_EDITOR)
+    endif()
 endif()
 brulion_set_warnings(brulion)
 

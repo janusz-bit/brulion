@@ -257,6 +257,11 @@ void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
         st.anchorInto = 0;
     }
 
+    // The list's text style around its rows from their first layout on: they are measured with it.
+    const bool pushText = !m_style.text.isEmpty();
+    if (pushText)
+        window.pushTextStyle(m_style.text);
+
     auto clampedY = [&] {
         const float maxY = std::max(0.0f, ex.total() - viewport);
         return st.atEnd ? maxY : std::clamp(ex.offsetOf(st.anchorRow) + st.anchorInto, 0.0f, maxY);
@@ -355,9 +360,6 @@ void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
     st.scroll.offset = {0, y};
 
     window.pushContentMask(inner);
-    const bool pushText = !m_style.text.isEmpty();
-    if (pushText)
-        window.pushTextStyle(m_style.text);
     window.pushScrollFrame(st.scroll, inner, false, true, m_hitbox);
     for (std::size_t k = 0; k < m_items.size(); ++k)
         m_items[k].prepaintAt({inner.left(), inner.top() + m_tops[k] - y}, window, app);
@@ -367,9 +369,9 @@ void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
         m_kept.prepaintAt({inner.left(), inner.top() + ex.offsetOf(m_keptIndex) - y}, window, app);
     }
     window.popScrollFrame();
+    window.popContentMask();
     if (pushText)
         window.popTextStyle();
-    window.popContentMask();
 }
 
 void MeasuredList::paint(Rect bounds, Window &window, App &app)
