@@ -21,6 +21,12 @@
 //   their own Tailscale Serve), or an https:// address of their own proxy.
 // * Pairing: newPairing() runs `acp pair` (a code for 10 minutes, once) — the row shows its QR code
 //   and the brulion://pair link; unpairAll() runs `acp revoke --all`; devices() counts them.
+// * The app's own conversations (docs/CLI.md "AI agents for other devices" → "The app's own
+//   conversations"): each process of the server gets a grant of the app's remote control of its own
+//   (setAppGrants(): RemoteControl::shareGrant(), GrantScope::Share) — the control socket in
+//   BRULION_APP_SOCKET and the token in BRULION_APP_SHARE_TOKEN of its environment only (never on its
+//   command line, never in a file), a new one each start (also after a crash), revoked when it ends
+//   —, with which it follows the conversations the app runs and steers them for the phone.
 // * A phone with the same notebook finds the computer by itself: in a tailnet the address and the
 //   agents' names go into the notebook's `.brulion/config.json` (core acp/hostoffer.h; never a
 //   token or a code), and every device lists the offers of the other computers there (offers():
@@ -34,6 +40,7 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -120,6 +127,23 @@ public:
     /// The agents of this device changed (WorkspaceAgents::setAgents()).
     void agentsChanged();
 
+    /// The app's grant for each process of the server (its conversations followed and steered from
+    /// the phone, RemoteControl::shareGrant()): `grant` gives the control socket and a new token
+    /// ({} none: the server runs without), `revoke` ends a token.
+    struct AppGrant {
+        QString socket;
+        QString token;
+    };
+    using GrantFunction = std::function<AppGrant()>;
+    using RevokeFunction = std::function<void(const QString &token)>;
+    void setAppGrants(GrantFunction grant, RevokeFunction revoke);
+    /// The environment variables of that grant (src/cli/acphost.cpp reads them, and takes them out
+    /// of its own environment: its agents never see them).
+    static constexpr auto SocketVariable = "BRULION_APP_SOCKET";
+    static constexpr auto TokenVariable = "BRULION_APP_SHARE_TOKEN";
+    /// The token of the server running now ("" none).
+    QString appToken() const { return m_appToken; }
+
     /// A pairing code for a device (`acp pair`): pairingChanged() with it, or message() why not.
     Q_INVOKABLE void newPairing();
     /// Forgets the code shown.
@@ -187,6 +211,9 @@ private:
     void readOffers();
     void watchVault();
     void onVaultChanged(const QList<brulion::VaultChange> &changes);
+    /// A process starts: the app's grant for it in `env` (the one before revoked).
+    void grantFor(QProcessEnvironment &env);
+    void revokeAppGrant();
 
     Workspace *m_workspace = nullptr;
     WorkspaceAgents *m_agents = nullptr;
@@ -218,6 +245,9 @@ private:
     QVariantList m_offers;
     int m_detecting = 0; ///< a Tailscale lookup on its way (its serial)
     quint16 m_port = DefaultPort;
+    GrantFunction m_grant;
+    RevokeFunction m_revoke;
+    QString m_appToken; ///< the app's grant of the process running now
 };
 
 } // namespace brulion::shell

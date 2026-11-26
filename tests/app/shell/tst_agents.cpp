@@ -50,6 +50,13 @@
 // A thread of another computer's project (the real acp serve --projects): its projects listed here, a
 // thread answered there in the project or a worktree made there, its checkpoint known here and in
 // its page, the turn's changes and a diff from there, a folder that is no worktree refused.
+// The app's conversations followed and steered from the phone (ChatControl's chatLive, chatAnswer):
+// the revision and its long poll (at once, on a change, on time out, dropped when the client left),
+// the rows (running, asking with its question, the messages waiting, ended lately and gone after
+// acp::RecentChatMinutes), one in full (its answer's end cut, tools, plan, question with options, diff
+// and plan, the messages waiting, a conversation that is none); chatAnswer (answered, no_question,
+// bad_option, an agent refused); chatSend's steer and queue; chatStart in a worktree of a project (one
+// under the worktrees root, one git lists, a folder that is none).
 #include "appsettings.h"
 #include "chatcontrol.h"
 #include "chatlineage.h"
@@ -61,6 +68,7 @@
 #include "workspaceagents.h"
 #include "workspacechats.h"
 
+#include "acp/appchats.h"
 #include "chat/chat.h"
 #include "log/redact.h"
 #include "webhook/webhook.h"
@@ -2399,6 +2407,276 @@ private Q_SLOTS:
         // (A change too large to keep: its call without it.)
         QVERIFY(!calls.last().toObject().contains(u"diffPath"_s));
         QCOMPARE(entry.value(u"plan"_s).toArray().at(0).toObject().value(u"content"_s).toString(), u"Napisać testy"_s);
+    }
+
+    /// The app's conversations as the phone follows them (chatLive) and steers them (chatAnswer,
+    /// chatSend's modes, chatStart in a worktree).
+    void liveConversations()
+    {
+        auto ws = open({fake()});
+        QDateTime now(QDate(2026, 11, 20), QTime(9, 15));
+        ws->setClock([&now] { return now; });
+        WorkspaceChats *chats = ws->chats();
+        ChatControl control(ws.get());
+        const auto live = [](const std::shared_ptr<Answer> &a) {
+            std::optional<acp::RemoteChats> out = acp::RemoteChats::fromJson(a->result);
+            if (!out)
+                qWarning() << "no RemoteChats:" << a->result;
+            return out.value_or(acp::RemoteChats{});
+        };
+        const auto rowOf = [](const acp::RemoteChats &c, const QString &path) {
+            for (const acp::RemoteChat &row : c.chats) {
+                if (row.path == path)
+                    return std::optional<acp::RemoteChat>(row);
+            }
+            return std::optional<acp::RemoteChat>();
+        };
+        // Nothing runs: no conversation, a revision (never below the time: it never goes back).
+        auto a = ask(control, u"chatLive"_s, {});
+        QVERIFY2(a->done && a->ok, qPrintable(a->message));
+        QVERIFY(live(a).chats.isEmpty());
+        QVERIFY(!live(a).detail);
+        const qint64 first = live(a).revision;
+        QVERIFY(first >= QDateTime::currentMSecsSinceEpoch() - 600000);
+        QCOMPARE(control.revision(), first);
+        // A long poll waits for a newer revision; timeout 0 or since -1 answers at once; one past
+        // the revision waits for its time.
+        QVERIFY(ask(control, u"chatLive"_s, {{u"since"_s, double(first)}, {u"timeout"_s, 0}})->done);
+        QVERIFY(ask(control, u"chatLive"_s, {{u"since"_s, -1}, {u"timeout"_s, 30000}})->done);
+        QVERIFY(ask(control, u"chatLive"_s, {{u"since"_s, double(first - 1)}})->done);
+        auto timed = ask(control, u"chatLive"_s, {{u"since"_s, double(first)}, {u"timeout"_s, 300}});
+        QVERIFY(!timed->done);
+        QTRY_VERIFY_WITH_TIMEOUT(timed->done, 5000);
+        QVERIFY(timed->ok);
+        QVERIFY(live(timed).revision >= first);
+        // (A wait whose client left is dropped: never answered.)
+        bool connected = true;
+        auto left = std::make_shared<Answer>();
+        ChatControl::Reply leftReply;
+        leftReply.ok = [left](const QJsonObject &) { left->done = true; };
+        leftReply.fail = [left](const QString &, const QString &, const QJsonObject &) { left->done = true; };
+        leftReply.connected = [&connected] { return connected; };
+        control.handle(u"chatLive"_s, {{u"since"_s, double(first)}, {u"timeout"_s, 60000}}, {}, leftReply);
+        connected = false;
+        auto poll = ask(control, u"chatLive"_s, {{u"since"_s, double(first)}, {u"timeout"_s, 30000}});
+        QVERIFY(!poll->done);
+
+        // A turn starts: the poll is answered with it, newer.
+        const QString path = chats->send(QString(), u"Teraz pokaż, co robisz"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(poll->done, 20000);
+        QVERIFY(poll->ok);
+        QVERIFY(live(poll).revision > first);
+        QTest::qWait(1500); // (the dropped wait's client check ran)
+        QVERIFY(!left->done);
+        // Its plan and tool calls, in full with `path`.
+        acp::RemoteChats seen;
+        QTRY_VERIFY_WITH_TIMEOUT((seen = live(ask(control, u"chatLive"_s, {{u"path"_s, path}}))).detail
+                                         && seen.detail->tools.size() >= 3,
+                                 20000);
+        const acp::RemoteChatDetail &d = *seen.detail;
+        QCOMPARE(d.path, path);
+        QCOMPARE(d.state, u"running"_s);
+        QCOMPARE(d.messages, 1);
+        QCOMPARE(d.tools.at(0), (acp::RemoteChatTool{u"Read Dom.md"_s, u"completed"_s, u"read"_s}));
+        QCOMPARE(d.tools.at(1).title, u"Edit Dom.md"_s);
+        QCOMPARE(d.tools.at(2).kind, u"execute"_s);
+        QCOMPARE(d.plan.size(), 3);
+        QCOMPARE(d.plan.at(1), (acp::RemoteChatStep{u"Policzyć zadania na ten tydzień"_s, u"in_progress"_s}));
+        QVERIFY(d.partial.contains(u"Sprawdzam notatki"_s));
+        QVERIFY(!d.partialCut);
+        QVERIFY(d.question.isEmpty());
+        std::optional<acp::RemoteChat> row = rowOf(seen, path);
+        QVERIFY(row);
+        QCOMPARE(row->state, u"running"_s);
+        QCOMPARE(row->partner, u"acp:fake"_s);
+        QCOMPARE(row->partnerName, u"Fałszywy"_s);
+        QCOMPARE(row->name, u"Teraz pokaż, co robisz"_s);
+        QCOMPARE(row->messages, 1);
+        QVERIFY(row->ended.isEmpty());
+        // A message written meanwhile waits: counted in its row, its text in full.
+        QVERIFY(chats->queue(path, u"Po pierwsze: zażółć"_s));
+        QTRY_VERIFY(rowOf(live(ask(control, u"chatLive"_s, {})), path).value_or(acp::RemoteChat{}).waiting == 1);
+        seen = live(ask(control, u"chatLive"_s, {{u"path"_s, path}}));
+        QCOMPARE(seen.detail->waiting, QStringList{u"Po pierwsze: zażółć"_s});
+        // Sent while it runs: refused, in line (mode or the old flag) — or now, steered in.
+        a = ask(control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Nie teraz"_s}, {u"mode"_s, u"now"_s}});
+        QCOMPARE(a->code, u"busy"_s);
+        a = ask(control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Po drugie: gęślą"_s}, {u"mode"_s, u"queue"_s}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QVERIFY(a->result.value(u"queued"_s).toBool());
+        QCOMPARE(chats->queued(path).size(), 2);
+        a = ask(control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Skręć: jaźń"_s}, {u"mode"_s, u"steer"_s}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QVERIFY(a->result.value(u"steered"_s).toBool());
+        // (The steered one first, the waiting ones after it.)
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path) && chats->queued(path).isEmpty(), 30000);
+        const QString page = ws->read(path);
+        const qsizetype steered = page.indexOf(u"- 🤖 Odpowiedź na: Skręć: jaźń"_s);
+        const qsizetype queuedFirst = page.indexOf(u"- 🤖 Odpowiedź na: Po pierwsze: zażółć"_s);
+        QVERIFY2(steered > 0 && queuedFirst > steered && page.contains(u"- 🤖 Odpowiedź na: Po drugie: gęślą"_s),
+                 qPrintable(page));
+        // Ended: listed a while yet (idle, when), then gone.
+        QTRY_VERIFY((row = rowOf(live(ask(control, u"chatLive"_s, {})), path)) && row->state == u"idle");
+        const QDateTime ended = QDateTime::fromString(row->ended, Qt::ISODate);
+        QVERIFY2(ended.isValid(), qPrintable(row->ended));
+        QCOMPARE(ended.toLocalTime(), now);
+        QVERIFY2(row->ended.startsWith(u"2026-11-20T09:15:00"_s), qPrintable(row->ended));
+        const int messages = int(chat::parse(ws->read(path)).messages.size());
+        QCOMPARE(messages, 7); // (the first, then the steered one and the two waiting, each answered)
+        QCOMPARE(row->messages, messages);
+        now = now.addSecs(60LL * acp::RecentChatMinutes - 30);
+        QVERIFY(rowOf(live(ask(control, u"chatLive"_s, {})), path));
+        const qint64 before = control.revision();
+        now = now.addSecs(60);
+        a = ask(control, u"chatLive"_s, {});
+        QVERIFY(!rowOf(live(a), path));
+        QTRY_VERIFY(control.revision() > before); // (its going is a change too)
+        // … but read in full by its path any time; a page that is no conversation has no detail.
+        seen = live(ask(control, u"chatLive"_s, {{u"path"_s, path}}));
+        QCOMPARE(seen.detail->state, u"idle"_s);
+        QCOMPARE(seen.detail->messages, messages);
+        QVERIFY(seen.detail->tools.isEmpty());
+        QVERIFY(!live(ask(control, u"chatLive"_s, {{u"path"_s, u"Dom.md"_s}})).detail);
+        QVERIFY(!live(ask(control, u"chatLive"_s, {{u"path"_s, u"AI/Nie ma.md"_s}})).detail);
+
+        // A question: in its row, in full with its options and diff; answered from here.
+        const QString asking = chats->send(QString(), u"Daj mi pozwolenie"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->asking(asking), 20000);
+        QTRY_VERIFY((seen = live(ask(control, u"chatLive"_s, {{u"path"_s, asking}}))).detail
+                    && !seen.detail->question.isEmpty());
+        QCOMPARE(seen.detail->state, u"asking"_s);
+        QCOMPARE(seen.detail->question.text, u"Fałszywy asks: Write Zgoda.md"_s);
+        QCOMPARE(seen.detail->question.details, u"Zgoda.md\n- zgoda"_s);
+        QCOMPARE(seen.detail->question.options, (QStringList{u"Allow"_s, u"Reject"_s}));
+        QCOMPARE(seen.detail->question.file, u"Zgoda.md"_s);
+        QCOMPARE(seen.detail->question.oldText, u"- nic\n"_s);
+        QCOMPARE(seen.detail->question.newText, u"- zgoda"_s);
+        row = rowOf(seen, asking);
+        QVERIFY(row);
+        QCOMPARE(row->state, u"asking"_s);
+        QCOMPARE(row->question, u"Fałszywy asks: Write Zgoda.md"_s);
+        // Not an option, an agent's answer: refused; the user's: answered; then nothing is asked.
+        a = ask(control, u"chatAnswer"_s, {{u"path"_s, asking}, {u"option"_s, u"Może później"_s}});
+        QCOMPARE(a->code, u"bad_option"_s);
+        QCOMPARE(a->details.value(u"options"_s).toArray(), (QJsonArray{u"Allow"_s, u"Reject"_s}));
+        a = ask(control, u"chatAnswer"_s, {{u"path"_s, asking}, {u"option"_s, u"Allow"_s}},
+                ChatControl::Caller{true, asking, u"Fałszywy"_s});
+        QCOMPARE(a->code, u"refused"_s);
+        QVERIFY(chats->asking(asking));
+        a = ask(control, u"chatAnswer"_s, {{u"path"_s, u"Nie ma takiej"_s}, {u"option"_s, u"Allow"_s}});
+        QCOMPARE(a->code, u"not_found"_s);
+        a = ask(control, u"chatAnswer"_s, {{u"path"_s, asking}, {u"option"_s, u" Allow "_s}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QVERIFY(a->result.value(u"answered"_s).toBool());
+        QCOMPARE(a->result.value(u"option"_s).toString(), u"Allow"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(asking), 20000);
+        QVERIFY(ws->read(asking).contains(u"- 🤖 Zapisano."_s));
+        a = ask(control, u"chatAnswer"_s, {{u"path"_s, asking}, {u"option"_s, u"Allow"_s}});
+        QCOMPARE(a->code, u"no_question"_s);
+        // A plan to approve: the question's plan.
+        QCOMPARE(chats->send(asking, u"Proszę zatwierdź"_s), asking);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->asking(asking), 20000);
+        QTRY_VERIFY((seen = live(ask(control, u"chatLive"_s, {{u"path"_s, asking}}))).detail
+                    && !seen.detail->question.isEmpty());
+        QCOMPARE(seen.detail->question.plan, u"# Porządki\n\n1. Połączyć notatki\n2. Usunąć duplikaty"_s);
+        QVERIFY(seen.detail->question.file.isEmpty());
+        QVERIFY2(ask(control, u"chatAnswer"_s, {{u"path"_s, asking}, {u"option"_s, u"Yes"_s}})->ok, "the plan approved");
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(asking), 20000);
+
+        // An answer longer than a device is given: its end, cut.
+        const QString longer = chats->send(QString(), u"Odpowiadaj długo"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT((seen = live(ask(control, u"chatLive"_s, {{u"path"_s, longer}}))).detail
+                                         && seen.detail->partialCut,
+                                 20000);
+        QCOMPARE(seen.detail->partial.size(), acp::MaxLiveTextChars);
+        QVERIFY(seen.detail->partial.endsWith(u"żżż"_s));
+        QVERIFY(!seen.detail->partial.contains(u"Długo"_s));
+        // The newest activity first.
+        QCOMPARE(seen.chats.first().path, longer);
+        a = ask(control, u"chatStop"_s, {{u"path"_s, longer}});
+        QVERIFY(a->ok);
+        QVERIFY(a->result.value(u"stopped"_s).toBool());
+    }
+
+    /// chatStart of a thread in a worktree of its project: one under the worktrees root, one `git
+    /// worktree list` lists (answered once git has listed it), a folder that is none refused; the
+    /// project's own folder is no worktree; worktree without a project, or with a parent, refused.
+    void liveThreadInWorktree()
+    {
+        if (!toolsThere())
+            QSKIP("no brulion-cli to name");
+        if (QStandardPaths::findExecutable(u"git"_s).isEmpty())
+            QSKIP("no git");
+        auto ws = open({fake(true)});
+        WorkspaceChats *chats = ws->chats();
+        shell::CodeProjects *projects = ws->projects();
+        QByteArray kept;
+        projects->setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
+        projects->setWorktreesRoot(m_tmp.filePath(u"drzewa-%1"_s.arg(m_n)));
+        const QString folder = m_tmp.filePath(u"Projekt gęsi %1"_s.arg(m_n));
+        QVERIFY(writeRaw(folder + u"/Dom.md"_s, "# README gęsi\n"));
+        const auto git = [](const QString &in, const QStringList &args) {
+            return QProcess::execute(u"git"_s, QStringList{u"-C"_s, in, u"-c"_s, u"user.name=Ala"_s, u"-c"_s,
+                                                           u"user.email=a@b.c"_s, u"-c"_s, u"commit.gpgsign=false"_s}
+                                                       + args);
+        };
+        QCOMPARE(git(folder, {u"init"_s, u"-q"_s, u"-b"_s, u"main"_s}), 0);
+        QCOMPARE(git(folder, {u"add"_s, u"-A"_s}), 0);
+        QCOMPARE(git(folder, {u"commit"_s, u"-qm"_s, u"start"_s}), 0);
+        const QString id = projects->add(folder);
+        QVERIFY(!id.isEmpty());
+        // A worktree git lists, outside the worktrees root.
+        const QString listed = m_tmp.filePath(u"obok-%1"_s.arg(m_n));
+        QCOMPARE(git(folder, {u"worktree"_s, u"add"_s, u"-q"_s, u"-b"_s, u"brulion/obok"_s, listed}), 0);
+        // One under the root (its folder there is enough).
+        const QString underRoot = QDir(projects->worktreesRoot()).filePath(id + u"/pod-korzeniem"_s);
+        QVERIFY(QDir().mkpath(underRoot));
+        ChatControl control(ws.get());
+        const auto start = [&](const QJsonObject &params) {
+            auto a = ask(control, u"chatStart"_s, params);
+            if (!QTest::qWaitFor([a] { return a->done; }, 20000))
+                qWarning() << "chatStart did not answer";
+            return a;
+        };
+        auto a = start({{u"text"_s, u"Popraw testy"_s}, {u"project"_s, id}, {u"worktree"_s, listed},
+                        {u"branch"_s, u"brulion/obok"_s}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString inListed = a->result.value(u"path"_s).toString();
+        QCOMPARE(chats->threadPlace(inListed).value(u"worktree"_s).toString(), QDir::cleanPath(listed));
+        QCOMPARE(chats->threadPlace(inListed).value(u"branch"_s).toString(), u"brulion/obok"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(inListed), 20000);
+        QCOMPARE(QDir::cleanPath(logged(u"session/new"_s).last().value(u"params"_s).toObject().value(u"cwd"_s).toString()),
+                 QDir::cleanPath(listed));
+        // Its row says where it works.
+        const std::optional<acp::RemoteChats> seen =
+                acp::RemoteChats::fromJson(ask(control, u"chatLive"_s, {})->result);
+        QVERIFY(seen && !seen->chats.isEmpty());
+        QCOMPARE(seen->chats.first().project, id);
+        QCOMPARE(seen->chats.first().worktree, QDir::cleanPath(listed));
+        QCOMPARE(seen->chats.first().branch, u"brulion/obok"_s);
+        a = start({{u"text"_s, u"Pod korzeniem"_s}, {u"project"_s, id}, {u"worktree"_s, underRoot}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QCOMPARE(chats->threadPlace(a->result.value(u"path"_s).toString()).value(u"worktree"_s).toString(),
+                 QDir::cleanPath(underRoot));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(a->result.value(u"path"_s).toString()), 20000);
+        // The project's own folder: no worktree of its own.
+        a = start({{u"text"_s, u"W projekcie"_s}, {u"project"_s, id}, {u"worktree"_s, QString(folder + u"/"_s)}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QCOMPARE(chats->threadPlace(a->result.value(u"path"_s).toString()).value(u"worktree"_s).toString(), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(a->result.value(u"path"_s).toString()), 20000);
+        // Refused: a folder that is no worktree of it, one that is not there, a relative one, without
+        // a project, as a sub-conversation.
+        const QString stranger = m_tmp.filePath(u"obcy-%1"_s.arg(m_n));
+        QVERIFY(QDir().mkpath(stranger));
+        for (const QString &bad : {stranger, m_tmp.filePath(u"nie-ma-%1"_s.arg(m_n)), u"wzgledny/folder"_s}) {
+            a = start({{u"text"_s, u"Nie tu"_s}, {u"project"_s, id}, {u"worktree"_s, bad}});
+            QCOMPARE(a->code, u"bad_params"_s);
+            QCOMPARE(a->details.value(u"param"_s).toString(), u"worktree"_s);
+        }
+        a = start({{u"text"_s, u"Bez projektu"_s}, {u"worktree"_s, listed}});
+        QCOMPARE(a->code, u"bad_params"_s);
+        a = start({{u"text"_s, u"Jako dziecko"_s}, {u"project"_s, id}, {u"worktree"_s, listed}, {u"parent"_s, inListed}});
+        QCOMPARE(a->code, u"bad_params"_s);
     }
 
     void autoAnswers()

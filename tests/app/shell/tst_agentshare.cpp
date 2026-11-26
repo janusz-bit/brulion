@@ -11,7 +11,10 @@
 // trust the code asked for (codeNeeded), not for the documentation notebook nor without agents,
 // and turned off it stops and its offer leaves the notebook. Code mode's projects of this device go
 // to its projects' file (--projects), written again when they change — the running server reads it
-// again: a paired device lists them at once.
+// again: a paired device lists them at once. The app's grant (a stand-in control socket with the
+// agent sharing's grants): each process of the server gets a new one in its environment alone (never
+// on its command line), links to the app with it (GET info names the "chats" feature), its agents
+// never see it, and it is revoked when the process is started again or stops.
 #include "agentshare.h"
 #include "codeprojects.h"
 #include "serverprocess.h"
@@ -19,7 +22,9 @@
 #include "workspaceagents.h"
 #include "workspacechats.h"
 
+#include "acp/appchats.h"
 #include "acp/codehost.h"
+#include "acp/remote.h"
 #include "faketailscaled.h"
 #include "sync/http.h"
 #include "tailscale/localapi.h"
@@ -31,12 +36,17 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
 #include <QUrlQuery>
+
+#ifdef BRULION_CLI
+#include "controlserver.h"
+#endif
 
 using namespace Qt::StringLiterals;
 using namespace brulion;
@@ -254,13 +264,41 @@ private Q_SLOTS:
         share->setPort(0);
         share->server()->setRetryDelays({200});
         QVERIFY(share->available());
+        // The app's remote control as a stand-in: a socket of its own, a grant of the agent sharing
+        // for each process of the server.
+        ipc::ControlServer app;
+        app.setOpen(false);
+        app.setHandler([](const ipc::ControlRequest &request, ipc::ControlReply reply) {
+            reply.ok(QJsonObject{{u"shareOnly"_s, request.shareOnly}});
+        });
+        const QString appKey = m_tmp.filePath(u"aplikacja-sterowanie"_s);
+        QVERIFY2(app.listen(appKey), qPrintable(app.errorString()));
+        QStringList granted;
+        QStringList revoked;
+        share->setAppGrants(
+                [&granted, &app, &appKey] {
+                    granted << app.addGrant(u"agent sharing"_s, ipc::GrantScope::Share);
+                    return AgentShare::AppGrant{appKey, granted.last()};
+                },
+                [&revoked, &app](const QString &token) {
+                    revoked << token;
+                    app.revokeGrant(token);
+                });
+        auto unset = qScopeGuard([share] { share->setAppGrants({}, {}); });
 
         // On, without agents: it waits for one.
         share->setNotebook(root, true);
         share->setSettings(true, QString(), true);
         QTRY_COMPARE_WITH_TIMEOUT(share->state(), u"agents"_s, kTimeoutMs);
         // The documentation notebook is never shared.
-        ws.chats()->setAgents({AgentConfig{u"fake"_s, u"Fałszywy agent"_s, u"sh"_s, false}});
+#ifdef Q_OS_LINUX
+        // (Its agent writes the environment it got: the app's grant is never in it.)
+        const QString agentEnv = m_tmp.filePath(u"srodowisko-agenta.txt"_s);
+        const QString agentCommand = u"sh -c \"env > %1; exec cat\""_s.arg(agentEnv);
+#else
+        const QString agentCommand = u"sh"_s;
+#endif
+        ws.chats()->setAgents({AgentConfig{u"fake"_s, u"Fałszywy agent"_s, agentCommand, false}});
         share->setNotebook(root, false);
         QTRY_COMPARE_WITH_TIMEOUT(share->state(), u"notebook"_s, kTimeoutMs);
         // The notebook: it runs, named by its tailnet name.
@@ -320,9 +358,48 @@ private Q_SLOTS:
         QCOMPARE(got.first().remote, u"fake"_s);
         QVERIFY(got.first().token.startsWith(u"bat_"_s));
         QTRY_COMPARE_WITH_TIMEOUT(share->devices(), 1, kTimeoutMs);
+        sync::NetworkHttpTransport transport;
+        // The app's own conversations: the server got a grant of its own — in its environment, never
+        // on its command line — and is linked to the app with it.
+        QCOMPARE(granted.size(), 1);
+        QCOMPARE(share->appToken(), granted.first());
+        QVERIFY(!share->server()->arguments().join(u' ').contains(granted.first()));
+        const auto features = [&] {
+            QStringList out;
+            bool done = false;
+            acp::fetchRemoteInfo(&transport, QUrl(reachable), got.first().token,
+                                 [&](const acp::RemoteInfo &info, const acp::RemoteError &) {
+                                     out = info.features;
+                                     done = true;
+                                 });
+            (void)QTest::qWaitFor([&done] { return done; }, kTimeoutMs);
+            return out;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(features().contains(QString(acp::ChatsFeature)), kTimeoutMs);
+#ifdef Q_OS_LINUX
+        {
+            QFile environ(u"/proc/%1/environ"_s.arg(share->server()->processId()));
+            QVERIFY(environ.open(QIODevice::ReadOnly));
+            const QList<QByteArray> vars = environ.readAll().split('\0');
+            QVERIFY(vars.contains("BRULION_APP_SHARE_TOKEN=" + granted.first().toUtf8()));
+            QVERIFY(vars.contains("BRULION_APP_SOCKET=" + appKey.toUtf8()));
+        }
+        // Its agent (a stream of the device) never sees the grant.
+        {
+            bool started = false;
+            const QJsonObject body{{u"agent"_s, u"fake"_s}};
+            transport.send(acp::remoteRequest("POST", QUrl(reachable), u"streams"_s, got.first().token, &body),
+                           [&started](const sync::HttpResponse &response) { started = response.status == 201; });
+            QTRY_VERIFY_WITH_TIMEOUT(started, kTimeoutMs);
+            QTRY_VERIFY_WITH_TIMEOUT(readRaw(agentEnv).contains(u"PATH="_s), kTimeoutMs);
+            const QString env = readRaw(agentEnv);
+            QVERIFY(!env.contains(u"BRULION_APP_SHARE_TOKEN"_s));
+            QVERIFY(!env.contains(granted.first()));
+            QVERIFY(!env.contains(u"BRULION_APP_SOCKET="_s + appKey));
+        }
+#endif
         // That device lists this computer's projects; one added here is there at once (the file
         // written again, read again by the server that runs on).
-        sync::NetworkHttpTransport transport;
         const auto projectsThere = [&] {
             QList<acp::RemoteProject> out;
             bool done = false;
@@ -365,6 +442,10 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(share->server()->arguments().contains(u"--no-tailnet-trust"_s)
                                          && share->state() == u"running", kTimeoutMs);
         QVERIFY(share->owner().isEmpty());
+        // (Started again: a new grant, the one before revoked.)
+        QTRY_COMPARE_WITH_TIMEOUT(granted.size(), 2, kTimeoutMs);
+        QVERIFY(revoked.contains(granted.first()));
+        QCOMPARE(share->appToken(), granted.last());
         QSignalSpy codeNeeded(agentsHere, &WorkspaceAgents::codeNeeded);
         paired.clear();
         agentsHere->pair(u"http://127.0.0.1:"_s + QString::number(QUrl(share->url()).port()), QString());
@@ -378,6 +459,10 @@ private Q_SLOTS:
         QVERIFY(pid > 0);
         share->setSettings(false, QString(), true);
         QTRY_COMPARE_WITH_TIMEOUT(share->state(), u"off"_s, kTimeoutMs);
+        // (Its grant goes with it.)
+        QTRY_VERIFY(revoked.contains(granted.last()));
+        QVERIFY(share->appToken().isEmpty());
+        QCOMPARE(app.grantCount(), 0);
         QTRY_VERIFY_WITH_TIMEOUT(!readRaw(configPath).contains(u"agentHosts"_s), kTimeoutMs);
         QCOMPARE(QJsonDocument::fromJson(readRaw(configPath).toUtf8()).object().value(u"przyszłość"_s).toInt(), 7);
 #ifdef Q_OS_LINUX

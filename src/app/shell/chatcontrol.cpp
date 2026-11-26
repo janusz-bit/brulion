@@ -9,10 +9,13 @@
 #include "workspaceagents.h"
 #include "workspacechats.h"
 
+#include "acp/appchats.h"
 #include "chat/chat.h"
 #include "vault/vault.h"
 
 #include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QPointer>
 #include <QSet>
@@ -34,6 +37,8 @@ const QString Refused = u"refused"_s;
 const QString Busy = u"busy"_s;
 const QString Timeout = u"timeout"_s;
 const QString Failed = u"failed"_s;
+const QString NoQuestion = u"no_question"_s;
+const QString BadOption = u"bad_option"_s;
 
 /// The longest partial answer chatRead and chatWait give of a turn that runs.
 constexpr int MaxPartialChars = 4000;
@@ -41,6 +46,23 @@ constexpr int MaxPartialChars = 4000;
 QString minute(const QDateTime &time)
 {
     return time.isValid() ? time.toString(u"yyyy-MM-dd HH:mm"_s) : QString();
+}
+
+/// `text` cut to its first `max` characters (a surrogate pair kept whole).
+QString keepStart(const QString &text, qsizetype max)
+{
+    if (text.size() <= max)
+        return text;
+    qsizetype n = max;
+    if (n > 0 && text.at(n - 1).isHighSurrogate())
+        --n;
+    return text.left(n);
+}
+
+/// When a turn ended, as chatLive says it: ISO 8601, the local time with its offset.
+QString isoTime(const QDateTime &time)
+{
+    return time.toOffsetFromUtc(time.offsetFromUtc()).toString(Qt::ISODate);
 }
 
 /// `text` from `from`, at most `chars` characters, never half a character.
@@ -62,6 +84,15 @@ struct ChatControl::Wait {
     bool done = false;
 };
 
+/// A chatLive waiting for a revision past `since`.
+struct ChatControl::LiveWait {
+    Reply reply;
+    qint64 since = 0;
+    QString path;
+    QTimer timer;
+    bool done = false;
+};
+
 ChatControl::ChatControl(Workspace *workspace, QObject *parent)
     : QObject(parent), m_workspace(workspace), m_chats(workspace->chats())
 {
@@ -70,9 +101,45 @@ ChatControl::ChatControl(Workspace *workspace, QObject *parent)
     m_clientCheck.setInterval(1000);
     connect(&m_clientCheck, &QTimer::timeout, this, [this] {
         m_waits.removeIf([](const std::shared_ptr<Wait> &w) { return w->reply.connected && !w->reply.connected(); });
-        if (m_waits.isEmpty())
+        m_liveWaits.removeIf(
+                [](const std::shared_ptr<LiveWait> &w) { return w->reply.connected && !w->reply.connected(); });
+        if (m_waits.isEmpty() && m_liveWaits.isEmpty())
             m_clientCheck.stop();
     });
+    // chatLive: the revision follows every change of the conversations' turns (at most every
+    // LiveIntervalMs), and never goes back — not even over a restart of the app.
+    m_revision = QDateTime::currentMSecsSinceEpoch();
+    m_sinceRevision.start();
+    m_liveTimer.setSingleShot(true);
+    connect(&m_liveTimer, &QTimer::timeout, this, &ChatControl::bumpRevision);
+    m_pruneTimer.setInterval(30000);
+    connect(&m_pruneTimer, &QTimer::timeout, this, [this] {
+        if (pruneEnded())
+            liveChanged();
+        if (m_ended.isEmpty())
+            m_pruneTimer.stop();
+    });
+    const auto turns = [this] {
+        noteTurns();
+        liveChanged();
+    };
+    connect(m_chats, &WorkspaceChats::stateChanged, this, turns);
+    connect(m_chats, &WorkspaceChats::questionsChanged, this, turns);
+    connect(m_chats, &WorkspaceChats::queueChanged, this, turns);
+    connect(m_chats, &WorkspaceChats::agentsChanged, this, turns);
+    connect(m_chats, &WorkspaceChats::written, this, [this](const QString &path) {
+        m_activity.insert(path.toLower(), ++m_activitySerial);
+        liveChanged();
+    });
+    connect(m_workspace, &Workspace::openChanged, this, [this] {
+        // (Another notebook: nothing of the one before.)
+        m_ended.clear();
+        m_activity.clear();
+        m_facts.clear();
+        noteTurns();
+        liveChanged();
+    });
+    noteTurns();
 }
 
 ChatControl::~ChatControl() = default;
@@ -92,7 +159,9 @@ bool ChatControl::handles(const QString &method)
                                        u"chatScheduleRemove"_s,
                                        u"chatScheduleRun"_s,
                                        u"chatRequestSecret"_s,
-                                       u"chatNotify"_s};
+                                       u"chatNotify"_s,
+                                       u"chatLive"_s,
+                                       u"chatAnswer"_s};
     return methods.contains(method);
 }
 
@@ -124,6 +193,10 @@ void ChatControl::handle(const QString &method, const QJsonObject &params, const
         requestSecret(params, caller, reply);
     else if (method == u"chatNotify")
         notify(params, caller, reply);
+    else if (method == u"chatLive")
+        live(params, reply);
+    else if (method == u"chatAnswer")
+        answerQuestion(params, caller, reply);
     else
         reply.fail(u"unknown_method"_s, u"Unknown method %1"_s.arg(method), {});
 }
@@ -314,9 +387,12 @@ void ChatControl::start(const QJsonObject &params, const Caller &caller, const R
     const QString text = params.value(u"text"_s).toString().trimmed();
     if (text.isEmpty())
         return reply.fail(BadParams, u"Write the message (text)"_s, {{u"param"_s, u"text"_s}});
-    // (No partner named: the device's default — "" names the assistant.)
-    const QString partner =
-            params.contains(u"partner"_s) ? params.value(u"partner"_s).toString().trimmed() : m_chats->defaultPartner();
+    // (No partner named: the device's default — "" names the assistant —, a thread's the agent a
+    // new thread gets.)
+    const bool thread = !params.value(u"project"_s).toString().trimmed().isEmpty();
+    const QString partner = params.contains(u"partner"_s) ? params.value(u"partner"_s).toString().trimmed()
+                            : thread                      ? m_chats->threadPartner()
+                                                          : m_chats->defaultPartner();
     QStringList ids;
     for (const QVariant &p : m_chats->partners())
         ids << p.toMap().value(u"id"_s).toString();
@@ -371,12 +447,83 @@ void ChatControl::start(const QJsonObject &params, const Caller &caller, const R
     if (!project.isEmpty() && !WorkspaceAgents::isAgent(partner))
         return reply.fail(BadParams, u"A thread of a project is answered by an AI agent (acp:<id>)"_s,
                           {{u"param"_s, u"partner"_s}});
+    // A thread in a worktree of its project (the phone's new thread there, a script's).
+    const QString worktree = params.value(u"worktree"_s).toString().trimmed();
+    const QString branch = params.value(u"branch"_s).toString().trimmed();
+    if ((!worktree.isEmpty() || !branch.isEmpty()) && project.isEmpty())
+        return reply.fail(BadParams, u"worktree and branch go with a thread of a project (project)"_s,
+                          {{u"param"_s, worktree.isEmpty() ? u"branch"_s : u"worktree"_s}});
+    if ((!worktree.isEmpty() || !branch.isEmpty()) && (!parent.isEmpty() || wake))
+        return reply.fail(BadParams,
+                          u"A thread in a worktree is started by the user, not as a sub-conversation (parent, wake)"_s,
+                          {{u"param"_s, u"worktree"_s}});
+    if (!worktree.isEmpty() || !branch.isEmpty()) {
+        CodeProjects *projects = m_workspace->projects();
+        const QString folder = QDir::cleanPath(worktree);
+        const auto notOurs = [reply, worktree] {
+            reply.fail(BadParams, u"%1 is no worktree of the project"_s.arg(worktree.left(300)),
+                       {{u"param"_s, u"worktree"_s}});
+        };
+        // (Another computer's project: that computer checks its own worktrees.)
+        if (worktree.isEmpty() || projects->isRemote(project))
+            return startThreadNow(project, text, partner, worktree, branch, reply);
+        if (!QDir::isAbsolutePath(folder) || !QFileInfo(folder).isDir())
+            return notOurs();
+        const QString canonical = QFileInfo(folder).canonicalFilePath();
+        // The project's own folder: no worktree of its own.
+        if (canonical == QFileInfo(projects->folderOf(project)).canonicalFilePath())
+            return startThreadNow(project, text, partner, QString(), branch, reply);
+        if (projects->projectOfFolder(folder) == project)
+            return startThreadNow(project, text, partner, folder, branch, reply);
+        // Elsewhere: only one `git worktree list` of the project lists.
+        if (!projects->listWorktrees(project))
+            return notOurs();
+        auto connection = std::make_shared<QMetaObject::Connection>();
+        auto timer = std::make_shared<QTimer>();
+        const auto finish = [connection, timer] {
+            QObject::disconnect(*connection);
+            timer->stop();
+        };
+        *connection = connect(projects, &CodeProjects::worktreesListed, this,
+                              [this, finish, notOurs, project, text, partner, folder, canonical, branch,
+                               reply](const QString &id, const QVariantList &list, const QString &) {
+                                  if (id != project)
+                                      return;
+                                  finish();
+                                  for (const QVariant &w : list) {
+                                      const QString listed = w.toMap().value(u"folder"_s).toString();
+                                      if (QFileInfo(listed).canonicalFilePath() == canonical)
+                                          return startThreadNow(project, text, partner, folder, branch, reply);
+                                  }
+                                  notOurs();
+                              });
+        timer->setSingleShot(true);
+        connect(timer.get(), &QTimer::timeout, this, [finish, notOurs] {
+            finish();
+            notOurs();
+        });
+        timer->start(15000);
+        return;
+    }
     const QString path = project.isEmpty()
                                  ? m_chats->send(QString(), text, page, {}, partner, parent, wake ? parent : QString())
                                  : m_chats->startThreadFrom(project, text, partner, parent, wake ? parent : QString());
     if (path.isEmpty()) {
         const QString failure = m_chats->turn(QString())->failure();
         return reply.fail(Failed, failure.isEmpty() ? u"The conversation could not be started"_s : failure, {});
+    }
+    reply.ok(row(path));
+}
+
+void ChatControl::startThreadNow(const QString &project, const QString &text, const QString &partner,
+                                 const QString &worktree, const QString &branch, const Reply &reply)
+{
+    if (!ready(reply))
+        return;
+    const QString path = m_chats->startThread(project, text, {}, partner, worktree, branch);
+    if (path.isEmpty()) {
+        const QString failure = m_chats->turn(QString())->failure();
+        return reply.fail(Failed, failure.isEmpty() ? u"The thread could not be started"_s : failure, {});
     }
     reply.ok(row(path));
 }
@@ -408,9 +555,20 @@ void ChatControl::sendTo(const QJsonObject &params, const Caller &caller, const 
         return reply.fail(Busy,
                           u"wake goes with a message sent now: wait for its turn (chatWait) or stop it (chatStop)"_s,
                           {{u"state"_s, m_chats->stateOf(path)}});
+    // How a message goes to a turn that runs: refused (busy), in line after it, now (steer).
+    const QString mode = params.value(u"mode"_s).toString().toLower();
+    const bool queue = params.value(u"queue"_s).toBool() || mode == u"queue";
     if (m_chats->isRunning(path)) {
+        // Now, ahead of the waiting messages: the running turn stopped first (as T3 Code's steer).
+        if (mode == u"steer") {
+            if (!m_chats->steer(path, text))
+                return reply.fail(Failed, u"The message could not be sent"_s, {});
+            QJsonObject out = row(path);
+            out.insert(u"steered"_s, true);
+            return reply.ok(out);
+        }
         // In line after the answer (as a message the user writes meanwhile), when asked to.
-        if (params.value(u"queue"_s).toBool() && m_chats->queue(path, text)) {
+        if (queue && m_chats->queue(path, text)) {
             QJsonObject out = row(path);
             out.insert(u"queued"_s, true);
             return reply.ok(out);
@@ -764,6 +922,311 @@ void ChatControl::notify(const QJsonObject &params, const Caller &caller, const 
     if (!open.isEmpty())
         out.insert(u"opens"_s, open);
     reply.ok(out);
+}
+
+// ---- chatLive: the conversations the app runs, as they go (core acp/appchats.h) ------------------
+
+void ChatControl::noteTurns()
+{
+    // Every turn of the conversations is a child of WorkspaceChats (made when first asked for).
+    const QList<ChatTurn *> turns = m_chats->findChildren<ChatTurn *>(Qt::FindDirectChildrenOnly);
+    QSet<ChatTurn *> active;
+    for (ChatTurn *t : turns) {
+        if (!m_watched.contains(t)) {
+            m_watched.insert(t);
+            connect(t, &QObject::destroyed, this, [this, t] {
+                m_watched.remove(t);
+                m_active.remove(t);
+            });
+            const auto touched = [this, t] {
+                m_activity.insert(t->path().toLower(), ++m_activitySerial);
+                liveChanged();
+            };
+            connect(t, &ChatTurn::stateChanged, this, [this, touched] {
+                noteTurns();
+                touched();
+            });
+            connect(t, &ChatTurn::partialChanged, this, touched);
+            connect(t, &ChatTurn::activityChanged, this, touched);
+        }
+        if (t->running() && !t->path().isEmpty())
+            active.insert(t);
+    }
+    // The turns that ended since: listed a while yet, with when.
+    const QDateTime now = m_workspace->now();
+    for (ChatTurn *t : std::as_const(m_active)) {
+        if (!active.contains(t) && m_watched.contains(t) && !t->path().isEmpty())
+            m_ended.insert(t->path().toLower(), Ended{t->path(), now});
+    }
+    for (ChatTurn *t : std::as_const(active)) {
+        m_ended.remove(t->path().toLower());
+        if (!m_activity.contains(t->path().toLower()))
+            m_activity.insert(t->path().toLower(), ++m_activitySerial);
+    }
+    m_active = active;
+    if (!m_ended.isEmpty() && !m_pruneTimer.isActive())
+        m_pruneTimer.start();
+}
+
+bool ChatControl::pruneEnded()
+{
+    const QDateTime oldest = m_workspace->now().addSecs(-60LL * acp::RecentChatMinutes);
+    return m_ended.removeIf([&oldest](QHash<QString, Ended>::iterator it) { return it->at < oldest; }) > 0;
+}
+
+void ChatControl::liveChanged()
+{
+    if (m_liveTimer.isActive())
+        return;
+    m_liveTimer.start(int(std::clamp<qint64>(LiveIntervalMs - m_sinceRevision.elapsed(), 0, LiveIntervalMs)));
+}
+
+void ChatControl::bumpRevision()
+{
+    m_revision = std::max(m_revision + 1, QDateTime::currentMSecsSinceEpoch());
+    m_sinceRevision.restart();
+    // The waits for an older revision answered (one answer for the waits of the same conversation).
+    QHash<QString, QJsonObject> answers;
+    const QList<std::shared_ptr<LiveWait>> waits = m_liveWaits;
+    for (const std::shared_ptr<LiveWait> &w : waits) {
+        if (w->done || w->since >= m_revision)
+            continue;
+        if (w->reply.connected && !w->reply.connected()) {
+            w->done = true;
+            m_liveWaits.removeAll(w);
+            continue;
+        }
+        auto it = answers.find(w->path);
+        if (it == answers.end())
+            it = answers.insert(w->path, liveAnswer(w->path));
+        w->done = true;
+        w->timer.stop();
+        m_liveWaits.removeAll(w);
+        w->reply.ok(*it);
+    }
+}
+
+void ChatControl::live(const QJsonObject &params, const Reply &reply)
+{
+    const qint64 since = params.contains(u"since"_s) ? params.value(u"since"_s).toInteger(-1) : -1;
+    const int timeout = std::clamp(params.value(u"timeout"_s).toInt(DefaultLiveWaitMs), 0, MaxLiveWaitMs);
+    const QString path = params.value(u"path"_s).toString().trimmed();
+    if (since < 0 || m_revision > since || timeout == 0)
+        return reply.ok(liveAnswer(path));
+    auto w = std::make_shared<LiveWait>();
+    w->reply = reply;
+    w->since = since;
+    w->path = path;
+    w->timer.setSingleShot(true);
+    w->timer.setInterval(timeout);
+    const std::weak_ptr<LiveWait> weak = w;
+    connect(&w->timer, &QTimer::timeout, this, [this, weak] {
+        if (const std::shared_ptr<LiveWait> live = weak.lock())
+            finishLive(live);
+    });
+    w->timer.start();
+    m_liveWaits.append(w);
+    if (!m_clientCheck.isActive())
+        m_clientCheck.start();
+}
+
+void ChatControl::finishLive(const std::shared_ptr<LiveWait> &w)
+{
+    if (w->done)
+        return;
+    w->done = true;
+    w->timer.stop();
+    m_liveWaits.removeAll(w);
+    w->reply.ok(liveAnswer(w->path));
+}
+
+const ChatControl::Facts &ChatControl::factsOf(const QString &path)
+{
+    const QString key = path.toLower();
+    Facts &f = m_facts[key];
+    const std::optional<FileStat> stat = m_workspace->vault() ? m_workspace->vault()->stat(path) : std::nullopt;
+    const qint64 mtime = stat ? stat->mtime : -2;
+    const qint64 size = stat ? stat->size : -2;
+    if (f.mtime == mtime && f.size == size)
+        return f;
+    f = Facts{};
+    f.mtime = mtime;
+    f.size = size;
+    if (!stat || !chat::inFolder(path))
+        return f;
+    bool ok = false;
+    const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
+    f.conversation = ok && !c.messages.isEmpty();
+    f.messages = int(c.messages.size());
+    f.partner = m_chats->partnerOf(path);
+    f.project = c.project;
+    f.worktree = c.worktree;
+    f.branch = c.branch;
+    return f;
+}
+
+QJsonObject ChatControl::liveAnswer(const QString &wanted)
+{
+    if (pruneEnded())
+        liveChanged();
+    // The conversations whose turn runs, waits or asks, and those that ended lately: newest
+    // activity first (side chats — the user's asides — are no conversation of the list).
+    struct Entry {
+        QString path;
+        qint64 order = 0;
+    };
+    QList<Entry> entries;
+    QSet<QString> seen;
+    const auto consider = [&](const QString &path) {
+        const QString key = path.toLower();
+        if (path.isEmpty() || seen.contains(key) || !m_chats->sideOf(path).isEmpty() || !factsOf(path).conversation)
+            return;
+        seen.insert(key);
+        entries.append({path, m_activity.value(key, 0)});
+    };
+    for (ChatTurn *t : std::as_const(m_active))
+        consider(t->path());
+    for (const Ended &e : std::as_const(m_ended))
+        consider(e.path);
+    std::ranges::sort(entries, [](const Entry &a, const Entry &b) {
+        return a.order != b.order ? a.order > b.order : a.path < b.path;
+    });
+    if (entries.size() > acp::MaxRemoteChats)
+        entries.resize(acp::MaxRemoteChats);
+    acp::RemoteChats out;
+    out.revision = m_revision;
+    for (const Entry &e : std::as_const(entries)) {
+        const Facts &f = factsOf(e.path);
+        acp::RemoteChat c;
+        c.path = e.path;
+        c.name = m_chats->nameOf(e.path);
+        c.partner = f.partner;
+        const QString label = m_chats->partnerLabel(f.partner);
+        c.partnerName = label.isEmpty() ? f.partner : label;
+        QString failure;
+        c.state = m_chats->stateOf(e.path, &failure);
+        c.failure = failure.left(2000);
+        if (m_chats->isRunning(e.path))
+            c.status = m_chats->turn(e.path)->status();
+        if (c.state == u"asking")
+            c.question = m_chats->questionText(e.path).section(u'\n', 0, 0).simplified().left(500);
+        c.project = f.project;
+        c.worktree = f.worktree;
+        c.branch = f.branch;
+        c.messages = f.messages;
+        c.waiting = int(m_chats->queued(e.path).size());
+        if (!c.active()) {
+            const auto ended = m_ended.constFind(e.path.toLower());
+            if (ended != m_ended.cend())
+                c.ended = isoTime(ended->at);
+        }
+        out.chats.append(c);
+    }
+    // One of them in full: the conversation the device shows (any, its turn running or not).
+    QString path;
+    if (!wanted.isEmpty()) {
+        path = m_workspace->exists(wanted) ? wanted : resolve(wanted);
+        if (!path.isEmpty() && !factsOf(path).conversation)
+            path.clear();
+    }
+    if (!path.isEmpty()) {
+        acp::RemoteChatDetail d;
+        d.path = path;
+        QString failure;
+        d.state = m_chats->stateOf(path, &failure);
+        d.failure = failure.left(2000);
+        d.messages = factsOf(path).messages;
+        if (m_chats->isRunning(path)) {
+            const ChatTurn *t = m_chats->turn(path);
+            d.status = t->status();
+            bool cut = false;
+            d.partial = acp::keepEnd(t->partial(), acp::MaxLiveTextChars, &cut);
+            d.partialCut = cut;
+            d.thoughts = acp::keepEnd(t->thoughts(), acp::MaxLiveThoughtsChars);
+            // (The latest tool calls when there are more; the plan's first steps.)
+            const QVariantList tools = t->tools();
+            for (qsizetype i = std::max<qsizetype>(0, tools.size() - acp::MaxLiveTools); i < tools.size(); ++i) {
+                const QVariantMap m = tools.at(i).toMap();
+                const acp::RemoteChatTool tool{m.value(u"title"_s).toString().simplified().left(300),
+                                               m.value(u"status"_s).toString().left(20),
+                                               m.value(u"kind"_s).toString().left(20)};
+                if (!tool.title.isEmpty())
+                    d.tools.append(tool);
+            }
+            for (const QVariant &v : t->plan()) {
+                const QVariantMap m = v.toMap();
+                const acp::RemoteChatStep step{m.value(u"content"_s).toString().simplified().left(500),
+                                               m.value(u"status"_s).toString().left(20)};
+                if (step.content.isEmpty())
+                    continue;
+                d.plan.append(step);
+                if (d.plan.size() >= acp::MaxLiveSteps)
+                    break;
+            }
+        }
+        if (m_chats->asking(path)) {
+            const QString text = m_chats->questionText(path);
+            for (const QString &option : m_chats->questionOptions(path)) {
+                if (option.trimmed().isEmpty() || d.question.options.contains(option))
+                    continue;
+                d.question.options.append(option);
+                if (d.question.options.size() >= acp::MaxQuestionOptions)
+                    break;
+            }
+            d.question.text = text.section(u'\n', 0, 0).simplified().left(500);
+            d.question.details = keepStart(text.section(u'\n', 1).trimmed(), acp::MaxQuestionChars);
+            d.question.plan = keepStart(m_chats->questionPlan(path), acp::MaxLiveTextChars);
+            const QVariantMap diff = m_chats->questionDiff(path);
+            d.question.file = diff.value(u"path"_s).toString().left(acp::MaxRemotePathChars);
+            if (!d.question.file.isEmpty()) {
+                d.question.oldText = keepStart(diff.value(u"oldText"_s).toString(), acp::MaxLiveTextChars);
+                d.question.newText = keepStart(diff.value(u"newText"_s).toString(), acp::MaxLiveTextChars);
+            }
+        }
+        for (const QVariant &q : m_chats->queued(path)) {
+            const QString text = keepStart(q.toMap().value(u"text"_s).toString(), 4000);
+            if (text.trimmed().isEmpty())
+                continue;
+            d.waiting.append(text);
+            if (d.waiting.size() >= acp::MaxLiveWaiting)
+                break;
+        }
+        out.detail = d;
+    }
+    return out.toJson();
+}
+
+void ChatControl::answerQuestion(const QJsonObject &params, const Caller &caller, const Reply &reply)
+{
+    // The user's answer (a script of theirs, the phone through the agent sharing), never an agent's:
+    // it would allow what it asked for itself.
+    if (caller.granted)
+        return reply.fail(Refused, u"An AI agent does not answer the questions meant for the user"_s, {});
+    const QString path = conversationOf(params, reply);
+    if (path.isEmpty())
+        return;
+    if (!m_chats->asking(path))
+        return reply.fail(NoQuestion, u"Nothing is asked in that conversation now"_s,
+                          {{u"state"_s, m_chats->stateOf(path)}});
+    const QStringList options = m_chats->questionOptions(path);
+    const QString option = params.value(u"option"_s).toString();
+    // The option as given, else as a device shows it (its spaces made one, at most 200 characters).
+    QString chosen = options.contains(option) ? option : QString();
+    if (chosen.isEmpty()) {
+        const QString shown = option.simplified().left(200);
+        QStringList matching;
+        for (const QString &o : options) {
+            if (!shown.isEmpty() && o.simplified().left(200) == shown)
+                matching << o;
+        }
+        if (matching.size() == 1)
+            chosen = matching.first();
+    }
+    if (chosen.isEmpty())
+        return reply.fail(BadOption, u"%1 is not one of the question's options"_s.arg(option.left(200)),
+                          {{u"param"_s, u"option"_s}, {u"options"_s, QJsonArray::fromStringList(options)}});
+    m_chats->answer(path, chosen);
+    reply.ok(QJsonObject{{u"path"_s, path}, {u"answered"_s, true}, {u"option"_s, chosen}});
 }
 
 } // namespace brulion::shell

@@ -8,6 +8,8 @@
 //   --crash-after MS  serve, then abort() after MS
 //   --ignore-eof      keep serving when standard input ends (it has to be terminated)
 //   --mark FILE       write "stopped" into FILE when it stops by itself (its input ended)
+//   --env NAME        (with --announce) the environment variable NAME as the result's "env" (its
+//                     absence: null)
 #include <QCoreApplication>
 #include <QFile>
 #include <QStringList>
@@ -41,7 +43,13 @@ int main(int argc, char *argv[])
         return code.toInt();
     }
     const QString url = value("--announce");
-    const QByteArray line = R"({"ok": true, "command": "fake.serve", "result": {"url": ")" + url.toUtf8() + "\"}}\n";
+    QByteArray env;
+    if (const QString name = value("--env"); !name.isEmpty())
+        env = qEnvironmentVariableIsSet(name.toLatin1().constData())
+                      ? QByteArray(R"(, "env": ")" + qgetenv(name.toLatin1().constData()) + '"')
+                      : QByteArray(R"(, "env": null)");
+    const QByteArray line =
+            R"({"ok": true, "command": "fake.serve", "result": {"url": ")" + url.toUtf8() + '"' + env + "}}\n";
     std::fwrite(line.constData(), 1, size_t(line.size()), stdout);
     std::fflush(stdout);
     std::fputs("2026-11-22 10:30:01 serving at the fake address\n", stderr);
