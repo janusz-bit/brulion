@@ -950,7 +950,14 @@ void Screen::resize(int columns, int rows)
 
     const int mainCursorRow = m_alternate ? m_savedMain.row : m_cursor.row;
     const int altCursorRow = m_alternate ? m_cursor.row : m_savedAlt.row;
-    const int mainShift = resizeScreen(m_mainLines, true, mainCursorRow);
+    // Another width on the main screen: its text wrapped again (the cursor placed by reflowMain).
+    const bool reflowing = m_reflow && !m_alternate && columns != oldColumns;
+    int mainShift = 0;
+    if (reflowing) {
+        reflowMain(columns, rows);
+    } else {
+        mainShift = resizeScreen(m_mainLines, true, mainCursorRow);
+    }
     const int altShift = resizeScreen(m_altLines, false, altCursorRow);
     m_rows = rows;
 
@@ -960,7 +967,8 @@ void Screen::resize(int columns, int rows)
             c.column = columns - 1;
         c.pendingWrap = false;
     };
-    clampCursor(m_cursor, m_alternate ? altShift : mainShift);
+    if (!reflowing)
+        clampCursor(m_cursor, m_alternate ? altShift : mainShift);
     clampCursor(m_savedMain, mainShift);
     clampCursor(m_savedAlt, altShift);
     m_cursor.pen = pen;
@@ -970,6 +978,137 @@ void Screen::resize(int columns, int rows)
     resetTabStops(oldColumns);
     m_dirty.fill(false, rows);
     markAllDirty();
+}
+
+void Screen::reflowMain(int columns, int rows)
+{
+    // The scrollback and the screen as lines of text: rows joined where the text wrapped. Blank
+    // rows under the cursor and the last text are left out (they are padding, not lines).
+    int lastRow = m_cursor.row;
+    for (int row = m_rows - 1; row > lastRow; --row) {
+        if (std::ranges::any_of(m_mainLines[row].cells, [](const Cell &c) { return !c.isPlainBlank(); })) {
+            lastRow = row;
+            break;
+        }
+    }
+    QList<Line> logical;
+    int cursorLine = -1;
+    qsizetype cursorOffset = 0;
+    bool open = false;
+    auto append = [&](const Line &row, bool isCursorRow) {
+        if (!open) {
+            logical.append(Line());
+            open = true;
+        }
+        Line &into = logical.last();
+        const qsizetype base = into.cells.size();
+        if (isCursorRow) {
+            cursorLine = int(logical.size()) - 1;
+            cursorOffset = base + m_cursor.column + (m_cursor.pendingWrap ? 1 : 0);
+        }
+        into.cells += row.cells;
+        for (auto it = row.clusters.cbegin(); it != row.clusters.cend(); ++it)
+            into.clusters.insert(int(base) + it.key(), it.value());
+        open = row.wrapped;
+    };
+    for (int i = 0; i < m_historyCount; ++i)
+        append(historyLine(i), false);
+    // (A scrollback line that wrapped into the screen goes on in its first row.)
+    for (int row = 0; row <= lastRow; ++row)
+        append(m_mainLines[row], row == m_cursor.row);
+
+    // Wrapped again at the new width.
+    QList<Line> rowsOut;
+    int cursorRowOut = 0;
+    int cursorColumnOut = 0;
+    for (int index = 0; index < logical.size(); ++index) {
+        Line &line = logical[index];
+        qsizetype end = line.cells.size();
+        while (end > 0 && line.cells.at(end - 1).isPlainBlank())
+            --end;
+        const bool hasCursor = index == cursorLine;
+        qsizetype pos = 0;
+        bool placed = false;
+        do {
+            Line row;
+            row.cells.reserve(columns);
+            const qsizetype start = pos;
+            while (pos < end && row.cells.size() < columns) {
+                const Cell &cell = line.cells.at(pos);
+                if (cell.isWideTail()) {
+                    ++pos; // (its head took it along, or lost it)
+                    continue;
+                }
+                if (cell.isWide()) {
+                    if (columns < 2) {
+                        Cell blank = cell;
+                        blank.ch = U' ';
+                        blank.attrs &= quint16(~(WideFlag | ClusterFlag));
+                        row.cells.append(blank);
+                        pos += 2;
+                        continue;
+                    }
+                    // A wide character that does not fit wraps first, the last cell left blank.
+                    if (row.cells.size() == columns - 1)
+                        break;
+                    if (cell.attrs & ClusterFlag)
+                        row.clusters.insert(int(row.cells.size()), line.clusters.value(int(pos)));
+                    row.cells.append(cell);
+                    Cell tail = pos + 1 < line.cells.size() ? line.cells.at(pos + 1) : Cell();
+                    tail.ch = 0;
+                    row.cells.append(tail);
+                    pos += 2;
+                    continue;
+                }
+                if (cell.attrs & ClusterFlag)
+                    row.clusters.insert(int(row.cells.size()), line.clusters.value(int(pos)));
+                row.cells.append(cell);
+                ++pos;
+            }
+            if (hasCursor && !placed && (cursorOffset < pos || pos >= end)) {
+                // (The cursor may stand after the text: on this row, or the rows it would fill.)
+                qsizetype column = cursorOffset - start;
+                int extraRows = 0;
+                while (column >= columns && pos >= end) {
+                    column -= columns;
+                    ++extraRows;
+                }
+                cursorRowOut = int(rowsOut.size()) + extraRows;
+                cursorColumnOut = int(std::clamp<qsizetype>(column, 0, columns - 1));
+                placed = true;
+            }
+            row.wrapped = pos < end;
+            row.cells.resize(columns);
+            rowsOut.append(std::move(row));
+        } while (pos < end);
+        if (hasCursor) {
+            const int needed = cursorRowOut + 1;
+            while (int(rowsOut.size()) < needed)
+                rowsOut.append(blankLine());
+        }
+    }
+
+    // The screen: the cursor on the row it was on, moved down by as many rows as the text above it
+    // grew (blank rows under it take them; more push the top rows into the scrollback), up when
+    // the rows under it would not fit; above the screen, the scrollback.
+    const int total = int(rowsOut.size());
+    const int grown = cursorRowOut - (m_historyCount + m_cursor.row);
+    const int below = std::min(total - 1 - cursorRowOut, rows - 1);
+    const int cursorRow = std::clamp(m_cursor.row + std::max(0, grown), 0, rows - 1 - std::max(0, below));
+    const int top = std::max(0, cursorRowOut - cursorRow);
+    clearHistory();
+    for (int i = 0; i < top; ++i)
+        pushHistory(std::move(rowsOut[i]));
+    m_mainLines.clear();
+    for (int i = top; i < total && m_mainLines.size() < rows; ++i)
+        m_mainLines.append(std::move(rowsOut[i]));
+    const Line blank = blankLine();
+    while (m_mainLines.size() < rows)
+        m_mainLines.append(blank);
+    m_cursor.row = std::clamp(cursorRowOut - top, 0, rows - 1);
+    m_cursor.column = cursorColumnOut;
+    m_cursor.pendingWrap = false;
+    m_scrolledIntoHistory = 0;
 }
 
 void Screen::reset()

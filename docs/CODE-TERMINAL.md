@@ -67,10 +67,20 @@ execute, ESC, CSI and OSC actions.
   (every 8 columns by default), G0/G1 with DEC Special Graphics and UK, DECSC/DECRC per screen.
 * Erasing and scrolled-in lines use the current background (xterm's bce, which xterm-256color
   promises).
-* Resize keeps the content without reflow: lines are cut or padded (a wide character cut at the new
-  edge goes), the cursor clamped. A shorter main screen pushes its top rows into the scrollback when
-  the cursor would fall off (else drops rows below the cursor); a taller one takes lines back from
-  the scrollback. The scroll region resets. Sizes are clamped to 1-1000 columns, 1-500 rows.
+* Another width on the main screen **reflows** it (`reflow()`, on by default): the scrollback's and
+  the screen's lines of text — rows joined where they wrapped — are wrapped again at the new width
+  (a wide character that does not fit at the margin wraps first; combining marks, colours and links
+  go with their cells); blank rows under the cursor and the last text are padding, not lines. The
+  cursor stays on its character, on the row it was on, moved down by as many rows as the text above
+  it grew (the blank rows under it take them; beyond, the top rows go into the scrollback) and up
+  when the rows under it would not fit. A split halving a terminal's width cuts nothing.
+* Otherwise — the alternate screen (its program redraws it on SIGWINCH), the main screen under it, a
+  change of height alone, `setReflow(false)` — resize keeps the content without reflow: lines are
+  cut or padded (a wide character cut at the new edge goes), the cursor clamped. A shorter main
+  screen pushes its top rows into the scrollback when the cursor would fall off (else drops rows
+  below the cursor); a taller one takes lines back from the scrollback. The scroll region resets.
+  Sizes are clamped to 1-1000 columns, 1-500 rows. A view drops its selection and link on a resize
+  and finds its matches again.
 * Dirty rows: `isRowDirty()` / `clearDirty()`, and `scrolledIntoHistory()` — how many lines went
   into the scrollback since, so a view scrolled back can keep showing the same lines.
 * `clearKeepingCursorLine()` — the panel's "Clear": the scrollback goes and, on the main screen, the
@@ -445,7 +455,6 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
 
 * Windows: a ConPTY backend (`pty_conpty.cpp`) behind `platform::Pty` — with `hasForegroundJob()`
   and `currentDirectory()` (false / "" are valid answers).
-* Reflow of wrapped lines on resize (lines are cut / padded; `Line::wrapped` is already kept).
 * A thread's terminal layout (tabs, splits, folders, commands — not the processes) restored after a
   restart; resizable splits (they share the tab equally).
 * The sidebar's "a program runs in its terminal" mark (`TerminalRegistry.busyKeys` /
@@ -459,8 +468,9 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
 * `tests/core/term`: `tst_term` (sequences in the style of vttest's basics, wrapping and the
   pending wrap, wide characters at the edge, combining marks, Polish text, SGR in every form,
   replies, OSC, hyperlinks, UTF-8 split at every byte and invalid bytes, long parameter lists,
-  scroll regions, scrollback, the alternate screen, modes, resize, dirty rows, character widths),
-  `tst_term_keys` (keys, pastes, focus, mouse), `tst_term_fuzz` (10 MB random bytes and sequences
+  scroll regions, scrollback, the alternate screen, modes, resize and its reflow — narrower, wider,
+  the scrollback, wide characters, marks and links, a cleared screen, one column —, dirty rows,
+  character widths), `tst_term_keys` (keys, pastes, focus, mouse), `tst_term_fuzz` (10 MB random bytes and sequences
   with resizes, invariants checked; `yes` flood), `tst_term_text` (lines of text mapped back to cells
   with wide characters, marks and emoji; the search — case, Polish letters, wrapped matches, the
   limit; Clear keeping the prompt's row; URLs and paths as compilers, test runners, grep, git and
@@ -478,6 +488,6 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
   window (keys, Ctrl+C, copy, the terminal's Ctrl+Shift chords, the app's shortcuts left alone, the
   input method, selection by drag / double / triple click, wrapped lines, the scrollback with keys
   and wheel, mouse reporting, links under Ctrl and Ctrl+click, the find bar's matches through new
-  output, Clear, the context menu's request, the chat's block, painting at 0×0, 1×1 and other odd
-  sizes, colours in both palettes, layout, a `yes` flood's paint count).
+  output, Clear, a resize reflowing the text, the context menu's request, the chat's block, painting
+  at 0×0, 1×1 and other odd sizes, colours in both palettes, layout, a `yes` flood's paint count).
 * `tst_qml_compiled`: the panel's QML is compiled to C++ in full.

@@ -173,6 +173,7 @@ void TerminalView::setSession(TerminalSession *session)
         connect(session, &TerminalSession::contentChanged, this, &TerminalView::onContentChanged);
         connect(session, &TerminalSession::modesChanged, this, &TerminalView::onModesChanged);
         connect(session, &TerminalSession::cleared, this, &TerminalView::onCleared);
+        connect(session, &TerminalSession::sizeChanged, this, &TerminalView::onResized);
         connect(session, &TerminalSession::runningChanged, this, [this] {
             updateBlinking();
             updateCursorArea();
@@ -1541,6 +1542,20 @@ void TerminalView::clear()
 {
     if (m_session)
         m_session->clear();
+}
+
+void TerminalView::onResized()
+{
+    // Another width wraps the text again (Screen::resize): the lines counted before are others now.
+    clearSelection();
+    clearLink();
+    m_noLink = {{1, 0}, {0, 0}};
+    m_scrollOffset = std::min(m_scrollOffset, historySize());
+    m_lastHistorySize = historySize();
+    if (!m_findText.isEmpty())
+        runFind(true);
+    update();
+    Q_EMIT scrollChanged();
 }
 
 void TerminalView::onCleared()

@@ -74,6 +74,7 @@ private Q_SLOTS:
     void cursorStyle();
     void resize();
     void resizePushesIntoScrollback();
+    void resizeReflows();
     void resetKeepsScrollback();
     void dirtyRows();
     void bell();
@@ -783,7 +784,9 @@ void TestTerm::cursorStyle()
 
 void TestTerm::resize()
 {
+    // Without reflow (as the alternate screen always is): lines cut and padded.
     Term term(10, 4);
+    term.t.screen().setReflow(false);
     term.feed("0123456789abc\r\nline 2\x1b[4;10H");
     term.t.resize(5, 4);
     QCOMPARE(term.screen().columns(), 5);
@@ -802,6 +805,7 @@ void TestTerm::resize()
     QCOMPARE(term.screen().cursorColumn(), 19);
     // A wide character cut by the new width goes.
     Term wide(4, 2);
+    wide.t.screen().setReflow(false);
     wide.feed(QString::fromUcs4(U"ab\x4E2D").toUtf8());
     wide.t.resize(3, 2);
     QCOMPARE(wide.screen().line(0).trimmedText(), u"ab"_s);
@@ -852,6 +856,86 @@ void TestTerm::resizePushesIntoScrollback()
     alt.feed("\x1b[?1049l");
     QCOMPARE(rowsOf(alt.screen()), (QStringList{u"3"_s, u"4"_s}));
     QCOMPARE(alt.screen().cursorRow(), 1);
+}
+
+void TestTerm::resizeReflows()
+{
+    // Narrower: a long line wraps again; wider: what wrapped joins; the cursor stays on its character.
+    Term term(20, 5, 100);
+    term.feed("zażółć gęślą jaźń 0123456789\r\n$ ls");
+    QCOMPARE(rowsOf(term.screen()), (QStringList{u"zażółć gęślą jaźń 01"_s, u"23456789"_s, u"$ ls"_s}));
+    term.t.resize(10, 5);
+    QCOMPARE(rowsOf(term.screen()), (QStringList{u"zażółć gęś"_s, u"lą jaźń 01"_s, u"23456789"_s, u"$ ls"_s}));
+    QCOMPARE(term.screen().cursorRow(), 3);
+    QCOMPARE(term.screen().cursorColumn(), 4);
+    QVERIFY(term.screen().line(0).wrapped && term.screen().line(1).wrapped && !term.screen().line(2).wrapped);
+    term.t.resize(40, 5);
+    QCOMPARE(rowsOf(term.screen()), (QStringList{u"zażółć gęślą jaźń 0123456789"_s, u"$ ls"_s}));
+    QCOMPARE(term.screen().cursorRow(), 1);
+    QCOMPARE(term.screen().cursorColumn(), 4);
+    term.feed("x");
+    QCOMPARE(term.screen().line(1).trimmedText(), u"$ lsx"_s);
+
+    // Rows beyond the screen go into the scrollback, and come back from it.
+    Term small(10, 3, 100);
+    small.feed("aaaaaaaaaabbbbbbbbbbcccccccccc\r\n$ ");
+    QCOMPARE(small.screen().historySize(), 1);
+    small.t.resize(30, 3);
+    QCOMPARE(small.screen().historySize(), 0);
+    QCOMPARE(rowsOf(small.screen()), (QStringList{u"aaaaaaaaaabbbbbbbbbbcccccccccc"_s, u"$"_s}));
+    QCOMPARE(small.screen().cursorRow(), 1);
+    QCOMPARE(small.screen().cursorColumn(), 2);
+    small.t.resize(5, 3);
+    QCOMPARE(small.screen().historySize(), 4);
+    QCOMPARE(rowsOf(small.screen()), (QStringList{u"ccccc"_s, u"ccccc"_s, u"$"_s}));
+    QCOMPARE(small.screen().cursorRow(), 2);
+    QCOMPARE(small.screen().cursorColumn(), 2);
+    QCOMPARE(logicalLine(small.screen(), -4, false).text, u"aaaaaaaaaabbbbbbbbbbcccccccccc"_s);
+    // A cleared screen over a scrollback: the prompt stays at the top, the scrollback above it.
+    Term cleared(10, 4, 100);
+    cleared.feed("1\r\n2\r\n3\r\n4\r\n5\r\n6\r\n\x1b[2J\x1b[H$ ");
+    const int history = cleared.screen().historySize();
+    cleared.t.resize(8, 4);
+    QCOMPARE(cleared.screen().cursorRow(), 0);
+    QCOMPARE(cleared.screen().historySize(), history);
+    QCOMPARE(cleared.screen().line(0).trimmedText(), u"$"_s);
+
+    // A wide character is never split: one that does not fit wraps first.
+    Term wide(6, 3, 10);
+    wide.feed(QString::fromUcs4(U"ab\x4E2D\x6587\x5B57\r\n").toUtf8());
+    wide.t.resize(5, 3);
+    QCOMPARE(wide.screen().line(0).trimmedText(), QString::fromUcs4(U"ab\x4E2D"));
+    QCOMPARE(wide.screen().line(1).trimmedText(), QString::fromUcs4(U"\x6587\x5B57"));
+    QVERIFY(wide.screen().line(0).wrapped);
+    QVERIFY(wide.cell(1, 0).isWide());
+    QVERIFY(wide.cell(1, 1).isWideTail());
+
+    // Combining marks and links go with their characters.
+    Term marks(6, 3, 10);
+    marks.feed("abcde\xcc\x81" "f\x1b]8;;https://x.pl\x07LINK\x1b]8;;\x07");
+    marks.t.resize(4, 4);
+    QCOMPARE(rowsOf(marks.screen()), (QStringList{u"abcd"_s, u"e\u0301fLI"_s, u"NK"_s}));
+    QCOMPARE(marks.screen().line(1).cellText(0), u"e\u0301"_s);
+    QCOMPARE(marks.screen().hyperlink(marks.cell(1, 2).link), u"https://x.pl"_s);
+    QCOMPARE(marks.screen().hyperlink(marks.cell(2, 1).link), u"https://x.pl"_s);
+    QCOMPARE(marks.screen().cursorRow(), 2);
+    QCOMPARE(marks.screen().cursorColumn(), 2);
+
+    // The alternate screen is not reflowed (its program redraws it), nor the main one under it.
+    Term alt(10, 3, 10);
+    alt.feed("0123456789AB\x1b[?1049h\x1b[Hfull");
+    alt.t.resize(5, 3);
+    QCOMPARE(alt.screen().line(0).trimmedText(), u"full"_s);
+    alt.feed("\x1b[?1049l");
+    QCOMPARE(alt.screen().line(0).trimmedText(), u"01234"_s);
+
+    // One column: wide characters become blanks, nothing breaks.
+    Term narrow(8, 3, 10);
+    narrow.feed(QString::fromUcs4(U"a\x4E2Db").toUtf8());
+    narrow.t.resize(1, 3);
+    for (int row = 0; row < 3; ++row)
+        QCOMPARE(narrow.screen().line(row).cells.size(), 1);
+    QCOMPARE(narrow.screen().cursorRow(), 2);
 }
 
 void TestTerm::resetKeepsScrollback()

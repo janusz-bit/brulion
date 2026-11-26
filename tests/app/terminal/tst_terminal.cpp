@@ -138,6 +138,7 @@ private Q_SLOTS:
     void viewLinks();
     void viewFind();
     void viewClear();
+    void viewReflow();
     void viewContextMenu();
     void chatBlock_data();
     void chatBlock();
@@ -795,6 +796,27 @@ void TestTerminal::viewClear()
     QVERIFY(!w.view->hasSelection());
     QVERIFY(w.view->visibleText().startsWith(u"$ ls -la"_s));
     QCOMPARE(w.view->visibleText().trimmed(), u"$ ls -la"_s);
+}
+
+void TestTerminal::viewReflow()
+{
+    Window w;
+    TerminalSession session;
+    w.view->setSession(&session);
+    const int columns = w.view->columns();
+    show(session, QByteArray(columns + 10, 'x') + "\r\n$ ");
+    w.view->selectAll();
+    QVERIFY(w.view->hasSelection());
+    // Narrower: the long line wraps again (nothing of it cut); the selection's lines are others now.
+    w.view->setWidth(w.view->width() / 2);
+    QTRY_VERIFY(w.view->columns() < columns);
+    QVERIFY(!w.view->hasSelection());
+    QCOMPARE(session.terminal().screen().text().count(u'x'), columns + 10);
+    QCOMPARE(session.terminal().screen().line(session.terminal().screen().cursorRow()).trimmedText(), u"$"_s);
+    // Wider again: one row of it.
+    w.view->setWidth(w.window.width());
+    QTRY_COMPARE(w.view->columns(), columns);
+    QCOMPARE(session.terminal().screen().line(1).trimmedText(), QString(10, u'x'));
 }
 
 void TestTerminal::viewContextMenu()

@@ -277,6 +277,7 @@ private:
     void runFind(bool keepPlace);
     void revealMatch(int index);
     void onCleared();
+    void onResized();
     void paintMatches(QPainter *painter, int lineIndex, qreal top);
     void applyColorsToSession();
     QColor resolve(quint32 rawColor, bool foreground) const;

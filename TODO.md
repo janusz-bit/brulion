@@ -9,8 +9,8 @@ done in the repository simply disappears from the list.
   worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
   and the terminal are there (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
   real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
-  mode tried on Windows and macOS at all; the terminal's reflow of wrapped lines on resize, its
-  layout (tabs, splits, folders) restored after a restart, resizable splits and the sidebar's mark
+  mode tried on Windows and macOS at all; the terminal's layout (tabs, splits, folders) restored
+  after a restart, resizable splits and the sidebar's mark
   of a thread whose terminal runs a program (TerminalRegistry.busyKeys); staging and discarding single files or hunks, stash, merge conflicts, pull requests from forks or
   to another base in the UI; a worktree removed with its thread; threads continued from the phone
   through `acp serve` (a project's folder on that computer).

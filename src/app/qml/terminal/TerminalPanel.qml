@@ -206,12 +206,7 @@ FocusScope {
         findBar.search()
     }
     function closeFind(): void {
-        if (!findBar.visible)
-            return
         findBar.visible = false
-        const view = root.currentView()
-        if (view !== null)
-            view.clearFind()
     }
 
     // ---- The context menu ------------------------------------------------------------------------

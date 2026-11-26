@@ -28,9 +28,20 @@ Rectangle {
         field.forceActiveFocus()
         field.selectAll()
     }
+    /// The terminal whose matches are shown (another one focused: its own, these go).
+    property TerminalView searched: null
     function search(): void {
-        if (bar.view !== null)
-            bar.view.find(field.text, bar.matchCase)
+        if (bar.searched !== null && bar.searched !== bar.view)
+            bar.searched.clearFind()
+        bar.searched = bar.visible ? bar.view : null
+        if (bar.searched !== null)
+            bar.searched.find(field.text, bar.matchCase)
+    }
+    /// The bar closed: no matches shown anywhere.
+    function clear(): void {
+        if (bar.searched !== null)
+            bar.searched.clearFind()
+        bar.searched = null
     }
     function older(): void {
         if (bar.view !== null)
@@ -50,9 +61,13 @@ Rectangle {
         return qsTr("%1 of %2").arg(bar.view.findIndex + 1).arg(bar.view.findCount)
     }
 
-    // Another terminal shown: the query goes on there.
+    // Another terminal shown: the query goes on there (only while the bar is open).
     onViewChanged: bar.search()
     onMatchCaseChanged: bar.search()
+    onVisibleChanged: {
+        if (!bar.visible)
+            bar.clear()
+    }
 
     implicitHeight: row.implicitHeight + 2 * Theme.space1
     implicitWidth: row.implicitWidth + Theme.space2 + Theme.space1
