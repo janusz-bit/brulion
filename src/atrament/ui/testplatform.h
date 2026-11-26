@@ -13,6 +13,7 @@
 //   QCOMPARE(tw.pixel(20, 20), …);
 
 #include "raster/raster.h"
+#include "ui/accessibility.h"
 #include "ui/platform.h"
 
 #include <chrono>
@@ -22,6 +23,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace brulion::atrament {
@@ -42,6 +44,7 @@ public:
     void setCursor(CursorStyle cursor) override { m_cursor = cursor; }
     void setTitle(std::u16string_view title) override { m_title = title; }
     void inputStateChanged() override { ++m_inputStateChanges; }
+    void accessibilityChanged(const std::vector<AccessibilityEvent> &events) override;
 
     // Runs queued tasks and draws while a frame is asked for; returns the number of frames drawn.
     int settle();
@@ -79,6 +82,15 @@ public:
     int inputStateChanges() const { return m_inputStateChanges; }
     InputHandler *inputHandler() const;
     const Scene *lastScene() const { return m_lastScene; }
+    // The accessibility events of the frames drawn since the last call (with copies of their text).
+    struct RecordedAccessibilityEvent {
+        AccessibilityEvent::Type type;
+        AccessNodeId node = 0;
+        AccessNodeId parent = 0;
+        AccessibilityStates changed;
+        std::u16string oldText;
+    };
+    std::vector<RecordedAccessibilityEvent> takeAccessibilityEvents() { return std::exchange(m_accessEvents, {}); }
 
 private:
     bool send(const PlatformInput &input);
@@ -98,6 +110,7 @@ private:
     RasterTarget m_target;
     RasterRenderer m_renderer;
     const Scene *m_lastScene = nullptr;
+    std::vector<RecordedAccessibilityEvent> m_accessEvents;
 };
 
 class TestPlatform final : public Platform {

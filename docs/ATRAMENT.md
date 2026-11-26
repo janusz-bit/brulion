@@ -65,7 +65,7 @@ typed element API instead), print support.
 | D10 | Input: hitboxes registered in prepaint, listeners in paint, dispatched in reverse paint order with a capture and a bubble phase; focus handles; actions and keymaps in key contexts; an `InputHandler` interface for input methods modelled on NSTextInputClient / Android `InputConnection` | GPUI's proven model; the IME interface maps 1:1 onto every platform's. |
 | D11 | Execution: one main thread, a platform dispatcher, timers; a test platform with a virtual clock and deterministic ordering | Timing-free tests; no flaky waits. |
 | D12 | First host: `AtramentItem`, a `QQuickItem` that draws a window's scene with the QRhi GPU renderer in a `QSGRenderNode`, inside Qt Quick's own render pass (the CPU renderer into a texture where Qt Quick has no QRhi, the GPU lacks OpenGL ES 3, or `BRULION_ATRAMENT_RENDERER=cpu`), and translates Qt's events and input-method queries | Views move one by one; Qt keeps providing windows, input methods and accessibility until our own platform layers replace it. |
-| D13 | Accessibility: elements describe themselves (role, name, value, state, actions, bounds) into a semantic tree each frame; hosted, a bridge to `QAccessibleInterface`; standalone, AccessKit's C API | Accessibility from the first view that ships, on every platform. |
+| D13 | Accessibility: elements describe themselves (role, name, value, state, actions, bounds) into a semantic tree each frame; hosted, a bridge to `QAccessibleInterface`; standalone, AccessKit's C API | Accessibility from the first view that ships, on every platform. Done hosted ("Accessibility" below): the tree in `ui/accessibility.h`, the bridge in `qt/qtaccessibility.h` (tested through `QAccessible`; the gallery read by an AT-SPI client); AccessKit with the own platforms (M4). |
 | D14 | Styling with GPUI-like builder methods (`p(12)`, `gap(8)`, `rounded(10)`, `bg(…)`) over theme tokens | Code completion, no style language to parse, compiled. |
 | D15 | Geometry in logical pixels (`float`), snapped to device pixels when painted | One scale factor per window; crisp edges at fractional scales. |
 
@@ -189,6 +189,59 @@ A focused element that edits text installs one for the frame; the host maps it o
 `inputMethodQuery` / `QInputMethodEvent`, later onto `text-input-v3`, `InputConnection`, TSF and
 a hidden `<textarea>` in the browser.
 
+### Accessibility
+
+While an assistive technology listens (`Window::setAccessibilityEnabled`, which the host sets),
+paint also builds a **semantic tree** (`ui/accessibility.h`): nodes with a role, a name, a value,
+a description, states (focusable, focused, selected, checked, disabled, expanded, editable,
+multiline, offscreen…), actions and bounds in window pixels; a text input's text, selection and
+laid-out text; a list's row count and each shown row's index; a scrolling node's offset. The nodes
+live in the frame arena next to the elements and are known across frames by their element's id
+path, as element state is — a screen reader follows a node from frame to frame, and a list's row
+by its index. Nothing of it is built, and paint costs nothing more, while it is off.
+
+Elements describe themselves:
+
+| Element | Node |
+|---|---|
+| `div()` | none by default; a **button** with an `id` and `onClick`, a **checkbox** with `checked(…)`, a **scroll view** when it scrolls, a **group** when it tracks focus or has a label; `role(Role::…)` gives any role (`Role::None`: no node) |
+| `Text` / a string | names the node around it when that one is named by its content (button, checkbox, link, heading, tab, list item, menu item — as on the web), else a **text** node of its own |
+| `TextInput` | a **text input**: the text as its value, the selection and caret, `label` as its name and the placeholder as its description (the placeholder names it when there is no label) |
+| `uniformList` | a **list** with its row count; each shown row a **list item** with its index, described by the row's root element (its click, `selected(…)`, its text as the name) |
+| `img(…).alt(u"…")` | an **image**; without `alt` decoration |
+
+The builder methods of `div()`: `role(Role)`, `ariaLabel(u"…")` (the name, in place of the text
+inside), `ariaDescription`, `ariaValue`, `ariaLevel(n)` (a heading's), `checked(bool)`,
+`selected(bool)`, `expanded(bool)`, `disabled()` (also keeps its click listeners from running),
+`rangeValue(value, min, max, step)`, `ariaHidden()` (it and what is inside are left out — icons
+beside their label, decoration, text that changes every frame), `onAccessibilityAction(action, f)`
+(a slider's Increment / Decrement, a custom SetValue).
+
+Actions of an assistive technology go through `Window::performAccessibilityAction(node, action)`
+to the element's own listeners, as input does: Click (a `ClickEvent` with `fromAccessibility`),
+Focus, SetValue / ReplaceText / SetSelection of a text input, ScrollIntoView (every scrolling node
+around it moves the least that shows it), ScrollForward / ScrollBackward (a page less an eighth),
+ScrollTo. After each frame the window compares the tree with the previous frame's and gives the
+platform the differences (`PlatformWindow::accessibilityChanged`): nodes added and removed (the
+topmost of each part), children changed, focus, name, description, value (with the old text),
+selection, states, role, the focused node's bounds, scrolling.
+
+**The Qt bridge** (`qt/qtaccessibility.h`): AtramentItem's `QAccessibleInterface` (from a factory,
+so it answers before Qt Quick's) has the root node's children as its own; every node an
+assistive technology asks for gets an object-less interface registered with Qt's cache — role and
+states mapped, the text and editable-text interfaces for text, actions (Press, Toggle, SetFocus,
+Increase / Decrease and Scroll Up / Down for scrolling — TalkBack scrolls forward with Increase —,
+ShowOnScreen inside scrolling content), the value interface for ranges and the viewport interface
+for scrolling (a list counts rows). The item is marked accessible as QML's `Accessible` would
+(`QQuickItemPrivate`, Qt6::QuickPrivate), so its window lists it; `Accessible.name` set in QML
+names it. The tree is turned on when Qt says an assistive technology is active, or when one first
+asks; an action draws its frame at once, so the next question sees its result. The tree's changes
+leave as `QAccessibleEvent`s — Focus, NameChanged, TextUpdated, TextCaretMoved and
+TextSelectionChanged, StateChanged one state at a time, ObjectCreated / ObjectShow and
+ObjectHide / ObjectDestroyed, ObjectReorder, ScrollingPositionChanged — for the nodes an assistive
+technology has seen (and the focus); a removed node's interface answers for its last place until
+the event loop runs again.
+
 ## Writing a view
 
 ```cpp
@@ -212,6 +265,7 @@ public:
                 .flexRow().itemsCenter().gap(8).px(12).h(36).rounded(8)
                 .hover([](Style &s) { s.background = Background::solid(rgb(0x2c2e33)); })
                 .child(div().id(u"check").size(16).rounded(4).border(1.5f).borderColor(rgb(0x9a9ca4))
+                               .checked(m_done).ariaLabel(u"Zrobione") // a checkbox for screen readers
                                .when(m_done, [](Div &&d) { return std::move(d).bg(rgb(0x8b93ff)); })
                                .onClick(cx.listener([](TaskRow &self, const ClickEvent &, Window &, Context<TaskRow> &cx) {
                                    self.m_done = !self.m_done;
@@ -239,6 +293,9 @@ Rules of thumb:
   listeners it registers live in the same frame arena.
 * **Elements that keep state across frames need a stable identity**: `id(…)` on rows of lists whose
   order changes; without one an element is known by its index among its siblings.
+* **Accessibility comes with the elements**: buttons, text, fields and lists describe themselves;
+  name what has no text (`ariaLabel` on an icon button, `alt` on a picture), say what a custom
+  control is (`role`, `checked`, `selected`, `expanded`), and leave decoration out (`ariaHidden`).
 * **Strings**: `std::u16string` / `std::u16string_view`, offsets in UTF-16 code units — what
   `QString` and Brulion's core use, so text from the core passes without conversion.
 * **Hosting in the Qt app**: `auto *item = new AtramentItem(parent); item->attach(app, view)` — the
@@ -250,10 +307,11 @@ Rules of thumb:
 ## Code
 
 * `src/atrament/<area>/` — `base`, `scene`, `raster`, `text`, `layout`, `ui`, each a static
-  library `brulion_atrament_<area>`; `src/atrament/qt` — the Qt Quick host and the QRhi renderer
-  (`brulion_atrament_qt`); `src/atrament/gallery` — a developer app showing every element
-  (`atrament-gallery`; `--screenshot <file> [--renderer gpu]` renders a frame headless with
-  either renderer and prints their times, `--grab <file>` saves what a Qt Quick window drew).
+  library `brulion_atrament_<area>`; `src/atrament/qt` — the Qt Quick host, the QRhi renderer and
+  the accessibility bridge (`brulion_atrament_qt`); `src/atrament/gallery` — a developer app showing
+  every element (`atrament-gallery`; `--screenshot <file> [--renderer gpu]` renders a frame headless
+  with either renderer and prints their times, `--accessibility` prints the frame's tree,
+  `--grab <file>` saves what a Qt Quick window drew).
 * Namespace `brulion::atrament`. No Qt, no exceptions thrown, no RTTI needed outside the host.
   Headers relative to `src/atrament` (`#include "text/textlayout.h"`).
 * Tests: `tests/atrament/<area>/tst_atrament_<area>*.cpp` (QtTest is only the runner; golden
@@ -275,6 +333,10 @@ Rules of thumb:
   headless (`tests/atrament/qt`: Vulkan from the loader under any platform plugin, OpenGL with a
   display; skipped with neither), and `AtramentItem` is drawn inside Qt Quick through a
   `QQuickRenderControl` on that QRhi.
+* Accessibility: `window.setAccessibilityEnabled(true)`, then `accessibilityTree().dump()` (one
+  node per line: `button "Zapisz" [focusable]`), `performAccessibilityAction`, and the events a
+  frame gave in `TestWindow::takeAccessibilityEvents()`; the Qt bridge through `QAccessible` itself
+  (`tests/atrament/qt`, an offscreen window, `QAccessible::installUpdateHandler` for the events).
 
 ## Roadmap
 

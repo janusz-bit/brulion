@@ -44,7 +44,7 @@ Div heading(std::u16string_view title, std::u16string_view subtitle)
     return div()
             .flexCol()
             .gap(4)
-            .child(div().textSize(22).fontSemibold().textColor(t.text).child(title))
+            .child(div().role(Role::Heading).ariaLevel(1).textSize(22).fontSemibold().textColor(t.text).child(title))
             .child(div().textSize(13).textColor(t.muted).child(subtitle));
 }
 
@@ -72,9 +72,9 @@ std::shared_ptr<FontCollection> loadFonts(const QStringList &folders)
 
 Gallery::Gallery(Context<Gallery> &cx)
     : m_focus(cx.newFocusHandle())
-    , m_search(cx.newEntity<TextInput>(TextInputOptions { u"Szukaj w notatkach…", false, InputHandler::Purpose::Text, {} }))
+    , m_search(cx.newEntity<TextInput>(TextInputOptions { u"Szukaj w notatkach…", false, InputHandler::Purpose::Text, {}, u"Szukaj" }))
     , m_note(cx.newEntity<TextInput>(TextInputOptions { u"Napisz coś…", true, InputHandler::Purpose::Multiline,
-              u"Jutro o 9 zadzwonić do Łucji.\nKupić: chleb, masło, żurek." }))
+              u"Jutro o 9 zadzwonić do Łucji.\nKupić: chleb, masło, żurek.", u"Notatka" }))
 {
 }
 
@@ -142,7 +142,9 @@ AnyElement Gallery::sidebar(Window &, Context<Gallery> &cx)
                             g.section = i;
                             cx.notify();
                         }))
-                        .child(div().w(22).textCenter().textColor(selected ? t.accent : t.faint).child(kSectionIcons[i]))
+                        .role(Role::Tab)
+                        .selected(selected)
+                        .child(div().ariaHidden().w(22).textCenter().textColor(selected ? t.accent : t.faint).child(kSectionIcons[i]))
                         .child(div().fontMedium().child(kSections[i])));
     }
     return div()
@@ -165,7 +167,7 @@ AnyElement Gallery::sidebar(Window &, Context<Gallery> &cx)
                             .child(div().flexCol()
                                             .child(div().textSize(16).fontBold().child(u"Atrament"))
                                             .child(div().textSize(11).textColor(t.faint).child(u"Brulion UI · M0"))))
-            .children(items);
+            .child(div().flexCol().gap(4).role(Role::TabList).ariaLabel(u"Sekcje").children(items));
 }
 
 AnyElement Gallery::typography(Window &, Context<Gallery> &cx)
@@ -190,6 +192,7 @@ AnyElement Gallery::typography(Window &, Context<Gallery> &cx)
                     g.columnWidth = std::clamp(g.columnWidth + delta, 160.0f, 900.0f);
                     cx.notify();
                 }))
+                .ariaLabel(delta < 0 ? u"Węziej" : u"Szerzej") // not "minus węziej"
                 .child(label);
     };
     TextStyleRefinement bold;
@@ -271,6 +274,7 @@ AnyElement Gallery::controls(Window &window, Context<Gallery> &cx)
                 .cursorPointer()
                 .hover([hoverBg](Style &s) { s.background = Background::solid(hoverBg); })
                 .active([](Style &s) { s.opacity = 0.8f; })
+                .role(Role::Button)
                 .child(label);
     };
     ArenaVector<AnyElement> chips;
@@ -312,6 +316,8 @@ AnyElement Gallery::controls(Window &window, Context<Gallery> &cx)
                                             .child(button(u"like", liked ? u"❤ Lubię" : u"🤍 Lubię",
                                                     liked ? rgba(0xf0716b33) : t.raised, liked ? t.danger : t.text,
                                                     t.hover)
+                                                            .checked(liked) // a toggle button
+                                                            .ariaLabel(u"Lubię")
                                                             .onClick(cx.listener([](Gallery &g, const ClickEvent &,
                                                                                          Window &, Context<Gallery> &cx) {
                                                                 g.liked = !g.liked;
@@ -332,7 +338,7 @@ AnyElement Gallery::controls(Window &window, Context<Gallery> &cx)
                                             .cursorPointer()
                                             .onClick(cx.listener([](Gallery &g, const ClickEvent &e, Window &,
                                                                          Context<Gallery> &cx) {
-                                                if (e.isKeyboard) {
+                                                if (e.isKeyboard || e.fromAccessibility) {
                                                     ++g.counter;
                                                     cx.notify();
                                                 }
@@ -421,6 +427,7 @@ AnyElement Gallery::longList(Window &, Context<Gallery> &cx)
                                 .borderB(1)
                                 .borderColor(th.border)
                                 .when(selected, [&](Div &&d) { return std::move(d).bg(rgba(0x8b93ff1f)); })
+                                .selected(selected)
                                 .hover([](Style &s) { s.background = Background::solid(theme().raised); })
                                 .cursorPointer()
                                 .onClick([app, id, i](const ClickEvent &, Window &, App &) {
@@ -430,6 +437,7 @@ AnyElement Gallery::longList(Window &, Context<Gallery> &cx)
                                     });
                                 })
                                 .child(div()
+                                                .ariaHidden()
                                                 .size(16)
                                                 .rounded(task ? 4 : 8)
                                                 .border(task ? 1.5f : 0)
@@ -441,6 +449,7 @@ AnyElement Gallery::longList(Window &, Context<Gallery> &cx)
                                 .child(div().textSize(12).textColor(th.faint).child(number(double(i % 28 + 1)) + u" lis"));
                     })
                             .itemHeight(40)
+                            .ariaLabel(u"Notatki")
                             .flex1()
                             .rounded(14)
                             .bg(t.surface)
@@ -455,7 +464,7 @@ AnyElement Gallery::drawing(Window &, Context<Gallery> &)
             .flexCol()
             .gap(20)
             .child(heading(u"Rysowanie", u"Ścieżki, łuki i krzywe — wypełnianie bez QPainter"))
-            .child(card().child(canvas([](Rect b, Window &w, App &) {
+            .child(card().role(Role::Image).ariaLabel(u"Wykres: fala, która gaśnie").child(canvas([](Rect b, Window &w, App &) {
                 const Theme &th = theme();
                 // A grid, a filled area under a curve, the curve itself as a thin band.
                 for (int i = 1; i < 4; ++i) {
@@ -486,7 +495,9 @@ AnyElement Gallery::drawing(Window &, Context<Gallery> &)
             .child(div()
                             .flexRow()
                             .gap(16)
-                            .child(card().w(240).itemsCenter().child(canvas([](Rect b, Window &w, App &) {
+                            .child(card().w(240).itemsCenter().role(Role::Image)
+                                            .ariaLabel(u"Wykres pierścieniowy: 42 %, 27 %, 19 % i 12 %")
+                                            .child(canvas([](Rect b, Window &w, App &) {
                                 // A ring chart from arcs.
                                 const Theme &th = theme();
                                 const Point c = b.center();
@@ -513,7 +524,9 @@ AnyElement Gallery::footer(Window &window, Context<Gallery> &)
 {
     const Theme &t = theme();
     const Window::FrameStats s = window.lastFrameStats();
+    // Statistics that change with every frame: left out of the accessibility tree.
     return div()
+            .ariaHidden()
             .flexRow()
             .itemsCenter()
             .gap(18)

@@ -30,6 +30,7 @@ class QTimer;
 namespace brulion::atrament {
 
 class App;
+class AtramentAccessibility;
 class FontCollection;
 class Window;
 struct AnyView;
@@ -76,6 +77,10 @@ public:
     void present(const Scene &scene, Atlas &atlas) override;
     void setCursor(CursorStyle cursor) override;
     void inputStateChanged() override;
+    void accessibilityChanged(const std::vector<AccessibilityEvent> &events) override;
+
+    // The accessibility bridge (qtaccessibility.h): the window's semantic tree for Qt's.
+    AtramentAccessibility *accessibility() const { return m_accessibility.get(); }
 
     // The last frame's pixels when the CPU renderer draws (tests, screenshots).
     const QImage &frameImage() const { return m_image; }
@@ -133,6 +138,7 @@ private:
     Point m_lastClickPos;
     MouseButton m_lastClickButton = MouseButton::Left;
     int m_clickCount = 0;
+    std::unique_ptr<AtramentAccessibility> m_accessibility;
 };
 
 // A key event as Atrament's keystroke ("ctrl-shift-a", keyChar the text it types).

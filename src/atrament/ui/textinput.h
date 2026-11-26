@@ -34,6 +34,9 @@ struct TextInputOptions {
     bool multiline = false;
     InputHandler::Purpose purpose = InputHandler::Purpose::Text;
     std::u16string text;
+    // The field's accessible name ("Szukaj"); without one a screen reader names it by the
+    // placeholder, which is otherwise its description.
+    std::u16string label;
 };
 
 class TextInput {
@@ -56,6 +59,8 @@ public:
     std::optional<Range> markedRange() const { return m_marked; }
     const FocusHandle &focusHandle() const { return m_focus; }
     bool multiline() const { return m_options.multiline; }
+    const Options &options() const { return m_options; }
+    void setLabel(std::u16string_view label, Context<TextInput> &cx);
 
     // Editing operations (what keys and the input method do), each one an undo step.
     void replace(Range range, std::u16string_view text, Context<TextInput> &cx);
@@ -78,6 +83,8 @@ public:
     void unmark(Context<TextInput> &cx);
     // Commits text in place of the composition (or the selection): the composition's undo step.
     void commitText(std::optional<Range> range, std::u16string_view text, Context<TextInput> &cx);
+    // An assistive technology's action (focus, set the text, replace a range, select).
+    bool performAccessibilityAction(const AccessibilityActionRequest &request, Window &window, Context<TextInput> &cx);
 
     // Where things are (window logical px), from the last frame.
     std::optional<Rect> boundsForRange(Range range) const;
@@ -97,6 +104,7 @@ private:
     void restartBlink(Context<TextInput> &cx);
     void scheduleBlink(Context<TextInput> &cx);
     int clampOffset(int offset) const;
+    std::u16string normalized(std::u16string_view text) const;
 
     Options m_options;
     std::u16string m_text;

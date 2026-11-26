@@ -14,11 +14,13 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace brulion::atrament {
 
 class Scene;
 class Atlas;
+struct AccessibilityEvent;
 
 enum class CursorStyle : std::uint8_t {
     Arrow,
@@ -92,6 +94,9 @@ public:
     // The focused element's text input state changed (its selection, its marked text, whether it
     // takes text at all): the input method should ask again.
     virtual void inputStateChanged() { }
+    // The frame just presented changed the window's accessibility tree (ui/accessibility.h; only
+    // while Window::accessibilityEnabled()). The events' strings are valid during the call.
+    virtual void accessibilityChanged(const std::vector<AccessibilityEvent> &) { }
 
     struct Callbacks {
         std::function<void()> frame;

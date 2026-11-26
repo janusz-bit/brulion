@@ -9,6 +9,12 @@
 //        .hover([](Style &s) { s.background = Background::solid(theme.accentHover); })
 //        .onClick(cx.listener([](Editor &e, const ClickEvent &, Window &, Context<Editor> &cx) { e.save(cx); }))
 //        .child(u"Zapisz")
+//
+// Accessibility (ui/accessibility.h): a div makes a node of the semantic tree when it has a role —
+// its own (`role(Role::Heading)`), or one it has by default: a button when it has an id and a click
+// listener, a checkbox with checked(), a scroll view when it scrolls, a group when it tracks focus
+// or has a label. Text inside names a button (as on the web); `ariaLabel(…)` names it instead.
+// disabled() also keeps its click listeners from running.
 
 #include "base/function.h"
 #include "ui/app.h"
@@ -17,6 +23,7 @@
 #include "ui/style.h"
 #include "ui/window.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -69,6 +76,7 @@ public:
     using ActionListener = Fn<void(Window &, App &)>;
     using StyleRefinement = Fn<void(Style &)>;
     using HoverListener = Fn<void(bool hovered, Window &, App &)>;
+    using AccessibilityListener = Fn<void(const AccessibilityActionRequest &, Window &, App &)>;
 
     Div();
 
@@ -123,6 +131,22 @@ public:
     // No scroll bar is drawn for overflow scroll.
     Div &&hideScrollbar() &&;
 
+    // --- accessibility: what assistive technology is told about this element
+    Div &&role(Role role) &&; // Role::None: no node, not even a default one
+    Div &&ariaLabel(std::u16string_view name) &&;
+    Div &&ariaDescription(std::u16string_view description) &&;
+    Div &&ariaValue(std::u16string_view value) &&;
+    Div &&ariaLevel(int level) &&; // a heading's 1–6
+    // The element and what is inside are left out (decoration, an icon beside its label).
+    Div &&ariaHidden(bool hidden = true) &&;
+    Div &&checked(bool checked) &&;
+    Div &&selected(bool selected = true) &&;
+    Div &&expanded(bool expanded) &&;
+    Div &&disabled(bool disabled = true) &&;
+    Div &&rangeValue(float value, float min, float max, float step = 0) &&;
+    // Handles an action of its own (Increment / Decrement of a slider, SetValue…).
+    Div &&onAccessibilityAction(AccessibilityAction action, AccessibilityListener f) &&;
+
     NodeId requestLayout(Window &window, App &app) override;
     void prepaint(Rect bounds, Window &window, App &app) override;
     void paint(Rect bounds, Window &window, App &app) override;
@@ -141,6 +165,26 @@ private:
         std::u16string_view action; // in the frame arena
         ActionListener f;
     };
+    struct AccessibilityActionEntry {
+        AccessibilityAction action;
+        AccessibilityListener f;
+    };
+    // In the frame arena, only for a div that was given any of it.
+    struct AccessibilityProps {
+        Role role = Role::None;
+        bool hasRole = false;
+        bool hidden = false;
+        bool disabled = false;
+        int level = 0;
+        std::optional<bool> checked;
+        std::optional<bool> selected;
+        std::optional<bool> expanded;
+        std::optional<AccessibilityRange> range;
+        std::u16string_view label;
+        std::u16string_view description;
+        std::u16string_view value;
+        ArenaVector<AccessibilityActionEntry> actions;
+    };
     // Kept across frames for an interactive element.
     struct InteractState {
         bool pressed = false;
@@ -153,6 +197,11 @@ private:
     void registerMouseListeners(Window &window);
     void registerKeyListeners(Window &window);
     std::u16string_view arenaString(std::u16string_view s);
+    AccessibilityProps &access();
+    bool isDisabled() const { return m_access && m_access->disabled; }
+    Role accessibilityRole() const;
+    AccessibilityNode *describeAccessibility(Rect bounds, Window &window, bool &ownNode);
+    bool performAccessibilityAction(const AccessibilityActionRequest &request, Window &window, App &app);
 
     Style m_style;
     ElementId m_id;
@@ -172,6 +221,7 @@ private:
     FocusHandle m_focus;
     std::u16string_view m_keyContext;
     std::shared_ptr<ScrollState> m_scrollHandle;
+    AccessibilityProps *m_access = nullptr;
     bool m_blockMouse = false;
     bool m_hideScrollbar = false;
 

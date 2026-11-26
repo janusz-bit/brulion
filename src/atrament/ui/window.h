@@ -16,6 +16,7 @@
 #include "layout/layout.h"
 #include "scene/scene.h"
 #include "text/textlayout.h"
+#include "ui/accessibility.h"
 #include "ui/app.h"
 #include "ui/element.h"
 #include "ui/events.h"
@@ -93,6 +94,40 @@ public:
     InputHandler *inputHandler() const;
     // Dispatches an action by name along the focused path, as a key binding would.
     bool dispatchAction(std::u16string_view action);
+
+    // --- accessibility (ui/accessibility.h)
+    // The host turns it on while an assistive technology listens (tests turn it on themselves):
+    // only then does a frame build its semantic tree.
+    bool accessibilityEnabled() const { return m_accessibilityEnabled; }
+    void setAccessibilityEnabled(bool on);
+    // The tree of the frame on screen (empty while disabled).
+    const AccessibilityTree &accessibilityTree() const { return rendered().accessibility; }
+    // An assistive technology's action on a node of the frame on screen, dispatched like input to
+    // the element's listeners; returns whether something handled it.
+    bool performAccessibilityAction(AccessNodeId node, const AccessibilityActionRequest &request);
+    bool performAccessibilityAction(AccessNodeId node, AccessibilityAction action)
+    {
+        return performAccessibilityAction(node, AccessibilityActionRequest{action, {}, {}, 0, {}});
+    }
+
+    // --- used by elements during paint (no-ops returning nullptr while disabled or hidden)
+    // A node of the current element — its id is the element's path (with `key` mixed in, for
+    // several nodes of one element) — and the parent of what is painted until
+    // endAccessibilityNode(), which closes a node this returned.
+    AccessibilityNode *beginAccessibilityNode(Role role, Rect bounds, std::uint64_t key = 0);
+    void endAccessibilityNode();
+    // The node the current element's content belongs to (the innermost begun).
+    AccessibilityNode *currentAccessibilityNode();
+    // A list's row waiting for its root element to describe it (claimed once), or nullptr.
+    AccessibilityNode *adoptAccessibilityNode();
+    // Text of the current element: into the name of a node named by its content (a button), else
+    // a text node of its own.
+    void addAccessibilityText(std::u16string_view text, Rect bounds, const TextLayout *layout = nullptr);
+    // Nothing painted until the pop is in the tree (decoration).
+    void pushAccessibilityHidden();
+    void popAccessibilityHidden();
+    // Copies into the frame arena (names and values that may change before the next frame).
+    std::u16string_view accessibilityString(std::u16string_view s);
 
     // --- views drawn by the frame (for notifications)
     void recordView(EntityId id);
@@ -242,6 +277,7 @@ private:
         std::uint64_t inputFocus = 0;
         InputHandler *inputHandler = nullptr;
         std::vector<EntityId> views; // sorted after the frame
+        AccessibilityTree accessibility;
         void clear();
     };
     struct AnyState {
@@ -261,6 +297,8 @@ private:
     std::vector<int> focusPath(const Frame &frame) const;
     bool dispatchActionAlong(const std::vector<int> &path, std::size_t fromDepth, std::u16string_view action);
     void insertPath(PathBuilder &&builder, Color color);
+    bool scrollIntoView(const AccessibilityTree &tree, const AccessibilityNode &node);
+    bool scrollPage(const AccessibilityNode &node, bool forward);
     ContentMask deviceMask() const;
     Color faded(Color c) const { return c.fadedBy(opacity()); }
     Frame &rendered() { return m_frames[m_renderedIndex]; }
@@ -293,6 +331,10 @@ private:
     bool m_drawing = false;
     CursorStyle m_cursor = CursorStyle::Arrow;
     FrameStats m_stats;
+    bool m_accessibilityEnabled = false;
+    std::vector<AccessibilityNode *> m_accessStack;
+    int m_accessHidden = 0;
+    std::vector<AccessibilityEvent> m_accessEvents;
 };
 
 template<class S>

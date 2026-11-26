@@ -103,9 +103,52 @@ public:
             handler->id = m_id;
             window.handleInput(m_input->focusHandle(), handler);
         }
+        describeAccessibility(bounds, window);
     }
 
 private:
+    // Fills the text input's node (its div's): the text, the selection, the label and placeholder.
+    void describeAccessibility(Rect bounds, Window &window)
+    {
+        AccessibilityNode *node = window.currentAccessibilityNode();
+        if (!node || node->role != Role::TextInput)
+            return;
+        const TextInputOptions &o = m_input->options();
+        AccessibilityStates &st = node->states;
+        st.focusable = true;
+        st.editable = true;
+        st.multiline = m_input->multiline();
+        st.password = o.purpose == InputHandler::Purpose::Password;
+        const std::u16string &text = m_input->text();
+        if (st.password) {
+            const std::u16string dots(text.size(), u'\u2022');
+            node->value = window.accessibilityString(dots);
+        } else {
+            node->value = window.accessibilityString(text);
+        }
+        if (!o.label.empty()) {
+            node->name = window.accessibilityString(o.label);
+            node->description = window.accessibilityString(o.placeholder);
+        } else {
+            node->name = window.accessibilityString(o.placeholder);
+        }
+        node->nameFromContent = false;
+        node->selection = m_input->selection();
+        node->textLayout = m_layout.get();
+        node->textOrigin = bounds.origin;
+        node->actions |= actionBit(AccessibilityAction::Click) | actionBit(AccessibilityAction::Focus)
+                         | actionBit(AccessibilityAction::SetValue) | actionBit(AccessibilityAction::SetSelection)
+                         | actionBit(AccessibilityAction::ReplaceText);
+        App *app = &m_app;
+        const EntityId id = m_id;
+        node->handler = [app, id](const AccessibilityActionRequest &r, Window &w, App &) {
+            bool done = false;
+            app->updateEntity<TextInput>(
+                    id, [&](TextInput &t, Context<TextInput> &cx) { done = t.performAccessibilityAction(r, w, cx); });
+            return done;
+        };
+    }
+
     struct Handler final : InputHandler {
         App *app = nullptr;
         EntityId id = 0;
@@ -292,6 +335,12 @@ void TextInput::replace(Range range, std::u16string_view text, Context<TextInput
 
 void TextInput::insert(std::u16string_view text, Context<TextInput> &cx)
 {
+    replace(m_marked ? *m_marked : m_selection.range(), normalized(text), cx);
+    m_marked.reset();
+}
+
+std::u16string TextInput::normalized(std::u16string_view text) const
+{
     std::u16string t(text);
     if (!m_options.multiline) {
         // One line: line breaks typed or pasted become spaces.
@@ -300,8 +349,37 @@ void TextInput::insert(std::u16string_view text, Context<TextInput> &cx)
                 c = u' ';
         }
     }
-    replace(m_marked ? *m_marked : m_selection.range(), t, cx);
-    m_marked.reset();
+    return t;
+}
+
+void TextInput::setLabel(std::u16string_view label, Context<TextInput> &cx)
+{
+    m_options.label = std::u16string(label);
+    cx.notify();
+}
+
+bool TextInput::performAccessibilityAction(const AccessibilityActionRequest &request, Window &window,
+                                           Context<TextInput> &cx)
+{
+    switch (request.action) {
+    case AccessibilityAction::Click:
+    case AccessibilityAction::Focus: m_focus.focus(window); return true;
+    case AccessibilityAction::SetValue:
+        // One undo step, as a paste over everything would be.
+        m_marked.reset();
+        m_coalesceTyping = false;
+        replace({0, int(m_text.size())}, normalized(request.text), cx);
+        m_coalesceTyping = false;
+        return true;
+    case AccessibilityAction::ReplaceText:
+        m_marked.reset();
+        m_coalesceTyping = false;
+        replace(request.range, normalized(request.text), cx);
+        m_coalesceTyping = false;
+        return true;
+    case AccessibilityAction::SetSelection: setSelection(request.range.start, request.range.end, cx); return true;
+    default: return false;
+    }
 }
 
 void TextInput::setSelection(int anchor, int focus, Context<TextInput> &cx)
@@ -588,38 +666,37 @@ AnyElement TextInput::render(Window &window, Context<TextInput> &cx)
             .minW0()
             .trackFocus(m_focus)
             .keyContext(u"TextInput")
+            .role(Role::TextInput)
             .cursorText()
             .onKeyDown(cx.listener([](TextInput &t, const KeyDownEvent &e, Window &w, Context<TextInput> &c) {
                 if (t.handleKey(e.keystroke, w, c))
                     w.stopPropagation();
             }))
             .onMouseDown(MouseButton::Left,
-                    cx.listener([](TextInput &t, const MouseDownEvent &e, Window &w, Context<TextInput> &c) {
-                        const std::optional<int> at = t.offsetForPoint(e.position);
-                        if (!at)
-                            return;
-                        t.m_focus.focus(w);
-                        if (e.clickCount >= 3) {
-                            t.selectAll(c);
-                        } else if (e.clickCount == 2) {
-                            const WordRange wr = wordAt(t.m_text, *at);
-                            t.setSelection(wr.start, wr.end, c);
-                        } else {
-                            t.moveCaret(*at, e.modifiers.shift, c);
-                        }
-                        t.m_dragging = true;
-                        t.m_dragAnchor = t.m_selection.anchor;
-                    }))
+                         cx.listener([](TextInput &t, const MouseDownEvent &e, Window &w, Context<TextInput> &c) {
+                             const std::optional<int> at = t.offsetForPoint(e.position);
+                             if (!at)
+                                 return;
+                             t.m_focus.focus(w);
+                             if (e.clickCount >= 3) {
+                                 t.selectAll(c);
+                             } else if (e.clickCount == 2) {
+                                 const WordRange wr = wordAt(t.m_text, *at);
+                                 t.setSelection(wr.start, wr.end, c);
+                             } else {
+                                 t.moveCaret(*at, e.modifiers.shift, c);
+                             }
+                             t.m_dragging = true;
+                             t.m_dragAnchor = t.m_selection.anchor;
+                         }))
             .onMouseMove(cx.listener([](TextInput &t, const MouseMoveEvent &e, Window &, Context<TextInput> &c) {
                 if (!t.m_dragging || e.pressedButton != MouseButton::Left)
                     return;
                 if (const std::optional<int> at = t.offsetForPoint(e.position))
                     t.setSelection(t.m_dragAnchor, *at, c);
             }))
-            .onMouseUp(MouseButton::Left,
-                    cx.listener([](TextInput &t, const MouseUpEvent &, Window &, Context<TextInput> &) {
-                        t.m_dragging = false;
-                    }))
+            .onMouseUp(MouseButton::Left, cx.listener([](TextInput &t, const MouseUpEvent &, Window &,
+                                                         Context<TextInput> &) { t.m_dragging = false; }))
             .child(std::move(element));
 }
 

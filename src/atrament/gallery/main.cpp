@@ -9,6 +9,7 @@
 // an offscreen QRhi (Vulkan unless --backend opengl), and prints the mean frame times.
 // --grab shows the window, waits for n frames and saves what Qt Quick drew (the render node of the
 // GPU renderer, or the CPU renderer's texture) — run it under a virtual display (xvfb-run).
+//                    [--accessibility]   (prints the frame's semantic tree)
 
 #include "gallery.h"
 #include "offscreenrhi.h"
@@ -42,7 +43,7 @@ bool savePixels(const QString &file, const Pixel *pixels, int w, int h)
 }
 
 int screenshot(const QString &file, Size size, float scale, int section, std::optional<Point> hover, int frames,
-               bool gpu, OffscreenRhi::Backend backend)
+               bool gpu, OffscreenRhi::Backend backend, bool accessibility)
 {
     auto platform = std::make_shared<TestPlatform>();
     App app(platform, gallery::loadFonts(kFontFolders));
@@ -50,6 +51,7 @@ int screenshot(const QString &file, Size size, float scale, int section, std::op
     Entity<gallery::Gallery> root = app.newEntity<gallery::Gallery>();
     root.update(app, [section](gallery::Gallery &g, Context<gallery::Gallery> &) { g.section = section; });
     Window &w = app.openWindow(tw, root);
+    w.setAccessibilityEnabled(accessibility);
     std::unique_ptr<OffscreenRhi> rhi;
     if (gpu) {
         QString error;
@@ -102,6 +104,10 @@ int screenshot(const QString &file, Size size, float scale, int section, std::op
         if (last)
             pixels = std::move(*image);
     }
+    if (accessibility) {
+        const std::u16string tree = w.accessibilityTree().dump();
+        QTextStream(stdout) << QString::fromUtf16(tree.data(), qsizetype(tree.size()));
+    }
     QTextStream out(stdout);
     out << "frame " << w.frameCount() << ": " << w.lastFrameStats().primitives << " primitives, build "
         << build / timed / 1000.0 << " ms";
@@ -149,8 +155,10 @@ int main(int argc, char **argv)
     QCommandLineOption grabOption(
             QStringLiteral("grab"), QStringLiteral("Show the window, save what it drew after --frames frames, quit"),
                                                    QStringLiteral("file"));
+    QCommandLineOption accessibilityOption(QStringLiteral("accessibility"),
+            QStringLiteral("Print the frame's accessibility tree (with --screenshot)"));
     parser.addOptions({screenshotOption, sizeOption, scaleOption, sectionOption, hoverOption, framesOption,
-                       rendererOption, backendOption, grabOption});
+                       rendererOption, backendOption, grabOption, accessibilityOption});
     parser.process(qapp);
 
     const QStringList wh = parser.value(sizeOption).split(QLatin1Char('x'));
@@ -168,7 +176,7 @@ int main(int argc, char **argv)
                                                       ? OffscreenRhi::Backend::OpenGL
                                                       : OffscreenRhi::Backend::Vulkan;
         return screenshot(parser.value(screenshotOption), size, parser.value(scaleOption).toFloat(), section, hover,
-                          frames, renderer == QLatin1String("gpu"), backend);
+                          frames, renderer == QLatin1String("gpu"), backend, parser.isSet(accessibilityOption));
     }
     if (renderer == QLatin1String("cpu"))
         qputenv("BRULION_ATRAMENT_RENDERER", "cpu");

@@ -1,5 +1,6 @@
 brulion_add_atrament_module(ui
     SOURCES
+        accessibility.cpp accessibility.h
         app.cpp app.h
         atrament.h
         div.cpp div.h
