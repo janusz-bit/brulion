@@ -3,6 +3,8 @@
 #include "chatlineage.h"
 #include "chatschedules.h"
 #include "chatsecrets.h"
+#include "codeprojects.h"
+#include "notificationcenter.h"
 #include "workspace.h"
 #include "workspaceagents.h"
 #include "workspacechats.h"
@@ -89,7 +91,8 @@ bool ChatControl::handles(const QString &method)
                                        u"chatScheduleSet"_s,
                                        u"chatScheduleRemove"_s,
                                        u"chatScheduleRun"_s,
-                                       u"chatRequestSecret"_s};
+                                       u"chatRequestSecret"_s,
+                                       u"chatNotify"_s};
     return methods.contains(method);
 }
 
@@ -119,6 +122,8 @@ void ChatControl::handle(const QString &method, const QJsonObject &params, const
         scheduleSet(method, params, caller, reply);
     else if (method == u"chatRequestSecret")
         requestSecret(params, caller, reply);
+    else if (method == u"chatNotify")
+        notify(params, caller, reply);
     else
         reply.fail(u"unknown_method"_s, u"Unknown method %1"_s.arg(method), {});
 }
@@ -203,6 +208,8 @@ QJsonObject ChatControl::row(const QString &path, qint64 modified) const
         out.insert(u"side"_s, side);
     if (m_chats->wakesParent(path))
         out.insert(u"wakes"_s, true);
+    if (!c.project.isEmpty())
+        out.insert(u"project"_s, c.project);
     if (!c.page.isEmpty())
         out.insert(u"page"_s, c.page);
     return out;
@@ -307,7 +314,9 @@ void ChatControl::start(const QJsonObject &params, const Caller &caller, const R
     const QString text = params.value(u"text"_s).toString().trimmed();
     if (text.isEmpty())
         return reply.fail(BadParams, u"Write the message (text)"_s, {{u"param"_s, u"text"_s}});
-    const QString partner = params.value(u"partner"_s).toString().trimmed();
+    // (No partner named: the device's default — "" names the assistant.)
+    const QString partner =
+            params.contains(u"partner"_s) ? params.value(u"partner"_s).toString().trimmed() : m_chats->defaultPartner();
     QStringList ids;
     for (const QVariant &p : m_chats->partners())
         ids << p.toMap().value(u"id"_s).toString();
@@ -349,7 +358,22 @@ void ChatControl::start(const QJsonObject &params, const Caller &caller, const R
         return reply.fail(BadParams, u"wake needs a conversation to wake: start it with parent"_s,
                           {{u"param"_s, u"wake"_s}});
     const QString page = params.value(u"page"_s).toString().trimmed();
-    const QString path = m_chats->send(QString(), text, page, {}, partner, parent, wake ? parent : QString());
+    // A thread of a project (Code mode, docs/CODE.md): an AI agent's task in its folder.
+    const QString project = params.value(u"project"_s).toString().trimmed();
+    if (!project.isEmpty() && !m_workspace->projects()->contains(project)) {
+        QStringList projects;
+        for (const CodeProjects::Project &p : m_workspace->projects()->projects())
+            projects << p.id;
+        return reply.fail(NotFound,
+                          u"No project %1 on this device (chatPartners names the projects)"_s.arg(project.left(100)),
+                          {{u"param"_s, u"project"_s}, {u"projects"_s, QJsonArray::fromStringList(projects)}});
+    }
+    if (!project.isEmpty() && !WorkspaceAgents::isAgent(partner))
+        return reply.fail(BadParams, u"A thread of a project is answered by an AI agent (acp:<id>)"_s,
+                          {{u"param"_s, u"partner"_s}});
+    const QString path = project.isEmpty()
+                                 ? m_chats->send(QString(), text, page, {}, partner, parent, wake ? parent : QString())
+                                 : m_chats->startThreadFrom(project, text, partner, parent, wake ? parent : QString());
     if (path.isEmpty()) {
         const QString failure = m_chats->turn(QString())->failure();
         return reply.fail(Failed, failure.isEmpty() ? u"The conversation could not be started"_s : failure, {});
@@ -512,16 +536,24 @@ void ChatControl::stop(const QJsonObject &params, const Caller &caller, const Re
 void ChatControl::partners(const Reply &reply)
 {
     QJsonArray out;
+    const QString byDefault = m_chats->defaultPartner();
     for (const QVariant &p : m_chats->partners()) {
         const QVariantMap m = p.toMap();
         const QString id = m.value(u"id"_s).toString();
-        out.append(QJsonObject{
-                {u"id"_s, id},
-                {u"name"_s, m.value(u"label"_s).toString()},
-                {u"kind"_s, id.isEmpty() ? u"assistant"_s : (WorkspaceAgents::isAgent(id) ? u"agent"_s : u"extension"_s)},
-                {u"by"_s, m.value(u"extension"_s).toString()}});
+        QJsonObject one{{u"id"_s, id},
+                        {u"name"_s, m.value(u"label"_s).toString()},
+                        {u"kind"_s,
+                         id.isEmpty() ? u"assistant"_s : (WorkspaceAgents::isAgent(id) ? u"agent"_s : u"extension"_s)},
+                        {u"by"_s, m.value(u"extension"_s).toString()}};
+        if (id == byDefault)
+            one.insert(u"default"_s, true);
+        out.append(one);
     }
-    reply.ok(QJsonObject{{u"partners"_s, out}});
+    // (The projects of Code mode a thread may be started in: chatStart's `project`.)
+    QJsonArray projects;
+    for (const CodeProjects::Project &p : m_workspace->projects()->projects())
+        projects.append(QJsonObject{{u"id"_s, p.id}, {u"name"_s, p.name}});
+    reply.ok(QJsonObject{{u"partners"_s, out}, {u"default"_s, byDefault}, {u"projects"_s, projects}});
 }
 
 void ChatControl::schedules(const Reply &reply)
@@ -562,7 +594,8 @@ void ChatControl::scheduleAdd(const QJsonObject &params, const Caller &caller, c
     ChatSchedules *s = m_chats->schedules();
     if (!s->available())
         return reply.fail(NotReady, u"Scheduled conversations are kept for a notebook of the user's: none is open"_s, {});
-    const QString partner = params.value(u"partner"_s).toString().trimmed();
+    const QString partner =
+            params.contains(u"partner"_s) ? params.value(u"partner"_s).toString().trimmed() : m_chats->defaultPartner();
     QStringList ids;
     for (const QVariant &p : m_chats->partners())
         ids << p.toMap().value(u"id"_s).toString();
@@ -581,7 +614,9 @@ void ChatControl::scheduleAdd(const QJsonObject &params, const Caller &caller, c
         parent = caller.conversation;
     }
     QString error;
-    const QString id = s->add(fieldsOf(params), caller.client, parent, &error);
+    QJsonObject fields = params;
+    fields.insert(u"partner"_s, partner); // (none named: the default's, kept as chosen now)
+    const QString id = s->add(fieldsOf(fields), caller.client, parent, &error);
     if (id.isEmpty())
         return reply.fail(BadParams, error, {});
     reply.ok(s->toJson(*s->find(id)));
@@ -666,6 +701,69 @@ void ChatControl::requestSecret(const QJsonObject &params, const Caller &caller,
     answer.fail = reply.fail;
     answer.connected = reply.connected;
     m_chats->secrets()->ask(r, answer);
+}
+
+void ChatControl::notify(const QJsonObject &params, const Caller &caller, const Reply &reply)
+{
+    // An agent notifies from its own conversation (its grant's): a click opens it; a script of the
+    // user's may name one, or none (a click then shows the app).
+    QString path;
+    if (caller.granted) {
+        if (caller.conversation.isEmpty() || !m_workspace->exists(caller.conversation))
+            return reply.fail(Refused, u"This grant belongs to no conversation of the app: it sends no notification"_s,
+                              {});
+        path = caller.conversation;
+        if (params.contains(u"path"_s)
+            && resolve(params.value(u"path"_s).toString()).compare(path, Qt::CaseInsensitive) != 0)
+            return reply.fail(Refused, u"An agent notifies from its own conversation only (%1)"_s.arg(path),
+                              {{u"param"_s, u"path"_s}});
+    } else if (params.contains(u"path"_s)) {
+        path = conversationOf(params, reply);
+        if (path.isEmpty())
+            return;
+    }
+    const QString text = params.value(u"text"_s).toString();
+    if (text.trimmed().isEmpty())
+        return reply.fail(BadParams, u"Write what the notification says (text)"_s, {{u"param"_s, u"text"_s}});
+    // What a click opens: the page named, else the conversation.
+    QString open = path;
+    if (const QString page = params.value(u"page"_s).toString().trimmed(); !page.isEmpty()) {
+        open = m_workspace->resolveLink(page, QString());
+        if (open.isEmpty() || !m_workspace->exists(open))
+            return reply.fail(NotFound, u"No page %1 in the notebook"_s.arg(page.left(100)), {{u"param"_s, u"page"_s}});
+    }
+    // Who sends it: the conversation's partner, else the script's name; an agent's count is its
+    // conversation's, the scripts' one of their own (NotificationCenter::MaxPerHour an hour).
+    NotificationCenter::Post post;
+    post.kind = caller.granted ? NotificationCenter::Kind::Agent : NotificationCenter::Kind::Script;
+    post.key = path;
+    post.who = path.isEmpty() ? caller.client : m_chats->partnerLabel(m_chats->partnerOf(path));
+    if (post.who.isEmpty())
+        post.who = caller.client;
+    post.title = params.value(u"title"_s).toString();
+    post.text = text;
+    post.open = open;
+    qint64 retryMs = 0;
+    const QString why = m_workspace->notifications()->post(post, &retryMs);
+    if (why == u"off")
+        return reply.fail(Refused,
+                          u"The user turned notifications from AI agents off (Settings → Extensions → AI): tell them "
+                          u"in your answer instead"_s,
+                          {{u"reason"_s, u"off"_s}});
+    if (why == u"limit")
+        return reply.fail(
+                Refused,
+                u"%1 notifications in the last hour already: wait, or tell the user in your answer"_s.arg(
+                        NotificationCenter::MaxPerHour),
+                {{u"reason"_s, u"limit"_s}, {u"max"_s, NotificationCenter::MaxPerHour}, {u"retryAfterMs"_s, retryMs}});
+    if (!why.isEmpty())
+        return reply.fail(BadParams, u"Write what the notification says (text)"_s, {{u"param"_s, u"text"_s}});
+    QJsonObject out{{u"sent"_s, true}};
+    if (!path.isEmpty())
+        out.insert(u"conversation"_s, path);
+    if (!open.isEmpty())
+        out.insert(u"opens"_s, open);
+    reply.ok(out);
 }
 
 } // namespace brulion::shell

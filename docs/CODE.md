@@ -1,0 +1,354 @@
+# Code mode — projects and AI agents' threads, as in T3 Code
+
+Brulion has two modes (`AppSettings.appMode`, key `ui/mode`, a device setting):
+
+* **Notes** (the default): the notebook — journal, pages, tasks, the AI chat about the notes.
+* **Code**: projects — folders of this computer, git repositories usually — and AI agents' threads in
+  them, the way [T3 Code](https://github.com/pingdotgg/t3code) works: a thread is one task given to
+  Claude Code, Codex, OpenCode or any agent of the Agent Client Protocol (docs/UI.md "AI agents
+  (ACP)"), working in the project's folder or in a git worktree of its own, with the project's changes
+  beside the conversation, a terminal under it, commits, pushes and pull requests — and Brulion's
+  notifications when an agent answers, fails, asks something or tells the user something itself.
+
+The mode switches on the rail's top button (`modeSwitch`), in the palette ("Code mode" `mode.code`,
+"Notes mode" `mode.notes`) and in Settings → Extensions → Code mode. Switching navigates to the mode's
+home: Code mode's route `code`, Notes mode's journal. A notebook opened in Code mode starts in route
+`code` (AppController's first route), unless a link or a notification asks for another.
+
+Code mode needs a notebook of the user's open — its threads are pages of it — but shows none of the
+notebook: the rail offers its threads alone, the page panel is replaced by the projects' panel, the
+bottom navigation is gone. Reminders, sync, notifications and the rest of the notebook go on.
+
+## Projects
+
+`shell/codeprojects.h` (`Workspace.projects`, QML type `CodeProjects`; `codeprojects.cpp` the list and
+settings, `codeconfig.cpp` t3.json, `codeworktrees.cpp` git and gh, `codeeditors.cpp` "Open in…"):
+this device's projects, kept in its settings (`code/projects`, JSON: `{projects: [{id, name, path,
+pinned?, icon?, agent?, env?, scripts?: [{name, command, icon, shortcut?, runOnWorktreeCreate?,
+wait?}]}], worktreesRoot?, editor?, preferredEditor?, branchPrefix?, deletedWorktrees?, newThreadEnv?,
+threadSort?}`) — **never in the notebook**: a path is this device's, and a synced file must never point
+an agent at a folder.
+
+* `add(folder)` (a path or a `file:` URL) gives the project's id: a slug of the folder's name
+  (`slug()`: ASCII letters, digits and dashes, Polish letters without their marks — "Projekt żółwia" →
+  `projekt-zolwia`), `-2`, `-3` … when taken; a folder added again gives its own id. At most 100.
+* `list`: pinned projects first, each part in the user's order; `move(id, index)` moves one within its
+  part (the sidebar's drag), `setPinned()`, `rename()`, `remove()` (its folder and threads stay).
+* `setIcon(id, emoji)` (one grapheme; without one the sidebar shows t3.json's `iconPath` picture, else a
+  folder), `setDefaults(id, agent, env)`: the agent of its new threads ("" the device's default) and
+  where they work ("" the device's default, `local`, `worktree`).
+* `newThreadEnv(id)` — where a new thread works unless its header chooses otherwise: the project's own
+  `env`, else the device's `newThreadEnvDefault` (Settings → Extensions → Code mode → "New threads
+  work"), else t3.json's `defaultThreadEnvMode`, else `local` (T3 Code's order: the project's override,
+  the device's setting, the repository's file, the built-in default).
+* `worktreesRoot` (default `~/.brulion/worktrees`; Windows `%USERPROFILE%\.brulion\worktrees`), `branchPrefix` (default `brulion/`; only what a
+  branch may start with), `deletedWorktrees` (`ask` | `delete` | `keep`), `threadSort` (`activity` |
+  `created`), `projectOfFolder(folder)`. On Windows a folder added in another case is the same
+  project; an editor's command is split by Windows' rules (`splitWindowsCommand()`, a path's
+  backslashes kept) and an editor that is a batch file — VS Code's and Cursor's `code.cmd` — runs
+  through `cmd.exe /d /v:off /s /c` with every argument quoted (`batchCommandLine()`, which refuses a
+  quote, `%` or a line break; `startEditor()`).
+* **Projects of the user's other computers** (`remote`, `shell/remoteprojects.h`, QML
+  `Workspace.projects.remote`): listed after this device's — `{id, name, path "", exists false, scripts
+  [], remote true, host, remotePath}`, read-only, `folderOf()` "" — when a computer that shares its
+  agents with this device offers them ("Threads on the phone" below). `isRemote(id)`; a project id of
+  this device's own hides one of a computer, and of two computers the first one's is listed.
+
+### t3.json
+
+A project's `t3.json` at its root (T3 Code's project file: `$schema`, `iconPath`,
+`defaultThreadEnvMode`, `scripts` — the fields Brulion does not use, `worktreeSubmodules`,
+`worktreeSparsePatternsPath`, `ignoreRepositories`, `worktreeLayout` and a script's `stopOnSettle`,
+`runOnSettle`, `previewUrl`, `autoOpenPreview`, are ignored) is read when the project is added or
+loaded and again when it changes (a `QFileSystemWatcher` on the project's folder and the file,
+debounced), **never written**. `parseConfig()` is pure and strict: at most 256 KB, a JSON object;
+`scripts` a list of objects with a non-empty `name` and `command` as text (a name cleaned of control
+and format characters, at most 60 characters; a command at most 4000), `icon` one of `play` (the
+default), `test`, `lint`, `configure`, `build`, `debug`, `runOnWorktreeCreate` and `async` booleans
+(anything else their defaults: false, true); a second script of a name (letter case aside), the 51st,
+and anything malformed is left out with a warning; `iconPath` a picture (`png`, `svg`, `jpg`, `jpeg`,
+`webp`, `ico`, `gif`) inside the project — no absolute path, nothing that leaves it, no link pointing
+out of it. A file that does not read is said in `configError` and nothing of it is used.
+
+Its content is data: a command of it runs only when the user clicks its button, runs it from the
+palette or its shortcut, or makes a worktree with it set to run there.
+
+### Scripts
+
+T3 Code's actions: buttons over the thread that run a command in a new tab of the thread's terminal
+(`CodeView.runScript(command, name)` → `TerminalPanel.run`). `scripts(id)` merges this device's
+scripts (`setScripts()`, at most 50) and the file's: the device's in their order, then the file's that
+no script of the device's of the same name (letter case aside) overrides — a device's one of a file's
+name replaces it ("overrides t3.json"). Each has an `id` (a unique slug of its name), its icon in
+Brulion's set (`iconName`: play, circle-check, list-checks, sliders-horizontal, layers, eye), a Code
+mode `shortcut`, `runOnWorktreeCreate` and `wait` (T3 Code's `async: false`), its `source` (`device` |
+`t3json`). `setupScripts(id)` / `setupList(id, field, waited)`: those that run when a worktree is made.
+
+The project dialog edits them (`CodeScriptsModel`, docs/UI.md "Code mode"); the palette lists the shown
+project's as "Run: Testy — kalkulator" (`code.script.<project>.<id>`), with their shortcuts
+("Shortcuts" below).
+
+### Worktrees, branches, pull requests
+
+Everything through `gitcli::Client` (QProcess argument lists, never a shell; docs/CODE-GIT.md
+"Security"), asynchronous, each run ending with a signal:
+
+* `worktreeFor(id, title)`: `{folder: <worktreesRoot>/<id>/<slug of title>, branch:
+  <branchPrefix><slug>}`; `createWorktree(id, title, base)`: a free name — no file of that folder name,
+  no branch of that name (`git for-each-ref refs/heads/`) — then `git worktree add -b <branch> -- <folder>
+  <base or HEAD>`; a remote-tracking base (`origin/main`) is fetched first (`git fetch -- origin main`;
+  offline, what is known of it). `worktreeCreated(project, folder, branch, error)`.
+* `listWorktrees(id)` → `worktreesListed(project, [{folder, branch, detached, exists}])` (not the
+  project's own folder); `listBranches(folder)` → `branchesListed(folder, [{name, remote, current,
+  isDefault (origin's HEAD, else main / master / trunk), worktree (the folder that has it checked out),
+  upstream, ahead, behind}], error)` — local ones first, remote ones a local branch tracks left out;
+  `branchItems()` / `branchOffers(query, branches, canCreate)` the branch picker's rows and offers.
+* `switchBranch(folder, name)` (`git switch`, a remote-tracking one `--track`), `createBranch(folder,
+  name)` → `branchSwitched(folder, branch, ok, message)`. The view refuses while an agent's turn of a
+  thread of that folder runs (`WorkspaceChats.runningIn(folder)`).
+* `pullRequestNumber(text)`: `#123`, `123`, a URL ending in `/pull/123` (`/files`, a query, a fragment
+  after it). `checkoutPullRequest(id, number, inWorktree)`: **Local** — refused while the project's
+  folder has uncommitted changes (untracked files aside); `gh pr checkout <n>` there, else `git fetch --
+  <remote> pull/<n>/head:<branchPrefix>pr-<n>` (origin, else the first remote) and `git switch`. **New
+  worktree** — with gh a detached worktree (`git worktree add --detach`) where `gh pr checkout <n>` runs
+  (removed again when gh fails), without it the fetch into a free `<branchPrefix>pr-<n>` and `git
+  worktree add` of that branch. `gh pr view <n> --json title` gives the title. →
+  `pullRequestCheckedOut(project, number, folder ("" the project's), branch, title, error)`.
+* `checkWorktree(folder)` → `worktreeChecked(folder, changes (files with uncommitted changes, untracked
+  ones too), branch, error)`; `removeWorktree(id, folder, force)` (`git worktree remove [--force]`; never
+  the project's own folder; its branch stays) → `worktreeRemoved`; `restoreWorktree(id, folder,
+  branch)` (`git worktree prune`, then `git worktree add -- <folder> <branch>`) → `worktreeRestored`.
+* A deleted thread's Undo: `keepUndo(toast, trashPaths, id, folder, branch, removed)` — AppController's
+  toast (`toastWithAction`) pressed (`toastActionTriggered` → `undo()`) brings the pages back from the
+  trash (`setRestorer`: `Workspace::restoreAll`) and makes the worktree again from its branch when it
+  was removed; the toast gone (`toastRemoved`) forgets it.
+
+### Open in an editor
+
+`editors`: the editors found on PATH (`knownEditors()`, in this order: VS Code `code`, `code-insiders`,
+VSCodium `codium`, Cursor, Windsurf, Zed `zed` / `zeditor`, Sublime Text `subl`, IntelliJ IDEA, PyCharm,
+WebStorm, CLion, GoLand, RustRover, PhpStorm, Rider, Kate, GNOME Text Editor, gedit, Notepad++ — Windows
+finds their `.exe` / `.cmd` by itself), then the custom command (`editorCommand`, split as a shell
+would — `splitCommand()` — with the path as its last argument) when set, then the file manager.
+`preferredEditor` (a device setting) — else the custom command, else the first found, else the file
+manager: `effectiveEditor`. `openInEditor(path, line = -1)` / `openWith(editor, path, line)` open a
+folder or a file (started detached, no shell); a file at a line where the editor takes one
+(`editorArguments()`: `--goto file:line` for VS Code, VSCodium, Cursor, Windsurf; `file:line` for Zed
+and Sublime Text; `--line N file` for the JetBrains IDEs and Kate; `+N file` for gedit; `-nN` for
+Notepad++). The other streams' panels (a file of the Changes panel, a path in the terminal, the file
+viewer) call `openInEditor(file, line)`.
+
+### Shortcuts
+
+Code mode's commands (`CommandModel`, ShortcutMap's scope `code`: their shortcuts work in Code mode
+only, may be keys of commands that are everywhere — they win there, AppShell turns the other off — and
+keys reserved for what Code mode never shows: drawings, the PDF viewer, the canvas, the tabs' Ctrl+1–9,
+the AI chat's list):
+
+| Command | Default | |
+|---|---|---|
+| `code.newThread` New thread | Ctrl+Shift+O | the project shown, its defaults |
+| `code.newLocalThread` New local thread | Ctrl+Shift+N | (Notes mode: quick capture) |
+| `code.previousThread` / `code.nextThread` | Ctrl+Shift+[ / Ctrl+Shift+] | in the sidebar's order |
+| (fixed) the n-th thread listed | Ctrl+1 … Ctrl+9 | (Notes mode: the tabs) |
+| `code.renameThread` Rename thread | F2 | (Notes mode: rename page) |
+| `code.branches` Branches… | Ctrl+Shift+G | switch, create, a pull request |
+| `code.environment` Where the new thread works… | Ctrl+Shift+X | |
+| `code.openInEditor` Open in editor | Ctrl+O | (Notes mode: go to page) |
+| `code.toggleChanges` Show or hide the changes | Ctrl+D | |
+| `code.script.<project>.<id>` Run: … | the script's own | the shown project's scripts |
+
+Those that need the view come back to it as uiActions `code:<what>` (`code:branches`,
+`code:script:<id>` …: CodeView, CodeSidebar). A script's shortcut is its default in Settings → Keyboard
+shortcuts (a custom one there wins); one a Code mode command has already loses it, and the project
+dialog checks it (`ShortcutMap.checkIn("code", …)`). The scripts are actions only while their project
+is shown: two projects' scripts may share a key.
+
+## Threads
+
+A thread is a conversation of the AI chat (docs/SYNTAX.md §14) whose frontmatter names its project:
+
+```markdown
+---
+tasks: ignore
+partner: acp:claude
+project: sklep
+worktree: "/home/ala/.brulion/worktrees/sklep/dodaj-rabat-10"
+branch: brulion/dodaj-rabat-10
+---
+- 🧑 Dodaj rabat 10% do koszyka
+  time:: 2026-11-25 23:18
+- 🤖 …
+```
+
+`project:` is the id of a project of this device; `worktree:` and `branch:` say where it works when it
+has a worktree of its own (`chat::Conversation::project / worktree / branch`, `chat::setField()`).
+Everything the AI chat does works for a thread: the queue and Send now, approvals, plans, the agent's
+options (model, mode, effort), its subscription's limits and usage, tool calls, side chats,
+sub-conversations, scheduled conversations, notifications, unread marks, search.
+
+* `WorkspaceChats.startThread(project, text, pictures, partner, worktree, branch, pullRequest)`: a new thread —
+  answered by an **AI agent** only (`partner`, else `threadPartner()`: the default partner when it is
+  an agent, else the first agent set up; none: the turn's failure says to add one), **no line in the
+  journal** (a thread is no event of the day). `threadPlace(path)`: `{project, projectName, worktree,
+  branch, folder, known, exists}`; `threadFolder(path)`; `setThreadWorktree(path, worktree, branch)`.
+  `agentPartners()` lists the agents. `pullRequest` ("#123 Title") is its page's `pr:` and the
+  agent's first context names it ("The branch checked out there is that of the pull request …").
+* `threadsIn(folder)`: the threads that work in a folder (a deleted thread's worktree: does another one
+  use it?); `runningIn(folder)`: a turn of one of them runs (no branch switch under it);
+  `markUnread(path)`: the sidebar's "Mark unread"; `draftSerial`: drafts changed — a new thread's draft
+  is kept per project (`draft("code:<project>")`, ChatView) and shown in the sidebar.
+* The AI chat's list (`ChatListModel.project` "") leaves threads out; `ChatListModel.project` = an id
+  lists a project's threads, `"*"` all of them.
+* **Its agent's session** (`WorkspaceAgents::codePlace()`): the session's `cwd` is the thread's folder
+  (its worktree's, else its project's); Brulion's MCP server is started with `--no-notes` (docs/CLI.md
+  "MCP server": the app's chat tools — notify, delegate, secrets — and with "Let it change the app" the
+  live tools, never the notebook's) and none when it would have no tool; the first prompt is
+  `codeContext()` — the project, its folder, the worktree's branch, the tools, nothing of the notebook.
+  `fs/read_text_file` and `fs/write_text_file` read and write the thread's files directly (absolute
+  paths, or relative to its folder; the agent runs with the user's rights anyway, its own permissions
+  decide); a terminal's default folder is the thread's. A thread's turn is not tracked by the chat's
+  "What a turn changed" card: git shows its changes (the Changes panel below).
+* A project that is not on this device, a worktree that is gone: the turn fails with what to do. **The
+  agent follows the project**: a thread of this device's project is answered by an agent of this device
+  — the partner when it is one, else the agent of the same id (a partner paired from a computer,
+  `<computer>-claude`, finds `claude`), else the first one —, a thread of another computer's project by
+  that computer's agents the same way (below).
+
+## Threads on the phone
+
+A thread runs on the computer that has its project — also when the user writes on the phone (or
+another computer of theirs): as in T3 Code, a phone continues the threads that run on the computer,
+and starts new ones there.
+
+* **The computer** shares its agents (`brulion-cli acp serve`, the desktop app's "Share agents with
+  the phone", docs/CLI.md "AI agents for other devices") with its projects: the desktop app writes
+  them to `<app data>/agent-share/projects.json` (`--projects`, written again whenever they change; the
+  server reads it again by itself), a server of its own takes the same file.
+* **The phone** (any device paired with that computer) asks it for them (`GET projects`: id, name,
+  folder there — `RemoteProjects`, again whenever Code mode's panel is shown and when the agents change;
+  the last lists kept in the notebook's device state, `code/remoteProjects`, so they show while the
+  computer is not reached) and lists them in Code mode with the computer's name. Their threads are the
+  notebook's pages as any thread's (`project:`, `worktree:`, `branch:` — the folders there), so a thread
+  started on the desktop is continued on the phone and the other way round: the agent follows the
+  project (above).
+* **A turn** goes to that computer's agent with the project in its session's request
+  (`_meta["brulion/code"]: {project, worktree, branch}`, core `acp/codehost.h`): the computer takes it
+  only for a project of its own and a worktree of that project (under its worktrees' root, or one
+  `git worktree list` names), sets the session's `cwd` there, gives it Brulion's tools without the
+  notebook's (`mcp --no-notes`), answers its files and terminals in that folder only — and refuses
+  anything else, so the turn fails with why. The first prompt is `codeContext()` with that computer's
+  folder. A thread's folder changed (its worktree set or gone): the next turn makes its session anew
+  there.
+* **A new thread**: Local, or New worktree — made by the computer (`POST projects/<id>/worktrees`,
+  the same naming as `worktreeFor()`), whose folder and branch the thread's page then names.
+* **Checkpoints** are taken there, before the prompt reaches the agent; the computer tells the device
+  (`_brulion/checkpoint`, also in the turn it keeps for a device that lost the stream), which records
+  it as its own (`WorkspaceAgents::checkpointMade` → the thread's checkpoints).
+* **Changes and the terminal are that computer's**: on the phone `CodeRemoteChanges` shows what the
+  last turn changed there (the files since its checkpoint, or every change not committed) and a file's
+  diff, read-only (`GET projects/<id>/changes`, `…/diff`); committing, pushing and the terminal are at
+  that computer.
+
+## The view
+
+`qml/code/CodeView.qml` (route `code`; its header's `CodeThreadTitle`, `CodeOpenIn`,
+`CodeBranchPicker`, `CodePullRequestDialog`, `CodeSetupBanner`), `qml/code/CodeSidebar.qml` (AppShell's
+page panel and the drawer's content in Code mode; `CodeProjectSection`, `CodeThreadRow`),
+`qml/code/CodeProjectDialog.qml` (`CodeScriptsEditor` over `shell/codescriptsmodel.h`); docs/UI.md
+"Code mode".
+
+**Setup scripts** (T3 Code's `runOnWorktreeCreate`): once a new thread's worktree is made
+(`createWorktree`, before its first message is sent), the project's scripts that run then start in
+the thread's terminal, in the worktree — those not waited for at once, those to wait for (`async:
+false`, "Wait for it before the agent starts") one after another while `CodeSetupBanner` says "Setting
+up the worktree…"; when they all ended with code 0 the message goes, when one failed (its exit code,
+or it did not start) the banner says which and the user sends anyway or not (the message stays in
+the field, the worktree stays: the next Send goes there without setting it up again). Without a
+terminal on the device the scripts are skipped, said in a toast, and the message goes.
+
+## Changes, checkpoints, commits
+
+The Changes panel (`GitChangesPanel`, `CodeGit`: `src/app/gitpanel`; core `src/core/gitcli`) is
+described in **docs/CODE-GIT.md**: T3 Code's diff sources (Latest turn / Turn N — what one turn
+changed —, Uncommitted, the branch against a base, one of the newest 100 commits) with a diff per
+file (side by side or stacked, wrapped, whitespace hidden, find, a tree of files; hunks staged,
+unstaged or thrown away; lines commented into the chat's composer), a file's actions (open, copy the
+path, stage, unstage, discard, take a side of a conflict), the branch (switch, create, stash), its pull
+request's badge, ahead / behind, one quick action from the state (Commit… with a checklist of files
+and a new branch, Push, Pull, Create PR… into a chosen base and from forks, Publish…, Initialize git;
+pushing to the default branch asks first), a banner for a merge / rebase / cherry-pick with its
+conflicts, and a turn's **Revert this turn…** / **Revert to before turn N…**.
+
+**Checkpoints of threads**: before each turn of a thread's agent, `WorkspaceChats` takes a snapshot of
+the thread's folder (`gitcli::Client::checkpoint`: a temporary index, `refs/brulion/checkpoints/<id>`;
+the user's index, HEAD and stash never move) and starts the agent once it is made — the turn's status
+says "Saving a checkpoint…" meanwhile; a folder that is no git repository, or git missing, starts the
+turn without one; Stop meanwhile starts nothing. `WorkspaceChats.checkpoints(path)` lists them ({id,
+at, message}: kept in the notebook's device state `code/checkpoints`, at most 30 a thread, the older
+refs dropped), `lastCheckpoint(path)` the newest — CodeView gives the list to the panel as its
+`checkpoints` (turn N's own changes: checkpoint N against checkpoint N + 1, the newest against the
+working tree; "Revert this turn…" takes that turn out, "Revert to before turn N…" puts checkpoint N
+back). While the agent works the panel polls git every 2 s; each answer written refreshes it. The
+panel's review comments go into the thread's composer (`ChatView.addToComposer`); its Open in editor
+uses `Workspace.projects.openInEditor` for the file. "Edit from here" on a message of a thread
+offers to put the files back to the checkpoint of that message's turn (`checkpointOf(path, number)`: the page's message number → the
+turn, `restoreCheckpoint(path, id)` → `checkpointRestored(path, ok, message)`; docs/UI.md "AI chat").
+
+**Where a thread's checkpoints live**: the list is this device's (device state, above: when, which
+message, which folder — what the device ran or heard of), and **the newest turn's id is also in the
+thread's page**, `checkpoint: <id>` in its frontmatter, written by whichever device ran the turn — the
+desktop for its own turns, the phone for a turn the computer of the project ran for it
+(`checkpointMade`). The page is what every device of the notebook shares (synced as the notebook is):
+the desktop that has the project shows a turn the phone started ("This turn", "Revert this turn…": the
+ref is in its repository — that computer took it), and the phone asks the computer for the changes
+since the desktop's last turn. `lastCheckpoint()` takes the page's first; `checkpoints()` lists the
+page's last when this device has not got it (its time unknown). A checkpoint id is no secret (a git
+ref's name), and a page that names one of another repository shows nothing of it.
+
+## Terminal
+
+The Terminal panel (`TerminalPanel`, `TerminalSession`, `TerminalView`, `TerminalRegistry`:
+`src/app/terminal`; core `src/core/term`; `src/platform/pty.h`) is described in
+**docs/CODE-TERMINAL.md**: each thread's terminals, kept — running, with their scrollback — while
+another thread is shown (`TerminalRegistry`, keyed by the thread's page; a new thread's by its folder
+until its first message), ended when the thread is deleted, their idle ones when it is archived,
+their layout (tabs, splits, folders, commands typed, not run) back after a restart;
+tabs of up to four terminals side by side or stacked, the project's scripts in new tabs; a find bar
+over the scrollback, a context menu with Add to chat (the selection or the screen into the
+thread's field), URLs and file paths (`path:line:column`) opened with Ctrl+click, marks on tabs
+(new output, a bell, the exit code), shortcuts (Ctrl+J shows or hides it); a real pseudo-terminal
+and an xterm emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8 links,
+OSC 52 ignored). POSIX desktops and Windows 10 1809+ (ConPTY: PowerShell 7, Windows PowerShell or
+cmd.exe); Android and the browser say there is no terminal.
+
+## Files
+
+The project's files beside the thread are described in **docs/CODE-FILES.md** (core
+`src/core/codefiles`, area `src/app/codefiles`): the right panel's tabs Changes | **Files** |
+**Search**, the file picker (Ctrl+P in Code mode: a fuzzy match over the folder's index from `git
+ls-files` or a walk of the folder), the file viewer (syntax colours, line numbers, pictures, a line
+marked; lines selected → a review comment in the composer), the project search (Ctrl+Shift+F:
+ripgrep, git grep or Brulion's own), a thread's **@-mentions** of its files and folders (each named
+file also sent to the agent as a `resource_link`) and links of answers and tool calls to the
+thread's files opening the viewer at their line (`CodeView.openFileInViewer(path, line)`).
+
+## What is not there yet
+
+* Windows: Code mode's tests run there (CI: the terminal on ConPTY, git and gh with Windows paths,
+  the Changes panel), not yet a session by hand with a real agent; a worktree of a repository whose
+  paths pass 260 characters needs git's `core.longpaths`; a terminal before Windows 10 1809.
+* A pull request's text written by AI (the commit message is: "Write with AI"), and the rest of
+  docs/CODE-GIT.md "Not done (yet)".
+* Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and
+  the terminal of a project of another computer (the phone shows its changes read-only); a new
+  worktree there from another base than its HEAD in the UI; projects of two computers with the same id
+  (the first computer's is listed).
+* t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl` (no in-app browser), `worktreeSubmodules`,
+  sparse checkouts, multi-repository projects and custom worktree layouts; a branch name the AI makes
+  up for a new worktree (the prefix and the first message's slug only); automatic worktree cleanup
+  (by age, merged pull requests).
+* Settling and snoozing threads, "Regenerate title", dropping files on a thread's row, scratch threads
+  without a project.
+* Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within
+  the file shown, mentions of threads and pull requests (docs/CODE-FILES.md "Not done").

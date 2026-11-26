@@ -342,6 +342,27 @@ Rectangle {
             shortcut: ShortcutMap.sequences["go.search"] || ""
             onClicked: AppController.search("")
         }
+        // What the app told the user (NotificationsView, Workspace.notifications): the bell, its
+        // unread count as a badge. Phones: only while something is unread (More keeps it).
+        BIconButton {
+            id: bellButton
+            objectName: "topBarNotifications"
+            readonly property int unread: Workspace.notifications.unread
+            visible: Workspace.isOpen && (!Theme.narrow || bellButton.unread > 0)
+            iconName: bellButton.unread > 0 ? "bell-ring" : "bell"
+            label: bellButton.unread > 0 ? qsTr("Notifications: %n unread", "", bellButton.unread) : qsTr("Notifications")
+            onClicked: AppController.navigate({ view: "notifications" })
+            BBadge {
+                objectName: "topBarNotificationsBadge"
+                visible: bellButton.unread > 0
+                x: parent.width - width + 2
+                y: -2
+                count: bellButton.unread
+                max: 9
+                variant: "accent"
+                Accessible.ignored: true
+            }
+        }
         // The AI assistant's commands, a tap away (while it is on): its menu; a spinner while a
         // model answers.
         BIconButton {
@@ -1017,6 +1038,12 @@ Rectangle {
                     text: qsTr("Clean up")
                     iconName: "sparkles"
                     onTriggered: AppController.navigate({ view: "cleanup" })
+                }
+                BMenuItem {
+                    objectName: "menuNotifications"
+                    text: Workspace.notifications.unread > 0 ? qsTr("Notifications (%1)").arg(Workspace.notifications.unread) : qsTr("Notifications")
+                    iconName: "bell"
+                    onTriggered: AppController.navigate({ view: "notifications" })
                 }
                 BMenuItem {
                     text: Workspace.trashCount > 0 ? qsTr("Trash (%1)").arg(Workspace.trashCount) : qsTr("Trash")

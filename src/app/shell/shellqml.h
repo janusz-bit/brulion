@@ -18,6 +18,8 @@
 //   AgentShare       uncreatable — Workspace.chats.share ("Share agents with the phone")
 //   AgentLimits      uncreatable — Workspace.chats.limits (Claude Code's and Codex's subscription limits)
 //   AgentUsage       uncreatable — Workspace.chats.usage (what they used, from their session logs)
+//   NotificationCenter uncreatable — Workspace.notifications (what the app told the user)
+//   RemoteProjects   uncreatable — Workspace.projects.remote (Code mode's projects of other computers)
 //   ChatLineage, ChatSchedules uncreatable — Workspace.chats.lineage / .schedules (sub-conversations,
 //                    scheduled conversations)
 //   ChatSecrets, HookServer uncreatable — Workspace.chats.secrets / .hooks (a secret an agent asks
@@ -49,12 +51,16 @@
 #include "chatschedules.h"
 #include "chatsecrets.h"
 #include "cleanupselection.h"
+#include "codeprojects.h"
+#include "codescriptsmodel.h"
 #include "commandmodel.h"
 #include "encryptedpagehost.h"
 #include "extensionviewmodel.h"
 #include "foldertreemodel.h"
 #include "hookserver.h"
+#include "notificationcenter.h"
 #include "recentnotebooks.h"
+#include "remoteprojects.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
 #include "themepages.h"
@@ -71,6 +77,7 @@
 #include "workspacereminders.h"
 #include "workspacesync.h"
 #include "writingsession.h"
+#include "aiask.h"
 
 #include <QJSEngine>
 #include <QtQml/qqmlregistration.h>
@@ -325,6 +332,34 @@ struct ChatLineageForeign {
     QML_UNCREATABLE("Use Workspace.chats.lineage")
 };
 
+struct CodeProjectsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::CodeProjects)
+    QML_NAMED_ELEMENT(CodeProjects)
+    QML_UNCREATABLE("Use Workspace.projects")
+};
+
+struct RemoteProjectsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::RemoteProjects)
+    QML_NAMED_ELEMENT(RemoteProjects)
+    QML_UNCREATABLE("Use Workspace.projects.remote")
+};
+
+// The project dialog's scripts editor (codescriptsmodel.h).
+struct CodeScriptsModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::CodeScriptsModel)
+    QML_NAMED_ELEMENT(CodeScriptsModel)
+};
+
+struct NotificationCenterForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::NotificationCenter)
+    QML_NAMED_ELEMENT(NotificationCenter)
+    QML_UNCREATABLE("Use Workspace.notifications")
+};
+
 struct ChatSchedulesForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::ChatSchedules)
@@ -350,6 +385,14 @@ struct WritingSessionForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::WritingSession)
     QML_NAMED_ELEMENT(WritingSession)
+};
+
+// One question to the AI of the user's settings, answered as text (aiask.h): Code mode's commit
+// message written from the changes.
+struct AiAskForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AiAsk)
+    QML_NAMED_ELEMENT(AiAsk)
 };
 
 struct AiReportDraftForeign {

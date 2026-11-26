@@ -37,7 +37,7 @@ pages name every function of `b`.
 | To … | read |
 |---|---|
 | write a first extension | [Quick start](#quick-start), [How the code runs](#how-the-code-runs) |
-| look a function up | [The API (`b`)](#the-api-b), [Commands](#commands), [Views](#views), [Macros](#macros), [Hooks](#hooks), [Questions](#questions), [Settings](#settings), [Timers](#timers), [Shared code](#shared-code), [AI](#ai-bai) |
+| look a function up | [The API (`b`)](#the-api-b), [Commands](#commands), [Views](#views), [Macros](#macros), [Hooks](#hooks), [Questions](#questions), [Settings](#settings), [Timers](#timers), [Notifications](#notifications), [Shared code](#shared-code), [AI](#ai-bai) |
 | show a value in a note, a view in a page or the side panel | [Macros](#macros), [Template variables](#template-variables), [View blocks and panels](#view-blocks-and-panels) |
 | copy something that works | [Recipes](#recipes) |
 | find out why it does not work | [Errors](#errors), [Troubleshooting](#troubleshooting), [The Luau console](#the-luau-console) |
@@ -455,6 +455,7 @@ end, { label = "Mark the first TODO as seen" })
 | `b.status(text?)` | what the running command is doing now, for the user to see while it waits (a question, a model): "Reading “Home”…". The AI chat shows it under the AI's dots (the assistant says what each tool does); elsewhere nothing shows it yet. Whitespace made single, at most 300 characters; `""` or nothing clears it. Not a text: an error |
 | `b.timer(seconds, label?)`, `b.timer(seconds, { label, message })` | starts the extension's own timer (1 … 86 400 s): its countdown shows in a banner under the top bar in every view; at the end a notification "`label` is over" with `message` (else the app's words), the message as a toast, and the extension's `"timer"` hooks ("Timers") |
 | `b.stopTimer()` | ends the extension's timer without a word |
+| `b.notify(text)`, `b.notify(text, { title, page })` | shows the user a notification from the extension ("Notifications"): `true` when the app showed it, else `false` and why not in a few English words (`"turned off"`, `"too many: at most 10 an hour"`, `"empty"`, `"not available here"` on the command line) — never an error for those. Text trimmed, at most 1000 characters; `title` one line of at most 80 (what it is about: the app titles it with the extension's name); `page` a page a tap on it opens. Text, title or page that is no text, options that are no table: an error |
 | `b.data(name)`, `b.data(name, key)` | read-only data bundled with a built-in extension (the gym's catalog `b.data("exercises")`, the AI assistant's `b.data("reference")` — this document's text); with `key` one entry of a record without the rest crossing into the script (the gym's `b.data("instructions", "back-squat")`: one exercise's of 600 KB); `nil` for extension pages — unless the page overrides a built-in, which keeps the built-in's data. A `key` that is no text is an error. The bundled files are read and parsed when first asked for (`extensions::DataFile`), kept by the engine, and dropped while the app is away (`Engine::dropData()`: the next `b.data` reads them again) |
 
 ```luau
@@ -869,7 +870,7 @@ end, { description = "Open tasks, of a tag or all of them", args = { "tag" }, ex
   of them are computed ("more than 200 macros on this page"). A macro cannot ask (`b.ask`,
   `b.choose`, `b.form`, `b.ai` are errors) nor change anything (`b.write` … are refused, so are
   `b.setSetting`, `b.settings` with fields, `b.timer` and `b.stopTimer`: what it shows must not
-  change what it is drawn from).
+  change what it is drawn from; `b.notify` gives `false, "not from a macro or a template variable"`).
 * **Placeholders.** A macro of an extension that waits for approval on this device shows
   `🔒 extension/name · run?`; off, unknown or failed, a chip saying so. Clicking one shows the
   extension's code to approve, as "Read and run" on its page does (ShellExtensionApproval: "Run
@@ -946,7 +947,8 @@ contains it). A hook that writes something for each event — a line in the jour
 done — should answer this device's events only (`if e.source == "sync" then return end`), or
 the notebook gets the line once per device.
 
-A hook may write and may ask a model, but never asks a question (`b.ask` there is an error); it
+A hook may write, may ask a model and may notify (`b.notify`: the app's limit of 10 an hour keeps a
+`"save"` hook from flooding the user), but never asks a question (`b.ask` there is an error); it
 runs under the same limits; what it returns is written to the console; and one that fails three
 times in a row is taken off until its extension loads again (Emacs does the same to a failing
 `post-command-hook` function), its errors in the console and the event log. At most 256 hooks in
@@ -1160,6 +1162,40 @@ b.command("stop-focus", function(ctx)
     b.stopTimer()
     return "Stopped"
 end, { label = "Stop the focus timer" })
+```
+
+## Notifications
+
+`b.notify(text, { title = …, page = … })` shows the user a notification from the extension: the
+app shows it as a system notification, or a message in the app while it is in front, titled with
+the extension's name (`title`, when given, says what it is about); `page` is a page a tap on it
+opens, named as a link names it. No permission is needed: a notification changes no note. It
+answers `true` when it was shown, else `false` and why not, in a few English words; a
+notification that is not shown is never an error (only arguments of the wrong kind are):
+
+* `"turned off"` — the user turned notifications from extensions off in Settings → Extensions;
+* `"too many: at most 10 an hour"` — at most 10 an hour from one extension;
+* `"no page “…” in the notebook"` — `page` names no page of the open notebook;
+* `"empty"` — the text is nothing but white space;
+* `"not from a macro or a template variable"`, `"not while the extension loads"` — a macro is
+  computed whenever its note changes, the top level runs at every load: notify from a command, an
+  action or a hook (a hook may: the limit above keeps a `"save"` hook from flooding the user);
+* `"not available here"` — where no app shows them: `brulion-cli extension run`, the tests.
+
+The engine trims the text and cuts it to 1000 characters, the title to one line of 80 ("…" where
+cut); the app may shorten them further for the platform's notification, and keeps each in the list
+of notifications (docs/UI.md "Notifications"). The built-in AI assistant
+notifies through it too (`notify_user`, "AI").
+
+```luau
+b.command("due-soon", function(ctx)
+    local due = b.query("type:tasks status:open due:today..+3d", 20)
+    if due.total == 0 then
+        return "Nothing due in the next three days"
+    end
+    local shown, why = b.notify(`{due.total} tasks due in the next three days`, { title = "Due soon", page = due.items[1].page })
+    return if shown then "Notified" else `Not notified: {why}`
+end, { label = "Notify me of what is due soon" })
 ```
 
 ## Shared code
@@ -1619,7 +1655,7 @@ is a due date and rings no alarm."); the same change written again as a reminder
 already (a fine-tuned model wrote the line a second time so). **The app's own tools** come after
 these only where the app runs the turn and its model is on the network (`ctx.appTools`, set by
 `WorkspaceExtensions::runChat` when the provider is not `local`; never in `brulion-cli acp agent`
-nor the bench), and the rules get one more line on when to use them; a model on the device never
+nor the bench), and the rules get two more lines on when to use them; a model on the device never
 gets them — Brulion Assistant 1.7B keeps exactly the twelve tools and the system text it was
 trained on (docs/FINETUNE.md), another model on the device what "What each model is given" below
 says. Six tools over
@@ -1641,6 +1677,12 @@ notebook with `b.app.set("themePage", …)`) and `add_button` (a button in `tool
 `app_commands` knows — or opens a page: written, checked and asked first, as an extension page
 `Rozszerzenia/Przycisk – <label>.md` / `Extensions/Button – <label>.md` with `permissions: [app]`
 and one `b.app.contribute`, which shows once the user presses Run on it, as any code the AI wrote).
+A seventh, `notify_user` (`text`, `title?`, `page?`), shows the user a notification through
+`b.notify` ("Notifications") — only when the user asked to be told of something or, in a scheduled
+conversation, when something needs them (the answer itself already notifies them, so never to say
+it is ready): asked of nobody and no app change (no `⚙️` line), its result `Notified.` or `Not
+notified: <why>.` — the app's refusal no failure, for the model to tell the user —, the same
+notification again in one question the same call as before (`REPEATED`).
 Every app change counts as a change of the question (a claim of one is no longer asked for again),
 and the AI's message ends with them: `⚙️ W aplikacji: theme → "dark"` / `⚙️ In the app: …`. Its system text is a list of rules, after the
 notes' syntax: search before answering about the notes and answer once a result does; answer only
@@ -1785,7 +1827,9 @@ page: call it from a command, an action or a hook). `theme`, `contribute`, `inpu
 they work at the top level, and what an extension set goes away when it is loaded again, switched
 off or removed. A macro or a template variable only reads (`b.app.state()` works there; a change
 is an error). In `brulion-cli extension run` there is no app: `b.app.state()` says
-`platform = "cli"`, and the changes are listed in the result's `app` instead of being made.
+`platform = "cli"`, `b.app.settings()` and `b.app.get` give the notebook's own settings, read from
+its `.brulion/config.json` (a device's setting is an error there), and the changes are listed in
+the result's `app` instead of being made.
 
 ### Theme
 
@@ -2489,6 +2533,7 @@ Home:7
 | `b.sorted` | 100 000 texts |
 | `b.log`, `print` | 4000 characters a line |
 | `b.timer` | 1 … 86 400 s; a label of 100 characters, a message of 300 (cut, one line); one timer per extension |
+| `b.notify` | a text of 1000 characters, a title of 80 (cut, one line); the app's 10 an hour from one extension |
 | Questions | a prompt's first line 300 characters, under it 200 lines and 10 000 characters (cut, "…"); `b.choose` 500 options of 500 characters, `b.form` 50 fields (more: an error); a label 200 characters, a text field's value 10 000 |
 | `b.settings` | 32 settings, a text of 4000 characters, 64 KB of values per extension (on this device) |
 | `b.require` | 16 pages deep; only extension pages approved and on here; a cycle is an error |
@@ -2544,7 +2589,7 @@ Home:7
 | `3rdparty/luau` | Luau 0.743: the VM and the compiler, and the type checker (Analysis, Config: `brulion_luau_analysis`, with `BRULION_LUAU_CHECK`); patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
 | `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits; the UI items and themes of `b.app` (`contributions()`, `themes()`, `appRevision()`) |
 | `src/core/extensions/appapi.h` | `b.app`'s checks: the theme's tokens (`themeTokens()`, `themeLayerFrom()`, `mergedTheme()`), the slots and their items (`contributionSlots()`, `contributionLimits()`, `contributionFrom()`), the operations the host answers (`appOperations()`, `isAppChange()`) |
-| `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks and pages by tag and property, a query from an offset, attachments, the revision, writes — a page, a journal, a block's line, status and property, blocks inserted and removed —, today and now, the week's first day, languages, the timer, the log) |
+| `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks and pages by tag and property, a query from an offset, attachments, the revision, writes — a page, a journal, a block's line, status and property, blocks inserted and removed —, today and now, the week's first day, languages, the timer, notifications (`NotifySpec`), the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`, `markdown::setTaskStatus`), every ref resolved the same way (`resolveRef`: a note's line, stale when changed); a dry run that only computes them (`brulion-cli extension …`, `brulion-cli habit …`) |
 | `src/core/extensions/blockedit.h` | the pure edits behind the writes: a block's line replaced, lines inserted around a block or under it, a block removed, a property set, a line replaced, inserted or removed as written (`b.replaceLine` …); `plainWords` (a block's `plain`, `b.plain`) |
 | `src/core/extensions/sandbox.h` | `checkExtension()`, `checkExtensionPage()`: an extension loaded in an engine of its own over a dry-run `NotebookHost` — `b.checkExtension`, `brulion-cli extension check / write` |

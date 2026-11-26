@@ -111,6 +111,7 @@ FocusScope {
     /// its own at the bottom instead (the drawing's tools). An editing toolbar that stays after
     /// the keyboard went (a menu above it took the keys) docks right above it.
     readonly property bool bottomNavShown: Theme.narrow && !keyboardUp && !shell.routeView.viewReplacesBottomNav && !focusMode
+                                           && AppSettings.appMode !== "code"
     /// Room under the content: the keyboard (minus the bottom navigation, while that is shown:
     /// sliding, the keyboard covers or uncovers it first); while typing without the navigation
     /// at least the system's navigation bar, which the docked toolbar must clear, and the
@@ -494,18 +495,32 @@ FocusScope {
                 height: sidebarSlot.height
                 x: sidebarSlot.width - width
                 opacity: shell.sidebarReveal
-                sourceComponent: ShellSidebar {
-                    // (Its header's name starts after the panel's button, which stays over it.)
-                    leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.layoutWidth
-                    topInset: shell.SafeArea.margins.top
-                    // (The navigation bar's part the keyboard's room leaves.)
-                    bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
-                    onNewPageRequested: (folder) => shell.openNewPage(folder)
-                    onNewFolderRequested: (folder) => shell.openNewFolder(folder)
-                    onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
-                    onDeleteRequested: (path) => shell.confirmDelete(path)
-                    onMoveRequested: (path, isDir) => shell.openMove(path, isDir)
-                    onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
+                sourceComponent: AppSettings.appMode === "code" ? codeSidebarWide : notesSidebarWide
+
+                // Code mode: its projects and threads in place of the notebook's pages (docs/CODE.md).
+                Component {
+                    id: notesSidebarWide
+                    ShellSidebar {
+                        // (Its header's name starts after the panel's button, which stays over it.)
+                        leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.layoutWidth
+                        topInset: shell.SafeArea.margins.top
+                        // (The navigation bar's part the keyboard's room leaves.)
+                        bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
+                        onNewPageRequested: (folder) => shell.openNewPage(folder)
+                        onNewFolderRequested: (folder) => shell.openNewFolder(folder)
+                        onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
+                        onDeleteRequested: (path) => shell.confirmDelete(path)
+                        onMoveRequested: (path, isDir) => shell.openMove(path, isDir)
+                        onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
+                    }
+                }
+                Component {
+                    id: codeSidebarWide
+                    CodeSidebar {
+                        leadingRoom: sidebarToggle.x + sidebarToggle.width + Theme.space2 - rail.layoutWidth
+                        topInset: shell.SafeArea.margins.top
+                        bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
+                    }
                 }
             }
         }
@@ -813,31 +828,45 @@ FocusScope {
             anchors.bottom: parent.bottom
             active: Theme.narrow && shell._drawerMade
             asynchronous: !drawer.visible
-            sourceComponent: ShellSidebar {
-                topInset: shell.SafeArea.margins.top
-                bottomInset: shell.navigationBar
-                onNavigated: drawer.close()
-                onNewPageRequested: (folder) => {
-                    drawer.close()
-                    shell.openNewPage(folder)
+            sourceComponent: AppSettings.appMode === "code" ? codeSidebarDrawer : notesSidebarDrawer
+
+            // Code mode: its projects and threads in place of the notebook's pages (docs/CODE.md).
+            Component {
+                id: notesSidebarDrawer
+                ShellSidebar {
+                    topInset: shell.SafeArea.margins.top
+                    bottomInset: shell.navigationBar
+                    onNavigated: drawer.close()
+                    onNewPageRequested: (folder) => {
+                        drawer.close()
+                        shell.openNewPage(folder)
+                    }
+                    onNewFolderRequested: (folder) => {
+                        drawer.close()
+                        shell.openNewFolder(folder)
+                    }
+                    onRenameRequested: (path, isDir) => {
+                        drawer.close()
+                        shell.openRename(path, isDir)
+                    }
+                    onDeleteRequested: (path) => {
+                        drawer.close()
+                        shell.confirmDelete(path)
+                    }
+                    onMoveRequested: (path, isDir) => {
+                        drawer.close()
+                        shell.openMove(path, isDir)
+                    }
+                    onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
                 }
-                onNewFolderRequested: (folder) => {
-                    drawer.close()
-                    shell.openNewFolder(folder)
+            }
+            Component {
+                id: codeSidebarDrawer
+                CodeSidebar {
+                    topInset: shell.SafeArea.margins.top
+                    bottomInset: shell.navigationBar
+                    onNavigated: drawer.close()
                 }
-                onRenameRequested: (path, isDir) => {
-                    drawer.close()
-                    shell.openRename(path, isDir)
-                }
-                onDeleteRequested: (path) => {
-                    drawer.close()
-                    shell.confirmDelete(path)
-                }
-                onMoveRequested: (path, isDir) => {
-                    drawer.close()
-                    shell.openMove(path, isDir)
-                }
-                onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
             }
         }
     }
@@ -1284,9 +1313,14 @@ FocusScope {
             id: binding
             required property string action
             required property string sequence
+            // (Code mode's own actions only there; one whose key a Code mode action has: not there.)
+            required property string scope
+            required property bool shadowed
             Shortcut {
                 sequence: binding.sequence
                 enabled: shell.shortcutEnabled(binding.action)
+                         && (binding.scope === "code" ? AppSettings.appMode === "code"
+                                                      : !(binding.shadowed && AppSettings.appMode === "code"))
                 onActivated: shell.runShortcut(binding.action)
             }
         }
@@ -1301,15 +1335,23 @@ FocusScope {
         delegate: Shortcut {
             required property int index
             sequence: "Ctrl+" + (index + 1)
-            // Ctrl+9: the last tab, as in browsers.
-            onActivated: AppController.selectTabAt(index === 8 ? -1 : index)
+            // Ctrl+9: the last tab, as in browsers. (In Code mode Ctrl+1–9 open its threads:
+            // CodeSidebar's uiAction — one Shortcut for both, so a sidebar being replaced never
+            // holds the key.)
+            onActivated: {
+                if (AppSettings.appMode === "code")
+                    AppController.requestUiAction("code:thread:" + index)
+                else
+                    AppController.selectTabAt(index === 8 ? -1 : index)
+            }
         }
     }
     function shortcutEnabled(id: string): bool {
         switch (id) {
         case "panel.toggle": return !Theme.narrow || contextDrawer.available
-        case "page.rename":
-        case "page.print": return shell.currentView === "page"
+        case "page.rename": return shell.currentView === "page"
+        // (In Code mode Print page's key is the file picker's: docs/CODE-FILES.md "Keys".)
+        case "page.print": return shell.currentView === "page" || shell.currentView === "code"
         }
         return true
     }
@@ -1318,7 +1360,19 @@ FocusScope {
         switch (id) {
         case "palette": shell.openPalette(""); break
         case "page.switch": shell.openSwitcher(""); break
-        case "go.search": AppController.search(""); break
+        // (Code mode: the project search; Print page's key the file picker — CodeView's uiActions.)
+        case "go.search":
+            if (shell.currentView === "code")
+                AppController.requestUiAction("code:search")
+            else
+                AppController.search("")
+            break
+        case "page.print":
+            if (shell.currentView === "code")
+                AppController.requestUiAction("code:findFile")
+            else
+                CommandModel.run(id)
+            break
         case "page.new": shell.openNewPage(""); break
         case "capture": shell.openCapture(); break
         case "panel.toggle":

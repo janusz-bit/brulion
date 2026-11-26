@@ -155,6 +155,13 @@ struct Conversation {
     /// … and the index of its first own message (the frontmatter's `side-from:`, counted from 1
     /// there; 0 when it says none): the messages before it are the copy of that conversation.
     int sideFrom = 0;
+    /// A thread of Code mode (docs/CODE.md): the project it works in — the frontmatter's
+    /// `project:`, an id of the device's projects ("" a conversation of the notebook) —, the git
+    /// worktree it has of its own (`worktree:`, an absolute folder; "" the project's folder) and
+    /// that worktree's branch (`branch:`).
+    QString project{};
+    QString worktree{};
+    QString branch{};
 };
 
 /// What the turn of a sub-conversation that wakes its parent came to (wakeMessage()).
@@ -219,6 +226,9 @@ QString newConversation(QStringView question, QStringView page, QStringView lang
 /// line replaced, or added at the frontmatter's end, or a frontmatter made for it; the rest byte
 /// for byte, its line endings kept.
 QString setPartner(const QString &content, QStringView partner);
+/// `content` with its frontmatter's `name:` set to `value` (one line: line breaks become spaces;
+/// "" takes the line out) — as setPartner() does for `partner:`.
+QString setField(const QString &content, QStringView name, QStringView value);
 
 /// The frontmatter's key of `flag` in the notebook's language: "zgłoszone" / "ukryte" ("pl"),
 /// else "reported" / "hidden" ("" for Flag::None).

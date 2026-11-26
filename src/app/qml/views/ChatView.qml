@@ -52,6 +52,27 @@ FocusScope {
 
     property var route: ({})
     property bool inSidePanel: false
+    /// The route's view this one belongs to: "chat" (the AI chat), "code" (a thread of Code mode in
+    /// CodeView: docs/CODE.md) — its navigations name it.
+    property string routeView: "chat"
+    /// Code mode: a new conversation is a thread of this project, working in `newWorktree` on
+    /// `newBranch` ("" the project's folder); answered by an AI agent (only agents are offered).
+    property string project
+    property string newWorktree
+    property string newBranch
+    /// … on that pull request ("#123 Title", "" none): its agent is told (WorkspaceChats.startThread).
+    property string newPullRequest
+    readonly property bool codeThread: root.routeView === "code"
+    /// The list of conversations beside the conversation (CodeView: its sidebar lists the threads).
+    property bool showList: true
+    /// A new thread wants a git worktree of its own: the first Send asks for it (worktreeWanted:
+    /// CodeView makes it, sets newWorktree / newBranch and sends again).
+    property bool wantsWorktree: false
+    signal worktreeWanted(string text)
+    /// A thread's folder (CodeView: the thread's): "@" names its files and folders instead of the
+    /// notebook's pages, and links of answers to its files open them (fileLinkActivated) — docs/CODE-FILES.md.
+    property string filesFolder
+    signal fileLinkActivated(string path, int line)
     /// The conversation shown: the route's, or the one its first message just started ("" none).
     property string path
     /// A new conversation's page (the chip; taken away before the first message: none).
@@ -60,15 +81,17 @@ FocusScope {
     property bool starting
     /// Who answers a new conversation ("" the built-in assistant; an extension's "id/command").
     property string newPartner
+    /// The device's default partner as last seen (Workspace.chats.defaultPartner).
+    property string knownDefault
     /// Who answers this one (its page's `partner:`).
     property string partnerHere
     /// The pictures going with the next message (vault paths, stored when picked).
     property list<string> attached
     readonly property string title: root.path !== "" && messages.title !== "" ? messages.title : qsTr("AI chat")
 
-    readonly property bool wide: !root.inSidePanel && root.width >= 720
-    readonly property bool listShown: root.wide || (root.path === "" && !root.starting)
-    readonly property bool conversationShown: root.wide || root.path !== "" || root.starting
+    readonly property bool wide: root.showList && !root.inSidePanel && root.width >= 720
+    readonly property bool listShown: root.showList && (root.wide || (root.path === "" && !root.starting))
+    readonly property bool conversationShown: !root.showList || root.wide || root.path !== "" || root.starting
     readonly property WorkspaceChats chats: Workspace.chats
     /// This conversation's turn ("" a new one's: only its failure).
     readonly property ChatTurn turn: root.chats.turn(root.path)
@@ -88,6 +111,7 @@ FocusScope {
     readonly property bool questionHasDiff: AppController.routeText(root.questionDiff, "path") !== ""
     readonly property list<string> noStrings: []
     readonly property list<var> noVars: []
+    readonly property var noMap: ({})
     readonly property string failure: root.turn !== null ? root.turn.failure : ""
     readonly property bool failedHere: root.failure !== ""
     /// Messages written while this conversation's turn runs: they wait for it ({id, text,
@@ -126,6 +150,55 @@ FocusScope {
     /// -1 none) and the one shown so, tinted for a moment.
     property int seekLine: -1
     property int foundLine: -1
+    /// Find in the conversation (Ctrl+F where the list of conversations is not shown — a thread of
+    /// Code mode, a phone —, as T3 Code's find in thread): the matching rows, the one shown (from
+    /// the newest; Enter goes to an older one, Shift+Enter back).
+    property bool findOpen: false
+    property list<int> findRows
+    property int findIndex: -1
+    property string findQuery
+    readonly property list<int> noRows: []
+    function openFind(): void {
+        root.findOpen = true
+        findField.forceActiveFocus()
+        findField.selectAll()
+    }
+    function closeFind(): void {
+        root.findOpen = false
+        root.findRows = root.noRows
+        root.findIndex = -1
+        root.findQuery = ""
+        root.foundLine = -1
+        input.forceActiveFocus()
+    }
+    function runFind(query: string): void {
+        if (query === root.findQuery && root.findRows.length > 0) {
+            root.stepFind(-1)
+            return
+        }
+        root.findQuery = query
+        root.findRows = messages.rowsMatching(query)
+        root.findIndex = root.findRows.length - 1
+        root.showFound()
+    }
+    function stepFind(delta: int): void {
+        const n = root.findRows.length
+        if (n === 0)
+            return
+        root.findIndex = (root.findIndex + delta + n) % n
+        root.showFound()
+    }
+    function showFound(): void {
+        if (root.findIndex < 0 || root.findIndex >= root.findRows.length) {
+            root.foundLine = -1
+            return
+        }
+        const row = root.findRows[root.findIndex]
+        foundTimer.stop()
+        root.following = false
+        list.positionViewAtIndex(row, ListView.Center)
+        root.foundLine = messages.lineOf(row)
+    }
     /// The answer as it is written: what the model thinks first, then its words.
     readonly property bool liveShown: root.busyHere && !root.queuedHere && !root.asking
                                       && (root.turn.partial !== "" || root.turn.thoughts !== "")
@@ -189,7 +262,12 @@ FocusScope {
         root.linkNote = ""
         root.seekLine = root.path !== "" ? AppController.routeInt(root.route, "line", -1) : -1
         root.foundLine = -1
+        root.findOpen = false
+        root.findRows = root.noRows
+        root.findIndex = -1
+        root.findQuery = ""
         const prompt = AppController.routeText(root.route, "prompt")
+        root.knownDefault = root.chats.defaultPartner
         if (root.starting && AppController.routeFlag(root.route, "fromLink")) {
             // A prompt link: its prompt in the field, never sent — the user reads it first.
             // (Typed through this file's functions: values a later call cannot change.)
@@ -199,15 +277,21 @@ FocusScope {
             const partnerMissing = root.routeString("partnerMissing")
             const partner = root.routeString("partner")
             const draft = root.routeString("draft")
-            const note = root.linkNoteText(hidden, capped, pageMissing, partnerMissing)
             // (Its partner, or the default: not the one an earlier draft had.)
             root.newPartner = partner
+            const note = root.linkNoteText(hidden, capped, pageMissing, partnerMissing)
             input.text = draft
             input.cursorPosition = input.length
             root.linkWarning = hidden > 0
             root.linkNote = note
             focusLater.restart()
-        } else if (root.starting && prompt !== "") {
+            return
+        }
+        // A new conversation: the device's default answers it, unless another is chosen (a thread:
+        // an agent).
+        if (root.path === "")
+            root.newPartner = root.codeThread ? root.chats.threadPartner() : root.knownDefault
+        if (root.starting && prompt !== "") {
             input.text = prompt
             sendLater.restart()
         } else if (root.conversationShown && (root.starting || !Theme.touchUi) && !root.sideOpen) {
@@ -229,11 +313,21 @@ FocusScope {
         root.refreshPartners()
     }
     function refreshPartners(): void {
-        root.partners = root.chats.partners()
+        root.partners = root.codeThread ? root.chats.agentPartners() : root.chats.partners()
     }
     Connections {
         target: root.chats
         function onPartnersChanged() { root.refreshPartners() }
+        // (Another default — chosen in the settings, or the one chosen gone —: it answers a new
+        // conversation whose partner nobody changed.)
+        function onDefaultPartnerChanged() {
+            const now = root.chats.defaultPartner
+            if (now === root.knownDefault)
+                return
+            if (root.path === "" && root.newPartner === root.knownDefault)
+                root.newPartner = now
+            root.knownDefault = now
+        }
     }
     /// A list of strings of a map (a result's).
     function routeList(map: var, key: string): list<string> {
@@ -258,9 +352,9 @@ FocusScope {
         if (path === "" && !fresh)
             return
         if (root.inSidePanel)
-            AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path }, true)
+            AppController.navigate(fresh ? { view: root.routeView, new: true, project: root.project } : { view: root.routeView, path: path }, true)
         else
-            AppController.navigate(fresh ? { view: "chat", new: true } : { view: "chat", path: path })
+            AppController.navigate(fresh ? { view: root.routeView, new: true, project: root.project } : { view: root.routeView, path: path })
     }
     /// Opens the conversation `path` at its message at the page's line `line` (a search's match;
     /// -1: as open()).
@@ -270,9 +364,9 @@ FocusScope {
             return
         }
         if (root.inSidePanel)
-            AppController.navigate({ view: "chat", path: path, line: line }, true)
+            AppController.navigate({ view: root.routeView, path: path, line: line }, true)
         else
-            AppController.navigate({ view: "chat", path: path, line: line })
+            AppController.navigate({ view: root.routeView, path: path, line: line })
     }
     /// The list's row `row` opened (Enter, a click, Alt+1…9).
     function openRow(row: int): void {
@@ -301,8 +395,15 @@ FocusScope {
                 root.clearField()
             return
         }
-        const sent = root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
-                                     root.path === "" ? root.newPartner : "")
+        if (root.path === "" && root.codeThread && root.wantsWorktree && root.newWorktree === "") {
+            root.worktreeWanted(text)
+            return
+        }
+        const sent = root.path === "" && root.codeThread
+                     ? root.chats.startThread(root.project, text, root.attached, root.newPartner, root.newWorktree, root.newBranch,
+                                              root.newPullRequest)
+                     : root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
+                                       root.path === "" ? root.newPartner : "")
         if (sent === "")
             return
         root.clearField()
@@ -311,9 +412,9 @@ FocusScope {
             root.path = sent
             root.starting = false
             if (root.inSidePanel)
-                AppController.navigate({ view: "chat", path: sent }, true)
+                AppController.navigate({ view: root.routeView, path: sent }, true)
             else
-                AppController.replaceRoute({ view: "chat", path: sent })
+                AppController.replaceRoute({ view: root.routeView, path: sent })
         }
         toEnd.restart()
     }
@@ -329,7 +430,8 @@ FocusScope {
             root.chats.setDraft(root.draftPath, input.text)
     }
     function loadDraft(): void {
-        root.draftPath = root.path
+        // (A new thread of Code mode: its project's draft — CodeSidebar shows it.)
+        root.draftPath = root.path !== "" || !root.codeThread ? root.path : "code:" + AppController.routeText(root.route, "project")
         root.draftLoaded = true
         input.text = root.chats.draft(root.path)
         input.cursorPosition = input.length
@@ -393,11 +495,11 @@ FocusScope {
         root.pendingSide = side
         root.pendingPushed = replacing ? root.sidePushed : !root.inSidePanel
         if (root.inSidePanel)
-            AppController.navigate({ view: "chat", path: root.path, side: side }, true)
+            AppController.navigate({ view: root.routeView, path: root.path, side: side }, true)
         else if (replacing)
-            AppController.replaceRoute({ view: "chat", path: root.path, side: side })
+            AppController.replaceRoute({ view: root.routeView, path: root.path, side: side })
         else
-            AppController.navigate({ view: "chat", path: root.path, side: side })
+            AppController.navigate({ view: root.routeView, path: root.path, side: side })
     }
     function closeSide(): void {
         if (root.sidePath === "")
@@ -405,9 +507,9 @@ FocusScope {
         if (root.sidePushed && AppController.canGoBack && AppController.back(0))
             return
         if (root.inSidePanel)
-            AppController.navigate({ view: "chat", path: root.path }, true)
+            AppController.navigate({ view: root.routeView, path: root.path }, true)
         else
-            AppController.replaceRoute({ view: "chat", path: root.path })
+            AppController.replaceRoute({ view: root.routeView, path: root.path })
     }
     /// A side chat's answer as a quote in this conversation's field (the narrow pane closes for it).
     function bringIn(markdown: string): void {
@@ -436,15 +538,50 @@ FocusScope {
         input.cursorPosition = input.length
         return true
     }
-    /// A page named at the caret: its link in place of what was typed ("@Do" → "[[Dom]] ").
+    /// A page named at the caret: its link in place of what was typed ("@Do" → "[[Dom]] "); in a
+    /// thread a file of its folder: "@src/ma" → "@src/main.cpp ".
     function insertMention(title: string): void {
         const caret = 0 + input.cursorPosition
         const typed = "" + input.text
+        if (root.codeThread) {
+            const withFile = "" + CodeFiles.withMention(typed, caret, title)
+            if (withFile === "")
+                return
+            input.text = withFile
+            input.cursorPosition = CodeFiles.mentionEnd(typed, caret, title)
+            input.forceActiveFocus()
+            return
+        }
         const next = "" + root.chats.withMention(typed, caret, title)
         if (next === "")
             return
         input.text = next
         input.cursorPosition = root.chats.mentionEnd(typed, caret, title)
+        input.forceActiveFocus()
+    }
+    /// A link of a thread's answer to a file of its folder: shown in the file viewer (true), else
+    /// false (the notebook's links, web addresses).
+    function openFileLink(link: string): bool {
+        const folder = root.codeThread ? root.filesFolder : ""
+        const href = link
+        if (folder === "")
+            return false
+        const path = "" + CodeFiles.linkPath(folder, href)
+        const line = 0 + CodeFiles.linkLine(folder, href)
+        if (path === "")
+            return false
+        root.fileLinkActivated(path, line)
+        return true
+    }
+    /// Text added to the field from elsewhere — Code mode's "Add to chat" of a terminal's selection
+    /// or a diff's lines —, at its end after a blank line, the field focused (nothing is sent).
+    function addToComposer(text: string): void {
+        const added = Js.trim(text)
+        if (added === "")
+            return
+        const typed = Js.trimEnd("" + input.text)
+        input.text = typed === "" ? added + "\n" : typed + "\n\n" + added + "\n"
+        input.cursorPosition = input.length
         input.forceActiveFocus()
     }
     /// A message's text as a quote at the field's start.
@@ -455,6 +592,21 @@ FocusScope {
         input.insert(0, quote)
         input.cursorPosition = input.length
         input.forceActiveFocus()
+    }
+    /// "Edit from here" on the message at `line` (its number in the page `number`): in a thread whose
+    /// turn of that message has a checkpoint, the dialog offers to put the project's files back too
+    /// (T3 Code's "Revert files too"); else at once.
+    function editFromHere(line: int, number: int): void {
+        const checkpoint = root.codeThread && root.path !== ""
+                           ? root.chats.checkpointOf(root.path, number, root.chats.checkpointSerial) : ""
+        if (checkpoint === "") {
+            root.rewindTo(line)
+            return
+        }
+        editDialog.line = line
+        editDialog.checkpoint = checkpoint
+        editDialog.checked = false
+        editDialog.open()
     }
     /// "Edit from here": the message and those after it out of the conversation, its text back in
     /// the field (Undo in the toast).
@@ -502,7 +654,8 @@ FocusScope {
         if (pageMissing !== "")
             note += "\n" + qsTr("The page “%1” is not in this notebook: the conversation is about no page.").arg(pageMissing)
         if (partnerMissing !== "")
-            note += "\n" + qsTr("“%1” is not set up on this device: the AI assistant answers instead.").arg(partnerMissing)
+            //: %1: the partner a prompt link names, %2: the one who answers instead (the default)
+            note += "\n" + qsTr("“%1” is not set up on this device: %2 answers instead.").arg(partnerMissing).arg(root.partnerName(root.newPartner))
         return note
     }
     /// The prompt link of `text` (brulion://chat: it opens a new conversation with it, never sent)
@@ -739,7 +892,7 @@ FocusScope {
         AppController.toastRestore(qsTr("Conversation moved to trash"), qsTr("Undo"), root.chats.lastRemoved())
         if (shown) {
             root.path = ""
-            AppController.replaceRoute({ view: "chat" })
+            AppController.replaceRoute({ view: root.routeView })
         }
     }
     BMenu {
@@ -947,6 +1100,36 @@ FocusScope {
             searchField.forceActiveFocus()
             searchField.selectAll()
         }
+    }
+    // "Edit from here" in a thread: the files back too, if asked (editFromHere).
+    BConfirmDialog {
+        id: editDialog
+        objectName: "chatEditFromHereDialog"
+        property int line: -1
+        property string checkpoint
+        title: qsTr("Edit from here?")
+        message: qsTr("This message and the ones after it come out of the conversation; its text comes back into the field to edit.")
+        checkText: qsTr("Also put the project's files back as they were before this message")
+        confirmText: qsTr("Edit from here")
+        onAccepted: {
+            const back = editDialog.checked
+            root.rewindTo(editDialog.line)
+            if (back && !root.chats.restoreCheckpoint(root.path, editDialog.checkpoint))
+                AppController.toast(qsTr("The files could not be put back: the thread's folder is not on this device."), "error")
+        }
+    }
+    Connections {
+        target: root.chats
+        function onCheckpointRestored(path: string, ok: bool, message: string) {
+            if (path === root.path)
+                AppController.toast(message, ok ? "success" : "error")
+        }
+    }
+    // … and where the list is not shown, find in the conversation.
+    Shortcut {
+        sequence: ShortcutMap.sequences["page.find"] || ""
+        enabled: root.visible && !root.listShown && root.path !== "" && root.activeFocus
+        onActivated: root.openFind()
     }
     Connections {
         target: root.chats
@@ -1498,6 +1681,64 @@ FocusScope {
                 }
             }
 
+            // Find in the conversation (Ctrl+F; root.openFind): the field, which match of how many,
+            // older / newer, close.
+            RowLayout {
+                objectName: "chatFind"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space3
+                Layout.topMargin: Theme.space1
+                visible: root.findOpen
+                spacing: Theme.space2
+                BSearchField {
+                    id: findField
+                    objectName: "chatFindField"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 420
+                    placeholderText: qsTr("Find in the conversation")
+                    onSearch: (query) => root.runFind(query)
+                    onEscapePressed: root.closeFind()
+                    Keys.onPressed: (event) => {
+                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier)) {
+                            root.stepFind(1)
+                            event.accepted = true
+                        }
+                    }
+                }
+                BText {
+                    objectName: "chatFindCount"
+                    visible: root.findQuery !== ""
+                    text: root.findRows.length === 0 ? qsTr("No matches")
+                                                     : qsTr("%1 of %2").arg(root.findRows.length - root.findIndex).arg(root.findRows.length)
+                    variant: "caption"
+                    color: Theme.fgMuted
+                }
+                BIconButton {
+                    objectName: "chatFindOlder"
+                    iconName: "chevron-up"
+                    label: qsTr("Older match")
+                    enabled: root.findRows.length > 0
+                    onClicked: root.stepFind(-1)
+                }
+                BIconButton {
+                    objectName: "chatFindNewer"
+                    iconName: "chevron-down"
+                    label: qsTr("Newer match")
+                    enabled: root.findRows.length > 0
+                    onClicked: root.stepFind(1)
+                }
+                BIconButton {
+                    objectName: "chatFindClose"
+                    iconName: "x"
+                    label: qsTr("Close find")
+                    onClicked: root.closeFind()
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -1541,7 +1782,13 @@ FocusScope {
                         /// It woke the conversation for this sub-conversation ("" none) — the app's message.
                         required property string wakeFrom
                         required property string wakeName
+                        /// Its number in the page (from 1): its work log (WorkspaceChats.workLog).
+                        required property int number
                         readonly property bool mine: message.sender === "user"
+                        readonly property var workLog: message.mine || root.path === "" ? root.noMap
+                                                       : root.chats.workLog(root.path, message.number, root.chats.workLogSerial)
+                        readonly property list<var> workTools: AppController.routeList(message.workLog, "tools")
+                        readonly property list<var> workPlan: AppController.routeList(message.workLog, "plan")
                         /// The user reported or hid it: a line in its place until it is opened.
                         readonly property bool folded: message.flag !== "" && !message.revealed
                         readonly property bool inParts: message.segments.length > 0
@@ -1692,6 +1939,25 @@ FocusScope {
                                 }
                             }
 
+                            // What the AI agent did for this answer, folded (T3 Code's "Worked for …"):
+                            // its tool calls and plan as they ended, kept on this device
+                            // (WorkspaceChats.workLog); a tap on the line opens them.
+                            Loader {
+                                width: Math.min(parent.width, 640)
+                                active: message.workTools.length > 0 || message.workPlan.length > 0
+                                visible: active
+                                sourceComponent: ChatActivity {
+                                    objectName: "chatWorkLog"
+                                    tools: message.workTools
+                                    plan: message.workPlan
+                                    seconds: AppController.routeInt(message.workLog, "seconds", 0)
+                                    finished: true
+                                    // (A thread's: the files of its calls open in Code mode's viewer.)
+                                    filesFolder: root.codeThread ? root.filesFolder : ""
+                                    onFileActivated: (path) => root.fileLinkActivated(path, 0)
+                                }
+                            }
+
                             Item {
                                 id: bubbleRow
                                 width: parent.width
@@ -1786,9 +2052,11 @@ FocusScope {
                                     onTapped: (eventPoint, button) => {
                                         const at = eventPoint.position
                                         const link = message.linkAt(at)
-                                        if (link !== "" && !Js.startsWith(link, "task:"))
-                                            tools.openLink(link, root.path, false)
-                                        else if (message.inParts)
+                                        if (link !== "" && !Js.startsWith(link, "task:")) {
+                                            // (A thread's link to a file of its folder: the file viewer.)
+                                            if (!root.openFileLink(link))
+                                                tools.openLink(link, root.path, false)
+                                        } else if (message.inParts)
                                             parts.openAt(message.linkPoint.x, message.linkPoint.y) // (a drawing opens large)
                                     }
                                     onLongPressed: message.openMenu(leftTap.point.position)
@@ -1814,7 +2082,7 @@ FocusScope {
                                         text: qsTr("Edit from here")
                                         hint: qsTr("this and what follows come out")
                                         iconName: "pencil"
-                                        onTriggered: root.rewindTo(message.line)
+                                        onTriggered: root.editFromHere(message.line, message.number)
                                     }
                                     BMenuItem {
                                         objectName: "chatMessageFork"
@@ -2069,6 +2337,8 @@ FocusScope {
                                 Layout.maximumWidth: 640
                                 tools: root.busyHere && !root.queuedHere ? root.turn.tools : root.noVars
                                 plan: root.busyHere && !root.queuedHere ? root.turn.plan : root.noVars
+                                filesFolder: root.codeThread ? root.filesFolder : ""
+                                onFileActivated: (path) => root.fileLinkActivated(path, 0)
                             }
 
                             // What the AI does now (not while its words come: they show it, and a
@@ -2415,11 +2685,40 @@ FocusScope {
                         spacing: Theme.space3
                         BEmptyState {
                             Layout.alignment: Qt.AlignHCenter
-                            iconName: "sparkles"
-                            title: qsTr("Ask about your notes")
-                            description: qsTr("The AI searches and reads the whole notebook, looks at its pictures and, with your yes, changes it. The conversation is kept as a page.")
+                            iconName: root.codeThread ? "code" : "sparkles"
+                            title: root.codeThread ? qsTr("What should the agent do?") : qsTr("Ask about your notes")
+                            description: root.codeThread
+                                         ? qsTr("It works in the project's folder with your subscription; its changes show in the Changes panel after each turn, where you can revert a turn, commit and open a pull request.")
+                                         : qsTr("The AI searches and reads the whole notebook, looks at its pictures and, with your yes, changes it. The conversation is kept as a page.")
                         }
                         Flow {
+                            objectName: "codeSuggestions"
+                            visible: root.codeThread
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 560
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Theme.space2
+                            BChip {
+                                interactive: true
+                                iconName: "search"
+                                text: qsTr("Explain this project")
+                                onClicked: root.suggest(qsTr("Explain this project: what it does, how it is built and where to start reading."))
+                            }
+                            BChip {
+                                interactive: true
+                                iconName: "list-checks"
+                                text: qsTr("Run the tests")
+                                onClicked: root.suggest(qsTr("Run the project's tests and fix what fails."))
+                            }
+                            BChip {
+                                interactive: true
+                                iconName: "git-compare"
+                                text: qsTr("Review my changes")
+                                onClicked: root.suggest(qsTr("Review the uncommitted changes in this project: bugs, risks and what to simplify."))
+                            }
+                        }
+                        Flow {
+                            visible: !root.codeThread
                             Layout.fillWidth: true
                             Layout.maximumWidth: 560
                             Layout.alignment: Qt.AlignHCenter
@@ -2567,7 +2866,7 @@ FocusScope {
                     BChip {
                         id: newPartnerChip
                         objectName: "chatNewPartner"
-                        visible: root.choosesPartner
+                        visible: root.choosesPartner || (root.codeThread && root.partners.length > 0)
                         iconName: "sparkles"
                         text: qsTr("Answers: %1").arg(root.partnerName(root.newPartner))
                         interactive: true
@@ -2616,10 +2915,20 @@ FocusScope {
 
                 // A page being named ("@Dom", "[[Do"): the pages it may be; a tap (or Tab: the
                 // first) writes its link — an AI agent gets the pages a message names.
+                // (In a thread: the files and folders of its folder, CodeFileIndex.)
+                CodeFileIndex {
+                    id: threadFiles
+                    folder: root.codeThread ? root.filesFolder : ""
+                    active: root.codeThread && CodeFiles.mentionStart(input.text, input.cursorPosition) >= 0
+                    query: threadFiles.active ? CodeFiles.mentionQuery(input.text, input.cursorPosition) : ""
+                    limit: 8
+                    markColor: Theme.link
+                }
                 Flow {
                     id: mentionList
                     objectName: "chatMentions"
-                    readonly property list<var> pages: root.chats.mentions(root.path, input.text, input.cursorPosition, 8)
+                    readonly property list<var> pages: root.codeThread ? threadFiles.rows
+                                                       : root.chats.mentions(root.path, input.text, input.cursorPosition, 8)
                     Layout.fillWidth: true
                     visible: mentionList.pages.length > 0
                     spacing: Theme.space1
@@ -2631,9 +2940,10 @@ FocusScope {
                             objectName: "chatMention"
                             size: "small"
                             interactive: true
-                            iconName: "file-text"
+                            iconName: root.codeThread ? AppController.routeText(mentionChip.modelData, "iconName") : "file-text"
                             text: AppController.routeText(mentionChip.modelData, "title")
-                            Accessible.name: qsTr("Name the page %1").arg(mentionChip.text)
+                            Accessible.name: root.codeThread ? qsTr("Name the file %1").arg(mentionChip.text)
+                                                             : qsTr("Name the page %1").arg(mentionChip.text)
                             onClicked: root.insertMention(mentionChip.text)
                         }
                     }
@@ -2778,6 +3088,11 @@ FocusScope {
                                     } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && control && root.busyHere) {
                                         event.accepted = true
                                         root.steer()
+                                    } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && root.codeThread
+                                               && mentionList.pages.length > 0) {
+                                        // (A thread's file being named: Enter takes the first, as Tab.)
+                                        event.accepted = true
+                                        root.insertMention(AppController.routeText(mentionList.pages[0], "title"))
                                     } else if ((key === Qt.Key_Return || key === Qt.Key_Enter) && !shift && !Theme.touchUi) {
                                         event.accepted = true
                                         root.send()

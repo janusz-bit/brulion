@@ -9,14 +9,19 @@
 // the owner's device pairs without a code through the app's own client (only the agent picked),
 // a pairing code with its brulion://pair link, the devices counted and all unpaired, without the
 // trust the code asked for (codeNeeded), not for the documentation notebook nor without agents,
-// and turned off it stops and its offer leaves the notebook.
+// and turned off it stops and its offer leaves the notebook. Code mode's projects of this device go
+// to its projects' file (--projects), written again when they change — the running server reads it
+// again: a paired device lists them at once.
 #include "agentshare.h"
+#include "codeprojects.h"
 #include "serverprocess.h"
 #include "workspace.h"
 #include "workspaceagents.h"
 #include "workspacechats.h"
 
+#include "acp/codehost.h"
 #include "faketailscaled.h"
+#include "sync/http.h"
 #include "tailscale/localapi.h"
 #include "vault/vaultconfig.h"
 
@@ -141,6 +146,11 @@ private Q_SLOTS:
         const QStringList args = AgentShare::serveArguments(launch(address, tailscale, lan, trust), &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QCOMPARE(args, base() + expected);
+        // With Code mode's projects: their file too.
+        AgentShare::Launch l = launch(address, tailscale, lan, trust);
+        l.projectsFile = u"/home/ala/.local/share/Brulion/agent-share/projects.json"_s;
+        const QStringList withProjects = base() + QStringList{u"--projects"_s, l.projectsFile} + expected;
+        QCOMPARE(AgentShare::serveArguments(l, &error), withProjects);
     }
 
     void argumentsRefused_data()
@@ -233,6 +243,12 @@ private Q_SLOTS:
         QString error;
         QVERIFY2(ws.open(root, root + u"-state"_s, &error), qPrintable(error));
         ws.finishIndexing();
+        // A project of Code mode on this computer.
+        QByteArray kept;
+        ws.projects()->setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
+        const QString project = m_tmp.filePath(u"Sklep żółwia"_s);
+        QVERIFY(QDir().mkpath(project));
+        QCOMPARE(ws.projects()->add(project), u"sklep-zolwia"_s);
         AgentShare *share = ws.chats()->share();
         share->setCommand({QStringLiteral(BRULION_CLI)});
         share->setPort(0);
@@ -264,6 +280,17 @@ private Q_SLOTS:
         const QJsonArray agents = QJsonDocument::fromJson(readRaw(args.at(args.indexOf(u"--agents"_s) + 1)).toUtf8()).array();
         QCOMPARE(agents.size(), 1);
         QCOMPARE(agents.first().toObject().value(u"name"_s).toString(), u"Fałszywy agent"_s);
+        // Its projects' list: this device's projects of Code mode, with their worktrees' root.
+        QVERIFY(args.contains(u"--projects"_s));
+        const QString projectsFile = args.at(args.indexOf(u"--projects"_s) + 1);
+        const std::optional<QList<acp::HostProject>> listed = acp::parseHostProjects(readRaw(projectsFile).toUtf8());
+        QVERIFY(listed && listed->size() == 1);
+        QCOMPARE(listed->first().id, u"sklep-zolwia"_s);
+        QCOMPARE(listed->first().path, QDir::cleanPath(project));
+        QCOMPARE(listed->first().worktreesRoot, ws.projects()->worktreesRoot());
+#ifndef Q_OS_WIN // (no permission bits there: Qt reports what the file's ACL allows the owner)
+        QCOMPARE(QFile(projectsFile).permissions() & (QFileDevice::ReadOther | QFileDevice::ReadGroup), QFileDevice::Permissions());
+#endif
 
         // The notebook offers it: its address and the agent's name, the other keys kept.
         const QString configPath = root + u"/.brulion/config.json"_s;
@@ -293,6 +320,29 @@ private Q_SLOTS:
         QCOMPARE(got.first().remote, u"fake"_s);
         QVERIFY(got.first().token.startsWith(u"bat_"_s));
         QTRY_COMPARE_WITH_TIMEOUT(share->devices(), 1, kTimeoutMs);
+        // That device lists this computer's projects; one added here is there at once (the file
+        // written again, read again by the server that runs on).
+        sync::NetworkHttpTransport transport;
+        const auto projectsThere = [&] {
+            QList<acp::RemoteProject> out;
+            bool done = false;
+            acp::fetchRemoteProjects(&transport, QUrl(reachable), got.first().token,
+                                     [&](const QList<acp::RemoteProject> &p, const acp::RemoteError &) {
+                                         out = p;
+                                         done = true;
+                                     });
+            (void)QTest::qWaitFor([&done] { return done; }, kTimeoutMs);
+            return out;
+        };
+        QList<acp::RemoteProject> there = projectsThere();
+        QCOMPARE(there.size(), 1);
+        QCOMPARE(there.first().name, u"Sklep żółwia"_s);
+        const qint64 serverPid = share->server()->processId();
+        const QString second = m_tmp.filePath(u"Drugi projekt"_s);
+        QVERIFY(QDir().mkpath(second));
+        QCOMPARE(ws.projects()->add(second), u"drugi-projekt"_s);
+        QTRY_COMPARE_WITH_TIMEOUT(projectsThere().size(), 2, kTimeoutMs);
+        QCOMPARE(share->server()->processId(), serverPid); // (not started again)
 
         // A code for a device outside the tailnet: its link for the QR code.
         QSignalSpy pairing(share, &AgentShare::pairingChanged);

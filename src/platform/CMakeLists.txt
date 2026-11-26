@@ -24,7 +24,10 @@
 #                photo from the camera and dictation for the AI chat: one backend per build, below;
 #                the hook for a speech recognizer of the app's own), devicefolder (the folder of
 #                this device a notebook in the app's storage syncs with: Android's picked folders
-#                through android/safstorage, a local folder elsewhere). Tests: tests/platform.
+#                through android/safstorage, a local folder elsewhere), pty (a program on a
+#                pseudo-terminal for the Code mode's terminal panel: POSIX or ConPTY, one backend
+#                per build, below).
+#                Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
@@ -46,6 +49,7 @@ qt_add_library(brulion_platform STATIC
     filesync.h filesync.cpp
     capture.h capture.cpp
     devicefolder.h devicefolder.cpp
+    pty.h
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
@@ -209,6 +213,26 @@ if(ANDROID)
     target_sources(brulion_platform PRIVATE capture_android.cpp)
 else()
     target_sources(brulion_platform PRIVATE capture_none.cpp)
+endif()
+
+# A program on a pseudo-terminal (pty.h; docs/CODE-TERMINAL.md): POSIX desktops — Linux, macOS, the
+# BSDs — through posix_openpt() and fork() (no libutil needed); Windows through ConPTY (Windows 10
+# 1809 and later, its functions looked up at run time; nothing to link); none on Android and in the
+# browser.
+if(WIN32)
+    target_sources(brulion_platform PRIVATE pty_conpty.cpp)
+    set(BRULION_PTY_BACKEND_USED conpty CACHE INTERNAL "The pseudo-terminal backend of this build")
+elseif(UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
+    target_sources(brulion_platform PRIVATE pty_posix.cpp)
+    set(BRULION_PTY_BACKEND_USED posix CACHE INTERNAL "The pseudo-terminal backend of this build")
+else()
+    target_sources(brulion_platform PRIVATE pty_none.cpp)
+    set(BRULION_PTY_BACKEND_USED none CACHE INTERNAL "The pseudo-terminal backend of this build")
+endif()
+if(NOT WIN32)
+    # Listed, not compiled: lupdate (which reads the target's sources) finds its texts on Linux too.
+    target_sources(brulion_platform PRIVATE pty_conpty.cpp)
+    set_source_files_properties(pty_conpty.cpp PROPERTIES HEADER_FILE_ONLY ON SKIP_AUTOGEN ON)
 endif()
 
 # A file handed to the system's app (openexternal.h): Android's ACTION_VIEW, the browser's new tab

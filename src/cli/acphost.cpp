@@ -11,6 +11,8 @@
 #include "acp/remote.h"
 #include "automation/uri.h"
 #include "commands_p.h"
+#include "gitcli/client.h"
+#include "gitcli/gitcli.h"
 #include "hostsync.h"
 #include "markdown/encrypted.h"
 #include "notebook/session.h"
@@ -71,6 +73,8 @@ constexpr qsizetype kMaxErrorChars = 4000;
 constexpr QLatin1StringView kCodeAlphabet{"ABCDEFGHJKMNPQRSTUVWXYZ23456789"};
 /// The tunnel's grants one stream keeps (a session's each; the oldest end first).
 constexpr int kMaxAppGrants = 64;
+/// The biggest file of a project a thread's agent reads through this server.
+constexpr qint64 kMaxCodeFileBytes = 16LL * 1024 * 1024;
 
 void logLine(const QString &line)
 {
@@ -114,6 +118,8 @@ QJsonObject HostTurn::toJson() const
                   {u"started"_s, timeText(started)}};
     if (!question.isEmpty())
         o.insert(u"question"_s, question);
+    if (!checkpoint.isEmpty())
+        o.insert(u"checkpoint"_s, QJsonObject{{u"id"_s, checkpoint}, {u"at"_s, checkpointAt}});
     if (state == State::Done)
         o.insert(u"stopReason"_s, stopReason);
     if (state == State::Failed)
@@ -442,9 +448,11 @@ QString secretHash(const QString &secret)
 
 QJsonObject toolsServer(const QString &program, const QString &root)
 {
+    // (A thread's: the app's tools alone, none of the notebook's.)
     return QJsonObject{{u"name"_s, u"brulion"_s},
                        {u"command"_s, program},
-                       {u"args"_s, QJsonArray{u"mcp"_s, u"--vault"_s, root}},
+                       {u"args"_s, root.isEmpty() ? QJsonArray{u"mcp"_s, u"--no-notes"_s}
+                                                  : QJsonArray{u"mcp"_s, u"--vault"_s, root}},
                        {u"env"_s, QJsonArray()}};
 }
 
@@ -479,6 +487,81 @@ bool servedHere(const QJsonObject &message)
         return false;
     const QString method = message.value(u"method"_s).toString();
     return method.startsWith(u"fs/"_s) || method.startsWith(u"terminal/"_s);
+}
+
+QString codeFilePath(const QString &folder, const QString &file, bool write)
+{
+    if (folder.isEmpty() || file.isEmpty() || file.contains(QChar(u'\0')) || file.size() > acp::MaxRemotePathChars)
+        return {};
+    const QString full = QDir::cleanPath(QDir::isAbsolutePath(file) ? file : QDir(folder).absoluteFilePath(file));
+    if (full != folder && !full.startsWith(folder + u'/'))
+        return {};
+    // (A link that leads out of the folder is outside it too: the nearest part that is there, as
+    // it really is.)
+    QFileInfo info(full);
+    while (!info.exists() && info.absolutePath() != info.absoluteFilePath())
+        info = QFileInfo(info.absolutePath());
+    const QString real = info.canonicalFilePath();
+    if (real.isEmpty() || (real != folder && !real.startsWith(folder + u'/')))
+        return {};
+    if (write) {
+        const QString first = full.mid(folder.size() + 1).section(u'/', 0, 0);
+        if (full == folder || first.compare(u".git"_s, Qt::CaseInsensitive) == 0)
+            return {};
+    }
+    return full;
+}
+
+// ---- Code mode's projects ----------------------------------------------------------------------------
+
+HostProjectsStore::HostProjectsStore(QString path) : m_path(std::move(path)) { }
+
+void HostProjectsStore::refresh()
+{
+    const QFileInfo info(m_path);
+    const QDateTime modified = info.exists() ? info.lastModified(QTimeZone::UTC) : QDateTime();
+    const qint64 size = info.exists() ? info.size() : -1;
+    if (modified == m_modified && size == m_size)
+        return;
+    m_modified = modified;
+    m_size = size;
+    m_projects.clear();
+    if (size < 0) {
+        if (log)
+            log(u"no projects: %1 is not there"_s.arg(m_path));
+        return;
+    }
+    QFile f(m_path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        if (log)
+            log(u"no projects: %1 not read (%2)"_s.arg(m_path, f.errorString()));
+        return;
+    }
+    QString error;
+    const std::optional<QList<acp::HostProject>> read = acp::parseHostProjects(f.read(4 * 1024 * 1024), &error);
+    if (!read) {
+        if (log)
+            log(u"no projects: %1 is %2"_s.arg(m_path, error));
+        return;
+    }
+    m_projects = *read;
+    if (log)
+        log(u"projects: %1"_s.arg(m_projects.size()));
+}
+
+const QList<acp::HostProject> &HostProjectsStore::projects()
+{
+    refresh();
+    return m_projects;
+}
+
+std::optional<acp::HostProject> HostProjectsStore::find(const QString &id)
+{
+    for (const acp::HostProject &p : projects()) {
+        if (p.id == id)
+            return p;
+    }
+    return std::nullopt;
 }
 
 // ---- The server -----------------------------------------------------------------------------------------
@@ -530,8 +613,21 @@ struct AcpHost::Stream {
     QString retiredWhy;
     QDateTime retiredAt;
     bool holding = false; // messages wait for the sync before a turn
-    QList<QJsonObject> held;
+    // Messages to the agent that wait: for the sync, or for a check or a checkpoint of their own
+    // (`ticket`, 0 when ready) — delivered in order.
+    struct Held {
+        QJsonObject message;
+        int ticket = 0;
+    };
+    QList<Held> held;
     QTimer *holdTimer = nullptr;
+    // Code mode's threads: where each of their sessions works (by the agent's session id), the
+    // session/new requests whose answer names it (by idKey()), the order they came in (bounded),
+    // each session's checkpoints taken here (oldest first).
+    QHash<QString, CodePlace> codeSessions;
+    QHash<QString, CodePlace> pendingCode;
+    QStringList codeOrder;
+    QHash<QString, QStringList> checkpoints;
     QHash<QString, Terminal *> terminals;
     // The app's calls of the agent's tools (acp/apptunnel.h).
     bool app = false; // its device answers them (POST streams {features: [app]})
@@ -750,6 +846,11 @@ bool AcpHost::start(QString *error)
         }
     }
 
+    if (!m_options.projectsFile.isEmpty()) {
+        m_projects = std::make_unique<HostProjectsStore>(m_options.projectsFile);
+        m_projects->log = [this](const QString &line) { say(line); };
+        (void)m_projects->projects(); // (said in the log at once)
+    }
     m_store = std::make_unique<HostStateStore>(m_options.stateFile);
     QString stateError;
     if (!m_store->update(
@@ -884,6 +985,19 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
         *maxBody = head.method == "POST" ? 4096 : 0;
         return std::nullopt;
     }
+    // Code mode's projects (acp/codehost.h).
+    if (parts.at(0) == u"projects") {
+        const bool list = parts.size() == 1;
+        const bool action = parts.size() == 3
+                            && (parts.at(2) == u"worktrees" || parts.at(2) == u"changes" || parts.at(2) == u"diff");
+        if (!list && !action)
+            return apiError(404, u"not_found"_s, u"Not found"_s);
+        const QByteArray method = action && parts.at(2) == u"worktrees" ? "POST"_ba : "GET"_ba;
+        if (head.method != method)
+            return apiError(405, u"method"_s, u"Method not allowed"_s);
+        *maxBody = method == "POST" ? 4096 : 0;
+        return std::nullopt;
+    }
     return apiError(404, u"not_found"_s, u"Not found"_s);
 }
 
@@ -938,6 +1052,10 @@ void AcpHost::onRequest(const http::Request &request, const http::Reply &rawRepl
     const QStringList parts = endpoint.split(u'/');
     if (parts.size() == 3 && parts.at(0) == u"sessions") {
         sessionTurn(who, parts.at(1), request, reply); // (route() decoded it)
+        return;
+    }
+    if (parts.at(0) == u"projects") {
+        projectsRequest(parts, request, reply);
         return;
     }
     Stream *s = parts.size() >= 2 ? m_streams.value(parts.at(1)) : nullptr;
@@ -1087,6 +1205,11 @@ http::Response AcpHost::pairWithCode(const QString &code, const QString &name, c
 
 http::Response AcpHost::info() const
 {
+    QJsonArray features;
+    if (m_tunnel)
+        features.append(QString(acp::AppFeature));
+    if (m_projects)
+        features.append(QString(acp::CodeFeature));
     QJsonArray agents;
     for (const HostAgent &a : m_options.agents)
         agents.append(QJsonObject{{u"id"_s, a.id}, {u"name"_s, a.name}, {u"command"_s, a.command}});
@@ -1096,7 +1219,7 @@ http::Response AcpHost::info() const
                              {u"host"_s, QSysInfo::machineHostName()},
                              {u"root"_s, m_root},
                              {u"tools"_s, !m_mcpServers.isEmpty()},
-                             {u"features"_s, m_tunnel ? QJsonArray{QString(acp::AppFeature)} : QJsonArray()},
+                             {u"features"_s, features},
                              {u"agents"_s, agents},
                              {u"sync"_s, m_sync ? m_sync->status() : QJsonObject{{u"enabled"_s, false}}}});
 }
@@ -1130,15 +1253,17 @@ http::Response AcpHost::openStream(const PairedDevice &device, const http::Reque
     s->agent = *agent;
     s->lastSeen = now();
     // The device answers the app's calls of the agent's tools, and they are tunnelled here.
-    s->app = m_tunnel && body.value(u"features"_s).toArray().contains(QString(acp::AppFeature));
+    const QJsonArray asked = body.value(u"features"_s).toArray();
+    s->app = m_tunnel && asked.contains(QString(acp::AppFeature));
+    // (Its threads work in this computer's projects: said to a device that asks.)
+    QJsonArray features = s->app ? QJsonArray{QString(acp::AppFeature)} : QJsonArray();
+    if (m_projects && asked.contains(QString(acp::CodeFeature)))
+        features.append(QString(acp::CodeFeature));
     m_streams.insert(s->id, s);
     say(u"%1 starts %2 for %3 (%4)%5"_s.arg(s->id, agent->name, device.name, device.id,
                                             s->app ? u", its app reached by the agent's tools"_s : QString()));
     startAgent(s);
-    return http::Response::json(
-            201, QJsonObject{{u"stream"_s, s->id},
-                             {u"root"_s, m_root},
-                             {u"features"_s, s->app ? QJsonArray{QString(acp::AppFeature)} : QJsonArray()}});
+    return http::Response::json(201, QJsonObject{{u"stream"_s, s->id}, {u"root"_s, m_root}, {u"features"_s, features}});
 }
 
 http::Response AcpHost::send(Stream *s, const http::Request &request)
@@ -1237,6 +1362,7 @@ void AcpHost::closeStream(Stream *s, const QString &why)
     s->asked.clear();
     s->held.clear();
     s->holding = false;
+    s->pendingCode.clear();
     if (s->holdTimer)
         s->holdTimer->stop();
     endTerminals(s);
@@ -1695,10 +1821,11 @@ QString AcpHost::pairedName(const QString &device) const
     return {};
 }
 
-QJsonArray AcpHost::sessionServers(Stream *s, const std::optional<acp::AppSession> &asked)
+QJsonArray AcpHost::sessionServers(Stream *s, const std::optional<acp::AppSession> &asked, bool code)
 {
+    // (A thread's session without the app's tools: Brulion's server would have none.)
     if (m_mcpServers.isEmpty() || !m_tunnel || !s->app || !asked || asked->isEmpty())
-        return m_mcpServers;
+        return code ? QJsonArray() : m_mcpServers;
     // Grants of the tunnel for this session's MCP server: its tokens only in the server's environment.
     const auto grant = [this, s, &asked](ipc::GrantScope scope) {
         const QString token = m_tunnel->addGrant(s->agent.name, scope);
@@ -1709,7 +1836,7 @@ QJsonArray AcpHost::sessionServers(Stream *s, const std::optional<acp::AppSessio
         s->appGrants.append(token);
         return token;
     };
-    QJsonObject server = toolsServer(m_options.toolsProgram, m_root);
+    QJsonObject server = toolsServer(m_options.toolsProgram, code ? QString() : m_root);
     QJsonArray args = server.value(u"args"_s).toArray();
     args.append(asked->control ? u"--app-control"_s : u"--app-chat"_s);
     const auto variable = [](const QString &name, const QString &value) {
@@ -2021,6 +2148,18 @@ void AcpHost::fromAgent(Stream *s, const QByteArray &line)
         return;
     }
     const QString method = o.value(u"method"_s).toString();
+    // The answer to a thread's session/new: its session works where the request said.
+    if (method.isEmpty() && o.contains(u"id"_s) && !s->pendingCode.isEmpty()) {
+        if (const auto it = s->pendingCode.constFind(idKey(o.value(u"id"_s))); it != s->pendingCode.cend()) {
+            const QString session = o.value(u"result"_s).toObject().value(u"sessionId"_s).toString();
+            if (!session.isEmpty() && session.size() <= 500) {
+                s->codeSessions.insert(session, *it);
+                s->codeOrder.removeAll(session);
+                s->codeOrder.append(session);
+            }
+            s->pendingCode.erase(it);
+        }
+    }
     if (method == u"session/update") {
         turnUpdate(s, o.value(u"params"_s).toObject());
     } else if (method == u"session/request_permission" && o.contains(u"id"_s)) {
@@ -2066,15 +2205,25 @@ void AcpHost::toAgent(Stream *s, const QJsonObject &message)
     // The device's answer to a call of the app (never the agent's business).
     if (appAnswered(s, message))
         return;
-    // What a session asks of the device's app: taken out, whatever the stream may do.
+    // What a session asks of the device's app, and the project a thread's session works in: taken
+    // out, whatever the stream may do.
     QJsonObject own = message;
     const std::optional<acp::AppSession> appAsked = acp::takeAppSession(own);
+    bool malformed = false;
+    const std::optional<acp::CodeSession> code = acp::takeCodeSession(own, &malformed);
+    if (code || malformed) {
+        codeSessionRequest(s, own, code, appAsked);
+        return;
+    }
+    const QString method = own.value(u"method"_s).toString();
+    // (A session the device asks for again without a project is the notebook's now.)
+    if (method == u"session/load" || method == u"session/resume")
+        s->codeSessions.remove(own.value(u"params"_s).toObject().value(u"sessionId"_s).toString());
     const std::optional<QJsonObject> rewritten = rewriteForAgent(own, m_root, sessionServers(s, appAsked));
     if (!rewritten) {
         say(u"%1: a message of the device that is no JSON-RPC message dropped"_s.arg(s->id));
         return;
     }
-    const QString method = rewritten->value(u"method"_s).toString();
     if (method.isEmpty() && rewritten->contains(u"id"_s)) {
         // The device's answer to a question of the agent.
         const QString key = idKey(rewritten->value(u"id"_s));
@@ -2108,12 +2257,34 @@ void AcpHost::toAgent(Stream *s, const QJsonObject &message)
                     releaseHeld(found);
             });
         }
+        // A thread's turn: its checkpoint first.
+        const QString session = rewritten->value(u"params"_s).toObject().value(u"sessionId"_s).toString();
+        if (s->codeSessions.contains(session)) {
+            checkpointThenPrompt(s, *rewritten, session);
+            return;
+        }
     }
-    if (s->holding) {
-        s->held.append(*rewritten);
+    deliverInOrder(s, *rewritten);
+}
+
+void AcpHost::deliverInOrder(Stream *s, const QJsonObject &message)
+{
+    if (s->holding || !s->held.isEmpty()) {
+        s->held.append({message, 0});
         return;
     }
-    deliver(s, *rewritten);
+    deliver(s, message);
+}
+
+void AcpHost::flushHeld(Stream *s)
+{
+    if (s->holding)
+        return;
+    while (!s->held.isEmpty() && s->held.constFirst().ticket == 0) {
+        const QJsonObject m = s->held.takeFirst().message;
+        if (!m.isEmpty())
+            deliver(s, m);
+    }
 }
 
 void AcpHost::releaseHeld(Stream *s)
@@ -2123,8 +2294,387 @@ void AcpHost::releaseHeld(Stream *s)
     s->holding = false;
     if (s->holdTimer)
         s->holdTimer->stop();
-    for (const QJsonObject &m : std::exchange(s->held, {}))
-        deliver(s, m);
+    flushHeld(s);
+}
+
+// ---- Code mode's threads (acp/codehost.h) ----------------------------------------------------------------
+
+gitcli::Client *AcpHost::git()
+{
+    if (!m_git) {
+        m_git = std::make_unique<gitcli::Client>();
+        if (!m_options.gitProgram.isEmpty())
+            m_git->setGitProgram(m_options.gitProgram);
+    }
+    return m_git.get();
+}
+
+void AcpHost::codePlace(const acp::CodeSession &code, std::function<void(const CodePlace &, const QString &)> done)
+{
+    const std::optional<acp::HostProject> project = m_projects ? m_projects->find(code.project) : std::nullopt;
+    if (!project) {
+        done({}, u"This computer has no project %1"_s.arg(code.project));
+        return;
+    }
+    const QString projectFolder = QFileInfo(project->path).canonicalFilePath();
+    if (projectFolder.isEmpty() || !QFileInfo(projectFolder).isDir()) {
+        done({}, u"The folder of the project %1 is not there on this computer"_s.arg(project->name));
+        return;
+    }
+    CodePlace place{project->id, projectFolder, QString()};
+    if (code.worktree.isEmpty()) {
+        done(place, {});
+        return;
+    }
+    // A worktree of the project: as it really is (no "..", no link out), under the project's
+    // worktrees root, or one git lists among the project's.
+    const QString folder = QFileInfo(code.worktree).canonicalFilePath();
+    if (folder.isEmpty() || !QFileInfo(folder).isDir()) {
+        done({}, u"The worktree %1 is not there on this computer"_s.arg(code.worktree));
+        return;
+    }
+    place.folder = folder;
+    place.branch = code.branch;
+    if (folder == projectFolder) {
+        done(place, {});
+        return;
+    }
+    const QString root = QFileInfo(project->worktreesRoot.isEmpty() ? acp::defaultWorktreesRoot() : project->worktreesRoot)
+                                 .canonicalFilePath();
+    if (!root.isEmpty() && folder.startsWith(root + u'/' + project->id + u'/')) {
+        done(place, {});
+        return;
+    }
+    const QString worktree = code.worktree;
+    git()->worktrees(projectFolder, [done, place, worktree](const gitcli::WorktreeList &list) {
+        for (const gitcli::Worktree &w : list.worktrees) {
+            if (!w.bare && QFileInfo(w.path).canonicalFilePath() == place.folder) {
+                done(place, {});
+                return;
+            }
+        }
+        done({}, u"%1 is no worktree of the project"_s.arg(worktree));
+    });
+}
+
+void AcpHost::codeSessionRequest(Stream *s, const QJsonObject &message, const std::optional<acp::CodeSession> &code,
+                                 const std::optional<acp::AppSession> &appAsked)
+{
+    const QJsonValue id = message.value(u"id"_s);
+    const QString method = message.value(u"method"_s).toString();
+    const QString streamId = s->id;
+    const auto refuse = [this, streamId, id, method](const QString &why) {
+        Stream *st = m_streams.value(streamId);
+        if (!st || st->closed)
+            return;
+        say(u"%1: a thread's %2 refused: %3"_s.arg(streamId, method, why));
+        // (Answered here, as the agent would: the device's turn fails with why.)
+        if (!id.isUndefined() && !id.isNull())
+            toDevice(st, QJsonObject{{u"jsonrpc"_s, u"2.0"_s},
+                                     {u"id"_s, id},
+                                     {u"error"_s, QJsonObject{{u"code"_s, acp::InvalidParams}, {u"message"_s, why}}}});
+    };
+    if (!code) {
+        refuse(u"The request's project is none (brulion/code)"_s);
+        return;
+    }
+    if (!m_projects) {
+        refuse(u"This computer runs no threads of Code mode (acp serve without --projects)"_s);
+        return;
+    }
+    // Held until its place is known (git may have to say), so what the device sends after it waits.
+    const int ticket = m_nextTicket++;
+    s->held.append({QJsonObject(), ticket});
+    const acp::CodeSession asked = *code;
+    codePlace(asked, [this, streamId, ticket, message, appAsked, refuse](const CodePlace &place, const QString &error) {
+        Stream *st = m_streams.value(streamId);
+        if (!st || st->closed)
+            return;
+        const auto held =
+                std::ranges::find_if(st->held, [ticket](const Stream::Held &h) { return h.ticket == ticket; });
+        if (held == st->held.end())
+            return; // (the stream let them go meanwhile)
+        if (!error.isEmpty()) {
+            st->held.erase(held);
+            refuse(error);
+            flushHeld(st);
+            return;
+        }
+        const std::optional<QJsonObject> rewritten =
+                rewriteForAgent(message, place.folder, sessionServers(st, appAsked, true));
+        held->ticket = 0;
+        held->message = rewritten.value_or(QJsonObject());
+        const QString method = message.value(u"method"_s).toString();
+        const QString session = message.value(u"params"_s).toObject().value(u"sessionId"_s).toString();
+        if (method == u"session/new") {
+            st->pendingCode.insert(idKey(message.value(u"id"_s)), place);
+        } else if (!session.isEmpty() && session.size() <= 500) {
+            st->codeSessions.insert(session, place);
+            st->codeOrder.removeAll(session);
+            st->codeOrder.append(session);
+        }
+        // (A stream's sessions come and go: the oldest threads' are forgotten.)
+        while (st->codeOrder.size() > 256) {
+            const QString old = st->codeOrder.takeFirst();
+            st->codeSessions.remove(old);
+            st->checkpoints.remove(old);
+        }
+        while (st->pendingCode.size() > 64)
+            st->pendingCode.erase(st->pendingCode.begin());
+        say(u"%1: a session of the project %2 in %3"_s.arg(st->id, place.project, place.folder));
+        flushHeld(st);
+    });
+}
+
+void AcpHost::checkpointThenPrompt(Stream *s, const QJsonObject &message, const QString &session)
+{
+    const CodePlace place = s->codeSessions.value(session);
+    const int ticket = m_nextTicket++;
+    s->held.append({message, ticket});
+    const QString turn = message.value(u"params"_s).toObject().value(u"_meta"_s).toObject().value(acp::TurnMetaKey)
+                                 .toString()
+                                 .left(200);
+    const QString id = gitcli::Client::newCheckpointId();
+    const QString streamId = s->id;
+    const QString device = s->device;
+    const QString prompt = idKey(message.value(u"id"_s));
+    git()->checkpoint(place.folder, id, [this, streamId, device, ticket, session, turn, id, place, prompt](
+                                                const gitcli::Outcome &outcome) {
+        Stream *st = m_streams.value(streamId);
+        if (!st || st->closed)
+            return;
+        const auto held =
+                std::ranges::find_if(st->held, [ticket](const Stream::Held &h) { return h.ticket == ticket; });
+        if (held == st->held.end())
+            return;
+        if (outcome.ok) {
+            const acp::RemoteCheckpoint c{session, turn, id, timeText(now())};
+            // The turn kept knows it (a device that lost the stream hears it there) …
+            const auto kept = m_turns.find(turnKey(device, session));
+            if (kept != m_turns.end() && kept->prompt == prompt && kept->stream == streamId) {
+                kept->checkpoint = id;
+                kept->checkpointAt = c.at;
+            }
+            // … and the device is told before the agent hears the prompt.
+            if (!st->retired)
+                toDevice(st, acp::checkpointNotification(c));
+            QStringList &list = st->checkpoints[session];
+            list.append(id);
+            QStringList dropped;
+            while (list.size() > std::max(1, m_options.maxCheckpoints))
+                dropped.append(list.takeFirst());
+            if (!dropped.isEmpty())
+                git()->dropCheckpoints(place.folder, dropped, [](const gitcli::Outcome &) { });
+            say(u"%1: checkpoint %2 of %3 before a turn"_s.arg(streamId, id, place.folder));
+        } else {
+            // (No git there, a folder git refuses: the turn goes on without one.)
+            say(u"%1: no checkpoint of %2: %3"_s.arg(streamId, place.folder, outcome.message.left(300)));
+        }
+        held->ticket = 0;
+        flushHeld(st);
+    });
+}
+
+AcpHost::CodePlace AcpHost::codeSessionOf(const Stream *s, const QJsonObject &params) const
+{
+    return s->codeSessions.value(params.value(u"sessionId"_s).toString());
+}
+
+void AcpHost::requestPlace(const QString &project, const QString &worktree,
+                           std::function<void(const CodePlace &, const http::Response &)> done)
+{
+    if (!m_projects) {
+        done({}, apiError(404, u"no_projects"_s, u"This computer offers no projects (acp serve without --projects)"_s));
+        return;
+    }
+    if (!m_projects->find(project)) {
+        done({}, apiError(404, u"unknown_project"_s, u"This computer has no project %1"_s.arg(project.left(100))));
+        return;
+    }
+    const std::optional<acp::CodeSession> code =
+            acp::CodeSession::fromJson(QJsonObject{{u"project"_s, project}, {u"worktree"_s, worktree}});
+    if (!code) {
+        done({}, apiError(400, u"bad_worktree"_s, u"The worktree is no absolute folder"_s));
+        return;
+    }
+    codePlace(*code, [done](const CodePlace &place, const QString &error) {
+        done(place, error.isEmpty() ? http::Response() : apiError(403, u"not_a_worktree"_s, error));
+    });
+}
+
+void AcpHost::projectsRequest(const QStringList &parts, const http::Request &request, const http::Reply &reply)
+{
+    if (parts.size() == 1) {
+        reply.send(projectList());
+        return;
+    }
+    const QString project = parts.at(1);
+    if (parts.at(2) == u"worktrees")
+        createWorktree(project, request, reply);
+    else if (parts.at(2) == u"changes")
+        changes(project, request, reply);
+    else
+        diff(project, request, reply);
+}
+
+http::Response AcpHost::projectList()
+{
+    if (!m_projects)
+        return apiError(404, u"no_projects"_s, u"This computer offers no projects (acp serve without --projects)"_s);
+    QJsonArray list;
+    for (const acp::HostProject &p : m_projects->projects())
+        list.append(QJsonObject{{u"id"_s, p.id}, {u"name"_s, p.name}, {u"path"_s, p.path}});
+    return http::Response::json(200, QJsonObject{{u"projects"_s, list}});
+}
+
+void AcpHost::createWorktree(const QString &project, const http::Request &request, const http::Reply &reply)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(request.body);
+    const QJsonObject body = doc.object();
+    const QString title = body.value(u"title"_s).toString().simplified();
+    const QString from = body.value(u"base"_s).toString().trimmed();
+    if (!doc.isObject() || title.isEmpty() || title.size() > acp::MaxWorktreeTitleChars) {
+        reply.send(apiError(400, u"bad_title"_s, u"A title of 1 to %1 characters is needed"_s.arg(acp::MaxWorktreeTitleChars)));
+        return;
+    }
+    if (!from.isEmpty() && !gitcli::isValidBranchName(from)) {
+        reply.send(apiError(400, u"bad_base"_s, u"That is no branch"_s));
+        return;
+    }
+    const std::optional<acp::HostProject> p = m_projects ? m_projects->find(project) : std::nullopt;
+    if (!p) {
+        reply.send(m_projects ? apiError(404, u"unknown_project"_s, u"This computer has no project %1"_s.arg(project.left(100)))
+                              : apiError(404, u"no_projects"_s,
+                                         u"This computer offers no projects (acp serve without --projects)"_s));
+        return;
+    }
+    const QString folder = QFileInfo(p->path).canonicalFilePath();
+    if (folder.isEmpty() || !QFileInfo(folder).isDir()) {
+        reply.send(apiError(409, u"no_folder"_s, u"The folder of the project is not there on this computer"_s));
+        return;
+    }
+    // The name the app gives one (CodeProjects::worktreeFor): a free folder of the project's root.
+    const acp::WorktreePlace place = acp::worktreePlace(p->worktreesRoot, p->id, title,
+                                                        [](const QString &f) { return QFileInfo::exists(f); });
+    if (!QDir().mkpath(QFileInfo(place.folder).absolutePath())) {
+        reply.send(apiError(500, u"cannot_write"_s, u"The worktrees' folder cannot be made"_s));
+        return;
+    }
+    say(u"a worktree of %1 for a thread: %2 on %3"_s.arg(p->id, place.folder, place.branch));
+    QPointer<AcpHost> self(this);
+    git()->addWorktree(folder, place.folder, place.branch, from.isEmpty() ? u"HEAD"_s : from,
+                       [self, reply, place](const gitcli::Outcome &outcome) {
+                           if (!self)
+                               return;
+                           if (!outcome.ok) {
+                               self->say(u"worktree not made: %1"_s.arg(outcome.message.left(300)));
+                               reply.send(apiError(409, u"git_failed"_s, outcome.message.left(1000)));
+                               return;
+                           }
+                           reply.send(http::Response::json(
+                                   201, QJsonObject{{u"folder"_s, place.folder}, {u"branch"_s, place.branch}}));
+                       });
+}
+
+void AcpHost::changes(const QString &project, const http::Request &request, const http::Reply &reply)
+{
+    const QUrlQuery query(QString::fromLatin1(request.query));
+    const QString since = query.queryItemValue(u"since"_s, QUrl::FullyDecoded);
+    if (!since.isEmpty() && !gitcli::isValidCheckpointId(since)) {
+        reply.send(apiError(400, u"bad_checkpoint"_s, u"That is no checkpoint"_s));
+        return;
+    }
+    QPointer<AcpHost> self(this);
+    requestPlace(project, query.queryItemValue(u"worktree"_s, QUrl::FullyDecoded),
+                 [self, reply, since](const CodePlace &place, const http::Response &refusal) {
+                     if (!self)
+                         return;
+                     if (place.folder.isEmpty()) {
+                         reply.send(refusal);
+                         return;
+                     }
+                     const auto answer = [reply](bool ok, const QString &error, const QList<gitcli::FileChange> &all) {
+                         if (!ok) {
+                             reply.send(apiError(409, u"git_failed"_s, error.left(1000)));
+                             return;
+                         }
+                         QJsonArray list;
+                         for (const gitcli::FileChange &c : all) {
+                             if (list.size() >= acp::MaxRemoteChanges)
+                                 break;
+                             QJsonObject o{{u"path"_s, c.path},
+                                           {u"change"_s, gitcli::changeName(c.change)},
+                                           {u"additions"_s, c.additions},
+                                           {u"deletions"_s, c.deletions},
+                                           {u"binary"_s, c.binary}};
+                             if (!c.oldPath.isEmpty())
+                                 o.insert(u"oldPath"_s, c.oldPath);
+                             list.append(o);
+                         }
+                         reply.send(http::Response::json(
+                                 200, QJsonObject{{u"changes"_s, list},
+                                                  {u"truncated"_s, all.size() > acp::MaxRemoteChanges}}));
+                     };
+                     if (since.isEmpty())
+                         self->git()->status(place.folder, [answer](const gitcli::StatusReport &r) {
+                             answer(r.ok, r.error, r.changes);
+                         });
+                     else
+                         self->git()->changesSince(place.folder, since, [answer](const gitcli::ChangesReport &r) {
+                             answer(r.ok, r.error, r.changes);
+                         });
+                 });
+}
+
+void AcpHost::diff(const QString &project, const http::Request &request, const http::Reply &reply)
+{
+    const QUrlQuery query(QString::fromLatin1(request.query));
+    const QString since = query.queryItemValue(u"since"_s, QUrl::FullyDecoded);
+    const QString path = query.queryItemValue(u"path"_s, QUrl::FullyDecoded);
+    const QString oldPath = query.queryItemValue(u"oldPath"_s, QUrl::FullyDecoded);
+    if (!since.isEmpty() && !gitcli::isValidCheckpointId(since)) {
+        reply.send(apiError(400, u"bad_checkpoint"_s, u"That is no checkpoint"_s));
+        return;
+    }
+    // (A path of the work tree as git writes it: nothing outside it, nothing of .git.)
+    if (!gitcli::isSafeRelativePath(path) || (!oldPath.isEmpty() && !gitcli::isSafeRelativePath(oldPath))) {
+        reply.send(apiError(400, u"bad_path"_s, u"That is no path of the project"_s));
+        return;
+    }
+    QPointer<AcpHost> self(this);
+    requestPlace(project, query.queryItemValue(u"worktree"_s, QUrl::FullyDecoded),
+                 [self, reply, since, path, oldPath](const CodePlace &place, const http::Response &refusal) {
+                     if (!self)
+                         return;
+                     if (place.folder.isEmpty()) {
+                         reply.send(refusal);
+                         return;
+                     }
+                     // (A folder of the path that leads out of the project — a link git never names
+                     // a file under: the file is read from disk.)
+                     const QString dir = QFileInfo(path).path();
+                     if (codeFilePath(place.folder, dir == u"." ? place.folder : dir, false).isEmpty()) {
+                         reply.send(apiError(400, u"bad_path"_s, u"That is no path of the project"_s));
+                         return;
+                     }
+                     gitcli::FileTextsRequest r;
+                     r.path = path;
+                     r.oldPath = oldPath;
+                     r.base = since.isEmpty() ? u"HEAD"_s : gitcli::Client::checkpointRef(since);
+                     self->git()->fileTexts(place.folder, r, [reply](const gitcli::FileTexts &t) {
+                         if (!t.ok) {
+                             reply.send(apiError(409, u"git_failed"_s, t.error.left(1000)));
+                             return;
+                         }
+                         reply.send(http::Response::json(200, QJsonObject{{u"path"_s, t.path},
+                                                                          {u"oldText"_s, t.oldText},
+                                                                          {u"newText"_s, t.newText},
+                                                                          {u"oldExists"_s, t.oldExists},
+                                                                          {u"newExists"_s, t.newExists},
+                                                                          {u"binary"_s, t.binary},
+                                                                          {u"tooLarge"_s, t.tooLarge}}));
+                     });
+                 });
 }
 
 void AcpHost::deliver(Stream *s, const QJsonObject &message)
@@ -2184,6 +2734,10 @@ QString AcpHost::notebookPath(const QString &file) const
 
 void AcpHost::readFile(Stream *s, const QJsonValue &id, const QJsonObject &params)
 {
+    if (const CodePlace place = codeSessionOf(s, params); !place.folder.isEmpty()) {
+        readCodeFile(s, id, place, params);
+        return;
+    }
     const QString path = notebookPath(params.value(u"path"_s).toString());
     if (path.isEmpty()) {
         respondError(s, id, acp::InvalidParams, u"Only files of the notebook can be read: %1"_s.arg(m_root));
@@ -2201,6 +2755,10 @@ void AcpHost::readFile(Stream *s, const QJsonValue &id, const QJsonObject &param
 
 void AcpHost::writeFile(Stream *s, const QJsonValue &id, const QJsonObject &params)
 {
+    if (const CodePlace place = codeSessionOf(s, params); !place.folder.isEmpty()) {
+        writeCodeFile(s, id, place, params);
+        return;
+    }
     const QString path = notebookPath(params.value(u"path"_s).toString());
     if (path.isEmpty()) {
         respondError(s, id, acp::InvalidParams, u"Only files of the notebook can be written: %1"_s.arg(m_root));
@@ -2240,6 +2798,47 @@ void AcpHost::writeFile(Stream *s, const QJsonValue &id, const QJsonObject &para
     respond(s, id, QJsonValue());
 }
 
+void AcpHost::readCodeFile(Stream *s, const QJsonValue &id, const CodePlace &place, const QJsonObject &params)
+{
+    // A thread's files: those of its folder alone.
+    const QString file = codeFilePath(place.folder, params.value(u"path"_s).toString(), false);
+    if (file.isEmpty()) {
+        respondError(s, id, acp::InvalidParams, u"Only files of the project's folder can be read: %1"_s.arg(place.folder));
+        return;
+    }
+    QFile f(file);
+    if (!QFileInfo(file).isFile() || !f.open(QIODevice::ReadOnly)) {
+        respondError(s, id, acp::ResourceNotFound, u"No such file: %1"_s.arg(file));
+        return;
+    }
+    if (f.size() > kMaxCodeFileBytes) {
+        respondError(s, id, acp::InvalidParams, u"%1 is too big to read so (%2 MiB at most)"_s.arg(file).arg(kMaxCodeFileBytes >> 20));
+        return;
+    }
+    respond(s, id,
+            QJsonObject{{u"content"_s, acp::textLines(QString::fromUtf8(f.readAll()), params.value(u"line"_s).toInt(),
+                                                      params.value(u"limit"_s).toInt())}});
+}
+
+void AcpHost::writeCodeFile(Stream *s, const QJsonValue &id, const CodePlace &place, const QJsonObject &params)
+{
+    const QString file = codeFilePath(place.folder, params.value(u"path"_s).toString(), true);
+    if (file.isEmpty()) {
+        respondError(s, id, acp::InvalidParams,
+                     u"Only files of the project's folder (not of its .git) can be written: %1"_s.arg(place.folder));
+        return;
+    }
+    const QByteArray bytes = params.value(u"content"_s).toString().toUtf8();
+    QSaveFile f(file);
+    if (!QDir().mkpath(QFileInfo(file).absolutePath()) || !f.open(QIODevice::WriteOnly)
+        || f.write(bytes) != bytes.size() || !f.commit()) {
+        respondError(s, id, -32603, u"%1 could not be written"_s.arg(file));
+        return;
+    }
+    say(u"%1 wrote %2"_s.arg(s->id, file));
+    respond(s, id, QJsonValue());
+}
+
 void AcpHost::terminalRequest(Stream *s, const QJsonValue &id, const QString &method, const QJsonObject &params)
 {
     if (method == u"terminal/create") {
@@ -2247,6 +2846,18 @@ void AcpHost::terminalRequest(Stream *s, const QJsonValue &id, const QString &me
         if (command.isEmpty() || s->terminals.size() >= kMaxTerminals) {
             respondError(s, id, acp::InvalidParams, command.isEmpty() ? u"No command"_s : u"Too many terminals"_s);
             return;
+        }
+        // A thread's commands run in its folder (or a folder inside it).
+        const CodePlace place = codeSessionOf(s, params);
+        QString home = m_root;
+        if (!place.folder.isEmpty()) {
+            const QString cwd = params.value(u"cwd"_s).toString();
+            home = cwd.isEmpty() ? place.folder : codeFilePath(place.folder, cwd, false);
+            if (home.isEmpty() || !QFileInfo(home).isDir()) {
+                respondError(s, id, acp::InvalidParams,
+                             u"A command runs in the project's folder or a folder inside it: %1"_s.arg(place.folder));
+                return;
+            }
         }
         QStringList args;
         for (const QJsonValue &a : params.value(u"args"_s).toArray())
@@ -2261,7 +2872,9 @@ void AcpHost::terminalRequest(Stream *s, const QJsonValue &id, const QString &me
             env.insert(v.toObject().value(u"name"_s).toString(), v.toObject().value(u"value"_s).toString());
         t->process->setProcessEnvironment(env);
         const QString cwd = params.value(u"cwd"_s).toString();
-        t->process->setWorkingDirectory(cwd.isEmpty() || !QDir(cwd).exists() ? m_root : cwd);
+        t->process->setWorkingDirectory(!place.folder.isEmpty()                 ? home
+                                        : cwd.isEmpty() || !QDir(cwd).exists() ? m_root
+                                                                                : cwd);
         t->process->setProcessChannelMode(QProcess::MergedChannels);
         t->process->setProgram(command);
         t->process->setArguments(args);
@@ -2630,6 +3243,11 @@ void addAcpHostCommands(QList<Command> &out)
                                       "separated by ';')")),
              option(u"agents"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "A JSON file with the agents: [{id, name, command}]")),
+             option(u"projects"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "A JSON file with Code mode's projects of this computer: [{id, name, path, "
+                                      "worktreesRoot}] — the devices' threads work in them (read again when it "
+                                      "changes)")),
              option(u"listen"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "The address to listen on (default 127.0.0.1)")),
              option(u"port"_s, ArgType::Int,
@@ -2778,6 +3396,10 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
         options.questionWaitMs = seconds * 1000;
     }
     options.allowHttp = args.value(u"allowHttp"_s).toBool();
+    if (const QString file = args.value(u"projects"_s).toString().trimmed(); !file.isEmpty()) {
+        const QString expanded = file.startsWith(u"~/") ? QDir::homePath() + file.mid(1) : file;
+        options.projectsFile = QDir::cleanPath(QFileInfo(expanded).absoluteFilePath());
+    }
     QString agentError;
     options.agents = agentsOf(args, &agentError);
     if (!agentError.isEmpty())
@@ -2912,6 +3534,8 @@ int serveAcpHost(Context &context, const Command &command, const QJsonObject &ar
                                       {u"tools"_s, options.tools},
                                       {u"appTools"_s, !host.tunnelSocket().isEmpty()},
                                       {u"sync"_s, sync != nullptr},
+                                      {u"projects"_s, options.projectsFile.isEmpty() ? QJsonValue()
+                                                                                     : QJsonValue(options.projectsFile)},
                                       {u"tailnet"_s, tailnetInfo.isEmpty() ? QJsonValue() : QJsonValue(tailnetInfo)},
                                       {u"stateFile"_s, options.stateFile}}},
             {u"warnings"_s, QJsonArray()}};

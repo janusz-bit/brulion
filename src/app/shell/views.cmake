@@ -33,6 +33,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/views/ImportExportView.qml
     qml/views/JournalsView.qml
     qml/views/JournalsJumpDialog.qml
+    qml/views/NotificationsView.qml
     qml/views/PageView.qml
     qml/views/ReplaceView.qml
     qml/views/SearchView.qml

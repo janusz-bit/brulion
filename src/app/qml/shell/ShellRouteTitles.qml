@@ -59,6 +59,8 @@ QtObject {
         case "importExport": return qsTranslate("AppShell", "Import and export")
         case "history": return qsTranslate("AppShell", "History of %1").arg(pageLabel(path))
         case "trash": return qsTranslate("AppShell", "Trash")
+        case "notifications": return qsTranslate("AppShell", "Notifications")
+        case "code": return path !== "" ? chatTitle(path) : qsTranslate("AppShell", "Code")
         case "cleanup": return qsTranslate("AppShell", "Clean up")
         case "replace": return qsTranslate("AppShell", "Replace in notebook")
         case "logs": return qsTranslate("AppShell", "Event log")
@@ -91,6 +93,8 @@ QtObject {
         case "importExport": return "import"
         case "history": return "history"
         case "trash": return "trash-2"
+        case "notifications": return "bell"
+        case "code": return "code"
         case "cleanup": return "sparkles"
         case "replace": return "repeat"
         case "logs": return "scroll-text"

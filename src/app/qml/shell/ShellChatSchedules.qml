@@ -210,7 +210,7 @@ ColumnLayout {
                     variant: "secondary"
                     iconName: "plus"
                     text: qsTr("Add…")
-                    onClicked: section.edit("", "", "", "", "", false, true, "")
+                    onClicked: section.edit("", "", "", Workspace.chats.defaultPartner, "", false, true, "") // (who answers: the default)
                 }
             }
         }

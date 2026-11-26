@@ -42,6 +42,17 @@
 //   picture is written here, where the tool reads it. A call the device does not answer in time
 //   fails with why; a few calls of a stream wait at once at most; a device gone fails them at once.
 //
+// * Code mode's threads (--projects; acp/codehost.h): the projects this computer's user added in
+//   Code mode (the desktop app's agent sharing writes the file, read again when it changes) are
+//   offered to the devices (GET projects), and a session whose request names one (`_meta`
+//   "brulion/code") works in its folder or a worktree of it — the cwd, files and terminals
+//   answered there and nowhere else, Brulion's tools without the notebook's (`mcp --no-notes`) —
+//   with a git checkpoint taken before each prompt reaches the agent (the prompt waits for it),
+//   told to the device (`_brulion/checkpoint`) and kept with the turn. A device may also make a
+//   worktree of a project for a new thread (POST projects/<id>/worktrees) and read the changes
+//   since a checkpoint (GET projects/<id>/changes, …/diff). A worktree a device names is taken only
+//   under the project's worktrees root or when `git worktree list` of the project lists it.
+//
 // Plain HTTP on 127.0.0.1 behind a reverse proxy that adds HTTPS (in the user's own network, a
 // tailnet — the agents can run commands here), plain HTTP on this computer's tailnet address
 // (--tailscale: WireGuard encrypts it), or HTTPS itself with --tls-cert / --tls-key. Host
@@ -52,6 +63,7 @@
 #include "http.h"
 
 #include "acp/apptunnel.h"
+#include "acp/codehost.h"
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -76,6 +88,9 @@ class QTimer;
 
 namespace brulion::notebook {
 class Notebook;
+}
+namespace brulion::gitcli {
+class Client;
 }
 namespace brulion::ipc {
 class ControlServer;
@@ -170,10 +185,32 @@ QString secretHash(const QString &secret);
 std::optional<QJsonObject> rewriteForAgent(const QJsonObject &message, const QString &root,
                                            const QJsonArray &mcpServers);
 /// Brulion's MCP server for a session: {name "brulion", command `program`, args [mcp, --vault,
-/// root], env []}.
+/// root], env []} — `root` "": a thread's, [mcp, --no-notes] (the app's tools alone).
 QJsonObject toolsServer(const QString &program, const QString &root);
 /// A request of the agent this server answers itself (fs/*, terminal/*).
 bool servedHere(const QJsonObject &message);
+/// A file a thread's agent names in its folder `folder` (canonical): absolute, or relative to the
+/// folder — its clean absolute path, "" when it is not inside the folder (`..`, a link that leads
+/// out, a NUL, too long) or, for `write`, inside its `.git`.
+QString codeFilePath(const QString &folder, const QString &file, bool write);
+
+/// The --projects file (acp/codehost.h HostProject), read again when it changed on disk; a missing
+/// or broken file: no projects (said once in the log).
+class HostProjectsStore {
+public:
+    explicit HostProjectsStore(QString path);
+    QString path() const { return m_path; }
+    const QList<acp::HostProject> &projects();
+    std::optional<acp::HostProject> find(const QString &id);
+    std::function<void(const QString &line)> log;
+
+private:
+    void refresh();
+    QString m_path;
+    QList<acp::HostProject> m_projects;
+    QDateTime m_modified;
+    qint64 m_size = -2;
+};
 
 /// The last turn of a session a device prompted (GET sessions/<id>/turn).
 struct HostTurn {
@@ -186,6 +223,9 @@ struct HostTurn {
     QString id;          ///< the device's id of the turn (its prompt's _meta "brulion/turn"), "" none
     QString text;        ///< what the agent said (agent_message_chunk), at most kMaxTurnTextChars
     QStringList tools;   ///< the titles of its tool calls, at most kMaxTurnTools
+    /// A thread's turn: the checkpoint taken before it and when ("" none, or not yet).
+    QString checkpoint;
+    QString checkpointAt;
     QString stopReason;  ///< Done: the agent's ("end_turn", "cancelled" …)
     QString error;       ///< Failed: why
     bool asking = false; ///< the agent waits on a question of it to the device
@@ -197,7 +237,7 @@ struct HostTurn {
     QDateTime started;
     QDateTime ended;
     /// {session, turn, state: "running" | "done" | "failed", text, tools, stopReason, error, asking,
-    /// question (while one waits), started, ended}.
+    /// question (while one waits), checkpoint {id, at} (a thread's), started, ended}.
     QJsonObject toJson() const;
 };
 /// The most of an answer and of its tool calls a turn keeps; the turns kept for one device (the
@@ -228,6 +268,13 @@ struct AcpHostOptions {
     QList<HostAgent> agents;
     bool tools = true;    ///< sessions get Brulion's MCP server
     QString toolsProgram; ///< brulion-cli (default: this program)
+    /// Code mode's projects of this computer (--projects, acp/codehost.h: [{id, name, path,
+    /// worktreesRoot}], read again when it changes; "" none — no thread runs here).
+    QString projectsFile;
+    /// git for the threads' checkpoints, worktrees and changes ("" the one on PATH).
+    QString gitProgram;
+    /// The checkpoints a thread's session keeps here at most (the older ones' refs dropped).
+    int maxCheckpoints = 30;
     /// A device that answers the app's calls gets them from its sessions' tools (the tunnel,
     /// acp/apptunnel.h; --no-app-tools: never).
     bool appTools = true;
@@ -352,8 +399,9 @@ private:
     http::Headers corsHeaders(const QByteArray &origin) const;
 
     // The app's calls of the agent's tools (acp/apptunnel.h).
-    /// The MCP servers of a session of `s` that asked for `asked` (the tunnel's grants made).
-    QJsonArray sessionServers(Stream *s, const std::optional<acp::AppSession> &asked);
+    /// The MCP servers of a session of `s` that asked for `asked` (the tunnel's grants made); `code`:
+    /// a thread's (Brulion's tools without the notebook's: none when the app's are not there either).
+    QJsonArray sessionServers(Stream *s, const std::optional<acp::AppSession> &asked, bool code = false);
     /// A request on the tunnel's socket: a call of the app's tools, handed to the device.
     void tunnelRequest(const ipc::ControlRequest &request, const ipc::ControlReply &reply);
     /// The device's answer to a call of `s` (true: it was one, now answered).
@@ -368,10 +416,44 @@ private:
     /// The name `device` (dev_…) was paired by ("" none).
     QString pairedName(const QString &device) const;
 
+    // Code mode's threads (acp/codehost.h).
+    /// Where a thread's session works: the project, its folder (canonical: the project's or a
+    /// worktree of it), the branch the thread names.
+    struct CodePlace {
+        QString project;
+        QString folder;
+        QString branch;
+    };
+    gitcli::Client *git();
+    /// The place of `code` (done at once when it can be told, else once git listed the project's
+    /// worktrees): `error` ("" fine) for the device.
+    void codePlace(const acp::CodeSession &code, std::function<void(const CodePlace &place, const QString &error)> done);
+    /// The place of a thread's request (`project`, query `worktree`), as codePlace().
+    void requestPlace(const QString &project, const QString &worktree,
+                      std::function<void(const CodePlace &place, const http::Response &refusal)> done);
+    void projectsRequest(const QStringList &parts, const http::Request &request, const http::Reply &reply);
+    http::Response projectList();
+    void createWorktree(const QString &project, const http::Request &request, const http::Reply &reply);
+    void changes(const QString &project, const http::Request &request, const http::Reply &reply);
+    void diff(const QString &project, const http::Request &request, const http::Reply &reply);
+    /// A thread's session request of `s` (its CodeSession taken out): held until its place is known,
+    /// then rewritten for it — or refused to the device.
+    void codeSessionRequest(Stream *s, const QJsonObject &message, const std::optional<acp::CodeSession> &code,
+                            const std::optional<acp::AppSession> &appAsked);
+    /// The prompt `message` of the thread's session `session` of `s`: held until its checkpoint is
+    /// taken (and told to the device), then delivered.
+    void checkpointThenPrompt(Stream *s, const QJsonObject &message, const QString &session);
+    /// A thread's file or terminal request: the place of its session ("" folder: none — the notebook's).
+    CodePlace codeSessionOf(const Stream *s, const QJsonObject &params) const;
+
     void startAgent(Stream *s);
     void fromAgent(Stream *s, const QByteArray &line);
     void toAgent(Stream *s, const QJsonObject &message);
     void deliver(Stream *s, const QJsonObject &message);
+    /// `message` to the agent after the messages held before it (or at once when none are).
+    void deliverInOrder(Stream *s, const QJsonObject &message);
+    /// The held messages that may go now (in order, up to the first one that still waits).
+    void flushHeld(Stream *s);
     void releaseHeld(Stream *s);
     void respond(Stream *s, const QJsonValue &id, const QJsonValue &result);
     void respondError(Stream *s, const QJsonValue &id, int code, const QString &message);
@@ -380,6 +462,8 @@ private:
     QString notebookPath(const QString &file) const;
     void readFile(Stream *s, const QJsonValue &id, const QJsonObject &params);
     void writeFile(Stream *s, const QJsonValue &id, const QJsonObject &params);
+    void readCodeFile(Stream *s, const QJsonValue &id, const CodePlace &place, const QJsonObject &params);
+    void writeCodeFile(Stream *s, const QJsonValue &id, const CodePlace &place, const QJsonObject &params);
     void terminalRequest(Stream *s, const QJsonValue &id, const QString &method, const QJsonObject &params);
     void endTerminals(Stream *s);
 
@@ -390,6 +474,9 @@ private:
     PairTrustCheck m_pairTrust;
     std::unique_ptr<http::Server> m_http;
     std::unique_ptr<HostStateStore> m_store;
+    std::unique_ptr<HostProjectsStore> m_projects; ///< Code mode's projects (--projects; null none)
+    std::unique_ptr<gitcli::Client> m_git;
+    int m_nextTicket = 1; ///< of held messages that wait for a check or a checkpoint
     QString m_root;
     QString m_publicUrl;
     QString m_basePath;

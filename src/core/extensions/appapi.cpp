@@ -585,6 +585,105 @@ QVariantMap tagStyleTable(const TagStyle &style)
             {u"bar"_s, style.bar}};
 }
 
+namespace {
+
+QList<NotebookSetting> makeNotebookSettings()
+{
+    const auto spec = [](const char *key, const char *kind, const char *label, QStringList options = {}) {
+        return NotebookSetting{QString::fromLatin1(key), QString::fromLatin1(kind), std::move(options),
+                               QString::fromUtf8(label)};
+    };
+    const QStringList days{u"monday"_s, u"tuesday"_s, u"wednesday"_s, u"thursday"_s,
+                           u"friday"_s, u"saturday"_s, u"sunday"_s};
+    return {
+            spec("journalsFolder", "path", "the folder of the daily notes"),
+            spec("journalFileFormat", "text", "the daily notes' file names, a date format (\"yyyy-MM-dd\")"),
+            spec("journalTemplate", "path", "the daily notes' template, a page's path (\"templates/journal.md\")"),
+            spec("templatesFolder", "path", "the folder of the templates"),
+            spec("newPagesFolder", "path", "the folder of new pages (\"\": the notebook's root)"),
+            spec("attachmentsFolder", "path", "the folder of pasted pictures and files"),
+            spec("weeklyFolder", "path", "the folder of the weekly notes"),
+            spec("weeklyFileFormat", "text", "the weekly notes' file names (\"yyyy-'W'ww\")"),
+            spec("weeklyTemplate", "path", "the weekly notes' template"),
+            spec("monthlyFolder", "path", "the folder of the monthly notes"),
+            spec("monthlyFileFormat", "text", "the monthly notes' file names (\"yyyy-MM\")"),
+            spec("monthlyTemplate", "path", "the monthly notes' template"),
+            spec("journalMode", "choice", "how daily notes are edited", {u"outline"_s, u"document"_s}),
+            spec("pageMode", "choice", "how new pages are edited", {u"document"_s, u"outline"_s}),
+            spec("defaultReminderTime", "text", "the time of a reminder given without one, \"HH:mm\""),
+            spec("weekStartsOn", "choice", "the first day of the week", days),
+            // The flashcards' card settings (the "flashcards" object; docs/SYNTAX.md §15).
+            spec("flashcards.tags", "text", "the tags of the decks, \"flashcards, fiszki\" (\"\": this device's)"),
+            spec("flashcards.singleLineSeparator", "text", "a one-line card's separator (\"::\")"),
+            spec("flashcards.singleLineReversedSeparator", "text", "a reversed one-line card's separator (\":::\")"),
+            spec("flashcards.multilineSeparator", "text", "a multi-line card's separator line (\"?\")"),
+            spec("flashcards.multilineReversedSeparator", "text", "a reversed multi-line card's separator (\"??\")"),
+            spec("flashcards.multilineEndMarker", "text", "the line that ends a multi-line card (\"\": a blank line)"),
+            spec("flashcards.clozeHighlights", "toggle", "==highlights== are clozes"),
+            spec("flashcards.clozeBold", "toggle", "**bold text** is a cloze"),
+            spec("flashcards.clozeCurly", "toggle", "{{curly brackets}} are clozes"),
+            spec("flashcards.foldersAsDecks", "toggle", "a card's deck is its note's folder"),
+            spec("flashcards.reviewTags", "text", "the tags of notes reviewed as a whole, \"review\" (\"\": that)"),
+            spec("themePage", "path", "the notebook's theme page (\"\": none; Settings → Appearance)"),
+    };
+}
+
+} // namespace
+
+const QList<NotebookSetting> &notebookSettings()
+{
+    static const QList<NotebookSetting> settings = makeNotebookSettings();
+    return settings;
+}
+
+const NotebookSetting *notebookSetting(QStringView key)
+{
+    for (const NotebookSetting &s : notebookSettings()) {
+        if (s.key == key)
+            return &s;
+    }
+    return nullptr;
+}
+
+QVariant notebookSettingValue(const NotebookSetting &setting, const QVariantMap &config)
+{
+    const qsizetype dot = setting.key.indexOf(u'.');
+    const QVariant v = dot < 0 ? config.value(setting.key)
+                               : config.value(setting.key.left(dot)).toMap().value(setting.key.mid(dot + 1));
+    if (setting.key == u"weekStartsOn") {
+        const int day = v.toInt();
+        return day >= 1 && day <= int(setting.options.size()) ? setting.options.at(day - 1) : setting.options.first();
+    }
+    return setting.kind == u"toggle" ? QVariant(v.toBool()) : QVariant(v.toString());
+}
+
+QVariantMap notebookSettingChange(const NotebookSetting &setting, const QVariant &value)
+{
+    QVariant v = value;
+    if (setting.key == u"weekStartsOn")
+        v = int(setting.options.indexOf(value.toString())) + 1;
+    const qsizetype dot = setting.key.indexOf(u'.');
+    return dot < 0 ? QVariantMap{{setting.key, v}}
+                   : QVariantMap{{setting.key.left(dot), QVariantMap{{setting.key.mid(dot + 1), v}}}};
+}
+
+QVariantList notebookSettingRows(const QVariantMap &config)
+{
+    QVariantList rows;
+    for (const NotebookSetting &s : notebookSettings()) {
+        QVariantMap row{{u"key"_s, s.key},
+                        {u"scope"_s, u"notebook"_s},
+                        {u"group"_s, u"notebook"_s},
+                        {u"kind"_s, s.kind},
+                        {u"label"_s, s.label},
+                        {u"value"_s, notebookSettingValue(s, config)}};
+        if (!s.options.isEmpty())
+            row.insert(u"options"_s, s.options);
+        rows << row;
+    }
+    return rows;
+}
+
 QStringList appOperations()
 {
     return {u"state"_s,    u"commands"_s, u"settings"_s, u"get"_s, u"set"_s,

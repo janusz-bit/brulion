@@ -8,6 +8,9 @@ Read before changing code:
 * `docs/SYNTAX.md` — the Markdown dialect (single source of truth for parsing/rendering).
 * `docs/ARCHITECTURE.md` — layers, modules, platform strategy.
 * `docs/UI.md` — QML UI, block editor, navigation, components.
+* `docs/CODE.md` — Code mode (projects and AI agents' threads, as in T3 Code), with
+  `docs/CODE-GIT.md` (git, checkpoints, the Changes panel), `docs/CODE-TERMINAL.md` (the terminal)
+  and `docs/CODE-FILES.md` (the project's files: picker, viewer, search, @-mentions).
 * `docs/ATRAMENT.md` — Atrament, the own GPU-first UI framework replacing Qt Quick view by view
   (`src/atrament/`, no Qt outside its `qt/` host): its decisions, architecture and roadmap.
 * `docs/EXTENSIONS.md` — Luau extensions (scripting): the `b` API, extension pages, the sandbox.

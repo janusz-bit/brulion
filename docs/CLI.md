@@ -362,17 +362,18 @@ Never compute a hash yourself.
 | `app revert` | `[--who W]` | undo the live changes (one client's or all), newest first: `{undone, changes}` | yes |
 | `app chat list` | `[--parent C] [--limit N]` | the app's AI conversations, newest change first: `{conversations [{path, name, partner, partnerName, state, failure?, question?, parent?, messages, changed}], total}` ("Conversations" below) | |
 | `app chat read <conversation>` | `[--from N] [--limit N] [--offset N]` | its messages `{…, total, messages [{position, role, time?, text, length, offset?, cut?}], next?, partial?}`, 30 000 characters at once | |
-| `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner, its turn started (an agent the app started: a sub-conversation of its own) | yes |
+| `app chat start <text>` | `[--partner P] [--page P] [--parent C] [--project ID] [--wake] [--wait] [--timeout MS] [--stdin]` | a new conversation with a partner (none: the default partner), its turn started (an agent the app started: a sub-conversation of its own); `--project`: a thread of Code mode in that project, answered by an AI agent working in its folder | yes |
 | `app chat send <conversation> <text>` | `[--queue] [--wait] [--timeout MS] [--stdin]` | its next message; exit 4 `busy` while its turn runs — `--queue` puts it in line instead, sent when the answer is written (docs/UI.md "AI chat": writing on while it answers; `--wait` then waits for the turn that runs) | yes |
 | `app chat wait <conversation>` | `[--timeout MS]` | until its turn ends: `{state, answer}`; exit 1 `turn_failed`, 5 `waiting_for_user`, 3 `timeout` | |
 | `app chat stop <conversation>` | | stop its turn: `{stopped}` | yes |
-| `app chat partners` | | who may answer: `{partners [{id, name, kind, by}]}` | |
+| `app chat partners` | | who may answer: `{partners [{id, name, kind, by, default?}], default, projects [{id, name}]}` (the default partner; Code mode's projects for `start --project`) | |
 | `app chat schedule list` | | the scheduled conversations of the open notebook with their next run | |
 | `app chat schedule add <prompt>` | `--when W [--title T] [--partner P] [--continue] [--disabled] [--stdin]` | schedule a conversation (`--when "codziennie o 7:30"`) | yes |
 | `app chat schedule set <id>` | `[--prompt T] [--when W] [--title T] [--partner P] [--destination new\|continue] [--enable \| --disable]` | change one | yes |
 | `app chat schedule remove <id>` | | delete one | yes |
 | `app chat schedule run <id>` | | run one now: `{…, path}` | yes |
 | `app chat request-secret <label>` | `[--reason T] [--placeholder T] [--url U] [--delivery file\|value] [--conversation C] [--timeout MS]` | ask the user for a secret in a private card of the app (never in the chat): `{delivery: file, file, note, expiresInMs}` — an owner-only file holding it — or `{delivery: value, value}`; exit 7 `refused` (cancelled, stopped), 3 `timeout`, 4 `busy` ("Conversations" below) | |
+| `app chat notify <text>` | `[--title T] [--page P] [--conversation C]` | a notification on the device the app runs on, titled with who sends it (a toast while the app is in front), kept in its list of notifications: `{sent, conversation?, opens?}`; exit 7 `refused` (`reason`: off, limit — 10 an hour, `retryAfterMs`), 3 `not_found` (the page) ("Conversations" below) | |
 | `app hooks serve` | `[--listen A] [--port N] [--public-url U] [--stop-on-eof]` | the webhooks of the app's scheduled conversations over HTTP, with the app's grant (`BRULION_APP_HOOK_TOKEN`: the app starts it; "Webhooks" below) | |
 | `init <path>` | | create a notebook folder | yes |
 | `version` | `[--plugins]` | `{version, qt, mcpProtocol, mcpProtocols, plugins}` (the newest MCP version and all of them; `plugins`: `{model, semantic, speech}`, the plugins over llama.cpp of the model on the device, search by meaning and speech recognition, each `{found}` where the app looks for it — `<lib>/brulion`, on Windows next to the program). `--plugins` loads each one found without a model — the plugin, llama.cpp's libraries, a processor plugin this processor runs — as `{found, loaded, error?}`, and fails with `plugin_not_loaded` (exit 5) when one does not load here: the AppImage's and the Windows packages' check | |
@@ -384,7 +385,7 @@ Never compute a hash yourself.
 | `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
 | `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
 | `mcp revoke [<connection>]` | `[--all] [--auth-file F]` | end a connection (`bgr_…`) or all of a client's (`bcl_…`, an https client ID); takes effect in a running server at once | |
-| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--question-wait S] [--tailscale \| --tailscale-serve] [--tailnet-user L] [--no-tailnet-trust] [--allow-http] [--stop-on-eof] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
+| `acp serve` | `(--agent SPEC \| --agents F) [--projects F] [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--allowed-origin O] [--no-tools] [--question-wait S] [--tailscale \| --tailscale-serve] [--tailnet-user L] [--no-tailnet-trust] [--allow-http] [--stop-on-eof] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
 | `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url, link}` — 10 minutes, one device, five wrong tries; `--format text` shows the link as a QR code | |
 | `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
 | `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
@@ -631,6 +632,9 @@ line on standard input and output (the stdio transport), tools only. Both eras o
   "Conversations" below; `--app-control` has them too): what every agent the app starts with
   Brulion's tools gets, with its conversation's chat grant — `brulion_app_chat_request_secret` among
   them (a secret in a private card of the app, never asked in the chat; the instructions say so).
+  `--no-notes` offers no notebook tools at all — only the app's (with `--app-chat` or
+  `--app-control`), no notebook opened, the instructions saying nothing of one: what a thread of
+  Code mode's agent gets, working in a project and not in the notebook (docs/CODE.md).
   `brulion_app_screenshot` returns the picture too (an `image` content item, PNG). With
   `BRULION_APP_SOCKET` in its environment (the tools of an agent `acp serve` started for a device:
   "The app's live tools" below) the app tools reach the app on that device through that server's
@@ -895,7 +899,9 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
 * **From the desktop app**: Settings → Extensions → AI agents → **Share agents with the phone**
   runs this server for the notebook the app has open, with the agents set up there, while the app
   runs (docs/UI.md "AI agents (ACP)" → "Sharing them with the phone"): `brulion-cli --vault
-  <notebook> acp serve --agents <app data>/agent-share/agents.json --stop-on-eof` and, found by
+  <notebook> acp serve --agents <app data>/agent-share/agents.json --projects <app
+  data>/agent-share/projects.json --stop-on-eof` (Code mode's projects of this computer, written
+  again whenever they change — the server reads the file again by itself) and, found by
   itself, `--tailscale` (below) or this computer's address in its network (`--listen <address>
   --public-url http://<address>:8790 --allow-http`). No terminal, no copy of the notebook, no
   service to set up; its pairing code is a button there, shown as a QR code.
@@ -966,6 +972,10 @@ written, its plan and steps, the diffs of files, its questions, its model and mo
   `--allowed-origin https://notes.example.com` (comma-separated; CORS answers for it, also to
   Chrome's Private Network Access preflight: a public page that calls an address of your own
   network). Any other page is refused.
+* **Code mode's threads** (`--projects projects.json`: `[{id, name, path, worktreesRoot}]`, the
+  projects this computer's user added in Code mode — the desktop app's sharing writes it, below):
+  a device lists them (`GET projects`) and continues their threads here (docs/CODE.md "Threads on
+  the phone") — "Code mode's projects" below.
 * **Language**: English, as `mcp serve` — the app words the agent's ends and failures itself.
 * **`--stop-on-eof`**: the server stops when its standard input ends — how a program that runs it
   (the app's switch) stops it, its agents with it; and when that program ends anyhow, a crash too,
@@ -1035,7 +1045,7 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | Request | Body / query | Answer |
 |---|---|---|
 | `POST pair` | `{code, device}` (no token; without `code`: by the device's tailnet identity) | `{token, device: {id, name}}`; 403 `no_code`, `bad_code`, `code_needed`, `too_many_devices`; 429 `too_many_tries` |
-| `GET info` | | `{protocol: 1, version, host, root, tools, features, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` — `features: ["app"]` when the app's live tools are tunnelled (an older server names none) |
+| `GET info` | | `{protocol: 1, version, host, root, tools, features, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` — `features: ["app"]` when the app's live tools are tunnelled, `"code"` when it runs Code mode's threads (`--projects`; an older server names none) |
 | `POST streams` | `{agent, features}` | 201 `{stream, root, features}`; 404 `unknown_agent`, 429 `too_many_streams` — `features` what the device does besides the protocol (`["app"]`: it answers the app's calls of the agent's tools) and, in the answer, what of it this stream gets |
 | `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
 | `GET streams/<id>/receive` | `?after=N&wait=S` (S ≤ 30) | `{messages [{seq, message}], closed, why}` — the messages after `N` (those up to `N` are dropped here), at once or within S seconds; at most 4 MiB at a time |
@@ -1043,6 +1053,10 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | `GET sessions/<id>/turn` | `?wait=S` (S ≤ 30) | `{session, turn, state: running \| done \| failed, text, tools, stopReason, error, asking, question, started, ended}` (`turn`: the id the device gave the turn in its prompt's `_meta`, `brulion/turn`; `question` while one waits: `{id, toolCall, options}`) — the last turn of the device's session, at once or when it changes (it ends, the agent asks) within S seconds; 404 `no_turn` |
 | `POST sessions/<id>/turn` | `{question, optionId}` | the turn, as `GET` gives it — the device's answer to the question `question` waiting in it: `optionId` one of its options, anything else (`""`) `cancelled`; 404 `no_question` (it was answered, or it waited too long) |
 | `DELETE sessions/<id>/turn` | | 204: the agent stops that turn (`session/cancel`; its questions `cancelled`) |
+| `GET projects` | | `{projects [{id, name, path}]}` — Code mode's projects of this computer (below); 404 `no_projects` without `--projects` |
+| `POST projects/<id>/worktrees` | `{title, base?}` | 201 `{folder, branch}`: a git worktree made for a new thread; 400 `bad_title`, `bad_base`; 404 `unknown_project`; 409 `git_failed` |
+| `GET projects/<id>/changes` | `?worktree=F&since=C` | `{changes [{path, oldPath?, change, additions, deletions, binary}], truncated}` — the files changed since the checkpoint `C` (none: since the last commit) in the project's folder or its worktree `F`; 400 `bad_checkpoint`, `bad_worktree`; 403 `not_a_worktree` |
+| `GET projects/<id>/diff` | `?worktree=F&since=C&path=P&oldPath=O` | `{path, oldText, newText, oldExists, newExists, binary, tooLarge}`; 400 `bad_path` (not a path of the work tree: absolute, `..`, `.git`, or through a folder that links out of it) |
 
 Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a
 paired one). Errors are `{error: {code, message}}`. A stream of another device, or one that ended
@@ -1052,6 +1066,51 @@ and was given up, is 404 `no_stream`.
 brulion-cli --vault ~/Notatki acp pair
 brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agent.example.com
 ```
+
+### Code mode's projects
+
+With `--projects <file>` the server also runs **threads of Code mode** for the devices
+(docs/CODE.md "Threads on the phone"; `src/core/acp/codehost.h`): the projects this computer's
+user added in Code mode — folders of this computer, git repositories usually — whose threads a
+phone continues while the agent works here, in the project, as on the desktop.
+
+* **The file** (`[{id, name, path, worktreesRoot}]`, at most 100; an entry without a valid id or an
+  absolute path left out) is read again whenever it changes: the desktop app writes it from its
+  projects (Settings → Extensions → AI agents → Share agents with the phone), a NixOS service from
+  its configuration. A missing or broken file: no projects (said in the log). A device gets `id`,
+  `name` and `path` of each (`GET projects`), never the worktrees' root.
+* **A thread's session**: a session request (`session/new`, `/load`, `/resume`) whose
+  `params._meta["brulion/code"]` is `{project, worktree?, branch?}` — the device's thread page names
+  them — works in that project: this server takes the key out (the agent never sees it), sets
+  `cwd` to the project's folder or to the worktree, and gives the session Brulion's MCP server as
+  the desktop gives a thread's (`brulion-cli mcp --no-notes`, with the app's tunnelled tools when
+  the session asks for them; none when it would have no tool). The project is one of the file's
+  (an id, never a folder a device names); a worktree is taken only when it is that project's — it
+  lies under `<worktreesRoot>/<id>/` (default `~/.brulion/worktrees`) or `git worktree list` of the
+  project names it —, compared as canonical paths, so no `..` or link leads elsewhere. Anything
+  else is refused before the agent hears of it: the device's request gets an error (`-32602`) with
+  why, and its turn fails so. The request waits for the check (git may have to answer); what the
+  device sends after it waits too.
+* **Its files and terminals** (`fs/read_text_file`, `fs/write_text_file`, `terminal/create`) are
+  answered in that folder: paths inside it (absolute or relative to it, no link out, nothing written
+  into its `.git`), a file of 16 MiB at most read, commands in the folder or a folder inside it —
+  written as files of the project, without the notebook's version history.
+* **Checkpoints**: before each prompt of a thread's session reaches the agent, the server takes a
+  git checkpoint of the folder (`refs/brulion/checkpoints/<id>`, through a temporary index — the
+  user's index, HEAD and stash never move; docs/CODE-GIT.md "Checkpoints"); the prompt waits for it
+  (a folder git refuses goes on without one). The device hears it first, a notification of its
+  own on the stream — `{"jsonrpc": "2.0", "method": "_brulion/checkpoint", "params": {sessionId,
+  turn, checkpoint: {id, at}}}` — and the turn kept carries it (`GET sessions/<id>/turn`:
+  `checkpoint`), so a device that lost the stream learns it too. A session keeps its last 30 here
+  (the older refs dropped).
+* **Worktrees and changes**: `POST projects/<id>/worktrees {title, base?}` makes a worktree for a
+  new thread as the desktop does (`git worktree add -b brulion/<slug> <root>/<id>/<slug> <base or
+  HEAD>`, a free name: `-2`, `-3` …); `GET …/changes` and `…/diff` give what changed since a
+  checkpoint (a turn's changes) or since the last commit, and a file's two texts (2 MiB each at
+  most), for the device's read-only changes list. Committing, pushing and the terminal stay this
+  computer's.
+* A stream that asks for the feature (`POST streams {features: ["code"]}`) is told the server has
+  it (`features` of the answer).
 
 ### The app's live tools
 
@@ -1118,6 +1177,10 @@ and the conversation's chat), this server carries the calls (`src/core/acp/apptu
 * The pairing link and its QR code carry the code: show them only to yourself, as the code.
 * Note text is untrusted data for the agent as for any model: a note can carry instructions. What
   an agent may do without asking is its own setting (its mode), as in the app.
+* **Code mode's threads** (`--projects`) let a paired device run an agent in the projects of this
+  computer the file names — only there: a worktree must be one of the project's, files and
+  terminals stay in its folder, and the device names an id, never a folder or a program. The
+  agent itself runs commands as the server's user all the same (above).
 * **The app's live tools** give an agent here what a granted agent of the device's desktop has —
   drive the UI, read what it shows, run Luau with every permission (so change notes) — on the device:
   the device lets only an agent the user marked do so, for its own process, and each change shows
@@ -1438,15 +1501,16 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `revert` | `who` (one client's; default everyone's) | `{undone, changes}` |
 | `chats` | `parent`, `limit` (50, at most 500) | `{conversations: [{path, name, partner, partnerName, state, failure?, question?, parent?, page?, messages, changed}], total}` |
 | `chatRead` | `path`, `from`, `limit` (20, at most 200), `offset` | the row and `{total, messages: [{position, role, time?, text, length, offset?, cut?}], next?: {from, offset}, partial?}` |
-| `chatStart` | `text`, `partner`, `page`, `parent` | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`) |
+| `chatStart` | `text`, `partner` (none: the default partner), `page`, `parent`, `project` (a thread of Code mode: an agent works in that project's folder) | the new conversation's row; `refused` (`reason`: depth, children), `not_found` (`partners`) |
 | `chatSend` | `path`, `text`, `queue`? | its row; `busy` while its turn runs — with `queue` true it waits in line instead (`queued: true`) |
 | `chatWait` | `path`, `ms` (60000, at most 600000) | `{path, state, answer? \| question? \| failure? \| partial?}`; `timeout` with them |
 | `chatStop` | `path` | `{path, stopped}` |
-| `chatPartners` | | `{partners: [{id, name, kind: assistant \| agent \| extension, by}]}` |
+| `chatPartners` | | `{partners: [{id, name, kind: assistant \| agent \| extension, by, default?}], default, projects: [{id, name}]}` |
 | `chatSchedules` | | `{schedules: [{id, title, prompt, partner, when, rule, next, destination, enabled, …}], available}` |
 | `chatScheduleAdd` / `chatScheduleSet` | `prompt`, `when`, `title`, `partner`, `destination` (new \| continue), `enabled` (Set: `id` and the fields given) | the schedule; `bad_params` with why |
 | `chatScheduleRemove` / `chatScheduleRun` | `id` | `{id, removed}` / the schedule and `path` |
 | `chatRequestSecret` | `label`, `reason`, `placeholder`, `url` (http, https), `delivery` (file \| value), `ms` (300000, at most 900000), `path` (a script's; an agent's grant: its own conversation) | when the user sends it: `{delivery: file, file, note, expiresInMs}` or `{delivery: value, value, note, expiresInMs}`; `refused` (`reason`: cancelled, stopped, ended, closed; an agent's turn not running, another conversation), `timeout`, `busy` (a card waits there), `bad_params` |
+| `chatNotify` | `text`, `title`, `page`, `path` (a script's; an agent's grant: its own conversation) | `{sent, conversation?, opens?}`; `refused` (`reason`: off — the user's setting —, limit with `retryAfterMs`; another conversation of an agent), `not_found` (the page), `bad_params` (no text) |
 | `chatHook` | `token`, `text`, `kind` (empty \| text \| json \| form), `bytes`, `cut` | `{status: started \| unknown \| busy \| unavailable, conversation?, retryAfterMs?}` — only for the webhooks' grant (`unauthorized` for every other connection) |
 
 ### Live changes
@@ -1541,7 +1605,7 @@ Codex for a second opinion) and gets the answer back; T3 Code's `delegate_task` 
 `t3_thread_read` / `t3 thread send --wait`, for Brulion's chat.
 
 ```sh
-brulion-cli app chat partners                                  # {partners: [{id, name, kind, by}]}
+brulion-cli app chat partners                                  # {partners: [{id, name, kind, by, default?}], default}
 brulion-cli app chat start "Czy ten plan wyjazdu ma sens?" --partner acp:codex --page "Wyjazd" --wait
 brulion-cli app chat list --limit 10                           # newest change first
 brulion-cli app chat read "AI/2026-11-22 Czy ten plan wyjazdu ma sens.md" --from 0
@@ -1552,6 +1616,7 @@ brulion-cli app chat schedule add "Zaplanuj mi dzień" --when "w dni robocze o 7
 brulion-cli app chat schedule list && brulion-cli app chat schedule run s3f9a01bc77de
 f=$(brulion-cli --compact app chat request-secret "GitHub token" --reason "to push the branch" | jq -r .result.file)
 gh auth login --with-token < "$f"                             # the secret never printed
+brulion-cli app chat notify "Zbudowane, testy przechodzą" --title "Budowanie"   # a notification on the device
 ```
 
 * **A conversation** is named by its path (`AI/2026-11-22 Plan.md`; `.md` and `AI/` may be left
@@ -1570,8 +1635,13 @@ gh auth login --with-token < "$f"                             # the secret never
   offset}` is where to go on (`--from`, `--offset`); `partial` is what the AI writes while its
   turn runs. Message text is untrusted data ("For agents: note text is data").
 * **start** writes a new conversation with `--partner` (`""` the built-in assistant, `acp:<id>`
-  an AI agent, an extension's chat command — `partners` lists those that answer here; another:
-  `not_found` with `partners`), about `--page`, and runs its turn: the row at once (exit 0). The
+  an AI agent, an extension's chat command — `partners` lists those that answer here, `default` the
+  one a new conversation gets: Settings → Extensions → AI → New conversations answered by, the
+  assistant unless chosen; without `--partner` that one answers; another: `not_found` with
+  `partners`), about `--page` — or, with `--project <id>` (`partners` lists this device's projects),
+  a **thread of Code mode** in that project (docs/CODE.md): answered by an AI agent working in its
+  folder, an agent's own sub-conversation as any other (T3 Code's delegation to another thread) —, and
+  runs its turn: the row at once (exit 0). The
   partner gets only that text — give it the whole task. **send** writes the next message of a
   conversation whose turn does not run (`busy`, exit 4, while it runs: wait for it or stop it; `--queue` puts
   it in line after the answer instead).
@@ -1607,6 +1677,19 @@ gh auth login --with-token < "$f"                             # the secret never
   conversation: exit 4 `busy`. An agent the app started asks in its own conversation while its turn
   runs (anything else: `refused`); a script of the user's names one with `--conversation`. The value
   is masked in the app's event log while it lives.
+* **notify** — the user asked to hear of something ("let me know when the build is done"), or
+  something needs them: `app chat notify <text> [--title T] [--page P]` shows a notification on the
+  device the app runs on (docs/UI.md "AI chat" → "An AI agent's own notifications"): a system
+  notification while the app is not in front, else a toast. Its title always starts with who sends it
+  — the conversation's partner ("Claude Code: Budowanie"), a script's client name —, the text is at most
+  1 000 characters (the title 80; longer ones cut), and a click opens the conversation or `--page`.
+  `{sent, conversation?, opens?}` (exit 0); exit 7 `refused` when the user turned notifications from
+  AI agents off (`details.reason: off`: say it in the answer instead) or after **10** of the
+  conversation in the last hour (`reason: limit`, `retryAfterMs`); exit 3 `not_found` for a page that
+  is not there. An agent the app started notifies from its own conversation (another `--conversation`:
+  `refused`); a script of the user's names one with `--conversation`, or none (a click then shows the
+  app). The answer itself already notifies the user when they want it (Settings → Extensions → AI →
+  Notify when the AI answers): no need to notify that a turn ended.
 * `--read-only` refuses start, send, stop and the schedules' changes (exit 7); `--dry-run` shows
   the request.
 
@@ -1622,7 +1705,7 @@ whose conversation asks, so:
   conversation as a message, a new turn of the agent;
 * it **sends** to and **stops** only its own sub-conversations (any depth) — reading and waiting
   are open to all (its notebook tools read every page anyway); it changes and deletes only the
-  schedules it set up from there;
+  schedules it set up from there; it notifies the user from its own conversation only (`notify`);
 * sub-conversations go **three levels** deep at most (a conversation that deep gets no chat grant;
   `refused` with `{reason: depth}`), and at most **four** of one conversation run at once
   (`{reason: children}`);

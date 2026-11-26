@@ -1375,6 +1375,183 @@ again) and "Extensions" (Settings → Extensions). Extension commands carry the 
 their subtitle and the icon `puzzle` (the gym's `dumbbell`, the habits' `flame`); the views of the
 gym and the habits are offered as "Gym" and "Habits" (`go.gym`, `go.habits`, while they are on),
 not as `extview.…`.
+## Code mode
+
+Projects and AI agents' threads, as in T3 Code (docs/CODE.md: the model; this section: the UI). The
+mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first button (`modeSwitch`: a
+`code` icon in Notes mode, `notebook-pen` in Code mode; "Code mode" / "Notes mode", in the drawer
+"Code" / "Notes"), the palette's `mode.code` / `mode.notes` and Settings → Extensions → Code mode
+(`codeSettings`: the mode `appModeSetting`, "Open in" `codePreferredEditorSetting` — the editors found,
+the custom command, the file manager —, the custom command `codeEditorSetting`, "New threads work"
+`codeNewThreadEnvSetting` (As t3.json says / Local / New worktree), the branch prefix
+`codeBranchPrefixSetting`, "Worktrees of deleted threads" `codeDeletedWorktreesSetting` (Ask / Delete /
+Keep), the worktrees' folder `codeWorktreesSetting`, "Draw terminals with Atrament"
+`codeTerminalAtramentSetting` (`AppSettings.terminalAtrament`, experimental, where Atrament is built:
+docs/CODE-TERMINAL.md "Drawn by Atrament"); shown where agents run).
+
+* **In Code mode** the rail shows only "Code" (`sidebarNav_code`, route `code`; `ShellRail.shows()`), the
+  page panel is `CodeSidebar` (AppShell's loaders choose it by the mode, wide and in the drawer) and the
+  bottom navigation is hidden; settings, notifications, the palette, tabs and the top bar stay. Ctrl+1–9
+  open the sidebar's threads instead of the tabs (Ctrl+PgUp / PgDown still switch tabs), and Code mode's
+  commands have shortcuts of their own (docs/CODE.md "Shortcuts": ShortcutMap's scope `code`; AppShell's
+  Shortcut of a command that is everywhere is off in Code mode while a Code mode command has its key).
+* **CodeSidebar** (`qml/code/CodeSidebar.qml`): "Projects" with the threads' order (`codeThreadSort`,
+  `codeThreadSortMenu`: Last activity first `codeSortActivity` / Newest first `codeSortCreated`;
+  CodeProjects.threadSort, this device's) and "Add a project…" (`codeAddProject`, a folder picker
+  `codeProjectFolderDialog`; with none: a note and `codeAddProjectEmpty`), a filter over the threads'
+  titles and branches (`codeThreadFilter`: ChatListModel.filter), then a section per project
+  (`CodeProjectSection`; pinned projects first): its row (`codeProject_<id>`: a click folds it — kept in
+  `code/collapsed` —, its icon `codeProjectIcon` — the user's emoji, t3.json's iconPath picture, a
+  folder —, a pin, "+" `codeNewThread_<id>`, "⋯" `codeProjectMore_<id>`; dragged with the mouse
+  (`codeProjectDrag`, a line `codeProjectDrop` where it goes) to another place within the pinned ones or
+  the others), the project's menu (`codeProjectMenu`, also a right click / long press: New thread
+  `codeProjectNewThread`, New thread in the project's folder `codeProjectNewLocalThread`, Open in editor,
+  Show the folder, Copy path, Pin / Unpin `codeProjectPin`, Move up / Move down, Project settings…
+  `codeProjectSettings`, Remove from the list `codeProjectRemove` — confirmed: its folder and threads
+  stay), a draft of a new thread when one was written and not sent (`codeDraft_<id>`, ChatView's draft
+  "code:<id>"), its threads (`CodeThreadRow`, `codeThread`, `ChatListModel { project: id }` with the
+  filter and the order) and "No threads yet" / "No thread matches". **A thread's row**: its state by
+  priority (`codeThreadState`: a plan to approve — `list-checks` and "Plan" —, an approval asked for —
+  `circle-help` and "Approve" —, a spinner while it works, the alert and "Failed" in the danger colour, an
+  accent dot while its answer is unread), the title (semibold unread or current), a pin, `terminal`
+  while a program runs in its terminal (`codeThreadTerminalBusy`: TerminalRegistry.isBusy, T3 Code's
+  "Terminal process running"), `git-branch` for a worktree of its own (its branch in a tooltip), when; the current one selected; "⋯"
+  `codeThreadMore` on hover, a right click / long press: Rename… (`codeThreadRename`: a dialog
+  `codeRenameThreadDialog` / `codeRenameThreadField`), Pin / Unpin, Mark unread, New thread in this
+  worktree (or in the project's folder) `codeThreadNewHere`, Open in editor, Copy path / Copy branch /
+  Copy link, Archive / Unarchive, Move to trash (`codeThreadDelete`). A thread with a worktree of its own
+  that no other thread uses (`WorkspaceChats.threadsIn`) asks first (`codeDeleteThreadDialog`, unless
+  "Worktrees of deleted threads" says Keep — or Delete and the worktree has no uncommitted changes):
+  where the worktree is, that its branch stays, how many files have uncommitted changes
+  (`CodeProjects.checkWorktree`), "Delete the worktree too" (checked when nothing would be lost). The toast's
+  Undo brings the thread back, and the worktree from its branch when it went (`CodeProjects.keepUndo`).
+  Archiving keeps the worktree.
+* **CodeView** (`qml/code/CodeView.qml`, route `code`: `{}` a new thread of the last project used —
+  `code/lastProject` — or the first; `{new: true, project, env?}`; `{new: true, project, worktree, branch,
+  pr?}` a new thread in that worktree (on that pull request); `{path}` a thread; `{addProject: true}` the
+  folder picker): no project yet — an empty state (`codeEmpty`) with "Add a project…" and, without an
+  agent, "Set up an AI agent". A header (`codeHeader`): the project (`codeProjectChip`; for a new thread a
+  menu of the projects, `codeProjectPick`, and "Add a project…"), the thread's name (`CodeThreadTitle`,
+  `codeThreadTitle`: a double click or F2 makes it a field `codeThreadTitleField`, Enter renames the
+  thread — WorkspaceChats.rename —, Esc keeps it), then where it works — **a thread**: its folder's branch
+  (`codeWhere`: `git-branch` for a worktree of its own, `hard-drive` for the project's folder; the folder
+  in its tooltip; a click opens the branch picker); **a new thread**: the environment (`codeEnvironment`,
+  Ctrl+Shift+X: a menu `codeEnvironmentMenu` — Local `codeEnvLocal`, New worktree `codeEnvWorktree`, the
+  project's worktrees `codeEnvExisting_<n>`; the default CodeProjects.newThreadEnv, the route's `env` or
+  `worktree`), the base of a new worktree or the branch of a Local one (`codeBaseBranch`: "From main" /
+  the branch; the branch picker) and the pull request it is on (`codePullRequestChip`) — the project's
+  scripts (`codeScript_<n>` buttons with their icons, the first two of more than three and all of them in
+  `codeScriptsMenuButton` / `codeScriptsMenu`: run in a new tab of the terminal), "Open in…"
+  (`CodeOpenIn`: `codeOpenEditor` opens the folder in the preferred editor, Ctrl+O; `codeOpenIn` the
+  menu `codeOpenInMenu` of the editors, `codeOpenIn_<id>`: the one picked opens it and is remembered),
+  the terminal's and the changes' toggles (`codeTerminalToggle`, `codeChangesToggle` Ctrl+D; kept in
+  `code/terminalOpen`, `code/changesOpen`). **The branch picker** (`CodeBranchPicker`,
+  `codeBranchPicker`, a BPalette; Ctrl+Shift+G): the folder's branches with their badges in the rows'
+  subtitles (current, default, remote, the worktree that has one, ↑ ahead ↓ behind), searched; typed text
+  offers "Create branch “x”" for a new valid name and "Check out pull request #123" for `#123`, `123` or
+  a pull request's address. Picking a branch checks it out — refused while an agent's turn of a thread of
+  that folder runs (a toast says why; the picker's empty text too) —; a branch checked out in another
+  worktree moves the thread there (a new thread: that worktree); for a new worktree it is the base.
+  **"Check out pull request #N"** (`CodePullRequestDialog`, `codePullRequestDialog`: New worktree /
+  Local `codePullRequestWhere`, its error `codePullRequestError`): a new thread then works there and
+  its agent is told which pull request it is. Under the header, while a new worktree's setup scripts run
+  and the message waits for them, `CodeSetupBanner` (`codeSetup`, `codeSetupText`: "Setting up the
+  worktree… (Setup)", Send anyway `codeSetupSend`); one that failed says so, with Send anyway and Don't
+  send (`codeSetupCancel`: the message stays in the field, the worktree stays). Under it a horizontal
+  SplitView: the thread — `ChatView` with `routeView: "code"` (its navigations name route `code`),
+  `showList: false`, `project`, `wantsWorktree` / `worktreeWanted()`, `newWorktree` / `newBranch` /
+  `newPullRequest`; only agents among the partners (`chatNewPartner` shown with one agent too; the
+  project's default agent chosen); its empty state "What should the agent do?" with suggestions
+  (`codeSuggestions`) — over the terminal (`codeTerminal`, `TerminalPanel` — the thread's terminals, `TerminalRegistry.thread(path or the new
+  thread's folder)`: tabs, splits, the find bar, the context menu with Add to chat into the thread's
+  field, Ctrl+click on a file path opens it in the Files tab (another folder's in the editor); its commands `terminal.*` — Ctrl+J shows
+  or hides it — are uiActions `terminal:…` CodeView carries out, docs/CODE-TERMINAL.md "Keys"), and the Changes panel
+  beside them (`codeChanges`, `GitChangesPanel`:
+  docs/CODE-GIT.md "The panel" — the diff sources Latest turn / Turn N / Uncommitted / Branch /
+  Commits, `GitDiffView` with hunks, find and review comments, the file menu, the quick action, the
+  merge / rebase banner). CodeView gives it the thread's `checkpoints` and turns its signals into the
+  editor (`openFile`), the composer (`addToChat` → `chat.addToComposer`), the clipboard (`copyText`)
+  and the browser (`openUrl`).
+* **The right panel's tabs** (`codeRightPanel`, `CodePanelTabs`: `codeTabChanges`, `codeTabFiles`,
+  `codeTabSearch`; kept in `code/rightTab`; docs/CODE-FILES.md): Changes (`codeChanges`), **Files**
+  (`codeFiles`, `CodeFilesPanel`: a header `codeFilesHeader` — recent files `codeFilesRecent`, the path
+  `codeFilesPath`, Go to file… `codeFilesGoTo`, Copy path `codeFilesCopyPath`, Open in editor
+  `codeFilesOpenEditor`, Reload `codeFilesReload` —, `codeFilesTruncated` over a big file's start, the
+  lines `codeFileView` / `codeFileLines` with rows `codeFileLine_<n>`, a picture `codeFilePicture`, a
+  message `codeFilesMessage` for binary, missing, folders, outside; no file: `codeFilesEmpty` with
+  `codeFilesEmptyGoTo` and `codeFilesRecentList`; lines selected: `codeFileSelectionBar` with
+  `codeFileComment` → `codeFileCommentDialog` (`codeFileCommentField`, "Add to chat") and
+  `codeFileCopyLines`, a right click `codeFileLineMenu`) and **Search** (`codeSearchPanel`,
+  `CodeSearchPanel`: `codeSearchField`, toggles `codeSearchCase` / `codeSearchWord` / `codeSearchRegex`,
+  `codeSearchStatus`, `codeSearchEngine`, `codeSearchStop`, results `codeSearchResults` with rows
+  `codeSearchFile` and `codeSearchMatch`, `codeSearchEmpty`). The **file picker** (`codeFilePicker`,
+  `CodeFilePicker`: `codeFilePickerField`, `codeFilePickerList` with `codeFilePickerRow`s): Print page's
+  key (Ctrl+P) in Code mode, the palette's "Go to file…"; Search's key (Ctrl+Shift+F) and "Search in the
+  project" open the Search tab (AppShell's `runShortcut()` → uiActions `code:findFile`, `code:search`).
+  In a thread `@` offers the folder's files and folders (`chatMentions`, CodeFileIndex; Tab or Enter
+  takes the first), and a link of an answer or a tool call's file (`chatToolFile`) to a file of the
+  folder opens it in the Files tab at its line (ChatView's `filesFolder`, `fileLinkActivated(path,
+  line)` → `CodeView.openFileInViewer(path, line)`).
+* **Narrow** (CodeView's `narrow`: under 640 px — a phone, a narrow window): the header keeps the
+  project, where the thread works and the toggles — no title (the top bar has it), no "Open in…", the
+  scripts only in their menu (`codeScriptsMenuButton`) —; the changes' toggle (and Ctrl+D) shows the
+  right panel in the thread's place and goes back to the thread, not kept (`remoteChangesShown`).
+* **CodeProjectDialog** (`codeProjectDialog`): the name `codeProjectName`, the icon (an emoji,
+  `codeProjectIconField`), new threads' agent (`codeProjectAgent`) and environment (`codeProjectEnv`:
+  Default / Local / New worktree), and the scripts (`CodeScriptsEditor`, `codeProjectScripts`; rows of
+  `CodeScriptsModel`): a row each (`codeScriptRow_<n>`) — its icon (`codeScriptIcon_<n>`, a menu of T3
+  Code's six), name (`codeScriptName_<n>`, "Another script has this name"), command
+  (`codeScriptCommand_<n>`, monospace), Move up / Move down / Delete (`codeScriptUp_<n>`,
+  `codeScriptDown_<n>`, `codeScriptDelete_<n>`: not for a row of t3.json), its shortcut
+  (`codeScriptShortcut_<n>`: a click records the next key — Esc cancels, Backspace none —, checked with
+  ShortcutMap.checkIn), "Run when a worktree is made" (`codeScriptOnWorktree_<n>`), "Wait for it before
+  the agent starts" (`codeScriptWait_<n>`), "from t3.json" / "overrides t3.json" chips — and "Add a
+  script" (`codeScriptAdd`). Save keeps all of it (only this device's scripts: t3.json is never written).
+* **Another computer's projects** (docs/CODE.md "Threads on the phone"; `CodeProjects`' remote ones, from
+  `Workspace.projects.remote`): CodeSidebar lists them after this device's, a `laptop` icon and "on
+  <computer>" (`codeProjectHost_<id>`) beside the name, no "⋯" (a long press: only New thread); it asks the computers for
+  their lists again whenever it is shown. CodeView names the computer in the project's chip ("Sklep · nixos", a `laptop`
+  icon), no terminal, editor or script buttons, and **CodeRemoteChanges** (`qml/code/CodeRemoteChanges.qml`,
+  `codeRemoteChanges`) in place of the Changes panel — beside the thread when wide (`code/changesOpen`),
+  under it when narrow, shown with the changes' toggle (not kept): "Changes and the terminal are on
+  <computer>: here they are read-only." (`codeRemoteNote`), refresh (`codeRemoteRefresh`), This turn / All
+  changes (`codeRemoteMode`, with the turn's checkpoint), the files (`codeRemoteChangeList`, rows
+  `codeRemoteChange`: the letter in its colour, the name, its folder dimmed, +N −N) and a file's diff
+  (`codeRemoteDiffPane`, `BDiffView`: beside the list when wide, in its place with Back when narrow) —
+  what that computer's git says (`RemoteProjects.requestChanges` / `requestDiff`), refreshed when the
+  thread's page changes. Local / New worktree work as for this device's projects: the worktree is made
+  there.
+
+## Notifications
+
+What the app told the user is kept, per notebook and on this device (`shell/notificationcenter.h`,
+QML `Workspace.notifications`, its device state `notify/log` — never in the notebook, it syncs
+nothing): a reminder or a calendar event's alarm that rang (`WorkspaceReminders::fired`), the AI
+chat's answers, failures and questions it notified of (`WorkspaceChats::notifyUser`), an extension's
+timer that ended, and the notifications AI agents (`chatNotify`), extensions (`b.notify`) and the
+user's scripts (`brulion-cli app chat notify`) send. Newest first, at most 200 and none older than 30
+days; one that came while the app was in front counts as read, the others are **unread** until
+opened from the list, until what they point to is opened another way (`markOpened`: a system
+notification's click — `AppController::openNotification` —, the conversation shown in a chat view)
+or "Mark all as read".
+
+* **The bell** (`topBarNotifications`, the top bar before the AI button): `bell-ring` and the unread
+  count as an accent badge (`topBarNotificationsBadge`, "9+") while something is unread; on narrow
+  windows only then — **More → Notifications (3)** (`menuNotifications`) and the palette's
+  "Notifications" (`go.notifications`) always lead there. Route `notifications` (views table).
+* **Posted ones** (`NotificationCenter::post`) — an agent's, an extension's, a script's — are checked
+  against the user's settings (Settings → Extensions → AI → "Let AI agents send notifications",
+  `AppSettings.aiAgentNotify`; Settings → Extensions → "Let extensions send notifications",
+  `extensionsNotifySetting`, `AppSettings.extensionsNotify`, key `extensions/notify`; a script of the
+  user's always), at most **10 an hour from one source** (a conversation, an extension, the scripts:
+  `MaxPerHour`, the workspace's clock), titled with who sends them ("Claude Code: Build", an
+  extension's name), cleaned (no control characters but line ends and tabs, no runs of empty lines)
+  and cut (1 000 characters, the title 80). Shown (`shown` → `workspaceintegration.cpp`): a system
+  notification while the app is not in front — its id `brulion-message:<kind>:<what it opens>`, a
+  newer one of the same replacing it —, else, or with nowhere to show one, a toast with **Open**
+  (`AppController::toastOpen`). The app lock's "Hide the note's text in notifications" makes it
+  "Brulion" — "Something new: open Brulion to see it".
+
 ## AI chat
 
 `qml/views/ChatView.qml`, route `chat` (the palette's "AI chat", `go.chat`, and "AI: new conversation",
@@ -1396,7 +1573,7 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   takes it away) that says it came from a link — with the warning tint "This prompt came from a link
   with N hidden characters, taken out now: they can hide instructions. Read it before you send it."
   when it had some —, that it was cut at 8 000 characters, that its page is not in this notebook or
-  its partner not set up here (the AI assistant answers instead). The first message of a new one replaces the route with the
+  its partner not set up here (the default partner answers instead: "Who answers a new one" below). The first message of a new one replaces the route with the
   conversation's (`AppController.replaceRoute`; in the side panel, where the view also opens, it
   pins the conversation there again). Title: the conversation's name without its date, else "AI
   chat".
@@ -1445,6 +1622,12 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   scrolled to the middle and its bubble has the accent's border for 2.5 s). The model keeps the
   messages' text (and its folded form) it read at its last refresh, so a keystroke reads no page;
   nothing found: "No conversation found" (`chatNoMatch`).
+* **Find in the conversation** (T3 Code's find in thread): where the list is not shown — a thread of
+  Code mode, a conversation on a phone — Ctrl+F (`page.find`) opens a find bar over the messages
+  (`chatFind`: `chatFindField`, `chatFindCount` "2 of 5", `chatFindOlder` / `chatFindNewer`,
+  `chatFindClose`): the messages holding every word typed, case and Polish marks aside
+  (`ChatMessageModel.rowsMatching`), from the newest; Enter goes to an older match, Shift+Enter to
+  a newer one, the match's message has the accent's border, Escape closes it.
 * **Keyboard** (desktop): the find command's key (Ctrl+F, `page.find`) while the chat has the focus
   goes to the search field, ↓ there to the first row; ↑ / ↓ move in the list without opening
   (`keyNavigationEnabled`), Enter opens the row (a match at its message), **Alt+1 … Alt+9** open the
@@ -1463,6 +1646,27 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   **Never**; never for a conversation shown in an active window. The app lock's "Hide the note's
   text in notifications" makes it "AI chat" — "Something new in a conversation". The toast for a
   question nobody sees stays as it was.
+* **An AI agent's own notifications** (T3 Code's notifications from the agent; `chatNotify`, the tool
+  `brulion_app_chat_notify`, docs/CLI.md "Conversations"): an agent tells the user what they asked to
+  hear of ("let me know when the build is done") — `ChatControl`'s `chatNotify` →
+  `NotificationCenter::post` ("Notifications" above): a system notification while the app is not in
+  front, else a toast with **Open**, kept in the list of notifications. Its title always says who
+  sends it ("Claude Code: Build", the conversation's partner; a script's its client name): a note an
+  agent read cannot make it pass for another app's. A click opens the agent's conversation, or the
+  page it named (`page`). At most **10 of a conversation an hour**: the next is refused with
+  `retryAfterMs`. **Settings → Extensions → AI → Let AI agents send notifications**
+  (`aiAgentNotifySetting`, `AppSettings.aiAgentNotify`, key `ai/agentNotify`, on by default): off,
+  every one is refused (`reason: off`) and the agent says it in its answer instead.
+* **Who answers a new one**: **Settings → Extensions → AI → New conversations answered by**
+  (`aiDefaultPartnerRow`, its button `aiDefaultPartnerSetting` and menu `aiDefaultPartnerMenu` of the
+  chat's partners; shown with more than one partner or a choice made; `AppSettings.aiDefaultPartner`,
+  key `ai/defaultPartner`, this device's — agents are set up per device): the built-in assistant (the
+  default), an AI agent or an extension's chat command. `WorkspaceChats::defaultPartner` is that
+  choice while it answers here, else "" (the assistant; the row then says the one chosen is not set up
+  here) — `defaultPartnerChanged` also when the partners change. A new conversation's chip starts with
+  it (`ChatView.newPartner`, set again when the default changes and nobody picked another), and so do
+  prompt links that name nobody or one not set up here (`carryOutAutomation`), "Add…" of the scheduled
+  conversations, and `chatStart` / `chatScheduleAdd` without a `partner` (`""` names the assistant).
 * **The list's menu** (`chatRowMenu`: a right-click, a long press): **Pin** / **Unpin**
   (`chatPin`, not on an archived one) and **Archive** / **Unarchive** (`chatArchive`):
   `WorkspaceChats.setPinned()` / `setArchived()` write the page's frontmatter (`chat::setMark`, the
@@ -1494,7 +1698,11 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   (`WorkspaceChats.rewind()`, core `chat::truncated`: the page before it byte for byte), its turn
   and its waiting messages stop, its text and pictures go back into the field; an AI agent's next
   turn is a new session with what is left; a toast's **Undo** puts the page back while it did not
-  change since — `undoRewind()`, AppController's `m_rewindToasts`) and **Fork from here**
+  change since — `undoRewind()`, AppController's `m_rewindToasts`; in a thread of Code mode whose turn
+  of that message has a checkpoint, a dialog first, `chatEditFromHereDialog`, with T3 Code's "Revert
+  files too": "Also put the project's files back as they were before this message" —
+  `WorkspaceChats.checkpointOf(path, number)` / `restoreCheckpoint(path, id)` →
+  `checkpointRestored(path, ok, message)`, a toast) and **Fork from here**
   (`chatMessageFork`: a new conversation, today's, a copy of this one up to that message —
   `WorkspaceChats.fork()`, core `chat::forked`, its journal line too — that goes on by itself with
   the same partner and a session of its own; its frontmatter's `fork:` names the source,
@@ -1878,7 +2086,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   `Workspace.chats.share`, `src/app/shell/agentshare.h`): "Share agents with the phone"
   (`AppSettings.acpShare`, key `ai/share`, off by default) runs `brulion-cli acp serve` for the
   notebook that is open — never the documentation — with this device's agents (programs only; their
-  list in `<app data>/agent-share/agents.json`) while the app runs (`ServerProcess`,
+  list in `<app data>/agent-share/agents.json`) and Code mode's projects of this device (`--projects
+  <app data>/agent-share/projects.json`, written again whenever the projects change: the phone's
+  threads of them run here, docs/CODE.md "Threads on the phone") while the app runs (`ServerProcess`,
   `src/app/shell/serverprocess.h`: started again after a crash with waits of 2 s … 1 min, a refusal
   left as it is, stopped with its standard input — `--stop-on-eof` — when it is turned off, the
   notebook or the agents change, or the app quits; every line of its log in the event log). The
@@ -1901,7 +2111,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   off.
 * **Who answers**: an agent is offered among the partners (`acp:<id>`, its name, "AI agent") and the
   conversation's page keeps it (`partner: acp:claude`, docs/SYNTAX.md §14); an agent not set up on
-  this device fails the turn with what to do.
+  this device fails the turn with what to do. It may answer every new conversation: Settings →
+  Extensions → AI → New conversations answered by ("AI chat" → "Who answers a new one").
 * **Its options** (`chatAgentOptions` under the conversation's row, `chatNewAgentOptions` before a
   new one's first message; `ChatAgentOptions.qml`): a chip per option of the session — its model,
   mode, effort … (`configOptions`; an agent's older `modes` and `models` as options of their own) —
@@ -2117,6 +2328,16 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   time, as any partner's; a turn of tool calls without words writes their summary line and their
   titles as a list ("Edited 1 file", then "- Edit Dom.md"; an agent on another computer keeps only
   the titles: "Took 2 steps").
+* **The work log** (T3 Code's "Worked for …"): once a turn with tool calls or a plan answered, what
+  it did stays above its answer — one folded line (`chatWorkLog`, ChatActivity with `finished`:
+  "Worked for 25 s · Edited 1 file · ran 1 command") that opens its plan and its calls as they
+  ended, their output and "Show the change". `WorkspaceChats.workLog(path, number)` (the answer's
+  number in the page, from 1; `workLogSerial`), kept in the notebook's device state (LocalStore
+  `chat/worklog`, not in the page: another device shows the answer alone) — 50 turns a
+  conversation, 200 conversations, the newest 200 calls of a turn, an output's last 4000 characters,
+  a change's texts while they are 40 000 characters at most (`workLogEntry()`). A command's output
+  that is one fenced block (Claude Code's "```console") shows without the fence
+  (`WorkspaceAgents::plainOutput()`). "Hide all" hides the line too.
 * **Tool calls in chat** (Settings → Extensions → AI agents, `chatToolCallsRow` /
   `chatToolCallsSetting`; `AppSettings.chatToolCalls`, key `ai/chatToolCalls`, this device's — T3
   Code's setting): **Show all** (`all`, the default: the list open), **Hide finished**
@@ -2179,9 +2400,12 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   on another computer (its files are there), nor for Brulion's own MCP tools (another process:
   their writes are in the pages' history).
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
-  program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one),
-  `tst_shell_chattools` (the calls in words, English and Polish plural forms), the shell self-test's
-  `checkChatDrawings` (the drawings of an answer, ChatActivity under each "Tool calls in chat").
+  program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` and `realAgentThread` —
+  a thread in a real git project, tried with Claude Code and Codex — with a real one,
+  `BRULION_REAL_ACP_AGENT`, `BRULION_REAL_ACP_OPTION`), `tst_shell_chattools` (the calls in words,
+  English and Polish plural forms), the shell self-test's `checkChatDrawings` (the drawings of an
+  answer, ChatActivity under each "Tool calls in chat") and `checkCodeMode` (Code mode: a project and
+  its thread, the header, the sidebar, the Changes panel, the file picker, find in the thread).
 
 ### Agents delegate
 
@@ -2471,6 +2695,15 @@ without one. `reset(id)` brings the default back (whoever took it meanwhile lose
 `resetAll()` all of them. Stored values are read defensively: no string (an INI list), malformed
 or not allowed is ignored; two actions on one key — the earlier custom one keeps it, a default
 taken by a custom one gives way.
+
+**Scopes**: an action is everywhere (`Action::scope` "") or Code mode's only ("code": its commands,
+the shown project's scripts — docs/CODE.md "Shortcuts"). Shortcuts are unique within a scope; a Code
+mode action may have the key of one that is everywhere (it wins in Code mode: the other's binding is
+`shadowed` and AppShell turns it off there) and keys reserved for what Code mode never shows (the
+drawing editor, the PDF viewer, the canvas, the tabs' Ctrl+1…9, the AI chat's Alt+1…9:
+`reservedIn(n, "code")`); `actionIn(sequence, scope)`, `scopeOf(id)`, `checkIn(scope, sequence,
+except)` (a script being edited, no action yet). Settings → Keyboard shortcuts lists Code mode's
+commands as "Code mode: …".
 
 Applied everywhere through `ShortcutMap.sequences[id]` / `bindings`: AppShell makes one
 `Shortcut` per action (`runShortcut(id)`: the shell's popups directly, the rest
@@ -2788,6 +3021,8 @@ Tests: `tst_memory_policy` (`notUsedForAWhile`), `tst_processmemory` (`programPa
 | `sync` | `SyncView` — Overview, Syncthing, Nextcloud (live progress, history of runs), GitHub (a notebook kept in a GitHub repository: "Notebooks from GitHub" below; `{tab: "github"}` is where a notebook opened from GitHub lands), Calendars (ICS subscriptions and CalDAV accounts: "Calendars" below; `{tab: "calendars"}`), Conflicts (merge; drawings element by element). Conflicts: the list beside the resolver on wide windows; on narrow ones (< 900 px) one at a time, and a conflict opens through the route (`{tab: "conflicts", copy}`, the entry before it showing the list, also when the tab was chosen here), so the top bar's ← and Android's Back return to the list — the resolver has no ← of its own — and a resolved one goes back to it too. `copy` is read on every route change: a route without one shows the list | `tab?`, `copy?`, `run?` (open a run's details) |
 | `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "More" (both remembered on the device), **Sign in to Microsoft**; then a well with the device code in large monospace, **Copy code**, the address as text and an **Open microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Cancel**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). The OneNote card uses the same block (`service: "onenote"`, scope Notes.Read) and, once signed in, lists the notebooks with check boxes and **Download n notebooks**; the Todoist and Airtable cards add `TokenSignIn` (the personal token in a password field, where to get it, **Download from Todoist** / **Connect to Airtable**; Airtable then a base menu and the tables as check boxes, **Download n tables**); the OneNote card has no file buttons. For a spreadsheet (CSV, Airtable) the preview adds the mapping card `ImportCsvMapping` (`ImportController.csvOptions` / `csvMapping`): A page per row / One page with the table (`BSegmented`), the title column (`IoChoiceButton`: a button with a menu of choices) or a title template, subfolders, the page-text column, a row per column — its name and a sample, the property's name (phones: a line of its own) and its type ("Detect: Number" until chosen, or Leave out) —, **Download the attachments** when cells name files on the web, the encoding, separator, header row and list separator under a toggle, the base switch, the first rows with their pages' titles and the first page as it will be written (monospace), **Back to what Brulion detected**; every change is checked again before anything is written. Export (`ExportPanel`): the format tiles (also PDF and Word: "Exporting and printing a page"), what to export (notebook / folder / page; several notes in a PDF or DOCX: each on its own page), for the HTML, PDF, Word and Pandoc formats **Pictures from the internet**: Keep addresses / Include copies (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Fetching pictures from the internet (1 of 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), for the "HTML document" **Protect with a password** (`ExportPasswordBox`: "Exporting and printing a page"), Export…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Replaced from the command line (agent)" with a terminal icon —, a restored version) | `path` |
+| `code` | `CodeView` ("Code mode" above): an AI agent's thread of a project with its changes and terminal, or a new thread | `project?`, `path?`, `new?`, `addProject?` |
+| `notifications` | `NotificationsView` ("Notifications" below): what the app told the user in this notebook, newest first under a heading per day (`section`: Today, Yesterday, the date); All / Unread (`notificationsFilter`), "Mark all as read" (`notificationsMarkRead`), "Clear" (`notificationsClear`, confirmed); a row (`notificationRow`: the kind's icon, its title — semibold while unread —, three lines of its text, its time, an accent dot `notificationUnread`, × `notificationRemove`) is marked read and opens what it points to on a click or Enter (`AppController.openNotification`), Delete removes it | — |
 | `trash` | `TrashView` — a row shows "Restore" (its icon on compact windows) and a "⋯" whose menu, also from a right-click or a long press on the row, has Restore and, after a separator in the danger colour, "Delete for good…" (asked first; no bare red × — the app's dismiss glyph — that deletes); the header's "Empty trash" is a secondary button with danger text, only the confirmations are solid red, and both say "This cannot be undone." | — |
 | `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
 | `settings` | `SettingsView` — one section at a time: on wide windows the list of sections on the left, choosing one replaces the route's section (no history entry); on narrow ones (under 900 px, phones) a route without a section shows the **list of sections** (`settingsHome`), drawn as the page's menu sheet (`BMenu.sheet`'s `BMenuItem`s: no cards, no coloured tiles): the Notebook row first (`settingsHomeRow-vault`, the notebook's name muted beside it), then the sections in groups set apart by a thin line, without headings — Appearance, Editor | Reminders, Search, Extensions | Sync, Backups, Privacy | General, Keyboard shortcuts (not on touch UIs), Automation, Application — each a row with its line icon in the muted colour, its title and an arrow (`settingsHomeRow-<key>`); a row opens its section as a step of the history (Back returns to the list), a route with a section shows it at once. General, Appearance (`appearance`), Editor, Notebook (also this device's "Follow links to folders outside the notebook", `AppSettings.followsOutsideLinks`, default off, never in `.brulion/config.json` — a sync peer must not switch it on —, pushed into `Workspace.setFollowsOutsideLinks` → `Vault::setFollowsOutsideLinks`, and read by brulion-cli and the background check: a toggle rescans, the linked files come or go as changes; off, a file opened from such a folder is offered as a copy, and neither its pictures nor its PDFs are shown. Devices that followed such links before it was a setting keep them: while the setting was never chosen, each notebook's first open checks once (`AppSettings::checkOutsideLinksOnce`, "vaults/outsideLinksChecked/<id>") and switches it on — before the index and sync see the notebook — only when this device knew the notebook before (state in its device folder, or a recent notebook) and it has such a link; a new device, or a link planted after the check, never does), Reminders, Sync, Backups (`backups`, "Backups" below), Automation (`automation`: brulion:// links and the notebook's key, "Automation (brulion:// links)" above), Application (on Android and Windows "Check for new versions" — `AppController.updates.enabled`, "Window layout"; on the desktop "Keep running in the system tray" and "Click on the tray icon" Window | Calendar — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Start when you sign in" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop "Browser extension (Web Clipper)": each browser's row with its state — Connected (the user's or the system's host manifest naming a program that is there), Not connected, Not installed for you, a broken one with the program it misses — and "Connect browsers" / "Connect again", "Disconnect" (only the user's own manifests), "How to install the extension" — `WebClipperSetup` (`src/app/shell/webclippersetup.h`, the same code as `brulion-cli clip install`: `clipper/hostinstall.h`), docs/CLIPPER.md; on the desktop with "For developers": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Reminders → sounds: on Windows the "Ringtone" menu lists Windows' notification sounds (Notification, Alarm 1–10, Call 1–10…) and "Sound file…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |

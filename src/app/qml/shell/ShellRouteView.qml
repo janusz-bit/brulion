@@ -178,6 +178,8 @@ Item {
         case "importExport": return Qt.resolvedUrl("../views/ImportExportView.qml")
         case "history": return Qt.resolvedUrl("../views/HistoryView.qml")
         case "trash": return Qt.resolvedUrl("../views/TrashView.qml")
+        case "notifications": return Qt.resolvedUrl("../views/NotificationsView.qml")
+        case "code": return Qt.resolvedUrl("../code/CodeView.qml")
         case "cleanup": return Qt.resolvedUrl("../views/CleanupView.qml")
         case "replace": return Qt.resolvedUrl("../views/ReplaceView.qml")
         case "settings": return Qt.resolvedUrl("../views/SettingsView.qml")

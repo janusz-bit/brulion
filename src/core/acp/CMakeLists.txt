@@ -7,11 +7,14 @@
 # lines over HTTPS through sync::HttpTransport). hostoffer.h: a computer's agents offered to the
 # notebook's other devices in its synced .brulion/config.json (an address of a tailnet and names).
 # apptunnel.h: the app's live tools for an agent on another computer — its calls tunnelled over the
-# device's stream to the app, which answers them in process.
+# device's stream to the app, which answers them in process. codehost.h: Code mode's threads on
+# another computer — its projects offered to the devices, a thread's session in a project's folder
+# or worktree there, the checkpoint of each turn, the changes since one.
 brulion_add_core_module(acp
     SOURCES
         acp.h acp.cpp
         remote.h remote.cpp
         hostoffer.h hostoffer.cpp
         apptunnel.h apptunnel.cpp
+        codehost.h codehost.cpp
     DEPS sync tailscale)

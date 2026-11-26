@@ -308,7 +308,8 @@ endif()
 # real program that speaks the Agent Client Protocol (fakeacpagent.cpp): a conversation answered,
 # the same session for the next message, the agent's question allowed, rejected and stopped, Stop,
 # an agent that dies and starts again with the conversation so far, signing in, an agent not set
-# up or not starting, the chat's partners, the settings' agents (malformed entries left out).
+# up or not starting, the chat's partners, the settings' agents (malformed entries left out); Code
+# mode's threads, also of a project of another computer through the real brulion-cli acp serve.
 qt_add_executable(fake_acp_agent fakeacpagent.cpp)
 target_link_libraries(fake_acp_agent PRIVATE Qt6::Core)
 brulion_set_warnings(fake_acp_agent)
@@ -322,6 +323,9 @@ if(TARGET brulion-cli)
 endif()
 # Claude Code's and Codex's subscription limits as the chat shows them (agentlimits.h): which agents
 # have them, their texts in local time, read when shown or refreshed over a fake transport.
+# What the app told the user (notificationcenter.h): kept per notebook, read or unread, pruned;
+# agents', extensions' and scripts' posts limited, titled with who sends them, cleaned.
+brulion_add_test(tst_shell_notificationcenter SOURCES tst_notificationcenter.cpp LIBS brulion_shell)
 brulion_add_test(tst_shell_agentlimits SOURCES tst_agentlimits.cpp LIBS brulion_shell brulion_core_agentlimits)
 # What the agents used, from their own session logs, as Settings and the chat show it
 # (agentusage.h): which agents, where their logs are, the texts in English and in Polish (the app's
@@ -363,3 +367,8 @@ if(TARGET brulion-cli)
 endif()
 math(EXPR _agentshare_timeout "180 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_shell_agentshare PROPERTIES TIMEOUT ${_agentshare_timeout})
+# Code mode's projects beyond the list (codeprojects.h, codeconfig.cpp, codeworktrees.cpp,
+# codeeditors.cpp): t3.json, merged scripts, pins, icons, defaults, "Open in…" with fake editors on a
+# PATH of their own, pull request references, and with git: worktrees from a base branch, branches,
+# pull requests checked out without gh and with a fake one, worktrees checked, removed and made again.
+brulion_add_test(tst_shell_codeprojects SOURCES tst_codeprojects.cpp LIBS brulion_shell)

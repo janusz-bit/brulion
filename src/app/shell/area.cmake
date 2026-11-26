@@ -94,6 +94,11 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/chatsecrets.h ${_brulion_shell_dir}/chatsecrets.cpp
     ${_brulion_shell_dir}/hookserver.h ${_brulion_shell_dir}/hookserver.cpp
     ${_brulion_shell_dir}/chatcontrol.h ${_brulion_shell_dir}/chatcontrol.cpp
+    ${_brulion_shell_dir}/notificationcenter.h ${_brulion_shell_dir}/notificationcenter.cpp
+    ${_brulion_shell_dir}/codeprojects.h ${_brulion_shell_dir}/codeprojects.cpp
+    ${_brulion_shell_dir}/remoteprojects.h ${_brulion_shell_dir}/remoteprojects.cpp
+    ${_brulion_shell_dir}/codeconfig.cpp ${_brulion_shell_dir}/codeworktrees.cpp ${_brulion_shell_dir}/codeeditors.cpp
+    ${_brulion_shell_dir}/codescriptsmodel.h ${_brulion_shell_dir}/codescriptsmodel.cpp
     ${_brulion_shell_dir}/workspaceagents.h ${_brulion_shell_dir}/workspaceagents.cpp
     ${_brulion_shell_dir}/chattools.h ${_brulion_shell_dir}/chattools.cpp
     ${_brulion_shell_dir}/agentshare.h ${_brulion_shell_dir}/agentshare.cpp
@@ -101,6 +106,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/agentusage.h ${_brulion_shell_dir}/agentusage.cpp
     ${_brulion_shell_dir}/serverprocess.h ${_brulion_shell_dir}/serverprocess.cpp
     ${_brulion_shell_dir}/writingsession.h ${_brulion_shell_dir}/writingsession.cpp
+    ${_brulion_shell_dir}/aiask.h ${_brulion_shell_dir}/aiask.cpp
     ${_brulion_shell_dir}/aireportdraft.h ${_brulion_shell_dir}/aireportdraft.cpp
     ${_brulion_shell_dir}/workspaceencryption.h ${_brulion_shell_dir}/workspaceencryption.cpp
     ${_brulion_shell_dir}/encryptedpagehost.h ${_brulion_shell_dir}/encryptedpagehost.cpp
@@ -134,7 +140,7 @@ target_link_libraries(brulion_shell
            brulion_core_writing
            brulion_core_encryption brulion_core_applock brulion_core_semantic
     PRIVATE Qt6::Network brulion_core_aireport brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
-            brulion_core_github brulion_core_caldav brulion_core_clipper
+            brulion_core_github brulion_core_caldav brulion_core_clipper brulion_core_gitcli
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
             brulion_ui_memory # viewkeeper.cpp: MemoryPolicy's letGo()
@@ -143,6 +149,8 @@ target_link_libraries(brulion_shell
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
 # src/app/pdf — its area is included before this one — and openexternal.h).
 target_link_libraries(brulion_shell PRIVATE brulion_platform brulion_pdfview)
+# A thread's @-mentioned files go to its agent as links (workspaceagents.cpp; core codefiles).
+target_link_libraries(brulion_shell PRIVATE brulion_core_codefiles)
 # Speech recognition and the recorder's clock (AppController.speech: src/app/media — its area is
 # included before this one); the slash commands this build cannot run (the editor's blocktext.h).
 target_link_libraries(brulion_shell PUBLIC brulion_media PRIVATE brulion_editor)

@@ -243,6 +243,7 @@ declare b: {
     status: (text: string?) -> (),
     timer: (seconds: number?, options: (string | { label: string?, message: string? })?) -> (),
     stopTimer: () -> (),
+    notify: (text: string, options: { title: string?, page: string? }?) -> (boolean, string?),
     data: (name: string, key: string?) -> any,
 
     -- questions and AI (in commands and actions)

@@ -400,6 +400,38 @@ private Q_SLOTS:
         QCOMPARE(setPartner(changed, partner), changed); // (again: nothing more)
     }
 
+    // A thread of Code mode: its project, worktree and branch in the frontmatter, set and taken out
+    // as one line each; a value with a line break never adds a key.
+    void codeThreads()
+    {
+        const QString start = newConversation(u"Napraw testy żółwia"_s, QString(), u"pl"_s, {}, u"acp:claude"_s);
+        QCOMPARE(parse(start).project, QString());
+        QString thread = setField(start, u"project", u"brulion");
+        thread = setField(thread, u"worktree", u"\"/home/ala/.brulion/worktrees/brulion/napraw testy\"");
+        thread = setField(thread, u"branch", u"brulion/napraw-testy");
+        const Conversation c = parse(thread);
+        QCOMPARE(c.project, u"brulion"_s);
+        QCOMPARE(c.worktree, u"/home/ala/.brulion/worktrees/brulion/napraw testy"_s);
+        QCOMPARE(c.branch, u"brulion/napraw-testy"_s);
+        QCOMPARE(c.partner, u"acp:claude"_s);
+        QCOMPARE(c.messages.size(), 1);
+        QCOMPARE(c.messages.first().text, u"Napraw testy żółwia"_s);
+        // Changed in place, then taken out; the rest stays byte for byte.
+        QString moved = setField(thread, u"branch", u"main");
+        QCOMPARE(parse(moved).branch, u"main"_s);
+        QCOMPARE(moved.count(u"branch:"_s), 1);
+        QCOMPARE(setField(setField(moved, u"branch", QString()), u"worktree", QString()),
+                 setField(start, u"project", u"brulion"));
+        // One line, whatever is given.
+        const QString sneaky = setField(start, u"project", u"x\npartner: acp:zly"_s);
+        QCOMPARE(parse(sneaky).partner, u"acp:claude"_s);
+        QCOMPARE(parse(sneaky).project, u"x partner: acp:zly"_s);
+        // CRLF pages keep their line endings; a page without a frontmatter gets one.
+        const QString crlf = u"---\r\nzadania: ignoruj\r\n---\r\n- 🧑 Hej\r\n"_s;
+        QCOMPARE(setField(crlf, u"project", u"p"), u"---\r\nzadania: ignoruj\r\nproject: p\r\n---\r\n- 🧑 Hej\r\n"_s);
+        QCOMPARE(setField(u"- 🧑 Hej\n"_s, u"project", u"p"), u"---\nproject: p\n---\n- 🧑 Hej\n"_s);
+    }
+
     void flags_data()
     {
         QTest::addColumn<QString>("page");

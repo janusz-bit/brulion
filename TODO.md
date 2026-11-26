@@ -5,6 +5,27 @@ done in the repository simply disappears from the list.
 
 ## Features
 
+* **Code mode: what is still missing** — projects, AI agents' threads in a project's folder or a
+  worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
+  the terminal and the project's files — picker, viewer, search, @-mentions — are there
+  (docs/CODE.md; tried with a real Claude Code and Codex: tst_shell_agents realAgentThread; its tests
+  run on Windows too: the ConPTY terminal, git, gh). Missing: Code mode tried by hand on Windows and on
+  macOS at all; t3.json read again when it changes, on Windows (CI's runner saw no change of it:
+  tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809; the terminal's resizable splits;
+  hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
+  a pull request's text written by AI (the commit message is: "Write with AI", AiAsk), a turn's
+  changes without what the user changed between turns, `--skip` while rebasing, `git fetch` of its
+  own (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
+  the phone through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and
+  the terminal from the phone, a worktree from another base, projects of two computers with the same
+  id; t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
+  multi-repository projects and custom worktree layouts; an AI-made branch name for a new worktree;
+  automatic worktree cleanup (by age, merged pull requests); settling and snoozing threads,
+  "Regenerate title", files dropped on a thread's row, scratch threads without a project; in the file
+  viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, find
+  within the file shown, the index following the disk through a file watcher; in a thread's composer:
+  mentions of threads, models and pull requests (`#`), review comments as chips instead of text.
+
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
   Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and
   the built-in AI assistant is an agent over the whole notebook — full-text search, queries,
@@ -18,11 +39,12 @@ done in the repository simply disappears from the list.
   agent asks for in a private card, subscription limits, the usage history with API-equivalent costs
   from the agents' own session logs, dictation on the desktop, prompt links, drawings in answers,
   tool calls in words, the list's pins, archive, search, badges and notifications, side chats
-  (`/btw`), sub-conversations that wake their parent and conversations archived by themselves are
-  there (docs/UI.md "AI chat", "AI agents (ACP)", "Agents delegate"). Not yet: the usage history
-  read from Codex's compressed rollouts (`rollout-*.jsonl.zst`: skipped) and of
-  `codex-auto-review`'s turns (the log names no model: tokens without a cost); all of it tried with
-  a real Claude Code and Codex.
+  (`/btw`), sub-conversations that wake their parent, conversations archived by themselves, a turn's
+  work log ("Worked for …") and find in a thread are there (docs/UI.md "AI chat", "AI agents
+  (ACP)", "Agents delegate"). Not yet: the usage history read from Codex's compressed rollouts
+  (`rollout-*.jsonl.zst`: skipped) and of `codex-auto-review`'s turns (the log names no model: tokens
+  without a cost); all of it tried with a real Claude Code and Codex (a thread's turns are:
+  tst_shell_agents realAgentThread).
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
@@ -50,7 +72,8 @@ done in the repository simply disappears from the list.
   key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
   real microphone on Windows; the browser's picture picker for a message in a real browser (CI's
   headless Chrome cannot open a file picker); the chat's notifications (an answer, a failure, a
-  question while the app is behind another: docs/UI.md "AI chat") on a real phone — Android shows
+  question while the app is behind another, an AI agent's own — `brulion_app_chat_notify`: docs/UI.md
+  "AI chat") on a real phone — Android shows
   them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; a side
   chat's pane (`/btw`) on a real phone (in place of the conversation, Back closing it) and a
   sub-conversation's wake with a real Claude Code and Codex.
@@ -103,8 +126,7 @@ done in the repository simply disappears from the list.
   self-test's phone run has them); replacing a built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
   input rules (`b.app.inputRule`) in source mode too (its TextEdit has an undo stack of its own) and
   the tint of `b.app.tagStyle` in rows drawn by `PageItem` / `JournalDayItem` (behind their
-  switches) and in exports; in `brulion-cli extension run`, the notebook's own settings for
-  `b.app.get` (they are there without the app: `.brulion/config.json`).
+  switches) and in exports.
 * **Gym: next steps** — Polish instructions for the rest of the exercises (the 144 common ones
   have them; the other free-exercise-db's stay English); the exercises' pictures checked on a real phone; the rest timer's notification with the
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).

@@ -908,6 +908,7 @@ void Engine::pushEnvironment(const QString &extension)
     set("setting", &Engine::apiSetting);
     set("setSetting", &Engine::apiSetSetting);
     set("stopTimer", &Engine::apiStopTimer);
+    set("notify", &Engine::apiNotify);
     set("aiModel", &Engine::apiAiModel);
     // b.require = factory(raw, done): the module's chunk runs in the Luau wrapper (prelude).
     lua_getref(L, m_requireFactoryRef);
@@ -1994,6 +1995,56 @@ int Engine::stopTimerImpl(lua_State *L)
     }
     m_host->stopTimer(extension);
     return 0;
+}
+
+int Engine::apiNotify(lua_State *L)
+{
+    return finishApi(L, self(L)->notifyImpl(L));
+}
+
+int Engine::notifyImpl(lua_State *L)
+{
+    // b.notify(text) or b.notify(text, { title = …, page = … }): true, or false and why not. Only
+    // arguments of the wrong kind raise; a notification that is not shown is an answer.
+    NotifySpec spec;
+    if (!argString(L, 1, "b.notify", &spec.text))
+        return kRaise;
+    if (!lua_isnoneornil(L, 2)) {
+        if (lua_type(L, 2) != LUA_TTABLE)
+            return failWith(
+                    L, u"b.notify: argument 2 must be a table, not %1"_s.arg(QString::fromUtf8(luaL_typename(L, 2))));
+        QVariant options;
+        if (!argValue(L, 2, "b.notify", &options))
+            return kRaise;
+        const QVariantMap map = options.toMap();
+        for (const QString &key : {u"title"_s, u"page"_s}) {
+            const QVariant v = map.value(key);
+            if (v.isValid() && v.metaType().id() != QMetaType::QString)
+                return failWith(L, u"b.notify: %1 must be a text"_s.arg(key));
+        }
+        spec.title = map.value(u"title"_s).toString();
+        spec.page = map.value(u"page"_s).toString();
+    }
+    QString why;
+    if (m_noWrites) {
+        why = u"not from a macro or a template variable"_s;
+    } else if (m_loading) {
+        why = u"not while the extension loads"_s;
+    } else {
+        spec.text = cutText(spec.text.trimmed(), QuestionLimits::notifyText);
+        spec.title = cutText(spec.title.simplified(), QuestionLimits::notifyTitle);
+        spec.page = spec.page.trimmed();
+        if (spec.text.isEmpty())
+            why = u"empty"_s;
+        else
+            why = m_host->notify(extensionOf(L), spec);
+    }
+    Unlimited unlimited(&m_unlimited);
+    lua_pushboolean(L, why.isEmpty());
+    if (why.isEmpty())
+        return 1;
+    pushString(L, why);
+    return 2;
 }
 
 QVariant resolvedData(const QVariant &stored)

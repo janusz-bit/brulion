@@ -16,7 +16,8 @@
 // user's yes), a picture looked at (a request of its own with the picture, its answer the tool's
 // result), an unknown tool, too many turns, the command the palette does not offer and its run by
 // hand; the app's own tools only with ctx.appTools (a setting changed with the user's yes, a command
-// of the app run, a theme page written and picked, a button written as an extension).
+// of the app run, a theme page written and picked, a button written as an extension, a notification
+// shown or refused).
 
 #include "ai/ai.h"
 #include "extensions/builtin.h"
@@ -1821,7 +1822,7 @@ private Q_SLOTS:
                                                {u"onDevice"_s, false},
                                                {u"small"_s, false},
                                                {u"trained"_s, false}}
-                                << 18;
+                                << 19;
         QTest::newRow("trained") << QVariantMap{{u"provider"_s, u"local"_s},
                                                 {u"model"_s, u"brulion-assistant-1.7b"_s},
                                                 {u"onDevice"_s, true},
@@ -1847,8 +1848,9 @@ private Q_SLOTS:
         for (const QVariant &t : request.value(u"tools"_s).toList())
             names << t.toMap().value(u"name"_s).toString();
         QCOMPARE(names.size(), tools);
-        QCOMPARE(names.contains(u"app_settings"_s), tools == 18);
-        QCOMPARE(request.value(u"system"_s).toString().contains(u"app_settings"_s), tools == 18);
+        QCOMPARE(names.contains(u"app_settings"_s), tools == 19);
+        QCOMPARE(names.contains(u"notify_user"_s), tools == 19);
+        QCOMPARE(request.value(u"system"_s).toString().contains(u"app_settings"_s), tools == 19);
     }
 
     // The app's own tools: only with ctx.appTools (the app, its model on the network) — never for the
@@ -1870,12 +1872,12 @@ private Q_SLOTS:
         r = askWithApp(u"Włącz ciemny motyw"_s);
         request = r.value.toMap().value(u"request"_s).toMap();
         const QVariantList tools = request.value(u"tools"_s).toList();
-        QCOMPARE(tools.size(), 18);
+        QCOMPARE(tools.size(), 19);
         QStringList names;
         for (const QVariant &t : tools)
             names << t.toMap().value(u"name"_s).toString();
         QCOMPARE(names.mid(12), (QStringList{u"app_settings"_s, u"change_setting"_s, u"app_commands"_s,
-                                             u"run_app_command"_s, u"set_theme"_s, u"add_button"_s}));
+                                             u"run_app_command"_s, u"set_theme"_s, u"add_button"_s, u"notify_user"_s}));
         // The rules say when; the notes' rules are the same text before them.
         QVERIFY(request.value(u"system"_s).toString().startsWith(system));
         QVERIFY(request.value(u"system"_s).toString().contains(u"app_settings, potem change_setting"_s));
@@ -2099,6 +2101,63 @@ private Q_SLOTS:
         QVERIFY(m_appCalls.isEmpty()); // (nothing of the app changed before Run)
         r = m_engine->resume(r.call, answering(u"Dodałem przycisk: naciśnij Uruchom na jego stronie."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
+    }
+
+    // notify_user: b.notify, asked of nobody (it changes nothing) and no "In the app" line; the app's
+    // no is the result the model tells the user of, no failure; the same notification again is the
+    // same call. Without the app (onNotify unset) it is "not available here".
+    void notifiesTheUser()
+    {
+        QVERIFY(open(sampleNotes()));
+        playTheApp();
+        QList<std::pair<QString, NotifySpec>> notified;
+        QString answer;
+        m_host->onNotify = [&](const QString &extension, const NotifySpec &spec) {
+            notified.append({extension, spec});
+            return answer;
+        };
+        Result r = askWithApp(u"Daj mi znać, gdy znajdziesz czynsz"_s);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"notify_user"_s,
+                                                   {{u"text"_s, u"  Czynsz: zapłacić do piątku  "_s},
+                                                    {u"title"_s, u"Czynsz"_s},
+                                                    {u"page"_s, u"[[Dom]]"_s}}),
+                                              call(u"c2"_s, u"notify_user"_s, {{u"text"_s, u" "_s}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s); // (no question asked)
+        QVariantList results = lastResults(r);
+        QCOMPARE(results[0].toMap().value(u"content"_s).toString(), u"Notified."_s);
+        QVERIFY(!results[0].toMap().value(u"isError"_s).toBool());
+        QVERIFY(results[1].toMap().value(u"isError"_s).toBool());
+        QCOMPARE(notified.size(), 1);
+        QCOMPARE(notified[0].first, u"asystent"_s);
+        QCOMPARE(notified[0].second.text, u"Czynsz: zapłacić do piątku"_s);
+        QCOMPARE(notified[0].second.title, u"Czynsz"_s);
+        QCOMPARE(notified[0].second.page, u"Dom"_s);
+        QCOMPARE(m_statuses.value(m_statuses.size() - 2), u"Wysyłam powiadomienie…"_s);
+        // The same again: not shown again. Refused by the app: its reason, for the user.
+        answer = u"too many: at most 10 an hour"_s;
+        r = m_engine->resume(r.call, calling({call(u"c3"_s, u"notify_user"_s,
+                                                   {{u"text"_s, u"  Czynsz: zapłacić do piątku  "_s},
+                                                    {u"title"_s, u"Czynsz"_s},
+                                                    {u"page"_s, u"[[Dom]]"_s}}),
+                                              call(u"c4"_s, u"notify_user"_s, {{u"text"_s, u"Żółw je sałatę"_s}})}));
+        results = lastResults(r);
+        QVERIFY2(results[0].toMap().value(u"content"_s).toString().startsWith(u"The same call as before"_s),
+                 qPrintable(results[0].toMap().value(u"content"_s).toString()));
+        QCOMPARE(results[1].toMap().value(u"content"_s).toString(), u"Not notified: too many: at most 10 an hour."_s);
+        QVERIFY(!results[1].toMap().value(u"isError"_s).toBool());
+        QCOMPARE(notified.size(), 2);
+        QCOMPARE(notified[1].second.title, QString());
+        r = m_engine->resume(r.call, answering(u"Czynsz jest do zapłacenia do piątku."_s));
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toString(), u"Czynsz jest do zapłacenia do piątku."_s); // (nothing changed in the app)
+        QVERIFY(m_appCalls.isEmpty());
+
+        // Without the app's handler: not available.
+        QVERIFY(open(sampleNotes(), QDate(2026, 11, 11), u"en"_s));
+        r = askWithApp(u"Tell me when you find the rent"_s);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"notify_user"_s, {{u"text"_s, u"Rent"_s}})}));
+        QCOMPARE(firstResult(r), u"Not notified: not available here."_s);
+        QCOMPARE(m_statuses.value(m_statuses.size() - 2), u"Sending a notification…"_s);
     }
 
     void looksAtAPicture()

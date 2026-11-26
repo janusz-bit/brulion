@@ -153,6 +153,20 @@ class AppSettings : public QObject {
     /// "Notify when the AI answers" (key `ai/chatNotify`; WorkspaceChats::setNotifyMode): "always",
     /// "background" (only while the app is not in front: the default) or "never".
     Q_PROPERTY(QString aiChatNotify READ aiChatNotify WRITE setAiChatNotify NOTIFY aiChatNotifyChanged FINAL)
+    /// "New conversations answered by" (key `ai/defaultPartner`; WorkspaceChats::setDefaultPartner):
+    /// "" the built-in assistant (the default), `acp:<id>` an AI agent, an extension's chat command.
+    Q_PROPERTY(QString aiDefaultPartner READ aiDefaultPartner WRITE setAiDefaultPartner NOTIFY aiDefaultPartnerChanged
+                       FINAL)
+    /// "Let AI agents send notifications" (key `ai/agentNotify`, on by default;
+    /// WorkspaceChats::setAgentNotifications).
+    Q_PROPERTY(bool aiAgentNotify READ aiAgentNotify WRITE setAiAgentNotify NOTIFY aiAgentNotifyChanged FINAL)
+    /// The app's mode (key `ui/mode`; docs/CODE.md): "notes" — the notebook (the default) — or
+    /// "code": projects and AI agents' threads, as in T3 Code. A device setting.
+    Q_PROPERTY(QString appMode READ appMode WRITE setAppMode NOTIFY appModeChanged FINAL)
+    /// "Let extensions send notifications" (key `extensions/notify`, on by default;
+    /// NotificationCenter::setAllowed: b.notify).
+    Q_PROPERTY(
+            bool extensionsNotify READ extensionsNotify WRITE setExtensionsNotify NOTIFY extensionsNotifyChanged FINAL)
     /// "Archive conversations untouched for" (key `ai/chatAutoArchive`; WorkspaceChats::
     /// setAutoArchiveDays): "never" (the default), or the days as a number — "1", "3", "7", "30".
     Q_PROPERTY(QString aiChatAutoArchive READ aiChatAutoArchive WRITE setAiChatAutoArchive NOTIFY
@@ -204,6 +218,10 @@ class AppSettings : public QObject {
     /// copy, the file and the export have none).
     Q_PROPERTY(bool codeLineNumbers READ codeLineNumbers WRITE setCodeLineNumbers NOTIFY codeLineNumbersChanged
                        FINAL)
+    /// Code mode's terminals drawn by Atrament (docs/CODE-TERMINAL.md "Drawn by Atrament"; default
+    /// off; where Atrament is built: TerminalRegistry.atramentAvailable). This device's.
+    Q_PROPERTY(
+            bool terminalAtrament READ terminalAtrament WRITE setTerminalAtrament NOTIFY terminalAtramentChanged FINAL)
     /// Task status history (docs/SYNTAX.md §5 "Time tracking and status history"; default off):
     /// a status change adds a `State "DONE" from "TODO" [time]` line to the task's `:LOGBOOK:`, and
     /// "In progress" starts its clock (leaving it stops the clock), as Logseq does. Pushed into the
@@ -434,6 +452,14 @@ public:
     void setChatHooksPublicUrl(const QString &url);
     QString aiChatNotify() const;
     void setAiChatNotify(const QString &mode);
+    QString aiDefaultPartner() const;
+    void setAiDefaultPartner(const QString &partner);
+    bool aiAgentNotify() const;
+    void setAiAgentNotify(bool on);
+    bool extensionsNotify() const;
+    void setExtensionsNotify(bool on);
+    QString appMode() const;
+    void setAppMode(const QString &mode);
     QString aiChatAutoArchive() const;
     void setAiChatAutoArchive(const QString &days);
     /// aiChatAutoArchive() in days (0: never).
@@ -506,6 +532,8 @@ public:
     void setLightPictureBacking(bool on);
     bool codeLineNumbers() const;
     void setCodeLineNumbers(bool on);
+    bool terminalAtrament() const;
+    void setTerminalAtrament(bool on);
     QString exportWebPictures() const;
     void setExportWebPictures(const QString &mode);
     bool spellCheck() const;
@@ -711,6 +739,10 @@ Q_SIGNALS:
     void acpShareChanged();
     void chatHooksChanged();
     void aiChatNotifyChanged();
+    void aiDefaultPartnerChanged();
+    void aiAgentNotifyChanged();
+    void extensionsNotifyChanged();
+    void appModeChanged();
     void aiChatAutoArchiveChanged();
     void chatToolCallsChanged();
     void editorLineSpacingChanged();
@@ -723,6 +755,7 @@ Q_SIGNALS:
     void pictureFramesChanged();
     void lightPictureBackingChanged();
     void codeLineNumbersChanged();
+    void terminalAtramentChanged();
     void exportWebPicturesChanged();
     void spellCheckChanged();
     void taskStatusHistoryChanged();

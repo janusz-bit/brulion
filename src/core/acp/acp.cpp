@@ -1219,6 +1219,11 @@ QString Client::keyOf(const QString &sessionId) const
 
 void Client::onNotification(const QString &method, const QJsonObject &params)
 {
+    if (method.startsWith(u'_')) {
+        // An extension's (a computer relaying the protocol tells the app: `_brulion/checkpoint`).
+        Q_EMIT extensionNotified(keyOf(params.value(u"sessionId"_s).toString()), method, params);
+        return;
+    }
     if (method != u"session/update")
         return; // (nothing else is said to a client)
     const QString key = keyOf(params.value(u"sessionId"_s).toString());

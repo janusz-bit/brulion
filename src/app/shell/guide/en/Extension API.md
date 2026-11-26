@@ -161,6 +161,7 @@ end, { label = "Archive the done tasks" })
 | `b.status(text)` | says what a command waiting for an answer is doing now ("Reading “Home”…"); the AI chat shows it under the AI's dots, `b.status("")` clears it |
 | `b.timer(seconds, { label = "Tea", message = "The tea is ready." })` | starts the extension's own timer (below, Timers) |
 | `b.stopTimer()` | stops it |
+| `b.notify(text, { title = "…", page = "…" })` | shows you a notification from the extension (below, Notifications): `true` when it was shown, else `false` and why not |
 | `b.data(name)`, `b.data(name, key)` | data that comes with a built-in extension (the gym's catalog of exercises, the AI assistant's reference for writing extensions); with `key` one entry of it (the gym's instructions of one exercise: `b.data("instructions", "back-squat")`); `nil` in your own |
 
 ## Commands
@@ -335,7 +336,7 @@ docs/mood
 - `ctx.args` is the list of arguments, separated by commas: `{{ext:a/b Squat, 30}}` gives `{ "Squat", "30" }`; `ctx.text` is them as written.
 - `ctx.page` and `ctx.path` name the note the macro is in, `ctx.date` its day when it is a day of the journal.
 - Return a text, a number, `b.ui.text` (muted, or in a colour), `b.ui.link`, `b.ui.heading` (bold) — or a list of them. It is always shown as text, never as HTML.
-- A macro is computed again by itself when a note it read changes, and when one of its extension's settings does. It may not ask a question nor change anything — no writes, no settings set, no timers —, and it has a quarter of a second.
+- A macro is computed again by itself when a note it read changes, and when one of its extension's settings does. It may not ask a question nor change anything — no writes, no settings set, no timers, no notifications —, and it has a quarter of a second.
 - A macro of an extension that has not run on this device shows a lock: a click shows the extension's code, to read before you run it.
 - The value shows wherever the note's text does: in **Tasks**, the backlinks, the results of a query and the cells of a database view, and in blocks you copy and paste into a mail or an office app. Exports to HTML, PDF and Word show it too; Markdown exports and copied Markdown keep the macro as written.
 
@@ -380,7 +381,7 @@ end, { description = "Open tasks due by the note's day" })
 | `"timer"` | the extension's own timer ended | `label`, `seconds` |
 | `"route"` | the screen shows something else: a page, a day, a view | `view`, `page`, `path`, `date`, `previous` |
 
-A reaction never hears what its own extension wrote — so it never answers itself — but it hears every other extension: a task ticked in one extension's view reaches the page another one keeps. Extensions answering each other stop after four rounds. A sync brings what another device's extensions wrote, with `source = "sync"`: a reaction that adds something for every event should skip those, or the line comes once from each device. A reaction cannot ask a question, and one that fails three times in a row is switched off until the extension is loaded again.
+A reaction never hears what its own extension wrote — so it never answers itself — but it hears every other extension: a task ticked in one extension's view reaches the page another one keeps. Extensions answering each other stop after four rounds. A sync brings what another device's extensions wrote, with `source = "sync"`: a reaction that adds something for every event should skip those, or the line comes once from each device. A reaction cannot ask a question (it may show a notification), and one that fails three times in a row is switched off until the extension is loaded again.
 
 ```luau
 -- A line in today's journal for every task done on this device.
@@ -470,6 +471,22 @@ b.on("timer", function(e)
 end)
 ```
 
+## Notifications
+`b.notify("The report is due tomorrow.", { title = "Report", page = "Work" })` shows you a notification: a system notification, or a message in the app while Brulion is in front, titled with the extension's name. `title` says what it is about, `page` is a page that opens when you tap it; both may be left out. An extension needs no permission for it — a notification changes no note.
+
+It gives `true` when the notification was shown, else `false` and the reason: `"turned off"` when you turned notifications from extensions off in **Settings → Extensions**, `"too many: at most 10 an hour"` (one extension shows at most 10 an hour), `"empty"` for a text of nothing but spaces, `"not available here"` where no app shows them (the command line). A macro, a template variable and an extension's code while it loads get `false` too: notify from a command, a view's action or a reaction. The text is cut to 1000 characters, the title to 80.
+
+```luau
+b.command("due-soon", function(ctx)
+    local due = b.query("type:tasks status:open due:today..+3d", 20)
+    if due.total == 0 then
+        return "Nothing is due in the next three days"
+    end
+    local shown, why = b.notify(`{due.total} tasks are due in the next three days`, { title = "Due soon" })
+    return if shown then "Notified" else `Not notified: {why}`
+end, { label = "Tell me what is due soon" })
+```
+
 ## Shared code
 `b.require("Shared helpers")` gives what the code of another extension page returns — usually a table of functions that several extensions use, so each of them does not carry its own copy. That page is an extension like any other (tagged `extension`, its code in `luau` blocks, ending with `return`), and it runs only once you approved it on this device. Each extension that uses it gets a copy of its own, with its own permissions: shared code can never do more than the extension using it may. When the shared page changes, the extensions using it load again.
 
@@ -496,7 +513,7 @@ end, { label = "How many open tasks" })
 | `b.app.commands()` | the command palette's commands, each `{ id, title, shortcut, enabled }` |
 | `b.app.run(id)` | runs one: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
 | `b.app.settings()` | the settings an extension may change, with their values and what they take: this device's (`scope = "device"`), then the notebook's own (`scope = "notebook"`, kept in `.brulion/config.json` and synced: `journalsFolder`, `journalFileFormat`, `journalTemplate`, `templatesFolder`, `newPagesFolder`, `weekStartsOn`, `defaultReminderTime`, the flashcards' `flashcards.tags`, `flashcards.clozeBold` …, `themePage`) |
-| `b.app.get(key)`, `b.app.set(key, value)` | one setting: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; the notebook's for every device of it: `b.app.set("journalsFolder", "Diary")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Themes/Sepia.md")` |
+| `b.app.get(key)`, `b.app.set(key, value)` | one setting: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; the notebook's for every device of it: `b.app.set("journalsFolder", "Diary")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Themes/Sepia.md")`; `brulion-cli extension run` reads only the notebook's (`b.app.get("journalsFolder")`) |
 | `b.app.navigate(view)` | shows a view: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
 | `b.app.open(page, { line = 12, side = true })` | opens a page, at a line, in the side panel |
 | `b.app.back()` | goes back |
@@ -601,7 +618,7 @@ An AI agent you work with can do all of this in the running app at once, without
 - There are no files, no network and no other programs: only `b`.
 
 ## Limits
-One call may take 2 seconds (the time you spend answering a question does not count) — a macro a quarter of a second, a template variable one second —, and all extensions together 64 MB of memory; past either, the call is stopped and the rest keeps working. A macro shows at most 400 characters; the macros of one page have 2 seconds together. A view shows up to 2000 lines, a row up to 24 controls; `b.blocks` gives up to 20 000 blocks; one request to a model has up to 200 000 characters. A question's text shows up to 10 000 characters, `b.choose` up to 500 options, `b.form` up to 50 fields; a timer's label 100 characters; an extension's settings 64 KB; `b.require` goes up to 16 pages deep.
+One call may take 2 seconds (the time you spend answering a question does not count) — a macro a quarter of a second, a template variable one second —, and all extensions together 64 MB of memory; past either, the call is stopped and the rest keeps working. A macro shows at most 400 characters; the macros of one page have 2 seconds together. A view shows up to 2000 lines, a row up to 24 controls; `b.blocks` gives up to 20 000 blocks; one request to a model has up to 200 000 characters. A question's text shows up to 10 000 characters, `b.choose` up to 500 options, `b.form` up to 50 fields; a timer's label 100 characters; a notification's text 1000 characters, 10 an hour from one extension; an extension's settings 64 KB; `b.require` goes up to 16 pages deep.
 
 ## Errors
 

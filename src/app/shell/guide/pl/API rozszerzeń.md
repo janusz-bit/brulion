@@ -161,6 +161,7 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 | `b.status(tekst)` | mówi, co robi teraz polecenie czekające na odpowiedź („Czytam „Dom”…”); czat z AI pokazuje to pod kropkami AI, `b.status("")` to czyści |
 | `b.timer(sekundy, { label = "Herbata", message = "Herbata gotowa." })` | uruchamia własny timer rozszerzenia (niżej, Timery) |
 | `b.stopTimer()` | zatrzymuje go |
+| `b.notify(tekst, { title = "…", page = "…" })` | pokazuje Ci powiadomienie od rozszerzenia (niżej, Powiadomienia): `true`, gdy się pokazało, a jeśli nie, `false` i powód |
 | `b.data(nazwa)`, `b.data(nazwa, klucz)` | dane dołączone do wbudowanego rozszerzenia (katalog ćwiczeń Siłowni, opis pisania rozszerzeń dla Asystenta AI); z `klucz` jeden ich wpis (opis wykonania jednego ćwiczenia Siłowni: `b.data("instructions", "back-squat")`); we własnym `nil` |
 
 ## Polecenia
@@ -335,7 +336,7 @@ docs/nastroj
 - `ctx.args` to lista argumentów rozdzielonych przecinkami: `{{ext:a/b Przysiad, 30}}` daje `{ "Przysiad", "30" }`; `ctx.text` to one tak, jak je zapisano.
 - `ctx.page` i `ctx.path` wskazują notatkę z makrem, `ctx.date` jej dzień, gdy to dzień dziennika.
 - Zwróć tekst, liczbę, `b.ui.text` (przygaszony albo w kolorze), `b.ui.link`, `b.ui.heading` (pogrubiony) — albo ich listę. Zawsze pokazuje się jako tekst, nigdy jako HTML.
-- Makro liczy się od nowa samo, gdy zmieni się notatka, którą czytało, i gdy zmieni się któreś z ustawień jego rozszerzenia. Nie może pytać ani niczego zmieniać — nie zapisuje, nie zmienia ustawień, nie uruchamia timerów — i ma ćwierć sekundy.
+- Makro liczy się od nowa samo, gdy zmieni się notatka, którą czytało, i gdy zmieni się któreś z ustawień jego rozszerzenia. Nie może pytać ani niczego zmieniać — nie zapisuje, nie zmienia ustawień, nie uruchamia timerów, nie wysyła powiadomień — i ma ćwierć sekundy.
 - Makro rozszerzenia, które jeszcze nie działało na tym urządzeniu, pokazuje kłódkę: kliknięcie pokazuje kod rozszerzenia do przeczytania przed uruchomieniem.
 - Wartość widać wszędzie tam, gdzie tekst notatki: w **Zadaniach**, w odnośnikach zwrotnych, w wynikach zapytania i w komórkach widoku bazy danych, a także w blokach skopiowanych i wklejonych do poczty albo edytora biurowego. Eksport do HTML, PDF i Worda też ją pokazuje; eksport do Markdownu i skopiowany Markdown zostawiają makro tak, jak je zapisano.
 
@@ -380,7 +381,7 @@ end, { description = "Otwarte zadania z terminem do dnia notatki" })
 | `"timer"` | skończył się własny timer rozszerzenia | `label`, `seconds` |
 | `"route"` | ekran pokazuje coś innego: stronę, dzień, widok | `view`, `page`, `path`, `date`, `previous` |
 
-Reakcja nigdy nie słyszy tego, co zapisało jej własne rozszerzenie — więc nie odpowiada sama sobie — ale słyszy każde inne: zadanie odhaczone w widoku jednego rozszerzenia dociera do strony, którą prowadzi inne. Rozszerzenia odpowiadające sobie nawzajem zatrzymują się po czterech rundach. Synchronizacja przynosi to, co zapisały rozszerzenia na innym urządzeniu, z `source = "sync"`: reakcja, która coś dopisuje przy każdym zdarzeniu, powinna je pomijać, inaczej wpis pojawi się raz z każdego urządzenia. Reakcja nie może zadać pytania, a taka, która zawiedzie trzy razy z rzędu, zostaje wyłączona do ponownego wczytania rozszerzenia.
+Reakcja nigdy nie słyszy tego, co zapisało jej własne rozszerzenie — więc nie odpowiada sama sobie — ale słyszy każde inne: zadanie odhaczone w widoku jednego rozszerzenia dociera do strony, którą prowadzi inne. Rozszerzenia odpowiadające sobie nawzajem zatrzymują się po czterech rundach. Synchronizacja przynosi to, co zapisały rozszerzenia na innym urządzeniu, z `source = "sync"`: reakcja, która coś dopisuje przy każdym zdarzeniu, powinna je pomijać, inaczej wpis pojawi się raz z każdego urządzenia. Reakcja nie może zadać pytania (może za to pokazać powiadomienie), a taka, która zawiedzie trzy razy z rzędu, zostaje wyłączona do ponownego wczytania rozszerzenia.
 
 ```luau
 -- Wpis w dzisiejszym dzienniku przy każdym zadaniu zrobionym na tym urządzeniu.
@@ -470,6 +471,22 @@ b.on("timer", function(e)
 end)
 ```
 
+## Powiadomienia
+`b.notify("Raport trzeba oddać jutro.", { title = "Raport", page = "Praca" })` pokazuje Ci powiadomienie: systemowe albo — gdy Brulion jest na wierzchu — komunikat w aplikacji, z nazwą rozszerzenia w tytule. `title` mówi, czego dotyczy, `page` to strona, która otworzy się po dotknięciu; oba można pominąć. Rozszerzenie nie potrzebuje do tego uprawnień — powiadomienie nie zmienia żadnej notatki.
+
+Daje `true`, gdy powiadomienie się pokazało, a jeśli nie, `false` i powód (po angielsku): `"turned off"`, gdy wyłączysz powiadomienia od rozszerzeń w **Ustawieniach → Rozszerzenia**, `"too many: at most 10 an hour"` (jedno rozszerzenie pokaże najwyżej 10 na godzinę), `"empty"` dla tekstu z samych spacji, `"not available here"` tam, gdzie żadna aplikacja ich nie pokazuje (wiersz poleceń). Makro, zmienna szablonu i kod rozszerzenia w trakcie wczytywania też dostają `false`: powiadamiaj z polecenia, akcji widoku albo reakcji. Tekst jest przycinany do 1000 znaków, tytuł do 80.
+
+```luau
+b.command("na-dniach", function(ctx)
+    local due = b.query("type:tasks status:open due:today..+3d", 20)
+    if due.total == 0 then
+        return "Przez najbliższe trzy dni nic nie mija"
+    end
+    local shown, why = b.notify(`Zadania z terminem w ciągu trzech dni: {due.total}`, { title = "Wkrótce termin" })
+    return if shown then "Powiadomiono" else `Bez powiadomienia: {why}`
+end, { label = "Powiedz, co wkrótce mija" })
+```
+
 ## Wspólny kod
 `b.require("Wspólne funkcje")` daje to, co zwraca kod innej strony rozszerzenia — zwykle tabelę funkcji, których używa kilka rozszerzeń, żeby każde nie nosiło własnej kopii. Taka strona to rozszerzenie jak każde inne (z tagiem `rozszerzenie`, kodem w blokach `luau`, zakończonym przez `return`) i działa dopiero, gdy zatwierdzisz ją na tym urządzeniu. Każde rozszerzenie, które jej używa, dostaje własną kopię, z własnymi uprawnieniami: wspólny kod nigdy nie zrobi więcej, niż wolno rozszerzeniu, które go używa. Gdy wspólna strona się zmieni, rozszerzenia, które jej używają, wczytują się od nowa.
 
@@ -496,7 +513,7 @@ end, { label = "Ile otwartych zadań" })
 | `b.app.commands()` | polecenia palety, każde `{ id, title, shortcut, enabled }` |
 | `b.app.run(id)` | uruchamia jedno z nich: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
 | `b.app.settings()` | ustawienia, które rozszerzenie może zmienić, z wartościami i tym, co przyjmują: tego urządzenia (`scope = "device"`), potem własne ustawienia notatnika (`scope = "notebook"`, zapisane w `.brulion/config.json` i synchronizowane: `journalsFolder`, `journalFileFormat`, `journalTemplate`, `templatesFolder`, `newPagesFolder`, `weekStartsOn`, `defaultReminderTime`, fiszkowe `flashcards.tags`, `flashcards.clozeBold` …, `themePage`) |
-| `b.app.get(klucz)`, `b.app.set(klucz, wartość)` | jedno ustawienie: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; ustawienia notatnika dla każdego jego urządzenia: `b.app.set("journalsFolder", "Dziennik")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Motywy/Sepia.md")` |
+| `b.app.get(klucz)`, `b.app.set(klucz, wartość)` | jedno ustawienie: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; ustawienia notatnika dla każdego jego urządzenia: `b.app.set("journalsFolder", "Dziennik")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Motywy/Sepia.md")`; `brulion-cli extension run` czyta tylko ustawienia notatnika (`b.app.get("journalsFolder")`) |
 | `b.app.navigate(widok)` | pokazuje widok: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
 | `b.app.open(strona, { line = 12, side = true })` | otwiera stronę, w danym wierszu, w panelu bocznym |
 | `b.app.back()` | wraca |
@@ -602,7 +619,7 @@ Agent AI, z którym pracujesz, może zrobić to wszystko od razu w działającej
 - Nie ma plików, sieci ani innych programów: jest tylko `b`.
 
 ## Limity
-Jedno wywołanie może trwać 2 sekundy (czas, w którym odpowiadasz na pytanie, się nie liczy) — makro ćwierć sekundy, zmienna szablonu sekundę —, a wszystkie rozszerzenia razem mają 64 MB pamięci; po przekroczeniu wywołanie zostaje zatrzymane, a reszta działa dalej. Widok pokazuje do 2000 wierszy, wiersz `row` do 24 kontrolek; `b.blocks` daje do 20 000 bloków; jedno pytanie do modelu ma do 200 000 znaków. Makro pokazuje najwyżej 400 znaków; makra jednej strony mają razem 2 sekundy. Tekst pytania pokazuje do 10 000 znaków, `b.choose` do 500 opcji, `b.form` do 50 pól; etykieta timera 100 znaków; ustawienia rozszerzenia 64 KB; `b.require` sięga do 16 stron w głąb.
+Jedno wywołanie może trwać 2 sekundy (czas, w którym odpowiadasz na pytanie, się nie liczy) — makro ćwierć sekundy, zmienna szablonu sekundę —, a wszystkie rozszerzenia razem mają 64 MB pamięci; po przekroczeniu wywołanie zostaje zatrzymane, a reszta działa dalej. Widok pokazuje do 2000 wierszy, wiersz `row` do 24 kontrolek; `b.blocks` daje do 20 000 bloków; jedno pytanie do modelu ma do 200 000 znaków. Makro pokazuje najwyżej 400 znaków; makra jednej strony mają razem 2 sekundy. Tekst pytania pokazuje do 10 000 znaków, `b.choose` do 500 opcji, `b.form` do 50 pól; etykieta timera 100 znaków; tekst powiadomienia 1000 znaków, 10 na godzinę od jednego rozszerzenia; ustawienia rozszerzenia 64 KB; `b.require` sięga do 16 stron w głąb.
 
 ## Błędy
 Komunikaty silnika są po angielsku:

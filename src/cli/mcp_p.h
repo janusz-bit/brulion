@@ -20,6 +20,9 @@ struct McpPolicy {
     /// The running app's AI chat alone (app chat …: `mcp --app-chat`, what every AI agent the app
     /// starts with Brulion's tools gets; --app-control has them too).
     bool appChat = false;
+    /// No notebook tools: only the app's (`mcp --no-notes`: a thread of Code mode, working in a
+    /// project and not in the notebook — docs/CODE.md).
+    bool noNotes = false;
     bool remote = false;     ///< over the network: no app.* tools at all, no paths of this computer
     /// The app tools reach the app on another device through `acp serve`'s tunnel
     /// (BRULION_APP_SOCKET): its name ("" the app on this desktop).

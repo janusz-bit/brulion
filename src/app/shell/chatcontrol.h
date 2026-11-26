@@ -1,7 +1,8 @@
 #pragma once
 // ChatControl — the AI chat for AI agents and scripts (docs/CLI.md "Conversations"): the remote
 // control's chat methods (ipc/controlprotocol.h: chats, chatRead, chatStart, chatSend, chatWait,
-// chatStop, chatPartners, chatSchedules, chatScheduleAdd / Set / Remove / Run, chatRequestSecret)
+// chatStop, chatPartners, chatSchedules, chatScheduleAdd / Set / Remove / Run, chatRequestSecret,
+// chatNotify)
 // answered over WorkspaceChats — `brulion-cli app chat …` and the MCP tools brulion_app_chat_* are
 // its clients.
 //
@@ -11,7 +12,10 @@
 // says `parent:`), it sends to and stops only its own sub-conversations (any depth), within the
 // limits of delegation (ChatLineage: MaxDepth levels, MaxRunningChildren at once), and changes
 // only the schedules it set up from there, and asks the user for a secret (chatRequestSecret:
-// ChatSecrets' private card) only in its own conversation while its turn runs. Reading (chats,
+// ChatSecrets' private card) only in its own conversation while its turn runs, and notifies the
+// user (chatNotify: WorkspaceChats::notify, a click opening its conversation or a page) only from
+// its own conversation. chatStart without a partner goes to the device's default
+// (WorkspaceChats::defaultPartner). Reading (chats,
 // chatRead, chatWait, chatPartners, chatSchedules) is open to all: the agent's notebook tools read
 // every page anyway. No schedule's webhook secret is ever given or taken here.
 //
@@ -89,6 +93,7 @@ private:
     void scheduleAdd(const QJsonObject &params, const Caller &caller, const Reply &reply);
     void scheduleSet(const QString &method, const QJsonObject &params, const Caller &caller, const Reply &reply);
     void requestSecret(const QJsonObject &params, const Caller &caller, const Reply &reply);
+    void notify(const QJsonObject &params, const Caller &caller, const Reply &reply);
 
     /// A conversation's row: {path, name, partner, partnerName, state, failure?, question?,
     /// parent?, side?, wakes?, page?, messages, changed}.

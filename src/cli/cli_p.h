@@ -345,7 +345,8 @@ int exitCode(const Result &result);
 
 /// The MCP server on standard input / output (`brulion-cli mcp`); `appControl`: also the tools
 /// that drive the running app.
-int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl = false, bool appChat = false);
+int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl = false, bool appChat = false,
+             bool noNotes = false);
 /// The newest MCP protocol version these servers speak.
 QString mcpProtocolVersion();
 /// Every MCP protocol version they speak, newest first.

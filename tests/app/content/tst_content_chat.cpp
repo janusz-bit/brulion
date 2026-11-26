@@ -767,6 +767,18 @@ private Q_SLOTS:
         QVERIFY(value(model, 0, "day").toString() != value(model, 2, "day").toString());
         QCOMPARE(value(model, 3, "time").toString(), QString());
         QCOMPARE(value(model, 1, "markdown").toString(), u"Tak"_s); // (no time line in the text)
+        // Their numbers in the page (a work log's key) and find in the conversation.
+        QCOMPARE(value(model, 3, "number").toInt(), 4);
+        QCOMPARE(model.rowsMatching(u"  "_s), QList<int>());
+        QCOMPARE(model.rowsMatching(u"DZIŚ"_s), QList<int>{2});
+        QCOMPARE(model.rowsMatching(u"bez"_s), QList<int>{3});
+        QCOMPARE(model.rowsMatching(u"czasu bez"_s), QList<int>{3}); // (every word, any order)
+        QCOMPARE(model.rowsMatching(u"22:10"_s), QList<int>()); // (the time is no part of the text)
+        QVERIFY(ws->write(u"AI/2026-11-14 Plan.md"_s,
+                          ws->read(u"AI/2026-11-14 Plan.md"_s) + u"- 🧑 Żółw i dziś\n- 🤖 Zolw, tak\n"_s));
+        model.refreshNow();
+        QCOMPARE(model.rowsMatching(u"zolw"_s), (QList<int>{4, 5}));
+        QCOMPARE(model.rowsMatching(u"dzis"_s), (QList<int>{2, 4}));
     }
 
     void renameAndDelete()
@@ -1189,6 +1201,59 @@ private Q_SLOTS:
                  u"---\ntasks: ignore\narchived: true\npinned: true\n---\n- 🧑 Ćma?\n- 🤖 Nocny motyl.\n"_s);
         QVERIFY(!chats->setPinned(u"AI/nie ma.md"_s, true));
         QVERIFY(!chats->setArchived(QString(), true));
+    }
+
+    // Code mode's threads (docs/CODE.md): a project's, with their worktree's branch, filtered by
+    // title or branch (not by the messages), ordered by the last change or by when they started.
+    void codeThreadsListed()
+    {
+        const QHash<QString, QString> files{
+                {u"AI/2026-11-20 Napraw kalkulator.md"_s,
+                 u"---\nproject: sklep\nworktree: \"/drzewa/sklep/napraw\"\nbranch: brulion/napraw-kalkulator\n---\n"
+                 u"- 🧑 Napraw ułamki\n  czas:: 2026-11-20 09:00\n- 🤖 Gotowe.\n"_s},
+                {u"AI/2026-11-21 Rabat.md"_s,
+                 u"---\nproject: sklep\n---\n- 🧑 Dodaj rabat żółwia\n  czas:: 2026-11-21 08:00\n- 🤖 Dodany.\n"_s},
+                {u"AI/2026-11-19 Koszyk.md"_s,
+                 u"---\nproject: sklep\nworktree: \"/drzewa/sklep/koszyk\"\nbranch: brulion/koszyk-zolwia\n---\n"
+                 u"- 🧑 Koszyk\n  czas:: 2026-11-19 10:00\n- 🤖 Jest.\n"_s},
+                {u"AI/2026-11-22 Inny.md"_s, u"---\nproject: inny\n---\n- 🧑 Inny projekt\n- 🤖 Tak.\n"_s},
+                {u"AI/2026-11-18 Notatki.md"_s, u"- 🧑 O notatkach\n- 🤖 Tak.\n"_s},
+        };
+        // (Changed last: Koszyk, then Napraw, then Rabat.)
+        const QHash<QString, QDateTime> times{
+                {u"AI/2026-11-19 Koszyk.md"_s, QDateTime(QDate(2026, 11, 23), QTime(12, 0))},
+                {u"AI/2026-11-20 Napraw kalkulator.md"_s, QDateTime(QDate(2026, 11, 22), QTime(12, 0))},
+                {u"AI/2026-11-21 Rabat.md"_s, QDateTime(QDate(2026, 11, 21), QTime(12, 0))},
+        };
+        auto ws = open(files, true, times);
+        ChatListModel list;
+        list.setWorkspace(ws.get());
+        list.setProject(u"sklep"_s);
+        list.refreshNow();
+        QCOMPARE(listed(list), (QStringList{u"[recent] Koszyk"_s, u"Napraw kalkulator"_s, u"Rabat"_s}));
+        QCOMPARE(value(list, 0, "branch").toString(), u"brulion/koszyk-zolwia"_s);
+        QCOMPARE(value(list, 0, "worktree").toString(), u"/drzewa/sklep/koszyk"_s);
+        QCOMPARE(value(list, 2, "branch").toString(), QString());
+        QCOMPARE(list.paths(), (QStringList{u"AI/2026-11-19 Koszyk.md"_s, u"AI/2026-11-20 Napraw kalkulator.md"_s,
+                                            u"AI/2026-11-21 Rabat.md"_s}));
+        // Newest first by when they started.
+        QSignalSpy sorted(&list, &ChatListModel::sortByChanged);
+        list.setSortBy(u"created"_s);
+        QCOMPARE(sorted.size(), 1);
+        QCOMPARE(listed(list), (QStringList{u"[recent] Rabat"_s, u"Napraw kalkulator"_s, u"Koszyk"_s}));
+        list.setSortBy(u"losowo"_s);
+        QCOMPARE(list.sortBy(), u"activity"_s);
+        // The filter: the title or the branch, diacritics aside; never the messages.
+        QSignalSpy filtered(&list, &ChatListModel::filterChanged);
+        list.setFilter(u"zółwia"_s);
+        QCOMPARE(filtered.size(), 1);
+        QCOMPARE(listed(list), (QStringList{u"[recent] Koszyk"_s}));
+        list.setFilter(u"napraw KALK"_s);
+        QCOMPARE(listed(list), (QStringList{u"[recent] Napraw kalkulator"_s}));
+        list.setFilter(u"ułamki"_s); // (only in a message)
+        QCOMPARE(list.count(), 0);
+        list.setFilter(QString());
+        QCOMPARE(list.count(), 3);
     }
 
     void whatNeedsTheUserComesFirst()

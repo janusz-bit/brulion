@@ -2788,6 +2788,13 @@ zadania: ignoruj
   partners"); `partner: acp:claude` an AI agent set up on the device (docs/UI.md "AI agents
   (ACP)"); without it the built-in AI assistant. The chat writes it when another partner is
   chosen and takes it out for the assistant.
+* **A thread of Code mode** (docs/CODE.md "Threads"): `project:` — the id of a project of the device
+  that runs its turns (`sklep`); `worktree:` — the absolute folder of a git worktree of its own, with
+  `branch:` its branch (none: the project's folder); `pr:` — the pull request it was started on
+  (`#123`, told to its agent); `checkpoint:` — the id of the git checkpoint taken before its newest
+  turn, written by whichever device ran it (docs/CODE.md "Where a thread's checkpoints live"). All
+  plain text values; another app shows them as page properties, and a conversation without
+  `project:` is the notebook's.
 * **Answers reported or hidden** (docs/UI.md "AI chat": Report response): the frontmatter lists them
   by number — the page's messages counted from 1, the user's too —, `zgłoszone: [2]` and `ukryte:
   [4, 6]` (`reported:` / `hidden:` in an English notebook). Either key is read in any case and in

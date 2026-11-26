@@ -493,7 +493,7 @@ const QList<MethodSpec> &controlMethods()
                     u"turn runs (wake: its end wakes the parent conversation)"_s,
                     {param(u"text"_s, ParamType::String, true), param(u"partner"_s, ParamType::String),
                      param(u"page"_s, ParamType::String), param(u"parent"_s, ParamType::String),
-                     param(u"wake"_s, ParamType::Bool)}));
+                     param(u"wake"_s, ParamType::Bool), param(u"project"_s, ParamType::String)}));
         chat(method(u"chatSend"_s,
                     u"Send a message into a conversation whose turn does not run (queue: in line after it); its "
                     u"turn runs (wake: its end wakes the parent conversation)"_s,
@@ -533,6 +533,13 @@ const QList<MethodSpec> &controlMethods()
                      param(u"placeholder"_s, ParamType::String), param(u"url"_s, ParamType::String),
                      oneOf(u"delivery"_s, {u"file"_s, u"value"_s}), range(u"ms"_s, ParamType::Integer, 0, 900000),
                      param(u"path"_s, ParamType::String)}));
+        // A notification an AI agent sends the user (docs/CLI.md "Conversations" → notify): from its
+        // own conversation; a click opens it, or the page named.
+        chat(method(u"chatNotify"_s,
+                    u"Show the user a notification: text, a title, the page a click opens (default the "
+                    u"conversation); at most 10 of a conversation an hour"_s,
+                    {param(u"text"_s, ParamType::String, true), param(u"title"_s, ParamType::String),
+                     param(u"page"_s, ParamType::String), param(u"path"_s, ParamType::String)}));
         // A webhook's request (docs/CLI.md "Webhooks"): only for the app's own hook server.
         MethodSpec hook = method(u"chatHook"_s,
                                  u"A webhook's request for a scheduled conversation (brulion-cli app hooks serve, "

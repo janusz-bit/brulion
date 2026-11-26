@@ -68,6 +68,8 @@ public:
     std::function<void(const QString &extension, int seconds, const QString &label)> onTimer;
     /// b.timer with its message, b.stopTimer (a spec with 0 seconds); unset: onTimer.
     std::function<void(const QString &extension, const TimerSpec &spec)> onExtensionTimer;
+    /// b.notify (Host::notify): "" when shown, else why not. Unset: "not available here".
+    std::function<QString(const QString &extension, const NotifySpec &spec)> onNotify;
     std::function<void(const QString &extension, const QString &message)> onLog;
     std::function<void(const QString &extension, const QString &text)> onStatus;
     /// Called after every write the host made (the path written).
@@ -76,9 +78,9 @@ public:
     /// what follows from its settings is out of date (the app's macros of it).
     std::function<void(const QString &extension)> onSettingChanged;
     /// b.app's operations (Host::app): the app answers them. Unset: a dry run answers the ones
-    /// that read with a state of no app ({view = "", platform = "cli"}, no commands, no settings)
-    /// and notes the ones that change it (dryApp()); a host that is no dry run says the app is
-    /// not there.
+    /// that read with a state of no app ({view = "", platform = "cli"}, no commands, of the settings
+    /// the notebook's own from its config — b.app.get("journalsFolder") — and no device's) and notes
+    /// the ones that change it (dryApp()); a host that is no dry run says the app is not there.
     std::function<QVariant(const QString &extension, const QString &operation, const QVariantMap &args, QString *error)>
             onApp;
     /// The theme or the UI items of an extension changed (Host::appChanged).
@@ -136,6 +138,7 @@ public:
     void timer(const QString &extension, int seconds, const QString &label) override;
     void startTimer(const QString &extension, const TimerSpec &spec) override;
     void stopTimer(const QString &extension) override;
+    QString notify(const QString &extension, const NotifySpec &spec) override;
     /// The extension page `name` as b.require takes it (Options::moduleAllowed decides whether).
     ModuleSource module(const QString &requester, const QString &name) override;
     /// The extension's settings on this device: the notebook's device state (LocalStore

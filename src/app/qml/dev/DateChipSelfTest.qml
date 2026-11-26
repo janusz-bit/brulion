@@ -53,7 +53,10 @@ QtObject {
     function text(): Item { return window.renderedIn(window.delegateAt(row)) }
     function menu(): DateChipMenu { return editor.dateMenu as DateChipMenu }
     function menuOpen(): bool { return menu() !== null && menu().opened }
-    function blockMenu(): BlockMenu { return editor.blockMenu as BlockMenu }
+    // BMenu, as the editor declares it: BlockMenu is loaded when first used (docs/UI.md "QML files
+    // loaded when first used"), and an `as BlockMenu` before that met a type without its meta-object
+    // (UBSan in CI's sanitizer build).
+    function blockMenu(): BMenu { return editor.blockMenu }
     function blockMenuOpen(): bool { return blockMenu() !== null && blockMenu().opened }
     function list(): ListView { return editor.listView }
     function dialogs(): EditorDialogs { return editor.dialogsNow() as EditorDialogs }

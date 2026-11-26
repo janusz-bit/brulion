@@ -39,6 +39,9 @@ If the block also has a `🔁` rule (see [[Tasks|Tasks]]), the reminder repeats 
 - On Windows *Settings → Application → Start when you sign in* starts Brulion hidden in the tray right after you sign in, so that reminders ring from the start of the day. The installer offers the same.
 - Reminders that passed while the device was off wait in the journal, where a banner shows the reminders to deal with: **Open**, **Snooze**, on a task **Done**, and dismissing.
 
+## The list of notifications
+The bell in the top bar (on a phone it shows while something is unread; else **More → Notifications**, or *Notifications* in the command palette) opens what Brulion told you in this notebook: reminders that rang, answers, failures and questions of the [[AI|AI chat]], and what AI agents, extensions and your scripts told you — newest first, under a heading per day. What came while Brulion was in the background is **unread**: an accent dot, and a number on the bell. A click marks it read and opens its note or conversation; **×** removes one, **Mark all as read** and **Clear** all of them. **Unread** shows only those. The list is kept on this device for 30 days (at most 200), never in the notebook.
+
 ## Reminders from other devices
 A reminder added on a computer (or by an AI agent with `brulion-cli`) reaches the phone together with the note, through Syncthing or Nextcloud. On Android it rings even when Brulion is closed: every now and then the phone checks the notes in the background by itself — with Nextcloud it syncs them first — and sets up what it finds. New reminders get added, and the ones deleted or moved on the computer disappear or move.
 - How often is chosen in *Settings → Reminders → Check notes in the background*: every 15 minutes, every 30 minutes (the default), every hour or never. Below this setting you see when the last check happened.

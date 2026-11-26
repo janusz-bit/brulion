@@ -183,6 +183,8 @@ struct QuestionLimits {
     static constexpr int value = 10000;      ///< characters of a text field's value
     static constexpr int timerLabel = 100;   ///< b.timer's label
     static constexpr int timerMessage = 300; ///< b.timer's message
+    static constexpr int notifyTitle = 80;   ///< b.notify's title
+    static constexpr int notifyText = 1000;  ///< b.notify's text
     static constexpr int settings = 32;      ///< b.settings: fields
     static constexpr int settingText = 4000; ///< characters of a setting's text
     static constexpr int requireDepth = 16;  ///< b.require inside b.require
@@ -397,6 +399,7 @@ private:
     static int apiSetting(lua_State *L);
     static int apiSetSetting(lua_State *L);
     static int apiStopTimer(lua_State *L);
+    static int apiNotify(lua_State *L);
     static int apiApp(lua_State *L); // b.app.state … b.app.toast: upvalues (extension, operation)
     static int apiAppTheme(lua_State *L);
     static int apiAppContribute(lua_State *L);
@@ -473,6 +476,7 @@ private:
     int settingImpl(lua_State *L);
     int setSettingImpl(lua_State *L);
     int stopTimerImpl(lua_State *L);
+    int notifyImpl(lua_State *L);
     int appImpl(lua_State *L);
     int appThemeImpl(lua_State *L);
     int appContributeImpl(lua_State *L);

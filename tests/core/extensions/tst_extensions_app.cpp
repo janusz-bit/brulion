@@ -1140,6 +1140,71 @@ private Q_SLOTS:
         QCOMPARE(report.value(u"tagStyles"_s).toList().first().toMap().value(u"bar"_s).toBool(), false);
     }
 
+    void dryRunReadsTheNotebooksSettings()
+    {
+        // brulion-cli has no app, but the notebook's own settings are in its config: b.app.get and
+        // b.app.settings() read them; a device's setting is an error that says why.
+        QTemporaryDir dir;
+        QDir().mkpath(dir.filePath(u"v"_s));
+        Vault vault(dir.filePath(u"v"_s), dir.filePath(u"s"_s));
+        QVERIFY(vault.open());
+        VaultConfig config = vault.config();
+        config.journalsFolder = u"Dziennik żółwia"_s;
+        config.weekStartsOn = Qt::Sunday;
+        config.flashcards.tags = QStringList{u"fiszki"_s, u"słówka"_s};
+        config.flashcards.clozeBold = true;
+        QVERIFY(vault.saveConfig(config));
+        VaultIndex index(vault.config());
+        NotebookHost::Options options;
+        options.dryRun = true;
+        NotebookHost host(vault, index, options);
+        Engine engine;
+        QVERIFY(engine.start(&host, kRoomy));
+        QVERIFY(engine.load(ext(u"n"_s, uR"lua(
+            b.command("go", function()
+                local rows = {}
+                for _, s in b.app.settings() do
+                    rows[s.key] = s
+                end
+                return {
+                    folder = b.app.get("journalsFolder"),
+                    week = b.app.get("weekStartsOn"),
+                    tags = b.app.get("flashcards.tags"),
+                    bold = b.app.get("flashcards.clozeBold"),
+                    mode = rows.journalMode.value,
+                    modes = #rows.journalMode.options,
+                    scope = rows.journalsFolder.scope,
+                    label = rows.themePage.label,
+                    density = rows.density == nil,
+                }
+            end)
+        )lua"_s))
+                        .ok());
+        const Result r = engine.runCommand(u"n"_s, u"go"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        const QVariantMap v = r.value.toMap();
+        QCOMPARE(v.value(u"folder"_s).toString(), u"Dziennik żółwia"_s);
+        QCOMPARE(v.value(u"week"_s).toString(), u"sunday"_s);
+        QCOMPARE(v.value(u"tags"_s).toString(), u"fiszki, słówka"_s);
+        QCOMPARE(v.value(u"bold"_s).toBool(), true);
+        QCOMPARE(v.value(u"mode"_s).toString(), u"outline"_s);
+        QCOMPARE(v.value(u"modes"_s).toInt(), 2);
+        QCOMPARE(v.value(u"scope"_s).toString(), u"notebook"_s);
+        QVERIFY2(v.value(u"label"_s).toString().contains(u"Settings → Appearance"_s),
+                 qPrintable(v.value(u"label"_s).toString()));
+        QVERIFY(v.value(u"density"_s).toBool()); // (a device's setting is not listed)
+        // A device's setting, and one there is not at all: errors that say what is there.
+        QVERIFY(engine.load(ext(u"m"_s, uR"lua(
+            b.command("device", function() return b.app.get("density") end)
+        )lua"_s))
+                        .ok());
+        const Result device = engine.runCommand(u"m"_s, u"device"_s, {});
+        QVERIFY(!device.ok());
+        QVERIFY2(device.error.contains(u"no setting “density” here"_s), qPrintable(device.error));
+        QVERIFY2(device.error.contains(u"only the notebook's own"_s), qPrintable(device.error));
+        QVERIFY(host.dryApp().isEmpty()); // (reading changes nothing)
+    }
+
     void appIsNotThereWithoutTheApp()
     {
         QTemporaryDir dir;

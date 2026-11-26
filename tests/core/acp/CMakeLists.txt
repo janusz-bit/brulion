@@ -15,3 +15,7 @@ brulion_add_test(tst_acp_hostoffer SOURCES tst_acp_hostoffer.cpp LIBS brulion_co
 # in `_meta`, the calls to the device's app and its answers (malformed ones refused, sizes bounded),
 # extension methods handed to the client's handler.
 brulion_add_test(tst_acp_apptunnel SOURCES tst_acp_apptunnel.cpp LIBS brulion_core_acp)
+# Code mode's threads on another computer (codehost.h): ids and worktrees' names, the projects file,
+# what a thread's session names in `_meta` (taken out, malformed ones too), a turn's checkpoint as a
+# notification and in the turn kept, the client handing an extension's notification on.
+brulion_add_test(tst_acp_codehost SOURCES tst_acp_codehost.cpp LIBS brulion_core_acp)

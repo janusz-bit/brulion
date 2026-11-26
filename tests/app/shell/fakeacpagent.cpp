@@ -11,7 +11,9 @@
 //   "… czytaj …"      reads the first line of Dom.md through the client (fs/read_text_file):
 //                     "Przeczytano: <it>"
 //   "… zapisz …"      writes Od agenta.md through the client (fs/write_text_file) and tries a file
-//                     outside the notebook: "Zapisano przez klienta; poza notatnikiem: <the error>"
+//                     outside the notebook — <cwd>-outside.txt, beside the folder: a test's own,
+//                     writable everywhere (a Code mode thread may write it; /etc/… would be C:\etc
+//                     on Windows): "Zapisano przez klienta; poza notatnikiem: <the error>"
 //   "… terminal …"    runs `sh -c 'printf "ąę\ndrugi\n"; sleep 0.4; exit 4'` in a terminal of the client, as a
 //                     tool call showing it: "Wyjście (4): <its output>"
 //   "… pokaż …"       a plan, a call done, a command that runs until the turn is cancelled
@@ -24,6 +26,11 @@
 //   "… narzędzia …"   a tool call and no words
 //   "… model …"       "Model: <the model option now>"
 //   "… sesja …"       "Sesja: <the session's id>"
+//   "… katalog …"     "Katalog: <its cwd>"
+//   "… pwd …"         runs `pwd` in a terminal of the client without a folder, then with the folder
+//                     "/": "Pwd: <its output> | /: <the second's output, or its error's code>"
+//   "… do gita …"     writes .git/brulion-test in its cwd through the client: "Do gita: <the error's
+//                     code, or 0>"
 //   "aplikacja <tool> <JSON arguments> [&& <tool> <JSON> …]"
 //                     starts the session's MCP server (its command, arguments and environment from
 //                     session/new — Brulion's, given by the app or by acp serve) and calls each tool
@@ -410,10 +417,10 @@ int main(int argc, char **argv)
             if (text.contains(u"zapisz"_s)) {
                 ask(u"fs/write_text_file"_s,
                     {{u"sessionId"_s, session}, {u"path"_s, QDir(cwd).filePath(u"Od agenta.md"_s)}, {u"content"_s, u"- od agenta\n"_s}},
-                    [end, session](const QJsonObject &a) {
+                    [end, session, outside = QString(QDir::cleanPath(cwd) + u"-outside.txt"_s)](const QJsonObject &a) {
                         const bool ok = !a.contains(u"error"_s);
                         ask(u"fs/write_text_file"_s,
-                            {{u"sessionId"_s, session}, {u"path"_s, u"/etc/brulion-test-outside"_s}, {u"content"_s, u"x"_s}},
+                            {{u"sessionId"_s, session}, {u"path"_s, outside}, {u"content"_s, u"x"_s}},
                             [end, ok](const QJsonObject &outside) {
                                 end((ok ? u"Zapisano przez klienta; poza notatnikiem: "_s : u"Błąd; poza: "_s)
                                     + QString::number(outside.value(u"error"_s).toObject().value(u"code"_s).toInt()));
@@ -532,6 +539,45 @@ int main(int argc, char **argv)
             }
             if (text.contains(u"sesja"_s)) {
                 end(u"Sesja: "_s + session);
+                continue;
+            }
+            if (text.contains(u"katalog"_s)) {
+                end(u"Katalog: "_s + cwd);
+                continue;
+            }
+            if (text.contains(u"do gita"_s)) {
+                ask(u"fs/write_text_file"_s,
+                    {{u"sessionId"_s, session}, {u"path"_s, QDir(cwd).filePath(u".git/brulion-test"_s)}, {u"content"_s, u"x"_s}},
+                    [end](const QJsonObject &a) {
+                        end(u"Do gita: "_s + QString::number(a.value(u"error"_s).toObject().value(u"code"_s).toInt()));
+                    });
+                continue;
+            }
+            if (text.contains(u"pwd"_s)) {
+                // (A command's output once it ended: created, waited for, read, released.)
+                const auto run = [session](const QJsonObject &create, std::function<void(const QString &)> then) {
+                    ask(u"terminal/create"_s, create, [session, then](const QJsonObject &created) {
+                        if (created.contains(u"error"_s)) {
+                            then(QString::number(created.value(u"error"_s).toObject().value(u"code"_s).toInt()));
+                            return;
+                        }
+                        const QString terminal = created.value(u"result"_s).toObject().value(u"terminalId"_s).toString();
+                        ask(u"terminal/wait_for_exit"_s, {{u"sessionId"_s, session}, {u"terminalId"_s, terminal}},
+                            [session, terminal, then](const QJsonObject &) {
+                                ask(u"terminal/output"_s, {{u"sessionId"_s, session}, {u"terminalId"_s, terminal}},
+                                    [session, terminal, then](const QJsonObject &output) {
+                                        const QString out =
+                                                output.value(u"result"_s).toObject().value(u"output"_s).toString().trimmed();
+                                        ask(u"terminal/release"_s, {{u"sessionId"_s, session}, {u"terminalId"_s, terminal}},
+                                            [then, out](const QJsonObject &) { then(out); });
+                                    });
+                            });
+                    });
+                };
+                run({{u"sessionId"_s, session}, {u"command"_s, u"pwd"_s}}, [run, session, end](const QString &here) {
+                    run({{u"sessionId"_s, session}, {u"command"_s, u"pwd"_s}, {u"cwd"_s, u"/"_s}},
+                        [end, here](const QString &root) { end(u"Pwd: "_s + here + u" | /: "_s + root); });
+                });
                 continue;
             }
             say(session, u"Myślę."_s, u"agent_thought_chunk"_s);
