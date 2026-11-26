@@ -93,24 +93,29 @@ void UniformList::prepaint(Rect bounds, Window &window, App &app)
     window.popContentMask();
 }
 
-void UniformList::paint(Rect bounds, Window &window, App &app)
+namespace detail {
+
+void paintListRows(const ListRowsPaint &list, Window &window, App &app)
 {
-    window.paintQuad(bounds, m_style.background, m_style.layout.border, m_style.borderColor, m_style.cornerRadii);
-    const Rect inner = bounds.inset(m_style.layout.padding).inset(m_style.layout.border);
-    AccessibilityNode *list =
+    const Rect bounds = list.bounds;
+    const Style &style = list.style;
+    window.paintQuad(bounds, style.background, style.layout.border, style.borderColor, style.cornerRadii);
+    const Rect inner = bounds.inset(style.layout.padding).inset(style.layout.border);
+    ScrollState *const scroll = list.scroll;
+    AccessibilityNode *node =
             window.accessibilityEnabled() ? window.beginAccessibilityNode(Role::List, bounds) : nullptr;
-    if (list) {
-        list->name = {m_label.data(), m_label.size()};
-        list->rowCount = std::int64_t(m_count);
-        if (m_scroll) {
-            list->scrolls = true;
-            list->scrollY = true;
-            list->scrollState = m_scroll;
-            list->scrollOffset = m_scroll->offset;
-            list->scrollContent = m_scroll->content;
-            list->scrollViewport = inner;
-            if (m_scroll->maxOffset().y > 0)
-                list->actions |=
+    if (node) {
+        node->name = list.label;
+        node->rowCount = std::int64_t(list.count);
+        if (scroll) {
+            node->scrolls = true;
+            node->scrollY = true;
+            node->scrollState = scroll;
+            node->scrollOffset = scroll->offset;
+            node->scrollContent = scroll->content;
+            node->scrollViewport = inner;
+            if (scroll->maxOffset().y > 0)
+                node->actions |=
                         actionBit(AccessibilityAction::ScrollForward) | actionBit(AccessibilityAction::ScrollBackward);
         }
     }
@@ -119,7 +124,7 @@ void UniformList::paint(Rect bounds, Window &window, App &app)
     auto paintRow = [&](AnyElement &row, std::size_t index) {
         // Each row is a list item known by its index; the row's root element describes it.
         AccessibilityNode *item = nullptr;
-        if (list) {
+        if (node) {
             item = window.beginAccessibilityNode(Role::ListItem, row.bounds(), hashCombine(0x726f77ull, index) | 1);
             if (item) {
                 item->rowIndex = std::int64_t(index);
@@ -133,18 +138,18 @@ void UniformList::paint(Rect bounds, Window &window, App &app)
         if (item)
             window.endAccessibilityNode();
     };
-    for (std::size_t k = 0; k < m_items.size(); ++k)
-        paintRow(m_items[k], m_first + k);
-    if (!m_kept.isEmpty())
-        paintRow(m_kept, m_keptIndex);
-    if (m_focusState)
-        m_focusState->row = focusedRow;
+    for (std::size_t k = 0; k < list.rows.size(); ++k)
+        paintRow(list.rows[k], list.indices ? list.indices[k] : list.first + k);
+    if (list.kept && !list.kept->isEmpty())
+        paintRow(*list.kept, list.keptIndex);
+    if (list.focusedRow)
+        *list.focusedRow = focusedRow;
     window.popContentMask();
-    if (list)
+    if (node)
         window.endAccessibilityNode();
 
-    if (m_scroll && m_scroll->content.height > m_scroll->viewport.height + 0.5f) {
-        const ScrollState &st = *m_scroll;
+    if (scroll && scroll->content.height > scroll->viewport.height + 0.5f) {
+        const ScrollState &st = *scroll;
         const float track = inner.height() - 4;
         const float h = std::max(24.0f, track * st.viewport.height / st.content.height);
         const float max = st.maxOffset().y;
@@ -153,8 +158,7 @@ void UniformList::paint(Rect bounds, Window &window, App &app)
                 transparent(), Corners::all(3));
     }
 
-    ScrollState *scroll = m_scroll;
-    const HitboxId hitbox = m_hitbox;
+    const HitboxId hitbox = list.hitbox;
     window.onMouseEvent([scroll, hitbox](const PlatformInput &input, DispatchPhase phase, Window &w, App &) {
         const auto *wheel = std::get_if<ScrollWheelEvent>(&input);
         if (!wheel || phase != DispatchPhase::Bubble || !scroll || !w.isHovered(hitbox))
@@ -164,6 +168,25 @@ void UniformList::paint(Rect bounds, Window &window, App &app)
             w.stopPropagation();
         }
     });
+}
+
+} // namespace detail
+
+void UniformList::paint(Rect bounds, Window &window, App &app)
+{
+    detail::paintListRows({bounds,
+                           m_style,
+                           {m_label.data(), m_label.size()},
+                           m_count,
+                           m_scroll,
+                           m_hitbox,
+                           std::span<AnyElement>(m_items.data(), m_items.size()),
+                           m_first,
+                           nullptr,
+                           &m_kept,
+                           m_keptIndex,
+                           m_focusState ? &m_focusState->row : nullptr},
+                          window, app);
 }
 
 Rect Img::fitRect(Size image, Rect bounds, ObjectFit fit)

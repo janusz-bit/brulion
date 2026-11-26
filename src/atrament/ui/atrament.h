@@ -11,6 +11,7 @@
 #include "ui/events.h"
 #include "ui/keymap.h"
 #include "ui/list.h"
+#include "ui/measuredlist.h"
 #include "ui/platform.h"
 #include "ui/style.h"
 #include "ui/text.h"

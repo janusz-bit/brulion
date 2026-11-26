@@ -8,6 +8,7 @@ brulion_add_atrament_module(ui
         events.cpp events.h
         keymap.cpp keymap.h
         list.cpp list.h
+        measuredlist.cpp measuredlist.h
         platform.h
         style.cpp style.h
         testplatform.cpp testplatform.h

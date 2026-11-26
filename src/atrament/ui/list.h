@@ -25,8 +25,30 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <span>
 
 namespace brulion::atrament {
+
+namespace detail {
+// What a virtual list paints after its prepaint (uniformList and list() alike): its background,
+// the rows in view and the focused row kept outside it, the accessibility list with one item per
+// row, the scroll bar, and the wheel.
+struct ListRowsPaint {
+    Rect bounds;
+    const Style &style;
+    std::u16string_view label;
+    std::size_t count;
+    ScrollState *scroll;
+    HitboxId hitbox;
+    std::span<AnyElement> rows;
+    std::size_t first;          // the index of rows[0] when `indices` is null (rows[k] is first + k)
+    const std::size_t *indices; // else each row's index
+    AnyElement *kept;           // the focused row outside the view, or null / empty
+    std::size_t keptIndex;
+    std::optional<std::size_t> *focusedRow; // set to the row painted with the focus
+};
+void paintListRows(const ListRowsPaint &list, Window &window, App &app);
+} // namespace detail
 
 class UniformList final : public Element, public Styled<UniformList> {
 public:

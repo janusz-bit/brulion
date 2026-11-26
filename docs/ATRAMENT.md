@@ -468,8 +468,8 @@ The targets in M5 are estimates of what the change can reach, not measurements.
 ## The block editor in Atrament (M2)
 
 The design of M2: the page and journal block editor drawn by Atrament, inside today's QML shell,
-behind a setting, replacing `BlockEditor.qml` one kind of row at a time. Nothing of it is built yet;
-this section is the plan its code follows (and changes first).
+behind a setting, replacing `BlockEditor.qml` one kind of row at a time. This section is the plan
+its code follows (and changes first); built so far: `list()` (below).
 
 ### What stays
 
@@ -507,7 +507,15 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   row and an offset into it), so rows measured above the view never move what is on screen. The
   editor's `RowExtents` is a thin adapter over `PageRows` / `RowHeightTree` on the app side (D2:
   the list itself knows no Qt). Touch scrolling, the fling and the focused row kept in the frame
-  come from M1 as they are for `uniformList`.
+  come from M1 as they are for `uniformList`. **Built** (`src/atrament/ui/measuredlist.h`,
+  `tests/atrament/ui/tst_atrament_list.cpp`): `list(id, extents, render)`; `RowHeights`, the
+  ready `RowExtents` (a Fenwick tree in 1/64 px, like `RowHeightTree`); a row measured as 0 is
+  hidden (a fold) and never shown, a row the list lays out is at least 1 px; a `ListHandle`
+  (`trackScroll`) shares the anchor: `scrollToRow(row, Start | Center | End | Nearest)`,
+  `rowsInserted` / `rowsRemoved` in front of the anchor (the top is sticky); a user's scroll
+  re-anchors on the first measured row in view (rows above measured later move nothing on
+  screen); a list scrolled to its end stays there (the rows filling the view from the bottom
+  measured first); a new width makes every height an estimate (`markAllEstimated`).
 * **Inline boxes in text**: a `TextSpan` with a background shape (a pill, a box, rounded, padded)
   drawn under its glyphs across line breaks, and an inline object of a given size (an icon, a
   checkbox) the line layout reserves room for — what `RenderedBackground` and `RenderedObject`
