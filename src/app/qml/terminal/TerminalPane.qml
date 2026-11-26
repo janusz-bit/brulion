@@ -64,7 +64,7 @@ FocusScope {
         objectName: pane.split ? "terminalView_" + pane.index : "terminalView"
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.right: scrollTrack.left
+        anchors.right: parent.right
         anchors.bottom: exited.visible ? exited.top : parent.bottom
         session: pane.session
         dark: pane.dark
@@ -101,9 +101,11 @@ FocusScope {
         }
     }
 
-    // The scroll bar: the screen's place in the scrollback (shown once there is one).
+    // The scroll bar: the screen's place in the scrollback (shown once there is one), over the
+    // view's right padding — never taking a column from the program when the scrollback begins.
     Item {
         id: scrollTrack
+        z: 1
         objectName: "terminalScrollBar_" + pane.index
         readonly property int total: view.historySize + view.rows
         readonly property real thumbSize: scrollTrack.total > 0 ? Math.max(24, scrollTrack.height * view.rows / scrollTrack.total) : scrollTrack.height
@@ -113,14 +115,14 @@ FocusScope {
         anchors.top: parent.top
         anchors.bottom: view.bottom
         anchors.right: parent.right
-        width: view.historySize > 0 ? 10 : 0
+        width: view.padding
         visible: view.historySize > 0
 
         Rectangle {
             id: thumb
             x: 2
             y: scrollTrack.thumbY
-            width: scrollTrack.width - 4
+            width: Math.max(2, scrollTrack.width - 4)
             height: scrollTrack.thumbSize
             radius: width / 2
             color: Theme.scrollbar
@@ -156,9 +158,10 @@ FocusScope {
     // Scrolled back: back to the newest output.
     BButton {
         objectName: "terminalJumpLatest_" + pane.index
-        anchors.right: scrollTrack.left
+        anchors.right: parent.right
+        z: 1
         anchors.bottom: view.bottom
-        anchors.margins: Theme.space2
+        anchors.margins: Theme.space3
         visible: view.scrollOffset > 0
         size: "small"
         variant: "secondary"

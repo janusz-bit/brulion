@@ -394,7 +394,7 @@ FocusScope {
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.topMargin: Theme.space2
-                anchors.rightMargin: Theme.space2 + 10
+                anchors.rightMargin: Theme.space3
                 width: Math.min(implicitWidth, parent.width - 2 * Theme.space2)
                 visible: false
                 z: 2
