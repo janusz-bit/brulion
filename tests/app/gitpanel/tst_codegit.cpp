@@ -14,6 +14,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -465,7 +466,9 @@ void TestCodeGit::commitAndPush()
 
 void TestCodeGit::commitPushAndPullRequest()
 {
-#ifdef Q_OS_UNIX
+#ifndef FAKE_GH
+    QSKIP("no fake gh in this build");
+#else
     QTemporaryDir remoteDir;
     const QString remote = QFileInfo(remoteDir.path()).canonicalFilePath() + u"/r.git"_s;
     gitIn(remoteDir.path(), {u"init"_s, u"-q"_s, u"--bare"_s, u"r.git"_s});
@@ -475,15 +478,18 @@ void TestCodeGit::commitPushAndPullRequest()
     repo.git({u"remote"_s, u"add"_s, u"origin"_s, remote});
     repo.git({u"switch"_s, u"-q"_s, u"-c"_s, u"funkcja"_s});
     repo.write(u"b.txt"_s, "b\n");
-    QTemporaryDir bin; // (not in the work tree: no changes of its own)
+    // A fake gh (tests/core/gitcli/fake_gh.cpp) writing its arguments outside the work tree.
+    QTemporaryDir bin;
     const QString argsFile = bin.filePath(u"gh-args"_s);
-    const QString script = bin.filePath(u"gh"_s);
-    writeFile(script, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\0' \"$a\"; done > \"" + argsFile.toUtf8()
-                              + "\"\necho https://github.com/ja/repo/pull/3\n");
-    QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    qputenv("FAKE_GH_ARGS", argsFile.toUtf8());
+    qputenv("FAKE_GH_MODE", "ok");
+    auto unset = qScopeGuard([] {
+        qunsetenv("FAKE_GH_ARGS");
+        qunsetenv("FAKE_GH_MODE");
+    });
 
     CodeGit git;
-    git.setGhProgram(script);
+    git.setGhProgram(QString::fromUtf8(FAKE_GH));
     QVERIFY(git.ghAvailable());
     git.setFolder(repo.root);
     QTRY_VERIFY_WITH_TIMEOUT(git.changeCount() == 1, Wait);
@@ -492,7 +498,7 @@ void TestCodeGit::commitPushAndPullRequest()
     QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"commit"_s).isEmpty(), Wait);
     const QList<QVariant> done = finished(actions, u"commit"_s);
     QVERIFY2(done.at(1).toBool(), qPrintable(done.at(2).toString()));
-    QCOMPARE(done.at(3).toString(), u"https://github.com/ja/repo/pull/3"_s);
+    QCOMPARE(done.at(3).toString(), u"https://github.com/ja/repo/pull/17"_s);
     const QList<QByteArray> args = readFile(argsFile).split('\0');
     QCOMPARE(QString::fromUtf8(args.value(3)), u"Tytuł z wiadomości"_s); // --title: the first line
     QCOMPARE(QString::fromUtf8(args.value(5)), u"Opis PR"_s);
@@ -506,8 +512,6 @@ void TestCodeGit::commitPushAndPullRequest()
     QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"pullRequest"_s).isEmpty(), Wait);
     QVERIFY(finished(actions, u"pullRequest"_s).at(1).toBool());
     QCOMPARE(QString::fromUtf8(readFile(argsFile).split('\0').value(3)), u"Drugi"_s);
-#else
-    QSKIP("a fake gh as a shell script");
 #endif
 }
 
@@ -607,8 +611,9 @@ void TestCodeGit::turnCheckpoint()
     QCOMPARE(rowOf(git.turnChanges(), u"a.txt"_s).value(u"additions"_s).toInt(), 1);
     QCOMPARE(rowOf(git.turnChanges(), u"usuwany.txt"_s).value(u"status"_s).toString(), u"deleted"_s);
     QCOMPARE(rowOf(git.turnChanges(), u"nowy/zagnieżdżony/plik ś.txt"_s).value(u"status"_s).toString(), u"added"_s);
-    // "All changes" has the file from before the turn too.
-    QCOMPARE(git.changeCount(), 4);
+    // "All changes" has the file from before the turn too (a refresh the watcher started before the
+    // writes may have read the status first: the next one, which refresh() asked for, has them).
+    QTRY_COMPARE_WITH_TIMEOUT(git.changeCount(), 4, Wait);
 
     QSignalSpy since(&git, &CodeGit::changesSinceReady);
     git.changesSince(id);

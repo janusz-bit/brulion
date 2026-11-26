@@ -11,7 +11,9 @@
 //   "… czytaj …"      reads the first line of Dom.md through the client (fs/read_text_file):
 //                     "Przeczytano: <it>"
 //   "… zapisz …"      writes Od agenta.md through the client (fs/write_text_file) and tries a file
-//                     outside the notebook: "Zapisano przez klienta; poza notatnikiem: <the error>"
+//                     outside the notebook — <cwd>-outside.txt, beside the folder: a test's own,
+//                     writable everywhere (a Code mode thread may write it; /etc/… would be C:\etc
+//                     on Windows): "Zapisano przez klienta; poza notatnikiem: <the error>"
 //   "… terminal …"    runs `sh -c 'printf "ąę\ndrugi\n"; sleep 0.4; exit 4'` in a terminal of the client, as a
 //                     tool call showing it: "Wyjście (4): <its output>"
 //   "… pokaż …"       a plan, a call done, a command that runs until the turn is cancelled
@@ -410,10 +412,10 @@ int main(int argc, char **argv)
             if (text.contains(u"zapisz"_s)) {
                 ask(u"fs/write_text_file"_s,
                     {{u"sessionId"_s, session}, {u"path"_s, QDir(cwd).filePath(u"Od agenta.md"_s)}, {u"content"_s, u"- od agenta\n"_s}},
-                    [end, session](const QJsonObject &a) {
+                    [end, session, outside = QString(QDir::cleanPath(cwd) + u"-outside.txt"_s)](const QJsonObject &a) {
                         const bool ok = !a.contains(u"error"_s);
                         ask(u"fs/write_text_file"_s,
-                            {{u"sessionId"_s, session}, {u"path"_s, u"/etc/brulion-test-outside"_s}, {u"content"_s, u"x"_s}},
+                            {{u"sessionId"_s, session}, {u"path"_s, outside}, {u"content"_s, u"x"_s}},
                             [end, ok](const QJsonObject &outside) {
                                 end((ok ? u"Zapisano przez klienta; poza notatnikiem: "_s : u"Błąd; poza: "_s)
                                     + QString::number(outside.value(u"error"_s).toObject().value(u"code"_s).toInt()));

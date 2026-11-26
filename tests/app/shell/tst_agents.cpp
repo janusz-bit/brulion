@@ -1756,7 +1756,7 @@ private Q_SLOTS:
         QVERIFY2(ws->read(path).contains(u"- 🤖 Zapisano przez klienta; poza notatnikiem: -32602"_s), qPrintable(ws->read(path)));
         QVERIFY(ws->exists(u"Od agenta.md"_s));
         QCOMPARE(ws->read(u"Od agenta.md"_s), u"- od agenta\n"_s);
-        QVERIFY(!QFile::exists(u"/etc/brulion-test-outside"_s));
+        QVERIFY(!QFile::exists(QDir::cleanPath(QDir(ws->rootPath()).absolutePath()) + u"-outside.txt"_s));
         const QJsonObject caps = logged(u"initialize"_s).first().value(u"params"_s).toObject().value(u"clientCapabilities"_s).toObject();
         QVERIFY(caps.value(u"fs"_s).toObject().value(u"writeTextFile"_s).toBool());
         QVERIFY(caps.value(u"terminal"_s).toBool());
