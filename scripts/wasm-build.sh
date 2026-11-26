@@ -143,7 +143,8 @@ if [[ $do_build == 1 ]]; then
   [[ -d "$QT_HOST/lib/cmake/Qt6" ]] || die "host Qt not found at $QT_HOST (--setup or QT_HOST)"
 
   # Fail early and readably when a prebuilt host tool cannot start (missing shared libraries).
-  for tool in libexec/moc libexec/rcc libexec/qmlcachegen libexec/qmlimportscanner bin/lrelease; do
+  for tool in libexec/moc libexec/rcc libexec/qmlcachegen libexec/qmlimportscanner bin/lrelease bin/qsb; do
+    [[ $tool != bin/qsb || -e $QT_HOST/$tool ]] || continue
     out=$("$QT_HOST/$tool" --help 2>&1 || true)
     if grep -q 'error while loading shared libraries' <<<"$out"; then
       die "Qt host tool $QT_HOST/$tool does not start: $(head -n 1 <<<"$out")"

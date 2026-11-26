@@ -162,6 +162,14 @@ jobs:
         name: Artifact name
         run: echo "name=${{ inputs.play && 'brulion-android-play' || 'brulion-android-apk' }}" >> "$GITHUB_OUTPUT"
 
+      # qsb (Qt Shader Tools: the shaders of Atrament's GPU renderer) links Qt Gui, which needs
+      # EGL, OpenGL, GLX, xkbcommon, fontconfig and D-Bus — the runner image lacks libEGL.so.1.
+      - name: Libraries of the host Qt's qsb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libegl1 libopengl0 libglx0 \
+            libxkbcommon0 libfontconfig1 libfreetype6 libdbus-1-3 libx11-6
+
       # The app for Google Play is signed with the upload key when its four secrets are there, all
       # of them together (never a mix of two keys' secrets), else with the release key — Play
       # accepts any key as the upload key on the first upload, and the owner may register the
