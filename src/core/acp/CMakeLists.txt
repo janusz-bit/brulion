@@ -9,7 +9,9 @@
 # apptunnel.h: the app's live tools for an agent on another computer — its calls tunnelled over the
 # device's stream to the app, which answers them in process. codehost.h: Code mode's threads on
 # another computer — its projects offered to the devices, a thread's session in a project's folder
-# or worktree there, the checkpoint of each turn, the changes since one.
+# or worktree there, the checkpoint of each turn, the changes since one. appchats.h: the
+# conversations the desktop app runs, followed and steered from another device through the app's
+# own `acp serve` (their live state, the question answered, Stop, the next message).
 brulion_add_core_module(acp
     SOURCES
         acp.h acp.cpp
@@ -17,4 +19,5 @@ brulion_add_core_module(acp
         hostoffer.h hostoffer.cpp
         apptunnel.h apptunnel.cpp
         codehost.h codehost.cpp
-    DEPS sync tailscale)
+        appchats.h appchats.cpp
+    DEPS sync tailscale chat)
