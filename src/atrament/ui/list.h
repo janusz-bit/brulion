@@ -16,6 +16,7 @@
 #include "ui/div.h"
 #include "ui/element.h"
 #include "ui/style.h"
+#include "ui/text.h"
 #include "ui/window.h"
 
 #include <cstddef>
@@ -41,6 +42,9 @@ public:
         m_scrollHandle = handle.shared();
         return std::move(*this);
     }
+    // The list's accessible name ("Notatki"). The list is a list node with a row count, each row
+    // shown a list item with its index, described by the row's root element.
+    UniformList &&ariaLabel(std::u16string_view name) &&;
 
     NodeId requestLayout(Window &window, App &app) override;
     void prepaint(Rect bounds, Window &window, App &app) override;
@@ -58,6 +62,7 @@ private:
     Style m_style;
     std::optional<float> m_itemHeight;
     std::shared_ptr<ScrollState> m_scrollHandle;
+    ArenaU16String m_label;
 
     NodeId m_layout = kNoNode;
     HitboxId m_hitbox = 0;
@@ -97,6 +102,12 @@ public:
         m_grayscale = g;
         return std::move(*this);
     }
+    // What the picture shows, for a screen reader; without it the picture is decoration.
+    Img &&alt(std::u16string_view text) &&
+    {
+        m_alt.assign(text.begin(), text.end());
+        return std::move(*this);
+    }
     NodeId requestLayout(Window &window, App &app) override;
     void paint(Rect bounds, Window &window, App &app) override;
 
@@ -108,6 +119,7 @@ private:
     Style m_style;
     ObjectFit m_fit = ObjectFit::Contain;
     bool m_grayscale = false;
+    ArenaU16String m_alt;
 };
 
 inline Img img(std::shared_ptr<const ImageData> image)

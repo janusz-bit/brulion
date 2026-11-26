@@ -113,6 +113,7 @@ struct ClickEvent {
     MouseUpEvent up;
     int clickCount() const { return up.clickCount; }
     bool isKeyboard = false; // activated with Enter / Space on a focused element
+    bool fromAccessibility = false; // activated by an assistive technology (a screen reader)
 };
 
 // Listeners run twice per event: Capture from the root down, then Bubble from the topmost element up.

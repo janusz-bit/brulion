@@ -13,6 +13,12 @@ UniformList::UniformList(ElementId id, std::size_t count, RenderItem render)
     m_style.layout.overflowY = Overflow::Scroll;
 }
 
+UniformList &&UniformList::ariaLabel(std::u16string_view name) &&
+{
+    m_label.assign(name.begin(), name.end());
+    return std::move(*this);
+}
+
 NodeId UniformList::requestLayout(Window &window, App &)
 {
     // Its rows are laid out on their own in prepaint: the list is a leaf sized by its style.
@@ -70,10 +76,43 @@ void UniformList::paint(Rect bounds, Window &window, App &app)
 {
     window.paintQuad(bounds, m_style.background, m_style.layout.border, m_style.borderColor, m_style.cornerRadii);
     const Rect inner = bounds.inset(m_style.layout.padding).inset(m_style.layout.border);
+    AccessibilityNode *list =
+            window.accessibilityEnabled() ? window.beginAccessibilityNode(Role::List, bounds) : nullptr;
+    if (list) {
+        list->name = {m_label.data(), m_label.size()};
+        list->rowCount = std::int64_t(m_count);
+        if (m_scroll) {
+            list->scrolls = true;
+            list->scrollY = true;
+            list->scrollState = m_scroll;
+            list->scrollOffset = m_scroll->offset;
+            list->scrollContent = m_scroll->content;
+            list->scrollViewport = inner;
+            if (m_scroll->maxOffset().y > 0)
+                list->actions |=
+                        actionBit(AccessibilityAction::ScrollForward) | actionBit(AccessibilityAction::ScrollBackward);
+        }
+    }
     window.pushContentMask(inner);
-    for (AnyElement &row : m_items)
+    for (std::size_t k = 0; k < m_items.size(); ++k) {
+        AnyElement &row = m_items[k];
+        // Each row is a list item known by its index; the row's root element describes it.
+        AccessibilityNode *item = nullptr;
+        if (list) {
+            const std::size_t index = m_first + k;
+            item = window.beginAccessibilityNode(Role::ListItem, row.bounds(), hashCombine(0x726f77ull, index) | 1);
+            if (item) {
+                item->rowIndex = std::int64_t(index);
+                item->adoptable = true;
+            }
+        }
         row.paint(window, app);
+        if (item)
+            window.endAccessibilityNode();
+    }
     window.popContentMask();
+    if (list)
+        window.endAccessibilityNode();
 
     if (m_scroll && m_scroll->content.height > m_scroll->viewport.height + 0.5f) {
         const ScrollState &st = *m_scroll;
@@ -132,6 +171,12 @@ NodeId Img::requestLayout(Window &window, App &)
 
 void Img::paint(Rect bounds, Window &window, App &)
 {
+    if (!m_alt.empty() && window.accessibilityEnabled()) {
+        if (AccessibilityNode *node = window.beginAccessibilityNode(Role::Image, bounds)) {
+            node->name = {m_alt.data(), m_alt.size()};
+            window.endAccessibilityNode();
+        }
+    }
     if (!m_image)
         return;
     const bool fade = m_style.opacity < 1;

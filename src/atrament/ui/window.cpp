@@ -1,6 +1,7 @@
 #include "ui/window.h"
 
 #include "text/textsystem.h"
+#include "ui/div.h"
 
 #include <algorithm>
 #include <chrono>
@@ -22,6 +23,7 @@ void Window::Frame::clear()
     inputFocus = 0;
     inputHandler = nullptr;
     views.clear();
+    accessibility.clear();
     arena.reset();
 }
 
@@ -112,6 +114,8 @@ void Window::draw()
         frame.dispatchNodes.push_back(DispatchNode {});
         m_dispatchStack.push_back(0);
         m_app.atlas().beginFrame();
+        m_accessStack.clear();
+        m_accessHidden = 0;
         {
             ArenaScope scope(frame.arena);
             AnyElement root = ViewElement(m_root);
@@ -119,7 +123,11 @@ void Window::draw()
                 root.layoutAsRoot(m_viewport, *this, m_app);
                 root.prepaintAt({}, *this, m_app);
                 computeHitTest(frame, m_mouse);
+                if (m_accessibilityEnabled)
+                    beginAccessibilityNode(Role::Window, Rect{{}, m_viewport}, 0x77696e646f77ull);
                 root.paint(*this, m_app);
+                m_accessStack.clear();
+                frame.accessibility.finish();
             }
         }
         std::sort(frame.views.begin(), frame.views.end());
@@ -149,7 +157,195 @@ void Window::draw()
         m_stats.presentMicros
                 = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - built).count();
         m_platform->inputStateChanged();
+        if (m_accessibilityEnabled && m_platform) {
+            // The previous frame's tree is intact until the next frame starts.
+            diffAccessibilityTrees(m_frames[1 - buildIndex].accessibility, frame.accessibility, m_accessEvents);
+            if (!m_accessEvents.empty())
+                m_platform->accessibilityChanged(m_accessEvents);
+        }
     });
+}
+
+// --- accessibility
+
+void Window::setAccessibilityEnabled(bool on)
+{
+    if (m_accessibilityEnabled == on)
+        return;
+    m_accessibilityEnabled = on;
+    refresh();
+}
+
+AccessibilityNode *Window::beginAccessibilityNode(Role role, Rect bounds, std::uint64_t key)
+{
+    if (!m_accessibilityEnabled || m_accessHidden > 0 || !m_building)
+        return nullptr;
+    Arena *arena = Arena::current();
+    if (!arena)
+        return nullptr;
+    AccessibilityNode *parent = m_accessStack.empty() ? nullptr : m_accessStack.back();
+    if (parent)
+        parent->adoptable = false; // the row's root made a node of its own
+    auto *node = arena->make<AccessibilityNode>();
+    node->id = (key ? hashCombine(currentElementId(), key) : currentElementId()) | 1;
+    node->role = role;
+    node->bounds = bounds;
+    node->states.offscreen = !bounds.intersects(contentMask()) && role != Role::Window;
+    node->nameFromContent = takesNameFromContent(role);
+    m_building->accessibility.add(node, parent ? parent->treeIndex : -1);
+    m_accessStack.push_back(node);
+    return node;
+}
+
+void Window::endAccessibilityNode()
+{
+    if (!m_accessStack.empty())
+        m_accessStack.pop_back();
+}
+
+AccessibilityNode *Window::currentAccessibilityNode()
+{
+    if (!m_accessibilityEnabled || m_accessHidden > 0 || m_accessStack.empty())
+        return nullptr;
+    return m_accessStack.back();
+}
+
+AccessibilityNode *Window::adoptAccessibilityNode()
+{
+    AccessibilityNode *node = currentAccessibilityNode();
+    if (!node || !node->adoptable)
+        return nullptr;
+    node->adoptable = false;
+    return node;
+}
+
+void Window::addAccessibilityText(std::u16string_view text, Rect bounds, const TextLayout *layout)
+{
+    AccessibilityNode *node = currentAccessibilityNode();
+    if (!node || text.empty())
+        return;
+    node->adoptable = false;
+    if (takesNameFromContent(node->role)) {
+        // The text names its node (unless the node has a label of its own); it is not a node.
+        if (!node->nameFromContent)
+            return;
+        if (node->name.empty()) {
+            node->name = text;
+        } else {
+            Arena *arena = Arena::current();
+            const std::size_t n = node->name.size() + 1 + text.size();
+            auto *p = static_cast<char16_t *>(arena->allocate(n * sizeof(char16_t), alignof(char16_t)));
+            std::copy(node->name.begin(), node->name.end(), p);
+            p[node->name.size()] = u' ';
+            std::copy(text.begin(), text.end(), p + node->name.size() + 1);
+            node->name = {p, n};
+        }
+        return;
+    }
+    if (AccessibilityNode *t = beginAccessibilityNode(Role::Text, bounds)) {
+        t->name = text;
+        t->textLayout = layout;
+        t->textOrigin = bounds.origin;
+        endAccessibilityNode();
+    }
+}
+
+void Window::pushAccessibilityHidden()
+{
+    if (m_accessibilityEnabled)
+        ++m_accessHidden;
+}
+
+void Window::popAccessibilityHidden()
+{
+    if (m_accessHidden > 0)
+        --m_accessHidden;
+}
+
+std::u16string_view Window::accessibilityString(std::u16string_view s)
+{
+    Arena *arena = Arena::current();
+    if (!arena || s.empty())
+        return {};
+    auto *p = static_cast<char16_t *>(arena->allocate(s.size() * sizeof(char16_t), alignof(char16_t)));
+    std::copy(s.begin(), s.end(), p);
+    return {p, s.size()};
+}
+
+bool Window::performAccessibilityAction(AccessNodeId id, const AccessibilityActionRequest &request)
+{
+    if (!m_platform || m_drawing)
+        return false;
+    m_defaultPrevented = false;
+    m_propagate = true;
+    return m_app.update([&] {
+        const AccessibilityTree &tree = rendered().accessibility;
+        const AccessibilityNode *node = tree.find(id);
+        if (!node)
+            return false;
+        if ((node->actions & actionBit(request.action)) && node->handler && node->handler(request, *this, m_app))
+            return true;
+        switch (request.action) {
+        case AccessibilityAction::ScrollIntoView: return scrollIntoView(tree, *node);
+        case AccessibilityAction::ScrollForward:
+        case AccessibilityAction::ScrollBackward:
+            return scrollPage(*node, request.action == AccessibilityAction::ScrollForward);
+        default: return false;
+        }
+    });
+}
+
+bool Window::scrollIntoView(const AccessibilityTree &tree, const AccessibilityNode &node)
+{
+    // From the innermost scrolling node out: each scrolls the least that shows what is left of the
+    // target (a target taller than the viewport shows its start).
+    Rect target = node.bounds;
+    bool moved = false;
+    for (const AccessibilityNode *s = tree.node(node.scrollAncestor); s; s = tree.node(s->scrollAncestor)) {
+        if (!s->scrollState)
+            continue;
+        const Rect vp = s->scrollViewport;
+        Point delta;
+        if (s->scrollY) {
+            if (target.top() < vp.top() || target.height() > vp.height())
+                delta.y = target.top() - vp.top();
+            else if (target.bottom() > vp.bottom())
+                delta.y = target.bottom() - vp.bottom();
+        }
+        if (s->scrollX) {
+            if (target.left() < vp.left() || target.width() > vp.width())
+                delta.x = target.left() - vp.left();
+            else if (target.right() > vp.right())
+                delta.x = target.right() - vp.right();
+        }
+        ScrollState &st = *s->scrollState;
+        const Point before = st.offset;
+        st.scrollBy(delta);
+        const Point applied = st.offset - before;
+        if (!(applied == Point{}))
+            moved = true;
+        target = target.translated(-applied);
+    }
+    if (moved)
+        refresh();
+    return moved;
+}
+
+bool Window::scrollPage(const AccessibilityNode &node, bool forward)
+{
+    if (!node.scrollState)
+        return false;
+    // A page less a little, so the line at the edge stays in view as the screen reader's anchor.
+    const float sign = forward ? 1.0f : -1.0f;
+    Point delta;
+    if (node.scrollY)
+        delta.y = sign * std::max(1.0f, node.scrollViewport.height() * 0.875f);
+    else if (node.scrollX)
+        delta.x = sign * std::max(1.0f, node.scrollViewport.width() * 0.875f);
+    if (!node.scrollState->scrollBy(delta))
+        return false;
+    refresh();
+    return true;
 }
 
 // --- layout

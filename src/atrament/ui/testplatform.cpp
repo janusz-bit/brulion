@@ -29,6 +29,12 @@ void TestWindow::present(const Scene &scene, const Atlas &atlas)
     m_renderer.render(scene, atlas, m_target, white());
 }
 
+void TestWindow::accessibilityChanged(const std::vector<AccessibilityEvent> &events)
+{
+    for (const AccessibilityEvent &e : events)
+        m_accessEvents.push_back({e.type, e.node, e.parent, e.changed, std::u16string(e.oldText)});
+}
+
 void TestWindow::draw()
 {
     m_frameRequested = false;

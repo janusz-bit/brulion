@@ -1,6 +1,7 @@
 #include "ui/div.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 
 namespace brulion::atrament {
@@ -144,6 +145,211 @@ Div &&Div::hideScrollbar() &&
     return std::move(*this);
 }
 
+Div::AccessibilityProps &Div::access()
+{
+    if (!m_access) {
+        Arena *arena = Arena::current();
+        assert(arena && "accessibility builders need a frame arena (Arena::current())");
+        static AccessibilityProps outsideFrame; // release builds without a frame: kept, not used
+        m_access = arena ? arena->make<AccessibilityProps>() : &outsideFrame;
+    }
+    return *m_access;
+}
+
+Div &&Div::role(Role role) &&
+{
+    access().role = role;
+    access().hasRole = true;
+    return std::move(*this);
+}
+
+Div &&Div::ariaLabel(std::u16string_view name) &&
+{
+    access().label = arenaString(name);
+    return std::move(*this);
+}
+
+Div &&Div::ariaDescription(std::u16string_view description) &&
+{
+    access().description = arenaString(description);
+    return std::move(*this);
+}
+
+Div &&Div::ariaValue(std::u16string_view value) &&
+{
+    access().value = arenaString(value);
+    return std::move(*this);
+}
+
+Div &&Div::ariaLevel(int level) &&
+{
+    access().level = level;
+    return std::move(*this);
+}
+
+Div &&Div::ariaHidden(bool hidden) &&
+{
+    access().hidden = hidden;
+    return std::move(*this);
+}
+
+Div &&Div::checked(bool checked) &&
+{
+    access().checked = checked;
+    return std::move(*this);
+}
+
+Div &&Div::selected(bool selected) &&
+{
+    access().selected = selected;
+    return std::move(*this);
+}
+
+Div &&Div::expanded(bool expanded) &&
+{
+    access().expanded = expanded;
+    return std::move(*this);
+}
+
+Div &&Div::disabled(bool disabled) &&
+{
+    access().disabled = disabled;
+    return std::move(*this);
+}
+
+Div &&Div::rangeValue(float value, float min, float max, float step) &&
+{
+    access().range = AccessibilityRange{value, min, max, step};
+    return std::move(*this);
+}
+
+Div &&Div::onAccessibilityAction(AccessibilityAction action, AccessibilityListener f) &&
+{
+    access().actions.push_back(AccessibilityActionEntry{action, f});
+    return std::move(*this);
+}
+
+Role Div::accessibilityRole() const
+{
+    const AccessibilityProps *a = m_access;
+    if (a && a->hasRole)
+        return a->role;
+    if (a && a->checked)
+        return Role::CheckBox;
+    if (!m_click.empty() && m_id.isValid())
+        return Role::Button;
+    if (isScrollable())
+        return Role::ScrollView;
+    if (m_focus)
+        return Role::Group;
+    if (a && (!a->label.empty() || !a->description.empty() || !a->value.empty() || !a->actions.empty() || a->range))
+        return Role::Group;
+    return Role::None;
+}
+
+AccessibilityNode *Div::describeAccessibility(Rect bounds, Window &window, bool &ownNode)
+{
+    // A list's row: the row's root element describes the list item instead of making a node in it.
+    const bool explicitRole = m_access && m_access->hasRole;
+    AccessibilityNode *node = explicitRole ? nullptr : window.adoptAccessibilityNode();
+    if (!node) {
+        const Role role = accessibilityRole();
+        if (role == Role::None)
+            return nullptr;
+        node = window.beginAccessibilityNode(role, bounds);
+        if (!node)
+            return nullptr;
+        ownNode = true;
+    }
+    AccessibilityStates &st = node->states;
+    if (const AccessibilityProps *a = m_access) {
+        if (!a->label.empty()) {
+            node->name = a->label;
+            node->nameFromContent = false;
+        }
+        if (!a->description.empty())
+            node->description = a->description;
+        if (!a->value.empty())
+            node->value = a->value;
+        if (a->level > 0)
+            node->level = a->level;
+        if (a->checked) {
+            st.checkable = true;
+            st.checked = *a->checked;
+        }
+        if (a->selected) {
+            st.selectable = true;
+            st.selected = *a->selected;
+        }
+        if (a->expanded) {
+            st.expandable = true;
+            st.expanded = *a->expanded;
+        }
+        st.disabled = st.disabled || a->disabled;
+        if (a->range) {
+            node->hasRange = true;
+            node->range = *a->range;
+        }
+        for (const AccessibilityActionEntry &e : a->actions)
+            node->actions |= actionBit(e.action);
+    }
+    if (m_focus) {
+        st.focusable = true;
+        st.focused = st.focused || m_focus.isFocused(window);
+        node->actions |= actionBit(AccessibilityAction::Focus);
+    }
+    if (!m_click.empty() && !st.disabled)
+        node->actions |= actionBit(AccessibilityAction::Click);
+    if (m_scrollState) {
+        const ScrollState &scroll = *m_scrollState;
+        node->scrolls = true;
+        node->scrollX = m_style.layout.overflowX == Overflow::Scroll;
+        node->scrollY = m_style.layout.overflowY == Overflow::Scroll;
+        node->scrollState = m_scrollState;
+        node->scrollOffset = scroll.offset;
+        node->scrollContent = scroll.content;
+        node->scrollViewport = bounds.inset(m_style.layout.border);
+        const Point max = scroll.maxOffset();
+        if ((node->scrollY && max.y > 0) || (node->scrollX && max.x > 0))
+            node->actions |=
+                    actionBit(AccessibilityAction::ScrollForward) | actionBit(AccessibilityAction::ScrollBackward);
+    }
+    Div *self = this; // in the frame arena, as the tree is
+    node->handler = [self](const AccessibilityActionRequest &r, Window &w, App &app) {
+        return self->performAccessibilityAction(r, w, app);
+    };
+    return node;
+}
+
+bool Div::performAccessibilityAction(const AccessibilityActionRequest &request, Window &window, App &app)
+{
+    if (m_access) {
+        for (const AccessibilityActionEntry &e : m_access->actions) {
+            if (e.action == request.action) {
+                e.f(request, window, app);
+                return true;
+            }
+        }
+    }
+    switch (request.action) {
+    case AccessibilityAction::Click: {
+        if (m_click.empty() || isDisabled())
+            return false;
+        ClickEvent click;
+        click.fromAccessibility = true;
+        for (const ClickListener &l : m_click)
+            l(click, window, app);
+        return true;
+    }
+    case AccessibilityAction::Focus:
+        if (!m_focus)
+            return false;
+        window.focus(m_focus);
+        return true;
+    default: return false;
+    }
+}
+
 bool Div::isScrollable() const
 {
     return m_style.layout.overflowX == Overflow::Scroll || m_style.layout.overflowY == Overflow::Scroll;
@@ -242,6 +448,12 @@ void Div::paint(Rect bounds, Window &window, App &app)
         window.pushDispatchNode(m_focus.id(), m_keyContext);
     registerMouseListeners(window);
     registerKeyListeners(window);
+    bool ownNode = false;
+    const bool hidden = m_access && m_access->hidden && window.accessibilityEnabled();
+    if (hidden)
+        window.pushAccessibilityHidden();
+    else if (window.accessibilityEnabled())
+        describeAccessibility(bounds, window, ownNode);
 
     const bool clip = s.layout.overflowX != Overflow::Visible || s.layout.overflowY != Overflow::Visible;
     if (clip)
@@ -255,6 +467,10 @@ void Div::paint(Rect bounds, Window &window, App &app)
         window.popTextStyle();
     if (clip)
         window.popContentMask();
+    if (ownNode)
+        window.endAccessibilityNode();
+    if (hidden)
+        window.popAccessibilityHidden();
     if (m_scrollState && !m_hideScrollbar)
         paintScrollbars(bounds, window);
     if (node)
@@ -358,7 +574,7 @@ void Div::registerMouseListeners(Window &window)
                 st->pressed = false;
                 if (self->m_activeStyle)
                     w.refresh();
-                if (!self->m_click.empty()) {
+                if (!self->m_click.empty() && !self->isDisabled()) {
                     ClickEvent click;
                     click.down = st->down;
                     click.up = *up;
@@ -425,8 +641,8 @@ void Div::registerKeyListeners(Window &window)
                 }
                 // A focused clickable element is pressed with Enter or Space.
                 const Keystroke &k = down->keystroke;
-                if (self->m_focus && self->m_focus.isFocused(w) && !self->m_click.empty() && !k.modifiers.any()
-                        && (k.key == u"enter" || k.key == u"space")) {
+                if (self->m_focus && self->m_focus.isFocused(w) && !self->m_click.empty() && !self->isDisabled()
+                    && !k.modifiers.any() && (k.key == u"enter" || k.key == u"space")) {
                     ClickEvent click;
                     click.isKeyboard = true;
                     for (const ClickListener &l : self->m_click)

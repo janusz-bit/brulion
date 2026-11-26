@@ -4,6 +4,7 @@
 
 #include "base/color.h"
 #include "base/geometry.h"
+#include "ui/accessibility.h"
 #include "ui/app.h"
 #include "ui/div.h"
 #include "ui/element.h"

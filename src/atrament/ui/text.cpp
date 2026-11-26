@@ -140,6 +140,8 @@ void Text::prepaint(Rect bounds, Window &, App &)
 
 void Text::paint(Rect bounds, Window &window, App &)
 {
+    if (window.accessibilityEnabled())
+        window.addAccessibilityText(text(), bounds, m_layout.get());
     if (!m_layout)
         return;
     window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()),

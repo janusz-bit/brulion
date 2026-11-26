@@ -28,7 +28,7 @@ struct Form {
     std::vector<std::u16string> submitted;
     std::vector<Subscription> subs;
     Form(Context<Form> &cx, bool multiline)
-        : field(cx.newEntity<TextInput>(TextInputOptions { u"Szukaj", multiline, InputHandler::Purpose::Text, {} }))
+        : field(cx.newEntity<TextInput>(TextInputOptions{u"Szukaj", multiline, InputHandler::Purpose::Text, {}, {}}))
     {
         subs.push_back(cx.subscribe<TextInput::Changed>(
                 field, [](Form &f, const TextInput::Changed &, Context<Form> &) { ++f.changes; }));
