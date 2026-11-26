@@ -76,7 +76,7 @@ BDialog {
                 id: iconField
                 objectName: "codeProjectIconField"
                 Layout.preferredWidth: 72
-                placeholderText: "🦊"
+                placeholderText: "📁"
                 accessibleName: qsTr("The project's icon: an emoji")
                 maximumLength: 16
             }

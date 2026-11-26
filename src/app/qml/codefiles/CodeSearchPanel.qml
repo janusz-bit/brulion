@@ -88,6 +88,7 @@ Item {
         contentItem: Text {
             id: toggleText
             text: toggle.label
+            textFormat: Text.PlainText
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             font.family: Theme.fontMono
@@ -289,6 +290,7 @@ Item {
                                 Layout.preferredWidth: lineMetrics.advanceWidth("00000")
                                 horizontalAlignment: Text.AlignRight
                                 text: "" + result.line
+                                textFormat: Text.PlainText
                                 color: Theme.fgFaint
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs

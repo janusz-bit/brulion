@@ -174,6 +174,7 @@ FocusScope {
                     anchors.rightMargin: Theme.space2
                     anchors.verticalCenter: parent.verticalCenter
                     text: "" + row.number
+                    textFormat: Text.PlainText
                     color: row.marked || row.selected ? Theme.fg : Theme.fgFaint
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.textSm
