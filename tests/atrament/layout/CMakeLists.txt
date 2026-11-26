@@ -1,0 +1,1 @@
+brulion_add_test(tst_atrament_layout SOURCES tst_atrament_layout.cpp LIBS brulion_atrament_layout)
