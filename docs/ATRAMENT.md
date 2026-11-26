@@ -216,7 +216,10 @@ Rules of thumb:
 * **Strings**: `std::u16string` / `std::u16string_view`, offsets in UTF-16 code units — what
   `QString` and Brulion's core use, so text from the core passes without conversion.
 * **Hosting in the Qt app**: `auto *item = new AtramentItem(parent); item->attach(app, view)` — the
-  item is a `QQuickItem` like any other; one `App` serves every item of the process.
+  item is a `QQuickItem` like any other; one `App` serves every item of the process. In the app's
+  QML, `AtramentView { view: "gallery" }` (src/app/ui/atramentview.h) shows a named view of the
+  process's App; `brulion --atrament` opens it in a window of the design system
+  (qml/dev/AtramentDemo.qml).
 
 ## Code
 

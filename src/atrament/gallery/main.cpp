@@ -21,10 +21,12 @@ using namespace brulion::atrament;
 
 namespace {
 
+const QStringList kFontFolders { QStringLiteral(":/atrament/fonts/ui"), QStringLiteral(":/atrament/fonts") };
+
 int screenshot(const QString &file, Size size, float scale, int section, std::optional<Point> hover, int frames)
 {
     auto platform = std::make_shared<TestPlatform>();
-    App app(platform, gallery::loadFonts());
+    App app(platform, gallery::loadFonts(kFontFolders));
     TestWindow &tw = platform->newWindow(size, scale);
     Entity<gallery::Gallery> root = app.newEntity<gallery::Gallery>();
     root.update(app, [section](gallery::Gallery &g, Context<gallery::Gallery> &) { g.section = section; });
@@ -89,7 +91,7 @@ int main(int argc, char **argv)
     }
 
     auto platform = std::make_shared<QtPlatform>();
-    App app(platform, gallery::loadFonts());
+    App app(platform, gallery::loadFonts(kFontFolders));
     Entity<gallery::Gallery> root = app.newEntity<gallery::Gallery>();
     root.update(app, [section](gallery::Gallery &g, Context<gallery::Gallery> &) { g.section = section; });
 

@@ -56,11 +56,11 @@ const Theme &theme()
     return t;
 }
 
-std::shared_ptr<FontCollection> loadFonts()
+std::shared_ptr<FontCollection> loadFonts(const QStringList &folders)
 {
     auto fonts = std::make_shared<FontCollection>();
     QStringList files;
-    for (const QString &dir : { QStringLiteral(":/atrament/fonts/ui"), QStringLiteral(":/atrament/fonts") }) {
+    for (const QString &dir : folders) {
         const QDir d(dir);
         for (const QString &f : d.entryList({ QStringLiteral("*.ttf"), QStringLiteral("*.otf") }, QDir::Files))
             files << d.filePath(f);

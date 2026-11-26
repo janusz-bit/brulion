@@ -6,6 +6,8 @@
 
 #include "ui/atrament.h"
 
+#include <QStringList>
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -55,7 +57,9 @@ private:
     Entity<TextInput> m_note;
 };
 
-// Bundled fonts from the gallery's resources into a collection, with the fallback chain set.
-std::shared_ptr<FontCollection> loadFonts();
+// Fonts from resource or file folders (every .ttf / .otf in them) into a collection, with
+// Brulion's fallback chain set. The developer app's: ":/atrament/fonts/ui", ":/atrament/fonts";
+// the Brulion app's: ":/fonts/ui", ":/fonts".
+std::shared_ptr<FontCollection> loadFonts(const QStringList &folders);
 
 } // namespace brulion::atrament::gallery

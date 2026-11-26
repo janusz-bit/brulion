@@ -97,6 +97,10 @@ set(BRULION_UI_QML
 )
 if(BRULION_DEV_QML_ENABLED)
     list(APPEND BRULION_UI_QML qml/dev/Gallery.qml qml/dev/GallerySection.qml)
+    # Atrament inside the app (`--atrament`, docs/ATRAMENT.md), where Atrament is built.
+    if(TARGET brulion_atrament_gallery)
+        list(APPEND BRULION_UI_QML qml/dev/AtramentDemo.qml)
+    endif()
 endif()
 # DatesHelper, TextHelper and DiffHelper live in the GUI-free static library brulion_ui_helpers
 # (src/app/ui/CMakeLists.txt, unit-tested in tests/app) and are registered here by
@@ -131,6 +135,10 @@ set(BRULION_UI_SOURCES
     ui/focusring.h ui/focusring.cpp
     ui/keyboardsources.h ui/keyboardsources.cpp
 )
+# AtramentView (`AtramentView { view: "gallery" }`): an Atrament view in QML (docs/ATRAMENT.md D12).
+if(TARGET brulion_atrament_gallery)
+    list(APPEND BRULION_UI_SOURCES ui/atramentview.h ui/atramentview.cpp)
+endif()
 set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml qml/components/OpenIn.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.
@@ -439,6 +447,10 @@ brulion_order_startup(brulion)
 
 target_compile_definitions(brulion PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(brulion PRIVATE brulion_core brulion_platform Qt6::Quick Qt6::QuickControls2 Qt6::Svg)
+if(TARGET brulion_atrament_gallery)
+    target_link_libraries(brulion PRIVATE brulion_atrament_gallery)
+    target_compile_definitions(brulion PRIVATE BRULION_HAS_ATRAMENT)
+endif()
 brulion_set_warnings(brulion)
 
 # -no-obsolete: strings that left the sources are dropped, not kept as vanished entries.
