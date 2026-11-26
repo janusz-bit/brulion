@@ -209,8 +209,18 @@ composition changes (Android's input context listens to it and tells the keyboar
 `InputMethodManager.updateSelection`), sets the input item's rectangle to the field, shows the
 virtual keyboard when a field takes the focus or is tapped and hides it when none has the focus,
 asks the input method to commit before a press and makes it forget a composition that ended
-without it (another field, a press, the focus gone; the field keeps the text). Tested with the
-event sequences of Qt's Android input context for Gboard (`tests/atrament/qt/tst_atrament_qt_input`).
+without it (another field, a press, the focus gone; the field keeps the text). It has an
+`inputMethodHints` property: Qt's Android input context drops every call of the keyboard's
+`InputConnection` to a focus object without one (Qt Quick's text fields have it). A screen reader
+moving its focus onto a field opens no keyboard; activating it does. Tested with the event
+sequences of Qt's Android input context for Gboard (`tests/atrament/qt/tst_atrament_qt_input`).
+
+A field keeps its caret in view (`Window::revealRect`: the scroll containers around an element —
+scrolling `div()`s push themselves in prepaint — scroll the least that shows a rectangle after the
+frame): when it takes the focus, when the caret or the text changes, and when the window gets
+another size, which is how an on-screen keyboard reaches Atrament (the QML around ends the view at
+the keyboard's top). A finger's press only places the caret: selecting is the platform's long
+press and handles, not a drag.
 
 ### Accessibility
 
@@ -328,7 +338,8 @@ Rules of thumb:
   (qml/dev/AtramentDemo.qml, developer QML: desktop builds and debuggable APKs — on a phone
   `adb shell am start -n io.github.januszbit.brulion.test/io.github.januszbit.brulion.android.BrulionActivity
   --es applicationArguments --atrament` for the APK of
-  `BRULION_ANDROID_ID_SUFFIX=.test BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo scripts/android-build.sh`).
+  `BRULION_ANDROID_ID_SUFFIX=.test BRULION_ANDROID_BUILD_TYPE=Debug scripts/android-build.sh`: Qt passes start
+  arguments only to a debuggable APK).
 
 ## Code
 
@@ -374,7 +385,7 @@ Each milestone ends with something running and measured; the gates decide whethe
 | Milestone | Content | Gate |
 |---|---|---|
 | **M0 Foundation** | base, scene, CPU raster, text (fonts, shaping, glyph raster, atlas, paragraph layout, hit tests), flex layout, ui (App, entities, window, div/text/canvas, events, hover, click, scroll, focus), test platform, Qt Quick host, gallery | The gallery runs in Brulion's Qt; every area has tests; a frame of the gallery in < 4 ms of CPU raster at 1280×800 (-O2). |
-| **M1 Editing** | text input element with selection, clipboard, undo hooks, the `InputHandler` through Qt (desktop + Android IME), virtualized lists (uniform and measured), images, keymaps, accessibility bridge | Polish text typed with Gboard (composition, autocorrect, gesture typing) and with a Linux IME into an Atrament field, TalkBack reads it. |
+| **M1 Editing** | text input element with selection, clipboard, undo hooks, the `InputHandler` through Qt (desktop + Android IME), virtualized lists (uniform and measured), images, keymaps, accessibility bridge | Polish text typed with Gboard (composition, autocorrect, gesture typing) and with a Linux IME into an Atrament field, TalkBack reads it. First check (2026-11-26, on the Android 16 emulator with Gboard — the phone was not connected): typing, gesture typing, a suggestion replacing the word (`replaceText`), Backspace, Enter in the multiline field, autocapitalisation, a long press selecting a word with Android's handles and Cut / Copy / Select all, the clipboard both ways (a Polish word cut and pasted from Gboard's clipboard), the caret kept above the keyboard, TalkBack's tree (tabs, buttons, a toggle, both fields with label and placeholder) and its focus following the field; three bugs found and fixed on the way (below). Gboard committed every letter there (no composition, so no autocorrect on space) — Qt Quick's own text fields alike: composition and Polish autocorrect still need the phone. Left: scrolling with a finger (Atrament has no touch scrolling or fling yet: a drag over a list does nothing), TalkBack's speech on a device, the tabs' selected state (not in Android's tree). |
 | **M2 First Brulion view** | the journal / page block editor in Atrament inside the QML shell, behind a setting; the QRhi GPU renderer (in place: every primitive kind, within 2 levels of the CPU renderer) | Memory per block < 2 KB (today 100–200 KB), scrolling a 1 000-block page at 120 fps on the desktop, the editor's existing behaviour tests pass against it. |
 | **M3 Views** | calendar, tasks, search, settings, Code mode (editor, terminal), the chat; the shell | No QML in the default journey. |
 | **M4 Own platforms** | Wayland (xdg-shell, layer-shell, text-input-v3, fractional scale), X11, Win32, Android (GameActivity + our own `InputConnection` in Kotlin), web (canvas + WebGPU / WebGL2, hidden textarea for the IME); the WebGPU renderer (Dawn) | The app runs with no QtGui/QtQuick loaded on Linux and Android. |
