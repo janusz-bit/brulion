@@ -86,6 +86,33 @@ private Q_SLOTS:
     void binary();
     void subject_data();
     void subject();
+    void revisions_data();
+    void revisions();
+
+    // history, remotes, gh
+    void log();
+    void logMalformed();
+    void stashes();
+    void remotes();
+    void remoteUrls_data();
+    void remoteUrls();
+    void forkTargets();
+    void pullRequestView_data();
+    void pullRequestView();
+    void repositoryNames_data();
+    void repositoryNames();
+
+    // patches
+    void patchHunks();
+    void patchTouching_data();
+    void patchTouching();
+    void patchOfSomeHunks();
+    void patchOfSomeHunksReversed();
+    void patchNoNewlineAndCrlf();
+    void patchMalformed();
+    void patchBinary();
+    void conflictMarkers_data();
+    void conflictMarkers();
 };
 
 // ---- status ------------------------------------------------------------------------------------
@@ -724,6 +751,426 @@ void TestGitCli::subject()
 {
     QFETCH(QString, message);
     QTEST(subjectOf(message), "subject");
+}
+
+void TestGitCli::revisions_data()
+{
+    QTest::addColumn<QString>("revision");
+    QTest::addColumn<bool>("ok");
+    QTest::newRow("HEAD") << u"HEAD"_s << true;
+    QTest::newRow("oid") << u"1a2b3c4d5e6f"_s << true;
+    QTest::newRow("remote branch") << u"origin/main"_s << true;
+    QTest::newRow("parent") << u"HEAD~1"_s << true;
+    QTest::newRow("checkpoint") << u"refs/brulion/checkpoints/abc"_s << true;
+    QTest::newRow("Polish branch") << u"gałąź/żółw"_s << true;
+    QTest::newRow("empty") << QString() << false;
+    QTest::newRow("option") << u"--output=/tmp/x"_s << false;
+    QTest::newRow("space") << u"a b"_s << false;
+    QTest::newRow("colon") << u"HEAD:secret"_s << false;
+    QTest::newRow("newline") << u"a\nb"_s << false;
+    QTest::newRow("backslash") << u"a\\b"_s << false;
+    QTest::newRow("too long") << QString(251, u'a') << false;
+}
+
+void TestGitCli::revisions()
+{
+    QFETCH(QString, revision);
+    QTEST(isSafeRevision(revision), "ok");
+}
+
+// ---- history, remotes, gh ----------------------------------------------------------------------
+
+void TestGitCli::log()
+{
+    QVERIFY(logFormat().startsWith(u"tformat:"_s));
+    const QByteArray data = z({"1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222",
+                               "Zofia Żółć", "zofia@example.com", "1700000000", "Poprawka: łączenie gałęzi",
+                               "\n2222222222222222222222222222222222222222", "", "Jan", "jan@example.com",
+                               "1600000000", "Root",
+                               "\n3333333333333333333333333333333333333333",
+                               "1111111111111111111111111111111111111111 2222222222222222222222222222222222222222",
+                               "Ann", "ann@example.com", "1800000000", "Merge branch 'x'"})
+                            + '\n';
+    const QList<Commit> commits = parseLog(data);
+    QCOMPARE(commits.size(), 3);
+    QCOMPARE(commits.at(0).oid, u"1111111111111111111111111111111111111111"_s);
+    QCOMPARE(commits.at(0).parents, QStringList{u"2222222222222222222222222222222222222222"_s});
+    QCOMPARE(commits.at(0).authorName, u"Zofia Żółć"_s);
+    QCOMPARE(commits.at(0).authorEmail, u"zofia@example.com"_s);
+    QCOMPARE(commits.at(0).authorTime, 1700000000);
+    QCOMPARE(commits.at(0).subject, u"Poprawka: łączenie gałęzi"_s);
+    QVERIFY(commits.at(1).parents.isEmpty());
+    QCOMPARE(commits.at(2).parents.size(), 2);
+    QCOMPARE(commits.at(2).subject, u"Merge branch 'x'"_s);
+}
+
+void TestGitCli::logMalformed()
+{
+    QVERIFY(parseLog("").isEmpty());
+    QVERIFY(parseLog("garbage without nuls").isEmpty());
+    // Not an id; a truncated record at the end.
+    QVERIFY(parseLog(z({"zzzz", "", "a", "b", "1", "s", "\n4444444444444444444444444444444444444444", "", "a"})).isEmpty());
+    // A time that does not read is 0, the rest stays.
+    const QList<Commit> c = parseLog(z({"5555555555555555555555555555555555555555", "", "a", "b", "x", "s"}));
+    QCOMPARE(c.size(), 1);
+    QCOMPARE(c.at(0).authorTime, 0);
+}
+
+void TestGitCli::stashes()
+{
+    QVERIFY(stashFormat().startsWith(u"tformat:"_s));
+    const QByteArray data = z({"stash@{0}", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "1700000000", "On main: przed zmianą",
+                               "\nstash@{1}", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "1600000000",
+                               "WIP on funkcja/żółw: 1a2b3c4 Coś",
+                               "\nstash@{x}", "cccccccccccccccccccccccccccccccccccccccc", "1", "broken",
+                               "\nstash@{2}", "dddddddddddddddddddddddddddddddddddddddd", "5", "autostash"})
+                            + '\n';
+    const QList<Stash> s = parseStashes(data);
+    QCOMPARE(s.size(), 3);
+    QCOMPARE(s.at(0).index, 0);
+    QCOMPARE(s.at(0).oid, u"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"_s);
+    QCOMPARE(s.at(0).time, 1700000000);
+    QCOMPARE(s.at(0).message, u"On main: przed zmianą"_s);
+    QCOMPARE(s.at(0).branch, u"main"_s);
+    QCOMPARE(s.at(1).index, 1);
+    QCOMPARE(s.at(1).branch, u"funkcja/żółw"_s);
+    QCOMPARE(s.at(2).index, 2);
+    QCOMPARE(s.at(2).branch, QString());
+    QVERIFY(parseStashes("").isEmpty());
+}
+
+void TestGitCli::remotes()
+{
+    const QList<Remote> r = parseRemotes("origin\tgit@github.com:ja/repo.git (fetch)\n"
+                                         "origin\tgit@github.com:ja/repo.git (push)\n"
+                                         "upstream\thttps://github.com/org/repo.git (fetch)\n"
+                                         "upstream\tno-push (push)\r\n"
+                                         "local\t/home/ja/kopia zapasowa (fetch)\n"
+                                         "broken line\n"
+                                         "\tno name (fetch)\n");
+    QCOMPARE(r.size(), 3);
+    QCOMPARE(r.at(0).name, u"origin"_s);
+    QCOMPARE(r.at(0).fetchUrl, u"git@github.com:ja/repo.git"_s);
+    QCOMPARE(r.at(0).pushUrl, u"git@github.com:ja/repo.git"_s);
+    QCOMPARE(r.at(1).pushUrl, u"no-push"_s);
+    QCOMPARE(r.at(2).fetchUrl, u"/home/ja/kopia zapasowa"_s);
+    QCOMPARE(r.at(2).pushUrl, r.at(2).fetchUrl);
+}
+
+void TestGitCli::remoteUrls_data()
+{
+    QTest::addColumn<QString>("url");
+    QTest::addColumn<QString>("host");
+    QTest::addColumn<QString>("owner");
+    QTest::addColumn<QString>("name");
+    QTest::newRow("scp") << u"git@github.com:ja/repo.git"_s << u"github.com"_s << u"ja"_s << u"repo"_s;
+    QTest::newRow("https") << u"https://github.com/Org/My.Repo"_s << u"github.com"_s << u"Org"_s << u"My.Repo"_s;
+    QTest::newRow("https .git /") << u"https://github.com/org/repo.git/"_s << u"github.com"_s << u"org"_s << u"repo"_s;
+    QTest::newRow("token") << u"https://x:ghp_secret@GitHub.com/org/repo"_s << u"github.com"_s << u"org"_s << u"repo"_s;
+    QTest::newRow("ssh port") << u"ssh://git@example.org:2222/grupa/podgrupa/repo.git"_s << u"example.org"_s
+                              << u"grupa/podgrupa"_s << u"repo"_s;
+    QTest::newRow("git://") << u"git://github.com/a/b"_s << u"github.com"_s << u"a"_s << u"b"_s;
+    QTest::newRow("local path") << u"/home/ja/repo"_s << QString() << QString() << QString();
+    QTest::newRow("relative") << u"../repo"_s << QString() << QString() << QString();
+    QTest::newRow("windows") << u"C:\\repos\\x"_s << QString() << QString() << QString();
+    QTest::newRow("one part") << u"https://github.com/repo"_s << QString() << QString() << QString();
+    QTest::newRow("empty") << QString() << QString() << QString() << QString();
+}
+
+void TestGitCli::remoteUrls()
+{
+    QFETCH(QString, url);
+    const RepoSlug slug = parseRemoteUrl(url);
+    QTEST(slug.host, "host");
+    QTEST(slug.owner, "owner");
+    QTEST(slug.name, "name");
+}
+
+void TestGitCli::forkTargets()
+{
+    const QList<Remote> fork{{u"origin"_s, u"git@github.com:ja/repo.git"_s, u"git@github.com:ja/repo.git"_s},
+                             {u"upstream"_s, u"https://github.com/org/repo.git"_s, u"https://github.com/org/repo.git"_s}};
+    ForkTarget t = forkTarget(fork, QString(), u"funkcja/żółw"_s);
+    QCOMPARE(t.repo, u"org/repo"_s);
+    QCOMPARE(t.head, u"ja:funkcja/żółw"_s);
+    // Pushed to upstream itself: no fork.
+    t = forkTarget(fork, u"upstream"_s, u"x"_s);
+    QVERIFY(t.repo.isEmpty() && t.head.isEmpty());
+    // No upstream remote, or the same repository under two names, or another host.
+    QVERIFY(forkTarget({fork.at(0)}, QString(), u"x"_s).repo.isEmpty());
+    const QList<Remote> same{fork.at(0), {u"upstream"_s, u"https://github.com/JA/repo"_s, u"https://github.com/JA/repo"_s}};
+    QVERIFY(forkTarget(same, QString(), u"x"_s).repo.isEmpty());
+    const QList<Remote> otherHost{fork.at(0), {u"upstream"_s, u"https://gitlab.com/org/repo"_s, QString()}};
+    QVERIFY(forkTarget(otherHost, QString(), u"x"_s).repo.isEmpty());
+    // GitHub Enterprise: the host before the repository.
+    const QList<Remote> enterprise{{u"origin"_s, u"git@ghe.example.com:ja/repo.git"_s, u"git@ghe.example.com:ja/repo.git"_s},
+                                   {u"upstream"_s, u"https://ghe.example.com/org/repo"_s, QString()}};
+    t = forkTarget(enterprise, u"origin"_s, u"x"_s);
+    QCOMPARE(t.repo, u"ghe.example.com/org/repo"_s);
+    QCOMPARE(t.head, u"ja:x"_s);
+    QVERIFY(forkTarget(fork, QString(), QString()).repo.isEmpty());
+}
+
+void TestGitCli::pullRequestView_data()
+{
+    QTest::addColumn<QByteArray>("json");
+    QTest::addColumn<int>("number");
+    QTest::addColumn<QString>("state");
+    QTest::newRow("open") << QByteArray(R"({"number":17,"url":"https://github.com/ja/repo/pull/17","state":"OPEN",)"
+                                        R"("isDraft":false,"title":"Żółw","baseRefName":"main"})")
+                          << 17 << u"open"_s;
+    QTest::newRow("draft") << QByteArray(R"({"number":3,"url":"https://github.com/a/b/pull/3","state":"OPEN","isDraft":true})")
+                           << 3 << u"draft"_s;
+    QTest::newRow("merged") << QByteArray(R"({"number":4,"url":"https://github.com/a/b/pull/4","state":"MERGED","isDraft":true})")
+                            << 4 << u"merged"_s;
+    QTest::newRow("closed") << QByteArray(R"({"number":5,"url":"https://github.com/a/b/pull/5","state":"CLOSED"})")
+                            << 5 << u"closed"_s;
+    QTest::newRow("no url") << QByteArray(R"({"number":5,"state":"OPEN"})") << 0 << QString();
+    QTest::newRow("not http") << QByteArray(R"j({"number":5,"url":"javascript:alert(1)","state":"OPEN"})j") << 0 << QString();
+    QTest::newRow("garbage") << QByteArray("no pull requests found") << 0 << QString();
+    QTest::newRow("array") << QByteArray("[1,2]") << 0 << QString();
+}
+
+void TestGitCli::pullRequestView()
+{
+    QFETCH(QByteArray, json);
+    const PullRequestInfo pr = parsePullRequestView(json);
+    QTEST(pr.number, "number");
+    QTEST(pr.state, "state");
+    if (pr.number == 17) {
+        QCOMPARE(pr.title, u"Żółw"_s);
+        QCOMPARE(pr.baseRefName, u"main"_s);
+        QCOMPARE(pr.url, u"https://github.com/ja/repo/pull/17"_s);
+    }
+}
+
+void TestGitCli::repositoryNames_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<bool>("ok");
+    QTest::newRow("plain") << u"notatki"_s << true;
+    QTest::newRow("owner") << u"ja/my-repo.v2_x"_s << true;
+    QTest::newRow("empty") << QString() << false;
+    QTest::newRow("dot") << u"."_s << false;
+    QTest::newRow("dots") << u"ja/.."_s << false;
+    QTest::newRow("option") << u"--public"_s << false;
+    QTest::newRow("space") << u"my repo"_s << false;
+    QTest::newRow("Polish") << u"notatki-żółw"_s << false;
+    QTest::newRow("three parts") << u"a/b/c"_s << false;
+    QTest::newRow("empty part") << u"a/"_s << false;
+}
+
+void TestGitCli::repositoryNames()
+{
+    QFETCH(QString, name);
+    QTEST(isValidRepositoryName(name), "ok");
+}
+
+// ---- patches -----------------------------------------------------------------------------------
+
+namespace {
+
+/// A file of 20 lines "1" … "20" with lines 3 and 15 changed and a line added after 9.
+const QByteArray kPatch = "diff --git a/plik ż.txt b/plik ż.txt\n"
+                          "index 1111111..2222222 100644\n"
+                          "--- a/plik ż.txt\n"
+                          "+++ b/plik ż.txt\n"
+                          "@@ -1,6 +1,6 @@ sekcja\n"
+                          " 1\n"
+                          " 2\n"
+                          "-3\n"
+                          "+trzy\n"
+                          " 4\n"
+                          " 5\n"
+                          " 6\n"
+                          "@@ -7,5 +7,6 @@\n"
+                          " 7\n"
+                          " 8\n"
+                          " 9\n"
+                          "+9½\n"
+                          " 10\n"
+                          " 11\n"
+                          "@@ -12,7 +13,6 @@\n"
+                          " 12\n"
+                          " 13\n"
+                          " 14\n"
+                          "-15\n"
+                          " 16\n"
+                          " 17\n"
+                          " 18\n";
+
+} // namespace
+
+void TestGitCli::patchHunks()
+{
+    const FilePatch p = parsePatch(kPatch);
+    QVERIFY(!p.binary);
+    QVERIFY(p.header.startsWith("diff --git a/plik ż.txt"));
+    QVERIFY(p.header.endsWith("+++ b/plik ż.txt\n"));
+    QCOMPARE(p.hunks.size(), 3);
+    const Hunk &a = p.hunks.at(0);
+    QCOMPARE(a.oldStart, 1);
+    QCOMPARE(a.oldLines, 6);
+    QCOMPARE(a.newStart, 1);
+    QCOMPARE(a.newLines, 6);
+    QCOMPARE(a.section, QByteArray("sekcja"));
+    QCOMPARE(a.lines.size(), 7);
+    QCOMPARE(a.oldFirst, 3);
+    QCOMPARE(a.oldLast, 3);
+    QCOMPARE(a.newFirst, 3);
+    QCOMPARE(a.newLast, 3);
+    // An insertion after line 9: new line 10, before old line 10.
+    const Hunk &b = p.hunks.at(1);
+    QCOMPARE(b.newFirst, 10);
+    QCOMPARE(b.newLast, 10);
+    QCOMPARE(b.oldFirst, 10);
+    QCOMPARE(b.oldLast, 10);
+    // A deletion of old line 15: before new line 16 (15 + the line added above).
+    const Hunk &c = p.hunks.at(2);
+    QCOMPARE(c.oldFirst, 15);
+    QCOMPARE(c.oldLast, 15);
+    QCOMPARE(c.newFirst, 16);
+    QCOMPARE(c.newLast, 16);
+}
+
+void TestGitCli::patchTouching_data()
+{
+    QTest::addColumn<int>("first");
+    QTest::addColumn<int>("last");
+    QTest::addColumn<bool>("newSide");
+    QTest::addColumn<QList<int>>("hunks");
+    QTest::newRow("first hunk") << 3 << 3 << true << QList<int>{0};
+    QTest::newRow("context only") << 5 << 6 << true << QList<int>{};
+    QTest::newRow("insertion") << 10 << 10 << true << QList<int>{1};
+    QTest::newRow("all") << 1 << 30 << true << QList<int>{0, 1, 2};
+    QTest::newRow("reversed range") << 16 << 3 << true << QList<int>{0, 1, 2};
+    QTest::newRow("old side deletion") << 15 << 15 << false << QList<int>{2};
+    QTest::newRow("old side insertion point") << 10 << 11 << false << QList<int>{1};
+    QTest::newRow("beyond") << 40 << 50 << true << QList<int>{};
+}
+
+void TestGitCli::patchTouching()
+{
+    QFETCH(int, first);
+    QFETCH(int, last);
+    QFETCH(bool, newSide);
+    QTEST(hunksTouching(parsePatch(kPatch), first, last, newSide), "hunks");
+}
+
+void TestGitCli::patchOfSomeHunks()
+{
+    const FilePatch p = parsePatch(kPatch);
+    // Only the last hunk: its new start as if the insertion before it were not there.
+    const QByteArray last = patchOf(p, {2});
+    QVERIFY(last.startsWith(p.header));
+    QVERIFY2(last.contains("\n@@ -12,7 +12,6 @@\n 12\n"), last.constData());
+    QVERIFY(!last.contains("trzy"));
+    // The first and the last: the first moves nothing (it adds as many lines as it deletes).
+    const QByteArray two = patchOf(p, {2, 0, 2});
+    QVERIFY(two.contains("@@ -1,6 +1,6 @@ sekcja\n"));
+    QVERIFY(two.contains("@@ -12,7 +12,6 @@\n"));
+    QVERIFY(!two.contains("9½"));
+    // The insertion and the deletion: the deletion's new start moves by the inserted line.
+    const QByteArray insertion = patchOf(p, {1, 2});
+    QVERIFY(insertion.contains("@@ -7,5 +7,6 @@\n"));
+    QVERIFY(insertion.contains("@@ -12,7 +13,6 @@\n"));
+    // Everything: the patch as git wrote it.
+    QCOMPARE(patchOf(p, {0, 1, 2}), kPatch);
+    QVERIFY(patchOf(p, {}).isEmpty());
+    QVERIFY(patchOf(p, {7}).isEmpty());
+}
+
+void TestGitCli::patchOfSomeHunksReversed()
+{
+    const FilePatch p = parsePatch(kPatch);
+    // Reversed onto the new file (all hunks in it): the new starts stay, the old ones move as if
+    // only the chosen hunks were taken out.
+    const QByteArray last = patchOf(p, {2}, true);
+    QVERIFY2(last.contains("\n@@ -13,7 +13,6 @@\n"), last.constData());
+    const QByteArray insertion = patchOf(p, {1}, true);
+    QVERIFY(insertion.contains("@@ -7,5 +7,6 @@\n"));
+    QCOMPARE(patchOf(p, {0, 1, 2}, true), kPatch);
+}
+
+void TestGitCli::patchNoNewlineAndCrlf()
+{
+    const QByteArray data = "diff --git a/x b/x\n--- a/x\n+++ b/x\n"
+                            "@@ -1,2 +1,2 @@\n"
+                            " jeden\r\n"
+                            "-dwa\r\n"
+                            "\\ No newline at end of file\n"
+                            "+dwa!\r\n"
+                            "\\ No newline at end of file\n";
+    const FilePatch p = parsePatch(data);
+    QCOMPARE(p.hunks.size(), 1);
+    QCOMPARE(p.hunks.at(0).lines.size(), 5);
+    QCOMPARE(p.hunks.at(0).lines.at(0), QByteArray(" jeden\r"));
+    QCOMPARE(patchOf(p, {0}), data);
+    // A pure insertion into an empty file and a deletion of everything.
+    const FilePatch added = parsePatch("diff --git a/n b/n\nnew file mode 100644\n--- /dev/null\n+++ b/n\n"
+                                       "@@ -0,0 +1,2 @@\n+a\n+b\n");
+    QCOMPARE(added.hunks.size(), 1);
+    QCOMPARE(added.hunks.at(0).newFirst, 1);
+    QCOMPARE(added.hunks.at(0).newLast, 2);
+    QCOMPARE(added.hunks.at(0).oldFirst, 1);
+    const FilePatch deleted = parsePatch("diff --git a/d b/d\ndeleted file mode 100644\n--- a/d\n+++ /dev/null\n"
+                                         "@@ -1,2 +0,0 @@\n-a\n-b\n");
+    QCOMPARE(deleted.hunks.size(), 1);
+    QCOMPARE(deleted.hunks.at(0).oldFirst, 1);
+    QCOMPARE(deleted.hunks.at(0).oldLast, 2);
+    QCOMPARE(deleted.hunks.at(0).newFirst, 1);
+}
+
+void TestGitCli::patchMalformed()
+{
+    QVERIFY(parsePatch("").hunks.isEmpty());
+    QVERIFY(parsePatch("garbage\n@@ nonsense @@\n+x\n").hunks.isEmpty());
+    // Counts that do not add up (truncated), then a good hunk.
+    const FilePatch p = parsePatch("diff --git a/x b/x\n--- a/x\n+++ b/x\n"
+                                   "@@ -1,3 +1,3 @@\n a\n-b\n"
+                                   "@@ -10,1 +10,1 @@\n-x\n+y\n");
+    QCOMPARE(p.hunks.size(), 1);
+    QCOMPARE(p.hunks.at(0).oldStart, 10);
+    // A second file is not the first one's.
+    const FilePatch two = parsePatch("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n"
+                                     "diff --git a/y b/y\n--- a/y\n+++ b/y\n@@ -1 +1 @@\n-c\n+d\n");
+    QCOMPARE(two.hunks.size(), 1);
+    QCOMPARE(two.hunks.at(0).lines.at(1), QByteArray("+b"));
+    QVERIFY(!two.header.contains("y"));
+    // A context line that lost its space (an editor stripped it) still counts.
+    const FilePatch stripped = parsePatch("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n a\n\n-c\n+d\n");
+    QCOMPARE(stripped.hunks.size(), 1);
+    QCOMPARE(stripped.hunks.at(0).lines.at(1), QByteArray(" "));
+}
+
+void TestGitCli::patchBinary()
+{
+    const FilePatch p = parsePatch("diff --git a/obraz.png b/obraz.png\nindex 1..2 100644\n"
+                                   "Binary files a/obraz.png and b/obraz.png differ\n");
+    QVERIFY(p.binary);
+    QVERIFY(p.hunks.isEmpty());
+}
+
+void TestGitCli::conflictMarkers_data()
+{
+    QTest::addColumn<QByteArray>("text");
+    QTest::addColumn<bool>("markers");
+    QTest::newRow("conflict") << QByteArray("a\n<<<<<<< HEAD\nb\n=======\nc\n>>>>>>> gałąź\n") << true;
+    QTest::newRow("only the end") << QByteArray("x\n>>>>>>> theirs") << true;
+    QTest::newRow("bare marker") << QByteArray("<<<<<<<\n") << true;
+    QTest::newRow("crlf") << QByteArray("a\r\n<<<<<<<\r\nb\r\n") << true;
+    QTest::newRow("first line") << QByteArray("<<<<<<< ours\n") << true;
+    QTest::newRow("indented") << QByteArray("  <<<<<<< HEAD\n") << false;
+    QTest::newRow("longer marker") << QByteArray("<<<<<<<< eight\n") << false;
+    QTest::newRow("in text") << QByteArray("a <<<<<<< b\n") << false;
+    QTest::newRow("separator alone") << QByteArray("=======\n") << false;
+    QTest::newRow("empty") << QByteArray() << false;
+}
+
+void TestGitCli::conflictMarkers()
+{
+    QFETCH(QByteArray, text);
+    QTEST(hasConflictMarkers(text), "markers");
 }
 
 QTEST_GUILESS_MAIN(TestGitCli)
