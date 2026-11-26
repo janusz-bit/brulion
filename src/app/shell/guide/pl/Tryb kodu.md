@@ -41,6 +41,8 @@ Obok wątku panel **Zmiany** pokazuje zmiany projektu — które, wybierasz w je
 ## Na telefonie
 Komputer, który udostępnia telefonowi swoich agentów ([[AI#Agent na innym komputerze]]), udostępnia też swoje projekty: na telefonie tryb kodu pokazuje je z nazwą komputera. Napisz w wątku — zaczętym na komputerze albo nowym, **Lokalnie** albo w **nowym worktree** — a agent pracuje na tamtym komputerze, w projekcie, jakbyś przy nim siedział. Punkt kontrolny każdej tury powstaje tam, więc z powrotem przy komputerze panel **Zmiany** pokaże, co zmieniła tura z telefonu. Na telefonie widzisz pliki zmienione w ostatniej turze i ich różnice; commit, push i terminal są na komputerze.
 
+To, co aplikacja na komputerze uruchomiła sama, telefon śledzi na żywo: **Na twoich komputerach** nad wątkami pokazuje każdą rozmowę, która tam pracuje, czeka albo o coś pyta. Otwórz ją, a zobaczysz odpowiedź w trakcie pisania, wywołania narzędzi i plan; odpowiedz na pytanie (ze zmianą, o którą prosi), **zatrzymaj** turę albo napisz następną wiadomość — poczeka w kolejce tam albo wejdzie od razu (**steer**). Odpowiedź, pytanie i błąd przychodzą jako powiadomienia. Dopóki Brulion na komputerze udostępnia swoich agentów, wątek jego projektu prowadzi tury w tamtej aplikacji — jeden agent, widoczny na obu ekranach — a nowy wątek zaczęty na telefonie też startuje tam.
+
 ## Pliki i wyszukiwanie
 Panel obok wątku ma trzy karty: **Zmiany**, **Pliki** i **Szukaj**.
 - **Ctrl+P** (albo *Przejdź do pliku…* w palecie) znajduje plik projektu po kilku literach nazwy — `cvw` znajdzie `CodeView.qml`; Enter otwiera go w karcie **Pliki**, Ctrl+Enter w Twoim edytorze.
