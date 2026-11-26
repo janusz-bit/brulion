@@ -4,6 +4,7 @@
 #include "applockcontroller.h"
 #include "appsettings.h"
 #include "chattools.h"
+#include "codeprojects.h"
 #include "commandmodel.h"
 #include "demovault.h"
 #include "extensionviewmodel.h"
@@ -68,6 +69,9 @@
 #include <QPainter>
 #include <QPdfWriter>
 #include <QPointer>
+#if QT_CONFIG(process)
+#include <QProcess>
+#endif
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -8454,6 +8458,96 @@ void checkChatSideChat(QQuickWindow *window, AppController *app, const Check &ch
         focused->forceActiveFocus();
 }
 
+/// Code mode (docs/CODE.md, docs/UI.md "Code mode"): a folder added as a project — a git repository
+/// with a change where git runs —, a thread of it (its partner runs nowhere: no agent needed) shown in
+/// the mode's view with its header, the sidebar's row (wide), the Changes panel's change (wide, git),
+/// the file picker (the palette's "Go to file…"), find in the thread (Ctrl+F); the project and the
+/// thread gone again, back in Notes mode.
+void checkCodeMode(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    const bool wide = window->width() >= 900;
+    QTemporaryDir dir;
+    const QString folder = dir.path() + u"/kalkulator"_s;
+    QDir().mkpath(folder);
+    const auto writeText = [](const QString &file, const QByteArray &bytes) {
+        QFile f(file);
+        return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
+    };
+    writeText(folder + u"/calc.py"_s, "def add(a, b):\n    return a - b\n");
+    bool git = false;
+#if QT_CONFIG(process)
+    if (!QStandardPaths::findExecutable(u"git"_s).isEmpty()) {
+        git = true;
+        for (const QStringList &args :
+             {QStringList{u"init"_s, u"-q"_s}, QStringList{u"add"_s, u"-A"_s},
+              QStringList{u"-c"_s, u"user.name=Ala"_s, u"-c"_s, u"user.email=ala@example.com"_s, u"commit"_s,
+                          u"-qm"_s, u"start"_s}})
+            git = git && QProcess::execute(u"git"_s, QStringList{u"-C"_s, folder} + args) == 0;
+        writeText(folder + u"/calc.py"_s, "def add(a, b):\n    return a + b\n");
+    }
+#endif
+    CodeProjects *projects = app->workspace()->projects();
+    const QString id = projects->add(folder);
+    check(!id.isEmpty(), "a folder becomes a project of Code mode");
+    if (id.isEmpty())
+        return;
+    const QString thread = u"AI/2026-11-26 Popraw dodawanie.md"_s;
+    app->workspace()->writeFile(thread, u"---\ntasks: ignore\npartner: nikt/rozmowa\nproject: "_s + id
+                                            + u"\n---\n- 🧑 Popraw dodawanie w calc.py\n- 🤖 Gotowe: add dodaje.\n"_s);
+    const QString mode = app->settings()->appMode();
+    app->settings()->setAppMode(u"code"_s);
+    app->navigate({{u"view"_s, u"code"_s}, {u"path"_s, thread}});
+    check(waitFor([&] {
+              return named(u"codeHeader"_s) != nullptr && named(u"codeProjectChip"_s) != nullptr
+                     && named(u"chatMessageAi"_s) != nullptr;
+          }),
+          "a thread opens in Code mode with its header and its messages");
+    if (wide) {
+        check(waitFor([&] { return named(u"codeProject_"_s + id) != nullptr && named(u"codeThread"_s) != nullptr; }),
+              "the sidebar lists the project with its thread");
+        if (git)
+            check(waitFor([&] { return named(u"gitChange_0"_s) != nullptr; }, 10000),
+                  "the Changes panel shows the project's uncommitted change");
+    }
+    // The file picker: the palette's "Go to file…", Escape closes it.
+    app->requestUiAction(u"code:findFile"_s);
+    check(waitFor([&] { return named(u"codeFilePickerField"_s) != nullptr; }), "“Go to file…” opens the file picker");
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return named(u"codeFilePickerField"_s) == nullptr; }), "Escape closes the file picker");
+    // Find in the thread (Ctrl+F there: ChatView.openFind — the key itself is tried in the running
+    // app: the shortcuts the steps before left in kept views share it here), both messages match
+    // "doda".
+    if (QQuickItem *chat = named(u"codeChat"_s))
+        QMetaObject::invokeMethod(chat, "openFind");
+    QQuickItem *findField = nullptr;
+    check(waitFor([&] { return (findField = named(u"chatFindField"_s)) != nullptr; }),
+          "find in the thread opens its bar");
+    if (findField) {
+        findField->setProperty("text", u"doda"_s);
+        QMetaObject::invokeMethod(findField, "search", Q_ARG(QString, u"doda"_s));
+        check(waitFor([&] {
+                  QQuickItem *count = named(u"chatFindCount"_s);
+                  return count && count->property("text").toString().contains(u'2');
+              }),
+              "find in the thread counts both messages");
+        sendKey(window, Qt::Key_Escape); // (the field: its text first)
+        sendKey(window, Qt::Key_Escape);
+        check(waitFor([&] { return named(u"chatFindField"_s) == nullptr; }), "Escape closes find in the thread");
+    }
+    // Gone again: Notes mode, the thread to the trash, the project off the list.
+    app->settings()->setAppMode(mode);
+    app->workspace()->chats()->remove(thread);
+    projects->remove(id);
+    mouseMove(window, QPointF(1, 1)); // (away: no tooltip opens)
+    app->goHome();
+    settle(300);
+    closeToolTipsWaitingForDeletion(window);
+    if (focused)
+        focused->forceActiveFocus();
+}
+
 /// A secret an agent asks for (docs/UI.md "AI chat" → "A secret the agent asks for"): its private
 /// card in the conversation — who asks and the label as plain text, the reason, the page's button, a
 /// masked field —, Show unmasks it, Send hands it over as an owner-only file (never into the page),
@@ -13006,6 +13100,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ai-btw. A side chat (/btw): its pane beside the conversation, out of the list.
     checkChatSideChat(window, app, check);
+    closeMenus(window);
+    // 3h-code. Code mode: a project, its thread, the header, the sidebar, the Changes panel, the file
+    // picker and find in the thread.
+    checkCodeMode(window, app, check);
     closeMenus(window);
     // 3h-ign. A page's tasks ignored from its menu, and back.
     checkIgnoreTasks(window, app, check);

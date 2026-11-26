@@ -1334,11 +1334,16 @@ FocusScope {
         model: 9
         delegate: Shortcut {
             required property int index
-            // (In Code mode Ctrl+1–9 open its threads: CodeSidebar.)
-            enabled: AppSettings.appMode !== "code"
             sequence: "Ctrl+" + (index + 1)
-            // Ctrl+9: the last tab, as in browsers.
-            onActivated: AppController.selectTabAt(index === 8 ? -1 : index)
+            // Ctrl+9: the last tab, as in browsers. (In Code mode Ctrl+1–9 open its threads:
+            // CodeSidebar's uiAction — one Shortcut for both, so a sidebar being replaced never
+            // holds the key.)
+            onActivated: {
+                if (AppSettings.appMode === "code")
+                    AppController.requestUiAction("code:thread:" + index)
+                else
+                    AppController.selectTabAt(index === 8 ? -1 : index)
+            }
         }
     }
     function shortcutEnabled(id: string): bool {

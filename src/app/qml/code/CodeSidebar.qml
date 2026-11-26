@@ -126,16 +126,9 @@ Rectangle {
                 sidebar.step(-1)
             else if (action === "code:nextThread")
                 sidebar.step(1)
-        }
-    }
-    // Ctrl+1–9: the n-th thread listed, in Code mode (Notes mode: the tabs', AppShell).
-    Instantiator {
-        model: 9
-        delegate: Shortcut {
-            required property int index
-            enabled: AppSettings.appMode === "code"
-            sequence: "Ctrl+" + (index + 1)
-            onActivated: sidebar.openThreadAt(index)
+            // Ctrl+1–9 in Code mode: the n-th thread listed (AppShell's keys; Notes mode: the tabs).
+            else if (Js.startsWith(action, "code:thread:"))
+                sidebar.openThreadAt(Math.floor(Js.parseInt(Js.sliceFrom(action, 12))))
         }
     }
 
