@@ -100,7 +100,9 @@ public:
     /// from the project's HEAD) without waiting: worktreeCreated() says how it went. False when it
     /// could not start (no such project, no git).
     Q_INVOKABLE bool createWorktree(const QString &id, const QString &title);
-    /// Opens `folder` in the editor (editorCommand, else the system's handler of folders).
+    /// Opens `folder` in the editor (editorCommand, else the system's handler of folders) — or a
+    /// file (the terminal's Ctrl+click on a path): with the editor's command only, never handed to
+    /// the desktop (which might run it).
     Q_INVOKABLE bool openInEditor(const QString &folder) const;
     /// Shows `folder` in the system's file manager.
     Q_INVOKABLE bool openFolder(const QString &folder) const;

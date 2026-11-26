@@ -1387,7 +1387,7 @@ bool TerminalView::linkAt(QPointF point, HoverLink *out) const
         if (url.isLocalFile()) {
             const QString path = url.toLocalFile();
             if (!QFileInfo(path).isFile()) {
-                const_cast<TerminalView *>(this)->m_noLink = result.range;
+                m_noLink = result.range;
                 return false;
             }
             result.file = true;
@@ -1398,7 +1398,7 @@ bool TerminalView::linkAt(QPointF point, HoverLink *out) const
     } else {
         const QString path = term::resolvePath(link.target, m_session->currentDirectory(), QDir::homePath());
         if (path.isEmpty()) {
-            const_cast<TerminalView *>(this)->m_noLink = result.range;
+            m_noLink = result.range;
             return false;
         }
         result.file = true;

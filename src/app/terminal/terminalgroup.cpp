@@ -116,13 +116,8 @@ void TerminalGroup::take(TerminalSession *session)
         next = focus - 1;
     else if (row == focus)
         next = std::min(row, int(m_sessions.size()) - 1);
-    m_focus = -2; // (always announced: the session at the index changed)
+    m_focus = -2; // (always announced: the session at the index changed; -1 when none is left)
     setFocusIndex(next);
-    if (m_sessions.isEmpty() && m_focus != -1) {
-        m_focus = -1;
-        Q_EMIT focusChanged();
-    }
-    Q_EMIT stateChanged();
 }
 
 int TerminalGroup::rowCount(const QModelIndex &parent) const

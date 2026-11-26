@@ -33,7 +33,8 @@ never point an agent at a folder.
   (a line each, `name: command`; a line without a short name is a command named after itself; at most 12).
 * `worktreesRoot` (default `~/.brulion/worktrees`) and `editorCommand` ("Open in editor": the command
   split as a shell would — `splitCommand()` — with the folder as its last argument, started detached; empty:
-  the system's handler of folders).
+  the system's handler of folders). `openInEditor()` takes a file too (the terminal's Ctrl+click on a
+  path): with the editor's command only, never the desktop's handler, which might run it.
 * `worktreeFor(id, title)`: `{folder: <worktreesRoot>/<id>/<slug of title>, branch: brulion/<slug>}`, a
   free folder; `createWorktree(id, title)` runs `git -C <project> worktree add -b <branch> <folder> HEAD`
   (no shell, `GIT_TERMINAL_PROMPT=0`) without waiting and signals `worktreeCreated(project, folder,

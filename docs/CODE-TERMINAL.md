@@ -421,7 +421,8 @@ paste).
   queries reveal only the theme's colours.
 * Hyperlinks (OSC 8) and links found in the text are never opened by the view: Ctrl+click emits
   `linkActivated(url)` or `fileActivated(path, …)` and the owner decides (CodeView: a note's link
-  rules for URLs; files only once the view found them on disk, opened in the user's editor). A path
+  rules for URLs; files only once the view found them on disk, opened with the editor's command —
+  `CodeProjects::openInEditor`, never the desktop's handler of files, which might run them). A path
   is looked up only for the word under the pointer while Ctrl is held — output cannot make the app
   touch files by itself. Titles are stripped of control characters and cut.
 * "Add to chat" puts the text into the composer only (the user sends it); the fence cannot be closed

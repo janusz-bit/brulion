@@ -340,7 +340,7 @@ private:
     bool m_hovering = false;
     QPointF m_hoverPoint;
     HoverLink m_link;
-    term::TextRange m_noLink{{1, 0}, {0, 0}}; // the last word found to be no link (no stat again)
+    mutable term::TextRange m_noLink{{1, 0}, {0, 0}}; // the last word found to be no link (no stat again)
 
     // The find bar's search.
     QString m_findText;

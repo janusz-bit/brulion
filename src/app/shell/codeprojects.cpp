@@ -334,16 +334,19 @@ QStringList CodeProjects::splitCommand(const QString &command)
 
 bool CodeProjects::openInEditor(const QString &folder) const
 {
-    if (folder.isEmpty() || !QFileInfo(folder).isDir())
+    const QFileInfo info(folder);
+    if (folder.isEmpty() || !(info.isDir() || info.isFile()))
         return false;
     const QStringList parts = splitCommand(m_editor);
 #if QT_CONFIG(process)
     if (!parts.isEmpty()) {
         const QString program = QStandardPaths::findExecutable(parts.first());
-        return !program.isEmpty() && QProcess::startDetached(program, parts.mid(1) << folder, folder);
+        return !program.isEmpty()
+               && QProcess::startDetached(program, parts.mid(1) << folder, info.isDir() ? folder : info.absolutePath());
     }
 #endif
-    return openFolder(folder);
+    // (A file goes to the editor's command only: the desktop's handler might run it.)
+    return info.isDir() && openFolder(folder);
 }
 
 bool CodeProjects::openFolder(const QString &folder) const
