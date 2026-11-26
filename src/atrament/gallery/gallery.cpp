@@ -30,7 +30,7 @@ std::u16string number(double v, int decimals = 0)
 }
 
 const char16_t *const kSections[] = { u"Typografia", u"Kontrolki", u"Długa lista", u"Rysowanie" };
-const char16_t *const kSectionIcons[] = { u"Aa", u"◉", u"☰", u"✎" };
+const char16_t *const kSectionIcons[] = { u"Aa", u"◉", u"≡", u"✏" };
 
 Div card()
 {
@@ -309,7 +309,7 @@ AnyElement Gallery::controls(Window &window, Context<Gallery> &cx)
                                                             .borderColor(t.border))
                                             .child(button(u"danger", u"Usuń", rgba(0xf0716b26), t.danger,
                                                     rgba(0xf0716b40)))
-                                            .child(button(u"like", liked ? u"♥ Lubię" : u"♡ Lubię",
+                                            .child(button(u"like", liked ? u"❤ Lubię" : u"🤍 Lubię",
                                                     liked ? rgba(0xf0716b33) : t.raised, liked ? t.danger : t.text,
                                                     t.hover)
                                                             .onClick(cx.listener([](Gallery &g, const ClickEvent &,

@@ -51,6 +51,9 @@ void UniformList::prepaint(Rect bounds, Window &window, App &app)
     const std::size_t last = std::min(m_count, std::size_t(std::ceil((top + inner.height()) / rowHeight)) + 1);
     m_items.clear();
     window.pushContentMask(inner);
+    const bool pushText = !m_style.text.isEmpty();
+    if (pushText)
+        window.pushTextStyle(m_style.text);
     for (std::size_t i = m_first; i < last; ++i) {
         AnyElement row = m_render(i, window, app);
         row.setSiblingIndex(std::uint32_t(i));
@@ -58,6 +61,8 @@ void UniformList::prepaint(Rect bounds, Window &window, App &app)
         row.prepaintAt({ inner.left(), inner.top() + float(i) * rowHeight - top }, window, app);
         m_items.push_back(std::move(row));
     }
+    if (pushText)
+        window.popTextStyle();
     window.popContentMask();
 }
 

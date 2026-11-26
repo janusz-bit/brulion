@@ -208,10 +208,16 @@ void Div::prepaint(Rect bounds, Window &window, App &app)
     const bool clip = m_style.layout.overflowX != Overflow::Visible || m_style.layout.overflowY != Overflow::Visible;
     if (clip)
         window.pushContentMask(bounds.inset(m_style.layout.border));
+    // The text style holds in every phase: a list renders its rows in prepaint.
+    const bool pushText = !m_style.text.isEmpty();
+    if (pushText)
+        window.pushTextStyle(m_style.text);
     window.pushElementOffset(-scroll);
     for (AnyElement &c : m_children)
         c.prepaint(window, app);
     window.popElementOffset();
+    if (pushText)
+        window.popTextStyle();
     if (clip)
         window.popContentMask();
 }
@@ -240,8 +246,13 @@ void Div::paint(Rect bounds, Window &window, App &app)
     const bool clip = s.layout.overflowX != Overflow::Visible || s.layout.overflowY != Overflow::Visible;
     if (clip)
         window.pushContentMask(bounds.inset(s.layout.border));
+    const bool pushText = !s.text.isEmpty();
+    if (pushText)
+        window.pushTextStyle(s.text);
     for (AnyElement &c : m_children)
         c.paint(window, app);
+    if (pushText)
+        window.popTextStyle();
     if (clip)
         window.popContentMask();
     if (m_scrollState && !m_hideScrollbar)
