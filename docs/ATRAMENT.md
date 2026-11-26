@@ -163,6 +163,61 @@ A focused element that edits text installs one for the frame; the host maps it o
 `inputMethodQuery` / `QInputMethodEvent`, later onto `text-input-v3`, `InputConnection`, TSF and
 a hidden `<textarea>` in the browser.
 
+## Writing a view
+
+```cpp
+#include "ui/atrament.h"
+using namespace brulion::atrament;
+
+class TaskRow {
+public:
+    TaskRow(Context<TaskRow> &cx, std::u16string title)
+        : m_title(std::move(title))
+        , m_note(cx.newEntity<TextInput>(TextInputOptions { u"Notatka…", true }))
+    {
+        // Another entity's events, while this view lives.
+        m_subs.push_back(cx.subscribe<TextInput::Changed>(m_note,
+                [](TaskRow &self, const TextInput::Changed &, Context<TaskRow> &cx) { cx.notify(); }));
+    }
+
+    AnyElement render(Window &window, Context<TaskRow> &cx)
+    {
+        return div()
+                .flexRow().itemsCenter().gap(8).px(12).h(36).rounded(8)
+                .hover([](Style &s) { s.background = Background::solid(rgb(0x2c2e33)); })
+                .child(div().id(u"check").size(16).rounded(4).border(1.5f).borderColor(rgb(0x9a9ca4))
+                               .when(m_done, [](Div &&d) { return std::move(d).bg(rgb(0x8b93ff)); })
+                               .onClick(cx.listener([](TaskRow &self, const ClickEvent &, Window &, Context<TaskRow> &cx) {
+                                   self.m_done = !self.m_done;
+                                   cx.notify();
+                               })))
+                .child(div().flex1().child(m_title).when(m_done, [](Div &&d) { return std::move(d).lineThrough(); }))
+                .child(m_note);
+    }
+
+private:
+    std::u16string m_title;
+    bool m_done = false;
+    Entity<TextInput> m_note;
+    std::vector<Subscription> m_subs;
+};
+```
+
+Rules of thumb:
+
+* **State lives in entities** (views and models); elements are throwaway descriptions of one frame.
+  A view's `render()` is called whenever its window draws: keep it cheap and free of side effects
+  other than starting and stopping its own timers.
+* **Listeners capture handles, never pointers into the tree** — `cx.listener(…)` does this for you.
+  A pointer to the element itself (`this` inside an element's paint) is fine: the element and the
+  listeners it registers live in the same frame arena.
+* **Elements that keep state across frames need a stable identity**: `id(…)` on rows of lists whose
+  order changes; without one an element is known by its index among its siblings.
+* **Strings**: `std::u16string` / `std::u16string_view`, offsets in UTF-16 code units — what
+  `QString` and Brulion's core use, so text from the core passes without conversion.
+* **Hosting in the Qt app**: `auto *item = new AtramentItem(parent); item->attach(app, view)` — the
+  item is a `QQuickItem` like any other; one `App` serves every item of the process.
+
 ## Code
 
 * `src/atrament/<area>/` — `base`, `scene`, `raster`, `text`, `layout`, `ui`, each a static
