@@ -51,6 +51,8 @@ private:
     AnyElement footer(Window &window, Context<Gallery> &cx);
 
     FocusHandle m_focus;
+    Entity<TextInput> m_search;
+    Entity<TextInput> m_note;
 };
 
 // Bundled fonts from the gallery's resources into a collection, with the fallback chain set.

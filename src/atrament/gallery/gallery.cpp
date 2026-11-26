@@ -72,6 +72,9 @@ std::shared_ptr<FontCollection> loadFonts()
 
 Gallery::Gallery(Context<Gallery> &cx)
     : m_focus(cx.newFocusHandle())
+    , m_search(cx.newEntity<TextInput>(TextInputOptions { u"Szukaj w notatkach…", false, InputHandler::Purpose::Text, {} }))
+    , m_note(cx.newEntity<TextInput>(TextInputOptions { u"Napisz coś…", true, InputHandler::Purpose::Multiline,
+              u"Jutro o 9 zadzwonić do Łucji.\nKupić: chleb, masło, żurek." }))
 {
 }
 
@@ -335,6 +338,27 @@ AnyElement Gallery::controls(Window &window, Context<Gallery> &cx)
                                                 }
                                             }))
                                             .child(focused ? u"Ma fokus — Enter dodaje" : u"Bez fokusu")))
+            .child(card()
+                            .child(div().textSize(12).textColor(t.faint).child(u"Pola tekstowe (IME, schowek, cofanie)"))
+                            .child(div()
+                                            .px(12)
+                                            .py(9)
+                                            .rounded(10)
+                                            .bg(t.raised)
+                                            .border(1)
+                                            .borderColor(m_search.read(cx.app()).focusHandle().isFocused(window) ? t.accent
+                                                                                                                 : t.border)
+                                            .child(m_search))
+                            .child(div()
+                                            .px(12)
+                                            .py(9)
+                                            .rounded(10)
+                                            .bg(t.raised)
+                                            .border(1)
+                                            .borderColor(m_note.read(cx.app()).focusHandle().isFocused(window) ? t.accent
+                                                                                                               : t.border)
+                                            .leading(1.5f)
+                                            .child(m_note)))
             .child(card()
                             .child(div().textSize(12).textColor(t.faint).child(u"Etykiety (zawijanie flex-wrap)"))
                             .child(div().flexRow().flexWrap().gap(8).children(chips)))
