@@ -899,10 +899,10 @@ private:
     /// `text` to another computer's turn of `path` (queued there, or steered in); false (said in a
     /// toast) for pictures, which do not go there yet.
     bool sendToComputer(const QString &path, const QString &text, const QStringList &pictures, acp::SendMode mode);
-    /// The address of the computer whose app runs the turns of the thread `path` — a thread of a
-    /// project of that computer whose app shares its conversations now —, "" none (this device runs
-    /// them, through that computer's shared agent).
-    QString threadComputer(const QString &path) const;
+    /// The address of the computer whose app runs the next turn of `path` — a conversation that app
+    /// runs or ended lately, or a thread of a project of that computer, while its app shares its
+    /// conversations —, "" none (this device runs it: a thread through that computer's shared agent).
+    QString computerFor(const QString &path) const;
     void setFailure(ChatTurn *turn, const QString &failure);
     void endTurn(ChatTurn *turn);
     void updateRunningShown();
