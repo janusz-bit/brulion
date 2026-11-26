@@ -247,7 +247,9 @@ ForkTarget forkTarget(const QList<Remote> &remotes, const QString &pushRemote, c
     }
     if (!push || !upstream || push == upstream || branch.isEmpty())
         return {};
-    const RepoSlug from = parseRemoteUrl(push->pushUrl);
+    RepoSlug from = parseRemoteUrl(push->pushUrl);
+    if (!from.isValid()) // (a push URL of its own that names no host: the fetch URL's owner)
+        from = parseRemoteUrl(push->fetchUrl);
     const RepoSlug to = parseRemoteUrl(upstream->fetchUrl);
     if (!from.isValid() || !to.isValid() || from.host != to.host
         || from.path().compare(to.path(), Qt::CaseInsensitive) == 0)

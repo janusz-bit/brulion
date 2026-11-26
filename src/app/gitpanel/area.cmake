@@ -13,9 +13,11 @@ set(_brulion_gitpanel_dir ${CMAKE_CURRENT_LIST_DIR})
 
 qt_add_library(brulion_gitpanel STATIC
     ${_brulion_gitpanel_dir}/codegit.h ${_brulion_gitpanel_dir}/codegit.cpp
+    ${_brulion_gitpanel_dir}/gitdiffrows.h ${_brulion_gitpanel_dir}/gitdiffrows.cpp
 )
 target_include_directories(brulion_gitpanel PUBLIC ${_brulion_gitpanel_dir})
-target_link_libraries(brulion_gitpanel PUBLIC Qt6::Core brulion_core_gitcli)
+# (brulion_ui_helpers: the line diff, ui::diffSequences — GUI-free like this library.)
+target_link_libraries(brulion_gitpanel PUBLIC Qt6::Core brulion_core_gitcli PRIVATE brulion_ui_helpers)
 qt_extract_metatypes(brulion_gitpanel)
 brulion_set_warnings(brulion_gitpanel)
 
