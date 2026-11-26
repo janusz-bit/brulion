@@ -160,7 +160,7 @@ NodeId Div::requestLayout(Window &window, App &app)
 {
     // Interaction state of the last frame refines the style before anything is laid out, so a
     // hover may change a text colour or a size (as in GPUI).
-    if (m_hoverStyle || m_activeStyle || !m_click.empty() || !m_hoverListeners.empty()) {
+    if (m_hoverStyle || m_activeStyle || !m_click.empty() || !m_hoverListeners.empty() || !m_mouseMove.empty()) {
         m_state = &window.elementState<InteractState>();
         if (m_hoverStyle && m_state->hovered)
             m_hoverStyle(m_style);

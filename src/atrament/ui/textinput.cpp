@@ -133,11 +133,7 @@ private:
         std::optional<Range> markedRange() override { return input() ? input()->markedRange() : std::nullopt; }
         void replaceText(std::optional<Range> range, std::u16string_view text) override
         {
-            edit([&](TextInput &t, Context<TextInput> &cx) {
-                const Range r = range ? *range : (t.markedRange() ? *t.markedRange() : t.selection().range());
-                t.unmark(cx);
-                t.replace(r, text, cx);
-            });
+            edit([&](TextInput &t, Context<TextInput> &cx) { t.commitText(range, text, cx); });
         }
         void replaceAndMarkText(std::optional<Range> range, std::u16string_view text,
                 std::optional<Range> selectedWithin) override
@@ -412,10 +408,16 @@ void TextInput::setMarkedText(std::optional<Range> range, std::u16string_view te
     const Range r = range ? *range : (m_marked ? *m_marked : m_selection.range());
     const int a = clampOffset(std::min(r.start, r.end));
     const int b = clampOffset(std::max(r.start, r.end));
-    if (!m_marked)
+    if (!m_marked && !text.empty()) {
         pushUndo(); // a composition is one undo step
+        m_compositionUndo = true;
+    }
     m_text.replace(std::size_t(a), std::size_t(b - a), text);
     if (text.empty()) {
+        // Cancelled: the text is as it was before, and so is the history.
+        if (m_marked && m_compositionUndo && !m_undo.empty() && m_undo.back().text == m_text)
+            m_undo.pop_back();
+        m_compositionUndo = false;
         m_marked.reset();
         m_selection = { a, a };
     } else {
@@ -430,11 +432,34 @@ void TextInput::setMarkedText(std::optional<Range> range, std::u16string_view te
     changed(cx);
 }
 
+void TextInput::commitText(std::optional<Range> range, std::u16string_view text, Context<TextInput> &cx)
+{
+    if (!m_marked) {
+        const Range r = range ? *range : m_selection.range();
+        replace(r, text, cx);
+        return;
+    }
+    // In place of the composition, in its undo step.
+    const Range r = range ? *range : *m_marked;
+    const int a = clampOffset(std::min(r.start, r.end));
+    const int b = clampOffset(std::max(r.start, r.end));
+    if (!m_compositionUndo)
+        pushUndo();
+    m_text.replace(std::size_t(a), std::size_t(b - a), text);
+    m_marked.reset();
+    m_compositionUndo = false;
+    m_coalesceTyping = false;
+    const int caret = a + int(text.size());
+    m_selection = { caret, caret };
+    changed(cx);
+}
+
 void TextInput::unmark(Context<TextInput> &cx)
 {
     if (!m_marked)
         return;
     m_marked.reset();
+    m_compositionUndo = false;
     cx.notify();
 }
 
@@ -559,6 +584,8 @@ AnyElement TextInput::render(Window &window, Context<TextInput> &cx)
     return div()
             .id(ElementId::number(cx.entityId()))
             .flexRow()
+            .wFull()
+            .minW0()
             .trackFocus(m_focus)
             .keyContext(u"TextInput")
             .cursorText()

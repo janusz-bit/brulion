@@ -69,7 +69,18 @@ Size AnyElement::layoutAsRoot(Size available, Window &window, App &app)
 Size AnyElement::layoutAsRoot(AvailableSpace width, AvailableSpace height, Window &window, App &app)
 {
     requestLayout(window, app);
-    window.layoutEngine().compute(m_layout, width, height);
+    // A root fills a definite width (as a block fills its container) and takes the height of its
+    // content: it is laid out as the stretched child of a column of that size.
+    LayoutStyle wrapper;
+    wrapper.flexDirection = FlexDirection::Column;
+    wrapper.alignItems = AlignItems::Stretch;
+    if (width.isDefinite())
+        wrapper.width = Length::px(width.value);
+    if (height.isDefinite())
+        wrapper.height = Length::px(height.value);
+    const NodeId child = m_layout;
+    const NodeId root = window.layoutEngine().newNode(wrapper, std::span<const NodeId>(&child, 1));
+    window.layoutEngine().compute(root, width, height);
     return window.layoutEngine().layout(m_layout).rect.size;
 }
 

@@ -91,7 +91,7 @@ void TestAtramentTextInput::backspaceByGrapheme()
 {
     Harness h;
     // A family emoji (ZWJ sequence, 8 code units) and an "a" with a combining ogonek go whole.
-    h.tw.simulateCommit(u"x👨‍👩‍👧ą");
+    h.tw.simulateCommit(u"x👨‍👩‍👧a\u0328");
     QCOMPARE(h.text().size(), std::size_t(1 + 8 + 2));
     h.tw.simulateKeystrokes(u"backspace");
     QCOMPARE(h.text(), std::u16string(u"x👨‍👩‍👧"));

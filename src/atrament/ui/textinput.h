@@ -76,6 +76,8 @@ public:
     void setMarkedText(std::optional<Range> range, std::u16string_view text, std::optional<Range> selectedWithin,
             Context<TextInput> &cx);
     void unmark(Context<TextInput> &cx);
+    // Commits text in place of the composition (or the selection): the composition's undo step.
+    void commitText(std::optional<Range> range, std::u16string_view text, Context<TextInput> &cx);
 
     // Where things are (window logical px), from the last frame.
     std::optional<Rect> boundsForRange(Range range) const;
@@ -104,6 +106,7 @@ private:
     std::vector<Snapshot> m_undo;
     std::vector<Snapshot> m_redo;
     bool m_coalesceTyping = false;
+    bool m_compositionUndo = false; // the composition pushed the undo step it belongs to
     bool m_caretVisible = true;
     bool m_blinking = false;
     Subscription m_blink;

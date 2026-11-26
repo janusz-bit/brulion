@@ -37,6 +37,8 @@ Window::Window(App &app, PlatformWindow &platform, AnyView root)
     callbacks.activeChanged = [this](bool) { refresh(); };
     callbacks.inputHandler = [this] { return inputHandler(); };
     m_platform->setCallbacks(std::move(callbacks));
+    // The window keeps its root view alive (as GPUI's windows do): the handle that opened it may go.
+    m_app.retain(m_root.id);
     m_viewport = m_platform->contentSize();
     m_scale = m_platform->scaleFactor();
     refresh();
@@ -52,6 +54,7 @@ void Window::detachPlatform()
 Window::~Window()
 {
     detachPlatform();
+    m_app.release(m_root.id);
     // Element states and frames go before the arena's objects they might point into.
     m_states.clear();
     m_frames[0].clear();
