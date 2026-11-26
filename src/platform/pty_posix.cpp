@@ -577,6 +577,34 @@ qint64 Pty::processId() const
     return d->pid;
 }
 
+bool Pty::hasForegroundJob() const
+{
+    if (d->pid <= 0 || d->master < 0)
+        return false;
+    // The child leads a session and a process group of its own (setsid()); a job of the shell's
+    // gets a group of its own and the terminal's foreground while it runs.
+    const pid_t foreground = ::tcgetpgrp(d->master);
+    return foreground > 0 && foreground != d->pid;
+}
+
+QString Pty::currentDirectory() const
+{
+    if (d->pid <= 0)
+        return {};
+#if defined(__linux__)
+    // The foreground group's leader (a job's first process), else the child.
+    pid_t pid = d->master >= 0 ? ::tcgetpgrp(d->master) : -1;
+    if (pid <= 0)
+        pid = d->pid;
+    for (const pid_t candidate : {pid, d->pid}) {
+        const QString link = QFile::symLinkTarget(u"/proc/%1/cwd"_s.arg(candidate));
+        if (!link.isEmpty() && QFileInfo(link).isDir())
+            return link;
+    }
+#endif
+    return {};
+}
+
 bool Pty::write(const QByteArray &data)
 {
     if (d->pid <= 0 || d->master < 0)

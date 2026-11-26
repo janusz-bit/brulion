@@ -972,6 +972,36 @@ private Q_SLOTS:
                 },
                 [](const QByteArray &) {});
         QCOMPARE(again.count(), 1);
+
+        // Open in editor: a folder, or a file (the terminal's Ctrl+click on a path) — a file only
+        // through the editor's command, never the desktop's handler (it might run it).
+        QVERIFY(!again.openInEditor(m_tmp.filePath(u"brak.cpp"_s)));
+#ifdef Q_OS_UNIX
+        const QString file = m_tmp.filePath(u"proj/Ala/zażółć.cpp"_s);
+        {
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+        }
+        const QString log = m_tmp.filePath(u"editor.log"_s);
+        const QString script = m_tmp.filePath(u"editor.sh"_s);
+        {
+            QFile f(script);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QByteArray("#!/bin/sh\nprintf '%s|%s' \"$PWD\" \"$1\" > '") + QFile::encodeName(log) + "'\n");
+        }
+        QFile::setPermissions(script, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        again.setEditorCommand(script);
+        QVERIFY(again.openInEditor(file));
+        QTRY_VERIFY(QFile::exists(log) && QFileInfo(log).size() > 0);
+        {
+            QFile f(log);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QCOMPARE(QString::fromUtf8(f.readAll()), QFileInfo(file).absolutePath() + u'|' + file);
+        }
+        again.setEditorCommand(QString());
+        // (Without an editor a file goes to the file manager as its folder — CodeProjects::openWith —,
+        // never to the desktop's handler of the file, which might run it: not started here.)
+#endif
     }
 
     // Who answers a new conversation: the device's default while it answers here.

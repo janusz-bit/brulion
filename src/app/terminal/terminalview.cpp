@@ -4,10 +4,15 @@
 
 #include "term/charwidth.h"
 #include "term/keys.h"
+#include "term/links.h"
 #include "term/screen.h"
 
 #include <QAccessible>
 #include <QClipboard>
+#include <QDir>
+#include <QFileInfo>
+#include <QKeySequence>
+#include <QUrl>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QGuiApplication>
@@ -30,6 +35,8 @@ namespace {
 constexpr int BlinkInterval = 530;
 constexpr int SyncTimeout = 150;
 constexpr int AccessibleDelay = 300;
+/// The find bar's matches are found again this long after output (a flood: a few times a second).
+constexpr int FindDelay = 250;
 /// Wheel events a notch reports to a program, at most.
 constexpr int MaxWheelReports = 10;
 
@@ -52,6 +59,21 @@ QColor defaultSelection(bool dark)
 {
     QColor c(0x9f, 0xc3, 0xe6);
     c.setAlphaF(dark ? 0.30f : 0.55f);
+    return c;
+}
+
+/// The find bar's matches, and the current one over them.
+QColor matchColor(bool dark)
+{
+    QColor c(0xf2, 0xc9, 0x4c);
+    c.setAlphaF(dark ? 0.32f : 0.45f);
+    return c;
+}
+
+QColor currentMatchColor(bool dark)
+{
+    QColor c(0xff, 0x8c, 0x42);
+    c.setAlphaF(dark ? 0.70f : 0.60f);
     return c;
 }
 
@@ -97,6 +119,11 @@ TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent)
         onContentChanged();
         m_flushingSync = false;
     });
+    m_findTimer.setSingleShot(true);
+    m_findTimer.setInterval(FindDelay);
+    connect(&m_findTimer, &QTimer::timeout, this, [this] { runFind(true); });
+    // (Hover events: links under Ctrl, and the programs that asked for every motion.)
+    setAcceptHoverEvents(true);
     m_accessibleTimer.setSingleShot(true);
     m_accessibleTimer.setInterval(AccessibleDelay);
     connect(&m_accessibleTimer, &QTimer::timeout, this, [this] {
@@ -109,7 +136,11 @@ TerminalView::TerminalView(QQuickItem *parent) : QQuickPaintedItem(parent)
     updateMetrics();
 }
 
-TerminalView::~TerminalView() = default;
+TerminalView::~TerminalView()
+{
+    if (m_session && m_shown)
+        m_session->setShown(false);
+}
 
 const term::Screen *TerminalView::screen() const
 {
@@ -122,40 +153,96 @@ void TerminalView::setSession(TerminalSession *session)
 {
     if (session == m_session)
         return;
-    if (m_session)
+    if (m_session) {
         disconnect(m_session, nullptr, this, nullptr);
+        if (m_shown)
+            m_session->setShown(false);
+    }
+    m_shown = false;
     m_session = session;
     m_scrollOffset = 0;
     m_hasSelection = false;
     m_selecting = false;
     m_reportedButton = -1;
     m_preedit.clear();
+    m_link = HoverLink();
+    m_noLink = {{1, 0}, {0, 0}};
+    m_matches.clear();
+    m_findCurrent = -1;
     if (session) {
         connect(session, &TerminalSession::contentChanged, this, &TerminalView::onContentChanged);
         connect(session, &TerminalSession::modesChanged, this, &TerminalView::onModesChanged);
+        connect(session, &TerminalSession::cleared, this, &TerminalView::onCleared);
+        connect(session, &TerminalSession::sizeChanged, this, &TerminalView::onResized);
         connect(session, &TerminalSession::runningChanged, this, [this] {
             updateBlinking();
             updateCursorArea();
         });
         connect(session, &QObject::destroyed, this, [this] {
             m_session = nullptr;
+            m_shown = false;
+            m_link = HoverLink();
+            m_matches.clear();
+            m_findCurrent = -1;
             update();
             Q_EMIT sessionChanged();
             Q_EMIT scrollChanged();
+            Q_EMIT findChanged();
         });
         if (m_columns > 0 && m_rows > 0)
             session->resize(m_columns, m_rows);
         applyColorsToSession();
+        // (What scrolled while no view showed it is no movement of what this one shows.)
+        session->terminal().screen().clearDirty();
         session->terminal().screen().markAllDirty();
         m_lastHistorySize = session->terminal().screen().historySize();
     }
     onModesChanged();
     updateBlinking();
+    updateShown();
+    if (!m_findText.isEmpty())
+        runFind(false);
     update();
     Q_EMIT sessionChanged();
     Q_EMIT scrollChanged();
     Q_EMIT selectionChanged();
+    Q_EMIT hoveredLinkChanged();
+    Q_EMIT findChanged();
     scheduleAccessibleText();
+}
+
+void TerminalView::updateShown()
+{
+    // Shown: in a window and visible (a panel hidden, a tab not current, Code mode left: not).
+    const bool shown = m_session && isVisible() && window();
+    if (shown == m_shown)
+        return;
+    m_shown = shown;
+    m_session->setShown(shown);
+}
+
+void TerminalView::setAppShortcuts(const QStringList &sequences)
+{
+    if (sequences == m_appShortcuts)
+        return;
+    m_appShortcuts = sequences;
+    m_appKeys.clear();
+    for (const QString &text : sequences) {
+        const QKeySequence sequence = QKeySequence::fromString(text, QKeySequence::PortableText);
+        if (sequence.count() == 1)
+            m_appKeys.append(sequence[0]);
+    }
+    Q_EMIT appShortcutsChanged();
+}
+
+bool TerminalView::isAppShortcut(const QKeyEvent *event) const
+{
+    if (m_appKeys.isEmpty())
+        return false;
+    const Qt::KeyboardModifiers mods =
+            event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+    const QKeyCombination pressed(mods, Qt::Key(event->key()));
+    return m_appKeys.contains(pressed);
 }
 
 void TerminalView::setFont(const QFont &font)
@@ -437,6 +524,8 @@ void TerminalView::itemChange(ItemChange change, const ItemChangeData &value)
     QQuickPaintedItem::itemChange(change, value);
     if (change == ItemDevicePixelRatioHasChanged || change == ItemSceneChange)
         updateMetrics();
+    if (change == ItemVisibleHasChanged || change == ItemSceneChange)
+        updateShown();
 }
 
 QRectF TerminalView::rowRect(int viewRow) const
@@ -542,6 +631,36 @@ void TerminalView::onContentChanged()
             }
         }
     }
+    if (m_link.valid) {
+        // A link under the pointer whose text moved or changed: looked for again on the next move.
+        bool changed = scrolled > 0;
+        for (int row = std::max(0, m_link.range.start.line); !changed && row <= std::min(s.rows() - 1, m_link.range.end.line);
+             ++row)
+            changed = s.isRowDirty(row);
+        if (changed)
+            clearLink();
+    }
+    if (scrolled > 0 || s.isRowDirty(std::clamp(m_noLink.start.line, 0, s.rows() - 1)))
+        m_noLink = {{1, 0}, {0, 0}};
+    if (!m_findText.isEmpty()) {
+        // The matches move up with their lines until they are found again (a moment later).
+        if (scrolled > 0) {
+            for (term::TextRange &match : m_matches) {
+                match.start.line -= scrolled;
+                match.end.line -= scrolled;
+            }
+            qsizetype gone = 0;
+            while (gone < m_matches.size() && m_matches.at(gone).start.line < -history)
+                ++gone;
+            if (gone > 0) {
+                m_matches.remove(0, gone);
+                m_findCurrent = m_matches.isEmpty() ? -1 : std::max(0, m_findCurrent - int(gone));
+                Q_EMIT findChanged();
+            }
+        }
+        if (!m_findTimer.isActive())
+            m_findTimer.start();
+    }
     if (m_scrollOffset > 0) {
         // Scrolled back: the view keeps showing the same lines while new ones arrive below.
         const int offset = std::min(m_scrollOffset + scrolled, history);
@@ -576,8 +695,6 @@ void TerminalView::onContentChanged()
 
 void TerminalView::onModesChanged()
 {
-    const bool motion = m_session && m_session->terminal().modes().mouseTracking == term::MouseTracking::Motion;
-    setAcceptHoverEvents(motion);
     if (m_session && !m_session->terminal().modes().synchronizedOutput && m_syncTimer.isActive()) {
         m_syncTimer.stop();
         onContentChanged();
@@ -644,7 +761,9 @@ void TerminalView::paintRow(QPainter *painter, int viewRow, const term::Line &li
         column = end;
     }
 
-    // The selection over them.
+    // The find bar's matches, then the selection over them.
+    if (!m_matches.isEmpty())
+        paintMatches(painter, lineIndex, top);
     if (m_hasSelection && lineIndex >= m_selStart.line && lineIndex <= m_selStop.line) {
         const int from = lineIndex == m_selStart.line ? m_selStart.column : 0;
         const int to = lineIndex == m_selStop.line ? m_selStop.column : s->columns();
@@ -721,6 +840,33 @@ void TerminalView::paintRow(QPainter *painter, int viewRow, const term::Line &li
         decorate(x, cellWidth, attrs, fg);
     }
     flush();
+
+    // The link under the pointer (Ctrl held), underlined.
+    if (m_link.valid && lineIndex >= m_link.range.start.line && lineIndex <= m_link.range.end.line) {
+        const int from = lineIndex == m_link.range.start.line ? m_link.range.start.column : 0;
+        const int to = lineIndex == m_link.range.end.line ? m_link.range.end.column : s->columns();
+        if (to > from)
+            painter->fillRect(QRectF(m_padding + from * m_cellWidth, baseline + m_underlinePos,
+                                     (to - from) * m_cellWidth, m_lineWidth),
+                              cursorColor());
+    }
+}
+
+void TerminalView::paintMatches(QPainter *painter, int lineIndex, qreal top)
+{
+    const term::Screen *s = screen();
+    // The first match that ends on this line or later (the matches are in order and apart).
+    const auto first = std::lower_bound(m_matches.cbegin(), m_matches.cend(), lineIndex,
+                                        [](const term::TextRange &m, int line) { return m.end.line < line; });
+    for (auto it = first; it != m_matches.cend() && it->start.line <= lineIndex; ++it) {
+        const int from = lineIndex == it->start.line ? it->start.column : 0;
+        const int to = lineIndex == it->end.line ? it->end.column : s->columns();
+        if (to <= from)
+            continue;
+        const bool current = it - m_matches.cbegin() == m_findCurrent;
+        painter->fillRect(QRectF(m_padding + from * m_cellWidth, top, (to - from) * m_cellWidth, m_cellHeight),
+                          current ? currentMatchColor(m_dark) : matchColor(m_dark));
+    }
 }
 
 void TerminalView::paintCursor(QPainter *painter)
@@ -800,7 +946,40 @@ bool TerminalView::handleShortcut(QKeyEvent *event, bool dryRun)
             paste();
         return true;
     }
+    if (event->matches(QKeySequence::SelectAll)) {
+        if (!dryRun)
+            selectAll();
+        return true;
+    }
+    if (event->matches(QKeySequence::Find)) {
+        if (!dryRun)
+            Q_EMIT findRequested();
+        return true;
+    }
 #endif
+    // The terminal's own Ctrl+Shift chords (T3 Code's on Linux and Windows): select all, find, the
+    // start and the end of the scrollback. (Ctrl+A, Ctrl+F stay the shell's.)
+    if (mods == (Qt::ControlModifier | Qt::ShiftModifier)) {
+        switch (key) {
+        case Qt::Key_A:
+            if (!dryRun)
+                selectAll();
+            return true;
+        case Qt::Key_F:
+            if (!dryRun)
+                Q_EMIT findRequested();
+            return true;
+        case Qt::Key_Home:
+            if (!dryRun)
+                scrollToTop();
+            return true;
+        case Qt::Key_End:
+            if (!dryRun)
+                scrollToBottom();
+            return true;
+        default: break;
+        }
+    }
     if (mods == (Qt::ControlModifier | Qt::ShiftModifier) && key == Qt::Key_C) {
         if (!dryRun)
             copy();
@@ -845,6 +1024,8 @@ bool TerminalView::event(QEvent *event)
         bool wanted = true;
         if (handleShortcut(key, true))
             wanted = true;
+        else if (isAppShortcut(key))
+            wanted = false; // the panel's own commands (toggle, split, next terminal…)
         else if (!m_session->isRunning())
             wanted = false; // nothing reads the keys: the app's shortcuts work
         else if ((mods & Qt::ControlModifier) && (mods & Qt::ShiftModifier))
@@ -866,6 +1047,13 @@ bool TerminalView::event(QEvent *event)
 void TerminalView::keyPressEvent(QKeyEvent *event)
 {
     if (!m_session) {
+        event->ignore();
+        return;
+    }
+    if (event->key() == Qt::Key_Control || event->key() == Qt::Key_Meta) {
+        // Ctrl pressed over a link: underlined at once, before the pointer moves.
+        if (m_hovering)
+            updateLink(m_hoverPoint);
         event->ignore();
         return;
     }
@@ -900,6 +1088,13 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     scrollToBottom();
     resetBlink();
     event->accept();
+}
+
+void TerminalView::keyReleaseEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Control || event->key() == Qt::Key_Meta)
+        clearLink();
+    QQuickPaintedItem::keyReleaseEvent(event);
 }
 
 void TerminalView::inputMethodEvent(QInputMethodEvent *event)
@@ -1034,8 +1229,14 @@ void TerminalView::mousePressEvent(QMouseEvent *event)
         event->accept();
         return;
     }
+    if (event->button() == Qt::RightButton) {
+        // (A selection made by the press stays: the menu's Copy and Add to chat use it.)
+        Q_EMIT contextMenuRequested(event->position().x(), event->position().y());
+        event->accept();
+        return;
+    }
     if (event->button() != Qt::LeftButton) {
-        event->ignore(); // a context menu above, say
+        event->ignore();
         return;
     }
     if (mods & (Qt::ControlModifier | Qt::MetaModifier)) {
@@ -1049,6 +1250,13 @@ void TerminalView::mousePressEvent(QMouseEvent *event)
                 event->accept();
                 return;
             }
+        }
+        // An address or a file path in the text.
+        HoverLink link;
+        if (linkAt(event->position(), &link)) {
+            activate(link);
+            event->accept();
+            return;
         }
     }
     pressAt(event->position(), mods, event->timestamp());
@@ -1132,7 +1340,283 @@ void TerminalView::hoverMoveEvent(QHoverEvent *event)
 {
     if (mouseReporting())
         sendMouse(term::MouseEvent::Move, -1, event->position(), event->modifiers());
+    m_hovering = true;
+    m_hoverPoint = event->position();
+    // Links are looked for only while Ctrl is held: the pointer moving costs nothing otherwise.
+    if (event->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))
+        updateLink(m_hoverPoint);
+    else if (m_link.valid)
+        clearLink();
     QQuickPaintedItem::hoverMoveEvent(event);
+}
+
+void TerminalView::hoverLeaveEvent(QHoverEvent *event)
+{
+    m_hovering = false;
+    clearLink();
+    QQuickPaintedItem::hoverLeaveEvent(event);
+}
+
+// ---- Links in the text --------------------------------------------------------------------------
+
+bool TerminalView::linkAt(QPointF point, HoverLink *out) const
+{
+    const term::Screen *s = screen();
+    if (!s || !m_session)
+        return false;
+    const QPoint cell = cellAt(point);
+    const term::CellPos at{cell.y() - m_scrollOffset, cell.x()};
+    if (at.line < -s->historySize() || at.line >= s->rows())
+        return false;
+    // The word found to be no link just now: no file system look again.
+    if (!(m_noLink.end < m_noLink.start) && !(at < m_noLink.start) && at < m_noLink.end)
+        return false;
+    const term::LogicalLine line = term::logicalLine(*s, at.line, true);
+    const qsizetype index = line.indexAt(at);
+    if (index < 0)
+        return false;
+    const QList<term::TextLink> links = term::findLinks(line.text);
+    const qsizetype found = term::linkAt(links, index);
+    if (found < 0)
+        return false;
+    const term::TextLink &link = links.at(found);
+    HoverLink result;
+    result.range = line.rangeOf(link.start, link.start + link.length);
+    result.line = link.line;
+    result.column = link.column;
+    if (link.kind == term::TextLink::Url) {
+        const QUrl url(link.target);
+        if (url.isLocalFile()) {
+            const QString path = url.toLocalFile();
+            if (!QFileInfo(path).isFile()) {
+                m_noLink = result.range;
+                return false;
+            }
+            result.file = true;
+            result.target = QDir::cleanPath(path);
+        } else {
+            result.target = link.target;
+        }
+    } else {
+        const QString path = term::resolvePath(link.target, m_session->currentDirectory(), QDir::homePath());
+        if (path.isEmpty()) {
+            m_noLink = result.range;
+            return false;
+        }
+        result.file = true;
+        result.target = path;
+    }
+    result.valid = true;
+    *out = result;
+    return true;
+}
+
+void TerminalView::updateLines(int first, int last)
+{
+    const term::Screen *s = screen();
+    if (!s)
+        return;
+    const int from = std::max(0, first + m_scrollOffset);
+    const int to = std::min(s->rows() - 1, last + m_scrollOffset);
+    updateRows(from, to);
+}
+
+void TerminalView::updateLink(QPointF point)
+{
+    if (m_link.valid) {
+        // Still over the same link: nothing to look for.
+        const QPoint cell = cellAt(point);
+        const term::CellPos at{cell.y() - m_scrollOffset, cell.x()};
+        if (!(at < m_link.range.start) && at < m_link.range.end)
+            return;
+    }
+    HoverLink link;
+    if (!linkAt(point, &link)) {
+        clearLink();
+        return;
+    }
+    if (m_link.valid)
+        updateLines(m_link.range.start.line, m_link.range.end.line);
+    m_link = link;
+    updateLines(m_link.range.start.line, m_link.range.end.line);
+    setCursor(Qt::PointingHandCursor);
+    Q_EMIT hoveredLinkChanged();
+}
+
+void TerminalView::clearLink()
+{
+    if (!m_link.valid)
+        return;
+    updateLines(m_link.range.start.line, m_link.range.end.line);
+    m_link = HoverLink();
+    setCursor(Qt::IBeamCursor);
+    Q_EMIT hoveredLinkChanged();
+}
+
+void TerminalView::activate(const HoverLink &link)
+{
+    if (link.file)
+        Q_EMIT fileActivated(link.target, link.line, link.column);
+    else
+        Q_EMIT linkActivated(link.target);
+}
+
+// ---- The find bar's search ----------------------------------------------------------------------
+
+int TerminalView::find(const QString &text, bool caseSensitive)
+{
+    m_findTimer.stop();
+    const bool same = text == m_findText && caseSensitive == m_findCase;
+    m_findText = text;
+    m_findCase = caseSensitive;
+    if (!same || m_matches.isEmpty())
+        runFind(false);
+    return int(m_matches.size());
+}
+
+void TerminalView::runFind(bool keepPlace)
+{
+    const term::Screen *s = screen();
+    const bool had = !m_matches.isEmpty();
+    const term::CellPos place = m_findCurrent >= 0 && m_findCurrent < m_matches.size()
+                                        ? m_matches.at(m_findCurrent).start
+                                        : term::CellPos{s ? s->rows() : 0, 0};
+    if (m_findText.isEmpty() || !s) {
+        m_matches.clear();
+        m_findCurrent = -1;
+    } else {
+        m_matches = term::findText(*s, m_findText, m_findCase ? Qt::CaseSensitive : Qt::CaseInsensitive, MaxMatches);
+        if (m_matches.isEmpty()) {
+            m_findCurrent = -1;
+        } else if (keepPlace) {
+            // The same match as before, else the one nearest to where it was.
+            const auto it = std::lower_bound(m_matches.cbegin(), m_matches.cend(), place,
+                                             [](const term::TextRange &m, term::CellPos p) { return m.start < p; });
+            m_findCurrent = std::clamp(int(it - m_matches.cbegin()), 0, int(m_matches.size()) - 1);
+        } else {
+            // The newest: a terminal is read from its end.
+            m_findCurrent = int(m_matches.size()) - 1;
+            revealMatch(m_findCurrent);
+        }
+    }
+    if (had || !m_matches.isEmpty())
+        update();
+    Q_EMIT findChanged();
+}
+
+void TerminalView::revealMatch(int index)
+{
+    const term::Screen *s = screen();
+    if (!s || index < 0 || index >= m_matches.size())
+        return;
+    const int line = m_matches.at(index).start.line;
+    const int row = line + m_scrollOffset;
+    if (row >= 0 && row < s->rows())
+        return;
+    // In the middle of the view when it has to scroll.
+    setScrollOffset(s->rows() / 2 - line);
+}
+
+void TerminalView::findOlder()
+{
+    if (m_matches.isEmpty())
+        return;
+    const int n = int(m_matches.size());
+    m_findCurrent = ((m_findCurrent - 1) % n + n) % n;
+    revealMatch(m_findCurrent);
+    update();
+    Q_EMIT findChanged();
+}
+
+void TerminalView::findNewer()
+{
+    if (m_matches.isEmpty())
+        return;
+    m_findCurrent = (m_findCurrent + 1) % int(m_matches.size());
+    revealMatch(m_findCurrent);
+    update();
+    Q_EMIT findChanged();
+}
+
+// ---- Clear, the chat ----------------------------------------------------------------------------
+
+void TerminalView::clear()
+{
+    if (m_session)
+        m_session->clear();
+}
+
+void TerminalView::onResized()
+{
+    // Another width wraps the text again (Screen::resize): the lines counted before are others now,
+    // found again here — not moved once more by what the resize pushed into the scrollback.
+    if (m_session) {
+        term::Screen &s = m_session->terminal().screen();
+        s.clearDirty();
+        s.markAllDirty();
+    }
+    clearSelection();
+    clearLink();
+    m_noLink = {{1, 0}, {0, 0}};
+    m_scrollOffset = std::min(m_scrollOffset, historySize());
+    m_lastHistorySize = historySize();
+    if (!m_findText.isEmpty())
+        runFind(true);
+    update();
+    Q_EMIT scrollChanged();
+}
+
+void TerminalView::onCleared()
+{
+    clearSelection();
+    clearLink();
+    m_scrollOffset = 0;
+    m_lastHistorySize = 0;
+    if (!m_findText.isEmpty())
+        runFind(false);
+    update();
+    Q_EMIT scrollChanged();
+}
+
+QString TerminalView::chatText() const
+{
+    if (!m_session)
+        return {};
+    const QString text = m_hasSelection ? selectedText() : visibleText();
+    return chatBlock(m_session->title(), m_session->currentDirectory(), text);
+}
+
+QString TerminalView::chatBlock(const QString &title, const QString &folder, const QString &text)
+{
+    QStringList lines = text.split(u'\n');
+    for (QString &line : lines) {
+        qsizetype end = line.size();
+        while (end > 0 && line.at(end - 1).isSpace())
+            --end;
+        line.truncate(end);
+    }
+    while (!lines.isEmpty() && lines.first().isEmpty())
+        lines.removeFirst();
+    while (!lines.isEmpty() && lines.last().isEmpty())
+        lines.removeLast();
+    if (lines.isEmpty())
+        return {};
+    const QString body = lines.join(u'\n');
+    // A fence the text cannot close: longer than any run of backticks in it.
+    int longest = 0;
+    int run = 0;
+    for (const QChar c : body) {
+        run = c == u'`' ? run + 1 : 0;
+        longest = std::max(longest, run);
+    }
+    const QString fence(std::max(3, longest + 1), u'`');
+    QString where = folder;
+    const QString home = QDir::homePath();
+    if (!home.isEmpty() && (where == home || where.startsWith(home + u'/')))
+        where = u'~' + where.mid(home.size());
+    const QString heading = where.isEmpty() ? tr("Terminal output (%1):").arg(title)
+                                            : tr("Terminal output (%1, in %2):").arg(title, where);
+    return heading + u'\n' + fence + u"console\n"_s + body + u'\n' + fence + u'\n';
 }
 
 void TerminalView::wheelEvent(QWheelEvent *event)

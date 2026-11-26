@@ -47,6 +47,10 @@ public:
     /// Fewer lines drop the oldest.
     void setScrollbackLimit(int lines);
     void clearHistory();
+    /// The user's "Clear" (the panel's menu): the scrollback goes and, on the main screen, the rows
+    /// above the cursor's — the cursor's row (the prompt being typed) becomes the first, the rows
+    /// below it are blanked. The alternate screen (a full-screen program draws it) stays as it is.
+    void clearKeepingCursorLine();
     /// The text of lineAt(index) without trailing spaces.
     QString lineText(int index) const { return lineAt(index).trimmedText(); }
     /// The screen's text, rows joined with "\n", trailing spaces of each row dropped.
@@ -153,10 +157,16 @@ public:
     void saveCursor();
     /// DECRC (home with the default pen when nothing was saved).
     void restoreCursor();
-    /// New size. Content is kept, not reflowed: lines are cut or padded, the cursor is clamped;
-    /// a shorter main screen pushes its top rows into the scrollback when the cursor would fall off,
-    /// a taller one takes lines back from it. Margins reset, both screens' saved cursors clamped.
+    /// New size. Another width on the main screen reflows it (reflow(), the default): the lines of
+    /// the scrollback and the screen are wrapped again at the new width — text that wrapped is
+    /// joined, long lines wrap — and the cursor stays on its character. Otherwise (the alternate
+    /// screen, reflow off, the height alone) content is kept, not reflowed: lines are cut or padded,
+    /// the cursor is clamped; a shorter main screen pushes its top rows into the scrollback when the
+    /// cursor would fall off, a taller one takes lines back from it. Margins reset, both screens'
+    /// saved cursors clamped.
     void resize(int columns, int rows);
+    bool reflow() const { return m_reflow; }
+    void setReflow(bool on) { m_reflow = on; }
     /// RIS's part: both screens cleared, modes and cursor to their defaults (the scrollback stays).
     void reset();
     /// DECSTR's part: modes and pen to their defaults, content kept.
@@ -204,6 +214,7 @@ private:
     void scrollRegionDown(int top, int bottom, int count);
     void pushHistory(Line &&line);
     Line takeNewestHistory();
+    void reflowMain(int columns, int rows);
     void resetTabStops(int from);
     void markDirty(int row);
     void markDirty(int from, int to);
@@ -234,6 +245,7 @@ private:
     bool m_insertMode = false;
     bool m_newLineMode = false;
     bool m_reverseVideo = false;
+    bool m_reflow = true;
     int m_top = 0;
     int m_bottom = 0;
     QList<bool> m_tabStops;

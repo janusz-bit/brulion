@@ -1662,7 +1662,10 @@ bool WorkspaceChats::setPinned(const QString &path, bool on)
 
 bool WorkspaceChats::setArchived(const QString &path, bool on)
 {
-    return setMark(path, int(chat::Mark::Archived), on);
+    const bool done = setMark(path, int(chat::Mark::Archived), on);
+    if (done)
+        Q_EMIT archivedChanged(path, on);
+    return done;
 }
 
 bool WorkspaceChats::setMark(const QString &path, int mark, bool on)

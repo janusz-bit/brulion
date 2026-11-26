@@ -302,13 +302,19 @@ ref's name), and a page that names one of another repository shows nothing of it
 
 ## Terminal
 
-The Terminal panel (`TerminalPanel`, `TerminalSession`, `TerminalView`: `src/app/terminal`; core
-`src/core/term`; `src/platform/pty.h`) is described in **docs/CODE-TERMINAL.md**: shells and the
-project's scripts in tabs, in the thread's folder (CodeView makes the panel for the thread's folder
-when it is first shown, and again for another thread's folder), a real pseudo-terminal and an xterm
-emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8 links opened by
-Ctrl+click, OSC 52 ignored). POSIX desktops; Windows, Android and the browser say there is no
-terminal (ConPTY: not yet).
+The Terminal panel (`TerminalPanel`, `TerminalSession`, `TerminalView`, `TerminalRegistry`:
+`src/app/terminal`; core `src/core/term`; `src/platform/pty.h`) is described in
+**docs/CODE-TERMINAL.md**: each thread's terminals, kept — running, with their scrollback — while
+another thread is shown (`TerminalRegistry`, keyed by the thread's page; a new thread's by its folder
+until its first message), ended when the thread is deleted, their idle ones when it is archived,
+their layout (tabs, splits, folders, commands typed, not run) back after a restart;
+tabs of up to four terminals side by side or stacked, the project's scripts in new tabs; a find bar
+over the scrollback, a context menu with Add to chat (the selection or the screen into the
+thread's field), URLs and file paths (`path:line:column`) opened with Ctrl+click, marks on tabs
+(new output, a bell, the exit code), shortcuts (Ctrl+J shows or hides it); a real pseudo-terminal
+and an xterm emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8 links,
+OSC 52 ignored). POSIX desktops; Windows, Android and the browser say there is no terminal (ConPTY:
+not yet).
 
 ## Files
 
@@ -326,7 +332,6 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
 * Windows: the terminal (ConPTY); everything else of Code mode is untried there.
 * A commit message or a pull request's text written by AI when left empty, and the rest of
   docs/CODE-GIT.md "Not done (yet)".
-* A thread's terminals kept while another thread is shown (they end when the folder changes).
 * Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and
   the terminal of a project of another computer (the phone shows its changes read-only); a new
   worktree there from another base than its HEAD in the UI; projects of two computers with the same id

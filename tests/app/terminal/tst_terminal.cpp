@@ -1,11 +1,18 @@
 // The terminal panel's C++ (src/app/terminal): TerminalSession end to end on a real
 // pseudo-terminal — input echoed by cat, a paste, the shell started in its folder printing pwd, the
-// size the program sees, the title it sets, stop and restart, exit codes —, the tabs' model, and
-// TerminalView in a window: keys into the program (Ctrl+C is ^C; Ctrl+Shift+C copies), the input
-// method's text, selection by dragging and by double and triple clicks, copying, the scrollback
-// and its keys and wheel, mouse reporting, painting at odd sizes and in both palettes.
+// size the program sees, the title it sets, stop and restart, exit codes, whether a program runs in
+// it, the marks of output and a bell while not shown, its current directory —, a thread's tabs and
+// splits (TerminalThread, TerminalGroup) and every thread's terminals (TerminalRegistry: keys,
+// rekeying, closing, the limits that never end a running program), and TerminalView in a window:
+// keys into the program (Ctrl+C is ^C; Ctrl+Shift+C copies; the terminal's own Ctrl+Shift chords;
+// the app's shortcuts left alone), the input method's text, selection by dragging and by double and
+// triple clicks, copying, the scrollback and its keys and wheel, mouse reporting, links under Ctrl
+// and Ctrl+click, the find bar's matches, Clear, the context menu's request, the block for the
+// chat, painting at odd sizes and in both palettes.
+#include "terminalgroup.h"
+#include "terminalregistry.h"
 #include "terminalsession.h"
-#include "terminalsessionmodel.h"
+#include "terminalthread.h"
 #include "terminalview.h"
 
 #include "term/screen.h"
@@ -13,9 +20,13 @@
 #include <QClipboard>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QGuiApplication>
 #include <QImage>
 #include <QInputMethodEvent>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPainter>
 #include <QPointer>
 #include <QQuickWindow>
@@ -24,8 +35,10 @@
 #include <QTest>
 
 using namespace Qt::StringLiterals;
+using brulion::terminal::TerminalGroup;
+using brulion::terminal::TerminalRegistry;
 using brulion::terminal::TerminalSession;
-using brulion::terminal::TerminalSessionModel;
+using brulion::terminal::TerminalThread;
 using brulion::terminal::TerminalView;
 
 namespace {
@@ -109,6 +122,7 @@ class TestTerminal : public QObject {
 
 private Q_SLOTS:
     void initTestCase();
+    void cleanup();
     void availability();
     void echoThroughCat();
     void shellInFolder();
@@ -116,8 +130,23 @@ private Q_SLOTS:
     void titleFromProgram();
     void stopAndRestart();
     void exitCodes();
-    void sessionModel();
+    void busyWithAJob();
+    void marksWhileNotShown();
+    void currentDirectory();
+    void tabsAndSplits();
+    void registryKeys();
+    void registryLimits();
+    void registryLayouts();
     void viewKeys();
+    void viewTerminalKeys();
+    void viewLinks();
+    void viewFind();
+    void viewClear();
+    void viewReflow();
+    void viewAttachesAfterOutput();
+    void viewContextMenu();
+    void chatBlock_data();
+    void chatBlock();
     void viewSelection();
     void viewScrollback();
     void viewMouseReporting();
@@ -138,10 +167,16 @@ void TestTerminal::initTestCase()
     qputenv("SHELL", "/bin/sh");
 }
 
+void TestTerminal::cleanup()
+{
+    // Sessions ended by a test are deleted later: now, before the next test (and no leaks).
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+}
+
 void TestTerminal::availability()
 {
     QCOMPARE(TerminalSession::available(), m_posix);
-    QCOMPARE(TerminalSessionModel::available(), m_posix);
+    QCOMPARE(TerminalRegistry::available(), m_posix);
     if (!m_posix) {
         TerminalSession session;
         QVERIFY(!session.start());
@@ -297,42 +332,683 @@ void TestTerminal::exitCodes()
              qPrintable(screenText(home)));
 }
 
-void TestTerminal::sessionModel()
+void TestTerminal::busyWithAJob()
 {
-    TerminalSessionModel model;
-    QSignalSpy count(&model, &TerminalSessionModel::countChanged);
-    QCOMPARE(model.add(u"/tmp"_s, QString(), u"Powłoka"_s), 0);
-    QCOMPARE(model.add(u"/tmp"_s, u"echo hi"_s, QString()), 1);
-    QCOMPARE(model.count(), 2);
-    QCOMPARE(model.rowCount(), 2);
-    QCOMPARE(count.size(), 2);
-    QCOMPARE(model.data(model.index(0), TerminalSessionModel::TitleRole).toString(), u"Powłoka"_s);
-    QCOMPARE(model.data(model.index(1), TerminalSessionModel::TitleRole).toString(), u"echo hi"_s);
-    QCOMPARE(model.at(0)->folder(), u"/tmp"_s);
-    QCOMPARE(model.at(1)->command(), u"echo hi"_s);
-    QCOMPARE(model.at(2), nullptr);
-    QCOMPARE(model.at(-1), nullptr);
-    QCOMPARE(model.indexOf(model.at(1)), 1);
-    QVERIFY(model.roleNames().values().contains("session"));
-    QCOMPARE(model.data(model.index(0), TerminalSessionModel::SessionRole).value<TerminalSession *>(), model.at(0));
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    // The interactive shell: a job of its own (job control) in the foreground.
+    TerminalSession shell;
+    QSignalSpy busy(&shell, &TerminalSession::busyChanged);
+    QVERIFY(shell.start());
+    QVERIFY(!shell.isBusy());
+    QTRY_VERIFY_WITH_TIMEOUT(!screenText(shell).trimmed().isEmpty(), Timeout); // the prompt
+    shell.write(u"sleep 100\r"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(shell.isBusy(), Timeout);
+    QVERIFY(busy.size() >= 1);
+    // ^C ends the job; the shell stays, idle.
+    shell.write(u"\x03"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(!shell.isBusy(), Timeout);
+    QVERIFY(shell.isRunning());
+    // A session's own command is its program: busy while it runs.
+    TerminalSession command;
+    command.setCommand(u"sleep 0.3"_s);
+    QVERIFY(command.start());
+    QVERIFY(command.isBusy());
+    QTRY_VERIFY_WITH_TIMEOUT(command.hasExited(), Timeout);
+    QVERIFY(!command.isBusy());
+}
 
-    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
-    model.at(1)->setLabel(u"Echo"_s);
-    QCOMPARE(changed.size(), 1);
-    QCOMPARE(model.data(model.index(1), TerminalSessionModel::TitleRole).toString(), u"Echo"_s);
-    if (m_posix) {
-        QVERIFY(model.at(1)->start());
-        QTRY_VERIFY_WITH_TIMEOUT(model.data(model.index(1), TerminalSessionModel::HasExitedRole).toBool(), Timeout);
-        QCOMPARE(model.data(model.index(1), TerminalSessionModel::ExitCodeRole).toInt(), 0);
+void TestTerminal::marksWhileNotShown()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    TerminalSession session;
+    session.setCommand(u"cat"_s);
+    QSignalSpy marks(&session, &TerminalSession::marksChanged);
+    QVERIFY(session.start());
+    // What it prints in its first half second (a shell's prompt) is no activity.
+    session.write(u"start\r"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(screenText(session).count(u"start"_s), 2, Timeout);
+    QVERIFY(!session.hasActivity() || BRULION_TEST_SLOWDOWN > 1);
+    QTest::qWait(600);
+    // Output while no view shows it: activity; a bell: rung.
+    session.write(u"zażółć\r"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(session.hasActivity(), Timeout);
+    QVERIFY(!session.bellRung());
+    session.write(u"\x07\r"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(session.bellRung(), Timeout);
+    // Shown: both go; output while shown leaves none.
+    session.setShown(true);
+    QVERIFY(session.isShown());
+    QVERIFY(!session.hasActivity());
+    QVERIFY(!session.bellRung());
+    session.write(u"gęślą\r"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(screenText(session).count(u"gęślą"_s), 2, Timeout);
+    QVERIFY(!session.hasActivity());
+    session.setShown(false);
+    QVERIFY(!session.isShown());
+
+    // A view in a window shows it; hidden, it does not.
+    Window w;
+    w.view->setSession(&session);
+    QVERIFY(session.isShown());
+    w.view->setVisible(false);
+    QVERIFY(!session.isShown());
+    w.view->setVisible(true);
+    QVERIFY(session.isShown());
+    w.view->setSession(nullptr);
+    QVERIFY(!session.isShown());
+    session.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(session.hasExited(), Timeout);
+}
+
+void TestTerminal::currentDirectory()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir(dir.path()).mkpath(u"podkatalog"_s));
+    TerminalSession session;
+    // Before it runs: its folder; none (or a missing one): home.
+    QCOMPARE(session.currentDirectory(), QDir::homePath());
+    session.setFolder(dir.path() + u"/brak"_s);
+    QCOMPARE(session.currentDirectory(), QDir::homePath());
+    session.setFolder(dir.path());
+    QCOMPARE(session.currentDirectory(), dir.path());
+    if (!m_posix)
+        return;
+    QVERIFY(session.start());
+    QTRY_VERIFY_WITH_TIMEOUT(!screenText(session).trimmed().isEmpty(), Timeout);
+    session.write(u"cd podkatalog\r"_s);
+#if defined(Q_OS_LINUX)
+    // The shell's own directory, though it reported none (no OSC 7).
+    QTRY_COMPARE_WITH_TIMEOUT(QDir(session.currentDirectory()).canonicalPath(),
+                              QDir(dir.path()).canonicalPath() + u"/podkatalog"_s, Timeout);
+#endif
+    session.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(session.hasExited(), Timeout);
+}
+
+void TestTerminal::tabsAndSplits()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    QTemporaryDir dir;
+    TerminalRegistry registry;
+    const QString key = u"AI/2026-11-26 Wątek.md"_s;
+    TerminalThread *thread = registry.thread(key, dir.path());
+    QVERIFY(thread);
+    QCOMPARE(thread->key(), key);
+    QCOMPARE(thread->folder(), dir.path());
+    QCOMPARE(registry.thread(key, QString()), thread);
+    QCOMPARE(thread->count(), 0);
+    QCOMPARE(thread->currentIndex(), -1);
+    QCOMPARE(thread->currentSession(), nullptr);
+    QVERIFY(thread->autoOpen());
+
+    // A tab: one shell, shown, started, in the thread's folder.
+    TerminalSession *first = thread->openTab(QString(), u"Powłoka"_s);
+    QVERIFY(first);
+    QVERIFY(first->isRunning());
+    QCOMPARE(first->folder(), dir.path());
+    QCOMPARE(thread->count(), 1);
+    QCOMPARE(thread->currentIndex(), 0);
+    QCOMPARE(thread->currentSession(), first);
+    TerminalGroup *group = thread->current();
+    QCOMPARE(group->count(), 1);
+    QCOMPARE(group->focusSession(), first);
+    QCOMPARE(group->title(), u"Powłoka"_s);
+    QCOMPARE(thread->data(thread->index(0), TerminalThread::TitleRole).toString(), u"Powłoka"_s);
+
+    // Splits: beside, then under (the tab's direction is the last split's), focused, up to four.
+    TerminalSession *right = thread->split(Qt::Horizontal);
+    QVERIFY(right);
+    QCOMPARE(group->count(), 2);
+    QCOMPARE(group->orientation(), Qt::Horizontal);
+    QCOMPARE(group->focusIndex(), 1);
+    QCOMPARE(thread->currentSession(), right);
+    QCOMPARE(thread->data(thread->index(0), TerminalThread::CountRole).toInt(), 2);
+    TerminalSession *down = thread->split(Qt::Vertical);
+    QVERIFY(down);
+    QCOMPARE(group->orientation(), Qt::Vertical);
+    QCOMPARE(group->indexOf(down), 2);
+    QVERIFY(thread->split(Qt::Vertical));
+    QCOMPARE(group->count(), TerminalGroup::MaxSessions);
+    QVERIFY(!group->canSplit());
+    QCOMPARE(thread->split(Qt::Horizontal), nullptr);
+    QVERIFY(!thread->error().isEmpty());
+    QCOMPARE(thread->sessionCount(), 4);
+
+    // A second tab after it, with a command; it ends: its exit code in the tab's roles.
+    TerminalSession *echo = thread->openTab(u"echo hej; exit 3"_s, QString());
+    QVERIFY(echo);
+    QVERIFY(thread->error().isEmpty());
+    QCOMPARE(thread->count(), 2);
+    QCOMPARE(thread->currentIndex(), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(thread->data(thread->index(1), TerminalThread::HasExitedRole).toBool(), Timeout);
+    QCOMPARE(thread->data(thread->index(1), TerminalThread::ExitCodeRole).toInt(), 3);
+
+    // Through every terminal: the last tab's one, then the first tab's four, around.
+    thread->focusNext(1);
+    QCOMPARE(thread->currentIndex(), 0);
+    QCOMPARE(group->focusIndex(), 0);
+    thread->focusNext(1);
+    QCOMPARE(group->focusIndex(), 1);
+    thread->focusNext(-2);
+    QCOMPARE(thread->currentIndex(), 1);
+    thread->setCurrentIndex(0);
+    group->setFocusIndex(2);
+    QCOMPARE(thread->currentSession(), down);
+
+    // Closing one: the others stay, the one beside it is focused; a tab left empty goes.
+    QPointer<TerminalSession> gone = down;
+    thread->closeSession(down, true);
+    QCOMPARE(group->count(), 3);
+    QCOMPARE(group->focusIndex(), 2);
+    QTRY_VERIFY(gone.isNull());
+    thread->closeTab(1, true);
+    QCOMPARE(thread->count(), 1);
+    QCOMPARE(thread->currentIndex(), 0);
+    QVERIFY(thread->autoOpen());
+    // The user closed the last one: no shell opens by itself here any more.
+    thread->closeTab(0, true);
+    QCOMPARE(thread->count(), 0);
+    QCOMPARE(thread->sessionCount(), 0);
+    QCOMPARE(thread->currentIndex(), -1);
+    QVERIFY(!thread->autoOpen());
+    // New terminals start where the thread works now.
+    thread->setFolder(QDir::tempPath());
+    TerminalSession *again = thread->openTab(QString(), QString());
+    QCOMPARE(again->folder(), QDir::tempPath());
+    thread->closeAll();
+    QCOMPARE(thread->count(), 0);
+}
+
+void TestTerminal::registryKeys()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    QTemporaryDir dir;
+    TerminalRegistry registry;
+    QCOMPARE(registry.thread(QString(), dir.path()), nullptr);
+    // A new thread's terminals, keyed by its folder.
+    TerminalThread *thread = registry.thread(dir.path(), dir.path());
+    registry.shown(dir.path());
+    QVERIFY(thread->openTab(QString(), QString()));
+    QCOMPARE(registry.keys(), QStringList{dir.path()});
+    QCOMPARE(registry.sessionCount(), 1);
+    // Its first message made its page.
+    const QString page = u"AI/2026-11-26 Napraw błąd.md"_s;
+    QVERIFY(registry.rekey(dir.path(), page));
+    QCOMPARE(registry.find(dir.path()), nullptr);
+    QCOMPARE(registry.find(page), thread);
+    QCOMPARE(thread->key(), page);
+    QCOMPARE(registry.keys(), QStringList{page});
+    QVERIFY(!registry.rekey(u"AI/none.md"_s, page));
+    // Another thread's terminals are not taken over.
+    TerminalThread *other = registry.thread(u"AI/inny.md"_s, dir.path());
+    QVERIFY(other->openTab(QString(), QString()));
+    QVERIFY(!registry.rekey(u"AI/inny.md"_s, page));
+    // A rename of the page: the terminals follow.
+    const QString renamed = u"AI/2026-11-26 Błąd naprawiony.md"_s;
+    registry.pathRenamed(page, renamed);
+    QCOMPARE(registry.find(renamed), thread);
+    QCOMPARE(registry.find(page), nullptr);
+
+    // A program running: busy, and what an archive leaves.
+    QSignalSpy busy(&registry, &TerminalRegistry::busyChanged);
+    QVERIFY(thread->openTab(u"sleep 100"_s, QString()));
+    QTRY_VERIFY_WITH_TIMEOUT(registry.isBusy(renamed), Timeout);
+    QCOMPARE(registry.busyKeys(), QStringList{renamed});
+    QCOMPARE(busy.last().at(0).toString(), renamed);
+    QCOMPARE(busy.last().at(1).toBool(), true);
+    QCOMPARE(thread->sessionCount(), 2);
+    registry.archived(renamed, true);
+    QCOMPARE(thread->sessionCount(), 1); // the idle shell ended, the running sleep stayed
+    QVERIFY(thread->sessions().first()->isBusy());
+    registry.archived(renamed, false); // brought back: nothing ends
+    QCOMPARE(thread->sessionCount(), 1);
+    // Deleted: everything ends, the thread is forgotten (it was not shown).
+    registry.shown(u"AI/inny.md"_s);
+    QPointer<TerminalThread> watched = thread;
+    registry.pathRemoved(renamed);
+    QCOMPARE(registry.find(renamed), nullptr);
+    QVERIFY(!registry.isBusy(renamed));
+    QCOMPARE(busy.last().at(0).toString(), renamed);
+    QCOMPARE(busy.last().at(1).toBool(), false);
+    QTRY_VERIFY(watched.isNull());
+    QCOMPARE(registry.keys(), QStringList{u"AI/inny.md"_s});
+    // The shown one deleted: its terminals end, the object stays for the panel.
+    registry.close(u"AI/inny.md"_s);
+    QCOMPARE(registry.find(u"AI/inny.md"_s), other);
+    QCOMPARE(other->sessionCount(), 0);
+    QCOMPARE(registry.sessionCount(), 0);
+    // Quitting.
+    QVERIFY(other->openTab(QString(), QString()));
+    registry.closeAll();
+    QCOMPARE(registry.sessionCount(), 0);
+}
+
+void TestTerminal::registryLimits()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    TerminalRegistry registry;
+    registry.setLimits(2, 4);
+    auto open = [&registry](const QString &key, int tabs) {
+        TerminalThread *thread = registry.thread(key, QDir::tempPath());
+        registry.shown(key);
+        for (int i = 0; i < tabs; ++i) {
+            if (!thread->openTab(QString(), QString()))
+                return thread;
+        }
+        return thread;
+    };
+    TerminalThread *a = open(u"A.md"_s, 1);
+    TerminalThread *b = open(u"B.md"_s, 2);
+    QCOMPARE(registry.sessionCount(), 3);
+    QCOMPARE(registry.keys(), (QStringList{u"B.md"_s, u"A.md"_s}));
+    // A third thread shown: the least recently shown one's idle terminals end.
+    QPointer<TerminalThread> watchedA = a;
+    TerminalThread *c = open(u"C.md"_s, 1);
+    QCOMPARE(c->sessionCount(), 1);
+    registry.shown(u"C.md"_s);
+    QCOMPARE(registry.keys(), (QStringList{u"C.md"_s, u"B.md"_s}));
+    QTRY_VERIFY(watchedA.isNull()); // nothing left of it to remember
+    QCOMPARE(registry.sessionCount(), 3);
+    // Beyond the terminals' limit: one of another thread's idle ones makes room.
+    QVERIFY(c->openTab(QString(), QString()));
+    QCOMPARE(registry.sessionCount(), 4);
+    QVERIFY(c->openTab(QString(), QString()));
+    QCOMPARE(registry.sessionCount(), 4);
+    QCOMPARE(b->sessionCount(), 1);
+    QCOMPARE(c->sessionCount(), 3);
+
+    // A running program is never ended to make room: with only those left, no new terminal.
+    TerminalRegistry busy;
+    busy.setLimits(1, 2);
+    TerminalThread *server = busy.thread(u"Serwer.md"_s, QDir::tempPath());
+    busy.shown(u"Serwer.md"_s);
+    QVERIFY(server->openTab(u"sleep 100"_s, u"Dev server"_s));
+    TerminalThread *next = busy.thread(u"Inny.md"_s, QDir::tempPath());
+    busy.shown(u"Inny.md"_s);
+    QVERIFY(next->openTab(QString(), QString()));
+    busy.shown(u"Inny.md"_s); // two threads with terminals, the limit one: the busy one stays
+    QCOMPARE(server->sessionCount(), 1);
+    QCOMPARE(next->openTab(QString(), QString()), nullptr);
+    QVERIFY(!next->error().isEmpty());
+    QCOMPARE(busy.sessionCount(), 2);
+}
+
+void TestTerminal::registryLayouts()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    QTemporaryDir dir;
+    QVERIFY(QDir(dir.path()).mkpath(u"zażółć"_s));
+    const QString inner = dir.path() + u"/zażółć"_s;
+    QByteArray stored;
+    int saves = 0;
+    {
+        TerminalRegistry before;
+        before.setLayoutStorage([] { return QByteArray(); },
+                                [&stored, &saves](const QByteArray &json) {
+                                    stored = json;
+                                    ++saves;
+                                });
+        TerminalThread *thread = before.thread(u"AI/Wątek.md"_s, dir.path());
+        before.shown(u"AI/Wątek.md"_s);
+        QVERIFY(thread->openTab(QString(), QString()));
+        QVERIFY(thread->split(Qt::Vertical));
+        QVERIFY(thread->openTab(u"echo gotowe-$((40+2)); sleep 100"_s, u"Serwer"_s));
+        thread->setCurrentIndex(0);
+        // A moment after the change, written.
+        QTRY_VERIFY_WITH_TIMEOUT(saves > 0, Timeout);
+        thread->setFolder(inner);
+        TerminalThread *other = before.thread(u"AI/Inny.md"_s, inner);
+        QVERIFY(other->openTab(QString(), QString()));
+        before.shown(u"AI/Wątek.md"_s);
+        before.saveLayouts();
+        const QJsonObject layouts = QJsonDocument::fromJson(stored).object();
+        const QJsonArray threads = layouts.value(u"threads"_s).toArray();
+        QCOMPARE(threads.size(), 2);
+        // The most recently shown first.
+        QCOMPARE(threads.at(0).toObject().value(u"key"_s).toString(), u"AI/Wątek.md"_s);
+        const QJsonArray tabs = threads.at(0).toObject().value(u"tabs"_s).toArray();
+        QCOMPARE(tabs.size(), 2);
+        QCOMPARE(tabs.at(0).toObject().value(u"split"_s).toString(), u"down"_s);
+        QCOMPARE(tabs.at(0).toObject().value(u"terminals"_s).toArray().size(), 2);
+        QCOMPARE(tabs.at(1).toObject().value(u"terminals"_s).toArray().at(0).toObject().value(u"label"_s).toString(),
+                 u"Serwer"_s);
     }
+    // After a restart: the thread's tabs and splits come back when its terminals are asked for.
+    TerminalRegistry after;
+    after.setLayoutStorage([&stored] { return stored; }, {});
+    QCOMPARE(after.savedCount(), 2);
+    QCOMPARE(after.sessionCount(), 0); // nothing runs before it is asked for
+    TerminalThread *thread = after.thread(u"AI/Wątek.md"_s, dir.path());
+    QCOMPARE(after.savedCount(), 1);
+    QCOMPARE(thread->count(), 2);
+    QCOMPARE(thread->currentIndex(), 0);
+    QCOMPARE(thread->group(0)->count(), 2);
+    QCOMPARE(thread->group(0)->orientation(), Qt::Vertical);
+    TerminalSession *server = thread->group(1)->at(0);
+    QCOMPARE(server->label(), u"Serwer"_s);
+    // The command typed into its shell, not run: Enter runs it again.
+    QVERIFY(server->command().isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(screenText(*server).contains(u"echo gotowe-$((40+2)); sleep 100"_s), Timeout);
+    QVERIFY(!screenText(*server).contains(u"gotowe-42"_s));
+    QVERIFY(!server->isBusy());
+    server->write(u"\x03"_s);
+    // Saved again: still that command's tab.
+    const QJsonArray again = after.layouts().value(u"threads"_s).toArray();
+    QCOMPARE(again.at(0).toObject().value(u"tabs"_s).toArray().at(1).toObject().value(u"terminals"_s).toArray().at(0)
+                     .toObject().value(u"command"_s).toString(),
+             u"echo gotowe-$((40+2)); sleep 100"_s);
+    // Kept while not asked for: the other one is still in the layouts.
+    const QJsonArray threads = after.layouts().value(u"threads"_s).toArray();
+    QCOMPARE(threads.size(), 2);
+    QCOMPARE(threads.at(1).toObject().value(u"key"_s).toString(), u"AI/Inny.md"_s);
+    // Renamed and deleted threads: their layouts follow, and go.
+    after.pathRenamed(u"AI/Inny.md"_s, u"AI/Nowa nazwa.md"_s);
+    QCOMPARE(after.layouts().value(u"threads"_s).toArray().at(1).toObject().value(u"key"_s).toString(),
+             u"AI/Nowa nazwa.md"_s);
+    after.pathRemoved(u"AI/Nowa nazwa.md"_s);
+    QCOMPARE(after.savedCount(), 0);
+    // Malformed settings: skipped, nothing breaks.
+    TerminalRegistry broken;
+    broken.setLayouts(QJsonDocument::fromJson(
+                              R"({"threads": [1, {"key": ""}, {"key": "a", "tabs": "x"}, {"key": "b", "tabs": [{"terminals": [{"folder": 5}]}]}]})")
+                              .object());
+    QCOMPARE(broken.savedCount(), 1);
+    QVERIFY(broken.thread(u"b"_s, QDir::tempPath())->count() == 1);
+    broken.setLayouts(QJsonObject());
+    QCOMPARE(broken.savedCount(), 0);
+    // A tab of four within a limit of three: three come back; a command of several lines is not
+    // typed (its line breaks would run it), and kept.
+    TerminalRegistry limited;
+    limited.setLimits(10, 3);
+    const QString tmp = QDir::tempPath();
+    QJsonArray four;
+    four.append(QJsonObject{{u"folder"_s, tmp}, {u"label"_s, QString()}, {u"command"_s, u"echo raz\necho dwa"_s}});
+    for (int i = 0; i < 3; ++i)
+        four.append(QJsonObject{{u"folder"_s, tmp}, {u"label"_s, QString()}, {u"command"_s, QString()}});
+    limited.setLayouts(QJsonObject{
+            {u"threads"_s, QJsonArray{QJsonObject{
+                                   {u"key"_s, u"c"_s},
+                                   {u"tabs"_s, QJsonArray{QJsonObject{{u"split"_s, u"right"_s}, {u"terminals"_s, four}}}}}}}});
+    TerminalThread *three = limited.thread(u"c"_s, tmp);
+    QCOMPARE(limited.sessionCount(), 3);
+    QCOMPARE(three->group(0)->count(), 3);
+    TerminalSession *script = three->group(0)->at(0);
+    QCOMPARE(script->label(), u"echo raz echo dwa"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(!screenText(*script).trimmed().isEmpty(), Timeout);
+    QTest::qWait(200);
+    QVERIFY(!screenText(*script).contains(u"echo raz"_s));
+    QCOMPARE(script->typedCommand(), u"echo raz\necho dwa"_s);
+}
 
-    QPointer<TerminalSession> first = model.at(0);
-    model.remove(0);
-    QCOMPARE(model.count(), 1);
-    QCOMPARE(model.at(0)->command(), u"echo hi"_s);
-    QTRY_VERIFY(first.isNull()); // deleted once the event loop is back
-    model.remove(5);
-    QCOMPARE(model.count(), 1);
+void TestTerminal::viewTerminalKeys()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    Window w;
+    TerminalSession session;
+    session.setCommand(u"cat"_s);
+    w.view->setSession(&session);
+    QVERIFY(session.start());
+    QTRY_VERIFY(w.view->hasActiveFocus());
+    QByteArray lines;
+    for (int i = 0; i < 100; ++i)
+        lines += "wiersz " + QByteArray::number(i) + "\r\n";
+    show(session, lines);
+    QVERIFY(w.view->historySize() > 0);
+
+    QSignalSpy find(w.view, &TerminalView::findRequested);
+    QTest::keyClick(&w.window, Qt::Key_A, Qt::ControlModifier | Qt::ShiftModifier);
+    QVERIFY(w.view->hasSelection());
+    QVERIFY(w.view->selectedText().startsWith(u"wiersz 0\n"_s));
+    QTest::keyClick(&w.window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(find.size(), 1);
+    QTest::keyClick(&w.window, Qt::Key_Home, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(w.view->scrollOffset(), w.view->historySize());
+    QTest::keyClick(&w.window, Qt::Key_End, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(w.view->scrollOffset(), 0);
+
+    // The app's shortcuts are left to it; other Ctrl chords are the program's.
+    w.view->setAppShortcuts({u"Ctrl+Alt+]"_s, u"Ctrl+`"_s, u"nie skrót"_s});
+    auto wanted = [&w](Qt::Key key, Qt::KeyboardModifiers mods) {
+        QKeyEvent over(QEvent::ShortcutOverride, key, mods);
+        over.ignore();
+        QGuiApplication::sendEvent(w.view, &over);
+        return over.isAccepted();
+    };
+    QVERIFY(!wanted(Qt::Key_BracketRight, Qt::ControlModifier | Qt::AltModifier));
+    QVERIFY(!wanted(Qt::Key_QuoteLeft, Qt::ControlModifier));
+    QVERIFY(wanted(Qt::Key_BracketLeft, Qt::ControlModifier | Qt::AltModifier));
+    QVERIFY(wanted(Qt::Key_R, Qt::ControlModifier));
+    // The terminal's own Ctrl+Shift chords are its own; other ones the app's.
+    QVERIFY(wanted(Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier));
+    QVERIFY(!wanted(Qt::Key_K, Qt::ControlModifier | Qt::ShiftModifier));
+    w.view->setAppShortcuts({});
+    QVERIFY(wanted(Qt::Key_BracketRight, Qt::ControlModifier | Qt::AltModifier));
+}
+
+void TestTerminal::viewLinks()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir(dir.path()).mkpath(u"src"_s));
+    {
+        QFile file(dir.path() + u"/src/main.cpp"_s);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+    const QString main = QDir::cleanPath(dir.path() + u"/src/main.cpp"_s);
+    Window w;
+    TerminalSession session;
+    session.setFolder(dir.path());
+    w.view->setSession(&session);
+    show(session, "error: src/main.cpp:12:5: boom\r\nsee https://example.com/x.\r\nmissing/file.cpp:3\r\n");
+    QSignalSpy files(w.view, &TerminalView::fileActivated);
+    QSignalSpy links(w.view, &TerminalView::linkActivated);
+    QSignalSpy hovered(w.view, &TerminalView::hoveredLinkChanged);
+
+    // Without Ctrl nothing is looked for.
+    w.mouse(QEvent::MouseMove, w.cell(10, 0), Qt::NoButton, Qt::NoButton, m_time += 10);
+    QCOMPARE(w.view->hoveredLink(), QString());
+    // With Ctrl: the file under the pointer.
+    w.mouse(QEvent::MouseMove, w.cell(11, 0), Qt::NoButton, Qt::NoButton, m_time += 10, Qt::ControlModifier);
+    QCOMPARE(w.view->hoveredLink(), main);
+    QCOMPARE(hovered.size(), 1);
+    // Along the same link: nothing looked for again.
+    w.mouse(QEvent::MouseMove, w.cell(15, 0), Qt::NoButton, Qt::NoButton, m_time += 10, Qt::ControlModifier);
+    QCOMPARE(hovered.size(), 1);
+    // Ctrl+click opens it at its line and column, selects nothing.
+    w.click(w.cell(11, 0), m_time += 1000, Qt::ControlModifier);
+    QCOMPARE(files.size(), 1);
+    QCOMPARE(files.at(0).at(0).toString(), main);
+    QCOMPARE(files.at(0).at(1).toInt(), 12);
+    QCOMPARE(files.at(0).at(2).toInt(), 5);
+    QVERIFY(!w.view->hasSelection());
+    // Ctrl let go (the pointer moves without it): no link.
+    w.mouse(QEvent::MouseMove, w.cell(12, 0), Qt::NoButton, Qt::NoButton, m_time += 10);
+    QCOMPARE(w.view->hoveredLink(), QString());
+    // A web address, without the full stop after it.
+    w.click(w.cell(8, 1), m_time += 1000, Qt::ControlModifier);
+    QCOMPARE(links.size(), 1);
+    QCOMPARE(links.at(0).at(0).toString(), u"https://example.com/x"_s);
+    // A path of no file: no link; the click is an ordinary one.
+    w.mouse(QEvent::MouseMove, w.cell(3, 2), Qt::NoButton, Qt::NoButton, m_time += 10, Qt::ControlModifier);
+    QCOMPARE(w.view->hoveredLink(), QString());
+    w.click(w.cell(3, 2), m_time += 1000, Qt::ControlModifier);
+    QCOMPARE(files.size(), 1);
+    // New output over the hovered line ends the link.
+    w.mouse(QEvent::MouseMove, w.cell(11, 0), Qt::NoButton, Qt::NoButton, m_time += 10, Qt::ControlModifier);
+    QCOMPARE(w.view->hoveredLink(), main);
+    show(session, "\x1b[1;1Hnothing here anymore\x1b[K");
+    QCOMPARE(w.view->hoveredLink(), QString());
+    // Painted with a link underlined: no crash, the view is drawn.
+    QVERIFY(!w.window.grabWindow().isNull());
+}
+
+void TestTerminal::viewFind()
+{
+    Window w;
+    TerminalSession session;
+    w.view->setSession(&session);
+    QByteArray out;
+    for (int i = 0; i < 200; ++i)
+        out += "wiersz " + QByteArray::number(i) + (i % 50 == 0 ? " Zażółć gęślą" : "") + "\r\n";
+    show(session, out);
+    QSignalSpy changed(w.view, &TerminalView::findChanged);
+    QCOMPARE(w.view->find(u"zażółć"_s, false), 4);
+    QCOMPARE(w.view->findText(), u"zażółć"_s);
+    QCOMPARE(w.view->findCount(), 4);
+    // The newest first, scrolled to.
+    QCOMPARE(w.view->findIndex(), 3);
+    QVERIFY(changed.size() >= 1);
+    QVERIFY(w.view->visibleText().contains(u"wiersz 150 Zażółć"_s));
+    // Older ones: up through the scrollback, around.
+    w.view->findOlder();
+    w.view->findOlder();
+    w.view->findOlder();
+    QCOMPARE(w.view->findIndex(), 0);
+    QVERIFY(w.view->visibleText().contains(u"wiersz 0 Zażółć"_s));
+    w.view->findOlder();
+    QCOMPARE(w.view->findIndex(), 3);
+    w.view->findNewer();
+    QCOMPARE(w.view->findIndex(), 0);
+    // Letter case.
+    QCOMPARE(w.view->find(u"zażółć"_s, true), 0);
+    QCOMPARE(w.view->findIndex(), -1);
+    QCOMPARE(w.view->find(u"Zażółć"_s, true), 4);
+    // New output: found again a moment later, the current match kept.
+    w.view->findOlder();
+    QCOMPARE(w.view->findIndex(), 2);
+    show(session, "nowy Zażółć\r\n");
+    QTRY_COMPARE(w.view->findCount(), 5);
+    QCOMPARE(w.view->findIndex(), 2);
+    QVERIFY(!w.window.grabWindow().isNull());
+    // Over.
+    w.view->clearFind();
+    QCOMPARE(w.view->findCount(), 0);
+    QCOMPARE(w.view->findText(), QString());
+}
+
+void TestTerminal::viewClear()
+{
+    Window w;
+    TerminalSession session;
+    w.view->setSession(&session);
+    QByteArray out;
+    for (int i = 0; i < 100; ++i)
+        out += "wiersz " + QByteArray::number(i) + "\r\n";
+    show(session, out + "$ ls -la");
+    w.view->scrollLines(5);
+    w.view->selectAll();
+    QVERIFY(w.view->historySize() > 0);
+    QSignalSpy cleared(&session, &TerminalSession::cleared);
+    w.view->clear();
+    QCOMPARE(cleared.size(), 1);
+    QCOMPARE(w.view->historySize(), 0);
+    QCOMPARE(w.view->scrollOffset(), 0);
+    QVERIFY(!w.view->hasSelection());
+    QVERIFY(w.view->visibleText().startsWith(u"$ ls -la"_s));
+    QCOMPARE(w.view->visibleText().trimmed(), u"$ ls -la"_s);
+}
+
+void TestTerminal::viewReflow()
+{
+    Window w;
+    TerminalSession session;
+    w.view->setSession(&session);
+    const int columns = w.view->columns();
+    show(session, QByteArray(columns + 10, 'x') + "\r\n$ ");
+    w.view->selectAll();
+    QVERIFY(w.view->hasSelection());
+    // Narrower: the long line wraps again (nothing of it cut); the selection's lines are others now.
+    w.view->setWidth(w.view->width() / 2);
+    QTRY_VERIFY(w.view->columns() < columns);
+    QVERIFY(!w.view->hasSelection());
+    QCOMPARE(session.terminal().screen().text().count(u'x'), columns + 10);
+    QCOMPARE(session.terminal().screen().line(session.terminal().screen().cursorRow()).trimmedText(), u"$"_s);
+    // Wider again: one row of it.
+    w.view->setWidth(w.window.width());
+    QTRY_COMPARE(w.view->columns(), columns);
+    QCOMPARE(session.terminal().screen().line(1).trimmedText(), QString(10, u'x'));
+}
+
+void TestTerminal::viewAttachesAfterOutput()
+{
+    // Output while no view shows the session (another tab, another thread): a view shown then and
+    // scrolled back keeps its lines when the next one comes.
+    TerminalSession session;
+    QByteArray lines;
+    for (int i = 0; i < 2000; ++i)
+        lines += "wiersz " + QByteArray::number(i) + "\r\n";
+    show(session, lines);
+    Window w;
+    w.view->setSession(&session);
+    w.view->scrollLines(5);
+    const QString before = w.view->visibleText();
+    show(session, "jeszcze jeden\r\n");
+    QCOMPARE(w.view->scrollOffset(), 6);
+    QCOMPARE(w.view->visibleText(), before);
+    // A selection made now survives the next line.
+    w.view->selectAll();
+    show(session, "i jeszcze\r\n");
+    QVERIFY(w.view->hasSelection());
+}
+
+void TestTerminal::viewContextMenu()
+{
+    Window w;
+    TerminalSession session;
+    w.view->setSession(&session);
+    show(session, "tekst do menu\r\n");
+    QSignalSpy menu(w.view, &TerminalView::contextMenuRequested);
+    const QPointF at = w.cell(3, 0);
+    w.mouse(QEvent::MouseButtonPress, at, Qt::RightButton, Qt::RightButton, m_time += 1000);
+    w.mouse(QEvent::MouseButtonRelease, at, Qt::RightButton, Qt::NoButton, m_time += 10);
+    QCOMPARE(menu.size(), 1);
+    QCOMPARE(menu.at(0).at(0).toReal(), at.x());
+    QCOMPARE(menu.at(0).at(1).toReal(), at.y());
+    // A program that asked for the mouse gets the right button; Shift bypasses it.
+    show(session, "\x1b[?1000h");
+    w.mouse(QEvent::MouseButtonPress, at, Qt::RightButton, Qt::RightButton, m_time += 1000);
+    w.mouse(QEvent::MouseButtonRelease, at, Qt::RightButton, Qt::NoButton, m_time += 10);
+    QCOMPARE(menu.size(), 1);
+    w.mouse(QEvent::MouseButtonPress, at, Qt::RightButton, Qt::RightButton, m_time += 1000, Qt::ShiftModifier);
+    w.mouse(QEvent::MouseButtonRelease, at, Qt::RightButton, Qt::NoButton, m_time += 10, Qt::ShiftModifier);
+    QCOMPARE(menu.size(), 2);
+}
+
+void TestTerminal::chatBlock_data()
+{
+    QTest::addColumn<QString>("title");
+    QTest::addColumn<QString>("folder");
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<QString>("block");
+    const QString home = QDir::homePath();
+    QTest::newRow("in home") << u"zsh"_s << home + u"/projekt"_s << u"\n$ ls   \nzażółć.txt\n\n\n"_s
+                             << u"Terminal output (zsh, in ~/projekt):\n```console\n$ ls\nzażółć.txt\n```\n"_s;
+    QTest::newRow("home itself") << u"bash"_s << home << u"x"_s
+                                 << u"Terminal output (bash, in ~):\n```console\nx\n```\n"_s;
+    QTest::newRow("elsewhere") << u"npm run dev"_s << u"/srv/app"_s << u"ready"_s
+                               << u"Terminal output (npm run dev, in /srv/app):\n```console\nready\n```\n"_s;
+    QTest::newRow("no folder") << u"sh"_s << QString() << u"ok"_s << u"Terminal output (sh):\n```console\nok\n```\n"_s;
+    QTest::newRow("backticks inside") << u"sh"_s << QString() << u"a ``` b ```` c"_s
+                                      << u"Terminal output (sh):\n`````console\na ``` b ```` c\n`````\n"_s;
+    QTest::newRow("blank") << u"sh"_s << home << u" \n\n  \n"_s << QString();
+    QTest::newRow("empty") << u"sh"_s << home << QString() << QString();
+}
+
+void TestTerminal::chatBlock()
+{
+    QFETCH(QString, title);
+    QFETCH(QString, folder);
+    QFETCH(QString, text);
+    QFETCH(QString, block);
+    QCOMPARE(TerminalView::chatBlock(title, folder, text), block);
 }
 
 void TestTerminal::viewKeys()

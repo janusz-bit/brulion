@@ -10,7 +10,7 @@ done in the repository simply disappears from the list.
   the terminal and the project's files — picker, viewer, search, @-mentions — are there
   (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
   real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
-  mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
+  mode tried on Windows and macOS at all; the terminal's resizable splits;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
   a commit message and a pull request's text written by AI when left empty (a small "ask the AI
   once" QML type in src/app/shell over `WorkspaceExtensions::sendAi`, handed to the panel), a turn's

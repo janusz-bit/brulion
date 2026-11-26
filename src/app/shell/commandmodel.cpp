@@ -97,6 +97,14 @@ constexpr UiAction kUiActions[] = {
         {u"encrypt.newPage", u"newEncryptedPage"},
         {u"theme.toggle", u"toggleTheme"},
         {u"about", u"about"},
+        // Code mode's terminal panel (CodeView: TerminalPanel).
+        {u"terminal.toggle", u"terminal:toggle"},
+        {u"terminal.new", u"terminal:new"},
+        {u"terminal.splitRight", u"terminal:splitRight"},
+        {u"terminal.splitDown", u"terminal:splitDown"},
+        {u"terminal.close", u"terminal:close"},
+        {u"terminal.next", u"terminal:next"},
+        {u"terminal.previous", u"terminal:previous"},
 };
 
 /// The uiAction of the command `id`, "" for a command that runs in C++.
@@ -847,6 +855,24 @@ static QList<Command> codeCommands(const AppController *app)
              u"code"_s},
             {u"code.toggleChanges"_s, CommandModel::tr("Show or hide the changes"),
              CommandModel::tr("Code mode: the Changes panel"), u"git-compare"_s, u"Ctrl+D"_s, inCode, u"code"_s},
+            // The thread's terminals (docs/CODE-TERMINAL.md "Keys"): T3 Code's mod+j (in Code mode Ctrl+J
+            // is the terminal's, elsewhere today's journal), the rest Ctrl+Shift chords the terminal
+            // leaves to the app (TerminalView: Ctrl+letters are the program's) — T3 Code's mod+d,
+            // mod+shift+d, mod+w with Shift, its Ctrl+Alt+] / [ as they are.
+            {u"terminal.toggle"_s, CommandModel::tr("Show or hide the terminal"), CommandModel::tr("Code mode"),
+             u"terminal"_s, u"Ctrl+J"_s, inCode, u"code"_s},
+            {u"terminal.new"_s, CommandModel::tr("New terminal"), CommandModel::tr("Code mode: a shell in the thread's folder"),
+             u"plus"_s, u"Ctrl+Shift+T"_s, inCode, u"code"_s},
+            {u"terminal.splitRight"_s, CommandModel::tr("Split terminal right"), CommandModel::tr("Code mode"),
+             u"columns-2"_s, u"Ctrl+Shift+D"_s, inCode, u"code"_s},
+            {u"terminal.splitDown"_s, CommandModel::tr("Split terminal down"), CommandModel::tr("Code mode"),
+             u"rows-2"_s, u"Ctrl+Alt+Shift+D"_s, inCode, u"code"_s},
+            {u"terminal.close"_s, CommandModel::tr("Close terminal"), CommandModel::tr("Code mode"), u"x"_s,
+             u"Ctrl+Shift+W"_s, inCode, u"code"_s},
+            {u"terminal.next"_s, CommandModel::tr("Next terminal"), CommandModel::tr("Code mode"), u"chevron-right"_s,
+             u"Ctrl+Alt+]"_s, inCode, u"code"_s},
+            {u"terminal.previous"_s, CommandModel::tr("Previous terminal"), CommandModel::tr("Code mode"),
+             u"chevron-left"_s, u"Ctrl+Alt+["_s, inCode, u"code"_s},
     };
     if (const QString project = inCode ? codeProject(app) : QString(); !project.isEmpty()) {
         const CodeProjects *projects = app->workspace()->projects();

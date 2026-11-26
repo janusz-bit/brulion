@@ -2,8 +2,9 @@
 // /bin/sh, input through cat, `stty size` before and after a resize, the working directory and the
 // environment the child gets, no descriptor of the parent's files in the child, exit codes and
 // signals, programs that cannot be started, terminate() of a `sleep 100` with its background job
-// and of one that ignores SIGHUP, a large paste into a slow reader — and every child reaped (no
-// zombies), also when the Pty is deleted while its program runs.
+// and of one that ignores SIGHUP, a large paste into a slow reader, whether a job of the shell's is
+// in the terminal's foreground, the foreground program's current directory — and every child reaped (no zombies), also when the Pty is deleted
+// while its program runs.
 #include "pty.h"
 
 #include <QDir>
@@ -95,6 +96,8 @@ private Q_SLOTS:
     void terminateIgnoringHangup();
     void deletedWhileRunning();
     void largePaste();
+    void foregroundJob();
+    void currentDirectory();
     void notRunning();
 
 private:
@@ -369,6 +372,53 @@ void TestPty::largePaste()
     QVERIFY2(run.output.contains("1000000"), run.output.right(200).constData());
     QVERIFY(run.output.contains("done"));
     QCOMPARE(run.exitCode, 0);
+}
+
+void TestPty::foregroundJob()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    Run run;
+    QVERIFY(!run.pty.hasForegroundJob());
+    // Job control on: the shell runs `sleep` in a process group of its own, in the foreground.
+    QVERIFY(run.sh(u"set -m; echo start; sleep %1; echo back; read answer; echo \"got $answer\""_s.arg(
+            3 * BRULION_TEST_SLOWDOWN)));
+    QTRY_VERIFY_WITH_TIMEOUT(run.output.contains("start"), Timeout);
+    QTRY_VERIFY_WITH_TIMEOUT(run.pty.hasForegroundJob(), Timeout);
+    // The job ended; the shell reads a line itself: nothing but the shell in the foreground.
+    QTRY_VERIFY_WITH_TIMEOUT(run.output.contains("back"), Timeout);
+    QTRY_VERIFY_WITH_TIMEOUT(!run.pty.hasForegroundJob(), Timeout);
+    QVERIFY(run.pty.write("tak\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
+    QVERIFY(run.output.contains("got tak"));
+    QVERIFY(!run.pty.hasForegroundJob());
+    QVERIFY(run.pty.currentDirectory().isEmpty());
+}
+
+void TestPty::currentDirectory()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir(dir.path()).mkpath(u"zażółć/src"_s));
+    const QString inner = QDir(dir.path()).canonicalPath() + u"/zażółć/src"_s;
+    Run run;
+    QVERIFY(run.sh(u"echo ready; read a; cd src; echo moved; read b"_s, dir.path() + u"/zażółć"_s));
+    QTRY_VERIFY_WITH_TIMEOUT(run.output.contains("ready"), Timeout);
+#if defined(Q_OS_LINUX)
+    QCOMPARE(QDir(run.pty.currentDirectory()).canonicalPath(), QDir(dir.path()).canonicalPath() + u"/zażółć"_s);
+    QVERIFY(run.pty.write("\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(run.output.contains("moved"), Timeout);
+    // The shell went into src: the directory follows it.
+    QTRY_COMPARE_WITH_TIMEOUT(QDir(run.pty.currentDirectory()).canonicalPath(), inner, Timeout);
+#else
+    // Where the system does not say: nothing.
+    QVERIFY(run.pty.currentDirectory().isEmpty());
+    QVERIFY(run.pty.write("\r"));
+#endif
+    QVERIFY(run.pty.write("\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(run.done, Timeout);
 }
 
 void TestPty::notRunning()

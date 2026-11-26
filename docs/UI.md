@@ -1459,7 +1459,10 @@ Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
   `showList: false`, `project`, `wantsWorktree` / `worktreeWanted()`, `newWorktree` / `newBranch` /
   `newPullRequest`; only agents among the partners (`chatNewPartner` shown with one agent too; the
   project's default agent chosen); its empty state "What should the agent do?" with suggestions
-  (`codeSuggestions`) — over the terminal (`codeTerminal`, `TerminalPanel`), and the Changes panel
+  (`codeSuggestions`) — over the terminal (`codeTerminal`, `TerminalPanel` — the thread's terminals, `TerminalRegistry.thread(path or the new
+  thread's folder)`: tabs, splits, the find bar, the context menu with Add to chat into the thread's
+  field, Ctrl+click on a file path opens it in the Files tab (another folder's in the editor); its commands `terminal.*` — Ctrl+J shows
+  or hides it — are uiActions `terminal:…` CodeView carries out, docs/CODE-TERMINAL.md "Keys"), and the Changes panel
   beside them (`codeChanges`, `GitChangesPanel`:
   docs/CODE-GIT.md "The panel" — the diff sources Latest turn / Turn N / Uncommitted / Branch /
   Commits, `GitDiffView` with hunks, find and review comments, the file menu, the quick action, the

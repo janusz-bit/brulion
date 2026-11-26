@@ -43,6 +43,16 @@ qint64 Pty::processId() const
     return 0;
 }
 
+bool Pty::hasForegroundJob() const
+{
+    return false;
+}
+
+QString Pty::currentDirectory() const
+{
+    return {};
+}
+
 bool Pty::write(const QByteArray &)
 {
     return false;
