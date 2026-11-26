@@ -29,7 +29,9 @@ QString hostProgram()
 
 } // namespace
 
-WebClipperSetup::WebClipperSetup(QObject *parent) : QObject(parent)
+WebClipperSetup::WebClipperSetup(QObject *parent) : WebClipperSetup(currentEnvironment(), parent) { }
+
+WebClipperSetup::WebClipperSetup(const clipper::Environment &env, QObject *parent) : QObject(parent), m_env(env)
 {
     if (available()) {
         m_program = hostProgram();
@@ -51,7 +53,7 @@ void WebClipperSetup::refresh()
     if (!available())
         return;
     const Os os = currentOs();
-    const Environment env = currentEnvironment();
+    const Environment &env = m_env;
     QVariantList list;
     int connected = 0;
     for (const Browser b : allBrowsers()) {
@@ -91,7 +93,7 @@ void WebClipperSetup::connectBrowsers()
         return;
     HostSetup setup;
     setup.os = currentOs();
-    setup.env = currentEnvironment();
+    setup.env = m_env;
     setup.program = m_program;
     QStringList done;
     QStringList failed;
@@ -126,7 +128,7 @@ void WebClipperSetup::disconnectBrowsers()
         return;
     HostSetup setup;
     setup.os = currentOs();
-    setup.env = currentEnvironment();
+    setup.env = m_env;
     setup.program = m_program;
     QStringList failed;
     for (const Browser b : allBrowsers()) {

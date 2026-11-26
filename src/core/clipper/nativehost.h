@@ -57,6 +57,10 @@ struct Environment {
     QString localAppData;  ///< %LOCALAPPDATA%
     QString appData;       ///< %APPDATA%
     QString programData;   ///< %ProgramData%
+    /// The folder the system's own folders are in ("" = "/", the real ones; a test's private
+    /// folder, so the machine's manifests stay out of it): /etc/… and /usr/lib/… on Linux,
+    /// /Library/… on macOS. (Windows' system scope is %ProgramData% and the registry.)
+    QString systemRoot;
 };
 
 /// Where a browser finds the host.

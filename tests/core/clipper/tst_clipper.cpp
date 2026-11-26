@@ -832,6 +832,16 @@ private Q_SLOTS:
         QTest::newRow("linux system firefox")
                 << linux << system << u"firefox"_s << u"/usr/lib/mozilla/native-messaging-hosts/"_s + file << QString()
                 << QString();
+        // A private folder for the system's (Environment::systemRoot, a test's), also with a "/".
+        QTest::newRow("linux system chromium root")
+                << linux << system << u"chromium"_s << u"/tmp/ąę/etc/chromium/native-messaging-hosts/"_s + file
+                << QString() << QString();
+        QTest::newRow("linux system firefox root/")
+                << linux << system << u"firefox"_s << u"/tmp/ąę/usr/lib/mozilla/native-messaging-hosts/"_s + file
+                << QString() << QString();
+        QTest::newRow("linux chrome root")
+                << linux << user << u"chrome"_s << u"/home/ja/.config/google-chrome/NativeMessagingHosts/"_s + file
+                << QString() << u"/home/ja/.config/google-chrome"_s;
         QTest::newRow("mac chrome") << mac << user << u"chrome"_s
                                     << u"/Users/ja/Library/Application Support/Google/Chrome/NativeMessagingHosts/"_s
                                                + file
@@ -845,6 +855,13 @@ private Q_SLOTS:
         QTest::newRow("mac system edge") << mac << system << u"edge"_s
                                          << u"/Library/Microsoft/Edge/NativeMessagingHosts/"_s + file << QString()
                                          << QString();
+        QTest::newRow("mac system chrome root")
+                << mac << system << u"chrome"_s << u"/tmp/ąę/Library/Google/Chrome/NativeMessagingHosts/"_s + file
+                << QString() << QString();
+        QTest::newRow("mac system chromium root")
+                << mac << system << u"chromium"_s
+                << u"/tmp/ąę/Library/Application Support/Chromium/NativeMessagingHosts/"_s + file << QString()
+                << QString();
         QTest::newRow("windows chrome")
                 << win << user << u"chrome"_s
                 << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
@@ -892,6 +909,12 @@ private Q_SLOTS:
             if (qstrcmp(QTest::currentDataTag(), "linux chromium xdg") == 0)
                 env.xdgConfigHome = u"/home/ja/cfg"_s;
         }
+        // (The user's folders never move with it.)
+        const QByteArray tag(QTest::currentDataTag());
+        if (tag.endsWith(" root"))
+            env.systemRoot = u"/tmp/ąę"_s;
+        else if (tag.endsWith(" root/"))
+            env.systemRoot = u"/tmp/ąę/"_s;
         const auto b = parseBrowser(browser);
         QVERIFY(b);
         const HostLocation l = hostLocation(*b, Os(os), Scope(scope), env);
