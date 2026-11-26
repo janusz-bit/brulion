@@ -131,6 +131,24 @@ else()
 endif()
 
 add_subdirectory(src/core)
+# Atrament, Brulion's own UI framework (docs/ATRAMENT.md): built where HarfBuzz is found
+# (pkg-config; the Nix dev shell and package). It does not use Qt; nothing of the app uses it yet.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(BRULION_ATRAMENT_HARFBUZZ QUIET IMPORTED_TARGET harfbuzz>=8.0)
+endif()
+if(BRULION_ATRAMENT_HARFBUZZ_FOUND AND NOT ANDROID AND NOT EMSCRIPTEN)
+    set(_brulion_atrament_default ON)
+else()
+    set(_brulion_atrament_default OFF)
+endif()
+option(BRULION_ATRAMENT "Build Atrament, the own UI framework (docs/ATRAMENT.md)" ${_brulion_atrament_default})
+if(BRULION_ATRAMENT)
+    if(NOT BRULION_ATRAMENT_HARFBUZZ_FOUND)
+        message(FATAL_ERROR "BRULION_ATRAMENT needs HarfBuzz 8 or newer (pkg-config harfbuzz)")
+    endif()
+    add_subdirectory(src/atrament)
+endif()
 # llama.cpp for the model on the device and search by meaning (BRULION_LOCAL_AI, 3rdparty/llama):
 # after the core modules, whose runners and plugins (src/core/ai, speech, semantic) it gives the
 # names of its processor plugins and its output folder.
