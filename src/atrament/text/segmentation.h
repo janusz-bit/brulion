@@ -5,8 +5,9 @@
 //   grapheme clusters   UAX #29's extended grapheme clusters for what Brulion meets: CR LF, a base
 //                       with combining marks (Mn, Mc, Me), Hangul syllable sequences, emoji with
 //                       variation selectors (U+FE0E/FE0F), skin-tone modifiers (U+1F3FB–1F3FF),
-//                       ZWJ sequences (👨‍👩‍👧), tag sequences (U+E0020–E007F), flags (regional
-//                       indicator pairs), keycaps (U+20E3); a surrogate pair is never split
+//                       ZWJ sequences (man, ZWJ, woman, ZWJ, girl), tag sequences (U+E0020–E007F),
+//                       flags (regional indicator pairs), keycaps (U+20E3); a surrogate pair is
+//                       never split
 //   words               for Ctrl+arrows and double clicks: runs of letters, marks and digits
 //                       (with apostrophes and periods between letters/digits, as UAX #29 WB6/7
 //                       and WB11/12), each other non-space character a word of its own; spaces

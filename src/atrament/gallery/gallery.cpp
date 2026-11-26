@@ -333,7 +333,7 @@ AnyElement Gallery::controls(Window &window, Context<Gallery> &cx)
                                                             .borderColor(t.border))
                                             .child(button(u"danger", u"Usuń", rgba(0xf0716b26), t.danger,
                                                     rgba(0xf0716b40)))
-                                            .child(button(u"like", liked ? u"❤ Lubię" : u"🤍 Lubię",
+                                            .child(button(u"like", u"❤ Lubię",
                                                     liked ? rgba(0xf0716b33) : t.raised, liked ? t.danger : t.text,
                                                     t.hover)
                                                             .checked(liked) // a toggle button
