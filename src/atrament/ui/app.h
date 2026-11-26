@@ -325,6 +325,7 @@ private:
     bool m_destroying = false;
     bool m_deferPosted = false;
     std::vector<std::unique_ptr<Window>> m_windows;
+    std::vector<std::unique_ptr<Window>> m_closingWindows;
 };
 
 // The context of an entity's update: the App and the entity's identity.

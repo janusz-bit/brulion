@@ -117,6 +117,7 @@ App::~App()
 {
     m_destroying = true;
     m_windows.clear();
+    m_closingWindows.clear();
     for (auto &[id, timer] : m_timers)
         m_platform->cancel(timer);
     m_timers.clear();
@@ -299,8 +300,9 @@ void App::closeWindow(Window &window)
     // Never while it dispatches or draws: a listener of its own may be closing it.
     std::unique_ptr<Window> closing = std::move(*it);
     m_windows.erase(it);
-    Window *raw = closing.release();
-    defer([raw](App &) { delete raw; });
+    closing->detachPlatform(); // its host may be gone before the deferred delete
+    m_closingWindows.push_back(std::move(closing));
+    defer([](App &app) { app.m_closingWindows.clear(); });
 }
 
 void App::refreshWindows()

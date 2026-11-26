@@ -3,6 +3,7 @@
 #include "text/textsystem.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace brulion::atrament {
@@ -26,7 +27,7 @@ void Window::Frame::clear()
 
 Window::Window(App &app, PlatformWindow &platform, AnyView root)
     : m_app(app)
-    , m_platform(platform)
+    , m_platform(&platform)
     , m_root(root)
 {
     PlatformWindow::Callbacks callbacks;
@@ -35,15 +36,22 @@ Window::Window(App &app, PlatformWindow &platform, AnyView root)
     callbacks.resized = [this] { refresh(); };
     callbacks.activeChanged = [this](bool) { refresh(); };
     callbacks.inputHandler = [this] { return inputHandler(); };
-    m_platform.setCallbacks(std::move(callbacks));
-    m_viewport = m_platform.contentSize();
-    m_scale = m_platform.scaleFactor();
+    m_platform->setCallbacks(std::move(callbacks));
+    m_viewport = m_platform->contentSize();
+    m_scale = m_platform->scaleFactor();
     refresh();
+}
+
+void Window::detachPlatform()
+{
+    if (m_platform)
+        m_platform->setCallbacks({});
+    m_platform = nullptr;
 }
 
 Window::~Window()
 {
-    m_platform.setCallbacks({});
+    detachPlatform();
     // Element states and frames go before the arena's objects they might point into.
     m_states.clear();
     m_frames[0].clear();
@@ -52,10 +60,10 @@ Window::~Window()
 
 void Window::refresh()
 {
-    if (m_refreshRequested && !m_drawing)
+    if (!m_platform || (m_refreshRequested && !m_drawing))
         return;
     m_refreshRequested = true;
-    m_platform.requestFrame();
+    m_platform->requestFrame();
 }
 
 const Scene &Window::scene() const
@@ -77,9 +85,10 @@ bool Window::drewEntity(EntityId id) const
 
 void Window::draw()
 {
-    if (m_drawing)
+    if (m_drawing || !m_platform)
         return;
     m_refreshRequested = false;
+    const auto started = std::chrono::steady_clock::now();
     m_app.update([&] {
         m_drawing = true;
         const int buildIndex = 1 - m_renderedIndex;
@@ -87,9 +96,9 @@ void Window::draw()
         frame.clear();
         m_building = &frame;
         ++m_frameCount;
-        m_viewport = m_platform.contentSize();
-        m_scale = std::max(0.25f, m_platform.scaleFactor());
-        m_modifiers = m_platform.modifiers();
+        m_viewport = m_platform->contentSize();
+        m_scale = std::max(0.25f, m_platform->scaleFactor());
+        m_modifiers = m_platform->modifiers();
         m_layout.clear();
         m_idStack.assign(1, kHashSeed);
         m_offsets.assign(1, Point {});
@@ -130,9 +139,13 @@ void Window::draw()
         m_stats.layoutNodes = m_layout.nodeCount();
         m_stats.hitboxes = frame.hitboxes.size();
         m_stats.arenaBytes = frame.arena.used();
+        const auto built = std::chrono::steady_clock::now();
+        m_stats.buildMicros = std::chrono::duration<double, std::micro>(built - started).count();
         updateCursor();
-        m_platform.present(frame.scene, m_app.atlas());
-        m_platform.inputStateChanged();
+        m_platform->present(frame.scene, m_app.atlas());
+        m_stats.presentMicros
+                = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - built).count();
+        m_platform->inputStateChanged();
     });
 }
 
@@ -278,9 +291,9 @@ void Window::updateCursor()
         if (found)
             break;
     }
-    if (cursor != m_cursor) {
+    if (cursor != m_cursor && m_platform) {
         m_cursor = cursor;
-        m_platform.setCursor(cursor);
+        m_platform->setCursor(cursor);
     }
 }
 
@@ -344,7 +357,8 @@ void Window::focus(const FocusHandle &handle)
     m_focused = handle.id();
     m_pendingKeys.clear();
     refresh();
-    m_platform.inputStateChanged();
+    if (m_platform)
+        m_platform->inputStateChanged();
 }
 
 void Window::blur()
@@ -354,7 +368,8 @@ void Window::blur()
     m_focused = 0;
     m_pendingKeys.clear();
     refresh();
-    m_platform.inputStateChanged();
+    if (m_platform)
+        m_platform->inputStateChanged();
 }
 
 std::vector<int> Window::focusPath(const Frame &frame) const
@@ -527,6 +542,8 @@ bool Window::dispatchMouse(const PlatformInput &input)
 
 bool Window::dispatchInput(const PlatformInput &input)
 {
+    if (!m_platform)
+        return false;
     m_defaultPrevented = false;
     return m_app.update([&] { return isMouseEvent(input) ? dispatchMouse(input) : dispatchKey(input); });
 }

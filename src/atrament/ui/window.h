@@ -55,12 +55,14 @@ public:
     Window &operator=(const Window &) = delete;
 
     App &app() { return m_app; }
-    PlatformWindow &platformWindow() { return m_platform; }
+    PlatformWindow *platformWindow() { return m_platform; }
+    // Leaves the platform window (it is going away); the window draws and dispatches no more.
+    void detachPlatform();
     Size viewportSize() const { return m_viewport; }
     float scaleFactor() const { return m_scale; }
     Point mousePosition() const { return m_mouse; }
     Modifiers modifiers() const { return m_modifiers; }
-    bool isActive() const { return m_platform.isActive(); }
+    bool isActive() const { return m_platform && m_platform->isActive(); }
 
     // Asks for a frame (coalesced).
     void refresh();
@@ -199,6 +201,8 @@ public:
         std::size_t layoutNodes = 0;
         std::size_t hitboxes = 0;
         std::size_t arenaBytes = 0;
+        double buildMicros = 0; // render, layout, prepaint and paint
+        double presentMicros = 0; // the platform's present (the CPU renderer's time, hosted)
     };
     FrameStats lastFrameStats() const { return m_stats; }
 
@@ -263,7 +267,7 @@ private:
     const Frame &rendered() const { return m_frames[m_renderedIndex]; }
 
     App &m_app;
-    PlatformWindow &m_platform;
+    PlatformWindow *m_platform;
     AnyView m_root;
     Frame m_frames[2];
     int m_renderedIndex = 0;
