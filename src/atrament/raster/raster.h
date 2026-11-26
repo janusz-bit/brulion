@@ -23,6 +23,11 @@
 // Each is cut to its content mask (whole pixels: the mask is snapped outwards), the optional
 // damage rectangle and the target; colours blend with source-over on premultiplied components in
 // sRGB space. Deterministic: the same scene gives the same bytes on every run of a build.
+//
+// Blending is 8-bit integer arithmetic on the premultiplied bytes (each channel × m / 255, rounded
+// exactly): a source is rounded to bytes once, so a pixel is within a level of the exact value.
+// Coverage comes from the float formulas above. What a later opaque quad paints over (16×16
+// tiles) is not drawn, nor cleared: that changes no byte of the result.
 
 #include "base/color.h"
 #include "base/geometry.h"
@@ -47,7 +52,7 @@ struct RasterTarget {
 };
 
 struct RasterStats {
-    std::size_t primitives = 0; // drawn (not entirely outside)
+    std::size_t primitives = 0;    // drawn (not entirely outside, nor entirely under a later opaque quad)
     std::size_t pixelsTouched = 0; // pixels a primitive was evaluated at
 };
 
