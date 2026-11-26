@@ -1,5 +1,5 @@
-ChatActivity	Worked for %1 · %2	Pracował %1 · %2	
-ChatActivity	Worked for %1	Pracował %1	
+ChatActivity	Worked for %1 · %2	Czas pracy: %1 · %2	
+ChatActivity	Worked for %1	Czas pracy: %1	
 ChatActivity	%1 s	%1 s	a duration in seconds
 ChatActivity	%1 min	%1 min	a duration in minutes
 ChatActivity	%1 min %2 s	%1 min %2 s	a duration
