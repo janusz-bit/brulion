@@ -6,6 +6,7 @@
 #include "chattools.h"
 #include "codeprojects.h"
 #include "computerchats.h"
+#include "remoteprojects.h"
 
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -1263,10 +1264,43 @@ QString WorkspaceChats::sendMessage(const QString &path, const QString &text, co
     }
     if ((message.isEmpty() && sent.isEmpty()) || !m_workspace->ready())
         return {};
-    if (remote(path))
+    if (remote(path) || m_routing.contains(path.toLower()))
         return sendToComputer(path, message, sent, acp::SendMode::Queue) ? path : QString();
     if (ChatTurn *t = path.isEmpty() ? nullptr : find(path); t && t->m_running)
         return {};
+    // A thread of another computer's project whose app runs there and shares its conversations: that
+    // app runs its turn — one agent, one session, seen on both screens — and this device follows it.
+    // Refused there (its copy of the notebook lacks the page yet, the app quit meanwhile): the turn
+    // runs from here through that computer's shared agent, as without it.
+    if (const QString url = sent.isEmpty() && !m_sendHere ? threadComputer(path) : QString(); !url.isEmpty()) {
+        m_routing.insert(path.toLower(), url);
+        const QPointer<WorkspaceChats> self(this);
+        m_agents->computerChats()->sendTo(
+                url, path, message, acp::SendMode::Now,
+                [self, url, path, message, page, partner, parent, wakes](const acp::RemoteError &error,
+                                                                          const QString &words) {
+                    if (!self)
+                        return;
+                    self->m_routing.remove(path.toLower());
+                    if (!error.failed())
+                        return;
+                    // (Its turn runs there after all: the message waits for it there.)
+                    if (error.code == u"busy") {
+                        self->m_agents->computerChats()->sendTo(url, path, message, acp::SendMode::Queue,
+                                                                [self](const acp::RemoteError &, const QString &w) {
+                                                                    if (self && !w.isEmpty())
+                                                                        Q_EMIT self->m_workspace->errorOccurred(w);
+                                                                });
+                        return;
+                    }
+                    qCInfo(logging::lcApp).noquote()
+                            << u"The app there did not take %1 (%2): its turn runs from here"_s.arg(path, words);
+                    self->m_sendHere = true;
+                    self->sendMessage(path, message, page, {}, partner, parent, wakes, nullptr);
+                    self->m_sendHere = false;
+                });
+        return path;
+    }
     const QString language = m_extensions->language();
     const QString who = path.isEmpty() ? partner.trimmed() : partnerOf(path);
     if (who.isEmpty() && !m_extensions->enabled().contains(u"asystent"_s)) {
@@ -2211,7 +2245,7 @@ bool WorkspaceChats::queue(const QString &path, const QString &text, const QStri
     if (text.trimmed().isEmpty() && sent.isEmpty())
         return false;
     // (Another computer's turn: in line there, behind what waits there.)
-    if (remote(path))
+    if (remote(path) || m_routing.contains(path.toLower()))
         return sendToComputer(path, text.trimmed(), sent, acp::SendMode::Queue);
     loadQueue();
     const QString key = path.toLower();
@@ -2369,7 +2403,7 @@ bool WorkspaceChats::sendNow(const QString &path, int id)
 
 bool WorkspaceChats::steer(const QString &path, const QString &text, const QStringList &pictures)
 {
-    if (remote(path))
+    if (remote(path) || m_routing.contains(path.toLower()))
         return sendToComputer(path, text.trimmed(), pictures, acp::SendMode::Steer);
     if (path.isEmpty() || !isRunning(path))
         return queue(path, text, pictures);
@@ -2880,20 +2914,38 @@ void WorkspaceChats::updateFollowing()
 bool WorkspaceChats::sendToComputer(const QString &path, const QString &text, const QStringList &pictures,
                                     acp::SendMode mode)
 {
+    ComputerChats *computers = m_agents->computerChats();
+    QString url = m_routing.value(path.toLower());
+    if (url.isEmpty())
+        if (const std::optional<ComputerChats::Computer> c = computers->computerOf(path))
+            url = c->url;
     const ChatTurn *t = find(path);
-    const QString host = t ? t->m_remoteHost : QString();
+    const QString host = t && !t->m_remoteHost.isEmpty() ? t->m_remoteHost : QUrl(url).host();
     if (!pictures.isEmpty()) {
         Q_EMIT m_workspace->errorOccurred(
                 tr("Pictures do not go to a conversation running on %1 yet: send the text alone.").arg(host));
         return false;
     }
-    if (text.isEmpty())
+    if (text.isEmpty() || url.isEmpty())
         return false;
-    m_agents->computerChats()->send(path, text, mode, [this](const QString &error) {
-        if (!error.isEmpty())
-            Q_EMIT m_workspace->errorOccurred(error);
+    const QPointer<WorkspaceChats> self(this);
+    computers->sendTo(url, path, text, mode, [self](const acp::RemoteError &, const QString &words) {
+        if (self && !words.isEmpty())
+            Q_EMIT self->m_workspace->errorOccurred(words);
     });
     return true;
+}
+
+QString WorkspaceChats::threadComputer(const QString &path) const
+{
+    if (path.isEmpty())
+        return {};
+    const QVariantMap place = threadPlace(path);
+    if (!place.value(u"remote"_s).toBool())
+        return {};
+    const std::optional<RemoteProjects::Project> project =
+            m_agents->remoteProjects()->find(place.value(u"project"_s).toString());
+    return project && m_agents->computerChats()->attached(project->url) ? project->url : QString();
 }
 
 void WorkspaceChats::mirror(const QString &path)
