@@ -19,6 +19,7 @@
   nodejs,
   fontconfig,
   hostname,
+  ripgrep,
   dejavu_fonts,
   makeFontsConf,
   hunspell,
@@ -244,6 +245,8 @@ stdenv.mkDerivation (finalAttrs: {
     nodejs
     fontconfig
     hostname
+    # (Code mode's project search tests rg itself where it is: docs/CODE-FILES.md.)
+    ripgrep
   ];
   env = lib.optionalAttrs finalAttrs.doCheck {
     FONTCONFIG_FILE = makeFontsConf { fontDirectories = [ dejavu_fonts ]; };
