@@ -3,7 +3,7 @@
 // HEAD; status with lines added / deleted (untracked files counted, the user's index never
 // written); a file's two texts (modified, new, deleted, renamed, binary, too large); commit,
 // push to and pull from a bare remote; branches; worktrees; pull requests through a fake `gh`
-// (arguments never through a shell); checkpoints — the index, HEAD and stash untouched, the
+// (fake_gh.cpp: arguments never through a shell, Windows' command line included); checkpoints — the index, HEAD and stash untouched, the
 // changes since one, the work tree put back (modified, added, deleted, renamed files, Polish
 // letters and spaces in names, a nested new folder, a file where a folder was and the other way
 // round, modes and symbolic links, ignored files left alone, files ignored again by the restored
@@ -648,29 +648,18 @@ void TestGitCliRepo::worktrees()
 
 void TestGitCliRepo::pullRequestThroughGh()
 {
-#ifdef Q_OS_UNIX
+    // A fake gh (tests/core/gitcli/fake_gh.cpp): writes its arguments NUL-separated and answers
+    // like gh — a program, so the arguments go through Windows' command line too.
     Repo repo;
-    // A fake gh: writes its arguments one per line (NUL-separated) and answers like gh.
     const QString argsFile = repo.dir.filePath(u"gh-args"_s);
-    const QString script = repo.dir.filePath(u"gh"_s);
-    QFile s(script);
-    QVERIFY(s.open(QIODevice::WriteOnly));
-    s.write("#!/bin/sh\nfor a in \"$@\"; do printf '%s\\0' \"$a\"; done > \"" + argsFile.toUtf8()
-            + "\"\n"
-              "pwd > \""
-            + argsFile.toUtf8()
-            + ".pwd\"\n"
-              "if [ \"$GH_PROMPT_DISABLED\" != 1 ]; then echo prompts >&2; exit 3; fi\n"
-              "echo 'Creating pull request for x into main in ja/repo' >&2\n"
-              "echo https://github.com/ja/repo/pull/17\n");
-    s.close();
-    QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    qputenv("FAKE_GH_ARGS", argsFile.toUtf8());
+    qputenv("FAKE_GH_MODE", "ok");
 
     Client client;
-    client.setGhProgram(script);
+    client.setGhProgram(QString::fromUtf8(FAKE_GH));
     PullRequest pr;
-    pr.title = u"Tytuł z \"cudzysłowem\" i $(rm -rf ~)"_s;
-    pr.body = u"Treść;\n`ls` && echo ąę"_s;
+    pr.title = u"Tytuł z \"cudzysłowem\" i $(rm -rf ~) & del %PATH% \\\" ^|"_s;
+    pr.body = u"Treść;\n`ls` && echo ąę\nC:\\ścieżka\\"_s;
     pr.draft = true;
     pr.head = u"funkcja/żółw"_s;
     const Outcome o = await<Outcome>([&](auto done) { client.createPullRequest(repo.root, pr, done); });
@@ -679,6 +668,7 @@ void TestGitCliRepo::pullRequestThroughGh()
     QFile a(argsFile);
     QVERIFY(a.open(QIODevice::ReadOnly));
     const QList<QByteArray> args = a.readAll().split('\0');
+    a.close();
     QCOMPARE(QString::fromUtf8(args.at(0)), u"pr"_s);
     QCOMPARE(QString::fromUtf8(args.at(1)), u"create"_s);
     QCOMPARE(QString::fromUtf8(args.at(2)), u"--title"_s);
@@ -691,29 +681,23 @@ void TestGitCliRepo::pullRequestThroughGh()
     QFile pwd(argsFile + u".pwd"_s);
     QVERIFY(pwd.open(QIODevice::ReadOnly));
     QCOMPARE(QFileInfo(QString::fromUtf8(pwd.readAll()).trimmed()).canonicalFilePath(), repo.root);
+    pwd.close();
 
     // "Already exists" is a pull request too; not signed in says how to sign in.
-    QFile e(script);
-    QVERIFY(e.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    e.write("#!/bin/sh\necho 'a pull request for branch \"x\" into branch \"main\" already exists:' >&2\n"
-            "echo https://github.com/ja/repo/pull/9 >&2\nexit 1\n");
-    e.close();
+    qputenv("FAKE_GH_MODE", "exists");
     const Outcome exists = await<Outcome>([&](auto done) { client.createPullRequest(repo.root, pr, done); });
     QVERIFY(exists.ok);
     QCOMPARE(exists.url, u"https://github.com/ja/repo/pull/9"_s);
-    QVERIFY(e.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    e.write("#!/bin/sh\necho 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4\n");
-    e.close();
+    qputenv("FAKE_GH_MODE", "signed-out");
     const Outcome signedOut = await<Outcome>([&](auto done) { client.createPullRequest(repo.root, pr, done); });
     QVERIFY(!signedOut.ok);
     QVERIFY2(signedOut.message.contains(u"gh auth login"_s), qPrintable(signedOut.message));
+    qunsetenv("FAKE_GH_MODE");
+    qunsetenv("FAKE_GH_ARGS");
 
     PullRequest untitled;
     const Outcome noTitle = await<Outcome>([&](auto done) { client.createPullRequest(repo.root, untitled, done); });
     QVERIFY(!noTitle.ok);
-#else
-    QSKIP("a fake gh as a shell script");
-#endif
 }
 
 void TestGitCliRepo::pullRequestWithoutGh()
@@ -1073,24 +1057,17 @@ void TestGitCliRepo::noGit()
 
 void TestGitCliRepo::timeLimit()
 {
-#ifdef Q_OS_UNIX
+    // A git that never finishes: the fake gh asleep.
     Repo repo;
-    const QString script = repo.dir.filePath(u"slow-git"_s);
-    QFile s(script);
-    QVERIFY(s.open(QIODevice::WriteOnly));
-    s.write("#!/bin/sh\nexec sleep 30\n");
-    s.close();
-    QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    qputenv("FAKE_GH_MODE", "slow");
     Client client;
-    client.setGitProgram(script);
+    client.setGitProgram(QString::fromUtf8(FAKE_GH));
     client.setLocalTimeoutMs(200);
     const RunResult r = await<RunResult>([&](auto done) { client.git(repo.root, {u"status"_s}, {}, done); });
+    qunsetenv("FAKE_GH_MODE");
     QVERIFY(!r.ok());
     QVERIFY2(r.failure.contains(u"did not finish"_s), qPrintable(r.failure));
     QCOMPARE(client.running(), 0);
-#else
-    QSKIP("a slow fake git as a shell script");
-#endif
 }
 
 void TestGitCliRepo::noCallbackAfterDestruction()

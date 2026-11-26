@@ -108,8 +108,13 @@ QString CodeProjects::add(const QString &folder)
     if (path.isEmpty() || !QFileInfo(path).isDir())
         return {};
     path = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+#ifdef Q_OS_WIN
+    constexpr Qt::CaseSensitivity paths = Qt::CaseInsensitive; // (C:/Projekty and c:/projekty)
+#else
+    constexpr Qt::CaseSensitivity paths = Qt::CaseSensitive;
+#endif
     for (const Project &p : std::as_const(m_projects))
-        if (QDir::cleanPath(p.path) == path)
+        if (QDir::cleanPath(p.path).compare(path, paths) == 0)
             return p.id;
     if (m_projects.size() >= MaxProjects)
         return {};
@@ -332,15 +337,112 @@ QStringList CodeProjects::splitCommand(const QString &command)
     return out;
 }
 
+QStringList CodeProjects::splitWindowsCommand(const QString &command)
+{
+    QStringList out;
+    QString part;
+    bool inPart = false;
+    bool quoted = false;
+    for (qsizetype i = 0; i < command.size();) {
+        const QChar c = command.at(i);
+        if (c == u'\\') {
+            qsizetype backslashes = 0;
+            while (i < command.size() && command.at(i) == u'\\') {
+                ++backslashes;
+                ++i;
+            }
+            if (i < command.size() && command.at(i) == u'"') {
+                // 2n backslashes and a quote: n and the quote's own meaning; 2n + 1: n and a quote.
+                part += QString(backslashes / 2, u'\\');
+                if (backslashes % 2) {
+                    part += u'"';
+                    ++i;
+                }
+            } else {
+                part += QString(backslashes, u'\\');
+            }
+            inPart = true;
+        } else if (c == u'"') {
+            if (quoted && i + 1 < command.size() && command.at(i + 1) == u'"') {
+                part += u'"'; // ("" inside quotes: a quote, as the C runtime reads it)
+                i += 2;
+            } else {
+                quoted = !quoted;
+                ++i;
+            }
+            inPart = true;
+        } else if (!quoted && (c == u' ' || c == u'\t')) {
+            if (inPart)
+                out << std::exchange(part, {});
+            inPart = false;
+            ++i;
+        } else {
+            part += c;
+            inPart = true;
+            ++i;
+        }
+    }
+    if (inPart)
+        out << part;
+    return out;
+}
+
+QString CodeProjects::batchCommandLine(const QString &batch, const QStringList &arguments)
+{
+    QString line = u"/d /v:off /s /c \""_s;
+    const QStringList all = QStringList{batch} + arguments;
+    for (qsizetype i = 0; i < all.size(); ++i) {
+        QString argument = all.at(i);
+        if (argument.contains(u'"') || argument.contains(u'%') || argument.contains(u'\n') || argument.contains(u'\r')
+            || argument.contains(QChar(0)))
+            return {};
+        // (The program the batch file runs reads "C:\" as C: and a quote.)
+        qsizetype trailing = 0;
+        while (trailing < argument.size() && argument.at(argument.size() - 1 - trailing) == u'\\')
+            ++trailing;
+        argument += QString(trailing, u'\\');
+        if (i > 0)
+            line += u' ';
+        line += u'"' + argument + u'"';
+    }
+    return line + u'"';
+}
+
 bool CodeProjects::openInEditor(const QString &folder) const
 {
     if (folder.isEmpty() || !QFileInfo(folder).isDir())
         return false;
+#ifdef Q_OS_WIN
+    const QStringList parts = splitWindowsCommand(m_editor);
+    const QString target = QDir::toNativeSeparators(QDir::cleanPath(QFileInfo(folder).absoluteFilePath()));
+#else
     const QStringList parts = splitCommand(m_editor);
+    const QString &target = folder;
+#endif
 #if QT_CONFIG(process)
     if (!parts.isEmpty()) {
         const QString program = QStandardPaths::findExecutable(parts.first());
-        return !program.isEmpty() && QProcess::startDetached(program, parts.mid(1) << folder, folder);
+        if (program.isEmpty())
+            return false;
+#ifdef Q_OS_WIN
+        // A batch file (findExecutable() finds `code` as code.cmd): CreateProcess would hand it to
+        // cmd.exe with arguments cmd.exe reads by rules of its own; quoted for them here instead.
+        const QString suffix = QFileInfo(program).suffix().toLower();
+        if (suffix == u"cmd"_s || suffix == u"bat"_s) {
+            const QString line = batchCommandLine(QDir::toNativeSeparators(program), parts.mid(1) << target);
+            QString cmd = qEnvironmentVariable("ComSpec");
+            if (cmd.isEmpty() || !QFileInfo(cmd).isFile())
+                cmd = QStandardPaths::findExecutable(u"cmd.exe"_s);
+            if (line.isEmpty() || cmd.isEmpty())
+                return false;
+            QProcess process;
+            process.setProgram(cmd);
+            process.setNativeArguments(line);
+            process.setWorkingDirectory(folder);
+            return process.startDetached();
+        }
+#endif
+        return QProcess::startDetached(program, parts.mid(1) << target, folder);
     }
 #endif
     return openFolder(folder);

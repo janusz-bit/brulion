@@ -560,7 +560,14 @@ bool isSafeRelativePath(QStringView path)
     if (path.size() >= 2 && path.at(1) == u':')
         return false;
     for (const QStringView part : path.tokenize(u'/')) {
-        if (part.isEmpty() || part == u"." || part == u".." || part.compare(u".git", Qt::CaseInsensitive) == 0)
+        if (part.isEmpty() || part == u"." || part == u"..")
+            return false;
+        // NTFS names .git also as ".git." / ".git " (Windows drops trailing dots and spaces) and by
+        // its short name GIT~1 — git's own core.protectNTFS rule.
+        QStringView name = part;
+        while (!name.isEmpty() && (name.back() == u'.' || name.back() == u' '))
+            name.chop(1);
+        if (name.compare(u".git", Qt::CaseInsensitive) == 0 || name.compare(u"git~1", Qt::CaseInsensitive) == 0)
             return false;
     }
     return true;

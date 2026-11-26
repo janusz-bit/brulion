@@ -886,6 +886,22 @@ private Q_SLOTS:
         QCOMPARE(shell::CodeProjects::slug(u"…"_s), u"project"_s);
         QCOMPARE(shell::CodeProjects::splitCommand(u"code --new-window \"a b\" c\\ d"_s),
                  (QStringList{u"code"_s, u"--new-window"_s, u"a b"_s, u"c d"_s}));
+        // Windows' rules: backslashes are a path's, quotes group, \" is a quote.
+        QCOMPARE(shell::CodeProjects::splitWindowsCommand(
+                         u"\"C:\\Program Files\\Microsoft VS Code\\Code.exe\" -n C:\\Użytkownicy\\Łucja\\"_s),
+                 (QStringList{u"C:\\Program Files\\Microsoft VS Code\\Code.exe"_s, u"-n"_s,
+                              u"C:\\Użytkownicy\\Łucja\\"_s}));
+        QCOMPARE(shell::CodeProjects::splitWindowsCommand(u"zed  \"a \\\"b\\\" c\" \"d\"\"e\" \"\" f\\\\\"g h\""_s),
+                 (QStringList{u"zed"_s, u"a \"b\" c"_s, u"d\"e"_s, QString(), u"f\\g h"_s}));
+        QCOMPARE(shell::CodeProjects::splitWindowsCommand(u"  "_s), QStringList());
+        // A batch file (code.cmd) through cmd.exe: everything quoted, a trailing backslash doubled,
+        // what cmd.exe would read inside quotes refused.
+        QCOMPARE(shell::CodeProjects::batchCommandLine(u"C:\\VS Code\\bin\\code.cmd"_s,
+                                                       {u"-n"_s, u"C:\\Projekty\\R&D (żółw)"_s, u"D:\\"_s}),
+                 u"/d /v:off /s /c \"\"C:\\VS Code\\bin\\code.cmd\" \"-n\" \"C:\\Projekty\\R&D (żółw)\" \"D:\\\\\"\""_s);
+        QCOMPARE(shell::CodeProjects::batchCommandLine(u"code.cmd"_s, {u"C:\\100%PATH%"_s}), QString());
+        QCOMPARE(shell::CodeProjects::batchCommandLine(u"code.cmd"_s, {u"a\"b"_s}), QString());
+        QCOMPARE(shell::CodeProjects::batchCommandLine(u"code.cmd"_s, {u"a\nb"_s}), QString());
         const QVariantList scripts =
                 shell::CodeProjects::parseScripts(u"dev: npm run dev\n\n  npm test  \nhttp://x\nzły klucz: echo\n"_s);
         QCOMPARE(scripts.size(), 4);

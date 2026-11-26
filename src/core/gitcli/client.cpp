@@ -66,6 +66,19 @@ QString lastLines(const QString &text)
     return pick.mid(qMax<qsizetype>(0, pick.size() - 4)).join(u'\n');
 }
 
+/// A program's output as lines, empty ones left out: '\n'-separated, a '\r' before it dropped (a
+/// wrapper on Windows may write CRLF where git writes LF).
+QStringList outputLines(const QByteArray &out)
+{
+    QStringList lines = QString::fromUtf8(out).split(u'\n', Qt::SkipEmptyParts);
+    for (QString &line : lines) {
+        if (line.endsWith(u'\r'))
+            line.chop(1);
+    }
+    lines.removeAll(QString());
+    return lines;
+}
+
 } // namespace
 
 QString RunResult::message() const
@@ -320,7 +333,7 @@ void Client::repository(const QString &folder, std::function<void(const RepoInfo
          u"--git-common-dir"_s, u"--show-toplevel"_s},
         o, [done = std::move(done)](const RunResult &r) {
             RepoInfo info;
-            const QStringList lines = QString::fromUtf8(r.out).split(u'\n', Qt::SkipEmptyParts);
+            const QStringList lines = outputLines(r.out);
             if (!lines.isEmpty() && lines.first() == u"true"_s) {
                 info.bare = true;
                 info.gitDir = lines.value(1);
@@ -659,7 +672,7 @@ void Client::push(const QString &folder, std::function<void(const Outcome &)> do
                         return;
                     }
                     git(folder, {u"remote"_s}, ro, [this, folder, net, branch, done](const RunResult &rm) {
-                        const QStringList remotes = QString::fromUtf8(rm.out).split(u'\n', Qt::SkipEmptyParts);
+                        const QStringList remotes = outputLines(rm.out);
                         if (!rm.ok() || remotes.isEmpty()) {
                             done(failed(rm.ok() ? GitMessages::tr("The repository has no remote to push to")
                                                 : rm.message()));

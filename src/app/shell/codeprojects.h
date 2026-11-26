@@ -100,12 +100,23 @@ public:
     /// from the project's HEAD) without waiting: worktreeCreated() says how it went. False when it
     /// could not start (no such project, no git).
     Q_INVOKABLE bool createWorktree(const QString &id, const QString &title);
-    /// Opens `folder` in the editor (editorCommand, else the system's handler of folders).
+    /// Opens `folder` in the editor (editorCommand, else the system's handler of folders). Windows:
+    /// the command split by Windows' rules, the folder in its native form; an editor that is a
+    /// batch file (VS Code's and Cursor's code.cmd) runs through cmd.exe (batchCommandLine()).
     Q_INVOKABLE bool openInEditor(const QString &folder) const;
-    /// Shows `folder` in the system's file manager.
+    /// Shows `folder` in the system's file manager (Windows: Explorer, or what the user made the
+    /// handler of folders).
     Q_INVOKABLE bool openFolder(const QString &folder) const;
     /// `command` split as a shell would (quotes, backslashes), no shell run (tests).
     static QStringList splitCommand(const QString &command);
+    /// `command` split as Windows programs read their command line (CommandLineToArgvW): a
+    /// backslash is a backslash except before a quote — "C:\Program Files\…\Code.exe" -n.
+    static QStringList splitWindowsCommand(const QString &command);
+    /// cmd.exe's arguments that run the batch file `batch` with `arguments`:
+    /// `/d /v:off /s /c ""<batch>" "<argument>" …"` — every one quoted, so & | < > ^ ( ) are text to
+    /// cmd.exe, and trailing backslashes doubled for the program the batch file hands them to. ""
+    /// when one of them holds what cmd.exe reads even inside quotes: a quote, %, a line break.
+    static QString batchCommandLine(const QString &batch, const QStringList &arguments);
 
     /// "Mój Projekt (2)!" → "moj-projekt-2": lower-case ASCII letters, digits and dashes, at most
     /// 40 characters ("project" when nothing is left).
