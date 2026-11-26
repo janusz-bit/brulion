@@ -1,6 +1,8 @@
 // CodeGit — one folder's git for the "Code" mode's changes panel (qml/gitpanel/GitChangesPanel.qml,
-// docs/CODE-GIT.md): the branch, its upstream and the working tree's changes kept up to date, a
-// file's diff, commit / push / pull, branches, pull requests (gh), worktrees and the checkpoints of
+// docs/CODE-GIT.md): the branch, its upstream, its pull request and the working tree's changes kept
+// up to date, other comparisons (a turn, the branch against a base, a commit), a file's diff, files
+// and hunks staged or thrown away, commits of chosen files, push / pull, branches, pull requests
+// (gh, forks), publishing, merges and rebases in progress, stashes, worktrees and the checkpoints of
 // an agent's turns. Everything runs asynchronously through gitcli::Client (src/core/gitcli); the
 // results come as properties and signals, never as calls into the rest of the app.
 //
@@ -31,6 +33,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <functional>
 
@@ -90,6 +93,49 @@ class CodeGit : public QObject {
     Q_PROPERTY(bool ghAvailable READ ghAvailable NOTIFY toolsChanged FINAL)
     Q_PROPERTY(int maxRows READ maxRows CONSTANT FINAL)
 
+    /// The paths of `changes` (a rename's new path), and those with something staged.
+    Q_PROPERTY(QStringList changePaths READ changePaths NOTIFY stateChanged FINAL)
+    Q_PROPERTY(QStringList stagedPaths READ stagedPaths NOTIFY stateChanged FINAL)
+    Q_PROPERTY(int conflictCount READ conflictCount NOTIFY stateChanged FINAL)
+    /// The conflicted files' paths.
+    Q_PROPERTY(QStringList conflictPaths READ conflictPaths NOTIFY stateChanged FINAL)
+    /// A merge, rebase … stopped in this work tree: "merge" | "rebase" | "cherryPick" | "revert" |
+    /// "apply" ("" none).
+    Q_PROPERTY(QString operation READ operation NOTIFY stateChanged FINAL)
+    /// The repository's default branch ("main"; "" unknown) and the ref to compare with
+    /// ("origin/main", else "main").
+    Q_PROPERTY(QString defaultBranch READ defaultBranch NOTIFY stateChanged FINAL)
+    Q_PROPERTY(QString defaultBranchRef READ defaultBranchRef NOTIFY stateChanged FINAL)
+    /// The branch checked out is the default branch (the panel asks before pushing to it).
+    Q_PROPERTY(bool onDefaultBranch READ onDefaultBranch NOTIFY stateChanged FINAL)
+    /// The repository has a remote (`remoteNames`).
+    Q_PROPERTY(bool hasRemote READ hasRemote NOTIFY stateChanged FINAL)
+    Q_PROPERTY(QStringList remoteNames READ remoteNames NOTIFY stateChanged FINAL)
+    /// The branch's pull request (gh): {number, url, state ("open" | "draft" | "merged" |
+    /// "closed"), title, baseRefName}; {} none or unknown. Asked when the branch or its upstream
+    /// changes, after a push or a pull request, and on refreshPullRequest().
+    Q_PROPERTY(QVariantMap pullRequest READ pullRequest NOTIFY pullRequestChanged FINAL)
+    /// The main action now (T3 Code's quick action): "commit" (changes), "push" (ahead, or not
+    /// pushed), "pull" (behind), "createPr" (pushed, no pull request, not the default branch),
+    /// "openPr" (it has one), "publish" (no remote), "init" (no repository); "" nothing to do.
+    Q_PROPERTY(QString primaryAction READ primaryAction NOTIFY revisionChanged FINAL)
+
+    /// A comparison of two revisions (compare()): its changes, as `changes`' rows.
+    Q_PROPERTY(bool compareActive READ compareActive NOTIFY compareChanged FINAL)
+    Q_PROPERTY(QString compareBase READ compareBase NOTIFY compareChanged FINAL)
+    Q_PROPERTY(QString compareTarget READ compareTarget NOTIFY compareChanged FINAL)
+    /// The base compared with: compareBase, or with compareMergeBase the commit the branch and
+    /// it have in common ("" the empty tree).
+    Q_PROPERTY(QString comparisonBase READ comparisonBase NOTIFY compareChanged FINAL)
+    Q_PROPERTY(QVariantList compareChanges READ compareChanges NOTIFY compareChanged FINAL)
+    Q_PROPERTY(bool compareLoaded READ compareLoaded NOTIFY compareChanged FINAL)
+    Q_PROPERTY(QString compareError READ compareError NOTIFY compareChanged FINAL)
+    /// After commits(): the branch's newest commits [{oid, shortOid, subject, author, time, when,
+    /// parentOid}] (`when`: "5 minutes ago"; `parentOid` "" for a root commit).
+    Q_PROPERTY(QVariantList commitList READ commitList NOTIFY commitListChanged FINAL)
+    /// After stashes(): [{index, oid, message, branch, time, when}], the newest first.
+    Q_PROPERTY(QVariantList stashList READ stashList NOTIFY stashListChanged FINAL)
+
 public:
     explicit CodeGit(QObject *parent = nullptr);
     ~CodeGit() override;
@@ -128,6 +174,27 @@ public:
     bool gitAvailable() const { return !m_client.gitProgram().isEmpty(); }
     bool ghAvailable() const { return !m_client.ghProgram().isEmpty(); }
     static int maxRows() { return MaxRows; }
+    QStringList changePaths() const { return m_changePaths; }
+    QStringList stagedPaths() const { return m_stagedPaths; }
+    int conflictCount() const { return int(m_conflictPaths.size()); }
+    QStringList conflictPaths() const { return m_conflictPaths; }
+    QString operation() const { return m_operation; }
+    QString defaultBranch() const { return m_defaultBranch; }
+    QString defaultBranchRef() const { return m_defaultBranchRef; }
+    bool onDefaultBranch() const { return !m_branch.isEmpty() && m_branch == m_defaultBranch; }
+    bool hasRemote() const { return !m_remoteNames.isEmpty(); }
+    QStringList remoteNames() const { return m_remoteNames; }
+    QVariantMap pullRequest() const { return m_pullRequest; }
+    QString primaryAction() const;
+    bool compareActive() const { return m_compareOn; }
+    QString compareBase() const { return m_compareBase; }
+    QString compareTarget() const { return m_compareTarget; }
+    QString comparisonBase() const { return m_comparisonBase; }
+    QVariantList compareChanges() const { return m_compareChanges; }
+    bool compareLoaded() const { return m_compareLoaded; }
+    QString compareError() const { return m_compareError; }
+    QVariantList commitList() const { return m_commitList; }
+    QVariantList stashList() const { return m_stashList; }
 
     /// The client (C++: its programs and time limits, for tests).
     gitcli::Client &client() { return m_client; }
@@ -180,6 +247,102 @@ public:
     /// The first non-blank line of a message, trimmed (a pull request's default title).
     Q_INVOKABLE QString subjectOf(const QString &message) const;
     Q_INVOKABLE bool isValidBranchName(const QString &name) const;
+    Q_INVOKABLE bool isValidRepositoryName(const QString &name) const;
+    /// A branch name made of a commit message's first line ("fix-the-sync-conflict"; "" none).
+    Q_INVOKABLE QString branchNameFor(const QString &message) const;
+    /// The row of `rows` (changes, compareChanges) for `path` ({} none).
+    Q_INVOKABLE QVariantMap rowOf(const QVariantList &rows, const QString &path) const;
+    /// How commitFiles() commits these paths: "all" | "staged" | "paths" ("" none chosen).
+    Q_INVOKABLE QString commitModeFor(const QStringList &paths) const;
+    /// Why `action` cannot run now ("" it can): "commit", "push", "pull", "createPr", "publish",
+    /// "init", "stash" — for a disabled entry's tooltip.
+    Q_INVOKABLE QString unavailableReason(const QString &action) const;
+
+    // ---- Diff sources (docs/CODE-GIT.md "The panel") ----------------------------------------------
+
+    /// What compareChanges lists: `base` → `target` (both revisions, or a checkpoint's ref;
+    /// `base` "" the empty tree, `target` "" the work tree now), or with `mergeBase` the commit
+    /// HEAD and `base` have in common → `target` (the branch's changes against a base branch).
+    /// Kept up to date with the refreshes; `on` false: none.
+    Q_INVOKABLE void compare(bool on, const QString &base, const QString &target, bool mergeBase);
+    /// A file's texts in two revisions (`target` "" the work tree; `base` "" nothing):
+    /// diffReady() / diffFailed() as requestDiff().
+    Q_INVOKABLE void requestDiffBetween(const QString &path, const QString &oldPath, const QString &base,
+                                        const QString &target);
+    /// Fills commitList: the newest 100 commits of HEAD.
+    Q_INVOKABLE void commits();
+
+    // ---- Files and hunks ----------------------------------------------------------------------------
+
+    /// actionFinished("stage" / "unstage", …).
+    Q_INVOKABLE void stage(const QStringList &paths);
+    Q_INVOKABLE void unstage(const QStringList &paths);
+    /// A file's changes thrown away (gitcli::Client::discard: new files to the trash):
+    /// actionFinished("discard", …).
+    Q_INVOKABLE void discard(const QString &path, const QString &oldPath);
+    /// A conflicted file settled: `how` "ours" | "theirs" | "resolved": actionFinished("resolve", …).
+    Q_INVOKABLE void resolve(const QString &path, const QString &how);
+    /// The hunks that change the work tree's lines [first, last] staged or thrown away, or those
+    /// that change HEAD's lines [first, last] unstaged: actionFinished("stageHunk" /
+    /// "discardHunk" / "unstageHunk", …).
+    Q_INVOKABLE void stageHunk(const QString &path, int first, int last);
+    Q_INVOKABLE void unstageHunk(const QString &path, int first, int last);
+    Q_INVOKABLE void discardHunk(const QString &path, int first, int last);
+
+    // ---- Commits, pull requests, publishing ---------------------------------------------------------
+
+    /// A commit of the chosen files (T3 Code's commit dialog), then as commit() pushed and a pull
+    /// request opened (into `prBase`, "" the default). `paths`: every changed file → all of them
+    /// (`git add -A`); exactly the staged ones → the index as it is (partly staged files stay
+    /// so); else those files as they are in the work tree, new ones added (`git commit --only`).
+    /// `newBranch` ("" none) is made and switched to first. Refused when a chosen file holds
+    /// conflict markers. actionFinished("commit", ok, message, the pull request's url).
+    Q_INVOKABLE void commitFiles(const QString &message, const QStringList &paths, const QString &newBranch, bool push,
+                                 bool createPr, const QString &prTitle, const QString &prBody, bool draft,
+                                 const QString &prBase);
+    /// createPullRequest() into `base` ("" the default branch); from a fork (an "upstream"
+    /// remote) with --repo and --head owner:branch.
+    Q_INVOKABLE void createPullRequestTo(const QString &title, const QString &body, bool draft, const QString &base);
+    /// The branch's pull request asked again (gh pr view): pullRequest.
+    Q_INVOKABLE void refreshPullRequest();
+    /// `git init` in `folder`: actionFinished("init", …).
+    Q_INVOKABLE void initRepository();
+    /// A GitHub repository for this one (gh repo create … --source --push): actionFinished("publish",
+    /// ok, message, its address).
+    Q_INVOKABLE void publish(const QString &name, bool isPublic);
+    /// The work tree without what `base` → `target` changed (an older turn: its checkpoint and the
+    /// next one): actionFinished("revertTurn", …).
+    Q_INVOKABLE void revertBetween(const QString &base, const QString &target);
+
+    // ---- Merges, rebases, stashes -------------------------------------------------------------------
+
+    /// The operation in progress aborted / continued: actionFinished("abort" / "continue", …).
+    Q_INVOKABLE void abortOperation();
+    Q_INVOKABLE void continueOperation();
+    /// Fills stashList.
+    Q_INVOKABLE void stashes();
+    /// actionFinished("stash" / "stashApply" / "stashPop" / "stashDrop", …); the list follows.
+    Q_INVOKABLE void stashPush(const QString &message);
+    Q_INVOKABLE void stashApply(const QString &oid);
+    Q_INVOKABLE void stashPop(const QString &oid);
+    Q_INVOKABLE void stashDrop(const QString &oid);
+
+    // ---- The diff view's rows (gitdiffrows.h) -------------------------------------------------------
+
+    /// The turns of a thread's checkpoints (WorkspaceChats.checkpoints(): [{id, at, message}],
+    /// oldest first), the newest first: [{index, id, number, label ("Turn 3"), at, latest, base,
+    /// target}] — `base` the turn's checkpoint's ref, `target` the next one's ("" for the latest:
+    /// the work tree), so compare(true, base, target, false) shows what that turn alone changed.
+    Q_INVOKABLE QVariantList turnRows(const QVariantList &checkpoints) const;
+    Q_INVOKABLE QVariantList diffRows(const QString &oldText, const QString &newText, bool split, bool ignoreWhitespace,
+                                      int context) const;
+    Q_INVOKABLE QList<int> findRows(const QVariantList &rows, const QString &query) const;
+    Q_INVOKABLE int longestLine(const QVariantList &rows) const;
+    Q_INVOKABLE QString lineHtml(const QString &text, const QVariantList &segs, const QString &changeColor,
+                                 const QString &query, const QString &findColor, bool wrap) const;
+    Q_INVOKABLE QVariantList treeRows(const QVariantList &changes, const QStringList &collapsed) const;
+    Q_INVOKABLE QString reviewComment(const QString &path, const QVariantList &rows, int from, int to,
+                                      const QString &comment) const;
 
 Q_SIGNALS:
     void folderChanged();
@@ -194,6 +357,10 @@ Q_SIGNALS:
     void lastErrorChanged();
     void revisionChanged();
     void toolsChanged();
+    void pullRequestChanged();
+    void compareChanged();
+    void commitListChanged();
+    void stashListChanged();
 
     /// requestDiff()'s answer: the texts ("" when binary or tooLarge).
     void diffReady(const QString &path, const QString &oldText, const QString &newText, bool binary, bool tooLarge);
@@ -234,6 +401,20 @@ private:
     void setActionError(const QString &error);
     void updateWatches();
     void bump();
+    /// compareChanges for the comparison set (then `then`).
+    void loadCompare(std::function<void()> then);
+    /// The default branch and the remotes (when the branch changes; after actions).
+    void loadRepoFacts();
+    /// An action whose body is one gitcli call giving an Outcome.
+    void simpleAction(const QString &action,
+                      std::function<void(const QString &root, std::function<void(const gitcli::Outcome &)> done)> body);
+    /// The commit() / commitFiles() tail: pushed, a pull request opened.
+    void afterCommit(const QString &root, const gitcli::Outcome &committed, bool push, bool createPr,
+                     const QString &message, const QString &prTitle, const QString &prBody, bool draft,
+                     const QString &prBase);
+    /// A pull request opened (the fork found first): finishAction(action, …) with its url.
+    void openPullRequest(const QString &action, const QString &root, const gitcli::PullRequest &pr,
+                         const QString &failurePrefix);
 
     gitcli::Client m_client;
     QFileSystemWatcher m_watcher;
@@ -263,6 +444,30 @@ private:
     QString m_turnError;
     QVariantList m_branchList;
     QVariantList m_worktreeList;
+    QStringList m_changePaths;
+    QStringList m_stagedPaths;
+    QStringList m_conflictPaths;
+    QString m_operation;
+    QString m_defaultBranch;
+    QString m_defaultBranchRef;
+    QStringList m_remoteNames;
+    /// The branch / upstream the facts and the pull request were last asked for.
+    QString m_factsBranch;
+    bool m_factsKnown = false;
+    QString m_prBranch;
+    QVariantMap m_pullRequest;
+    int m_prSerial = 0;
+    bool m_compareOn = false;
+    QString m_compareBase;
+    QString m_compareTarget;
+    bool m_compareMergeBase = false;
+    QString m_comparisonBase;
+    QVariantList m_compareChanges;
+    bool m_compareLoaded = false;
+    QString m_compareError;
+    int m_compareSerial = 0;
+    QVariantList m_commitList;
+    QVariantList m_stashList;
 
     QList<Task> m_queue;
     bool m_taskRunning = false;

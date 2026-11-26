@@ -213,56 +213,161 @@ void Client::changesSince(const QString &folder, const QString &id, std::functio
         });
         return;
     }
+    changesBetween(folder, checkpointRef(id), QString(), std::move(done));
+}
+
+namespace {
+
+/// `diff-tree --raw --numstat` of two trees as FileChange rows.
+ChangesReport changesOf(const RunResult &d)
+{
+    ChangesReport r;
+    if (!d.ok()) {
+        r.error = d.message();
+        return r;
+    }
+    r.ok = true;
+    const DiffRecords records = parseDiff(d.out);
+    QHash<QString, const NumstatEntry *> counts;
+    for (const NumstatEntry &n : records.numstat)
+        counts.insert(n.path, &n);
+    for (const RawEntry &e : records.raw) {
+        FileChange f;
+        f.path = e.path;
+        f.oldPath = e.oldPath;
+        f.change = changeOfRawStatus(e.status);
+        f.unstaged = true;
+        f.oldMode = e.oldMode;
+        f.newMode = e.newMode;
+        if (const NumstatEntry *n = counts.value(e.path)) {
+            f.binary = n->binary;
+            f.additions = n->binary ? -1 : n->additions;
+            f.deletions = n->binary ? -1 : n->deletions;
+        }
+        r.changes.append(f);
+    }
+    return r;
+}
+
+} // namespace
+
+void Client::changesBetween(const QString &folder, const QString &base, const QString &target,
+                            std::function<void(const ChangesReport &)> done)
+{
+    if ((!base.isEmpty() && !isSafeRevision(base)) || (!target.isEmpty() && !isSafeRevision(target))) {
+        later([done = std::move(done), base, target] {
+            ChangesReport r;
+            r.error = GitMessages::tr("Not a revision: %1").arg(isSafeRevision(base) ? target : base);
+            done(r);
+        });
+        return;
+    }
     RunOptions ro;
     ro.readOnly = true;
-    git(folder, {u"rev-parse"_s, u"-q"_s, u"--verify"_s, checkpointRef(id) + u"^{tree}"_s}, ro,
-        [this, folder, ro, done = std::move(done)](const RunResult &c) {
-            const QString base = QString::fromUtf8(c.out).trimmed();
-            if (!c.ok() || base.isEmpty()) {
-                ChangesReport r;
-                r.error = c.failure.isEmpty() ? GitMessages::tr("The checkpoint does not exist") : c.failure;
-                done(r);
-                return;
-            }
-            snapshotTree(folder, [this, folder, ro, base, done](const QString &now, const QString &error) {
+    // The target's tree: the work tree's snapshot, or the revision's.
+    const auto withBase = [this, folder, target, ro, done](const QString &baseTree) {
+        const auto diff = [this, folder, ro, baseTree, done](const QString &targetTree) {
+            git(folder,
+                {u"diff-tree"_s, u"-r"_s, u"-z"_s, u"-M"_s, u"--raw"_s, u"--numstat"_s, u"--no-ext-diff"_s,
+                 u"--no-textconv"_s, baseTree, targetTree},
+                ro, [done](const RunResult &d) { done(changesOf(d)); });
+        };
+        if (target.isEmpty()) {
+            snapshotTree(folder, [diff, done](const QString &now, const QString &error) {
                 if (now.isEmpty()) {
                     ChangesReport r;
                     r.error = error;
                     done(r);
                     return;
                 }
-                git(folder,
-                    {u"diff-tree"_s, u"-r"_s, u"-z"_s, u"-M"_s, u"--raw"_s, u"--numstat"_s, u"--no-ext-diff"_s,
-                     u"--no-textconv"_s, base, now},
-                    ro, [done](const RunResult &d) {
-                        ChangesReport r;
-                        if (!d.ok()) {
-                            r.error = d.message();
-                            done(r);
-                            return;
-                        }
-                        r.ok = true;
-                        const DiffRecords records = parseDiff(d.out);
-                        QHash<QString, const NumstatEntry *> counts;
-                        for (const NumstatEntry &n : records.numstat)
-                            counts.insert(n.path, &n);
-                        for (const RawEntry &e : records.raw) {
-                            FileChange f;
-                            f.path = e.path;
-                            f.oldPath = e.oldPath;
-                            f.change = changeOfRawStatus(e.status);
-                            f.unstaged = true;
-                            f.oldMode = e.oldMode;
-                            f.newMode = e.newMode;
-                            if (const NumstatEntry *n = counts.value(e.path)) {
-                                f.binary = n->binary;
-                                f.additions = n->binary ? -1 : n->additions;
-                                f.deletions = n->binary ? -1 : n->deletions;
-                            }
-                            r.changes.append(f);
-                        }
-                        done(r);
-                    });
+                diff(now);
+            });
+            return;
+        }
+        git(folder, {u"rev-parse"_s, u"-q"_s, u"--verify"_s, target + u"^{tree}"_s}, ro,
+            [diff, done, target](const RunResult &t) {
+                const QString tree = QString::fromUtf8(t.out).trimmed();
+                if (!t.ok() || tree.isEmpty()) {
+                    ChangesReport r;
+                    r.error = t.failure.isEmpty() ? GitMessages::tr("There is no %1 in the repository").arg(target)
+                                                  : t.failure;
+                    done(r);
+                    return;
+                }
+                diff(tree);
+            });
+    };
+    if (base.isEmpty()) {
+        // The empty tree (of this repository's hash: SHA-1 or SHA-256), not written anywhere.
+        git(folder, {u"hash-object"_s, u"-t"_s, u"tree"_s, u"--stdin"_s}, ro, [withBase, done](const RunResult &e) {
+            const QString empty = QString::fromUtf8(e.out).trimmed();
+            if (!e.ok() || empty.isEmpty()) {
+                ChangesReport r;
+                r.error = e.message();
+                done(r);
+                return;
+            }
+            withBase(empty);
+        });
+        return;
+    }
+    const bool checkpoint = base.startsWith(checkpointRef(QString()));
+    git(folder, {u"rev-parse"_s, u"-q"_s, u"--verify"_s, base + u"^{tree}"_s}, ro,
+        [withBase, done, base, checkpoint](const RunResult &c) {
+            const QString tree = QString::fromUtf8(c.out).trimmed();
+            if (!c.ok() || tree.isEmpty()) {
+                ChangesReport r;
+                r.error = !c.failure.isEmpty() ? c.failure
+                          : checkpoint         ? GitMessages::tr("The checkpoint does not exist")
+                                               : GitMessages::tr("There is no %1 in the repository").arg(base);
+                done(r);
+                return;
+            }
+            withBase(tree);
+        });
+}
+
+void Client::revertBetween(const QString &folder, const QString &base, const QString &target,
+                           std::function<void(const Outcome &)> done)
+{
+    if (!isSafeRevision(base) || !isSafeRevision(target)) {
+        later([done = std::move(done)] {
+            Outcome o;
+            o.message = GitMessages::tr("Not a revision to revert");
+            done(o);
+        });
+        return;
+    }
+    RunOptions ro;
+    ro.readOnly = true;
+    git(folder,
+        {u"diff-tree"_s, u"-r"_s, u"-p"_s, u"--binary"_s, u"--no-renames"_s, u"--no-ext-diff"_s, u"--no-textconv"_s,
+         u"--no-color"_s, base, target},
+        ro, [this, folder, done = std::move(done)](const RunResult &d) {
+            if (!d.ok()) {
+                Outcome o;
+                o.message = d.message();
+                done(o);
+                return;
+            }
+            if (d.out.trimmed().isEmpty()) {
+                Outcome o;
+                o.ok = true;
+                o.message = GitMessages::tr("Nothing to revert: the turn changed no file");
+                done(o);
+                return;
+            }
+            RunOptions a;
+            a.noHooks = true;
+            a.input = d.out;
+            git(folder, {u"apply"_s, u"-R"_s, u"--whitespace=nowarn"_s, u"-"_s}, a, [done](const RunResult &r) {
+                Outcome o;
+                o.ok = r.ok();
+                o.message = r.ok() ? GitMessages::tr("Reverted the turn's changes")
+                                   : GitMessages::tr("The files changed since in the same places, so the turn cannot be "
+                                                     "taken out alone: %1")
+                                             .arg(r.message());
+                done(o);
             });
         });
 }

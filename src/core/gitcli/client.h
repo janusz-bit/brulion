@@ -25,6 +25,13 @@
 // `folder` is a work tree's top-level folder (repository() finds it from any folder inside). The
 // paths of the results are relative to it, '/'-separated, as git writes them.
 //
+// Beyond those: history and comparisons (log(), changesBetween(), mergeBase(), defaultBranch()),
+// remotes and gh (pullRequestTarget() for forks, pullRequestFor(), publish(), initRepository()),
+// single files and hunks (stage(), unstage(), discard(), resolve(), applyHunk()), commits of chosen
+// files refused with conflict markers (commit()), merges and rebases in progress (operationIn(),
+// abortOperation(), continueOperation()) and stashes — paths always as literal pathspecs,
+// revisions checked (isSafeRevision()).
+//
 // Checkpoints (checkpoint(), changesSince(), restore(), dropCheckpoints()): a snapshot of the
 // whole work tree — untracked files included, ignored ones not — as a commit kept by the ref
 // refs/brulion/checkpoints/<id>, made through a temporary index (GIT_INDEX_FILE, a copy of the
@@ -157,6 +164,80 @@ struct FileTextsRequest {
     QString oldPath;
     /// The revision of the old text: "HEAD", a commit, checkpointRef(id); "" none (all new).
     QString base = QStringLiteral("HEAD");
+    /// The revision of the new text: "" the work tree (read from disk), else a commit, a
+    /// checkpoint's ref — `path` in it (none there: the file was deleted).
+    QString target;
+};
+
+struct CommitList {
+    bool ok = false;
+    QString error;
+    QList<Commit> commits;
+};
+
+struct StashList {
+    bool ok = false;
+    QString error;
+    QList<Stash> stashes;
+};
+
+struct RemoteList {
+    bool ok = false;
+    QString error;
+    QList<Remote> remotes;
+};
+
+/// The branch a repository's work goes into (defaultBranch()).
+struct DefaultBranch {
+    /// Found (origin/HEAD, else a branch main or master).
+    bool ok = false;
+    /// The branch's name ("main").
+    QString name;
+    /// What to compare with: the remote-tracking branch when there is one ("origin/main"), else
+    /// the local one ("main").
+    QString ref;
+};
+
+/// The pull request of a branch (pullRequestFor()).
+struct PullRequestStatus {
+    /// gh answered (a pull request or none).
+    bool ok = false;
+    QString error;
+    /// The branch has one (`pr` holds it).
+    bool found = false;
+    PullRequestInfo pr;
+};
+
+/// What a commit takes (commit()).
+struct CommitRequest {
+    QString message;
+    /// "all": every change, new files too (`git add -A`); "staged": the index as it is (a plain
+    /// `git commit`); "paths": only `paths`, as they are in the work tree (`git commit --only`),
+    /// what is staged of other files left staged.
+    QString mode = QStringLiteral("all");
+    QStringList paths;
+    /// Of `paths`, the untracked ones: added first (and taken out of the index again when the
+    /// commit fails).
+    QStringList untracked;
+    /// A new branch to switch to first ("" none).
+    QString newBranch;
+};
+
+/// A merge, rebase, cherry-pick, revert or `git am` that stopped (on a conflict, an edit …).
+enum class Operation : quint8 { None, Merge, Rebase, CherryPick, Revert, Apply };
+
+/// What applyHunk() does with the hunks it finds.
+enum class HunkAction : quint8 {
+    Stage,   ///< from the work tree into the index (`git apply --cached`)
+    Unstage, ///< out of the index (`git apply --cached -R` of HEAD → index)
+    Discard, ///< out of the work tree (`git apply -R` of index → work tree)
+};
+
+/// How a conflicted file is settled (resolve()).
+enum class Resolution : quint8 {
+    Ours,     ///< `git checkout --ours` (HEAD's side; while rebasing the branch rebased onto)
+    Theirs,   ///< `git checkout --theirs`
+    Resolved, ///< as it is in the work tree (no conflict markers left), `git add`
 };
 
 struct BranchList {
@@ -175,10 +256,13 @@ struct PullRequest {
     QString title;
     QString body;
     bool draft = false;
-    /// The branch it is from (`--head`); "" gh's own choice (the current branch).
+    /// The branch it is from (`--head`): "branch", or "owner:branch" from a fork; "" gh's own
+    /// choice (the current branch).
     QString head;
     /// The branch it goes into (`--base`); "" the repository's default.
     QString base;
+    /// The repository it is opened in (`--repo`, "owner/name"); "" the folder's.
+    QString repo;
 };
 
 /// What restore() did.
@@ -291,6 +375,92 @@ public:
     /// The ids of the checkpoints the repository keeps.
     void checkpoints(const QString &folder,
                      std::function<void(bool ok, const QStringList &ids, const QString &error)> done);
+    /// The changes between `base` ("" the empty tree) and `target` ("" the work tree now —
+    /// untracked files too, through a snapshot tree as changesSince() — else a revision):
+    /// renames found, lines added / deleted. A commit's own changes: its first parent (or "")
+    /// and it.
+    void changesBetween(const QString &folder, const QString &base, const QString &target,
+                        std::function<void(const ChangesReport &)> done);
+    /// The work tree without what `base` → `target` changed (both revisions: an older turn's
+    /// checkpoints): the reverse of their diff applied to the work tree (`git apply -R`, all or
+    /// nothing — a file changed since in the same lines refuses it). Index, HEAD untouched.
+    void revertBetween(const QString &folder, const QString &base, const QString &target,
+                       std::function<void(const Outcome &)> done);
+
+    // ---- History, branches, remotes (client_history.cpp) ------------------------------------------------
+
+    /// The newest `max` commits of `revision` ("" HEAD), newest first. None in a new repository.
+    void log(const QString &folder, const QString &revision, int max, std::function<void(const CommitList &)> done);
+    /// `git merge-base a b`: Outcome::value the commit ("" none in common: not ok).
+    void mergeBase(const QString &folder, const QString &a, const QString &b, std::function<void(const Outcome &)> done);
+    /// The repository's default branch: origin/HEAD's, else main or master (local or
+    /// remote-tracking), else the branch init.defaultBranch names when it exists.
+    void defaultBranch(const QString &folder, std::function<void(const DefaultBranch &)> done);
+    void remotes(const QString &folder, std::function<void(const RemoteList &)> done);
+    /// Where a pull request of `branch` goes from a fork (forkTarget() of the remotes and the
+    /// branch's push remote, `@{push}`): an empty ForkTarget when it is no fork.
+    void pullRequestTarget(const QString &folder, const QString &branch, std::function<void(const ForkTarget &)> done);
+    /// `gh pr view [<head>] [--repo <repo>] --json number,url,state,isDraft,title,baseRefName`:
+    /// the branch's pull request (`head` "" the current branch's; "owner:branch" from a fork).
+    void pullRequestFor(const QString &folder, const QString &head, const QString &repo,
+                        std::function<void(const PullRequestStatus &)> done);
+    /// `git init` in `folder` (it must exist).
+    void initRepository(const QString &folder, std::function<void(const Outcome &)> done);
+    /// `gh repo create <name> --private|--public --source <folder> --remote origin --push`: a
+    /// GitHub repository for a folder without a remote, pushed (Outcome::url its address).
+    void publish(const QString &folder, const QString &name, bool isPublic, std::function<void(const Outcome &)> done);
+
+    // ---- Files, hunks, commits (client_files.cpp) --------------------------------------------------------
+
+    /// `git add` of the paths (a deleted file's deletion too).
+    void stage(const QString &folder, const QStringList &paths, std::function<void(const Outcome &)> done);
+    /// The paths out of the index (`git restore --staged`; before the first commit `git rm --cached`):
+    /// the work tree keeps them.
+    void unstage(const QString &folder, const QStringList &paths, std::function<void(const Outcome &)> done);
+    /// A file's changes thrown away: `path` (and a rename's `oldPath`) back to HEAD in the index
+    /// and the work tree; a file HEAD does not have (new, untracked, a rename's new name) out of
+    /// the index and into the system's trash (deleted where there is none). Refused for a
+    /// conflicted file, a folder, a path that leaves the work tree or goes through a link.
+    void discard(const QString &folder, const QString &path, const QString &oldPath,
+                 std::function<void(const Outcome &)> done);
+    /// A conflicted file settled: one side taken (a side that deleted it deletes it), or the work
+    /// tree's text marked resolved — refused while it holds conflict markers.
+    void resolve(const QString &folder, const QString &path, Resolution how, std::function<void(const Outcome &)> done);
+    /// The hunks of `path` that change a line of [first, last] — the work tree's lines (Stage,
+    /// Discard) or HEAD's (Unstage) — staged, unstaged or thrown away, from git's own diff of the
+    /// file (index → work tree, or HEAD → index) through `git apply`.
+    void applyHunk(const QString &folder, const QString &path, HunkAction action, int first, int last,
+                   std::function<void(const Outcome &)> done);
+    /// The files of `paths` (relative) that hold conflict markers (hasConflictMarkers(); files
+    /// over MaxTextBytes, binary or missing ones not), read a few at a time from the event loop.
+    void conflictMarkers(const QString &folder, const QStringList &paths, std::function<void(const QStringList &)> done);
+    /// A commit as `request` says (refused when a file to commit holds conflict markers, naming
+    /// them): Outcome::value the new commit's id.
+    void commit(const QString &folder, const CommitRequest &request, std::function<void(const Outcome &)> done);
+
+    // ---- Merges, rebases, stashes (client_operations.cpp) -------------------------------------------------
+
+    /// What is in progress in a work tree whose git folder is `gitDir` (RepoInfo::gitDir): files
+    /// git keeps meanwhile (MERGE_HEAD, rebase-merge/, rebase-apply/, CHERRY_PICK_HEAD,
+    /// REVERT_HEAD). Reads only file names.
+    static Operation operationIn(const QString &gitDir);
+    /// "merge" | "rebase" | "cherryPick" | "revert" | "apply" | "".
+    static QString operationName(Operation operation);
+    static Operation operationFromName(const QString &name);
+    /// `git merge --abort`, `git rebase --abort` …
+    void abortOperation(const QString &folder, Operation operation, std::function<void(const Outcome &)> done);
+    /// A merge committed with its MERGE_MSG (`git commit --no-edit`); a rebase, cherry-pick,
+    /// revert or am continued (`--continue`) — never in an editor (GIT_EDITOR=true).
+    void continueOperation(const QString &folder, Operation operation, std::function<void(const Outcome &)> done);
+    /// The repository's stashes (shared by its worktrees), the newest first.
+    void stashes(const QString &folder, std::function<void(const StashList &)> done);
+    /// `git stash push --include-untracked [-m message]`.
+    void stashPush(const QString &folder, const QString &message, std::function<void(const Outcome &)> done);
+    /// `git stash apply <oid>`, then — `drop` (Pop) — the stash dropped when it applied cleanly.
+    void stashApply(const QString &folder, const QString &oid, bool drop, std::function<void(const Outcome &)> done);
+    /// The stash whose commit is `oid` dropped (its index found again first: another one may
+    /// have been pushed since the list was read).
+    void stashDrop(const QString &folder, const QString &oid, std::function<void(const Outcome &)> done);
 
 private:
     struct Run;
@@ -300,6 +470,11 @@ private:
     void snapshotTree(const QString &folder, std::function<void(const QString &tree, const QString &error)> done);
     /// `done` later, on this object's thread (never from inside the call).
     void later(std::function<void()> done);
+    /// conflictMarkers()'s next files from `next` on.
+    void scanMarkers(const QString &folder, const QStringList &paths, qsizetype next,
+                     std::shared_ptr<QStringList> found, std::function<void(const QStringList &)> done);
+    /// The commit itself, after the checks (commit()).
+    void commitChecked(const QString &folder, const CommitRequest &request, std::function<void(const Outcome &)> done);
 
     QString m_git;
     QString m_gh;

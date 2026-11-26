@@ -14,6 +14,7 @@
 
 #include <QDeadlineTimer>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
@@ -132,6 +133,53 @@ const FileChange *find(const QList<FileChange> &changes, const QString &path)
     return nullptr;
 }
 
+#ifdef Q_OS_UNIX
+/// A fake gh in `dir`: writes its arguments NUL-separated to `<dir>/gh-args` and answers with
+/// `script` (shell lines: what it prints and its exit code).
+QString fakeGh(const QTemporaryDir &dir, const QByteArray &script)
+{
+    const QString argsFile = dir.filePath(u"gh-args"_s);
+    const QString path = dir.filePath(u"gh"_s);
+    QFile s(path);
+    if (!s.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        qWarning() << "cannot write" << path;
+    s.write("#!/bin/sh\nfor a in \"$@\"; do printf '%s\\0' \"$a\"; done > \"" + argsFile.toUtf8() + "\"\n" + script);
+    s.close();
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    return path;
+}
+
+QStringList ghArgs(const QTemporaryDir &dir)
+{
+    QFile a(dir.filePath(u"gh-args"_s));
+    if (!a.open(QIODevice::ReadOnly))
+        return {};
+    QStringList out;
+    for (const QByteArray &arg : a.readAll().split('\0'))
+        out.append(QString::fromUtf8(arg));
+    if (!out.isEmpty() && out.last().isEmpty())
+        out.removeLast();
+    return out;
+}
+#endif
+
+/// A repository whose branch "inna" and main changed the same line of "wspólny.txt": `git merge
+/// inna` stops on the conflict (also "usunięty.txt": changed on main, deleted on inna).
+void makeConflict(Repo &repo)
+{
+    repo.write(u"wspólny.txt"_s, "jeden\ndwa\ntrzy\n");
+    repo.write(u"usunięty.txt"_s, "stary\n");
+    repo.commitAll(u"baza"_s);
+    repo.run({u"switch"_s, u"-q"_s, u"-c"_s, u"inna"_s});
+    repo.write(u"wspólny.txt"_s, "jeden\nDWA z innej\ntrzy\n");
+    repo.run({u"rm"_s, u"-q"_s, u"usunięty.txt"_s});
+    repo.commitAll(u"inna zmiana"_s);
+    repo.run({u"switch"_s, u"-q"_s, u"main"_s});
+    repo.write(u"wspólny.txt"_s, "jeden\nDWA z main\ntrzy\n");
+    repo.write(u"usunięty.txt"_s, "zmieniony\n");
+    repo.commitAll(u"main zmiana"_s);
+}
+
 } // namespace
 
 class TestGitCliRepo : public QObject {
@@ -169,6 +217,35 @@ private Q_SLOTS:
     void timeLimit();
     void noCallbackAfterDestruction();
 
+    // History, comparisons, remotes, gh
+    void logOfCommits();
+    void changesBetweenRevisions();
+    void fileTextsBetweenRevisions();
+    void mergeBaseAndDefaultBranch();
+    void forkPullRequestTarget();
+    void pullRequestView();
+    void initAndPublish();
+    void revertAnOlderTurn();
+
+    // Files, hunks, commits
+    void stageAndUnstage();
+    void stageInEmptyRepository();
+    void discardFiles();
+    void discardRefused();
+    void hunks();
+    void commitChosenFiles();
+    void commitStagedOnly();
+    void commitOnNewBranch();
+    void commitRefusesConflictMarkers();
+
+    // Merges, rebases, stashes
+    void mergeConflictResolved();
+    void mergeAborted();
+    void takeTheirsOfADeletion();
+    void rebaseContinued();
+    void cherryPickAborted();
+    void stashes();
+
 private:
     QTemporaryDir m_home;
 };
@@ -188,6 +265,9 @@ void TestGitCliRepo::initTestCase()
     qputenv("GIT_CONFIG_NOSYSTEM", "1");
     qputenv("HOME", m_home.path().toUtf8());
     qputenv("XDG_CONFIG_HOME", m_home.filePath(u"xdg"_s).toUtf8());
+    // (discard() moves files to the trash: this home's.)
+    qputenv("XDG_DATA_HOME", m_home.filePath(u"xdg-data"_s).toUtf8());
+    QDir().mkpath(m_home.filePath(u"xdg-data"_s)); // (Qt trashes only into a data folder that exists)
     // No repository above the temporary folders counts (a test's "no repository" folder).
     qputenv("GIT_CEILING_DIRECTORIES",
             (QDir::tempPath() + QDir::listSeparator() + QFileInfo(QDir::tempPath()).canonicalFilePath()).toUtf8());
@@ -270,7 +350,7 @@ void TestGitCliRepo::emptyRepository()
     QCOMPARE(staged->additions, 1);
 
     const FileTexts t = await<FileTexts>(
-            [&](auto done) { client.fileTexts(repo.root, {u"pierwszy plik.md"_s, QString(), u"HEAD"_s}, done); });
+            [&](auto done) { client.fileTexts(repo.root, {u"pierwszy plik.md"_s, QString(), u"HEAD"_s, QString()}, done); });
     QVERIFY2(t.ok, qPrintable(t.error));
     QVERIFY(!t.oldExists);
     QVERIFY(t.oldText.isEmpty());
@@ -395,7 +475,7 @@ void TestGitCliRepo::fileTexts()
 
     Client client;
     const auto texts = [&](const QString &path, const QString &oldPath) {
-        return await<FileTexts>([&](auto done) { client.fileTexts(repo.root, {path, oldPath, u"HEAD"_s}, done); });
+        return await<FileTexts>([&](auto done) { client.fileTexts(repo.root, {path, oldPath, u"HEAD"_s, QString()}, done); });
     };
     const FileTexts mod = texts(u"tekst.md"_s, QString());
     QVERIFY2(mod.ok, qPrintable(mod.error));
@@ -433,7 +513,7 @@ void TestGitCliRepo::fileTexts()
 
     // No base: everything is new.
     const FileTexts none = await<FileTexts>(
-            [&](auto done) { client.fileTexts(repo.root, {u"tekst.md"_s, QString(), QString()}, done); });
+            [&](auto done) { client.fileTexts(repo.root, {u"tekst.md"_s, QString(), QString(), QString()}, done); });
     QVERIFY(none.ok);
     QVERIFY(none.oldText.isEmpty());
     QCOMPARE(none.newText, u"Zażółć\njaźń\n"_s);
@@ -815,13 +895,13 @@ void TestGitCliRepo::changesSinceCheckpoint()
 
     // The old text from the checkpoint, the new one from disk.
     const FileTexts t = await<FileTexts>([&](auto done) {
-        client.fileTexts(repo.root, {u"przed turą.txt"_s, QString(), Client::checkpointRef(u"tura-1"_s)}, done);
+        client.fileTexts(repo.root, {u"przed turą.txt"_s, QString(), Client::checkpointRef(u"tura-1"_s), QString()}, done);
     });
     QVERIFY(t.ok);
     QCOMPARE(t.oldText, u"był\n"_s);
     QCOMPARE(t.newText, u"był\njest\n"_s);
     const FileTexts rt = await<FileTexts>([&](auto done) {
-        client.fileTexts(repo.root, {u"nowa nazwa ś.txt"_s, u"stara nazwa.txt"_s, Client::checkpointRef(u"tura-1"_s)},
+        client.fileTexts(repo.root, {u"nowa nazwa ś.txt"_s, u"stara nazwa.txt"_s, Client::checkpointRef(u"tura-1"_s), QString()},
                          done);
     });
     QVERIFY(rt.ok);
@@ -1106,6 +1186,768 @@ void TestGitCliRepo::noCallbackAfterDestruction()
     }
     QTest::qWait(300);
     QVERIFY(!called);
+}
+
+// ---- History, comparisons, remotes, gh ---------------------------------------------------------
+
+void TestGitCliRepo::logOfCommits()
+{
+    Client client;
+    Repo empty;
+    const CommitList none = await<CommitList>([&](auto done) { client.log(empty.root, QString(), 100, done); });
+    QVERIFY2(none.ok, qPrintable(none.error));
+    QVERIFY(none.commits.isEmpty());
+
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"Pierwszy: zażółć"_s);
+    repo.write(u"a.txt"_s, "b\n");
+    repo.commitAll(u"Drugi"_s);
+    repo.write(u"a.txt"_s, "c\n");
+    repo.commitAll(u"Trzeci"_s);
+    const CommitList all = await<CommitList>([&](auto done) { client.log(repo.root, QString(), 100, done); });
+    QVERIFY(all.ok);
+    QCOMPARE(all.commits.size(), 3);
+    QCOMPARE(all.commits.at(0).subject, u"Trzeci"_s);
+    QCOMPARE(all.commits.at(0).oid, repo.text({u"rev-parse"_s, u"HEAD"_s}));
+    QCOMPARE(all.commits.at(0).parents, QStringList{all.commits.at(1).oid});
+    QCOMPARE(all.commits.at(2).subject, u"Pierwszy: zażółć"_s);
+    QVERIFY(all.commits.at(2).parents.isEmpty());
+    QCOMPARE(all.commits.at(0).authorName, u"Testowy Użytkownik"_s);
+    QVERIFY(all.commits.at(0).authorTime > 1600000000);
+    const CommitList two = await<CommitList>([&](auto done) { client.log(repo.root, u"HEAD~1"_s, 1, done); });
+    QCOMPARE(two.commits.size(), 1);
+    QCOMPARE(two.commits.at(0).subject, u"Drugi"_s);
+    const CommitList bad = await<CommitList>([&](auto done) { client.log(repo.root, u"--all"_s, 5, done); });
+    QVERIFY(!bad.ok);
+}
+
+void TestGitCliRepo::changesBetweenRevisions()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\nb\n");
+    repo.write(u"stary.txt"_s, "s\n");
+    repo.commitAll(u"jeden"_s);
+    const QString first = repo.text({u"rev-parse"_s, u"HEAD"_s});
+    repo.write(u"a.txt"_s, "a\nB\nc\n");
+    repo.remove(u"stary.txt"_s);
+    repo.write(u"folder ż/nowy.txt"_s, "n\n");
+    repo.commitAll(u"dwa"_s);
+    const QString second = repo.text({u"rev-parse"_s, u"HEAD"_s});
+    Client client;
+    ChangesReport r = await<ChangesReport>([&](auto done) { client.changesBetween(repo.root, first, second, done); });
+    QVERIFY2(r.ok, qPrintable(r.error));
+    QCOMPARE(r.changes.size(), 3);
+    const FileChange *a = find(r.changes, u"a.txt"_s);
+    QVERIFY(a);
+    QCOMPARE(a->change, Change::Modified);
+    QCOMPARE(a->additions, 2);
+    QCOMPARE(a->deletions, 1);
+    QCOMPARE(find(r.changes, u"stary.txt"_s)->change, Change::Deleted);
+    QCOMPARE(find(r.changes, u"folder ż/nowy.txt"_s)->change, Change::Added);
+
+    // The root commit's own changes: against the empty tree.
+    r = await<ChangesReport>([&](auto done) { client.changesBetween(repo.root, QString(), first, done); });
+    QVERIFY(r.ok);
+    QCOMPARE(r.changes.size(), 2);
+    QCOMPARE(find(r.changes, u"a.txt"_s)->change, Change::Added);
+
+    // A commit against the work tree: untracked files too, the index untouched.
+    repo.write(u"nieśledzony.txt"_s, "u\n");
+    const QByteArray index = repo.indexBytes();
+    r = await<ChangesReport>([&](auto done) { client.changesBetween(repo.root, second, QString(), done); });
+    QVERIFY(r.ok);
+    QCOMPARE(r.changes.size(), 1);
+    QCOMPARE(r.changes.at(0).path, u"nieśledzony.txt"_s);
+    QCOMPARE(repo.indexBytes(), index);
+
+    // Revisions that are no revisions.
+    r = await<ChangesReport>([&](auto done) { client.changesBetween(repo.root, u"nie-ma-takiej"_s, second, done); });
+    QVERIFY(!r.ok);
+    QVERIFY2(r.error.contains(u"nie-ma-takiej"_s), qPrintable(r.error));
+    r = await<ChangesReport>([&](auto done) { client.changesBetween(repo.root, u"--output=x"_s, second, done); });
+    QVERIFY(!r.ok);
+    QVERIFY(!QFileInfo::exists(repo.path(u"x"_s)));
+    r = await<ChangesReport>(
+            [&](auto done) { client.changesBetween(repo.root, Client::checkpointRef(u"brak"_s), QString(), done); });
+    QVERIFY(!r.ok);
+    QCOMPARE(r.error, u"The checkpoint does not exist"_s);
+}
+
+void TestGitCliRepo::fileTextsBetweenRevisions()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "stary ą\n");
+    repo.commitAll(u"jeden"_s);
+    const QString first = repo.text({u"rev-parse"_s, u"HEAD"_s});
+    repo.write(u"a.txt"_s, "nowy ę\n");
+    repo.write(u"b.txt"_s, "b\n");
+    repo.commitAll(u"dwa"_s);
+    repo.write(u"a.txt"_s, "na dysku\n");
+    Client client;
+    FileTextsRequest req;
+    req.path = u"a.txt"_s;
+    req.base = first;
+    req.target = u"HEAD"_s;
+    FileTexts t = await<FileTexts>([&](auto done) { client.fileTexts(repo.root, req, done); });
+    QVERIFY2(t.ok, qPrintable(t.error));
+    QCOMPARE(t.oldText, u"stary ą\n"_s);
+    QCOMPARE(t.newText, u"nowy ę\n"_s);
+    QVERIFY(t.oldExists && t.newExists);
+    // A file added by the commit: no old side; deleted: no new side.
+    req.path = u"b.txt"_s;
+    t = await<FileTexts>([&](auto done) { client.fileTexts(repo.root, req, done); });
+    QVERIFY(t.ok);
+    QVERIFY(!t.oldExists);
+    QCOMPARE(t.newText, u"b\n"_s);
+    req.base = u"HEAD"_s;
+    req.target = first;
+    t = await<FileTexts>([&](auto done) { client.fileTexts(repo.root, req, done); });
+    QVERIFY(t.ok);
+    QVERIFY(t.oldExists);
+    QVERIFY(!t.newExists);
+    QCOMPARE(t.newText, QString());
+    // A root commit against the empty side.
+    req.path = u"a.txt"_s;
+    req.base.clear();
+    req.target = first;
+    t = await<FileTexts>([&](auto done) { client.fileTexts(repo.root, req, done); });
+    QVERIFY(t.ok);
+    QCOMPARE(t.newText, u"stary ą\n"_s);
+    // An option as a revision.
+    req.target = u"--output=x"_s;
+    t = await<FileTexts>([&](auto done) { client.fileTexts(repo.root, req, done); });
+    QVERIFY(!t.ok);
+}
+
+void TestGitCliRepo::mergeBaseAndDefaultBranch()
+{
+    Client client;
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"a"_s);
+    const QString base = repo.text({u"rev-parse"_s, u"HEAD"_s});
+    DefaultBranch d = await<DefaultBranch>([&](auto done) { client.defaultBranch(repo.root, done); });
+    QVERIFY(d.ok);
+    QCOMPARE(d.name, u"main"_s);
+    QCOMPARE(d.ref, u"main"_s);
+    repo.run({u"switch"_s, u"-q"_s, u"-c"_s, u"funkcja/żółw"_s});
+    repo.write(u"b.txt"_s, "b\n");
+    repo.commitAll(u"b"_s);
+    repo.run({u"switch"_s, u"-q"_s, u"main"_s});
+    repo.write(u"c.txt"_s, "c\n");
+    repo.commitAll(u"c"_s);
+    Outcome m = await<Outcome>([&](auto done) { client.mergeBase(repo.root, u"main"_s, u"funkcja/żółw"_s, done); });
+    QVERIFY2(m.ok, qPrintable(m.message));
+    QCOMPARE(m.value, base);
+    m = await<Outcome>([&](auto done) { client.mergeBase(repo.root, u"main"_s, u"-x"_s, done); });
+    QVERIFY(!m.ok);
+    // An unrelated history: nothing in common.
+    repo.run({u"switch"_s, u"-q"_s, u"--orphan"_s, u"sierota"_s});
+    repo.write(u"d.txt"_s, "d\n");
+    repo.commitAll(u"d"_s);
+    m = await<Outcome>([&](auto done) { client.mergeBase(repo.root, u"main"_s, u"sierota"_s, done); });
+    QVERIFY(!m.ok);
+
+    // master; and origin/HEAD of a clone wins.
+    Repo old;
+    old.run({u"switch"_s, u"-q"_s, u"--orphan"_s, u"master"_s});
+    old.write(u"a"_s, "a");
+    old.commitAll(u"a"_s);
+    d = await<DefaultBranch>([&](auto done) { client.defaultBranch(old.root, done); });
+    QCOMPARE(d.name, u"master"_s);
+    QTemporaryDir cloneDir;
+    Repo::runIn(cloneDir.path(), {u"clone"_s, u"-q"_s, repo.root, u"klon"_s});
+    const QString clone = cloneDir.filePath(u"klon"_s);
+    Repo::runIn(clone, {u"remote"_s, u"set-head"_s, u"origin"_s, u"funkcja/żółw"_s});
+    d = await<DefaultBranch>([&](auto done) { client.defaultBranch(clone, done); });
+    QVERIFY(d.ok);
+    QCOMPARE(d.name, u"funkcja/żółw"_s);
+    QCOMPARE(d.ref, u"origin/funkcja/żółw"_s);
+    // None at all.
+    Repo bare;
+    d = await<DefaultBranch>([&](auto done) { client.defaultBranch(bare.root, done); });
+    QVERIFY(!d.ok);
+}
+
+void TestGitCliRepo::forkPullRequestTarget()
+{
+    Client client;
+    Repo repo;
+    repo.write(u"a"_s, "a");
+    repo.commitAll(u"a"_s);
+    repo.run({u"remote"_s, u"add"_s, u"origin"_s, u"git@github.com:ja/repo.git"_s});
+    ForkTarget t = await<ForkTarget>([&](auto done) { client.pullRequestTarget(repo.root, u"main"_s, done); });
+    QVERIFY(t.repo.isEmpty() && t.head.isEmpty());
+    repo.run({u"remote"_s, u"add"_s, u"upstream"_s, u"https://github.com/org/repo.git"_s});
+    t = await<ForkTarget>([&](auto done) { client.pullRequestTarget(repo.root, u"main"_s, done); });
+    QCOMPARE(t.repo, u"org/repo"_s);
+    QCOMPARE(t.head, u"ja:main"_s);
+    // Pushed to upstream (branch.<name>.pushRemote): no fork.
+    repo.run({u"config"_s, u"branch.main.pushRemote"_s, u"upstream"_s});
+    t = await<ForkTarget>([&](auto done) { client.pullRequestTarget(repo.root, u"main"_s, done); });
+    QVERIFY(t.repo.isEmpty());
+}
+
+void TestGitCliRepo::pullRequestView()
+{
+#ifdef Q_OS_UNIX
+    Repo repo;
+    QTemporaryDir ghDir;
+    const QString gh = fakeGh(ghDir, "echo '{\"number\":42,\"url\":\"https://github.com/ja/repo/pull/42\",\"state\":\"OPEN\","
+                                     "\"isDraft\":true,\"title\":\"Żółw\",\"baseRefName\":\"main\"}'\n");
+    Client client;
+    client.setGhProgram(gh);
+    PullRequestStatus s = await<PullRequestStatus>([&](auto done) { client.pullRequestFor(repo.root, QString(), QString(), done); });
+    QVERIFY2(s.ok, qPrintable(s.error));
+    QVERIFY(s.found);
+    QCOMPARE(s.pr.number, 42);
+    QCOMPARE(s.pr.state, u"draft"_s);
+    QCOMPARE(s.pr.title, u"Żółw"_s);
+    QCOMPARE(ghArgs(ghDir),
+             (QStringList{u"pr"_s, u"view"_s, u"--json"_s, u"number,url,state,isDraft,title,baseRefName"_s}));
+    s = await<PullRequestStatus>([&](auto done) { client.pullRequestFor(repo.root, u"ja:x"_s, u"org/repo"_s, done); });
+    QCOMPARE(ghArgs(ghDir), (QStringList{u"pr"_s, u"view"_s, u"ja:x"_s, u"--repo"_s, u"org/repo"_s, u"--json"_s,
+                                         u"number,url,state,isDraft,title,baseRefName"_s}));
+    // None for the branch: an answer.
+    fakeGh(ghDir, "echo 'no pull requests found for branch \"x\"' >&2\nexit 1\n");
+    s = await<PullRequestStatus>([&](auto done) { client.pullRequestFor(repo.root, QString(), QString(), done); });
+    QVERIFY(s.ok);
+    QVERIFY(!s.found);
+    fakeGh(ghDir, "echo 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4\n");
+    s = await<PullRequestStatus>([&](auto done) { client.pullRequestFor(repo.root, QString(), QString(), done); });
+    QVERIFY(!s.ok);
+    QVERIFY2(s.error.contains(u"gh auth login"_s), qPrintable(s.error));
+    client.setGhProgram(QString());
+    s = await<PullRequestStatus>([&](auto done) { client.pullRequestFor(repo.root, QString(), QString(), done); });
+    QVERIFY(!s.ok);
+
+    // A pull request into another base, from a fork.
+    fakeGh(ghDir, "echo https://github.com/org/repo/pull/7\n");
+    client.setGhProgram(gh);
+    PullRequest pr;
+    pr.title = u"Tytuł"_s;
+    pr.base = u"rozwój"_s;
+    pr.head = u"ja:funkcja"_s;
+    pr.repo = u"org/repo"_s;
+    const Outcome o = await<Outcome>([&](auto done) { client.createPullRequest(repo.root, pr, done); });
+    QVERIFY(o.ok);
+    QCOMPARE(o.url, u"https://github.com/org/repo/pull/7"_s);
+    const QStringList args = ghArgs(ghDir);
+    QVERIFY(args.contains(u"--base"_s));
+    QCOMPARE(args.at(args.indexOf(u"--base"_s) + 1), u"rozwój"_s);
+    QCOMPARE(args.at(args.indexOf(u"--head"_s) + 1), u"ja:funkcja"_s);
+    QCOMPARE(args.at(args.indexOf(u"--repo"_s) + 1), u"org/repo"_s);
+#else
+    QSKIP("a fake gh as a shell script");
+#endif
+}
+
+void TestGitCliRepo::initAndPublish()
+{
+    Client client;
+    QTemporaryDir plain;
+    const QString folder = QFileInfo(plain.path()).canonicalFilePath();
+    Outcome o = await<Outcome>([&](auto done) { client.initRepository(folder, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    const RepoInfo info = await<RepoInfo>([&](auto done) { client.repository(folder, done); });
+    QVERIFY(info.isRepo);
+    o = await<Outcome>([&](auto done) { client.initRepository(folder + u"/brak"_s, done); });
+    QVERIFY(!o.ok);
+#ifdef Q_OS_UNIX
+    QTemporaryDir ghDir;
+    client.setGhProgram(fakeGh(ghDir, "echo '✓ Created repository ja/notatki on GitHub' >&2\n"
+                                      "echo '  https://github.com/ja/notatki'\n"));
+    o = await<Outcome>([&](auto done) { client.publish(folder, u"notatki"_s, false, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(o.url, u"https://github.com/ja/notatki"_s);
+    QCOMPARE(ghArgs(ghDir), (QStringList{u"repo"_s, u"create"_s, u"notatki"_s, u"--private"_s, u"--source"_s, folder,
+                                         u"--remote"_s, u"origin"_s, u"--push"_s}));
+    o = await<Outcome>([&](auto done) { client.publish(folder, u"ja/publiczne"_s, true, done); });
+    QVERIFY(ghArgs(ghDir).contains(u"--public"_s));
+    // Names that are no names never reach gh.
+    QFile::remove(ghDir.filePath(u"gh-args"_s));
+    o = await<Outcome>([&](auto done) { client.publish(folder, u"--help"_s, true, done); });
+    QVERIFY(!o.ok);
+    o = await<Outcome>([&](auto done) { client.publish(folder, u"żółw"_s, true, done); });
+    QVERIFY(!o.ok);
+    QVERIFY(!QFileInfo::exists(ghDir.filePath(u"gh-args"_s)));
+#endif
+}
+
+void TestGitCliRepo::revertAnOlderTurn()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
+    repo.commitAll(u"a"_s);
+    Client client;
+    // Turn 1 changes line 2 and adds a file; turn 2 changes line 9; then turn 1 alone is undone.
+    QVERIFY(await<Outcome>([&](auto done) { client.checkpoint(repo.root, u"t1"_s, done); }).ok);
+    repo.write(u"a.txt"_s, "1\nDWA\n3\n4\n5\n6\n7\n8\n9\n10\n");
+    repo.write(u"nowy ż.txt"_s, "n\n");
+    QVERIFY(await<Outcome>([&](auto done) { client.checkpoint(repo.root, u"t2"_s, done); }).ok);
+    repo.write(u"a.txt"_s, "1\nDWA\n3\n4\n5\n6\n7\n8\nDZIEWIĘĆ\n10\n");
+    const QByteArray index = repo.indexBytes();
+    Outcome o = await<Outcome>([&](auto done) {
+        client.revertBetween(repo.root, Client::checkpointRef(u"t1"_s), Client::checkpointRef(u"t2"_s), done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.read(u"a.txt"_s), QByteArray("1\n2\n3\n4\n5\n6\n7\n8\nDZIEWIĘĆ\n10\n"));
+    QVERIFY(!repo.exists(u"nowy ż.txt"_s));
+    QCOMPARE(repo.indexBytes(), index);
+    // Changed since in the same lines: refused, nothing written.
+    QVERIFY(await<Outcome>([&](auto done) { client.checkpoint(repo.root, u"t3"_s, done); }).ok);
+    repo.write(u"a.txt"_s, "1\n2\n3\n4\n5\n6\n7\n8\nINNE\n10\n");
+    o = await<Outcome>([&](auto done) {
+        client.revertBetween(repo.root, Client::checkpointRef(u"t2"_s), Client::checkpointRef(u"t3"_s), done);
+    });
+    QVERIFY(!o.ok);
+    QCOMPARE(repo.read(u"a.txt"_s), QByteArray("1\n2\n3\n4\n5\n6\n7\n8\nINNE\n10\n"));
+    // Nothing between them.
+    o = await<Outcome>([&](auto done) {
+        client.revertBetween(repo.root, Client::checkpointRef(u"t3"_s), Client::checkpointRef(u"t3"_s), done);
+    });
+    QVERIFY(o.ok);
+    o = await<Outcome>([&](auto done) { client.revertBetween(repo.root, u"-x"_s, u"HEAD"_s, done); });
+    QVERIFY(!o.ok);
+}
+
+// ---- Files, hunks, commits ---------------------------------------------------------------------
+
+void TestGitCliRepo::stageAndUnstage()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.write(u"usuń.txt"_s, "x\n");
+    repo.commitAll(u"a"_s);
+    repo.write(u"a.txt"_s, "b\n");
+    repo.remove(u"usuń.txt"_s);
+    repo.write(u":(glob)*"_s, "dziwna nazwa\n");
+    repo.write(u"-n"_s, "opcja?\n");
+    Client client;
+    Outcome o = await<Outcome>([&](auto done) {
+        client.stage(repo.root, {u"a.txt"_s, u"usuń.txt"_s, u":(glob)*"_s, u"-n"_s}, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.text({u"diff"_s, u"--cached"_s, u"--name-status"_s, u"-z"_s}).split(QChar(0), Qt::SkipEmptyParts).size(), 8);
+    QCOMPARE(repo.text({u"diff"_s, u"--name-only"_s}), QString());
+    o = await<Outcome>([&](auto done) { client.unstage(repo.root, {u"a.txt"_s, u":(glob)*"_s}, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    const QString staged = repo.text({u"diff"_s, u"--cached"_s, u"--name-only"_s});
+    QVERIFY(!staged.contains(u"a.txt"_s));
+    QVERIFY(staged.contains(u"usuń.txt"_s) || staged.contains(u"\\305"_s));
+    QCOMPARE(repo.read(u"a.txt"_s), QByteArray("b\n"));
+    QVERIFY(repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? \":(glob)*\""_s)
+            || repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? :(glob)*"_s));
+    // Paths that leave the work tree never reach git.
+    o = await<Outcome>([&](auto done) { client.stage(repo.root, {u"../poza"_s}, done); });
+    QVERIFY(!o.ok);
+    o = await<Outcome>([&](auto done) { client.stage(repo.root, {}, done); });
+    QVERIFY(!o.ok);
+}
+
+void TestGitCliRepo::stageInEmptyRepository()
+{
+    Repo repo;
+    repo.write(u"pierwszy.txt"_s, "1\n");
+    Client client;
+    QVERIFY(await<Outcome>([&](auto done) { client.stage(repo.root, {u"pierwszy.txt"_s}, done); }).ok);
+    QCOMPARE(repo.text({u"ls-files"_s}), u"pierwszy.txt"_s);
+    const Outcome o = await<Outcome>([&](auto done) { client.unstage(repo.root, {u"pierwszy.txt"_s}, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.text({u"ls-files"_s}), QString());
+    QVERIFY(repo.exists(u"pierwszy.txt"_s));
+}
+
+void TestGitCliRepo::discardFiles()
+{
+    Repo repo;
+    repo.write(u"zmieniony.txt"_s, "stary\n");
+    repo.write(u"usunięty.txt"_s, "był\n");
+    repo.write(u"przeniesiony.txt"_s, "przenoszę\nwiele\nlinii\n");
+    repo.commitAll(u"a"_s);
+    repo.write(u"zmieniony.txt"_s, "nowy\n");
+    repo.run({u"add"_s, u"zmieniony.txt"_s});
+    repo.write(u"zmieniony.txt"_s, "jeszcze nowszy\n");
+    repo.remove(u"usunięty.txt"_s);
+    repo.write(u"dodany.txt"_s, "dodany\n");
+    repo.run({u"add"_s, u"dodany.txt"_s});
+    repo.write(u"folder/nieśledzony.txt"_s, "u\n");
+    repo.run({u"mv"_s, u"przeniesiony.txt"_s, u"nowa nazwa.txt"_s});
+    Client client;
+    for (const auto &[path, old] : QList<QPair<QString, QString>>{{u"zmieniony.txt"_s, QString()},
+                                                                  {u"usunięty.txt"_s, QString()},
+                                                                  {u"dodany.txt"_s, QString()},
+                                                                  {u"folder/nieśledzony.txt"_s, QString()},
+                                                                  {u"nowa nazwa.txt"_s, u"przeniesiony.txt"_s}}) {
+        const Outcome o = await<Outcome>([&](auto done) { client.discard(repo.root, path, old, done); });
+        QVERIFY2(o.ok, qPrintable(path + u": "_s + o.message));
+    }
+    QCOMPARE(repo.text({u"status"_s, u"--porcelain"_s, u"--untracked-files=all"_s}), QString());
+    QCOMPARE(repo.read(u"zmieniony.txt"_s), QByteArray("stary\n"));
+    QCOMPARE(repo.read(u"usunięty.txt"_s), QByteArray("był\n"));
+    QCOMPARE(repo.read(u"przeniesiony.txt"_s), QByteArray("przenoszę\nwiele\nlinii\n"));
+    QVERIFY(!repo.exists(u"dodany.txt"_s));
+    QVERIFY(!repo.exists(u"nowa nazwa.txt"_s));
+    QVERIFY(!repo.exists(u"folder/nieśledzony.txt"_s));
+    // The new files went to the trash (this test's home), not gone for good.
+    QDirIterator it(m_home.filePath(u"xdg-data/Trash/files"_s), QDir::Files);
+    QStringList trashed;
+    while (it.hasNext())
+        trashed << QFileInfo(it.next()).fileName();
+    QVERIFY2(trashed.contains(u"dodany.txt"_s), qPrintable(trashed.join(u", "_s)));
+    QVERIFY(trashed.contains(u"nieśledzony.txt"_s));
+}
+
+void TestGitCliRepo::discardRefused()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"a"_s);
+    repo.write(u"podrepo/plik"_s, "x");
+    QDir().mkpath(repo.path(u"podrepo/.git"_s));
+    Client client;
+    Outcome o = await<Outcome>([&](auto done) { client.discard(repo.root, u"podrepo"_s, QString(), done); });
+    QVERIFY(!o.ok);
+    QVERIFY(repo.exists(u"podrepo/plik"_s));
+    o = await<Outcome>([&](auto done) { client.discard(repo.root, u"../a.txt"_s, QString(), done); });
+    QVERIFY(!o.ok);
+    o = await<Outcome>([&](auto done) { client.discard(repo.root, u".git/config"_s, QString(), done); });
+    QVERIFY(!o.ok);
+#ifdef Q_OS_UNIX
+    // Through a link to a folder outside: never.
+    QTemporaryDir outside;
+    QFile victim(outside.filePath(u"ofiara.txt"_s));
+    QVERIFY(victim.open(QIODevice::WriteOnly));
+    victim.write("cenne\n");
+    victim.close();
+    QVERIFY(QFile::link(outside.path(), repo.path(u"link"_s)));
+    o = await<Outcome>([&](auto done) { client.discard(repo.root, u"link/ofiara.txt"_s, QString(), done); });
+    QVERIFY(!o.ok);
+    QVERIFY(QFileInfo::exists(outside.filePath(u"ofiara.txt"_s)));
+#endif
+    // A conflicted file is settled, not thrown away.
+    Repo conflicted;
+    makeConflict(conflicted);
+    conflicted.run({u"merge"_s, u"-q"_s, u"inna"_s}, {}, nullptr);
+    o = await<Outcome>([&](auto done) { client.discard(conflicted.root, u"wspólny.txt"_s, QString(), done); });
+    QVERIFY(!o.ok);
+    QVERIFY(conflicted.read(u"wspólny.txt"_s).contains("<<<<<<<"));
+}
+
+void TestGitCliRepo::hunks()
+{
+    Repo repo;
+    QByteArray lines;
+    for (int i = 1; i <= 30; ++i)
+        lines += "linia " + QByteArray::number(i) + '\n';
+    repo.write(u"plik ż.txt"_s, lines);
+    repo.commitAll(u"a"_s);
+    QByteArray changed = lines;
+    changed.replace("linia 3\n", "LINIA 3\n");
+    changed.replace("linia 25\n", "LINIA 25\nnowa po 25\n");
+    repo.write(u"plik ż.txt"_s, changed);
+    Client client;
+    // The second change only (the work tree's lines 25–26).
+    Outcome o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Stage, 25, 26, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QByteArray staged = repo.run({u"show"_s, u":plik ż.txt"_s});
+    QVERIFY(staged.contains("LINIA 25\nnowa po 25\n"));
+    QVERIFY(staged.contains("linia 3\n"));
+    QCOMPARE(repo.read(u"plik ż.txt"_s), changed);
+    // Again: nothing of those lines is unstaged any more.
+    o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Stage, 25, 26, done); });
+    QVERIFY(!o.ok);
+    // The first one staged too, then taken out of the index again by HEAD's line 3.
+    QVERIFY(await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Stage, 3, 3, done); }).ok);
+    QCOMPARE(repo.run({u"show"_s, u":plik ż.txt"_s}), changed);
+    o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Unstage, 3, 3, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    staged = repo.run({u"show"_s, u":plik ż.txt"_s});
+    QVERIFY(staged.contains("linia 3\n"));
+    QVERIFY(staged.contains("LINIA 25\n"));
+    // Thrown away from the work tree: line 3 back to the index's text, line 25 stays.
+    o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Discard, 3, 3, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    const QByteArray now = repo.read(u"plik ż.txt"_s);
+    QVERIFY(now.contains("linia 3\n"));
+    QVERIFY(now.contains("LINIA 25\nnowa po 25\n"));
+    QCOMPARE(repo.text({u"diff"_s, u"--name-only"_s}), QString());
+    // A binary file has no hunks.
+    repo.write(u"obraz.bin"_s, QByteArray("\0\1\2", 3));
+    repo.commitAll(u"bin"_s);
+    repo.write(u"obraz.bin"_s, QByteArray("\0\1\3", 3));
+    o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"obraz.bin"_s, HunkAction::Stage, 1, 1, done); });
+    QVERIFY(!o.ok);
+    o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"../x"_s, HunkAction::Stage, 1, 1, done); });
+    QVERIFY(!o.ok);
+}
+
+void TestGitCliRepo::commitChosenFiles()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.write(u"b.txt"_s, "b\n");
+    repo.write(u"usuń.txt"_s, "u\n");
+    repo.commitAll(u"start"_s);
+    repo.write(u"a.txt"_s, "A\n");
+    repo.write(u"b.txt"_s, "B staged\n");
+    repo.run({u"add"_s, u"b.txt"_s});
+    repo.write(u"b.txt"_s, "B staged and more\n");
+    repo.remove(u"usuń.txt"_s);
+    repo.write(u"nowy ą.txt"_s, "n\n");
+    repo.write(u"zostaje.txt"_s, "z\n");
+    Client client;
+    CommitRequest req;
+    req.message = u"Tylko wybrane: a, usunięcie i nowy"_s;
+    req.mode = u"paths"_s;
+    req.paths = {u"a.txt"_s, u"usuń.txt"_s, u"nowy ą.txt"_s};
+    req.untracked = {u"nowy ą.txt"_s};
+    const Outcome o = await<Outcome>([&](auto done) { client.commit(repo.root, req, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    const QString committed = repo.text({u"-c"_s, u"core.quotepath=off"_s, u"show"_s, u"--name-status"_s,
+                                         u"--format="_s, u"HEAD"_s});
+    QVERIFY2(committed.contains(u"M\ta.txt"_s), qPrintable(committed));
+    QVERIFY(committed.contains(u"D\tusuń.txt"_s));
+    QVERIFY(committed.contains(u"A\tnowy ą.txt"_s));
+    QVERIFY(!committed.contains(u"b.txt"_s));
+    QVERIFY(!committed.contains(u"zostaje"_s));
+    // b.txt is still staged as it was, with its unstaged rest; zostaje.txt still untracked.
+    QCOMPARE(repo.run({u"show"_s, u":b.txt"_s}), QByteArray("B staged\n"));
+    QCOMPARE(repo.read(u"b.txt"_s), QByteArray("B staged and more\n"));
+    QVERIFY(repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? zostaje.txt"_s));
+
+    // A failing commit (a hook refuses) takes the new files out of the index again.
+    repo.write(u".git/hooks/pre-commit"_s, "#!/bin/sh\nexit 1\n");
+    QFile::setPermissions(repo.path(u".git/hooks/pre-commit"_s), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    CommitRequest refused;
+    refused.message = u"Odrzucony"_s;
+    refused.mode = u"paths"_s;
+    refused.paths = {u"zostaje.txt"_s};
+    refused.untracked = {u"zostaje.txt"_s};
+    const Outcome r = await<Outcome>([&](auto done) { client.commit(repo.root, refused, done); });
+    QVERIFY(!r.ok);
+    QVERIFY(repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? zostaje.txt"_s));
+    CommitRequest none;
+    none.message = u"x"_s;
+    none.mode = u"paths"_s;
+    QVERIFY(!await<Outcome>([&](auto done) { client.commit(repo.root, none, done); }).ok);
+}
+
+void TestGitCliRepo::commitStagedOnly()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
+    repo.commitAll(u"start"_s);
+    repo.write(u"a.txt"_s, "1\nDWA\n3\n4\n5\n6\n7\n8\n9\nDZIESIĘĆ\n");
+    Client client;
+    QVERIFY(await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"a.txt"_s, HunkAction::Stage, 2, 2, done); }).ok);
+    CommitRequest req;
+    req.message = u"Tylko część pliku"_s;
+    req.mode = u"staged"_s;
+    req.paths = {u"a.txt"_s};
+    const Outcome o = await<Outcome>([&](auto done) { client.commit(repo.root, req, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.run({u"show"_s, u"HEAD:a.txt"_s}), QByteArray("1\nDWA\n3\n4\n5\n6\n7\n8\n9\n10\n"));
+    QCOMPARE(repo.read(u"a.txt"_s), QByteArray("1\nDWA\n3\n4\n5\n6\n7\n8\n9\nDZIESIĘĆ\n"));
+    const Outcome nothing = await<Outcome>([&](auto done) { client.commit(repo.root, req, done); });
+    QVERIFY(!nothing.ok);
+}
+
+void TestGitCliRepo::commitOnNewBranch()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"start"_s);
+    repo.write(u"a.txt"_s, "b\n");
+    Client client;
+    CommitRequest req;
+    req.message = u"Na nowej gałęzi"_s;
+    req.newBranch = u"funkcja/nowa-gałąź"_s;
+    const Outcome o = await<Outcome>([&](auto done) { client.commit(repo.root, req, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.text({u"symbolic-ref"_s, u"--short"_s, u"HEAD"_s}), u"funkcja/nowa-gałąź"_s);
+    QCOMPARE(repo.text({u"log"_s, u"-1"_s, u"--format=%s"_s, u"main"_s}), u"start"_s);
+    req.newBranch = u"zła nazwa"_s;
+    QVERIFY(!await<Outcome>([&](auto done) { client.commit(repo.root, req, done); }).ok);
+}
+
+void TestGitCliRepo::commitRefusesConflictMarkers()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"start"_s);
+    repo.write(u"a.txt"_s, "a\n<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> inna\n");
+    repo.write(u"b.txt"_s, "czysty\n");
+    Client client;
+    const QStringList found = await<QStringList>([&](auto done) {
+        client.conflictMarkers(repo.root, {u"a.txt"_s, u"b.txt"_s, u"brak.txt"_s, u"../x"_s}, done);
+    });
+    QCOMPARE(found, QStringList{u"a.txt"_s});
+    CommitRequest req;
+    req.message = u"Z konfliktem"_s;
+    req.paths = {u"a.txt"_s, u"b.txt"_s};
+    const Outcome o = await<Outcome>([&](auto done) { client.commit(repo.root, req, done); });
+    QVERIFY(!o.ok);
+    QVERIFY2(o.message.contains(u"a.txt"_s), qPrintable(o.message));
+    QVERIFY(!o.message.contains(u"b.txt"_s));
+    QCOMPARE(repo.text({u"log"_s, u"-1"_s, u"--format=%s"_s}), u"start"_s);
+    // Many files: found across the slices.
+    QStringList many;
+    for (int i = 0; i < 40; ++i) {
+        const QString name = u"plik%1.txt"_s.arg(i);
+        repo.write(name, i == 37 ? QByteArray(">>>>>>> koniec\n") : QByteArray("ok\n"));
+        many << name;
+    }
+    QCOMPARE(await<QStringList>([&](auto done) { client.conflictMarkers(repo.root, many, done); }),
+             QStringList{u"plik37.txt"_s});
+}
+
+// ---- Merges, rebases, stashes ------------------------------------------------------------------
+
+void TestGitCliRepo::mergeConflictResolved()
+{
+    Repo repo;
+    makeConflict(repo);
+    int code = 0;
+    repo.run({u"merge"_s, u"-q"_s, u"inna"_s}, {}, &code);
+    QVERIFY(code != 0);
+    Client client;
+    const RepoInfo info = await<RepoInfo>([&](auto done) { client.repository(repo.root, done); });
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::Merge);
+    QCOMPARE(Client::operationName(Operation::Merge), u"merge"_s);
+    QCOMPARE(Client::operationFromName(u"cherryPick"_s), Operation::CherryPick);
+    QCOMPARE(Client::operationFromName(u"x"_s), Operation::None);
+    // Not yet: the files are conflicted.
+    Outcome o = await<Outcome>([&](auto done) { client.continueOperation(repo.root, Operation::Merge, done); });
+    QVERIFY(!o.ok);
+    // Marked resolved with its markers still in: refused.
+    o = await<Outcome>([&](auto done) { client.resolve(repo.root, u"wspólny.txt"_s, Resolution::Resolved, done); });
+    QVERIFY(!o.ok);
+    repo.write(u"wspólny.txt"_s, "jeden\nDWA z obu\ntrzy\n");
+    o = await<Outcome>([&](auto done) { client.resolve(repo.root, u"wspólny.txt"_s, Resolution::Resolved, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    // Ours of a file they deleted: kept as ours.
+    o = await<Outcome>([&](auto done) { client.resolve(repo.root, u"usunięty.txt"_s, Resolution::Ours, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.read(u"usunięty.txt"_s), QByteArray("zmieniony\n"));
+    QCOMPARE(repo.text({u"ls-files"_s, u"-u"_s}), QString());
+    o = await<Outcome>([&](auto done) { client.continueOperation(repo.root, Operation::Merge, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::None);
+    QCOMPARE(repo.text({u"log"_s, u"-1"_s, u"--format=%s"_s}), u"Merge branch 'inna'"_s);
+    QCOMPARE(repo.text({u"rev-list"_s, u"--count"_s, u"--merges"_s, u"HEAD"_s}), u"1"_s);
+    o = await<Outcome>([&](auto done) { client.resolve(repo.root, u"wspólny.txt"_s, Resolution::Theirs, done); });
+    QVERIFY(!o.ok); // (no conflict any more)
+}
+
+void TestGitCliRepo::mergeAborted()
+{
+    Repo repo;
+    makeConflict(repo);
+    const QString head = repo.text({u"rev-parse"_s, u"HEAD"_s});
+    repo.run({u"merge"_s, u"-q"_s, u"inna"_s}, {}, nullptr);
+    Client client;
+    const Outcome o = await<Outcome>([&](auto done) { client.abortOperation(repo.root, Operation::Merge, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.text({u"rev-parse"_s, u"HEAD"_s}), head);
+    QCOMPARE(repo.read(u"wspólny.txt"_s), QByteArray("jeden\nDWA z main\ntrzy\n"));
+    QCOMPARE(repo.text({u"status"_s, u"--porcelain"_s}), QString());
+    QVERIFY(!await<Outcome>([&](auto done) { client.abortOperation(repo.root, Operation::None, done); }).ok);
+}
+
+void TestGitCliRepo::takeTheirsOfADeletion()
+{
+    Repo repo;
+    makeConflict(repo);
+    repo.run({u"merge"_s, u"-q"_s, u"inna"_s}, {}, nullptr);
+    Client client;
+    Outcome o = await<Outcome>([&](auto done) { client.resolve(repo.root, u"usunięty.txt"_s, Resolution::Theirs, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QVERIFY(!repo.exists(u"usunięty.txt"_s));
+    o = await<Outcome>([&](auto done) { client.resolve(repo.root, u"wspólny.txt"_s, Resolution::Theirs, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.read(u"wspólny.txt"_s), QByteArray("jeden\nDWA z innej\ntrzy\n"));
+    QCOMPARE(repo.text({u"ls-files"_s, u"-u"_s}), QString());
+}
+
+void TestGitCliRepo::rebaseContinued()
+{
+    Repo repo;
+    makeConflict(repo);
+    repo.run({u"switch"_s, u"-q"_s, u"inna"_s});
+    int code = 0;
+    repo.run({u"rebase"_s, u"main"_s}, {}, &code);
+    QVERIFY(code != 0);
+    Client client;
+    const RepoInfo info = await<RepoInfo>([&](auto done) { client.repository(repo.root, done); });
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::Rebase);
+    QVERIFY(await<Outcome>([&](auto done) { client.resolve(repo.root, u"wspólny.txt"_s, Resolution::Theirs, done); }).ok);
+    QVERIFY(await<Outcome>([&](auto done) { client.resolve(repo.root, u"usunięty.txt"_s, Resolution::Theirs, done); }).ok);
+    const Outcome o = await<Outcome>([&](auto done) { client.continueOperation(repo.root, Operation::Rebase, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::None);
+    QCOMPARE(repo.text({u"log"_s, u"-1"_s, u"--format=%s"_s}), u"inna zmiana"_s);
+    QCOMPARE(repo.text({u"rev-parse"_s, u"HEAD~1"_s}), repo.text({u"rev-parse"_s, u"main"_s}));
+}
+
+void TestGitCliRepo::cherryPickAborted()
+{
+    Repo repo;
+    makeConflict(repo);
+    const QString head = repo.text({u"rev-parse"_s, u"HEAD"_s});
+    repo.run({u"cherry-pick"_s, u"inna"_s}, {}, nullptr);
+    Client client;
+    const RepoInfo info = await<RepoInfo>([&](auto done) { client.repository(repo.root, done); });
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::CherryPick);
+    const Outcome o = await<Outcome>([&](auto done) { client.abortOperation(repo.root, Operation::CherryPick, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::None);
+    QCOMPARE(repo.text({u"rev-parse"_s, u"HEAD"_s}), head);
+}
+
+void TestGitCliRepo::stashes()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"a"_s);
+    Client client;
+    StashList list = await<StashList>([&](auto done) { client.stashes(repo.root, done); });
+    QVERIFY(list.ok);
+    QVERIFY(list.stashes.isEmpty());
+    Outcome o = await<Outcome>([&](auto done) { client.stashPush(repo.root, u"nic"_s, done); });
+    QVERIFY(!o.ok);
+    repo.write(u"a.txt"_s, "zmiana\n");
+    repo.write(u"nowy ż.txt"_s, "nowy\n");
+    o = await<Outcome>([&](auto done) { client.stashPush(repo.root, u"Przed zmianą — ąę"_s, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.text({u"status"_s, u"--porcelain"_s}), QString());
+    repo.write(u"b.txt"_s, "b\n");
+    QVERIFY(await<Outcome>([&](auto done) { client.stashPush(repo.root, QString(), done); }).ok);
+    list = await<StashList>([&](auto done) { client.stashes(repo.root, done); });
+    QCOMPARE(list.stashes.size(), 2);
+    QCOMPARE(list.stashes.at(1).message, u"On main: Przed zmianą — ąę"_s);
+    QCOMPARE(list.stashes.at(1).branch, u"main"_s);
+    const QString older = list.stashes.at(1).oid;
+    const QString newer = list.stashes.at(0).oid;
+    // Apply keeps it; pop of the older one (its index found again) drops only it.
+    o = await<Outcome>([&](auto done) { client.stashApply(repo.root, newer, false, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QVERIFY(repo.exists(u"b.txt"_s));
+    repo.remove(u"b.txt"_s);
+    o = await<Outcome>([&](auto done) { client.stashApply(repo.root, older, true, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.read(u"a.txt"_s), QByteArray("zmiana\n"));
+    QCOMPARE(repo.read(u"nowy ż.txt"_s), QByteArray("nowy\n"));
+    list = await<StashList>([&](auto done) { client.stashes(repo.root, done); });
+    QCOMPARE(list.stashes.size(), 1);
+    QCOMPARE(list.stashes.at(0).oid, newer);
+    o = await<Outcome>([&](auto done) { client.stashDrop(repo.root, newer, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    list = await<StashList>([&](auto done) { client.stashes(repo.root, done); });
+    QVERIFY(list.stashes.isEmpty());
+    QVERIFY(!await<Outcome>([&](auto done) { client.stashDrop(repo.root, newer, done); }).ok);
+    QVERIFY(!await<Outcome>([&](auto done) { client.stashApply(repo.root, u"--index"_s, false, done); }).ok);
 }
 
 QTEST_GUILESS_MAIN(TestGitCliRepo)

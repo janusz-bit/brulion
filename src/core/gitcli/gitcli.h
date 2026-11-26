@@ -12,9 +12,15 @@
 //   parseWorktrees()  `git worktree list --porcelain [-z]`
 //   parseBranches()   `git branch --format=<branchFormat()>`
 //   parsePullRequestUrl()  the URL `gh pr create` prints (also in its "already exists" error)
+//   parseLog(), parseStashes(), parseRemotes(), parseRemoteUrl(), forkTarget(),
+//   parsePullRequestView()   history, stashes, remotes, the fork a pull request comes from, gh's JSON
+//                     (history.cpp)
+//   parsePatch(), hunksTouching(), patchOf(), hasConflictMarkers()   one file's unified diff, the
+//                     hunks that change some lines, a patch of some of them, git's conflict
+//                     markers (patch.cpp)
 //
 // and small rules the client and the app share (isValidBranchName(), isValidCheckpointId(),
-// isSafeRelativePath(), looksBinary(), subjectOf()). Malformed input never crashes a parser: a
+// isSafeRelativePath(), isSafeRevision(), isValidRepositoryName(), looksBinary(), subjectOf()). Malformed input never crashes a parser: a
 // record that does not read is skipped, a truncated one at the end dropped. Paths are git's bytes
 // as UTF-8 (with -z git never quotes them: spaces, newlines and any letters come through as they
 // are).
@@ -22,9 +28,11 @@
 // client.h: Client, which runs git and gh asynchronously (QProcess) and builds the operations on
 // these parsers, checkpoints included.
 
+#include <QByteArray>
 #include <QByteArrayView>
 #include <QList>
 #include <QString>
+#include <QStringList>
 #include <QStringView>
 
 namespace brulion::gitcli {
@@ -197,10 +205,150 @@ QString branchFormat();
 /// order; symbolic refs (origin/HEAD) left out.
 QList<Branch> parseBranches(QByteArrayView data);
 
+// ---- git log -----------------------------------------------------------------------------------
+
+struct Commit {
+    QString oid;
+    /// Its parents' ids (none: a root commit; two or more: a merge).
+    QStringList parents;
+    QString authorName;
+    QString authorEmail;
+    /// When it was written (the author's time), seconds since 1970.
+    qint64 authorTime = 0;
+    /// The message's first line.
+    QString subject;
+};
+
+/// The --format parseLog() reads (`tformat:`, six NUL-terminated fields a commit, the record ended
+/// by a newline).
+QString logFormat();
+/// `git log --format=<logFormat()>`: the commits in git's order.
+QList<Commit> parseLog(QByteArrayView data);
+
+// ---- git stash list ----------------------------------------------------------------------------
+
+struct Stash {
+    /// n of stash@{n} (0 the newest) — when it was listed: another stash pushed meanwhile moves it.
+    int index = -1;
+    /// The stash's commit (what apply takes; drop finds its index again by it).
+    QString oid;
+    /// When it was made, seconds since 1970.
+    qint64 time = 0;
+    /// Its message ("On main: before the turn", "WIP on main: 1a2b3c4 subject").
+    QString message;
+    /// The branch it was made on ("" when the message does not say).
+    QString branch;
+};
+
+/// The --format parseStashes() reads (four NUL-terminated fields a stash).
+QString stashFormat();
+/// `git stash list --format=<stashFormat()>`.
+QList<Stash> parseStashes(QByteArrayView data);
+
+// ---- Remotes -----------------------------------------------------------------------------------
+
+struct Remote {
+    QString name;
+    QString fetchUrl;
+    QString pushUrl;
+};
+
+/// `git remote -v`: "name<TAB>url (fetch)" and "(push)" lines, one Remote a name, in git's order.
+QList<Remote> parseRemotes(QByteArrayView data);
+
+/// A repository on a host, read from a remote's URL.
+struct RepoSlug {
+    QString host;
+    QString owner;
+    QString name;
+    bool isValid() const { return !host.isEmpty() && !owner.isEmpty() && !name.isEmpty(); }
+    /// "owner/name".
+    QString path() const { return owner + u'/' + name; }
+};
+
+/// The host, owner and name of `git@github.com:owner/name.git`, `https://github.com/owner/name`,
+/// `ssh://git@host:22/owner/name.git` …; invalid for anything else (a local path, one part only).
+RepoSlug parseRemoteUrl(QStringView url);
+
+/// Where `gh pr create` opens a pull request from a fork: `repo` the repository to open it in
+/// ("owner/name", `--repo`) and `head` the branch as "owner:branch" (`--head`); both "" when the
+/// branch is pushed to the repository gh targets anyway.
+struct ForkTarget {
+    QString repo;
+    QString head;
+};
+
+/// The fork case: the branch is pushed to `pushRemote` ("" origin), and a remote called
+/// "upstream" is another repository on the same host — the pull request goes there, from
+/// "<push remote's owner>:<branch>".
+ForkTarget forkTarget(const QList<Remote> &remotes, const QString &pushRemote, const QString &branch);
+
 // ---- gh ----------------------------------------------------------------------------------------
 
 /// The last pull request URL (http(s)://…/pull/<n>) in `gh pr create`'s output or error; "" none.
 QString parsePullRequestUrl(QStringView output);
+
+/// A pull request as `gh pr view --json number,url,state,isDraft,title,baseRefName` gives it.
+struct PullRequestInfo {
+    int number = 0;
+    QString url;
+    /// "open" | "draft" | "merged" | "closed" (a draft is open).
+    QString state;
+    QString title;
+    QString baseRefName;
+    bool isValid() const { return number > 0 && !url.isEmpty(); }
+};
+
+/// gh's JSON; invalid when it does not read (no number or no url).
+PullRequestInfo parsePullRequestView(QByteArrayView json);
+
+/// A name `gh repo create` takes: "name" or "owner/name", each of 1–100 of [A-Za-z0-9._-], not
+/// "." or "..".
+bool isValidRepositoryName(QStringView name);
+
+// ---- Patches -----------------------------------------------------------------------------------
+
+/// One hunk of a unified diff.
+struct Hunk {
+    int oldStart = 0;
+    int oldLines = 0;
+    int newStart = 0;
+    int newLines = 0;
+    /// What follows the second "@@" (a function's name; "" none), as git wrote it.
+    QByteArray section;
+    /// Its lines as written: ' ' / '-' / '+' and the text, or "\ No newline at end of file" —
+    /// without the '\n' (a '\r' of a CRLF file stays: it is the line's).
+    QList<QByteArray> lines;
+    /// The lines it changes, counted on each side (first, last; 0, 0 when none there): a deletion
+    /// is at the old side's lines it deletes and at the new side's line it comes before (and the
+    /// other way round), so a range of either side's lines finds the hunks that change them.
+    int oldFirst = 0;
+    int oldLast = 0;
+    int newFirst = 0;
+    int newLast = 0;
+};
+
+/// One file's unified diff (`git diff -- <path>`).
+struct FilePatch {
+    /// The lines before the first hunk (diff --git, index, ---, +++ …), each ending with '\n'.
+    QByteArray header;
+    QList<Hunk> hunks;
+    /// "Binary files … differ" / a GIT binary patch: no hunks to take.
+    bool binary = false;
+};
+
+/// The first file of a unified diff; hunks whose counts do not add up are dropped.
+FilePatch parsePatch(QByteArrayView data);
+/// The hunks of `patch` that change a line of [first, last] (1-based) on the new side (`newSide`)
+/// or the old one.
+QList<int> hunksTouching(const FilePatch &patch, int first, int last, bool newSide);
+/// A patch of the header and the hunks `indexes` alone, for `git apply`: the new sides' starts
+/// counted again as if only they were applied — with `reverse` (`git apply -R`, to a file that
+/// has all of them) the old sides' instead. "" when no index is a hunk.
+QByteArray patchOf(const FilePatch &patch, const QList<int> &indexes, bool reverse = false);
+
+/// A line starts with a conflict marker of git's ("<<<<<<< " or ">>>>>>> ", or the marker alone).
+bool hasConflictMarkers(QByteArrayView data);
 
 // ---- Rules -------------------------------------------------------------------------------------
 
@@ -215,6 +363,10 @@ bool isValidCheckpointId(QStringView id);
 /// A path inside the work tree as git writes it: relative, '/'-separated, no empty, ".", ".." or
 /// ".git" part (".git" in any case), no backslash, no NUL. What restore() deletes passes this.
 bool isSafeRelativePath(QStringView path);
+/// A revision the client hands git as an argument (a commit's id, a branch, "HEAD~1",
+/// "origin/main", a checkpoint's ref): not empty, no leading '-' (never an option), no space,
+/// control character or ':' (a revision and a path are joined with ':'), at most 250 characters.
+bool isSafeRevision(QStringView revision);
 /// git's own test: a NUL in the first 8000 bytes.
 bool looksBinary(QByteArrayView data);
 /// The first line of a commit message that is not blank, trimmed — a pull request's default title.

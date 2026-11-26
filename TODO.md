@@ -10,11 +10,14 @@ done in the repository simply disappears from the list.
   and the terminal are there (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
   real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
   mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
-  staging and discarding single files or hunks, stash, merge conflicts, pull requests from forks or
-  to another base in the UI; for a thread of another computer's project (continued from the phone
-  through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and the
-  terminal from the phone, a worktree from another base, projects of two computers with the same id;
-  t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
+  hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
+  a commit message and a pull request's text written by AI when left empty (a small "ask the AI
+  once" QML type in src/app/shell over `WorkspaceExtensions::sendAi`, handed to the panel), a turn's
+  changes without what the user changed between turns, `--skip` while rebasing, `git fetch` of its
+  own (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
+  the phone through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and
+  the terminal from the phone, a worktree from another base, projects of two computers with the same
+  id; t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
   multi-repository projects and custom worktree layouts; an AI-made branch name for a new worktree;
   automatic worktree cleanup (by age, merged pull requests); settling and snoozing threads,
   "Regenerate title", files dropped on a thread's row, scratch threads without a project.

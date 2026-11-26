@@ -479,6 +479,12 @@ void Client::fileTexts(const QString &folder, const FileTextsRequest &request,
         later([done = std::move(done), texts] { done(texts); });
         return;
     }
+    if ((!request.base.isEmpty() && !isSafeRevision(request.base))
+        || (!request.target.isEmpty() && !isSafeRevision(request.target))) {
+        texts.error = GitMessages::tr("Not a revision: %1").arg(request.base + u' ' + request.target);
+        later([done = std::move(done), texts] { done(texts); });
+        return;
+    }
     // The work tree's side, from disk (bounded).
     const auto readNew = [folder, request](FileTexts &t, QByteArray &bytes) {
         const QString full = inTree(folder, request.path);
@@ -525,13 +531,53 @@ void Client::fileTexts(const QString &folder, const FileTextsRequest &request,
         }
         return t;
     };
+    RunOptions o;
+    o.readOnly = true;
+    o.maxOutput = MaxTextBytes;
+    if (!request.target.isEmpty()) {
+        // Both sides in git: the base's and the target's blobs.
+        const auto withOld = [this, folder, request, o, done](FileTexts t, const QByteArray &oldBytes) {
+            git(folder, {u"cat-file"_s, u"blob"_s, request.target + u':' + request.path}, o,
+                [t, oldBytes, done](const RunResult &r) mutable {
+                    t.ok = true;
+                    if (r.outputCut) {
+                        t.tooLarge = true;
+                        t.newExists = true;
+                        done(t);
+                        return;
+                    }
+                    t.newExists = r.ok();
+                    const QByteArray newBytes = r.ok() ? r.out : QByteArray();
+                    t.binary = looksBinary(oldBytes) || looksBinary(newBytes);
+                    if (!t.binary) {
+                        t.oldText = QString::fromUtf8(oldBytes);
+                        t.newText = QString::fromUtf8(newBytes);
+                    }
+                    done(t);
+                });
+        };
+        if (request.base.isEmpty()) {
+            later([withOld, texts] { withOld(texts, {}); });
+            return;
+        }
+        git(folder, {u"cat-file"_s, u"blob"_s, request.base + u':' + basePath}, o,
+            [withOld, done, texts](const RunResult &r) mutable {
+                if (r.outputCut) {
+                    texts.tooLarge = true;
+                    texts.oldExists = true;
+                    texts.ok = true;
+                    done(texts);
+                    return;
+                }
+                texts.oldExists = r.ok();
+                withOld(texts, r.ok() ? r.out : QByteArray());
+            });
+        return;
+    }
     if (request.base.isEmpty()) {
         later([done = std::move(done), texts, finish] { done(finish(texts, {})); });
         return;
     }
-    RunOptions o;
-    o.readOnly = true;
-    o.maxOutput = MaxTextBytes;
     git(folder, {u"cat-file"_s, u"blob"_s, request.base + u':' + basePath}, o,
         [done = std::move(done), texts, finish](const RunResult &r) mutable {
             if (r.outputCut) {
@@ -793,6 +839,8 @@ void Client::createPullRequest(const QString &folder, const PullRequest &request
         args << u"--head"_s << request.head;
     if (!request.base.isEmpty())
         args << u"--base"_s << request.base;
+    if (!request.repo.isEmpty())
+        args << u"--repo"_s << request.repo;
     gh(folder, args, {}, [done = std::move(done)](const RunResult &r) {
         const QString all = QString::fromUtf8(r.out) + u'\n' + r.err;
         const QString url = parsePullRequestUrl(all);

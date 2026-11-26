@@ -1459,8 +1459,13 @@ Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
   `showList: false`, `project`, `wantsWorktree` / `worktreeWanted()`, `newWorktree` / `newBranch` /
   `newPullRequest`; only agents among the partners (`chatNewPartner` shown with one agent too; the
   project's default agent chosen); its empty state "What should the agent do?" with suggestions
-  (`codeSuggestions`) — over the terminal (`codeTerminal`, `TerminalPanel`), and the Changes panel beside
-  them (`codeChanges`, `GitChangesPanel`).
+  (`codeSuggestions`) — over the terminal (`codeTerminal`, `TerminalPanel`), and the Changes panel
+  beside them (`codeChanges`, `GitChangesPanel`:
+  docs/CODE-GIT.md "The panel" — the diff sources Latest turn / Turn N / Uncommitted / Branch /
+  Commits, `GitDiffView` with hunks, find and review comments, the file menu, the quick action, the
+  merge / rebase banner). CodeView gives it the thread's `checkpoints` and turns its signals into the
+  editor (`openFile`), the composer (`addToChat` → `chat.addToComposer`), the clipboard (`copyText`)
+  and the browser (`openUrl`).
 * **CodeProjectDialog** (`codeProjectDialog`): the name `codeProjectName`, the icon (an emoji,
   `codeProjectIconField`), new threads' agent (`codeProjectAgent`) and environment (`codeProjectEnv`:
   Default / Local / New worktree), and the scripts (`CodeScriptsEditor`, `codeProjectScripts`; rows of

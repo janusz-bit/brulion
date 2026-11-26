@@ -566,6 +566,18 @@ bool isSafeRelativePath(QStringView path)
     return true;
 }
 
+bool isSafeRevision(QStringView revision)
+{
+    if (revision.isEmpty() || revision.size() > 250 || revision.startsWith(u'-'))
+        return false;
+    for (const QChar c : revision) {
+        const char16_t u = c.unicode();
+        if (u <= 0x20 || u == 0x7f || u == u':' || u == u'\\')
+            return false;
+    }
+    return true;
+}
+
 bool looksBinary(QByteArrayView data)
 {
     return data.first(qMin<qsizetype>(data.size(), 8000)).contains('\0');
