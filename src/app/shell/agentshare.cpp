@@ -67,6 +67,7 @@ AgentShare::AgentShare(Workspace *workspace, WorkspaceAgents *agents, QObject *p
     : QObject(parent), m_workspace(workspace), m_agents(agents), m_command(defaultCommand())
 {
     m_server = new ServerProcess(u"AI agents for the phone"_s, this);
+    m_server->setLaunchEnvironment([this](QProcessEnvironment &env) { grantFor(env); });
     connect(m_server, &ServerProcess::stateChanged, this, &AgentShare::serverChanged);
     connect(m_server, &ServerProcess::announced, this, &AgentShare::announced);
     // (The server says when a device paired: the count follows.)
@@ -95,7 +96,49 @@ AgentShare::AgentShare(Workspace *workspace, WorkspaceAgents *agents, QObject *p
     }
 }
 
-AgentShare::~AgentShare() = default;
+AgentShare::~AgentShare()
+{
+    revokeAppGrant();
+}
+
+void AgentShare::setAppGrants(GrantFunction grant, RevokeFunction revoke)
+{
+    m_grant = std::move(grant);
+    m_revoke = std::move(revoke);
+    // (A server started before the app could grant anything: started again, with its grant.)
+    if (m_grant && m_server->active() && m_appToken.isEmpty() && !m_server->program().isEmpty()) {
+        qCInfo(logging::lcApp, "AI agents for the phone: starting again with the app's grant");
+        m_server->start();
+    }
+}
+
+void AgentShare::grantFor(QProcessEnvironment &env)
+{
+    // A new grant for each process (the one before ended with it), only in its environment.
+    revokeAppGrant();
+    env.remove(QString::fromLatin1(SocketVariable));
+    env.remove(QString::fromLatin1(TokenVariable));
+    if (!m_grant)
+        return;
+    const AppGrant g = m_grant();
+    if (g.token.isEmpty() || g.socket.isEmpty()) {
+        if (!g.token.isEmpty() && m_revoke)
+            m_revoke(g.token);
+        qCWarning(logging::lcApp, "AI agents for the phone: the app's conversations are not shared with it (no "
+                                  "control socket)");
+        return;
+    }
+    m_appToken = g.token;
+    env.insert(QString::fromLatin1(SocketVariable), g.socket);
+    env.insert(QString::fromLatin1(TokenVariable), g.token);
+}
+
+void AgentShare::revokeAppGrant()
+{
+    const QString token = std::exchange(m_appToken, QString());
+    if (!token.isEmpty() && m_revoke)
+        m_revoke(token);
+}
 
 bool AgentShare::available() const
 {
@@ -283,12 +326,18 @@ void AgentShare::launch(const Launch &l)
     if (std::ranges::none_of(agents, [](const AgentConfig &a) { return a.tools; }))
         args << u"--no-tools"_s;
     m_server->setProgram(m_command.first(), m_command.mid(1) + args);
+    // (The app's environment read now, as the webhooks' server does; each process's grant is added
+    // to it as it starts: grantFor().)
+    m_server->setEnvironment(QProcessEnvironment::systemEnvironment());
     m_server->start();
     Q_EMIT changed();
 }
 
 void AgentShare::serverChanged()
 {
+    // (Its process ended — stopped, crashed, refused: its grant goes with it.)
+    if (m_server->state() != ServerProcess::State::Running && m_server->state() != ServerProcess::State::Starting)
+        revokeAppGrant();
     if (m_server->state() != ServerProcess::State::Running) {
         m_url.clear();
         m_tailnet = false;

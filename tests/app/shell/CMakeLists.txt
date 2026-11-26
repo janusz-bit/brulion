@@ -364,12 +364,16 @@ add_dependencies(tst_shell_serverprocess fake_server)
 # network's address, the notebook's offers; and the real `brulion-cli acp serve` started by the
 # switch against a fake tailscaled (tests/common/faketailscaled.h): its tailnet name, the offer in
 # config.json, a pairing without a code from the app's client, a code and its link, unpairing,
-# the code asked for without the trust, turned off.
+# the code asked for without the trust, turned off; the app's grant for each of its processes (a
+# stand-in control socket: its conversations shared with the phone, the grant in its environment
+# alone, never its agents').
 brulion_add_test(tst_shell_agentshare SOURCES tst_agentshare.cpp ${PROJECT_SOURCE_DIR}/tests/common/faketailscaled.h
     LIBS brulion_shell brulion_core_tailscale brulion_core_vault Qt6::Network)
 if(TARGET brulion-cli)
     target_compile_definitions(tst_shell_agentshare PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
     add_dependencies(tst_shell_agentshare brulion-cli)
+    # (The app's grant for the server — its conversations for the phone — from a stand-in control socket.)
+    target_link_libraries(tst_shell_agentshare PRIVATE brulion_ipc)
 endif()
 math(EXPR _agentshare_timeout "180 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_shell_agentshare PROPERTIES TIMEOUT ${_agentshare_timeout})
