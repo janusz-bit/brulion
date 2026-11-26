@@ -4,6 +4,7 @@
 // you sign in" (over an Autostart on INI files).
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "codeprojects.h"
 #include "autostart.h"
 #include "commandmodel.h"
 #include "demovault.h"
@@ -1417,6 +1418,77 @@ private Q_SLOTS:
         QCOMPARE(triggered.size(), 1);
     }
 
+    // Code mode's commands (docs/CODE.md "Shortcuts"): their shortcuts in ShortcutMap's scope "code"
+    // (Ctrl+O beside "Go to page…"), the shown project's scripts as "Run: …" with their own
+    // shortcuts, what they do (navigations, uiActions "code:<what>"), and a deleted thread's Undo
+    // through the toast (the page back from the trash).
+    void codeModeCommands()
+    {
+        auto app = openApp(u"kodowy"_s);
+        const QString folder = m_tmp.filePath(u"Kalkulator żółwia"_s);
+        QVERIFY(QDir().mkpath(folder));
+        {
+            QFile t3(folder + u"/t3.json"_s);
+            QVERIFY(t3.open(QIODevice::WriteOnly));
+            t3.write(R"({"scripts":[{"name":"Budowanie","command":"make","icon":"build"}]})");
+        }
+        CodeProjects *projects = app->workspace()->projects();
+        const QString id = projects->add(folder);
+        QVERIFY(!id.isEmpty());
+        projects->setScripts(id, {QVariantMap{{u"name"_s, u"Testy"_s}, {u"command"_s, u"ctest"_s},
+                                              {u"icon"_s, u"test"_s}, {u"shortcut"_s, u"Ctrl+Alt+T"_s}}});
+        app->settings()->setAppMode(u"code"_s);
+        app->navigate({{u"view"_s, u"code"_s}, {u"new"_s, true}, {u"project"_s, id}});
+        CommandModel *model = app->commands();
+        ShortcutMap *keys = app->shortcuts();
+        QVERIFY(model->ids().contains(u"code.newLocalThread"_s));
+        QCOMPARE(keys->sequence(u"code.openInEditor"_s), u"Ctrl+O"_s);
+        QCOMPARE(keys->sequence(u"page.switch"_s), u"Ctrl+O"_s);
+        QCOMPARE(keys->scopeOf(u"code.openInEditor"_s), u"code"_s);
+        QCOMPARE(keys->sequence(u"code.toggleChanges"_s), u"Ctrl+D"_s);
+        QCOMPARE(keys->sequence(u"code.newThread"_s), u"Ctrl+Shift+O"_s);
+        QCOMPARE(keys->sequence(u"code.renameThread"_s), u"F2"_s);
+        QCOMPARE(keys->sequence(u"page.rename"_s), u"F2"_s);
+        QVERIFY(keys->title(u"code.branches"_s).startsWith(u"Code mode: "_s));
+        // The shown project's scripts, the device's and its t3.json's.
+        const QString testy = u"code.script.%1.testy"_s.arg(id);
+        const QString build = u"code.script.%1.budowanie"_s.arg(id);
+        QVERIFY(model->ids().contains(testy) && model->ids().contains(build));
+        QCOMPARE(keys->sequence(testy), u"Ctrl+Alt+T"_s);
+        bool titled = false;
+        for (const QVariant &v : model->commands()) {
+            const QVariantMap c = v.toMap();
+            if (c.value(u"id"_s) == testy)
+                titled = c.value(u"title"_s).toString() == u"Run: Testy — Kalkulator żółwia"_s
+                         && c.value(u"shortcut"_s) == u"Ctrl+Alt+T"_s && c.value(u"icon"_s) == u"circle-check"_s;
+        }
+        QVERIFY(titled);
+        // What they do.
+        QSignalSpy actions(app.get(), &AppController::uiActionRequested);
+        QVERIFY(model->run(u"code.branches"_s));
+        QVERIFY(model->run(testy));
+        QVERIFY(model->run(u"code.toggleChanges"_s));
+        QVERIFY(!model->run(u"code.renameThread"_s)); // (a new thread: nothing to rename)
+        QCOMPARE(strings(actions), (QStringList{u"code:branches"_s, u"code:script:testy"_s, u"code:toggleChanges"_s}));
+        QVERIFY(model->run(u"code.newLocalThread"_s));
+        QCOMPARE(app->currentRoute().value(u"env"_s).toString(), u"local"_s);
+        QCOMPARE(app->currentRoute().value(u"project"_s).toString(), id);
+        // Elsewhere (Notes mode's views): no script of the project, the commands off.
+        app->settings()->setAppMode(u"notes"_s);
+        app->navigate({{u"view"_s, u"tasks"_s}});
+        QVERIFY(!model->ids().contains(testy));
+        QVERIFY(!model->run(u"code.branches"_s));
+        // A deleted thread's Undo (CodeProjects.keepUndo): its page back from the trash.
+        const QString page = app->workspace()->createPage(u"Wątek do kosza"_s);
+        const QString trashed = app->workspace()->deletePage(page);
+        QVERIFY(!trashed.isEmpty() && !app->workspace()->exists(page));
+        const int toast = app->toastWithAction(u"Wątek trafił do kosza"_s, u"info"_s, u"Cofnij"_s);
+        projects->keepUndo(toast, {trashed}, id, QString(), QString(), false);
+        app->setToastHostId(toast, 31);
+        app->hostToastActionTriggered(31);
+        QVERIFY(app->workspace()->exists(page));
+    }
+
     // The breadcrumb's folders (the top bar): every folder down to the one given.
     void folderChain_data()
     {
@@ -1830,7 +1902,7 @@ private Q_SLOTS:
         };
         QCOMPARE(commandNamed(u"block.copyRef"_s).value(u"shortcut"_s).toString(), u"Ctrl+Shift+C"_s);
         // The shortcuts' actions (ShortcutMap): the palette, then every command; each default can
-        // be a shortcut and belongs to one action. The palette shows a custom one.
+        // be a shortcut and belongs to one action of its scope. The palette shows a custom one.
         {
             using brulion::shell::ShortcutMap;
             const QList<ShortcutMap::Action> actions = model->shortcutActions();
@@ -1843,9 +1915,11 @@ private Q_SLOTS:
                     continue;
                 QCOMPARE(ShortcutMap::normalize(a.defaultSequence), a.defaultSequence);
                 QVERIFY2(!ShortcutMap::typesText(a.defaultSequence), qPrintable(a.id));
-                QVERIFY2(ShortcutMap::reservedUse(a.defaultSequence).isEmpty(), qPrintable(a.id));
-                QVERIFY2(!defaults.contains(a.defaultSequence), qPrintable(a.defaultSequence));
-                defaults.insert(a.defaultSequence);
+                // (Unique within a scope: Code mode's may have a key of one that is everywhere.)
+                QVERIFY2(ShortcutMap::reservedIn(a.defaultSequence, a.scope).isEmpty(), qPrintable(a.id));
+                const QString key = a.scope + u'|' + a.defaultSequence;
+                QVERIFY2(!defaults.contains(key), qPrintable(a.defaultSequence));
+                defaults.insert(key);
             }
             QCOMPARE(app->shortcuts()->sequence(u"view.focus"_s), u"F8"_s);
             QSignalSpy shortcutsChanged(model, &CommandModel::commandsChanged);

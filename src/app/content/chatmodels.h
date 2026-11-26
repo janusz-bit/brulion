@@ -214,6 +214,12 @@ class ChatListModel : public WorkspaceListModel {
     Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged FINAL)
     /// How many are listed (rows).
     Q_PROPERTY(int count READ count NOTIFY sectionsChanged FINAL)
+    /// Code mode's sidebar: words the rows' title or branch has all of ("" all; not the messages, unlike
+    /// `query`).
+    Q_PROPERTY(QString filter READ filter WRITE setFilter NOTIFY filterChanged FINAL)
+    /// The order after pinned ones: "activity" (what needs the user, then the last change: the
+    /// default) or "created" (the newest conversation first: its first message's time).
+    Q_PROPERTY(QString sortBy READ sortBy WRITE setSortBy NOTIFY sortByChanged FINAL)
 
 public:
     enum Role {
@@ -237,7 +243,9 @@ public:
         MatchTextRole,
         MatchMatchesRole,
         MatchLineRole,
-        ProjectRole
+        ProjectRole,
+        BranchRole,
+        WorktreeRole
     };
     explicit ChatListModel(QObject *parent = nullptr);
     QString project() const { return m_project; }
@@ -250,6 +258,10 @@ public:
     void setQuery(const QString &query);
     bool showArchived() const { return m_showArchived; }
     void setShowArchived(bool show);
+    QString filter() const { return m_filter; }
+    void setFilter(const QString &filter);
+    QString sortBy() const { return m_sortBy; }
+    void setSortBy(const QString &sort);
     int archivedCount() const { return m_archivedCount; }
     int pinnedCount() const { return m_pinnedCount; }
 
@@ -260,6 +272,8 @@ public:
     /// The conversation of row `row` ("" for a bad row) / the first line of its message that
     /// matches the query (-1 none).
     Q_INVOKABLE QString pathAt(int row) const;
+    /// Every listed conversation's path, in the rows' order.
+    Q_INVOKABLE QStringList paths() const;
     Q_INVOKABLE int matchLineAt(int row) const;
 
     /// "2026-11-15 Co mam jutro" → {"2026-11-15", "Co mam jutro"}; a name without a date: {"", name}.
@@ -275,6 +289,8 @@ Q_SIGNALS:
     void showArchivedChanged();
     void sectionsChanged();
     void projectChanged();
+    void filterChanged();
+    void sortByChanged();
 
 protected:
     void refresh() override;
@@ -293,6 +309,11 @@ private:
         bool pinned = false;
         bool archived = false;
         QString project;
+        /// A thread's worktree and branch ("" the project's folder).
+        QString worktree;
+        QString branch;
+        /// When it was started (its first message's time, ms since the epoch; else its date's).
+        qint64 created = 0;
         /// Its messages for a query: {first line in the page, text, the text folded}.
         struct Text {
             int line = 0;
@@ -323,6 +344,9 @@ private:
         QList<int> matchMatches;
         int matchLine = -1;
         QString project;
+        QString worktree;
+        QString branch;
+        qint64 created = 0;
         bool operator==(const Row &) const = default;
     };
     QList<Entry> m_all;
@@ -331,6 +355,8 @@ private:
     QString m_query;
     bool m_showArchived = false;
     QString m_project;
+    QString m_filter;
+    QString m_sortBy = QStringLiteral("activity");
     int m_archivedCount = 0;
     int m_pinnedCount = 0;
     QList<QMetaObject::Connection> m_turnsChanged;

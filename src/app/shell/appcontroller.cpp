@@ -515,6 +515,9 @@ AppController::AppController(const Options &options, QObject *parent)
     m_workspace->projects()->setStorage(
             [this] { return m_settings->value(u"code/projects"_s).toString().toUtf8(); },
             [this](const QByteArray &json) { m_settings->setValue(u"code/projects"_s, QString::fromUtf8(json)); });
+    // (A deleted thread's toast: its Undo brings the thread back, and its worktree when it went.)
+    connect(this, &AppController::toastActionTriggered, m_workspace->projects(), &CodeProjects::undo);
+    connect(this, &AppController::toastRemoved, m_workspace->projects(), &CodeProjects::forgetUndo);
     // Who answers a new conversation and whether AI agents and extensions may notify the user
     // (Settings → Extensions): the device's choices.
     const auto chatChoices = [this] {

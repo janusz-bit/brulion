@@ -140,6 +140,21 @@ QString ShortcutMap::reservedUse(const QString &normalized)
     return reservedKeys().value(normalized);
 }
 
+QString ShortcutMap::reservedIn(const QString &normalized, const QString &scope)
+{
+    const QString area = reservedUse(normalized);
+    // (Code mode shows no drawing, PDF, canvas nor the AI chat's list; its Ctrl+1–9 are its threads.)
+    if (scope == u"code"
+        && (area == u"drawing" || area == u"pdf" || area == u"canvas" || area == u"tabs" || area == u"chat"))
+        return {};
+    return area;
+}
+
+QString ShortcutMap::ownerKey(const QString &scope, const QString &sequence)
+{
+    return scope.isEmpty() ? sequence : scope + u'\n' + sequence;
+}
+
 bool ShortcutMap::typesText(const QString &normalized)
 {
     const auto combination = combinationOf(normalized);
@@ -179,7 +194,7 @@ void ShortcutMap::load()
             continue;
         }
         const QString n = normalize(text);
-        if (n.isEmpty() || n == a.defaultSequence || typesText(n) || !reservedUse(n).isEmpty())
+        if (n.isEmpty() || n == a.defaultSequence || typesText(n) || !reservedIn(n, a.scope).isEmpty())
             continue;
         m_custom.insert(a.id, n);
     }
@@ -197,19 +212,20 @@ void ShortcutMap::rebuild()
         const auto it = m_custom.constFind(a.id);
         if (it == m_custom.cend() || it->isEmpty())
             continue;
-        if (m_owner.contains(*it)) {
+        if (m_owner.contains(ownerKey(a.scope, *it))) {
             dropped.append(a.id);
             continue;
         }
-        m_owner.insert(*it, a.id);
+        m_owner.insert(ownerKey(a.scope, *it), a.id);
         m_effective.insert(a.id, *it);
     }
     for (const QString &id : std::as_const(dropped))
         m_custom.remove(id);
     for (const Action &a : std::as_const(m_actions)) {
-        if (m_custom.contains(a.id) || a.defaultSequence.isEmpty() || m_owner.contains(a.defaultSequence))
+        if (m_custom.contains(a.id) || a.defaultSequence.isEmpty()
+            || m_owner.contains(ownerKey(a.scope, a.defaultSequence)))
             continue;
-        m_owner.insert(a.defaultSequence, a.id);
+        m_owner.insert(ownerKey(a.scope, a.defaultSequence), a.id);
         m_effective.insert(a.id, a.defaultSequence);
     }
     Q_EMIT changed();
@@ -237,7 +253,11 @@ QVariantList ShortcutMap::bindings() const
     for (const Action &a : m_actions) {
         const QString s = m_effective.value(a.id);
         if (!s.isEmpty())
-            out.append(QVariantMap{{u"id"_s, a.id}, {u"action"_s, a.id}, {u"sequence"_s, s}});
+            out.append(QVariantMap{{u"id"_s, a.id},
+                                   {u"action"_s, a.id},
+                                   {u"sequence"_s, s},
+                                   {u"scope"_s, a.scope},
+                                   {u"shadowed"_s, a.scope.isEmpty() && m_owner.contains(ownerKey(u"code"_s, s))}});
     }
     return out;
 }
@@ -249,7 +269,11 @@ QVariantList ShortcutMap::shellBindings() const
     for (const Action &a : m_actions) {
         const QString s = m_effective.value(a.id);
         if (!s.isEmpty() && !viewsOwn.contains(a.id) && !(a.id == u"block.copyRef" && s == u"Ctrl+Shift+C"))
-            out.append(QVariantMap{{u"id"_s, a.id}, {u"action"_s, a.id}, {u"sequence"_s, s}});
+            out.append(QVariantMap{{u"id"_s, a.id},
+                                   {u"action"_s, a.id},
+                                   {u"sequence"_s, s},
+                                   {u"scope"_s, a.scope},
+                                   {u"shadowed"_s, a.scope.isEmpty() && m_owner.contains(ownerKey(u"code"_s, s))}});
     }
     return out;
 }
@@ -272,7 +296,20 @@ bool ShortcutMap::isCustom(const QString &id) const
 
 QString ShortcutMap::actionFor(const QString &sequence) const
 {
-    return m_owner.value(normalize(sequence));
+    const QString n = normalize(sequence);
+    const QString everywhere = m_owner.value(n);
+    return everywhere.isEmpty() ? m_owner.value(ownerKey(u"code"_s, n)) : everywhere;
+}
+
+QString ShortcutMap::actionIn(const QString &sequence, const QString &scope) const
+{
+    return m_owner.value(ownerKey(scope, normalize(sequence)));
+}
+
+QString ShortcutMap::scopeOf(const QString &id) const
+{
+    const Action *a = find(id);
+    return a ? a->scope : QString();
 }
 
 QString ShortcutMap::title(const QString &id) const
@@ -283,6 +320,23 @@ QString ShortcutMap::title(const QString &id) const
 
 QVariantMap ShortcutMap::check(const QString &id, const QString &sequence) const
 {
+    const Action *a = find(id);
+    if (!a)
+        return {{u"sequence"_s, normalize(sequence)},
+                {u"conflictId"_s, QString()},
+                {u"conflictTitle"_s, QString()},
+                {u"status"_s, u"unknown"_s},
+                {u"message"_s, tr("There is no such command.")}};
+    return judge(id, a->scope, sequence);
+}
+
+QVariantMap ShortcutMap::checkIn(const QString &scope, const QString &sequence, const QString &except) const
+{
+    return judge(except, scope, sequence);
+}
+
+QVariantMap ShortcutMap::judge(const QString &id, const QString &scope, const QString &sequence) const
+{
     const QString n = normalize(sequence);
     QVariantMap out{{u"sequence"_s, n}, {u"conflictId"_s, QString()}, {u"conflictTitle"_s, QString()}};
     const auto result = [&out](const char *status, const QString &message) {
@@ -290,8 +344,6 @@ QVariantMap ShortcutMap::check(const QString &id, const QString &sequence) const
         out.insert(u"message"_s, message);
         return out;
     };
-    if (!find(id))
-        return result("unknown", tr("There is no such command."));
     if (n.isEmpty())
         return result(
                 "invalid",
@@ -301,15 +353,15 @@ QVariantMap ShortcutMap::check(const QString &id, const QString &sequence) const
         return result(
                 "typing",
                 tr("%1 types or moves the caret in text. Add Ctrl or Alt, or use a function key (F1–F12).").arg(n));
-    const QString reserved = reservedUse(n);
+    const QString reserved = reservedIn(n, scope);
     if (reserved == u"altgr")
         return result("reserved", tr("%1 types a Polish letter on Windows (AltGr). Choose another key.").arg(n));
     if (!reserved.isEmpty())
         return result("reserved",
                       tr("%1 is used for %2 and cannot be a command's shortcut.").arg(n, areaName(reserved)));
-    if (sequence == this->sequence(id) || n == this->sequence(id))
+    if (!id.isEmpty() && (sequence == this->sequence(id) || n == this->sequence(id)))
         return result("same", QString());
-    const QString owner = m_owner.value(n);
+    const QString owner = m_owner.value(ownerKey(scope, n));
     if (!owner.isEmpty() && owner != id) {
         out.insert(u"conflictId"_s, owner);
         out.insert(u"conflictTitle"_s, title(owner));
@@ -362,7 +414,7 @@ QString ShortcutMap::reset(const QString &id)
     if (!a || !m_custom.contains(id))
         return {};
     // The action that has its default now ("" for none: no action owns "").
-    QString loser = m_owner.value(a->defaultSequence);
+    QString loser = m_owner.value(ownerKey(a->scope, a->defaultSequence));
     if (loser == id)
         loser.clear();
     if (!loser.isEmpty())
@@ -395,6 +447,7 @@ QVariantList ShortcutMap::entries(const QString &query) const
                                {u"title"_s, a.title},
                                {u"sequence"_s, s},
                                {u"defaultSequence"_s, a.defaultSequence},
+                               {u"scope"_s, a.scope},
                                {u"custom"_s, m_custom.contains(a.id)}});
     }
     return out;

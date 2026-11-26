@@ -29,6 +29,7 @@
 #include <QBuffer>
 #include <QClipboard>
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
@@ -782,7 +783,8 @@ QString WorkspaceChats::startThreadFrom(const QString &project, const QString &t
 }
 
 QString WorkspaceChats::startThread(const QString &project, const QString &text, const QStringList &pictures,
-                                    const QString &partner, const QString &worktree, const QString &branch)
+                                    const QString &partner, const QString &worktree, const QString &branch,
+                                    const QString &pullRequest)
 {
     if (!m_workspace->projects()->contains(project)) {
         setFailure(turn(QString()), tr("No such project on this device: add its folder in Code mode."));
@@ -805,7 +807,7 @@ QString WorkspaceChats::startThread(const QString &project, const QString &text,
                                        "pair one in Settings → Extensions → AI agents."));
         return {};
     }
-    const ThreadPlace place{project, worktree.trimmed(), branch.trimmed()};
+    const ThreadPlace place{project, worktree.trimmed(), branch.trimmed(), pullRequest.simplified().left(200)};
     return sendMessage(QString(), text, QString(), pictures, who, QString(), QString(), &place);
 }
 
@@ -1100,6 +1102,48 @@ bool WorkspaceChats::setThreadWorktree(const QString &path, const QString &workt
     return next == content || m_workspace->write(path, next);
 }
 
+QStringList WorkspaceChats::threadsIn(const QString &folder) const
+{
+    QStringList out;
+    const QString clean = QDir::cleanPath(folder);
+    if (folder.isEmpty() || !m_workspace->ready() || !m_workspace->vault())
+        return out;
+    const CodeProjects *projects = m_workspace->projects();
+    for (const FileStat &f : m_workspace->vault()->markdownFiles()) {
+        if (!chat::inFolder(f.path))
+            continue;
+        bool ok = false;
+        const chat::Conversation c = chat::parse(m_workspace->read(f.path, &ok));
+        if (!ok || c.project.isEmpty())
+            continue;
+        const QString in = !c.worktree.isEmpty() ? c.worktree : projects->folderOf(c.project);
+        if (!in.isEmpty() && QDir::cleanPath(in) == clean)
+            out << f.path;
+    }
+    return out;
+}
+
+bool WorkspaceChats::runningIn(const QString &folder) const
+{
+    const QString clean = QDir::cleanPath(folder);
+    if (folder.isEmpty())
+        return false;
+    for (const ChatTurn *t : m_turns) {
+        if (!t->m_running)
+            continue;
+        const QString in = threadFolder(t->m_path);
+        if (!in.isEmpty() && QDir::cleanPath(in) == clean)
+            return true;
+    }
+    return false;
+}
+
+void WorkspaceChats::markUnread(const QString &path)
+{
+    if (!path.isEmpty() && isConversation(path))
+        setUnread(path, true);
+}
+
 QString WorkspaceChats::sendMessage(const QString &path, const QString &text, const QString &page,
                                     const QStringList &pictures, const QString &partner, const QString &parent,
                                     const QString &wakes, const ThreadPlace *thread)
@@ -1131,6 +1175,9 @@ QString WorkspaceChats::sendMessage(const QString &path, const QString &text, co
         if (thread) {
             // A thread of Code mode: where it works (the worktree quoted: a path may hold ": ").
             content = chat::setField(content, u"project", thread->project);
+            if (!thread->pullRequest.isEmpty())
+                content = chat::setField(content, u"pr",
+                                         QString(u'"' + QString(thread->pullRequest).replace(u'"', u'\'') + u'"'));
             if (!thread->worktree.isEmpty()) {
                 content = chat::setField(content, u"worktree", QString(u'"' + thread->worktree + u'"'));
                 content = chat::setField(content, u"branch", thread->branch);
@@ -2351,6 +2398,8 @@ void WorkspaceChats::setDraft(const QString &path, const QString &text)
     while (all.size() > 200)
         all.remove(all.keys().first());
     local->set(DraftsKey, all);
+    ++m_draftSerial;
+    Q_EMIT draftsChanged();
 }
 
 std::pair<int, QString> WorkspaceChats::mentionAt(const QString &text, int caret)

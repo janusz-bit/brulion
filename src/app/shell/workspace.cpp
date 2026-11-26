@@ -173,6 +173,8 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     // extensions' timers that ended — the chat's and the posted ones by their own code.
     m_notifications = new NotificationCenter([this] { return now(); }, this);
     m_projects = new CodeProjects(this);
+    // (A deleted thread's Undo brings its pages back from the trash.)
+    m_projects->setRestorer([this](const QStringList &paths) { restoreAll(paths); });
     connect(m_reminders, &WorkspaceReminders::fired, this, [this](const QVariantMap &n) {
         m_notifications->record(NotificationCenter::Kind::Reminder, QString(), n.value(u"title"_s).toString(),
                                 n.value(u"body"_s).toString(), n.value(u"path"_s).toString());

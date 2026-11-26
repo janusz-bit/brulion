@@ -3,13 +3,14 @@
 #include "remoteprojects.h"
 
 #include <QDesktopServices>
+#include "gitcli/client.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QProcess>
-#include <QStandardPaths>
+#include <QTextBoundaryFinder>
 #include <QUrl>
 
 #include <algorithm>
@@ -19,7 +20,75 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
-CodeProjects::CodeProjects(QObject *parent) : QObject(parent) { }
+namespace {
+
+/// A script's fields as kept and as QML gives them.
+CodeProjects::Script scriptFrom(const QVariantMap &m)
+{
+    CodeProjects::Script s;
+    s.name = m.value(u"name"_s).toString().simplified().left(60);
+    s.command = m.value(u"command"_s).toString().trimmed().left(4000);
+    s.icon = m.value(u"icon"_s).toString().trimmed();
+    s.shortcut = m.value(u"shortcut"_s).toString().trimmed().left(40);
+    s.onWorktree = m.value(u"runOnWorktreeCreate"_s).toBool();
+    s.wait = s.onWorktree && m.value(u"wait"_s).toBool();
+    return s;
+}
+
+QJsonObject scriptJson(const CodeProjects::Script &s)
+{
+    QJsonObject o{{u"name"_s, s.name}, {u"command"_s, s.command}, {u"icon"_s, s.icon}};
+    if (!s.shortcut.isEmpty())
+        o.insert(u"shortcut"_s, s.shortcut);
+    if (s.onWorktree)
+        o.insert(u"runOnWorktreeCreate"_s, true);
+    if (s.wait)
+        o.insert(u"wait"_s, true);
+    return o;
+}
+
+/// One grapheme of `icon` (an emoji with its modifiers and joiners, a letter), "" for none.
+QString cleanIcon(const QString &icon)
+{
+    QString clean = icon.trimmed();
+    if (clean.isEmpty())
+        return {};
+    QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, clean);
+    const qsizetype end = graphemes.toNextBoundary();
+    clean = clean.left(end > 0 ? end : clean.size()).left(16);
+    return clean.at(0).category() == QChar::Other_Control || clean.at(0).isSpace() ? QString() : clean;
+}
+
+const QStringList &t3Icons()
+{
+    static const QStringList icons{u"play"_s, u"test"_s, u"lint"_s, u"configure"_s, u"build"_s, u"debug"_s};
+    return icons;
+}
+
+} // namespace
+
+CodeProjects::CodeProjects(QObject *parent) : QObject(parent)
+{
+    // (A t3.json saved by an editor fires several times: read once they are done.)
+    m_configTimer.setSingleShot(true);
+    m_configTimer.setInterval(250);
+    connect(&m_configTimer, &QTimer::timeout, this, [this] {
+        bool any = false;
+        for (const QString &id : std::exchange(m_configDue, {})) {
+            const Config before = m_configs.value(id);
+            readConfig(id);
+            any = any || !(m_configs.value(id) == before);
+            // (A file saved by replacing it is another file: watched again below.)
+            if (m_watcher)
+                m_watcher->removePath(QDir(folderOf(id)).filePath(u"t3.json"_s));
+        }
+        watchConfigs();
+        if (any)
+            Q_EMIT changed();
+    });
+}
+
+CodeProjects::~CodeProjects() = default;
 
 void CodeProjects::setStorage(std::function<QByteArray()> load, std::function<void(const QByteArray &)> save)
 {
@@ -61,10 +130,17 @@ int CodeProjects::indexOf(const QString &id) const
     return -1;
 }
 
+QList<CodeProjects::Project> CodeProjects::displayed() const
+{
+    QList<Project> out = m_projects;
+    std::ranges::stable_partition(out, [](const Project &p) { return p.pinned; });
+    return out;
+}
+
 QVariantList CodeProjects::list() const
 {
     QVariantList out;
-    for (const Project &p : m_projects)
+    for (const Project &p : displayed())
         out << project(p.id);
     // (Then those of the user's other computers this device has no project of the id of.)
     if (m_remote) {
@@ -117,14 +193,20 @@ QVariantMap CodeProjects::project(const QString &id) const
     if (i < 0)
         return {};
     const Project &p = m_projects.at(i);
-    QVariantList scripts;
-    for (const Script &s : p.scripts)
-        scripts << QVariantMap{{u"name"_s, s.name}, {u"command"_s, s.command}, {u"icon"_s, s.icon}};
+    const Config c = m_configs.value(id);
     return {{u"id"_s, p.id},
             {u"name"_s, p.name},
             {u"path"_s, p.path},
             {u"exists"_s, QFileInfo(p.path).isDir()},
-            {u"scripts"_s, scripts}};
+            {u"pinned"_s, p.pinned},
+            {u"icon"_s, p.icon},
+            {u"iconUrl"_s, c.iconPath.isEmpty() ? QString() : QUrl::fromLocalFile(c.iconPath).toString()},
+            {u"agent"_s, p.agent},
+            {u"env"_s, p.env},
+            {u"newThreadEnv"_s, newThreadEnv(id)},
+            {u"scripts"_s, scripts(id)},
+            {u"config"_s, c.found && c.error.isEmpty()},
+            {u"configError"_s, c.error}};
 }
 
 QString CodeProjects::folderOf(const QString &id) const
@@ -146,6 +228,23 @@ QString CodeProjects::nameOf(const QString &id) const
 bool CodeProjects::contains(const QString &id) const
 {
     return indexOf(id) >= 0 || isRemote(id);
+}
+
+QString CodeProjects::projectOfFolder(const QString &folder) const
+{
+    const QString clean = QDir::cleanPath(folder);
+    if (clean.isEmpty() || clean == u".")
+        return {};
+    for (const Project &p : m_projects)
+        if (QDir::cleanPath(p.path) == clean)
+            return p.id;
+    const QString root = QDir::cleanPath(worktreesRoot()) + u'/';
+    if (clean.startsWith(root)) {
+        const QString id = clean.mid(root.size()).section(u'/', 0, 0);
+        if (contains(id))
+            return id;
+    }
+    return {};
 }
 
 QString CodeProjects::add(const QString &folder)
@@ -171,6 +270,8 @@ QString CodeProjects::add(const QString &folder)
         p.id = base + u'-' + QString::number(n);
     p.path = path;
     m_projects.append(p);
+    readConfig(p.id);
+    watchConfigs();
     save();
     return p.id;
 }
@@ -181,6 +282,8 @@ void CodeProjects::remove(const QString &id)
     if (i < 0)
         return;
     m_projects.removeAt(i);
+    m_configs.remove(id);
+    watchConfigs();
     save();
 }
 
@@ -196,12 +299,67 @@ void CodeProjects::rename(const QString &id, const QString &name)
 
 void CodeProjects::move(const QString &id, int index)
 {
-    const int i = indexOf(id);
-    const int to = std::clamp(index, 0, int(m_projects.size()) - 1);
-    if (i < 0 || i == to)
+    // (Within its part of list(): the pinned ones, or the others.)
+    QList<Project> shown = displayed();
+    const auto it = std::ranges::find(shown, id, &Project::id);
+    if (it == shown.end())
         return;
-    m_projects.move(i, to);
+    const int from = int(it - shown.begin());
+    const int pinned = int(std::ranges::count_if(shown, &Project::pinned));
+    const int first = it->pinned ? 0 : pinned;
+    const int last = it->pinned ? pinned - 1 : int(shown.size()) - 1;
+    const int to = std::clamp(index, first, last);
+    if (from == to)
+        return;
+    shown.move(from, to);
+    m_projects = shown;
     save();
+}
+
+void CodeProjects::setPinned(const QString &id, bool pinned)
+{
+    const int i = indexOf(id);
+    if (i < 0 || m_projects.at(i).pinned == pinned)
+        return;
+    m_projects[i].pinned = pinned;
+    save();
+}
+
+void CodeProjects::setIcon(const QString &id, const QString &icon)
+{
+    const int i = indexOf(id);
+    if (i < 0)
+        return;
+    const QString clean = cleanIcon(icon);
+    if (m_projects.at(i).icon == clean)
+        return;
+    m_projects[i].icon = clean;
+    save();
+}
+
+void CodeProjects::setDefaults(const QString &id, const QString &agent, const QString &env)
+{
+    const int i = indexOf(id);
+    if (i < 0)
+        return;
+    const QString cleanEnv = env == u"local" || env == u"worktree" ? env : QString();
+    const QString cleanAgent = agent.trimmed().left(200);
+    if (m_projects.at(i).agent == cleanAgent && m_projects.at(i).env == cleanEnv)
+        return;
+    m_projects[i].agent = cleanAgent;
+    m_projects[i].env = cleanEnv;
+    save();
+}
+
+QString CodeProjects::newThreadEnv(const QString &id) const
+{
+    const int i = indexOf(id);
+    if (i >= 0 && !m_projects.at(i).env.isEmpty())
+        return m_projects.at(i).env;
+    if (!m_newThreadEnv.isEmpty())
+        return m_newThreadEnv;
+    const QString fromFile = m_configs.value(id).defaultThreadEnvMode;
+    return fromFile.isEmpty() ? u"local"_s : fromFile;
 }
 
 void CodeProjects::setScripts(const QString &id, const QVariantList &scripts)
@@ -210,14 +368,19 @@ void CodeProjects::setScripts(const QString &id, const QVariantList &scripts)
     if (i < 0)
         return;
     QList<Script> out;
+    QStringList names;
     for (const QVariant &v : scripts) {
-        const QVariantMap m = v.toMap();
-        Script s{m.value(u"name"_s).toString().simplified().left(40), m.value(u"command"_s).toString().trimmed(),
-                 m.value(u"icon"_s).toString().trimmed().left(40)};
+        Script s = scriptFrom(v.toMap());
         if (s.command.isEmpty())
             continue;
         if (s.name.isEmpty())
-            s.name = s.command.left(40);
+            s.name = s.command.simplified().left(60);
+        if (!t3Icons().contains(s.icon))
+            s.icon = u"play"_s;
+        // (A second one of a name: left out — a name is what a t3.json's script is overridden by.)
+        if (names.contains(s.name.toLower()))
+            continue;
+        names << s.name.toLower();
         out << s;
         if (out.size() >= MaxScripts)
             break;
@@ -228,38 +391,94 @@ void CodeProjects::setScripts(const QString &id, const QVariantList &scripts)
     save();
 }
 
-QString CodeProjects::scriptsText(const QString &id) const
+QList<std::pair<CodeProjects::Script, QString>> CodeProjects::mergeScripts(const QList<Script> &device,
+                                                                           const QList<Script> &file)
 {
-    const int i = indexOf(id);
-    if (i < 0)
-        return {};
-    QStringList lines;
-    for (const Script &s : m_projects.at(i).scripts)
-        lines << (s.name == s.command.left(40) ? s.command : s.name + u": "_s + s.command);
-    return lines.join(u'\n');
-}
-
-QVariantList CodeProjects::parseScripts(const QString &text)
-{
-    QVariantList out;
-    for (const QString &raw : text.split(u'\n')) {
-        const QString line = raw.trimmed();
-        if (line.isEmpty())
+    QList<std::pair<Script, QString>> out;
+    QStringList names;
+    for (const Script &s : device) {
+        const bool overrides = std::ranges::any_of(
+                file, [&s](const Script &f) { return f.name.compare(s.name, Qt::CaseInsensitive) == 0; });
+        out.append({s, overrides ? u"override"_s : u"device"_s});
+        names << s.name.toLower();
+    }
+    for (const Script &s : file) {
+        if (names.contains(s.name.toLower()) || out.size() >= MaxScripts)
             continue;
-        const qsizetype colon = line.indexOf(u':');
-        const QString head = colon > 0 ? line.left(colon).trimmed() : QString();
-        // ("name: command": a short name without spaces; "http://…" or "a b: c" stay commands.)
-        const bool named = colon > 0 && colon <= 40 && !head.contains(u' ') && !line.mid(colon + 1).startsWith(u"//"_s);
-        out << QVariantMap{{u"name"_s, named ? head : QString()},
-                           {u"command"_s, named ? line.mid(colon + 1).trimmed() : line},
-                           {u"icon"_s, u"play"_s}};
+        names << s.name.toLower();
+        out.append({s, u"t3json"_s});
     }
     return out;
 }
 
-void CodeProjects::setScriptsText(const QString &id, const QString &text)
+QString CodeProjects::iconOf(const QString &t3Icon)
 {
-    setScripts(id, parseScripts(text));
+    if (t3Icon == u"test")
+        return u"circle-check"_s;
+    if (t3Icon == u"lint")
+        return u"list-checks"_s;
+    if (t3Icon == u"configure")
+        return u"sliders-horizontal"_s;
+    if (t3Icon == u"build")
+        return u"layers"_s;
+    if (t3Icon == u"debug")
+        return u"eye"_s;
+    return u"play"_s;
+}
+
+QVariantList CodeProjects::scripts(const QString &id) const
+{
+    const int i = indexOf(id);
+    if (i < 0)
+        return {};
+    QVariantList out;
+    QStringList ids;
+    for (const auto &[s, source] : mergeScripts(m_projects.at(i).scripts, m_configs.value(id).scripts)) {
+        QString sid = slug(s.name);
+        const QString base = sid;
+        for (int n = 2; ids.contains(sid); ++n)
+            sid = base + u'-' + QString::number(n);
+        ids << sid;
+        out << QVariantMap{{u"id"_s, sid},
+                           {u"name"_s, s.name},
+                           {u"command"_s, s.command},
+                           {u"icon"_s, s.icon},
+                           {u"iconName"_s, iconOf(s.icon)},
+                           {u"shortcut"_s, s.shortcut},
+                           {u"runOnWorktreeCreate"_s, s.onWorktree},
+                           {u"wait"_s, s.wait},
+                           {u"source"_s, source == u"t3json" ? u"t3json"_s : u"device"_s},
+                           {u"overrides"_s, source == u"override"}};
+    }
+    return out;
+}
+
+QVariantList CodeProjects::setupScripts(const QString &id) const
+{
+    QVariantList out;
+    for (const QVariant &v : scripts(id))
+        if (v.toMap().value(u"runOnWorktreeCreate"_s).toBool())
+            out << v;
+    return out;
+}
+
+QString CodeProjects::scriptField(const QString &id, const QString &scriptId, const QString &field) const
+{
+    for (const QVariant &v : scripts(id))
+        if (v.toMap().value(u"id"_s).toString() == scriptId)
+            return v.toMap().value(field).toString();
+    return {};
+}
+
+QStringList CodeProjects::setupList(const QString &id, const QString &field, bool waited) const
+{
+    QStringList out;
+    for (const QVariant &v : setupScripts(id)) {
+        const QVariantMap m = v.toMap();
+        if (m.value(u"wait"_s).toBool() == waited)
+            out << m.value(field).toString();
+    }
+    return out;
 }
 
 QString CodeProjects::worktreesRoot() const
@@ -287,119 +506,68 @@ void CodeProjects::setEditorCommand(const QString &command)
         return;
     m_editor = clean;
     save();
+    Q_EMIT editorsChanged();
 }
 
-QVariantMap CodeProjects::worktreeFor(const QString &id, const QString &title) const
+void CodeProjects::setBranchPrefix(const QString &prefix)
 {
-    if (indexOf(id) < 0)
-        return {};
-    const QString base = slug(title);
-    const QDir dir(QDir(worktreesRoot()).filePath(id));
-    QString name = base;
-    for (int n = 2; QFileInfo::exists(dir.filePath(name)); ++n)
-        name = base + u'-' + QString::number(n);
-    return {{u"folder"_s, dir.filePath(name)}, {u"branch"_s, QString(u"brulion/"_s + name)}};
+    // (Only what a branch name may have: "feature/", "ala-"; anything else keeps the one before.)
+    const QString clean = prefix.trimmed();
+    if (clean == m_branchPrefix || (!clean.isEmpty() && !validBranchName(clean + u"x"_s)))
+        return;
+    m_branchPrefix = clean;
+    save();
 }
 
-bool CodeProjects::createWorktree(const QString &id, const QString &title)
+void CodeProjects::setDeletedWorktrees(const QString &policy)
 {
-    // (Another computer's project: its worktree is made there, worktreeCreated() when it is.)
-    if (isRemote(id))
-        return m_remote->createWorktree(id, title);
-#if QT_CONFIG(process)
-    const QString repo = folderOf(id);
-    const QString git = QStandardPaths::findExecutable(u"git"_s);
-    if (repo.isEmpty() || git.isEmpty())
-        return false;
-    const QVariantMap place = worktreeFor(id, title);
-    const QString folder = place.value(u"folder"_s).toString();
-    const QString branch = place.value(u"branch"_s).toString();
-    QDir().mkpath(QFileInfo(folder).absolutePath());
-    auto *proc = new QProcess(this);
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert(u"GIT_TERMINAL_PROMPT"_s, u"0"_s);
-    env.insert(u"LC_ALL"_s, u"C"_s);
-    proc->setProcessEnvironment(env);
-    proc->setProcessChannelMode(QProcess::MergedChannels);
-    // (No shell: the folder and the branch are arguments of their own.)
-    proc->setProgram(git);
-    proc->setArguments({u"-C"_s, repo, u"worktree"_s, u"add"_s, u"-b"_s, branch, folder, u"HEAD"_s});
-    connect(proc, &QProcess::finished, this, [this, proc, id, folder, branch](int code, QProcess::ExitStatus status) {
-        const QString output = QString::fromUtf8(proc->readAll()).trimmed();
-        proc->deleteLater();
-        if (status != QProcess::NormalExit || code != 0)
-            Q_EMIT worktreeCreated(id, QString(), QString(),
-                                   output.isEmpty() ? tr("git could not make the worktree.") : output.right(500));
-        else
-            Q_EMIT worktreeCreated(id, folder, branch, QString());
-    });
-    connect(proc, &QProcess::errorOccurred, this, [this, proc, id](QProcess::ProcessError error) {
-        if (error != QProcess::FailedToStart)
-            return;
-        proc->deleteLater();
-        Q_EMIT worktreeCreated(id, QString(), QString(), tr("git could not be started."));
-    });
-    proc->start();
-    return true;
-#else
-    Q_UNUSED(id)
-    Q_UNUSED(title)
-    return false;
-#endif
+    const QString clean = policy == u"delete" || policy == u"keep" ? policy : u"ask"_s;
+    if (clean == m_deletedWorktrees)
+        return;
+    m_deletedWorktrees = clean;
+    save();
 }
 
-QStringList CodeProjects::splitCommand(const QString &command)
+void CodeProjects::setNewThreadEnvDefault(const QString &env)
 {
-    QStringList out;
-    QString part;
-    bool inPart = false;
-    QChar quote;
-    for (qsizetype i = 0; i < command.size(); ++i) {
-        const QChar c = command.at(i);
-        if (!quote.isNull()) {
-            if (c == quote)
-                quote = QChar();
-            else if (c == u'\\' && quote == u'"' && i + 1 < command.size())
-                part += command.at(++i);
-            else
-                part += c;
-        } else if (c == u'"' || c == u'\'') {
-            quote = c;
-            inPart = true;
-        } else if (c == u'\\' && i + 1 < command.size()) {
-            part += command.at(++i);
-            inPart = true;
-        } else if (c.isSpace()) {
-            if (inPart)
-                out << std::exchange(part, {});
-            inPart = false;
-        } else {
-            part += c;
-            inPart = true;
-        }
-    }
-    if (inPart)
-        out << part;
-    return out;
+    const QString clean = env == u"local" || env == u"worktree" ? env : QString();
+    if (clean == m_newThreadEnv)
+        return;
+    m_newThreadEnv = clean;
+    save();
 }
 
-bool CodeProjects::openInEditor(const QString &folder) const
+void CodeProjects::setThreadSort(const QString &sort)
 {
-    if (folder.isEmpty() || !QFileInfo(folder).isDir())
-        return false;
-    const QStringList parts = splitCommand(m_editor);
-#if QT_CONFIG(process)
-    if (!parts.isEmpty()) {
-        const QString program = QStandardPaths::findExecutable(parts.first());
-        return !program.isEmpty() && QProcess::startDetached(program, parts.mid(1) << folder, folder);
-    }
-#endif
-    return openFolder(folder);
+    const QString clean = sort == u"created" ? sort : u"activity"_s;
+    if (clean == m_threadSort)
+        return;
+    m_threadSort = clean;
+    save();
 }
 
-bool CodeProjects::openFolder(const QString &folder) const
+void CodeProjects::keepUndo(int toast, const QStringList &trashPaths, const QString &id, const QString &folder,
+                            const QString &branch, bool removed)
 {
-    return !folder.isEmpty() && QFileInfo(folder).isDir() && QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
+    if (toast <= 0)
+        return;
+    m_undos.insert(toast, Undo{trashPaths, id, folder, branch, removed});
+}
+
+void CodeProjects::undo(int toast)
+{
+    if (!m_undos.contains(toast))
+        return;
+    const Undo u = m_undos.take(toast);
+    if (m_restore && !u.trash.isEmpty())
+        m_restore(u.trash);
+    if (u.removed && !u.folder.isEmpty() && !u.branch.isEmpty())
+        restoreWorktree(u.project, u.folder, u.branch);
+}
+
+void CodeProjects::forgetUndo(int toast)
+{
+    m_undos.remove(toast);
 }
 
 void CodeProjects::load()
@@ -416,20 +584,46 @@ void CodeProjects::load()
             continue; // (broken, or a second one of an id: left out)
         if (p.name.isEmpty())
             p.name = p.id;
+        QStringList names;
         for (const QJsonValue &sv : o.value(u"scripts"_s).toArray()) {
-            const QJsonObject so = sv.toObject();
-            const Script s{so.value(u"name"_s).toString(), so.value(u"command"_s).toString(),
-                           so.value(u"icon"_s).toString()};
-            if (!s.command.isEmpty() && p.scripts.size() < MaxScripts)
-                p.scripts << s;
+            Script s = scriptFrom(sv.toObject().toVariantMap());
+            if (s.command.isEmpty() || p.scripts.size() >= MaxScripts)
+                continue;
+            if (s.name.isEmpty())
+                s.name = s.command.simplified().left(60);
+            if (!t3Icons().contains(s.icon))
+                s.icon = u"play"_s;
+            if (names.contains(s.name.toLower()))
+                continue;
+            names << s.name.toLower();
+            p.scripts << s;
         }
+        p.pinned = o.value(u"pinned"_s).toBool();
+        p.agent = o.value(u"agent"_s).toString().left(200);
+        const QString env = o.value(u"env"_s).toString();
+        p.env = env == u"local" || env == u"worktree" ? env : QString();
+        p.icon = cleanIcon(o.value(u"icon"_s).toString());
         m_projects << p;
         if (m_projects.size() >= MaxProjects)
             break;
     }
     m_worktreesRoot = all.value(u"worktreesRoot"_s).toString();
     m_editor = all.value(u"editor"_s).toString();
+    m_preferredEditor = all.value(u"preferredEditor"_s).toString();
+    m_branchPrefix = all.contains(u"branchPrefix"_s) ? all.value(u"branchPrefix"_s).toString() : u"brulion/"_s;
+    if (!m_branchPrefix.isEmpty() && !validBranchName(m_branchPrefix + u"x"_s))
+        m_branchPrefix = u"brulion/"_s;
+    const QString deleted = all.value(u"deletedWorktrees"_s).toString();
+    m_deletedWorktrees = deleted == u"delete" || deleted == u"keep" ? deleted : u"ask"_s;
+    const QString env = all.value(u"newThreadEnv"_s).toString();
+    m_newThreadEnv = env == u"local" || env == u"worktree" ? env : QString();
+    m_threadSort = all.value(u"threadSort"_s).toString() == u"created" ? u"created"_s : u"activity"_s;
+    m_configs.clear();
+    for (const Project &p : std::as_const(m_projects))
+        readConfig(p.id);
+    watchConfigs();
     Q_EMIT changed();
+    Q_EMIT editorsChanged();
 }
 
 void CodeProjects::save()
@@ -438,10 +632,18 @@ void CodeProjects::save()
     for (const Project &p : std::as_const(m_projects)) {
         QJsonArray scripts;
         for (const Script &s : p.scripts)
-            scripts << QJsonObject{{u"name"_s, s.name}, {u"command"_s, s.command}, {u"icon"_s, s.icon}};
+            scripts << scriptJson(s);
         QJsonObject o{{u"id"_s, p.id}, {u"name"_s, p.name}, {u"path"_s, p.path}};
         if (!scripts.isEmpty())
             o.insert(u"scripts"_s, scripts);
+        if (p.pinned)
+            o.insert(u"pinned"_s, true);
+        if (!p.icon.isEmpty())
+            o.insert(u"icon"_s, p.icon);
+        if (!p.agent.isEmpty())
+            o.insert(u"agent"_s, p.agent);
+        if (!p.env.isEmpty())
+            o.insert(u"env"_s, p.env);
         projects << o;
     }
     QJsonObject all{{u"projects"_s, projects}};
@@ -449,6 +651,16 @@ void CodeProjects::save()
         all.insert(u"worktreesRoot"_s, m_worktreesRoot);
     if (!m_editor.isEmpty())
         all.insert(u"editor"_s, m_editor);
+    if (!m_preferredEditor.isEmpty())
+        all.insert(u"preferredEditor"_s, m_preferredEditor);
+    if (m_branchPrefix != u"brulion/")
+        all.insert(u"branchPrefix"_s, m_branchPrefix);
+    if (m_deletedWorktrees != u"ask")
+        all.insert(u"deletedWorktrees"_s, m_deletedWorktrees);
+    if (!m_newThreadEnv.isEmpty())
+        all.insert(u"newThreadEnv"_s, m_newThreadEnv);
+    if (m_threadSort != u"activity")
+        all.insert(u"threadSort"_s, m_threadSort);
     if (m_save)
         m_save(QJsonDocument(all).toJson(QJsonDocument::Compact));
     Q_EMIT changed();

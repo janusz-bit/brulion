@@ -52,6 +52,7 @@
 #include "chatsecrets.h"
 #include "cleanupselection.h"
 #include "codeprojects.h"
+#include "codescriptsmodel.h"
 #include "commandmodel.h"
 #include "encryptedpagehost.h"
 #include "extensionviewmodel.h"
@@ -342,6 +343,13 @@ struct RemoteProjectsForeign {
     QML_FOREIGN(brulion::shell::RemoteProjects)
     QML_NAMED_ELEMENT(RemoteProjects)
     QML_UNCREATABLE("Use Workspace.projects.remote")
+};
+
+// The project dialog's scripts editor (codescriptsmodel.h).
+struct CodeScriptsModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::CodeScriptsModel)
+    QML_NAMED_ELEMENT(CodeScriptsModel)
 };
 
 struct NotificationCenterForeign {

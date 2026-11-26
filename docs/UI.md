@@ -1381,43 +1381,102 @@ Projects and AI agents' threads, as in T3 Code (docs/CODE.md: the model; this se
 mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first button (`modeSwitch`: a
 `code` icon in Notes mode, `notebook-pen` in Code mode; "Code mode" / "Notes mode", in the drawer
 "Code" / "Notes"), the palette's `mode.code` / `mode.notes` and Settings → Extensions → Code mode
-(`codeSettings`: the mode `appModeSetting`, the editor `codeEditorSetting`, the worktrees' folder
-`codeWorktreesSetting`; shown where agents run).
+(`codeSettings`: the mode `appModeSetting`, "Open in" `codePreferredEditorSetting` — the editors found,
+the custom command, the file manager —, the custom command `codeEditorSetting`, "New threads work"
+`codeNewThreadEnvSetting` (As t3.json says / Local / New worktree), the branch prefix
+`codeBranchPrefixSetting`, "Worktrees of deleted threads" `codeDeletedWorktreesSetting` (Ask / Delete /
+Keep), the worktrees' folder `codeWorktreesSetting`; shown where agents run).
 
 * **In Code mode** the rail shows only "Code" (`sidebarNav_code`, route `code`; `ShellRail.shows()`), the
   page panel is `CodeSidebar` (AppShell's loaders choose it by the mode, wide and in the drawer) and the
-  bottom navigation is hidden; settings, notifications, the palette, tabs and the top bar stay.
-* **CodeSidebar** (`qml/code/CodeSidebar.qml`): "Projects" with "Add a project…" (`codeAddProject`, a
-  folder picker `codeProjectFolderDialog`; with none: a note and `codeAddProjectEmpty`), a section per
-  project (`codeProject_<id>`: a click folds it — kept in `code/collapsed` —, "+" `codeNewThread_<id>`, "⋯"
-  `codeProjectMore_<id>` and a right click / long press: New thread, Open in editor, Show the folder, Name
-  and scripts… (`codeProjectDialog`: `codeProjectName`, `codeProjectScripts` — a line each,
-  "name: command"), Remove from the list (confirmed: its folder and threads stay)) with its threads
-  (`codeThread`, `ChatListModel { project: id }`): the state (a spinner while the agent works, a question
-  mark in the accent while it asks, the alert in the danger colour after a failure, an accent dot while
-  unread), the title (semibold unread or current), when; the current one selected; a right click / long
-  press: Archive / Unarchive, Move to trash (a toast with Undo). "No threads yet" under an empty project.
+  bottom navigation is hidden; settings, notifications, the palette, tabs and the top bar stay. Ctrl+1–9
+  open the sidebar's threads instead of the tabs (Ctrl+PgUp / PgDown still switch tabs), and Code mode's
+  commands have shortcuts of their own (docs/CODE.md "Shortcuts": ShortcutMap's scope `code`; AppShell's
+  Shortcut of a command that is everywhere is off in Code mode while a Code mode command has its key).
+* **CodeSidebar** (`qml/code/CodeSidebar.qml`): "Projects" with the threads' order (`codeThreadSort`,
+  `codeThreadSortMenu`: Last activity first `codeSortActivity` / Newest first `codeSortCreated`;
+  CodeProjects.threadSort, this device's) and "Add a project…" (`codeAddProject`, a folder picker
+  `codeProjectFolderDialog`; with none: a note and `codeAddProjectEmpty`), a filter over the threads'
+  titles and branches (`codeThreadFilter`: ChatListModel.filter), then a section per project
+  (`CodeProjectSection`; pinned projects first): its row (`codeProject_<id>`: a click folds it — kept in
+  `code/collapsed` —, its icon `codeProjectIcon` — the user's emoji, t3.json's iconPath picture, a
+  folder —, a pin, "+" `codeNewThread_<id>`, "⋯" `codeProjectMore_<id>`; dragged with the mouse
+  (`codeProjectDrag`, a line `codeProjectDrop` where it goes) to another place within the pinned ones or
+  the others), the project's menu (`codeProjectMenu`, also a right click / long press: New thread
+  `codeProjectNewThread`, New thread in the project's folder `codeProjectNewLocalThread`, Open in editor,
+  Show the folder, Copy path, Pin / Unpin `codeProjectPin`, Move up / Move down, Project settings…
+  `codeProjectSettings`, Remove from the list `codeProjectRemove` — confirmed: its folder and threads
+  stay), a draft of a new thread when one was written and not sent (`codeDraft_<id>`, ChatView's draft
+  "code:<id>"), its threads (`CodeThreadRow`, `codeThread`, `ChatListModel { project: id }` with the
+  filter and the order) and "No threads yet" / "No thread matches". **A thread's row**: its state by
+  priority (`codeThreadState`: a plan to approve — `list-checks` and "Plan" —, an approval asked for —
+  `circle-help` and "Approve" —, a spinner while it works, the alert and "Failed" in the danger colour, an
+  accent dot while its answer is unread), the title (semibold unread or current), a pin, `git-branch`
+  for a worktree of its own (its branch in a tooltip), when; the current one selected; "⋯"
+  `codeThreadMore` on hover, a right click / long press: Rename… (`codeThreadRename`: a dialog
+  `codeRenameThreadDialog` / `codeRenameThreadField`), Pin / Unpin, Mark unread, New thread in this
+  worktree (or in the project's folder) `codeThreadNewHere`, Open in editor, Copy path / Copy branch /
+  Copy link, Archive / Unarchive, Move to trash (`codeThreadDelete`). A thread with a worktree of its own
+  that no other thread uses (`WorkspaceChats.threadsIn`) asks first (`codeDeleteThreadDialog`, unless
+  "Worktrees of deleted threads" says Keep — or Delete and the worktree has no uncommitted changes):
+  where the worktree is, that its branch stays, how many files have uncommitted changes
+  (`CodeProjects.checkWorktree`), "Delete the worktree too" (checked when nothing would be lost). The toast's
+  Undo brings the thread back, and the worktree from its branch when it went (`CodeProjects.keepUndo`).
+  Archiving keeps the worktree.
 * **CodeView** (`qml/code/CodeView.qml`, route `code`: `{}` a new thread of the last project used —
-  `code/lastProject` — or the first; `{new: true, project}`; `{path}` a thread; `{addProject: true}` the
-  folder picker): no project yet — an empty state (`codeEmpty`) with "Add a project…" and, without an agent,
-  "Set up an AI agent". A header (`codeHeader`): the project (`codeProjectChip`; for a new thread a menu of
-  the projects, `codeProjectPick`, and "Add a project…"), where the thread works (`codeWhere`: its
-  worktree's branch, else "Local"; the folder in its tooltip) or, for a new one, **Local / New worktree**
-  (`codeEnvironment`, kept in `code/newWorktree`: the first Send makes the worktree —
-  `CodeProjects.createWorktree`, a spinner meanwhile — then sends), the project's script buttons
-  (`codeScript_<n>`: run in a new tab of the terminal), Open in editor (`codeOpenEditor`), the terminal's
-  and the changes' toggles (`codeTerminalToggle`, `codeChangesToggle`; kept in `code/terminalOpen`,
-  `code/changesOpen`). Under it a horizontal SplitView: the thread — `ChatView` with `routeView: "code"`
-  (its navigations name route `code`), `showList: false`, `project`, `wantsWorktree` /
-  `worktreeWanted()`; only agents among the partners (`chatNewPartner` shown with one agent too); its
-  empty state "What should the agent do?" with suggestions (`codeSuggestions`) — over the terminal
-  (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
+  `code/lastProject` — or the first; `{new: true, project, env?}`; `{new: true, project, worktree, branch,
+  pr?}` a new thread in that worktree (on that pull request); `{path}` a thread; `{addProject: true}` the
+  folder picker): no project yet — an empty state (`codeEmpty`) with "Add a project…" and, without an
+  agent, "Set up an AI agent". A header (`codeHeader`): the project (`codeProjectChip`; for a new thread a
+  menu of the projects, `codeProjectPick`, and "Add a project…"), the thread's name (`CodeThreadTitle`,
+  `codeThreadTitle`: a double click or F2 makes it a field `codeThreadTitleField`, Enter renames the
+  thread — WorkspaceChats.rename —, Esc keeps it), then where it works — **a thread**: its folder's branch
+  (`codeWhere`: `git-branch` for a worktree of its own, `hard-drive` for the project's folder; the folder
+  in its tooltip; a click opens the branch picker); **a new thread**: the environment (`codeEnvironment`,
+  Ctrl+Shift+X: a menu `codeEnvironmentMenu` — Local `codeEnvLocal`, New worktree `codeEnvWorktree`, the
+  project's worktrees `codeEnvExisting_<n>`; the default CodeProjects.newThreadEnv, the route's `env` or
+  `worktree`), the base of a new worktree or the branch of a Local one (`codeBaseBranch`: "From main" /
+  the branch; the branch picker) and the pull request it is on (`codePullRequestChip`) — the project's
+  scripts (`codeScript_<n>` buttons with their icons, the first two of more than three and all of them in
+  `codeScriptsMenuButton` / `codeScriptsMenu`: run in a new tab of the terminal), "Open in…"
+  (`CodeOpenIn`: `codeOpenEditor` opens the folder in the preferred editor, Ctrl+O; `codeOpenIn` the
+  menu `codeOpenInMenu` of the editors, `codeOpenIn_<id>`: the one picked opens it and is remembered),
+  the terminal's and the changes' toggles (`codeTerminalToggle`, `codeChangesToggle` Ctrl+D; kept in
+  `code/terminalOpen`, `code/changesOpen`). **The branch picker** (`CodeBranchPicker`,
+  `codeBranchPicker`, a BPalette; Ctrl+Shift+G): the folder's branches with their badges in the rows'
+  subtitles (current, default, remote, the worktree that has one, ↑ ahead ↓ behind), searched; typed text
+  offers "Create branch “x”" for a new valid name and "Check out pull request #123" for `#123`, `123` or
+  a pull request's address. Picking a branch checks it out — refused while an agent's turn of a thread of
+  that folder runs (a toast says why; the picker's empty text too) —; a branch checked out in another
+  worktree moves the thread there (a new thread: that worktree); for a new worktree it is the base.
+  **"Check out pull request #N"** (`CodePullRequestDialog`, `codePullRequestDialog`: New worktree /
+  Local `codePullRequestWhere`, its error `codePullRequestError`): a new thread then works there and
+  its agent is told which pull request it is. Under the header, while a new worktree's setup scripts run
+  and the message waits for them, `CodeSetupBanner` (`codeSetup`, `codeSetupText`: "Setting up the
+  worktree… (Setup)", Send anyway `codeSetupSend`); one that failed says so, with Send anyway and Don't
+  send (`codeSetupCancel`: the message stays in the field, the worktree stays). Under it a horizontal
+  SplitView: the thread — `ChatView` with `routeView: "code"` (its navigations name route `code`),
+  `showList: false`, `project`, `wantsWorktree` / `worktreeWanted()`, `newWorktree` / `newBranch` /
+  `newPullRequest`; only agents among the partners (`chatNewPartner` shown with one agent too; the
+  project's default agent chosen); its empty state "What should the agent do?" with suggestions
+  (`codeSuggestions`) — over the terminal (`codeTerminal`, `TerminalPanel`), and the Changes panel beside
+  them (`codeChanges`, `GitChangesPanel`).
+* **CodeProjectDialog** (`codeProjectDialog`): the name `codeProjectName`, the icon (an emoji,
+  `codeProjectIconField`), new threads' agent (`codeProjectAgent`) and environment (`codeProjectEnv`:
+  Default / Local / New worktree), and the scripts (`CodeScriptsEditor`, `codeProjectScripts`; rows of
+  `CodeScriptsModel`): a row each (`codeScriptRow_<n>`) — its icon (`codeScriptIcon_<n>`, a menu of T3
+  Code's six), name (`codeScriptName_<n>`, "Another script has this name"), command
+  (`codeScriptCommand_<n>`, monospace), Move up / Move down / Delete (`codeScriptUp_<n>`,
+  `codeScriptDown_<n>`, `codeScriptDelete_<n>`: not for a row of t3.json), its shortcut
+  (`codeScriptShortcut_<n>`: a click records the next key — Esc cancels, Backspace none —, checked with
+  ShortcutMap.checkIn), "Run when a worktree is made" (`codeScriptOnWorktree_<n>`), "Wait for it before
+  the agent starts" (`codeScriptWait_<n>`), "from t3.json" / "overrides t3.json" chips — and "Add a
+  script" (`codeScriptAdd`). Save keeps all of it (only this device's scripts: t3.json is never written).
 * **Another computer's projects** (docs/CODE.md "Threads on the phone"; `CodeProjects`' remote ones, from
   `Workspace.projects.remote`): CodeSidebar lists them after this device's, a `laptop` icon and "on
   <computer>" (`codeProjectHost_<id>`) beside the name, no "⋯" (a long press: only New thread); it asks the computers for
-  their lists again whenever it is shown. CodeView names the computer in the project's chip ("Sklep · nixos",
-a `laptop` icon), no
-  terminal, editor or script buttons, and **CodeRemoteChanges** (`qml/code/CodeRemoteChanges.qml`,
+  their lists again whenever it is shown. CodeView names the computer in the project's chip ("Sklep · nixos", a `laptop`
+  icon), no terminal, editor or script buttons, and **CodeRemoteChanges** (`qml/code/CodeRemoteChanges.qml`,
   `codeRemoteChanges`) in place of the Changes panel — beside the thread when wide (`code/changesOpen`),
   under it when narrow, shown with the changes' toggle (not kept): "Changes and the terminal are on
   <computer>: here they are read-only." (`codeRemoteNote`), refresh (`codeRemoteRefresh`), This turn / All
@@ -2594,6 +2653,15 @@ without one. `reset(id)` brings the default back (whoever took it meanwhile lose
 `resetAll()` all of them. Stored values are read defensively: no string (an INI list), malformed
 or not allowed is ignored; two actions on one key — the earlier custom one keeps it, a default
 taken by a custom one gives way.
+
+**Scopes**: an action is everywhere (`Action::scope` "") or Code mode's only ("code": its commands,
+the shown project's scripts — docs/CODE.md "Shortcuts"). Shortcuts are unique within a scope; a Code
+mode action may have the key of one that is everywhere (it wins in Code mode: the other's binding is
+`shadowed` and AppShell turns it off there) and keys reserved for what Code mode never shows (the
+drawing editor, the PDF viewer, the canvas, the tabs' Ctrl+1…9, the AI chat's Alt+1…9:
+`reservedIn(n, "code")`); `actionIn(sequence, scope)`, `scopeOf(id)`, `checkIn(scope, sequence,
+except)` (a script being edited, no action yet). Settings → Keyboard shortcuts lists Code mode's
+commands as "Code mode: …".
 
 Applied everywhere through `ShortcutMap.sequences[id]` / `bindings`: AppShell makes one
 `Shortcut` per action (`runShortcut(id)`: the shell's popups directly, the rest

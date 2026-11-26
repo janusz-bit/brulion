@@ -180,7 +180,9 @@ public:
     /// The text a new session of a thread of Code mode starts with (English): the project `name`,
     /// its folder (a worktree on `branch` when given), whether the app's chat tools (`chat`) and
     /// live tools (`app`) are there — nothing of the notebook.
-    static QString codeContext(const QString &name, const QString &folder, const QString &branch, bool app, bool chat);
+    /// `pullRequest` ("" none): the pull request the thread works on ("#123 Title", its page's `pr:`).
+    static QString codeContext(const QString &name, const QString &folder, const QString &branch, bool app, bool chat,
+                               const QString &pullRequest = QString());
     /// The conversation so far as one text for a new session ("" when there is none before the
     /// newest message): `history` as WorkspaceChats builds it ({role, content}).
     static QString transcript(const QVariantList &history);
@@ -451,6 +453,7 @@ private:
         QString url{};
         QString host{};
         QString worktree{};
+        QString pullRequest{};
     };
     CodePlace codePlace(const QString &path) const;
     /// The agent that answers a thread at `code` when `id` is asked for (threadPartnerFor()).

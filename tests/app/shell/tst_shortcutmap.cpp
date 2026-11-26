@@ -357,6 +357,76 @@ private Q_SLOTS:
         QVERIFY(!ids(map.shellBindings()).contains(u"page.find"_s));
     }
 
+    // Code mode's actions (scope "code"): their own namespace — a key of an action that is everywhere
+    // is theirs in Code mode (that one "shadowed" there), keys reserved for what Code mode never
+    // shows are free for them, two of them still conflict.
+    void codeScope()
+    {
+        AppSettings settings(nextFile(), m_tmp.path());
+        ShortcutMap map(&settings);
+        QList<ShortcutMap::Action> actions = sampleActions();
+        actions << ShortcutMap::Action{u"page.switch"_s, u"Przejdź do strony"_s, u"Ctrl+O"_s}
+                << ShortcutMap::Action{u"code.openInEditor"_s, u"Tryb kodu: Otwórz w edytorze"_s, u"Ctrl+O"_s, u"code"_s}
+                << ShortcutMap::Action{u"code.toggleChanges"_s, u"Tryb kodu: Zmiany"_s, u"Ctrl+D"_s, u"code"_s}
+                << ShortcutMap::Action{u"code.nextThread"_s, u"Tryb kodu: Następny wątek"_s, u"Ctrl+Shift+]"_s,
+                                       u"code"_s}
+                << ShortcutMap::Action{u"code.branches"_s, u"Tryb kodu: Gałęzie"_s, u"Ctrl+Shift+G"_s, u"code"_s}
+                // (A script with a command's key loses it: the earlier action keeps it.)
+                << ShortcutMap::Action{u"code.script.kalkulator.testy"_s, u"Uruchom: Testy — kalkulator"_s,
+                                       u"Ctrl+D"_s, u"code"_s};
+        map.setActions(actions);
+        QCOMPARE(map.sequence(u"page.switch"_s), u"Ctrl+O"_s);
+        QCOMPARE(map.sequence(u"code.openInEditor"_s), u"Ctrl+O"_s);
+        // Reserved for drawings and the canvas elsewhere: Code mode's.
+        QCOMPARE(map.sequence(u"code.toggleChanges"_s), u"Ctrl+D"_s);
+        QCOMPARE(map.sequence(u"code.nextThread"_s), u"Ctrl+Shift+]"_s);
+        QCOMPARE(map.sequence(u"code.branches"_s), u"Ctrl+Shift+G"_s);
+        QVERIFY(map.sequence(u"code.script.kalkulator.testy"_s).isEmpty());
+        QCOMPARE(map.actionFor(u"Ctrl+O"_s), u"page.switch"_s);
+        QCOMPARE(map.actionIn(u"Ctrl+O"_s, u"code"_s), u"code.openInEditor"_s);
+        QCOMPARE(map.actionFor(u"Ctrl+D"_s), u"code.toggleChanges"_s);
+        QCOMPARE(map.scopeOf(u"code.branches"_s), u"code"_s);
+        QCOMPARE(map.scopeOf(u"page.switch"_s), QString());
+        // The shell's bindings say which is which.
+        bool sawShadowed = false, sawCode = false;
+        for (const QVariant &v : map.shellBindings()) {
+            const QVariantMap b = v.toMap();
+            if (b.value(u"id"_s) == u"page.switch"_s)
+                sawShadowed = b.value(u"shadowed"_s).toBool() && b.value(u"scope"_s).toString().isEmpty();
+            if (b.value(u"id"_s) == u"code.openInEditor"_s)
+                sawCode = b.value(u"scope"_s) == u"code"_s && !b.value(u"shadowed"_s).toBool();
+            if (b.value(u"id"_s) == u"journal.today"_s)
+                QVERIFY(!b.value(u"shadowed"_s).toBool());
+        }
+        QVERIFY(sawShadowed && sawCode);
+        // A Code mode key: free for an action that is everywhere? Reserved there (drawings).
+        QCOMPARE(map.check(u"journal.today"_s, u"Ctrl+D"_s).value(u"status"_s).toString(), u"reserved"_s);
+        // Two of Code mode conflict; one of Code mode and one that is everywhere do not.
+        QVariantMap verdict = map.check(u"code.branches"_s, u"Ctrl+D"_s);
+        QCOMPARE(verdict.value(u"status"_s).toString(), u"conflict"_s);
+        QCOMPARE(verdict.value(u"conflictId"_s).toString(), u"code.toggleChanges"_s);
+        QCOMPARE(map.check(u"code.branches"_s, u"Ctrl+J"_s).value(u"status"_s).toString(), u"ok"_s);
+        QVERIFY(map.assign(u"code.branches"_s, u"Ctrl+J"_s));
+        QCOMPARE(map.sequence(u"journal.today"_s), u"Ctrl+J"_s);
+        QCOMPARE(map.actionIn(u"Ctrl+J"_s, u"code"_s), u"code.branches"_s);
+        // Text editing keys stay reserved in Code mode too (the composer is text).
+        QCOMPARE(map.check(u"code.branches"_s, u"Ctrl+C"_s).value(u"status"_s).toString(), u"reserved"_s);
+        QCOMPARE(map.check(u"code.branches"_s, u"Ctrl+Alt+S"_s).value(u"status"_s).toString(), u"reserved"_s);
+        // A script being edited: checked in the scope without being an action yet.
+        QCOMPARE(map.checkIn(u"code"_s, u"Ctrl+Shift+G"_s, QString()).value(u"status"_s).toString(), u"ok"_s);
+        QCOMPARE(map.checkIn(u"code"_s, u"Ctrl+D"_s, QString()).value(u"conflictId"_s).toString(),
+                 u"code.toggleChanges"_s);
+        QCOMPARE(map.checkIn(u"code"_s, u"Ctrl+D"_s, u"code.toggleChanges"_s).value(u"status"_s).toString(),
+                 u"same"_s);
+        QCOMPARE(map.checkIn(u"code"_s, u"x"_s, QString()).value(u"status"_s).toString(), u"typing"_s);
+        // Kept, and read back in their scope.
+        ShortcutMap again(&settings);
+        again.setActions(actions);
+        QCOMPARE(again.sequence(u"code.branches"_s), u"Ctrl+J"_s);
+        QCOMPARE(again.sequence(u"journal.today"_s), u"Ctrl+J"_s);
+        QVERIFY(again.entries(u"Gałęzie"_s).first().toMap().value(u"scope"_s) == u"code"_s);
+    }
+
     void withoutSettings()
     {
         ShortcutMap map(nullptr);
