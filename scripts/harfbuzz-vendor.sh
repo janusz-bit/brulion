@@ -69,7 +69,7 @@ for defines in "-D_WIN32 -D_MSC_VER=1940" "-D__ANDROID__" "-D__EMSCRIPTEN__" "-D
   # shellcheck disable=SC2086 # the defines are words
   (cd "$up" && "$cxx" -std=c++17 -MM -MG $defines -I. "$amalgamation" 2>/dev/null) >>"$tmp/deps" || true
 done
-tr ' \\' '\n\n' <"$tmp/deps" | grep -v -E '^$|:$' | sort -u |
+sed 's/[ \\]/\n/g' <"$tmp/deps" | grep -v -E '^$|:$' | sort -u | # one path a line
   python3 -I -c '
 import os, sys
 up = sys.argv[1]
@@ -78,7 +78,9 @@ for line in sys.stdin:
     if os.path.isfile(path) and os.path.commonpath([up, path]) == up:
         print(os.path.relpath(path, up))
 ' "$up" | sort -u >"$files"
-grep -qx 'hb.h' "$files" && grep -qx 'hb-ot-shape.cc' "$files" || die "the file list misses hb.h or hb-ot-shape.cc"
+if ! grep -qx 'hb.h' "$files" || ! grep -qx 'hb-ot-shape.cc' "$files"; then
+  die "the file list misses hb.h or hb-ot-shape.cc"
+fi
 
 rm -rf -- "$DEST/src"
 mkdir -p "$DEST/src"
