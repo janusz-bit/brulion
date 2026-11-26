@@ -955,11 +955,16 @@ void TestTerminal::viewAttachesAfterOutput()
     // Output while no view shows the session (another tab, another thread): a view shown then and
     // scrolled back keeps its lines when the next one comes.
     TerminalSession session;
+    Window w;
+    // The session already at the view's size: attaching resizes nothing (a resize pulls lines back
+    // out of the history, and how many depends on the font the platform gives the view — Nix's
+    // aarch64 sandbox gave another one).
+    QTRY_VERIFY(w.view->columns() > 0 && w.view->rows() > 0);
+    session.resize(w.view->columns(), w.view->rows());
     QByteArray lines;
     for (int i = 0; i < 2000; ++i)
         lines += "wiersz " + QByteArray::number(i) + "\r\n";
     show(session, lines);
-    Window w;
     w.view->setSession(&session);
     w.view->scrollLines(5);
     const QString before = w.view->visibleText();

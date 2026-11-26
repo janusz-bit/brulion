@@ -626,7 +626,7 @@ void Client::worktrees(const QString &folder, std::function<void(const WorktreeL
 {
     RunOptions o;
     o.readOnly = true;
-    git(folder, {u"worktree"_s, u"list"_s, u"--porcelain"_s, u"-z"_s}, o, [done = std::move(done)](const RunResult &r) {
+    auto finish = [done = std::move(done)](const RunResult &r) {
         WorktreeList list;
         list.ok = r.ok();
         if (!r.ok())
@@ -634,7 +634,17 @@ void Client::worktrees(const QString &folder, std::function<void(const WorktreeL
         else
             list.worktrees = parseWorktrees(r.out);
         done(list);
-    });
+    };
+    // `-z` came with git 2.36 (Ubuntu 22.04 has 2.34): without it the porcelain is a line a field,
+    // which parseWorktrees() reads too.
+    git(folder, {u"worktree"_s, u"list"_s, u"--porcelain"_s, u"-z"_s}, o,
+        [this, folder, o, finish = std::move(finish)](const RunResult &r) mutable {
+            if (!r.ok() && r.err.contains(u"unknown switch"_s)) {
+                git(folder, {u"worktree"_s, u"list"_s, u"--porcelain"_s}, o, std::move(finish));
+                return;
+            }
+            finish(r);
+        });
 }
 
 // ---- Actions -----------------------------------------------------------------------------------

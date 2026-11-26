@@ -54,6 +54,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -161,6 +162,22 @@ int git(const QString &folder, const QStringList &args)
     return QProcess::execute(u"git"_s, QStringList{u"-C"_s, folder, u"-c"_s, u"user.name=Ala"_s, u"-c"_s,
                                                     u"user.email=ala@example.com"_s, u"-c"_s,
                                                     u"commit.gpgsign=false"_s} + args);
+}
+
+/// A shell's `pwd` on Windows is git for Windows' sh: "/c/Users/…" for "C:/Users/…".
+QString fromMsys(QString text)
+{
+#ifdef Q_OS_WIN
+    static const QRegularExpression drive(u"(^|[\\s:])/([a-zA-Z])/"_s);
+    QRegularExpressionMatch m;
+    qsizetype from = 0;
+    while ((m = drive.match(text, from)).hasMatch()) {
+        const QString replacement = m.captured(1) + m.captured(2).toUpper() + u":/"_s;
+        text.replace(m.capturedStart(), m.capturedLength(), replacement);
+        from = m.capturedStart() + replacement.size();
+    }
+#endif
+    return text;
 }
 
 /// A git repository at `folder` with Dom.md committed.
@@ -1531,7 +1548,9 @@ private Q_SLOTS:
         QTest::newRow("dot dot out") << u"../obcy/x"_s << false << u"-"_s;
         QTest::newRow("absolute outside") << u"/etc/passwd"_s << false << u"-"_s;
         QTest::newRow("a prefix of its name") << u"%1-inny/x"_s << false << u"-"_s;
+#ifndef Q_OS_WIN // (QFile::link() makes a .lnk shortcut there, no symbolic link)
         QTest::newRow("a link out") << u"wyjscie/plik"_s << false << u"-"_s;
+#endif
         QTest::newRow(".git read") << u".git/config"_s << false << u".git/config"_s;
         QTest::newRow(".git written") << u".git/config"_s << true << u"-"_s;
         QTest::newRow(".GIT written") << u".GIT/hooks/x"_s << true << u"-"_s;
@@ -1656,7 +1675,7 @@ private Q_SLOTS:
         QCOMPARE(askCode(*t, key, u"do gita"_s, code), u"Do gita: -32602"_s);
         QVERIFY(!QFile::exists(repo + u"/.git/brulion-test"_s));
         // A terminal: in the project's folder, never elsewhere.
-        QCOMPARE(askCode(*t, key, u"pwd"_s, code), u"Pwd: %1 | /: -32602"_s.arg(folder));
+        QCOMPARE(fromMsys(askCode(*t, key, u"pwd"_s, code)), u"Pwd: %1 | /: -32602"_s.arg(folder));
         // The changes since the checkpoint before "zapisz" (and since none: against HEAD).
         HttpResult r = http("GET", u"projects/zolw/changes?since=%1"_s.arg(beforeWrite), {}, bearer(token));
         QCOMPARE(r.status, 200);
@@ -1715,7 +1734,7 @@ private Q_SLOTS:
         // The same stream's conversations of the notebook: the notebook's folder, no checkpoint.
         QCOMPARE(ask(*t, u"AI/Notatki.md"_s, u"katalog"_s), u"Katalog: "_s + QDir::cleanPath(m_vault));
         QCOMPARE(t->checkpoints.size(), 5);
-        QCOMPARE(ask(*t, u"AI/Notatki.md"_s, u"pwd"_s), u"Pwd: %1 | /: /"_s.arg(canonical(m_vault)));
+        QCOMPARE(fromMsys(ask(*t, u"AI/Notatki.md"_s, u"pwd"_s)), u"Pwd: %1 | /: /"_s.arg(canonical(m_vault)));
     }
 
     void codeWorktrees()
@@ -1735,7 +1754,8 @@ private Q_SLOTS:
         const QString folder = r.json.value(u"folder"_s).toString();
         QCOMPARE(folder, QDir::cleanPath(root + u"/zolw/napraw-blad-12"_s));
         QCOMPARE(r.json.value(u"branch"_s).toString(), u"brulion/napraw-blad-12"_s);
-        QCOMPARE(fileText(folder + u"/Dom.md"_s), u"# README żółwia\n"_s);
+        // (git for Windows checks files out with CRLF line ends: core.autocrlf.)
+        QCOMPARE(fileText(folder + u"/Dom.md"_s).remove(u'\r'), u"# README żółwia\n"_s);
         QCOMPARE(git(repo, {u"rev-parse"_s, u"-q"_s, u"--verify"_s, u"refs/heads/brulion/napraw-blad-12"_s}), 0);
         // The same title again: a free name; through the app's side.
         acp::RemoteWorktree made;

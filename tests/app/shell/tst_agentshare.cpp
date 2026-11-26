@@ -288,7 +288,9 @@ private Q_SLOTS:
         QCOMPARE(listed->first().id, u"sklep-zolwia"_s);
         QCOMPARE(listed->first().path, QDir::cleanPath(project));
         QCOMPARE(listed->first().worktreesRoot, ws.projects()->worktreesRoot());
+#ifndef Q_OS_WIN // (no permission bits there: Qt reports what the file's ACL allows the owner)
         QCOMPARE(QFile(projectsFile).permissions() & (QFileDevice::ReadOther | QFileDevice::ReadGroup), QFileDevice::Permissions());
+#endif
 
         // The notebook offers it: its address and the agent's name, the other keys kept.
         const QString configPath = root + u"/.brulion/config.json"_s;

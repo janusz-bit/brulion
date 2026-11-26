@@ -10,7 +10,8 @@ done in the repository simply disappears from the list.
   the terminal and the project's files — picker, viewer, search, @-mentions — are there
   (docs/CODE.md; tried with a real Claude Code and Codex: tst_shell_agents realAgentThread; its tests
   run on Windows too: the ConPTY terminal, git, gh). Missing: Code mode tried by hand on Windows and on
-  macOS at all; a terminal on Windows before 10 1809; the terminal's resizable splits;
+  macOS at all; t3.json read again when it changes, on Windows (CI's runner saw no change of it:
+  tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809; the terminal's resizable splits;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
   a pull request's text written by AI (the commit message is: "Write with AI", AiAsk), a turn's
   changes without what the user changed between turns, `--skip` while rebasing, `git fetch` of its

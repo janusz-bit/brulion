@@ -221,7 +221,7 @@ QString resolvePath(const QString &path, const QString &workingDirectory, const 
     };
     if (path.startsWith(u"~/"))
         return home.isEmpty() ? QString() : existing(home + path.mid(1));
-    if (path.startsWith(u'/'))
+    if (QDir::isAbsolutePath(path)) // "/…" and, on Windows, "C:/…" / "C:\…"
         return existing(path);
     if (workingDirectory.isEmpty() || !QDir::isAbsolutePath(workingDirectory))
         return {};

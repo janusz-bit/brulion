@@ -92,6 +92,25 @@ bool reaped(qint64 pid)
 #endif
 }
 
+/// The process has ended: reaped, or a zombie nobody reaps (its parent gone, and the first
+/// process of a container is not always an init that reaps orphans).
+bool ended(qint64 pid)
+{
+    if (reaped(pid))
+        return true;
+#ifdef Q_OS_LINUX
+    QFile stat(u"/proc/%1/stat"_s.arg(pid));
+    if (!stat.open(QIODevice::ReadOnly))
+        return true;
+    const QByteArray line = stat.readAll();
+    // "pid (comm) S …": the state follows the command's closing parenthesis.
+    const qsizetype paren = line.lastIndexOf(')');
+    return paren >= 0 && paren + 2 < line.size() && line.at(paren + 2) == 'Z';
+#else
+    return false;
+#endif
+}
+
 #ifdef Q_OS_WIN
 /// Whether the process `pid` has ended (waiting up to `ms` for it).
 bool processEnded(qint64 pid, int ms = 0)
@@ -418,8 +437,9 @@ void TestPty::terminateSleep()
     QCOMPARE(run.exitCode, SigHup);
     QVERIFY2(timer.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, "SIGHUP ended it, not the SIGKILL after the grace period");
     QVERIFY(reaped(pid));
-    // The job got the hangup too (init reaps it).
-    QTRY_VERIFY_WITH_TIMEOUT(reaped(job), Timeout);
+    // The job got the hangup too (init reaps it — where there is one: in a container whose first
+    // process reaps nothing, such as CI's AppImage build, it stays a zombie, ended all the same).
+    QTRY_VERIFY_WITH_TIMEOUT(ended(job), Timeout);
 }
 
 void TestPty::terminateIgnoringHangup()

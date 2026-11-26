@@ -1499,23 +1499,37 @@ void TestGitCliRepo::stageAndUnstage()
     repo.commitAll(u"a"_s);
     repo.write(u"a.txt"_s, "b\n");
     repo.remove(u"usuń.txt"_s);
+    // A name git would read as a pathspec's magic; Windows allows neither ':' nor '*' in names.
+#ifdef Q_OS_WIN
+    const bool magicName = false;
+#else
+    const bool magicName = true;
     repo.write(u":(glob)*"_s, "dziwna nazwa\n");
+#endif
     repo.write(u"-n"_s, "opcja?\n");
     Client client;
-    Outcome o = await<Outcome>([&](auto done) {
-        client.stage(repo.root, {u"a.txt"_s, u"usuń.txt"_s, u":(glob)*"_s, u"-n"_s}, done);
-    });
+    QStringList toStage{u"a.txt"_s, u"usuń.txt"_s, u"-n"_s};
+    if (magicName)
+        toStage.append(u":(glob)*"_s);
+    Outcome o = await<Outcome>([&](auto done) { client.stage(repo.root, toStage, done); });
     QVERIFY2(o.ok, qPrintable(o.message));
-    QCOMPARE(repo.text({u"diff"_s, u"--cached"_s, u"--name-status"_s, u"-z"_s}).split(QChar(0), Qt::SkipEmptyParts).size(), 8);
+    QCOMPARE(repo.text({u"diff"_s, u"--cached"_s, u"--name-status"_s, u"-z"_s})
+                     .split(QChar(0), Qt::SkipEmptyParts)
+                     .size(),
+             magicName ? 8 : 6);
     QCOMPARE(repo.text({u"diff"_s, u"--name-only"_s}), QString());
-    o = await<Outcome>([&](auto done) { client.unstage(repo.root, {u"a.txt"_s, u":(glob)*"_s}, done); });
+    QStringList toUnstage{u"a.txt"_s};
+    if (magicName)
+        toUnstage.append(u":(glob)*"_s);
+    o = await<Outcome>([&](auto done) { client.unstage(repo.root, toUnstage, done); });
     QVERIFY2(o.ok, qPrintable(o.message));
     const QString staged = repo.text({u"diff"_s, u"--cached"_s, u"--name-only"_s});
     QVERIFY(!staged.contains(u"a.txt"_s));
     QVERIFY(staged.contains(u"usuń.txt"_s) || staged.contains(u"\\305"_s));
     QCOMPARE(repo.read(u"a.txt"_s), QByteArray("b\n"));
-    QVERIFY(repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? \":(glob)*\""_s)
-            || repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? :(glob)*"_s));
+    if (magicName)
+        QVERIFY(repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? \":(glob)*\""_s)
+                || repo.text({u"status"_s, u"--porcelain"_s}).contains(u"?? :(glob)*"_s));
     // Paths that leave the work tree never reach git.
     o = await<Outcome>([&](auto done) { client.stage(repo.root, {u"../poza"_s}, done); });
     QVERIFY(!o.ok);
@@ -1567,13 +1581,16 @@ void TestGitCliRepo::discardFiles()
     QVERIFY(!repo.exists(u"dodany.txt"_s));
     QVERIFY(!repo.exists(u"nowa nazwa.txt"_s));
     QVERIFY(!repo.exists(u"folder/nieśledzony.txt"_s));
-    // The new files went to the trash (this test's home), not gone for good.
+#ifdef Q_OS_LINUX
+    // The new files went to the trash (this test's home), not gone for good. (The XDG trash: Windows'
+    // Recycle Bin and the macOS Trash are the system's, outside the test's home.)
     QDirIterator it(m_home.filePath(u"xdg-data/Trash/files"_s), QDir::Files);
     QStringList trashed;
     while (it.hasNext())
         trashed << QFileInfo(it.next()).fileName();
     QVERIFY2(trashed.contains(u"dodany.txt"_s), qPrintable(trashed.join(u", "_s)));
     QVERIFY(trashed.contains(u"nieśledzony.txt"_s));
+#endif
 }
 
 void TestGitCliRepo::discardRefused()

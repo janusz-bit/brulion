@@ -274,7 +274,11 @@ void TestCodeGit::rows()
     QCOMPARE(u.value(u"dir"_s).toString(), u"folder/głęboki"_s);
     QCOMPARE(u.value(u"additions"_s).toInt(), 1);
 
-    // A refresh with nothing new changes nothing.
+    // A refresh with nothing new changes nothing. (One refresh first: git's first status after files
+    // were written in the same second may rewrite the index's stat data — racy git — and Windows'
+    // coarser timestamps make that likely.)
+    git.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(!git.refreshing(), Wait);
     const int before = git.revision();
     git.refresh();
     QTRY_VERIFY_WITH_TIMEOUT(!git.refreshing(), Wait);

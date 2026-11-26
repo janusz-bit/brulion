@@ -216,7 +216,11 @@ std::optional<FileLink> parseFileLink(QStringView link)
         const QUrl url(s);
         if (!url.isValid() || (!url.host().isEmpty() && url.host() != u"localhost"))
             return std::nullopt;
-        s = url.path(QUrl::FullyDecoded);
+        // toLocalFile(): "C:/…" on Windows (path() keeps the "/" before the drive: "/C:/…"); without
+        // the "localhost" host, which it would turn into a network path.
+        QUrl local = url;
+        local.setHost(QString());
+        s = local.toLocalFile();
         if (url.hasFragment())
             s += u'#' + url.fragment(QUrl::FullyDecoded);
     } else {

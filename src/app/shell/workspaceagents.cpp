@@ -26,8 +26,8 @@
 #if QT_CONFIG(process) // (not in the browser: AI agents run in the desktop app)
 #include <QProcess>
 #include <QRegularExpression>
-#include <QSaveFile>
 #endif
+#include <QSaveFile> // writeFile: a Code mode thread's files (also built in the browser)
 #include <QStandardPaths>
 #include <QSysInfo>
 #include <QTimer>
