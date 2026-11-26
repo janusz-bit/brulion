@@ -18,6 +18,15 @@
 #include <optional>
 #include <vector>
 
+// Vulkan in this build: a Qt with Vulkan and Vulkan's headers here. Qt's qvulkaninstance.h
+// declares no QVulkanInstance without <vulkan/vulkan.h> (aqt's Qt on a CI runner has the
+// feature, the runner no headers).
+#if QT_CONFIG(vulkan) && __has_include(<vulkan/vulkan.h>)
+#define BRULION_ATRAMENT_VULKAN 1
+#else
+#define BRULION_ATRAMENT_VULKAN 0
+#endif
+
 QT_BEGIN_NAMESPACE
 class QOffscreenSurface;
 class QRhiRenderPassDescriptor;
@@ -37,7 +46,7 @@ public:
     ~OffscreenRhi();
 
     QRhi *rhi() const { return m_rhi.get(); }
-#if QT_CONFIG(vulkan)
+#if BRULION_ATRAMENT_VULKAN
     QVulkanInstance *vulkanInstance() const { return m_vulkan.get(); }
 #endif
     // "Vulkan: llvmpipe (LLVM 21.1.8, 256 bits)".
@@ -53,7 +62,7 @@ public:
 private:
     OffscreenRhi();
 
-#if QT_CONFIG(vulkan)
+#if BRULION_ATRAMENT_VULKAN
     std::unique_ptr<QVulkanInstance> m_vulkan;
 #endif
     std::unique_ptr<QOffscreenSurface> m_surface;

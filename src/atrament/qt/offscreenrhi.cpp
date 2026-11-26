@@ -5,7 +5,7 @@
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
 #include <rhi/qrhi.h>
-#if QT_CONFIG(vulkan)
+#if BRULION_ATRAMENT_VULKAN
 #include <QVulkanInstance>
 #include <private/qbasicvulkanplatforminstance_p.h>
 #include <private/qvulkaninstance_p.h>
@@ -16,7 +16,7 @@
 
 namespace brulion::atrament {
 
-#if QT_CONFIG(vulkan)
+#if BRULION_ATRAMENT_VULKAN
 namespace {
 
 // A Vulkan instance straight from the loader, without the platform plugin: no surface extensions
@@ -52,7 +52,7 @@ std::unique_ptr<OffscreenRhi> OffscreenRhi::create(Backend backend, QString *err
     };
     std::unique_ptr<OffscreenRhi> r(new OffscreenRhi);
     if (backend == Backend::Vulkan) {
-#if QT_CONFIG(vulkan)
+#if BRULION_ATRAMENT_VULKAN
         r->m_vulkan = std::make_unique<QVulkanInstance>();
         QVulkanInstancePrivate::get(r->m_vulkan.get())
                 ->platformInst.reset(new HeadlessVulkanInstance(r->m_vulkan.get()));
@@ -71,7 +71,7 @@ std::unique_ptr<OffscreenRhi> OffscreenRhi::create(Backend backend, QString *err
             return fail(QStringLiteral("no Vulkan device"));
         return r;
 #else
-        // The browser's Qt (WebGL only).
+        // The browser's Qt (WebGL only), or no Vulkan headers where this was built.
         return fail(QStringLiteral("this Qt has no Vulkan"));
 #endif
     }
@@ -95,7 +95,7 @@ OffscreenRhi::~OffscreenRhi()
     m_texture.reset();
     m_rhi.reset();
     m_surface.reset();
-#if QT_CONFIG(vulkan)
+#if BRULION_ATRAMENT_VULKAN
     if (m_vulkan)
         m_vulkan->destroy();
 #endif
