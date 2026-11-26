@@ -1,0 +1,7 @@
+Nowości w 0.32.0:
+• Klonowanie repozytorium w trybie Kod
+• Notatki z powrotem z serwera
+• Atrament do wypróbowania
+• Poprawka w palecie
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.32.0
