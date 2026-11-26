@@ -11,6 +11,8 @@
 //   tw.draw();
 //   tw.simulateClick({ 20, 20 });          // dispatches, then draws if a frame was asked for
 //   QCOMPARE(tw.pixel(20, 20), …);
+//   tw.simulateTouchDrag({ 50, 250 }, { 50, 50 }, 80ms);   // a finger's flick, on the virtual clock
+//   tw.advance(500ms);                     // the fling's frames, one per 16 ms
 
 #include "raster/raster.h"
 #include "ui/accessibility.h"
@@ -40,6 +42,8 @@ public:
     Modifiers modifiers() const override { return m_modifiers; }
     bool isActive() const override { return m_active; }
     void requestFrame() override { m_frameRequested = true; }
+    // Drawn by advance() at the next step of the virtual clock, not by settle().
+    void requestAnimationFrame() override { m_animationFrameRequested = true; }
     void present(const Scene &scene, Atlas &atlas) override;
     void setCursor(CursorStyle cursor) override { m_cursor = cursor; }
     void setTitle(std::u16string_view title) override { m_title = title; }
@@ -51,6 +55,10 @@ public:
     // Draws one frame now.
     void draw();
     bool frameRequested() const { return m_frameRequested; }
+    bool animationFrameRequested() const { return m_animationFrameRequested; }
+    // Moves the platform's virtual clock by `by` in steps of a frame (16 ms), drawing at each step
+    // what was asked for — an animation's next frame too — as a display refreshing at about 60 Hz.
+    void advance(std::chrono::milliseconds by);
     int framesPresented() const { return m_frames; }
 
     void resize(Size size);
@@ -76,6 +84,18 @@ public:
     void simulateMouseExit();
     // Any input as a platform gives it (a finger's pointer kind, a pen…); settles afterwards.
     bool simulateInput(const PlatformInput &input) { return send(input); }
+    // A finger (or a pen: `pointer`), each event stamped with the virtual clock's time.
+    bool simulateTouchDown(Point p, PointerKind pointer = PointerKind::Touch);
+    bool simulateTouchMove(Point p);
+    bool simulateTouchUp(Point p);
+    // The system took the touch (Qt's TouchCancel, an ungrab).
+    bool simulateTouchCancel();
+    // Down at `from`, then `steps` moves evenly to `to` over `duration` (advance() between them:
+    // the clock moves, frames are drawn), then up unless `release` is false.
+    void simulateTouchDrag(Point from, Point to, std::chrono::milliseconds duration, int steps = 8,
+            bool release = true);
+    // A finger's tap: down and up at once.
+    bool simulateTap(Point p);
 
     const RasterTarget &image() const { return m_target; }
     Pixel pixel(int x, int y) const; // device pixels
@@ -96,6 +116,7 @@ public:
 
 private:
     bool send(const PlatformInput &input);
+    EventTime clockTime() const;
 
     TestPlatform &m_platform;
     Size m_size;
@@ -104,6 +125,9 @@ private:
     Modifiers m_modifiers;
     bool m_active = true;
     bool m_frameRequested = false;
+    bool m_animationFrameRequested = false;
+    PointerKind m_touchPointer = PointerKind::Touch;
+    Point m_touchAt;
     bool m_rasterize = true;
     int m_frames = 0;
     int m_inputStateChanges = 0;

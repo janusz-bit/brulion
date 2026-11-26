@@ -4,8 +4,15 @@
 //
 //   QtPlatform      Atrament's Platform over Qt: the event loop's queue, QTimer, the clipboard
 //   AtramentItem    a QQuickItem that is an Atrament window: it draws the window's frame and
-//                   turns Qt's mouse, wheel, key, hover and input-method events into Atrament's,
-//                   answering the input method's queries from the focused element's InputHandler.
+//                   turns Qt's mouse, touch, wheel, key, hover and input-method events into
+//                   Atrament's, answering the input method's queries from the focused element's
+//                   InputHandler.
+//
+// Touch: the item takes Qt's touch events itself (not the mouse events Qt Quick would make of
+// them): the first finger down is Atrament's pointer of kind Touch until it lifts — with the
+// event's time, for the fling's velocity — and a TouchCancel or a grab taken away (a Drawer's
+// edge, a Flickable around) ends its press as cancelled, which the mouse Qt Quick makes of a touch
+// never said. A pen comes as the mouse Qt makes of it, of kind Pen.
 //
 // The input method sees a field as Qt's own controls show it: the composition (Atrament's marked
 // text, which is part of the text) is not in the text Qt is told about, it sits at the caret, and
@@ -55,6 +62,11 @@ public:
     void writeClipboard(std::u16string_view text) override;
     std::optional<std::u16string> readClipboard() override;
     std::chrono::milliseconds doubleClickInterval() const override;
+    // QStyleHints::startDragDistance (Qt Quick's Flickable starts at it too).
+    float touchSlop() const override;
+    // Android: ViewConfiguration.getLongPressTimeout(), when its GestureDetector — and through it
+    // Qt's input context — takes a long press; elsewhere QStyleHints::mousePressAndHoldInterval.
+    std::chrono::milliseconds longPressInterval() const override;
 
 private:
     QObject *m_context;
@@ -86,6 +98,9 @@ public:
     Modifiers modifiers() const override;
     bool isActive() const override;
     void requestFrame() override;
+    // Asked for while a frame is built (a fling's next one), the item is polished when that frame
+    // is done: Qt Quick would polish it again at once, in the same pass, with nothing shown between.
+    void requestAnimationFrame() override;
     void present(const Scene &scene, Atlas &atlas) override;
     void setCursor(CursorStyle cursor) override;
     void inputStateChanged() override;
@@ -118,6 +133,9 @@ protected:
     void hoverMoveEvent(QHoverEvent *event) override;
     void hoverLeaveEvent(QHoverEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    void touchEvent(QTouchEvent *event) override;
+    void touchUngrabEvent() override;
+    void mouseUngrabEvent() override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void inputMethodEvent(QInputMethodEvent *event) override;
@@ -143,7 +161,12 @@ private:
     bool send(const PlatformInput &input);
     InputHandler *inputHandler() const;
     void showInputPanelAt(Point p);
-    int clickCountFor(Point p, MouseButton button);
+    int clickCountFor(Point p, MouseButton button, PointerKind pointer);
+    // A press and a release of the mouse, a pen or the finger.
+    void pointerPressed(MouseButton button, Point p, Modifiers modifiers, PointerKind pointer, EventTime time);
+    void pointerReleased(MouseButton button, Point p, Modifiers modifiers, PointerKind pointer, EventTime time);
+    // The press in progress ends without a release (its grab was taken, the touch cancelled).
+    void cancelPointer();
     bool gpuAvailable() const;
     void checkGpuRenderer();
 
@@ -173,6 +196,12 @@ private:
     Point m_lastClickPos;
     MouseButton m_lastClickButton = MouseButton::Left;
     int m_clickCount = 0;
+    // The press in progress (a cancel ends it), and the finger it belongs to (a touch point's id).
+    bool m_building = false; // in updatePolish, building a frame
+    bool m_animationFramePosted = false;
+    std::optional<MouseButton> m_pressedButton;
+    PointerKind m_pressedPointer = PointerKind::Mouse;
+    int m_touchId = -1;
     std::unique_ptr<AtramentAccessibility> m_accessibility;
     // The input method's view of the focused field, as last told (inputStateChanged).
     struct ImeState {

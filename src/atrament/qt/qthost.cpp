@@ -14,6 +14,7 @@
 #include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QLoggingCategory>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGImageNode>
@@ -21,10 +22,19 @@
 #include <QSGRendererInterface>
 #include <QStyleHints>
 #include <QTimer>
+#include <QTouchEvent>
 #include <QWheelEvent>
 #include <rhi/qrhi.h>
 
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#endif
+
 namespace brulion::atrament {
+
+// A finger's scrolls and flings (QT_LOGGING_RULES="brulion.atrament.touch.debug=true"): what the
+// device measured — the release velocity, the fling's distance and duration, its frames.
+Q_LOGGING_CATEGORY(lcAtramentTouch, "brulion.atrament.touch", QtWarningMsg)
 
 namespace {
 
@@ -412,6 +422,23 @@ std::chrono::milliseconds QtPlatform::doubleClickInterval() const
     return std::chrono::milliseconds(QGuiApplication::styleHints()->mouseDoubleClickInterval());
 }
 
+float QtPlatform::touchSlop() const
+{
+    return float(std::max(1, QGuiApplication::styleHints()->startDragDistance()));
+}
+
+std::chrono::milliseconds QtPlatform::longPressInterval() const
+{
+#ifdef Q_OS_ANDROID
+    // Qt's own hint (800 ms) is not when Android's GestureDetector selects a word (400 ms, or
+    // what the accessibility setting "Touch & hold delay" says).
+    static const int timeout = QJniObject::callStaticMethod<jint>("android/view/ViewConfiguration", "getLongPressTimeout");
+    if (timeout > 0)
+        return std::chrono::milliseconds(timeout);
+#endif
+    return std::chrono::milliseconds(QGuiApplication::styleHints()->mousePressAndHoldInterval());
+}
+
 int addQtFonts(FontCollection &fonts, const QStringList &paths)
 {
     int added = 0;
@@ -435,6 +462,7 @@ AtramentItem::AtramentItem(QQuickItem *parent)
     setFlag(ItemIsFocusScope);
     setAcceptHoverEvents(true);
     setAcceptedMouseButtons(Qt::AllButtons);
+    setAcceptTouchEvents(true);
     setActiveFocusOnTab(true);
     m_accessibility = std::make_unique<AtramentAccessibility>(this);
 }
@@ -451,6 +479,27 @@ void AtramentItem::attach(App &app, const AnyView &root)
     m_app = &app;
     m_window = &app.openWindow(*this, root);
     m_accessibility->setWindow(m_window);
+    if (lcAtramentTouch().isDebugEnabled()) {
+        m_window->setTouchTrace([](const Window::TouchTrace &t) {
+            switch (t.kind) {
+            case Window::TouchTrace::Kind::Scroll:
+                qCDebug(lcAtramentTouch, "scroll from (%.0f, %.0f), offset (%.1f, %.1f)", t.position.x, t.position.y,
+                        t.offset.x, t.offset.y);
+                break;
+            case Window::TouchTrace::Kind::Release:
+                qCDebug(lcAtramentTouch,
+                        "release at (%.0f, %.0f), offset (%.1f, %.1f), velocity (%.0f, %.0f) px/s, fling (%.1f, %.1f) "
+                        "px in %.3f s",
+                        t.position.x, t.position.y, t.offset.x, t.offset.y, t.velocity.x, t.velocity.y, t.distance.x,
+                        t.distance.y, t.seconds);
+                break;
+            case Window::TouchTrace::Kind::FlingEnd:
+                qCDebug(lcAtramentTouch, "fling ended at offset (%.1f, %.1f) after %.3f s, %d frames", t.offset.x,
+                        t.offset.y, t.seconds, t.frames);
+                break;
+            }
+        });
+    }
 }
 
 void AtramentItem::accessibilityChanged(const std::vector<AccessibilityEvent> &events)
@@ -485,10 +534,32 @@ void AtramentItem::requestFrame()
     polish();
 }
 
+void AtramentItem::requestAnimationFrame()
+{
+    if (!m_building) {
+        polish();
+        return;
+    }
+    // After this polish pass: Qt Quick builds the next frame when it starts one, paced by the
+    // display (its render loop waits for the last frame's swap).
+    if (m_animationFramePosted)
+        return;
+    m_animationFramePosted = true;
+    QMetaObject::invokeMethod(
+            this,
+            [this] {
+                m_animationFramePosted = false;
+                polish();
+            },
+            Qt::QueuedConnection);
+}
+
 void AtramentItem::updatePolish()
 {
+    m_building = true;
     if (m_callbacks.frame)
         m_callbacks.frame();
+    m_building = false;
 }
 
 bool AtramentItem::gpuAvailable() const
@@ -723,12 +794,16 @@ bool AtramentItem::send(const PlatformInput &input)
     return m_callbacks.input ? m_callbacks.input(input) : false;
 }
 
-int AtramentItem::clickCountFor(Point p, MouseButton button)
+int AtramentItem::clickCountFor(Point p, MouseButton button, PointerKind pointer)
 {
     const auto now = std::chrono::steady_clock::now();
     const auto interval = std::chrono::milliseconds(QGuiApplication::styleHints()->mouseDoubleClickInterval());
     const float distance = std::abs(p.x - m_lastClickPos.x) + std::abs(p.y - m_lastClickPos.y);
-    if (button == m_lastClickButton && now - m_lastClick <= interval && distance < 6)
+    // A finger lands less precisely than a mouse.
+    const float near = pointer == PointerKind::Touch
+            ? float(std::max(6, QGuiApplication::styleHints()->touchDoubleTapDistance()))
+            : 6.0f;
+    if (button == m_lastClickButton && now - m_lastClick <= interval && distance < near)
         ++m_clickCount;
     else
         m_clickCount = 1;
@@ -738,13 +813,9 @@ int AtramentItem::clickCountFor(Point p, MouseButton button)
     return m_clickCount;
 }
 
-void AtramentItem::mousePressEvent(QMouseEvent *event)
+void AtramentItem::pointerPressed(MouseButton button, Point p, Modifiers modifiers, PointerKind pointer,
+                                  EventTime time)
 {
-    const auto button = buttonFromQt(event->button());
-    if (!button) {
-        event->ignore();
-        return;
-    }
     if (!hasActiveFocus())
         forceActiveFocus(Qt::MouseFocusReason);
     // A press ends a composition: the input method commits it first, as Qt's own fields have it
@@ -752,13 +823,60 @@ void AtramentItem::mousePressEvent(QMouseEvent *event)
     if (InputHandler *h = inputHandler(); h && h->markedRange())
         QGuiApplication::inputMethod()->commit();
     MouseDownEvent e;
-    e.button = *button;
-    e.position = { float(event->position().x()), float(event->position().y()) };
-    e.modifiers = modifiersFromQt(event->modifiers());
-    e.clickCount = clickCountFor(e.position, *button);
-    e.pointer = pointerFromQt(event);
-    m_mouse = e.position;
+    e.button = button;
+    e.position = p;
+    e.modifiers = modifiers;
+    e.clickCount = clickCountFor(p, button, pointer);
+    e.pointer = pointer;
+    e.time = time;
+    m_mouse = p;
+    m_pressedButton = button;
+    m_pressedPointer = pointer;
     send(e);
+}
+
+void AtramentItem::pointerReleased(MouseButton button, Point p, Modifiers modifiers, PointerKind pointer,
+                                   EventTime time)
+{
+    MouseUpEvent e;
+    e.button = button;
+    e.position = p;
+    e.modifiers = modifiers;
+    e.clickCount = m_clickCount;
+    e.pointer = pointer;
+    e.time = time;
+    m_mouse = p;
+    if (m_pressedButton == button)
+        m_pressedButton.reset();
+    send(e);
+    // A tap in the field brings its keyboard back; a finger's drag that scrolled was no tap.
+    if (e.button == MouseButton::Left && !(m_window && pointer != PointerKind::Mouse && m_window->touchScrolled()))
+        showInputPanelAt(e.position);
+}
+
+void AtramentItem::cancelPointer()
+{
+    m_touchId = -1;
+    if (!m_pressedButton)
+        return;
+    MouseUpEvent e;
+    e.button = *m_pressedButton;
+    e.position = m_mouse;
+    e.pointer = m_pressedPointer;
+    e.cancelled = true;
+    m_pressedButton.reset();
+    send(e);
+}
+
+void AtramentItem::mousePressEvent(QMouseEvent *event)
+{
+    const auto button = buttonFromQt(event->button());
+    if (!button) {
+        event->ignore();
+        return;
+    }
+    pointerPressed(*button, { float(event->position().x()), float(event->position().y()) },
+                   modifiersFromQt(event->modifiers()), pointerFromQt(event), EventTime(event->timestamp()));
     event->accept(); // keep the grab, so the release comes here
 }
 
@@ -773,16 +891,59 @@ void AtramentItem::mouseReleaseEvent(QMouseEvent *event)
     const auto button = buttonFromQt(event->button());
     if (!button)
         return;
-    MouseUpEvent e;
-    e.button = *button;
-    e.position = { float(event->position().x()), float(event->position().y()) };
-    e.modifiers = modifiersFromQt(event->modifiers());
-    e.clickCount = m_clickCount;
-    e.pointer = pointerFromQt(event);
-    m_mouse = e.position;
-    send(e);
-    if (e.button == MouseButton::Left)
-        showInputPanelAt(e.position);
+    pointerReleased(*button, { float(event->position().x()), float(event->position().y()) },
+                    modifiersFromQt(event->modifiers()), pointerFromQt(event), EventTime(event->timestamp()));
+}
+
+void AtramentItem::mouseUngrabEvent()
+{
+    // Qt Quick ungrabs after every release too: only a press still in progress was taken away.
+    if (m_touchId < 0)
+        cancelPointer();
+}
+
+void AtramentItem::touchEvent(QTouchEvent *event)
+{
+    event->accept(); // all of it: no mouse is made of it for the item or for anything below
+    if (event->type() == QEvent::TouchCancel) {
+        cancelPointer();
+        return;
+    }
+    const Modifiers modifiers = modifiersFromQt(event->modifiers());
+    for (const QEventPoint &point : event->points()) {
+        const Point p { float(point.position().x()), float(point.position().y()) };
+        const EventTime time(point.timestamp() ? point.timestamp() : event->timestamp());
+        if (m_touchId < 0) {
+            // The first finger down is the pointer (until it lifts); more fingers are ignored.
+            if (point.state() == QEventPoint::State::Pressed) {
+                m_touchId = point.id();
+                pointerPressed(MouseButton::Left, p, modifiers, PointerKind::Touch, time);
+            }
+            continue;
+        }
+        if (point.id() != m_touchId)
+            continue;
+        if (point.state() == QEventPoint::State::Updated) {
+            MouseMoveEvent e;
+            e.position = p;
+            e.modifiers = modifiers;
+            e.pressedButton = MouseButton::Left;
+            e.pointer = PointerKind::Touch;
+            e.time = time;
+            m_mouse = p;
+            send(e);
+        } else if (point.state() == QEventPoint::State::Released) {
+            m_touchId = -1;
+            pointerReleased(MouseButton::Left, p, modifiers, PointerKind::Touch, time);
+        }
+    }
+}
+
+void AtramentItem::touchUngrabEvent()
+{
+    // Also after every release of the last finger: only a touch still down was taken away.
+    if (m_touchId >= 0)
+        cancelPointer();
 }
 
 void AtramentItem::mouseMoveEvent(QMouseEvent *event)
@@ -795,6 +956,7 @@ void AtramentItem::mouseMoveEvent(QMouseEvent *event)
     else if (event->buttons() & Qt::RightButton)
         e.pressedButton = MouseButton::Right;
     e.pointer = pointerFromQt(event);
+    e.time = EventTime(event->timestamp());
     m_mouse = e.position;
     send(e);
 }
@@ -804,6 +966,9 @@ void AtramentItem::hoverMoveEvent(QHoverEvent *event)
     MouseMoveEvent e;
     e.position = { float(event->position().x()), float(event->position().y()) };
     e.modifiers = modifiersFromQt(event->modifiers());
+    // A pen above the screen hovers; Qt Quick's hover where a finger was is none (the window
+    // ignores a finger's move without a touch).
+    e.pointer = pointerFromQt(event);
     m_mouse = e.position;
     send(e);
 }

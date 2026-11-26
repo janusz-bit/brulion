@@ -10,6 +10,11 @@
 //
 // Elements call the methods below during their phases; coordinates are the window's logical
 // pixels, and the scene receives device pixels (× scaleFactor()).
+//
+// A finger's or a pen's press, drag and release go through the window's touch gesture first
+// (docs/ATRAMENT.md "Touch", ui/touch.cpp): a drag past the slop scrolls the innermost container
+// under it that can still move that way, its release flings it; the elements see a tap, a press
+// held still, or a drag nothing scrolls.
 
 #include "base/arena.h"
 #include "base/function.h"
@@ -22,8 +27,10 @@
 #include "ui/events.h"
 #include "ui/platform.h"
 #include "ui/style.h"
+#include "ui/touch.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -75,6 +82,25 @@ public:
 
     // Input from the platform; returns whether a listener handled it.
     bool dispatchInput(const PlatformInput &input);
+    // The last touch became a scroll (until the next one goes down): its release was no tap.
+    bool touchScrolled() const { return m_touchScrolled; }
+    // A finger (or a pen) is down, and whether its drag is scrolling now.
+    bool touchActive() const { return m_touch.phase != TouchPhaseState::None; }
+    bool touchScrolling() const { return m_touch.phase == TouchPhaseState::Scrolling; }
+    bool flinging() const { return m_fling.active; }
+    void stopFling();
+    // What a finger did, for diagnosis (the Qt host logs it under brulion.atrament.touch).
+    struct TouchTrace {
+        enum class Kind : std::uint8_t { Scroll, Release, FlingEnd };
+        Kind kind = Kind::Scroll;
+        Point position; // the finger's
+        Point offset; // the container's scroll offset
+        Point velocity; // Release: the finger's, px/s
+        Point distance; // Release: the fling's (zero: no fling)
+        double seconds = 0; // Release: the fling's duration; FlingEnd: how long it ran
+        int frames = 0; // FlingEnd: the frames it moved in
+    };
+    void setTouchTrace(std::function<void(const TouchTrace &)> trace) { m_touchTrace = std::move(trace); }
     // Stops the event at the current listener (no further bubbling, no default action).
     void stopPropagation() { m_propagate = false; }
     bool propagating() const { return m_propagate; }
@@ -169,9 +195,10 @@ public:
     void pushTextStyle(const TextStyleRefinement &refinement);
     void popTextStyle();
 
-    // The scroll containers around what is prepainted now (a scrolling Div pushes itself around its
-    // children; `viewport` in window coordinates).
-    void pushScrollFrame(ScrollState &state, Rect viewport, bool x, bool y);
+    // The scroll containers around what is prepainted now (a scrolling Div or list pushes itself
+    // around its children; `viewport` in window coordinates). With its hitbox it is also one a
+    // finger's drag scrolls.
+    void pushScrollFrame(ScrollState &state, Rect viewport, bool x, bool y, HitboxId hitbox = 0);
     void popScrollFrame();
     // During prepaint: after this frame the scroll containers around the current element scroll
     // the least that shows `rect` (window coordinates; the last request of a frame wins) — a
@@ -194,6 +221,10 @@ public:
     // focus handle and key context; key and action listeners attach to the current node.
     void pushDispatchNode(std::uint64_t focusId, std::u16string_view keyContext);
     void popDispatchNode();
+    // The dispatch nodes painted so far, and whether the focused element is among those painted
+    // since such a mark (a list finds the row with the focus).
+    std::size_t dispatchNodeMark() const { return m_building ? m_building->dispatchNodes.size() : 0; }
+    bool focusPaintedSince(std::size_t mark) const;
     using KeyListener = Fn<void(const PlatformInput &, DispatchPhase, Window &, App &)>;
     void onKeyEvent(KeyListener listener);
     using ActionListener = Fn<void(Window &, App &)>;
@@ -277,6 +308,12 @@ private:
         std::u16string action;
         ActionListener listener;
     };
+    struct ScrollTarget { // a container a finger can scroll
+        ScrollState *state = nullptr;
+        HitboxId hitbox = 0;
+        bool x = false;
+        bool y = false;
+    };
     struct Frame {
         Arena arena { 256 * 1024 };
         Scene scene;
@@ -287,6 +324,7 @@ private:
         std::vector<DispatchNode> dispatchNodes;
         std::vector<KeyListenerEntry> keyListeners;
         std::vector<ActionListenerEntry> actionListeners;
+        std::vector<ScrollTarget> scrollTargets; // in prepaint order: outer containers first
         std::uint64_t inputFocus = 0;
         InputHandler *inputHandler = nullptr;
         std::vector<EntityId> views; // sorted after the frame
@@ -304,8 +342,27 @@ private:
     };
 
     void computeHitTest(Frame &frame, Point position);
+    std::vector<HitboxId> hitsAt(const Frame &frame, Point position) const;
     void updateCursor();
     bool dispatchMouse(const PlatformInput &input);
+    // --- touch (ui/touch.cpp)
+    bool isTouchInput(const PlatformInput &input) const;
+    bool dispatchTouch(const PlatformInput &input);
+    bool touchDown(const MouseDownEvent &down);
+    bool touchMove(const MouseMoveEvent &move);
+    bool touchUp(const MouseUpEvent &up);
+    void deliverTouchPress();
+    void touchLongPressed();
+    bool beginTouchScroll(Point dragged);
+    void cancelTouchPress();
+    void touchHoverOff();
+    void endTouch();
+    double touchSeconds(EventTime time) const;
+    // The containers under a point that a finger could scroll, topmost (innermost) first.
+    std::vector<ScrollTarget> scrollTargetsAt(Point position) const;
+    ScrollState *liveScrollTarget(ScrollState *state) const;
+    void startFling(ScrollState *state, bool x, bool y, Point velocity);
+    void stepFling();
     bool dispatchKey(const PlatformInput &input);
     std::vector<int> focusPath(const Frame &frame) const;
     bool dispatchActionAlong(const std::vector<int> &path, std::size_t fromDepth, std::u16string_view action);
@@ -342,6 +399,38 @@ private:
     };
     std::vector<ScrollFrame> m_scrollFrames;
     std::vector<ScrollFrame> m_revealFrames; // revealRect's containers, innermost last
+    enum class TouchPhaseState : std::uint8_t {
+        None,
+        Waiting, // down inside a container that can scroll: the elements do not have the press yet
+        Pressed, // the elements have the press; a drag past the slop may still scroll
+        Scrolling, // the drag scrolls `target`; the elements' press was cancelled (or never given)
+        Held, // a long press in the focused field: it selects, the finger scrolls nothing
+    };
+    struct TouchGesture {
+        TouchPhaseState phase = TouchPhaseState::None;
+        MouseDownEvent down; // the press, kept for the elements while Waiting
+        Point last;
+        bool decided = false; // the drag passed the slop: it scrolls, or never will
+        ScrollState *target = nullptr;
+        bool x = false;
+        bool y = false;
+        VelocityTracker velocity;
+        Subscription pressTimer;
+        Subscription longPressTimer;
+    };
+    TouchGesture m_touch;
+    bool m_touchScrolled = false;
+    struct Fling {
+        bool active = false;
+        ScrollState *target = nullptr;
+        FlingCurve x;
+        FlingCurve y;
+        std::chrono::steady_clock::time_point start;
+        Point travelled; // what the curves moved so far (the container may have moved otherwise too)
+        int frames = 0;
+    };
+    Fling m_fling;
+    std::function<void(const TouchTrace &)> m_touchTrace;
     std::optional<Rect> m_reveal;
     bool revealPending();
     std::unordered_map<std::uint64_t, std::unique_ptr<AnyState>> m_states;

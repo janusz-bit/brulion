@@ -4,3 +4,5 @@ brulion_add_test(tst_atrament_textinput SOURCES tst_atrament_textinput.cpp LIBS 
 target_compile_definitions(tst_atrament_textinput PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_atrament_accessibility SOURCES tst_atrament_accessibility.cpp LIBS brulion_atrament_ui)
 target_compile_definitions(tst_atrament_accessibility PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+brulion_add_test(tst_atrament_touch SOURCES tst_atrament_touch.cpp LIBS brulion_atrament_ui)
+target_compile_definitions(tst_atrament_touch PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

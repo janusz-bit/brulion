@@ -7,6 +7,7 @@
 #if QT_CONFIG(accessibility)
 
 #include <QAccessibleObject>
+#include <QGuiApplication>
 #include <QQuickWindow>
 #include <QTextBoundaryFinder>
 // The item is accessible only when Qt Quick knows it is (as if it had QML's Accessible
@@ -16,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <utility>
 
 namespace brulion::atrament {
@@ -61,6 +63,18 @@ QAccessible::Role qtRole(Role role)
     return QAccessible::NoRole;
 }
 
+std::optional<bool> &selectionAsCheckedOverride()
+{
+    static std::optional<bool> on;
+    return on;
+}
+
+// A tab's selection is its checked state where the platform's tree has no selected state.
+bool selectionShownAsChecked(const AccessibilityNode &n)
+{
+    return n.role == Role::Tab && n.states.selectable && AtramentAccessibility::selectionAsChecked();
+}
+
 QAccessible::State qtState(const AccessibilityNode &n)
 {
     const AccessibilityStates &s = n.states;
@@ -82,6 +96,10 @@ QAccessible::State qtState(const AccessibilityNode &n)
     q.offscreen = s.offscreen;
     q.readOnly = n.role == Role::TextInput && !s.editable;
     q.selectableText = n.role == Role::TextInput || n.role == Role::Text;
+    if (selectionShownAsChecked(n)) {
+        q.checkable = true;
+        q.checked = s.selected;
+    }
     return q;
 }
 
@@ -827,6 +845,19 @@ void AtramentAccessibility::setWindow(Window *window)
         m_window->setAccessibilityEnabled(true);
 }
 
+bool AtramentAccessibility::selectionAsChecked()
+{
+    if (const std::optional<bool> on = selectionAsCheckedOverride())
+        return *on;
+    static const bool android = QGuiApplication::platformName() == QLatin1String("android");
+    return android;
+}
+
+void AtramentAccessibility::setSelectionAsChecked(bool on)
+{
+    selectionAsCheckedOverride() = on;
+}
+
 void AtramentAccessibility::accessibilityActiveChanged(bool active)
 {
     if (m_window)
@@ -1016,10 +1047,14 @@ void AtramentAccessibility::treeChanged(const std::vector<AccessibilityEvent> &e
                 send(QAccessibleTextSelectionEvent(iface, r.start, r.end));
             }
             break;
-        case Type::StateChanged:
-            for (const QAccessible::State &s : splitStates(e.changed))
+        case Type::StateChanged: {
+            AccessibilityStates changed = e.changed;
+            if (n && changed.selected && selectionShownAsChecked(*n))
+                changed.checked = true;
+            for (const QAccessible::State &s : splitStates(changed))
                 send(QAccessibleStateChangeEvent(iface, s));
             break;
+        }
         case Type::ScrollChanged: send(QAccessibleEvent(iface, QAccessible::ScrollingPositionChanged)); break;
         case Type::BoundsChanged: send(QAccessibleEvent(iface, QAccessible::LocationChanged)); break;
         case Type::ChildrenChanged:

@@ -422,7 +422,7 @@ void Div::prepaint(Rect bounds, Window &window, App &app)
     if (m_scrollState)
         window.pushScrollFrame(*m_scrollState, bounds.inset(m_style.layout.border),
                                m_style.layout.overflowX == Overflow::Scroll,
-                               m_style.layout.overflowY == Overflow::Scroll);
+                               m_style.layout.overflowY == Overflow::Scroll, m_hitbox);
     for (AnyElement &c : m_children)
         c.prepaint(window, app);
     if (m_scrollState)

@@ -714,10 +714,11 @@ AnyElement TextInput::render(Window &window, Context<TextInput> &cx)
                              } else {
                                  t.moveCaret(*at, e.modifiers.shift, c);
                              }
-                             // A finger drags no selection: a touch platform selects by a long
-                             // press and the handles (Android's input method sets the selection);
-                             // a drag selecting from the press undid it.
-                             t.m_dragging = e.pointer != PointerKind::Touch;
+                             // A finger or a pen drags no selection — its drag scrolls (the
+                             // window's touch gesture): a touch platform selects by a long press
+                             // and the handles (Android's input method sets the selection); a drag
+                             // selecting from the press undid it.
+                             t.m_dragging = e.pointer == PointerKind::Mouse;
                              t.m_dragAnchor = t.m_selection.anchor;
                          }))
             .onMouseMove(cx.listener([](TextInput &t, const MouseMoveEvent &e, Window &, Context<TextInput> &c) {

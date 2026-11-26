@@ -55,6 +55,21 @@ int TestWindow::settle()
     return frames;
 }
 
+void TestWindow::advance(std::chrono::milliseconds by)
+{
+    constexpr std::chrono::milliseconds kFrame { 16 };
+    while (by.count() > 0) {
+        const std::chrono::milliseconds step = std::min(by, kFrame);
+        m_platform.advanceClock(step);
+        by -= step;
+        if (m_animationFrameRequested) {
+            m_animationFrameRequested = false;
+            m_frameRequested = true;
+        }
+        settle();
+    }
+}
+
 void TestWindow::resize(Size size)
 {
     m_size = size;
@@ -134,6 +149,76 @@ bool TestWindow::simulateScroll(Point p, Point delta, Modifiers modifiers)
     e.delta = delta;
     e.modifiers = modifiers;
     return send(e);
+}
+
+EventTime TestWindow::clockTime() const
+{
+    return std::chrono::duration_cast<EventTime>(m_platform.now().time_since_epoch());
+}
+
+bool TestWindow::simulateTouchDown(Point p, PointerKind pointer)
+{
+    m_touchPointer = pointer;
+    m_touchAt = p;
+    MouseDownEvent e;
+    e.position = p;
+    e.pointer = pointer;
+    e.time = clockTime();
+    return send(e);
+}
+
+bool TestWindow::simulateTouchMove(Point p)
+{
+    m_touchAt = p;
+    MouseMoveEvent e;
+    e.position = p;
+    e.pressedButton = MouseButton::Left;
+    e.pointer = m_touchPointer;
+    e.time = clockTime();
+    return send(e);
+}
+
+bool TestWindow::simulateTouchUp(Point p)
+{
+    m_touchAt = p;
+    MouseUpEvent e;
+    e.position = p;
+    e.pointer = m_touchPointer;
+    e.time = clockTime();
+    return send(e);
+}
+
+bool TestWindow::simulateTouchCancel()
+{
+    MouseUpEvent e;
+    e.position = m_touchAt;
+    e.pointer = m_touchPointer;
+    e.time = clockTime();
+    e.cancelled = true;
+    return send(e);
+}
+
+void TestWindow::simulateTouchDrag(Point from, Point to, std::chrono::milliseconds duration, int steps, bool release)
+{
+    steps = std::max(1, steps);
+    simulateTouchDown(from);
+    for (int i = 1; i <= steps; ++i) {
+        // Even steps of the clock (the remainder in the last one).
+        const auto at = duration * i / steps;
+        const auto before = duration * (i - 1) / steps;
+        advance(at - before);
+        const float f = float(i) / float(steps);
+        simulateTouchMove(from + (to - from) * f);
+    }
+    if (release)
+        simulateTouchUp(to);
+}
+
+bool TestWindow::simulateTap(Point p)
+{
+    const bool down = simulateTouchDown(p);
+    const bool up = simulateTouchUp(p);
+    return down || up;
 }
 
 void TestWindow::simulateMouseExit()

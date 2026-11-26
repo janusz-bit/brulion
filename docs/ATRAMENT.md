@@ -62,7 +62,7 @@ typed element API instead), print support.
 | D7 | Fonts: HarfBuzz for shaping and for glyph outlines (`hb-draw`), our own coverage rasterizer, a glyph atlas; no FreeType, no hinting, subpixel x positions in quarters of a pixel | One code path on every platform, pixel-identical output, the fonts Brulion already bundles (Inter, Literata, JetBrains Mono, Brulion Emoji, Brulion Math). Color glyphs (COLRv1, `hb-paint`) come later. |
 | D8 | Line breaking and grapheme clusters: our own implementation of the parts of UAX #14 / #29 Brulion's languages need, tables later generated from the Unicode data; bidirectional text later | Small, no ICU (≈30 MB of data). |
 | D9 | Layout: our own flexbox (the CSS algorithm's subset Brulion uses: direction, justify, align, gap, padding, margin, grow/shrink/basis, min/max, absolute position, measured leaves) | GPUI's Taffy is Rust; Yoga brings a node object per element; the tree is ours already. |
-| D10 | Input: hitboxes registered in prepaint, listeners in paint, dispatched in reverse paint order with a capture and a bubble phase; focus handles; actions and keymaps in key contexts; an `InputHandler` interface for input methods modelled on NSTextInputClient / Android `InputConnection` | GPUI's proven model; the IME interface maps 1:1 onto every platform's. |
+| D10 | Input: hitboxes registered in prepaint, listeners in paint, dispatched in reverse paint order with a capture and a bubble phase; focus handles; actions and keymaps in key contexts; an `InputHandler` interface for input methods modelled on NSTextInputClient / Android `InputConnection`; a finger's or a pen's drags go through the window's touch gesture first — slop, the innermost container that can scroll that way, a fling on Android's curve ("Touch" below) | GPUI's proven model; the IME interface maps 1:1 onto every platform's; scrolling by touch is the window's, so every scroll container gets it and no element has to tell a tap from a drag. |
 | D11 | Execution: one main thread, a platform dispatcher, timers; a test platform with a virtual clock and deterministic ordering | Timing-free tests; no flaky waits. |
 | D12 | First host: `AtramentItem`, a `QQuickItem` that draws a window's scene with the QRhi GPU renderer in a `QSGRenderNode`, inside Qt Quick's own render pass (the CPU renderer into a texture where Qt Quick has no QRhi, the GPU lacks OpenGL ES 3, or `BRULION_ATRAMENT_RENDERER=cpu`), and translates Qt's events and input-method queries | Views move one by one; Qt keeps providing windows, input methods and accessibility until our own platform layers replace it. |
 | D13 | Accessibility: elements describe themselves (role, name, value, state, actions, bounds) into a semantic tree each frame; hosted, a bridge to `QAccessibleInterface`; standalone, AccessKit's C API | Accessibility from the first view that ships, on every platform. Done hosted ("Accessibility" below): the tree in `ui/accessibility.h`, the bridge in `qt/qtaccessibility.h` (tested through `QAccessible`; the gallery read by an AT-SPI client); AccessKit with the own platforms (M4). |
@@ -216,11 +216,75 @@ moving its focus onto a field opens no keyboard; activating it does. Tested with
 sequences of Qt's Android input context for Gboard (`tests/atrament/qt/tst_atrament_qt_input`).
 
 A field keeps its caret in view (`Window::revealRect`: the scroll containers around an element —
-scrolling `div()`s push themselves in prepaint — scroll the least that shows a rectangle after the
-frame): when it takes the focus, when the caret or the text changes, and when the window gets
-another size, which is how an on-screen keyboard reaches Atrament (the QML around ends the view at
-the keyboard's top). A finger's press only places the caret: selecting is the platform's long
-press and handles, not a drag.
+scrolling `div()`s and `uniformList`s push themselves in prepaint — scroll the least that shows a
+rectangle after the frame): when it takes the focus, when the caret or the text changes, and when
+the window gets another size, which is how an on-screen keyboard reaches Atrament (the QML around
+ends the view at the keyboard's top). A `uniformList` keeps the row with the focus in its frame
+while that row is scrolled away (painted outside the view, so unseen): the field keeps its input
+method, and comes back into view when a keyboard covers it or the caret moves. A finger's tap only
+places the caret: selecting is the platform's long press and handles; a finger's or a pen's drag
+scrolls (below), only a mouse's selects.
+
+### Touch
+
+A finger's (or a pen's) press, drag and release go through the window's touch gesture
+(`ui/touch.h`, `Window::dispatchTouch`) before any element sees them. A mouse never scrolls by
+dragging; the wheel does as before.
+
+* **Which container.** Every scrolling `div()` and `uniformList` registers itself with its hitbox
+  in prepaint. When a drag passes the slop (`Platform::touchSlop`: Qt's `startDragDistance`, 10 px;
+  Android's 8 dp on the test platform), the innermost container under the press that can still
+  move in the drag's direction takes it — vertical when the drag is at least as vertical as
+  horizontal — for the whole drag: latched, as browsers and Android's lists do, so an inner list
+  reaching its end leaves the page around it to the next drag, not to the rest of this one. A drag
+  nothing takes stays the elements' (a slider's thumb, a sideways drag over a vertical list) and
+  never becomes a scroll.
+* **1:1.** The content follows the finger from where the drag passed the slop (no jump by it).
+* **A press waits.** Inside a container that can scroll, the elements get a finger's press after
+  100 ms (Android's tap timeout): a drag that starts sooner is a scroll they never hear of — a
+  field it started on is not focused, no keyboard opens, its caret stays —, a release is a tap
+  (the press and the release at once: a click), a finger that stays gives them the press (pressed
+  looks). Outside scroll containers the press is immediate.
+* **A scroll clicks nothing.** When a drag becomes a scroll, the press the elements had is
+  cancelled: a `MouseUpEvent` with `cancelled`, dispatched over nothing, so nothing is clicked and
+  pressed looks end. The hover goes too: a finger hovers nothing, no hover look follows the content
+  under it or stays behind after a tap.
+* **Fling.** The release velocity is a least-squares quadratic over the finger's last 100 ms of
+  samples, its slope at the newest (Android's and Flutter's `VelocityTracker`), zero when the
+  finger rested 40 ms. The fling follows Android's `OverScroller`: the distance and the duration
+  from the velocity (friction 0.015, deceleration rate ln 0.78 / ln 0.9, gravity at 160 px per
+  inch — a logical px is Android's dp), the position along its spline, the Bézier with time
+  (0, 0.175, 0.35, 1) and position (0, 0.5, 1, 1); flings below 50 px/s do not start, faster than
+  8000 px/s are capped (ViewConfiguration); each axis on its own. 2500 px/s glides 954 px in
+  1.09 s, 5000 px/s 3178 px in 1.81 s — a hard flick crosses a long list, as on Android.
+* **Frames.** A fling moves its container at the start of each frame to where the curve is at the
+  platform's time, and asks for the next one (`PlatformWindow::requestAnimationFrame`). Qt Quick
+  builds it when its render loop starts the next frame, paced by the display (asked from inside a
+  frame, the item is polished after that pass: within it, Qt Quick would polish it again at once,
+  a busy loop with nothing shown); the test platform draws it at the next 16 ms of its virtual
+  clock (`TestWindow::advance`).
+* **Stops.** A finger on the flinging container stops it and drags it on at once, a press no
+  element sees (a tap that stops a list opens no row); a press of the mouse or a wheel stops it
+  too. An edge stops it on its axis: no bounce, no glow — Android 12's stretch needs a transform of
+  the content's layer that the scene does not have yet, and a bounce would be the iOS look on
+  Android.
+* **Long press.** A finger held still for the long-press time (`Platform::longPressInterval`:
+  Android's `ViewConfiguration.getLongPressTimeout()`, 400 ms by default; elsewhere Qt's
+  press-and-hold interval) on the focused field scrolls nothing more: Android's input context
+  selects the word under it then (`QAndroidInputContext::longPress`, from its own
+  `GestureDetector`), and the finger moving on must not carry the selection and its handles away.
+  Held anywhere else, the finger still scrolls when it moves, as native lists do.
+* **Through Qt** (`qt/qthost.h`) the item takes `QTouchEvent`s itself (`setAcceptTouchEvents`):
+  the first finger down is the pointer until it lifts, with the events' times; `TouchCancel`, or
+  the grab taken away (a Drawer's edge, a Flickable around: `touchUngrabEvent`, and
+  `mouseUngrabEvent` while a press is still down — Qt Quick ungrabs after every release too), ends
+  the press as cancelled. Not the mouse Qt Quick makes of a touch: that one says nothing when the
+  touch is cancelled or stolen (a press stuck down, a scroll that never ends), brings hover events
+  where the finger was and double clicks of its own; and the touch events have the second finger
+  for a pinch later. A pen comes as the mouse Qt makes of it, of kind Pen, and scrolls as a finger.
+* Left for later: two fingers (pinch, two-finger scroll), an overscroll effect, a drag an element
+  claims in a container's own direction (a vertical slider in a vertical list: today the list
+  takes it), smooth programmatic scrolling.
 
 ### Accessibility
 
@@ -265,9 +329,12 @@ assistive technology asks for gets an object-less interface registered with Qt's
 states mapped, the text and editable-text interfaces for text, actions (Press, Toggle, SetFocus,
 Increase / Decrease and Scroll Up / Down for scrolling — TalkBack scrolls forward with Increase —,
 ShowOnScreen inside scrolling content), the value interface for ranges and the viewport interface
-for scrolling (a list counts rows). The item is marked accessible as QML's `Accessible` would
-(`QQuickItemPrivate`, Qt6::QuickPrivate), so its window lists it; `Accessible.name` set in QML
-names it. The tree is turned on when Qt says an assistive technology is active, or when one first
+for scrolling (a list counts rows). On Android a selectable tab is also checkable, and checked when
+selected: Qt's Android bridge (6.12) gives Android's nodes no selected state at all (it never calls
+`AccessibilityNodeInfo.setSelected`), which is why the emulator's tree showed the gallery's tabs
+without one — Qt Quick's own TabButton is a checkable button for the same reason. The item is
+marked accessible as QML's `Accessible` would (`QQuickItemPrivate`, Qt6::QuickPrivate), so its
+window lists it; `Accessible.name` set in QML names it. The tree is turned on when Qt says an assistive technology is active, or when one first
 asks; an action draws its frame at once, so the next question sees its result. The tree's changes
 leave as `QAccessibleEvent`s — Focus, NameChanged, TextUpdated, TextCaretMoved and
 TextSelectionChanged, StateChanged one state at a time, ObjectCreated / ObjectShow and
@@ -365,6 +432,11 @@ Rules of thumb:
 * `TestPlatform` / `TestWindow`: a window without a screen — size, scale, a virtual clock, input
   simulated in process (`simulateClick`, `simulateKeys(u"ctrl-a backspace")`, `simulateText`,
   `simulateComposition`), a frame rendered by `raster` to an RGBA image.
+* Touch on the virtual clock: `simulateTouchDown` / `Move` / `Up` / `Cancel` (events stamped with
+  the clock's time; a pen with `PointerKind::Pen`), `simulateTouchDrag(from, to, duration, steps)`,
+  `simulateTap`, and `advance(ms)`, which moves the clock in frames of 16 ms and draws what each
+  asks for — a fling's frames too (`tests/atrament/ui/tst_atrament_touch.cpp`; the Qt host's
+  `QTouchEvent`s in `tests/atrament/qt/tst_atrament_qt_touch.cpp`).
 * Golden images compared with a tolerance of 2 per channel (fused multiply-add differs between
   processors), regenerated with `BRULION_ATRAMENT_UPDATE_GOLDENS=1`.
 * Layout tests: the flex algorithm against hand-computed CSS results; text tests: Polish

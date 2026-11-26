@@ -17,3 +17,7 @@ target_compile_definitions(tst_atrament_qt_accessibility PRIVATE BRULION_SOURCE_
 brulion_add_test(tst_atrament_qt_input SOURCES tst_atrament_qt_input.cpp
     LIBS brulion_atrament_qt Qt6::Quick)
 target_compile_definitions(tst_atrament_qt_input PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+# The Qt host's touch: QTouchEvents as Atrament's finger, a cancel and a grab taken away.
+brulion_add_test(tst_atrament_qt_touch SOURCES tst_atrament_qt_touch.cpp
+    LIBS brulion_atrament_qt Qt6::Quick Qt6::GuiPrivate)
+target_compile_definitions(tst_atrament_qt_touch PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

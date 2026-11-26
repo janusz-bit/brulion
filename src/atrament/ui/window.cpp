@@ -20,6 +20,7 @@ void Window::Frame::clear()
     dispatchNodes.clear();
     keyListeners.clear();
     actionListeners.clear();
+    scrollTargets.clear();
     inputFocus = 0;
     inputHandler = nullptr;
     views.clear();
@@ -95,6 +96,9 @@ void Window::draw()
     m_refreshRequested = false;
     const auto started = std::chrono::steady_clock::now();
     m_app.update([&] {
+        // A fling moves its container to where it is at this frame's time.
+        if (m_fling.active)
+            stepFling();
         m_drawing = true;
         const int buildIndex = 1 - m_renderedIndex;
         Frame &frame = m_frames[buildIndex];
@@ -139,6 +143,8 @@ void Window::draw()
         m_drawing = false;
         if (revealPending())
             refresh(); // the next frame shows it
+        if (m_fling.active)
+            m_platform->requestAnimationFrame();
 
         // Element state nobody asked for in this frame is gone with its element.
         for (auto it = m_states.begin(); it != m_states.end();) {
@@ -351,9 +357,11 @@ bool Window::scrollIntoView(const AccessibilityTree &tree, const AccessibilityNo
     return moved;
 }
 
-void Window::pushScrollFrame(ScrollState &state, Rect viewport, bool x, bool y)
+void Window::pushScrollFrame(ScrollState &state, Rect viewport, bool x, bool y, HitboxId hitbox)
 {
     m_scrollFrames.push_back(ScrollFrame{&state, viewport, x, y});
+    if (m_building && hitbox)
+        m_building->scrollTargets.push_back(ScrollTarget{&state, hitbox, x, y});
 }
 
 void Window::popScrollFrame()
@@ -512,15 +520,21 @@ HitboxId Window::insertHitbox(Rect bounds, HitboxBehavior behavior)
 
 void Window::computeHitTest(Frame &frame, Point position)
 {
-    frame.hitTest.clear();
+    frame.hitTest = hitsAt(frame, position);
+}
+
+std::vector<HitboxId> Window::hitsAt(const Frame &frame, Point position) const
+{
+    std::vector<HitboxId> hits;
     for (std::size_t i = frame.hitboxes.size(); i-- > 0;) {
         const Hitbox &h = frame.hitboxes[i];
         if (h.bounds.contains(position)) {
-            frame.hitTest.push_back(HitboxId(i + 1));
+            hits.push_back(HitboxId(i + 1));
             if (h.behavior == HitboxBehavior::BlockMouse)
                 break;
         }
     }
+    return hits;
 }
 
 bool Window::isHovered(HitboxId hitbox) const
@@ -585,6 +599,18 @@ void Window::pushDispatchNode(std::uint64_t focusId, std::u16string_view keyCont
     node.keyContext = std::u16string(keyContext);
     m_building->dispatchNodes.push_back(std::move(node));
     m_dispatchStack.push_back(int(m_building->dispatchNodes.size() - 1));
+}
+
+bool Window::focusPaintedSince(std::size_t mark) const
+{
+    if (!m_building || m_focused == 0)
+        return false;
+    const auto &nodes = m_building->dispatchNodes;
+    for (std::size_t i = mark; i < nodes.size(); ++i) {
+        if (nodes[i].focusId == m_focused)
+            return true;
+    }
+    return false;
 }
 
 void Window::popDispatchNode()
@@ -787,8 +813,9 @@ bool Window::dispatchKey(const PlatformInput &input)
 bool Window::dispatchMouse(const PlatformInput &input)
 {
     Frame &f = rendered();
-    if (std::holds_alternative<MouseExitEvent>(input))
-        m_mouse = Point { -1e9f, -1e9f };
+    const auto *up = std::get_if<MouseUpEvent>(&input);
+    if (std::holds_alternative<MouseExitEvent>(input) || (up && up->cancelled))
+        m_mouse = Point { -1e9f, -1e9f }; // a cancelled press ends over nothing
     else
         m_mouse = positionOf(input);
     std::visit(
@@ -815,7 +842,16 @@ bool Window::dispatchInput(const PlatformInput &input)
     if (!m_platform)
         return false;
     m_defaultPrevented = false;
-    return m_app.update([&] { return isMouseEvent(input) ? dispatchMouse(input) : dispatchKey(input); });
+    return m_app.update([&] {
+        if (!isMouseEvent(input))
+            return dispatchKey(input);
+        // Fingers and pens go through the touch gesture; any other press or a wheel ends a fling.
+        if (isTouchInput(input))
+            return dispatchTouch(input);
+        if (std::holds_alternative<MouseDownEvent>(input) || std::holds_alternative<ScrollWheelEvent>(input))
+            stopFling();
+        return dispatchMouse(input);
+    });
 }
 
 // --- painting

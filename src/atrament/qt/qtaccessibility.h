@@ -49,6 +49,13 @@ public:
 #if QT_CONFIG(accessibility)
     void accessibilityActiveChanged(bool active) override;
 
+    // Qt's Android bridge never gives Android's node a selected state (6.12 calls no
+    // AccessibilityNodeInfo.setSelected), so TalkBack could not tell which tab is chosen: there a
+    // selectable tab is checkable and checked when selected, as Qt Quick's TabButton (a checkable
+    // button) is. On where Qt's platform is "android"; tests turn it on.
+    static bool selectionAsChecked();
+    static void setSelectionAsChecked(bool on);
+
     // --- for the interfaces
     AtramentItem *item() const { return m_item; }
     Window *window() const { return m_window; }

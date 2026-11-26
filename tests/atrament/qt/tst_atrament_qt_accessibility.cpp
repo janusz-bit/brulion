@@ -96,6 +96,26 @@ struct View {
     }
 };
 
+// Two tabs, one selected.
+struct Tabs {
+    int section = 0;
+    AnyElement render(Window &, Context<Tabs> &cx)
+    {
+        ArenaVector<AnyElement> tabs;
+        for (int i = 0; i < 2; ++i)
+            tabs.push_back(div().id(ElementId(u"tab", std::uint64_t(i)))
+                                   .h(30)
+                                   .role(Role::Tab)
+                                   .selected(section == i)
+                                   .onClick(cx.listener([i](Tabs &t, const ClickEvent &, Window &, Context<Tabs> &c) {
+                                       t.section = i;
+                                       c.notify();
+                                   }))
+                                   .child(i == 0 ? u"Dziennik" : u"Zadania"));
+        return div().sizeFull().flexCol().child(div().role(Role::TabList).ariaLabel(u"Sekcje").children(tabs));
+    }
+};
+
 struct Recorded {
     QAccessible::Event type;
     QAccessible::Role role = QAccessible::NoRole;
@@ -170,6 +190,7 @@ private Q_SLOTS:
     void textInput();
     void structureAndNames();
     void listViewport();
+    void tabSelectionAsChecked();
 };
 
 void TestAtramentQtAccessibility::initTestCase()
@@ -408,6 +429,44 @@ void TestAtramentQtAccessibility::listViewport()
     QCOMPARE(list->child(0)->rect().top(), list->rect().top());
     viewport->setPosition(QPointF(0, 0));
     QCOMPARE(list->child(0)->text(QAccessible::Name), QStringLiteral("Wiersz 1"));
+}
+
+void TestAtramentQtAccessibility::tabSelectionAsChecked()
+{
+    std::shared_ptr<QtPlatform> platform = std::make_shared<QtPlatform>();
+    App app{platform, loadFonts()};
+    Entity<Tabs> view = app.newEntity<Tabs>();
+    QQuickWindow window;
+    window.resize(200, 100);
+    auto item = std::make_unique<AtramentItem>(window.contentItem());
+    item->setSize(QSizeF(200, 100));
+    item->attach(app, AnyView{view.id(), &renderView<Tabs>});
+    QAccessibleInterface *root = QAccessible::queryAccessibleInterface(item.get());
+    QAccessibleInterface *list = childOf(root, QAccessible::PageTabList);
+    QVERIFY(list);
+    QAccessibleInterface *first = childOf(list, QAccessible::PageTab, QStringLiteral("Dziennik"));
+    QAccessibleInterface *second = childOf(list, QAccessible::PageTab, QStringLiteral("Zadania"));
+    QVERIFY(first && second);
+    // Off Android: selected as it is.
+    AtramentAccessibility::setSelectionAsChecked(false);
+    QVERIFY(first->state().selectable && first->state().selected);
+    QVERIFY(!first->state().checkable);
+    // Android's tree (Qt's bridge passes no selected state there): checkable, checked when selected.
+    AtramentAccessibility::setSelectionAsChecked(true);
+    QVERIFY(first->state().checkable && first->state().checked);
+    QVERIFY(first->state().selected);
+    QVERIFY(second->state().checkable && !second->state().checked);
+    // Choosing the other tab tells the change as a checked one too.
+    g_events.clear();
+    second->actionInterface()->doAction(QAccessibleActionInterface::pressAction());
+    QCOMPARE(view.read(app).section, 1);
+    QVERIFY(second->state().checked && !first->state().checked);
+    bool checkedChange = false;
+    for (const Recorded &r : g_events)
+        checkedChange = checkedChange || (r.type == QAccessible::StateChanged && r.changed.checked);
+    QVERIFY(checkedChange);
+    AtramentAccessibility::setSelectionAsChecked(false);
+    item.reset();
 }
 
 QTEST_MAIN(TestAtramentQtAccessibility)

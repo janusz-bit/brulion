@@ -90,6 +90,9 @@ public:
 
     // Asks for one frame: the platform calls `Callbacks::frame` once, at its next vertical blank.
     virtual void requestFrame() = 0;
+    // A frame of an animation in progress (a fling): at the display's next refresh, however soon
+    // the last one was — the test platform draws it when its virtual clock reaches the next 16 ms.
+    virtual void requestAnimationFrame() { requestFrame(); }
     // Shows a frame (called from inside `Callbacks::frame`). A GPU renderer mirrors the atlas's
     // pages as textures and marks them clean once it has copied what changed.
     virtual void present(const Scene &scene, Atlas &atlas) = 0;
@@ -144,6 +147,12 @@ public:
 
     // Time between two clicks that makes them a double click, and how far apart they may be.
     virtual std::chrono::milliseconds doubleClickInterval() const { return std::chrono::milliseconds(400); }
+    // How far (logical px) a finger or a pen moves from where it went down before its drag scrolls
+    // instead of tapping (Android's touch slop is 8 dp; Qt's start drag distance).
+    virtual float touchSlop() const { return 8; }
+    // A finger held still this long is a long press (Android's GestureDetector: 400 ms by default),
+    // when the platform's input method selects a word in a focused field.
+    virtual std::chrono::milliseconds longPressInterval() const { return std::chrono::milliseconds(400); }
 };
 
 } // namespace brulion::atrament

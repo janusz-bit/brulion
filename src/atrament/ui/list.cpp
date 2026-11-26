@@ -5,6 +5,11 @@
 
 namespace brulion::atrament {
 
+// Which row had the focus in the last frame (kept across frames as the list's element state).
+struct UniformList::FocusState {
+    std::optional<std::size_t> row;
+};
+
 UniformList::UniformList(ElementId id, std::size_t count, RenderItem render)
     : m_id(id)
     , m_count(count)
@@ -29,6 +34,7 @@ NodeId UniformList::requestLayout(Window &window, App &)
 void UniformList::prepaint(Rect bounds, Window &window, App &app)
 {
     m_hitbox = window.insertHitbox(bounds);
+    m_focusState = &window.elementState<FocusState>();
     ScrollState &st = m_scrollHandle ? *m_scrollHandle : window.elementState<ScrollState>();
     m_scroll = &st;
     const Rect inner = bounds.inset(m_style.layout.padding).inset(m_style.layout.border);
@@ -36,6 +42,8 @@ void UniformList::prepaint(Rect bounds, Window &window, App &app)
         st.viewport = inner.size;
         st.content = {};
         st.scrollBy({});
+        window.pushScrollFrame(st, inner, false, true, m_hitbox);
+        window.popScrollFrame();
         return;
     }
     float rowHeight = m_itemHeight.value_or(0);
@@ -60,6 +68,9 @@ void UniformList::prepaint(Rect bounds, Window &window, App &app)
     const bool pushText = !m_style.text.isEmpty();
     if (pushText)
         window.pushTextStyle(m_style.text);
+    // The rows' scroll container: a focused field in a row reveals its caret through it
+    // (Window::revealRect), a finger drags it.
+    window.pushScrollFrame(st, inner, false, true, m_hitbox);
     for (std::size_t i = m_first; i < last; ++i) {
         AnyElement row = m_render(i, window, app);
         row.setSiblingIndex(std::uint32_t(i));
@@ -67,6 +78,16 @@ void UniformList::prepaint(Rect bounds, Window &window, App &app)
         row.prepaintAt({ inner.left(), inner.top() + float(i) * rowHeight - top }, window, app);
         m_items.push_back(std::move(row));
     }
+    m_kept = AnyElement();
+    if (const std::optional<std::size_t> kept = m_focusState->row;
+            kept && window.focusedId() != 0 && *kept < m_count && (*kept < m_first || *kept >= last)) {
+        m_keptIndex = *kept;
+        m_kept = m_render(m_keptIndex, window, app);
+        m_kept.setSiblingIndex(std::uint32_t(m_keptIndex));
+        m_kept.layoutAsRoot({ inner.width(), rowHeight }, window, app);
+        m_kept.prepaintAt({ inner.left(), inner.top() + float(m_keptIndex) * rowHeight - top }, window, app);
+    }
+    window.popScrollFrame();
     if (pushText)
         window.popTextStyle();
     window.popContentMask();
@@ -94,22 +115,30 @@ void UniformList::paint(Rect bounds, Window &window, App &app)
         }
     }
     window.pushContentMask(inner);
-    for (std::size_t k = 0; k < m_items.size(); ++k) {
-        AnyElement &row = m_items[k];
+    std::optional<std::size_t> focusedRow;
+    auto paintRow = [&](AnyElement &row, std::size_t index) {
         // Each row is a list item known by its index; the row's root element describes it.
         AccessibilityNode *item = nullptr;
         if (list) {
-            const std::size_t index = m_first + k;
             item = window.beginAccessibilityNode(Role::ListItem, row.bounds(), hashCombine(0x726f77ull, index) | 1);
             if (item) {
                 item->rowIndex = std::int64_t(index);
                 item->adoptable = true;
             }
         }
+        const std::size_t mark = window.dispatchNodeMark();
         row.paint(window, app);
+        if (window.focusPaintedSince(mark))
+            focusedRow = index;
         if (item)
             window.endAccessibilityNode();
-    }
+    };
+    for (std::size_t k = 0; k < m_items.size(); ++k)
+        paintRow(m_items[k], m_first + k);
+    if (!m_kept.isEmpty())
+        paintRow(m_kept, m_keptIndex);
+    if (m_focusState)
+        m_focusState->row = focusedRow;
     window.popContentMask();
     if (list)
         window.endAccessibilityNode();

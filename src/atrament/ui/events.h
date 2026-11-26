@@ -7,6 +7,7 @@
 
 #include "base/geometry.h"
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -17,7 +18,13 @@
 namespace brulion::atrament {
 
 enum class MouseButton : std::uint8_t { Left, Right, Middle, Back, Forward };
+// A finger and a pen manipulate directly: their drags scroll (docs/ATRAMENT.md "Touch"); a mouse's
+// drags select and drag.
 enum class PointerKind : std::uint8_t { Mouse, Touch, Pen };
+
+// When the platform saw an event, in milliseconds of its own input clock (only differences
+// count: a finger's velocity is measured from them); zero when it does not say.
+using EventTime = std::chrono::milliseconds;
 
 struct Modifiers {
     bool control = false;
@@ -56,6 +63,7 @@ struct MouseDownEvent {
     Modifiers modifiers;
     int clickCount = 1; // 2 for a double click, 3 for a triple click
     PointerKind pointer = PointerKind::Mouse;
+    EventTime time { 0 };
 };
 
 struct MouseUpEvent {
@@ -64,6 +72,10 @@ struct MouseUpEvent {
     Modifiers modifiers;
     int clickCount = 1;
     PointerKind pointer = PointerKind::Mouse;
+    EventTime time { 0 };
+    // The press ended without a release: a finger's drag became a scroll, or the system took the
+    // touch. Dispatched over nothing — no element is under it, nothing is clicked, pressed looks end.
+    bool cancelled = false;
 };
 
 struct MouseMoveEvent {
@@ -71,6 +83,7 @@ struct MouseMoveEvent {
     std::optional<MouseButton> pressedButton;
     Modifiers modifiers;
     PointerKind pointer = PointerKind::Mouse;
+    EventTime time { 0 };
 };
 
 // The pointer left the window.

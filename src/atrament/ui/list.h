@@ -10,7 +10,10 @@
 //
 // Every row of a uniform list is as tall as `itemHeight()` — or, when not given, as the first row
 // measures at the list's width. Rows are identified by their index (ElementId::sibling(i)), so
-// their element state (hover, an inner scroll) follows the index.
+// their element state (hover, an inner scroll) follows the index. The row with the focus stays in
+// the frame (painted outside the view, so invisible) while it is scrolled away: a focused field
+// keeps its input method and scrolls its caret back into view (Window::revealRect) when an
+// on-screen keyboard covers it.
 
 #include "base/function.h"
 #include "ui/div.h"
@@ -69,6 +72,10 @@ private:
     ScrollState *m_scroll = nullptr;
     std::size_t m_first = 0;
     ArenaVector<AnyElement> m_items;
+    struct FocusState;
+    FocusState *m_focusState = nullptr;
+    AnyElement m_kept; // the focused row outside [m_first, m_first + m_items.size())
+    std::size_t m_keptIndex = 0;
 };
 
 inline UniformList uniformList(ElementId id, std::size_t count, UniformList::RenderItem render)
