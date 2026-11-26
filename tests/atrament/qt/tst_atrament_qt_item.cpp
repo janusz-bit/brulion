@@ -82,7 +82,9 @@ void TestAtramentQtItem::initTestCase()
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
     m_control = std::make_unique<QQuickRenderControl>();
     m_window = std::make_unique<QQuickWindow>(m_control.get());
+#if BRULION_ATRAMENT_VULKAN // (else create(Vulkan) failed above)
     m_window->setVulkanInstance(m_rhi->vulkanInstance());
+#endif
     m_window->setGraphicsDevice(QQuickGraphicsDevice::fromRhi(m_rhi->rhi()));
     m_window->setColor(QColor(0x20, 0x30, 0x40));
     m_window->setGeometry(0, 0, kWidth, kHeight);
