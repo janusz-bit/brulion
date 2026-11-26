@@ -209,7 +209,9 @@ void TestGitDiffRows::html()
     QCOMPARE(lineHtml(u"Kot i kot"_s, {}, u"#f00"_s, u"KOT"_s, u"#0f0"_s, false),
              u"<span style=\"white-space:pre\"><span style=\"background-color:#0f0\">Kot</span> i "
              "<span style=\"background-color:#0f0\">kot</span></span>"_s);
-    QCOMPARE(lineHtml(QString(), {}, u"#f00"_s, u"x"_s, u"#0f0"_s, true), u"<span style=\"white-space:pre-wrap\"></span>"_s);
+    // Nothing to mark: plain text.
+    QCOMPARE(lineHtml(u"a <b>"_s, {}, u"#f00"_s, u"x"_s, u"#0f0"_s, true), QString());
+    QCOMPARE(lineHtml(QString(), {}, u"#f00"_s, QString(), u"#0f0"_s, true), QString());
 }
 
 void TestGitDiffRows::tree()

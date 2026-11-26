@@ -370,6 +370,8 @@ QString lineHtml(const QString &text, const QVariantList &segs, const QString &c
             from = found + qMax<qsizetype>(1, query.size());
         }
     }
+    if (!marks.contains(1) && !marks.contains(2))
+        return {}; // (nothing to mark: the line as plain text)
     QString out = wrap ? u"<span style=\"white-space:pre-wrap\">"_s : u"<span style=\"white-space:pre\">"_s;
     qsizetype i = 0;
     while (i < text.size()) {

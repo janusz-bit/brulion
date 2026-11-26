@@ -48,7 +48,8 @@ QList<int> findRows(const QVariantList &rows, const QString &query);
 /// The longest line of the rows, in characters (a tab counted as 4).
 int longestLine(const QVariantList &rows);
 /// `text` as rich text: `segs`' changed parts on `changeColor`, every occurrence of `query`
-/// (case-insensitive) on `findColor`; white space kept (`wrap`: pre-wrap, else pre). Escaped.
+/// (case-insensitive) on `findColor`; white space kept (`wrap`: pre-wrap, else pre). Escaped. ""
+/// when nothing is marked (the line is plain text then).
 QString lineHtml(const QString &text, const QVariantList &segs, const QString &changeColor, const QString &query,
                  const QString &findColor, bool wrap);
 

@@ -170,7 +170,7 @@ void CodeGit::setFolder(const QString &folder)
     m_worktreeList.clear();
     m_changePaths.clear();
     m_stagedPaths.clear();
-    m_conflictCount = 0;
+    m_conflictPaths.clear();
     m_operation.clear();
     m_defaultBranch.clear();
     m_defaultBranchRef.clear();
@@ -365,20 +365,20 @@ void CodeGit::applyStatus(const gitcli::StatusReport &report)
     m_changeCount = int(report.changes.size());
     QStringList paths;
     QStringList staged;
-    int conflicts = 0;
+    QStringList conflicts;
     for (const gitcli::FileChange &c : report.changes) {
         paths.append(c.path);
         if (c.staged)
             staged.append(c.path);
         if (c.change == gitcli::Change::Conflicted)
-            ++conflicts;
+            conflicts.append(c.path);
     }
     const QString operation = gitcli::Client::operationName(gitcli::Client::operationIn(m_info.gitDir));
-    const bool more = paths != m_changePaths || staged != m_stagedPaths || conflicts != m_conflictCount
+    const bool more = paths != m_changePaths || staged != m_stagedPaths || conflicts != m_conflictPaths
                       || operation != m_operation;
     m_changePaths = paths;
     m_stagedPaths = staged;
-    m_conflictCount = conflicts;
+    m_conflictPaths = conflicts;
     m_operation = operation;
     setRefreshError(QString());
     if (changed || more) {
@@ -461,7 +461,7 @@ void CodeGit::setNotRepo(const QString &error, bool wasRepo)
     m_changeCount = 0;
     m_changePaths.clear();
     m_stagedPaths.clear();
-    m_conflictCount = 0;
+    m_conflictPaths.clear();
     m_operation.clear();
     m_factsKnown = false;
     setRefreshError(error);
@@ -946,6 +946,24 @@ QString CodeGit::branchNameFor(const QString &message) const
     return gitcli::isValidBranchName(out) ? out : QString();
 }
 
+QVariantMap CodeGit::rowOf(const QVariantList &rows, const QString &path) const
+{
+    return gitpanel::rowFor(rows, path);
+}
+
+QString CodeGit::commitModeFor(const QStringList &paths) const
+{
+    const QSet<QString> chosen(paths.cbegin(), paths.cend());
+    if (chosen.isEmpty())
+        return {};
+    // (A merge is committed whole: git refuses a partial commit then.)
+    if (chosen == QSet<QString>(m_changePaths.cbegin(), m_changePaths.cend()) || m_operation == u"merge"_s)
+        return u"all"_s;
+    if (!m_stagedPaths.isEmpty() && chosen == QSet<QString>(m_stagedPaths.cbegin(), m_stagedPaths.cend()))
+        return u"staged"_s;
+    return u"paths"_s;
+}
+
 QString CodeGit::primaryAction() const
 {
     if (!m_loaded || m_folder.isEmpty())
@@ -1161,7 +1179,7 @@ void CodeGit::commits()
                                         {u"author"_s, c.authorName},
                                         {u"time"_s, c.authorTime},
                                         {u"when"_s, whenText(c.authorTime)},
-                                        {u"parent"_s, c.parents.value(0)}});
+                                        {u"parentOid"_s, c.parents.value(0)}});
             }
             m_commitList = rows;
             Q_EMIT commitListChanged();
@@ -1233,21 +1251,18 @@ void CodeGit::commitFiles(const QString &message, const QStringList &paths, cons
     runAction(u"commit"_s, [this, message, paths, newBranch, push, createPr, prTitle, prBody, draft,
                             prBase](const QString &root) {
         // Which way: everything, the index as it is, or these files alone.
-        QSet<QString> chosen(paths.cbegin(), paths.cend());
-        const QSet<QString> all(m_changePaths.cbegin(), m_changePaths.cend());
-        const QSet<QString> staged(m_stagedPaths.cbegin(), m_stagedPaths.cend());
+        const QSet<QString> chosen(paths.cbegin(), paths.cend());
         gitcli::CommitRequest request;
         request.message = message;
         request.newBranch = newBranch;
-        if (chosen.isEmpty()) {
+        request.mode = commitModeFor(paths);
+        if (request.mode.isEmpty()) {
             finishAction(u"commit"_s, false, tr("Choose the files to commit"), QString());
             return;
         }
-        if (chosen == all || !m_operation.isEmpty()) {
-            request.mode = u"all"_s;
+        if (request.mode == u"all"_s) {
             request.paths = m_changePaths;
-        } else if (chosen == staged) {
-            request.mode = u"staged"_s;
+        } else if (request.mode == u"staged"_s) {
             request.paths = m_stagedPaths;
         } else {
             request.mode = u"paths"_s;
@@ -1430,6 +1445,29 @@ void CodeGit::stashDrop(const QString &oid)
 }
 
 // ---- The diff view's rows -----------------------------------------------------------------------
+
+QVariantList CodeGit::turnRows(const QVariantList &checkpoints) const
+{
+    QVariantList out;
+    for (qsizetype i = checkpoints.size() - 1; i >= 0; --i) {
+        const QVariantMap c = checkpoints.at(i).toMap();
+        const QString id = c.value(u"id"_s).toString();
+        if (!gitcli::isValidCheckpointId(id))
+            continue;
+        const int message = c.value(u"message"_s).toInt();
+        const int number = message > 0 ? message : int(i) + 1;
+        const QString next = i + 1 < checkpoints.size() ? checkpoints.at(i + 1).toMap().value(u"id"_s).toString() : QString();
+        out.append(QVariantMap{{u"index"_s, int(i)},
+                               {u"id"_s, id},
+                               {u"number"_s, number},
+                               {u"label"_s, tr("Turn %1").arg(number)},
+                               {u"at"_s, c.value(u"at"_s).toString()},
+                               {u"latest"_s, i == checkpoints.size() - 1},
+                               {u"base"_s, gitcli::Client::checkpointRef(id)},
+                               {u"target"_s, next.isEmpty() ? QString() : gitcli::Client::checkpointRef(next)}});
+    }
+    return out;
+}
 
 QVariantList CodeGit::diffRows(const QString &oldText, const QString &newText, bool split, bool ignoreWhitespace,
                                int context) const

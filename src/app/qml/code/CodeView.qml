@@ -347,15 +347,23 @@ FocusScope {
                 C.SplitView.preferredWidth: root.wide ? 420 : 320
                 C.SplitView.minimumWidth: 260
                 folder: root.folder
-                // The last turn's snapshot (WorkspaceChats.checkpoints): "This turn" and its revert.
-                checkpoint: root.path !== "" ? Workspace.chats.lastCheckpoint(root.path, Workspace.chats.checkpointSerial) : ""
-                checkpointLabel: qsTr("The agent's last turn")
+                // The thread's turns' snapshots (WorkspaceChats.checkpoints): "Latest turn" / "Turn N"
+                // and their reverts.
+                checkpoints: root.path !== "" ? Workspace.chats.checkpoints(root.path, Workspace.chats.checkpointSerial)
+                                              : changes.noRows
                 // (While the agent works: its changes as they come.)
                 pollInterval: chat.busyHere ? 2000 : 0
                 onActionFinished: (action, ok, message, url) => {
                     if (message !== "")
                         AppController.toast(url !== "" ? message + "\n" + url : message, ok ? "success" : "error")
                 }
+                onOpenFile: (path, line) => Workspace.projects.openInEditor(path)
+                onAddToChat: (text) => chat.addToComposer(text)
+                onCopyText: (text) => {
+                    if (pageTools.copyText(text))
+                        AppController.toast(qsTr("Copied: %1").arg(text), "success")
+                }
+                onOpenUrl: (url) => Workspace.openUrl(url)
             }
         }
     }

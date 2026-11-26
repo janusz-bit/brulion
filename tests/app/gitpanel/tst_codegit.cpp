@@ -855,8 +855,8 @@ void TestCodeGit::commitList()
     QCOMPARE(first.value(u"subject"_s).toString(), u"Drugi: żółw"_s);
     QCOMPARE(first.value(u"author"_s).toString(), u"Testowy Użytkownik"_s);
     QCOMPARE(first.value(u"shortOid"_s).toString().size(), 7);
-    QCOMPARE(first.value(u"parent"_s).toString(), git.commitList().at(1).toMap().value(u"oid"_s).toString());
-    QCOMPARE(git.commitList().at(1).toMap().value(u"parent"_s).toString(), QString());
+    QCOMPARE(first.value(u"parentOid"_s).toString(), git.commitList().at(1).toMap().value(u"oid"_s).toString());
+    QCOMPARE(git.commitList().at(1).toMap().value(u"parentOid"_s).toString(), QString());
     QVERIFY(!first.value(u"when"_s).toString().isEmpty());
 }
 

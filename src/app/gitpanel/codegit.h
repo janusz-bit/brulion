@@ -95,6 +95,8 @@ class CodeGit : public QObject {
     Q_PROPERTY(QStringList changePaths READ changePaths NOTIFY stateChanged FINAL)
     Q_PROPERTY(QStringList stagedPaths READ stagedPaths NOTIFY stateChanged FINAL)
     Q_PROPERTY(int conflictCount READ conflictCount NOTIFY stateChanged FINAL)
+    /// The conflicted files' paths.
+    Q_PROPERTY(QStringList conflictPaths READ conflictPaths NOTIFY stateChanged FINAL)
     /// A merge, rebase … stopped in this work tree: "merge" | "rebase" | "cherryPick" | "revert" |
     /// "apply" ("" none).
     Q_PROPERTY(QString operation READ operation NOTIFY stateChanged FINAL)
@@ -127,7 +129,7 @@ class CodeGit : public QObject {
     Q_PROPERTY(bool compareLoaded READ compareLoaded NOTIFY compareChanged FINAL)
     Q_PROPERTY(QString compareError READ compareError NOTIFY compareChanged FINAL)
     /// After commits(): the branch's newest commits [{oid, shortOid, subject, author, time, when,
-    /// parent}] (`when`: "5 minutes ago"; `parent` "" for a root commit).
+    /// parentOid}] (`when`: "5 minutes ago"; `parentOid` "" for a root commit).
     Q_PROPERTY(QVariantList commitList READ commitList NOTIFY commitListChanged FINAL)
     /// After stashes(): [{index, oid, message, branch, time, when}], the newest first.
     Q_PROPERTY(QVariantList stashList READ stashList NOTIFY stashListChanged FINAL)
@@ -172,7 +174,8 @@ public:
     static int maxRows() { return MaxRows; }
     QStringList changePaths() const { return m_changePaths; }
     QStringList stagedPaths() const { return m_stagedPaths; }
-    int conflictCount() const { return m_conflictCount; }
+    int conflictCount() const { return int(m_conflictPaths.size()); }
+    QStringList conflictPaths() const { return m_conflictPaths; }
     QString operation() const { return m_operation; }
     QString defaultBranch() const { return m_defaultBranch; }
     QString defaultBranchRef() const { return m_defaultBranchRef; }
@@ -245,6 +248,10 @@ public:
     Q_INVOKABLE bool isValidRepositoryName(const QString &name) const;
     /// A branch name made of a commit message's first line ("fix-the-sync-conflict"; "" none).
     Q_INVOKABLE QString branchNameFor(const QString &message) const;
+    /// The row of `rows` (changes, compareChanges) for `path` ({} none).
+    Q_INVOKABLE QVariantMap rowOf(const QVariantList &rows, const QString &path) const;
+    /// How commitFiles() commits these paths: "all" | "staged" | "paths" ("" none chosen).
+    Q_INVOKABLE QString commitModeFor(const QStringList &paths) const;
     /// Why `action` cannot run now ("" it can): "commit", "push", "pull", "createPr", "publish",
     /// "init", "stash" — for a disabled entry's tooltip.
     Q_INVOKABLE QString unavailableReason(const QString &action) const;
@@ -320,6 +327,11 @@ public:
 
     // ---- The diff view's rows (gitdiffrows.h) -------------------------------------------------------
 
+    /// The turns of a thread's checkpoints (WorkspaceChats.checkpoints(): [{id, at, message}],
+    /// oldest first), the newest first: [{index, id, number, label ("Turn 3"), at, latest, base,
+    /// target}] — `base` the turn's checkpoint's ref, `target` the next one's ("" for the latest:
+    /// the work tree), so compare(true, base, target, false) shows what that turn alone changed.
+    Q_INVOKABLE QVariantList turnRows(const QVariantList &checkpoints) const;
     Q_INVOKABLE QVariantList diffRows(const QString &oldText, const QString &newText, bool split, bool ignoreWhitespace,
                                       int context) const;
     Q_INVOKABLE QList<int> findRows(const QVariantList &rows, const QString &query) const;
@@ -432,7 +444,7 @@ private:
     QVariantList m_worktreeList;
     QStringList m_changePaths;
     QStringList m_stagedPaths;
-    int m_conflictCount = 0;
+    QStringList m_conflictPaths;
     QString m_operation;
     QString m_defaultBranch;
     QString m_defaultBranchRef;

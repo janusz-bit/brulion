@@ -5,8 +5,9 @@ import Brulion
 
 // GitPullRequestDialog — the changes panel's "Create PR…": a pull request on GitHub for the
 // branch checked out, through the GitHub CLI (`gh pr create`; the branch is pushed first when it
-// has no upstream or is ahead of it). The result comes from `git` as
-// actionFinished("pullRequest", ok, message, url).
+// has no upstream or is ahead of it), into a base branch (GitBasePicker: the default branch unless
+// another is chosen); from a fork (an "upstream" remote) into the upstream repository. The result
+// comes from `git` as actionFinished("pullRequest", ok, message, url).
 //
 //   GitPullRequestDialog { id: prDialog; git: panel.git }   …   prDialog.openFor()
 BDialog {
@@ -14,11 +15,15 @@ BDialog {
     objectName: "gitPullRequestDialog"
 
     property CodeGit git: null
+    property string base
 
     function openFor(): void {
         titleField.text = ""
         bodyField.text = ""
         draftSwitch.checked = false
+        dialog.base = ""
+        if (dialog.git !== null)
+            dialog.git.branches()
         dialog.open()
     }
 
@@ -28,7 +33,7 @@ BDialog {
     acceptText: qsTr("Create PR")
     acceptEnabled: dialog.git !== null && !dialog.git.busy && Js.trim(titleField.typedText) !== ""
     initialFocusItem: titleField
-    onAccepted: dialog.git.createPullRequest(titleField.text, bodyField.text, draftSwitch.checked)
+    onAccepted: dialog.git.createPullRequestTo(titleField.text, bodyField.text, draftSwitch.checked, dialog.base)
 
     BText {
         Layout.fillWidth: true
@@ -56,6 +61,13 @@ BDialog {
         wrapMode: TextEdit.Wrap
         accessibleName: qsTr("Pull request description")
         placeholderText: qsTr("What and why (optional)…")
+    }
+    GitBasePicker {
+        objectName: "gitPullRequestBase"
+        Layout.fillWidth: true
+        git: dialog.git
+        base: dialog.base
+        onPicked: (name) => dialog.base = name
     }
     BSwitch {
         id: draftSwitch
