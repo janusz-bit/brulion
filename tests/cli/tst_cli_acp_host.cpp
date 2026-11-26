@@ -1736,7 +1736,13 @@ private Q_SLOTS:
         // The same stream's conversations of the notebook: the notebook's folder, no checkpoint.
         QCOMPARE(ask(*t, u"AI/Notatki.md"_s, u"katalog"_s), u"Katalog: "_s + QDir::cleanPath(m_vault));
         QCOMPARE(t->checkpoints.size(), 5);
-        QCOMPARE(fromMsys(ask(*t, u"AI/Notatki.md"_s, u"pwd"_s)), u"Pwd: %1 | /: /"_s.arg(canonical(m_vault)));
+        const QString notebookPwd = fromMsys(ask(*t, u"AI/Notatki.md"_s, u"pwd"_s));
+#ifdef Q_OS_WIN
+        // git for Windows' sh shows "/" as the drive it runs from ("/d"): the notebook's folder counts.
+        QVERIFY2(notebookPwd.startsWith(u"Pwd: %1 | /: /"_s.arg(canonical(m_vault))), qPrintable(notebookPwd));
+#else
+        QCOMPARE(notebookPwd, u"Pwd: %1 | /: /"_s.arg(canonical(m_vault)));
+#endif
     }
 
     void codeWorktrees()
