@@ -19,3 +19,7 @@ brulion_add_test(tst_acp_apptunnel SOURCES tst_acp_apptunnel.cpp LIBS brulion_co
 # what a thread's session names in `_meta` (taken out, malformed ones too), a turn's checkpoint as a
 # notification and in the turn kept, the client handing an extension's notification on.
 brulion_add_test(tst_acp_codehost SOURCES tst_acp_codehost.cpp LIBS brulion_core_acp)
+# The conversations the desktop app runs, followed from another device (appchats.h): their JSON both
+# ways (odd entries dropped, texts bounded, paths only of the AI folder), the device's requests (the
+# long poll, the page, sending now / queued / steered, start, stop, answer) and the host's errors.
+brulion_add_test(tst_acp_appchats SOURCES tst_acp_appchats.cpp LIBS brulion_core_acp)
