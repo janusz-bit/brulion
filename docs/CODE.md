@@ -346,5 +346,3 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   without a project.
 * Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within
   the file shown, mentions of threads and pull requests (docs/CODE-FILES.md "Not done").
-* Tried with the protocol's fake agent and real git, not yet with a real Claude Code and Codex in a
-  real project.

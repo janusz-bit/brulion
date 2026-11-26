@@ -8,9 +8,9 @@ done in the repository simply disappears from the list.
 * **Code mode: what is still missing** — projects, AI agents' threads in a project's folder or a
   worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
   the terminal and the project's files — picker, viewer, search, @-mentions — are there
-  (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
-  real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
-  mode tried on Windows and macOS at all; the terminal's resizable splits;
+  (docs/CODE.md; tried with a real Claude Code and Codex: tst_shell_agents realAgentThread). Missing:
+  the terminal on Windows (ConPTY) and Code mode tried on Windows and macOS at all; the terminal's
+  resizable splits;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
   a commit message and a pull request's text written by AI when left empty (a small "ask the AI
   once" QML type in src/app/shell over `WorkspaceExtensions::sendAi`, handed to the panel), a turn's
@@ -39,11 +39,12 @@ done in the repository simply disappears from the list.
   agent asks for in a private card, subscription limits, the usage history with API-equivalent costs
   from the agents' own session logs, dictation on the desktop, prompt links, drawings in answers,
   tool calls in words, the list's pins, archive, search, badges and notifications, side chats
-  (`/btw`), sub-conversations that wake their parent and conversations archived by themselves are
-  there (docs/UI.md "AI chat", "AI agents (ACP)", "Agents delegate"). Not yet: the usage history
-  read from Codex's compressed rollouts (`rollout-*.jsonl.zst`: skipped) and of
-  `codex-auto-review`'s turns (the log names no model: tokens without a cost); all of it tried with
-  a real Claude Code and Codex.
+  (`/btw`), sub-conversations that wake their parent, conversations archived by themselves, a turn's
+  work log ("Worked for …") and find in a thread are there (docs/UI.md "AI chat", "AI agents
+  (ACP)", "Agents delegate"). Not yet: the usage history read from Codex's compressed rollouts
+  (`rollout-*.jsonl.zst`: skipped) and of `codex-auto-review`'s turns (the log names no model: tokens
+  without a cost); all of it tried with a real Claude Code and Codex (a thread's turns are:
+  tst_shell_agents realAgentThread).
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
