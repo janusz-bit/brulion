@@ -64,7 +64,7 @@ typed element API instead), print support.
 | D9 | Layout: our own flexbox (the CSS algorithm's subset Brulion uses: direction, justify, align, gap, padding, margin, grow/shrink/basis, min/max, absolute position, measured leaves) | GPUI's Taffy is Rust; Yoga brings a node object per element; the tree is ours already. |
 | D10 | Input: hitboxes registered in prepaint, listeners in paint, dispatched in reverse paint order with a capture and a bubble phase; focus handles; actions and keymaps in key contexts; an `InputHandler` interface for input methods modelled on NSTextInputClient / Android `InputConnection` | GPUI's proven model; the IME interface maps 1:1 onto every platform's. |
 | D11 | Execution: one main thread, a platform dispatcher, timers; a test platform with a virtual clock and deterministic ordering | Timing-free tests; no flaky waits. |
-| D12 | First host: `AtramentItem`, a `QQuickItem` that draws a window's scene (CPU raster → texture first, the QRhi GPU renderer next) and translates Qt's events and input-method queries | Views move one by one; Qt keeps providing windows, input methods and accessibility until our own platform layers replace it. |
+| D12 | First host: `AtramentItem`, a `QQuickItem` that draws a window's scene with the QRhi GPU renderer in a `QSGRenderNode`, inside Qt Quick's own render pass (the CPU renderer into a texture where Qt Quick has no QRhi, the GPU lacks OpenGL ES 3, or `BRULION_ATRAMENT_RENDERER=cpu`), and translates Qt's events and input-method queries | Views move one by one; Qt keeps providing windows, input methods and accessibility until our own platform layers replace it. |
 | D13 | Accessibility: elements describe themselves (role, name, value, state, actions, bounds) into a semantic tree each frame; hosted, a bridge to `QAccessibleInterface`; standalone, AccessKit's C API | Accessibility from the first view that ships, on every platform. |
 | D14 | Styling with GPUI-like builder methods (`p(12)`, `gap(8)`, `rounded(10)`, `bg(…)`) over theme tokens | Code completion, no style language to parse, compiled. |
 | D15 | Geometry in logical pixels (`float`), snapped to device pixels when painted | One scale factor per window; crisp edges at fractional scales. |
@@ -80,7 +80,7 @@ typed element API instead), print support.
 │         line layout · paragraph wrapping · carets / hit tests / selection rectangles   │
 ├ scene   primitives, draw order, content masks                                          │
 ├ raster  CPU renderer of a scene (reference, tests, fallback)                            │
-├ gpu     QRhi renderer (hosted) · WebGPU renderer (standalone) · GLES/WebGL2 fallback    │
+├ gpu     QRhi renderer (hosted, in qt/) · WebGPU renderer (standalone) · WebGL2 fallback │
 ├ base    geometry · colours · arena · ids · small callables                             │
 └ platform interface: windows, events, input method, clipboard, cursors, timers, frames ┘
    hosts / platforms: qt (QQuickItem; now) · wayland · x11 · win32 · android · web (later)
@@ -104,6 +104,32 @@ typed element API instead), print support.
 
 The arena is reset when the next frame starts. Nothing in it outlives the frame, so listeners
 capture entity handles (cheap ids), never pointers into the tree.
+
+### The GPU renderer
+
+`src/atrament/qt/qrhirenderer.h`, after GPUI's Metal/Blade/D3D11 renderers, on whatever Qt Quick
+runs on (Vulkan, Metal, Direct3D, OpenGL ES 3 / OpenGL 3.3):
+
+* **Batches.** `GpuFrameBuilder` (`gpuframe.h`, Qt-free) turns the scene into instances of five
+  shader kinds — quads, shadows, monochrome sprites, images (colour sprites and pictures), wavy
+  underlines — and one batch per run of the same kind and texture in painter's order: one
+  instanced draw each (≈ 10 for a busy frame of 7 000 primitives). Every value a shader needs is
+  computed there with the CPU renderer's arithmetic, so each fragment shader is the CPU renderer's
+  per-pixel formula; blending is premultiplied source-over in sRGB space, as the CPU's.
+* **Content masks** cut each instance's rectangle in whole pixels on the CPU, as the CPU renderer
+  cuts each primitive: the same pixels as GPUI's test in the fragment shader, without the
+  fragments.
+* **Paths** are rasterized on the CPU (`CoverageRasterizer`) into tiles of a path atlas, cached by
+  content and subpixel offset, and drawn as monochrome sprites.
+* **The atlas** is mirrored as textures (A8 → R8): what changed since a renderer's copy goes up —
+  the dirty rectangle, or the whole page when another window's renderer cleaned it since
+  (`AtlasPage::cleanRevision`) — copied in Qt Quick's sync, uploaded before its render pass.
+* **Opacity** inherited from Qt Quick multiplies every primitive (as Qt Quick fades its own nodes;
+  the CPU fallback's texture fades as one image).
+* Shaders: Vulkan GLSL 440 in `src/atrament/qt/shaders/`, compiled by `qt_add_shaders`. Measured
+  against the CPU renderer on every primitive kind, masks, scales and atlas updates within 2 levels
+  per channel (3 where translucent layers stack) on Intel, NVIDIA and llvmpipe Vulkan and on
+  llvmpipe OpenGL (`tst_atrament_qt`).
 
 ### Views and entities
 
@@ -221,9 +247,10 @@ Rules of thumb:
 ## Code
 
 * `src/atrament/<area>/` — `base`, `scene`, `raster`, `text`, `layout`, `ui`, each a static
-  library `brulion_atrament_<area>`; `src/atrament/qt` — the Qt Quick host
+  library `brulion_atrament_<area>`; `src/atrament/qt` — the Qt Quick host and the QRhi renderer
   (`brulion_atrament_qt`); `src/atrament/gallery` — a developer app showing every element
-  (`atrament-gallery`, `--screenshot <file>`).
+  (`atrament-gallery`; `--screenshot <file> [--renderer gpu]` renders a frame headless with
+  either renderer and prints their times, `--grab <file>` saves what a Qt Quick window drew).
 * Namespace `brulion::atrament`. No Qt, no exceptions thrown, no RTTI needed outside the host.
   Headers relative to `src/atrament` (`#include "text/textlayout.h"`).
 * Tests: `tests/atrament/<area>/tst_atrament_<area>*.cpp` (QtTest is only the runner; golden
@@ -241,6 +268,10 @@ Rules of thumb:
   processors), regenerated with `BRULION_ATRAMENT_UPDATE_GOLDENS=1`.
 * Layout tests: the flex algorithm against hand-computed CSS results; text tests: Polish
   diacritics, combining marks, emoji, wrapping at a width, carets and hit tests round-tripping.
+* The GPU renderer is compared with the CPU renderer on every QRhi backend that can be made
+  headless (`tests/atrament/qt`: Vulkan from the loader under any platform plugin, OpenGL with a
+  display; skipped with neither), and `AtramentItem` is drawn inside Qt Quick through a
+  `QQuickRenderControl` on that QRhi.
 
 ## Roadmap
 
@@ -250,7 +281,7 @@ Each milestone ends with something running and measured; the gates decide whethe
 |---|---|---|
 | **M0 Foundation** | base, scene, CPU raster, text (fonts, shaping, glyph raster, atlas, paragraph layout, hit tests), flex layout, ui (App, entities, window, div/text/canvas, events, hover, click, scroll, focus), test platform, Qt Quick host, gallery | The gallery runs in Brulion's Qt; every area has tests; a frame of the gallery in < 4 ms of CPU raster at 1280×800 (-O2). |
 | **M1 Editing** | text input element with selection, clipboard, undo hooks, the `InputHandler` through Qt (desktop + Android IME), virtualized lists (uniform and measured), images, keymaps, accessibility bridge | Polish text typed with Gboard (composition, autocorrect, gesture typing) and with a Linux IME into an Atrament field, TalkBack reads it. |
-| **M2 First Brulion view** | the journal / page block editor in Atrament inside the QML shell, behind a setting; the QRhi GPU renderer | Memory per block < 2 KB (today 100–200 KB), scrolling a 1 000-block page at 120 fps on the desktop, the editor's existing behaviour tests pass against it. |
+| **M2 First Brulion view** | the journal / page block editor in Atrament inside the QML shell, behind a setting; the QRhi GPU renderer (in place: every primitive kind, within 2 levels of the CPU renderer) | Memory per block < 2 KB (today 100–200 KB), scrolling a 1 000-block page at 120 fps on the desktop, the editor's existing behaviour tests pass against it. |
 | **M3 Views** | calendar, tasks, search, settings, Code mode (editor, terminal), the chat; the shell | No QML in the default journey. |
 | **M4 Own platforms** | Wayland (xdg-shell, layer-shell, text-input-v3, fractional scale), X11, Win32, Android (GameActivity + our own `InputConnection` in Kotlin), web (canvas + WebGPU / WebGL2, hidden textarea for the IME); the WebGPU renderer (Dawn) | The app runs with no QtGui/QtQuick loaded on Linux and Android. |
 | **M5 Qt Quick out** | QtGui, Qt Quick, QML, Controls, Svg, Pdf leave the build (PDF through PDFium/poppler into a picture) | APK < 20 MB, start-up memory < 60 MB, first browser visit < 6 MB. |

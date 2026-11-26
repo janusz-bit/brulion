@@ -84,8 +84,9 @@ public:
 
     // Asks for one frame: the platform calls `Callbacks::frame` once, at its next vertical blank.
     virtual void requestFrame() = 0;
-    // Shows a frame (called from inside `Callbacks::frame`).
-    virtual void present(const Scene &scene, const Atlas &atlas) = 0;
+    // Shows a frame (called from inside `Callbacks::frame`). A GPU renderer mirrors the atlas's
+    // pages as textures and marks them clean once it has copied what changed.
+    virtual void present(const Scene &scene, Atlas &atlas) = 0;
     virtual void setCursor(CursorStyle cursor) = 0;
     virtual void setTitle(std::u16string_view) { }
     // The focused element's text input state changed (its selection, its marked text, whether it

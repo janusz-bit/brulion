@@ -38,7 +38,7 @@ public:
     Modifiers modifiers() const override { return m_modifiers; }
     bool isActive() const override { return m_active; }
     void requestFrame() override { m_frameRequested = true; }
-    void present(const Scene &scene, const Atlas &atlas) override;
+    void present(const Scene &scene, Atlas &atlas) override;
     void setCursor(CursorStyle cursor) override { m_cursor = cursor; }
     void setTitle(std::u16string_view title) override { m_title = title; }
     void inputStateChanged() override { ++m_inputStateChanges; }

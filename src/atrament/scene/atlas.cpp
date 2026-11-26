@@ -137,8 +137,10 @@ void Atlas::blit(const AtlasTile &tile, const AtlasBitmap &bitmap)
 
 void Atlas::markClean(std::uint32_t page)
 {
-    if (page < m_pages.size())
+    if (page < m_pages.size()) {
         m_pages[page].dirty = Rect {};
+        m_pages[page].cleanRevision = m_pages[page].revision;
+    }
 }
 
 void Atlas::collectGarbage(std::uint32_t maxIdleFrames)

@@ -51,6 +51,10 @@ struct AtlasPage {
     std::uint64_t revision = 0;
     // The part changed since markClean() (empty when clean).
     Rect dirty;
+    // The revision markClean() last saw: `dirty` covers every change after it. A mirror that
+    // uploaded an older revision (another window's renderer cleaned the page since) uploads the
+    // whole page instead.
+    std::uint64_t cleanRevision = 0;
 
     int bytesPerPixel() const { return kind == AtlasKind::Alpha ? 1 : 4; }
     const std::uint8_t *row(int y) const { return pixels.data() + std::size_t(y) * std::size_t(width * bytesPerPixel()); }

@@ -1,9 +1,9 @@
 #pragma once
 
 // The scene (docs/ATRAMENT.md D5): what a frame draws, as a flat list of primitives in painter's
-// order, in device pixels. Built by a Window's paint phase, drawn by any renderer (raster/ for the
-// CPU, gpu/ later). Primitives carry their own content mask (the clip rectangle in effect when
-// they were painted), so a renderer never keeps a clip stack.
+// order, in device pixels. Built by a Window's paint phase, drawn by any renderer (raster/ on the
+// CPU, qt/qrhirenderer.h on the GPU). Primitives carry their own content mask (the clip rectangle
+// in effect when they were painted), so a renderer never keeps a clip stack.
 //
 // Kinds, after GPUI's: quads (rounded rectangles with borders and a fill), shadows (blurred
 // rounded rectangles), monochrome sprites (glyphs: atlas coverage × a colour), colour sprites

@@ -101,8 +101,11 @@ void TestAtramentScene::atlasBlitsPixels()
     QCOMPARE(int(page.alpha(t->x + 3, t->y)), 0);
     QVERIFY(!page.dirty.isEmpty());
     QVERIFY(page.revision > 0);
+    QCOMPARE(page.cleanRevision, std::uint64_t(0));
     atlas.markClean(t->page);
     QVERIFY(atlas.pages()[t->page].dirty.isEmpty());
+    // What a GPU mirror compares its copy with: dirty holds the changes after this revision.
+    QCOMPARE(atlas.pages()[t->page].cleanRevision, atlas.pages()[t->page].revision);
 
     AtlasBitmap c;
     c.width = 1;
