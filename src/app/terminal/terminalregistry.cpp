@@ -39,10 +39,11 @@ TerminalRegistry::TerminalRegistry(QObject *parent) : QObject(parent)
 
 TerminalRegistry::~TerminalRegistry()
 {
+    // Deleting the threads (children) hangs up on their programs and reaps them (each Pty's
+    // destructor; quitting hung up on all of them at once before: aboutToQuit). No timers here:
+    // at the application's end the event dispatcher is gone.
     for (TerminalThread *thread : std::as_const(m_threads))
         disconnect(thread, nullptr, this, nullptr);
-    // Every program hung up on at once; deleting the threads (children) reaps them.
-    hangUpAll();
 }
 
 TerminalRegistry *TerminalRegistry::instance()
@@ -381,7 +382,8 @@ QJsonObject TerminalRegistry::layouts() const
                 terminals.append(QJsonObject{
                         {u"folder"_s, session->isRunning() ? session->currentDirectory() : session->folder()},
                         {u"label"_s, session->label()},
-                        {u"command"_s, session->command()}});
+                        // (A tab brought back keeps the command it had: typed, not its own.)
+                        {u"command"_s, session->command().isEmpty() ? session->typedCommand() : session->command()}});
                 ++sessions;
             }
             if (terminals.isEmpty())

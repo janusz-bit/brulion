@@ -697,7 +697,12 @@ void TestTerminal::registryLayouts()
     QTRY_VERIFY_WITH_TIMEOUT(screenText(*server).contains(u"echo gotowe-$((40+2)); sleep 100"_s), Timeout);
     QVERIFY(!screenText(*server).contains(u"gotowe-42"_s));
     QVERIFY(!server->isBusy());
-    server->write(u""_s);
+    server->write(u"\x03"_s);
+    // Saved again: still that command's tab.
+    const QJsonArray again = after.layouts().value(u"threads"_s).toArray();
+    QCOMPARE(again.at(0).toObject().value(u"tabs"_s).toArray().at(1).toObject().value(u"terminals"_s).toArray().at(0)
+                     .toObject().value(u"command"_s).toString(),
+             u"echo gotowe-$((40+2)); sleep 100"_s);
     // Kept while not asked for: the other one is still in the layouts.
     const QJsonArray threads = after.layouts().value(u"threads"_s).toArray();
     QCOMPARE(threads.size(), 2);

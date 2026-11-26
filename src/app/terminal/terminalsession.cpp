@@ -265,6 +265,7 @@ void TerminalSession::resize(int columns, int rows)
 void TerminalSession::typeWhenReady(const QString &text)
 {
     m_typeWhenReady = text;
+    m_typedCommand = text;
 }
 
 void TerminalSession::onData(const QByteArray &data)

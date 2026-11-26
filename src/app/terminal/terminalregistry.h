@@ -87,8 +87,8 @@ public:
     Q_INVOKABLE bool isBusy(const QString &key) const;
     /// Ends every terminal: every program hung up on at once, the sessions deleted later.
     Q_INVOKABLE void closeAll();
-    /// SIGHUP to every program at once, the sessions kept (the app quits: deleting the registry,
-    /// a child of the application, reaps them). The layouts are saved first.
+    /// SIGHUP to every program at once, the sessions kept (the app quits — its layouts saved just
+    /// before —; deleting the registry, a child of the application, reaps them).
     void hangUpAll();
 
     /// Room for one more terminal of `asking`: true below MaxSessions, after ending idle terminals

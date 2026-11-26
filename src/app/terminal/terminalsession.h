@@ -116,6 +116,8 @@ public:
     /// `text` typed into the program once it printed something (its prompt: the line editor reads
     /// it then, its echo after the prompt) — a restored tab's command, waiting for Enter.
     void typeWhenReady(const QString &text);
+    /// What typeWhenReady() typed (a restored tab's command: kept in its layout again).
+    QString typedCommand() const { return m_typedCommand; }
     /// Raw input bytes (keys already encoded by term::encodeKey()).
     void writeBytes(const QByteArray &bytes);
     term::Terminal &terminal() { return m_terminal; }
@@ -172,6 +174,7 @@ private:
     int m_shownBy = 0;
     QElapsedTimer m_startedAt;
     QString m_typeWhenReady;
+    QString m_typedCommand;
     QTimer m_busySoon; // a moment after output or input
     QTimer m_busyPoll; // while a program runs
 };
