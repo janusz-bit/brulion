@@ -41,6 +41,8 @@ Beside the thread, the **Changes** panel shows the project's changes — pick wh
 ## On the phone
 A computer that shares its agents with your phone ([[AI#An agent on another computer]]) shares its projects too: on the phone, Code mode lists them with the computer's name. Write in a thread — one you started on the computer, or a new one, **Local** or in a **new worktree** — and the agent works on that computer, in the project, as if you were sitting at it. The checkpoint of each turn is taken there, so back at the computer the **Changes** panel shows what the phone's turn changed. On the phone you see the last turn's changed files and their diffs; committing, pushing and the terminal are at the computer.
 
+What the computer's app runs itself, the phone follows live: **On your computers** above the threads lists each conversation working, waiting or asking there. Open one and you see its answer as it is written, its tool calls and plan; answer its question (with the change it asks for), **Stop** it, or write the next message — it waits in line there, or **steer** it in. The answer, a question and a failure come as notifications. While the computer's Brulion shares its agents, a thread of its project runs its turns in the app there — one agent, seen on both screens — and a new thread you start on the phone starts there too.
+
 ## Files and search
 The panel beside the thread has three tabs: **Changes**, **Files** and **Search**.
 - **Ctrl+P** (or *Go to file…* in the palette) finds a file of the project by a few letters of its name — `cvw` finds `CodeView.qml`; Enter opens it in the **Files** tab, Ctrl+Enter in your editor.
