@@ -2,7 +2,7 @@
 
 // The gallery (docs/ATRAMENT.md M0): every Atrament element in Brulion's graphite look, for
 // developing the framework and for comparing renderers. `atrament-gallery` shows it in a Qt Quick
-// window; `atrament-gallery --screenshot out.png` renders one frame with the CPU renderer.
+// window; `atrament-gallery --screenshot out.png [--renderer gpu]` renders one frame headless.
 
 #include "ui/atrament.h"
 

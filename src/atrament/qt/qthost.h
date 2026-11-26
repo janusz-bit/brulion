@@ -3,13 +3,16 @@
 // The Qt host (docs/ATRAMENT.md D12): Atrament inside today's Qt Quick shell, one view at a time.
 //
 //   QtPlatform      Atrament's Platform over Qt: the event loop's queue, QTimer, the clipboard
-//   AtramentItem    a QQuickItem that is an Atrament window: it draws the window's frame (CPU
-//                   renderer → texture for now; the QRhi renderer next), and turns Qt's mouse,
-//                   wheel, key, hover and input-method events into Atrament's, answering the
-//                   input method's queries from the focused element's InputHandler.
+//   AtramentItem    a QQuickItem that is an Atrament window: it draws the window's frame and
+//                   turns Qt's mouse, wheel, key, hover and input-method events into Atrament's,
+//                   answering the input method's queries from the focused element's InputHandler.
 //
-// Frames are built on the GUI thread (in updatePolish), never on Qt Quick's render thread.
+// Frames are built on the GUI thread (in updatePolish), never on Qt Quick's render thread. They are
+// drawn by the GPU renderer (qrhirenderer.h) in a QSGRenderNode, inside Qt Quick's own render pass,
+// where Qt Quick runs on QRhi; by the CPU renderer into a texture where it does not (the software
+// backend), where the GPU renderer fails on the device, or with BRULION_ATRAMENT_RENDERER=cpu.
 
+#include "gpuframe.h"
 #include "raster/raster.h"
 #include "ui/platform.h"
 
@@ -17,6 +20,7 @@
 #include <QPointer>
 #include <QQuickItem>
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -69,12 +73,14 @@ public:
     Modifiers modifiers() const override;
     bool isActive() const override;
     void requestFrame() override;
-    void present(const Scene &scene, const Atlas &atlas) override;
+    void present(const Scene &scene, Atlas &atlas) override;
     void setCursor(CursorStyle cursor) override;
     void inputStateChanged() override;
 
-    // The last frame's pixels (tests, screenshots).
+    // The last frame's pixels when the CPU renderer draws (tests, screenshots).
     const QImage &frameImage() const { return m_image; }
+    // Whether frames go to the GPU renderer (decided at each frame from the window's graphics API).
+    bool usesGpuRenderer() const { return m_gpu; }
 
 protected:
     void updatePolish() override;
@@ -98,14 +104,30 @@ protected:
 private:
     bool send(const PlatformInput &input);
     int clickCountFor(Point p, MouseButton button);
+    bool gpuAvailable() const;
+    void checkGpuRenderer();
 
     App *m_app = nullptr;
     Window *m_window = nullptr;
     Point m_mouse { -1e9f, -1e9f };
+    // The CPU path.
     RasterRenderer m_renderer;
     RasterTarget m_target;
     QImage m_image;
     bool m_imageDirty = false;
+    // The GPU path: the frame waiting for the next sync, the atlas it refers to, and a flag the
+    // render thread sets when the renderer cannot draw (then the CPU renderer takes over).
+    struct GpuShared {
+        std::atomic<bool> failed{false};       // the renderer cannot draw here: the CPU takes over
+        std::atomic<bool> lostTextures{false}; // Qt Quick released them: copy the atlas again
+    };
+    bool m_gpu = false;
+    GpuFrameBuilder m_gpuBuilder;
+    std::shared_ptr<const GpuFrame> m_gpuFrame;
+    bool m_gpuFrameNew = false;
+    Atlas *m_atlas = nullptr;
+    std::shared_ptr<GpuShared> m_gpuShared = std::make_shared<GpuShared>();
+    QMetaObject::Connection m_frameSwapped;
     // Double and triple clicks: Qt reports only doubles.
     std::chrono::steady_clock::time_point m_lastClick;
     Point m_lastClickPos;

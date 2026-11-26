@@ -16,7 +16,7 @@ TestWindow::TestWindow(TestPlatform &platform, Size size, float scale)
 {
 }
 
-void TestWindow::present(const Scene &scene, const Atlas &atlas)
+void TestWindow::present(const Scene &scene, Atlas &atlas)
 {
     ++m_frames;
     m_lastScene = &scene;

@@ -1,5 +1,6 @@
 #include "qthost.h"
 
+#include "qrhirenderer.h"
 #include "text/fonts.h"
 #include "ui/app.h"
 #include "ui/window.h"
@@ -14,13 +15,76 @@
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGImageNode>
+#include <QSGRenderNode>
+#include <QSGRendererInterface>
 #include <QStyleHints>
 #include <QTimer>
 #include <QWheelEvent>
+#include <rhi/qrhi.h>
 
 namespace brulion::atrament {
 
 namespace {
+
+// The GPU renderer inside Qt Quick's render pass: the frame and the atlas pages come in the sync
+// (updatePaintNode, the GUI thread waiting), uploads are recorded in prepare() before the pass,
+// the draws in render(). The node is the item's size and draws nothing outside it; it uses only
+// QRhi (no native API calls) and no depth buffer — Qt Quick then draws the window back to front.
+class AtramentRenderNode final : public QSGRenderNode {
+public:
+    template<typename Shared>
+    explicit AtramentRenderNode(std::shared_ptr<Shared> shared)
+        : m_failed(std::shared_ptr<std::atomic<bool>>(shared, &shared->failed))
+        , m_lostTextures(std::shared_ptr<std::atomic<bool>>(shared, &shared->lostTextures))
+    { }
+
+    QRhiRenderer renderer;
+    QRectF bounds;
+    float scale = 1;
+
+    void prepare() override
+    {
+        QRhiRenderTarget *rt = renderTarget();
+        QRhiCommandBuffer *cb = commandBuffer();
+        m_ready = false;
+        if (!rt || !cb)
+            return;
+        // The frame's device pixels → the item's logical pixels → Qt Quick's clip space.
+        QMatrix4x4 transform = *projectionMatrix() * *matrix();
+        transform.scale(1 / scale, 1 / scale);
+        m_ready = renderer.prepare(rt->rhi(), cb, rt->renderPassDescriptor(), rt->sampleCount(), transform,
+                                   float(inheritedOpacity()));
+        if (!m_ready)
+            m_failed->store(true);
+    }
+
+    void render(const RenderState *state) override
+    {
+        if (!m_ready)
+            return;
+        std::optional<std::array<int, 4>> scissor;
+        if (state->scissorEnabled()) {
+            const QRect r = state->scissorRect();
+            scissor = std::array<int, 4>{r.x(), r.y(), r.width(), r.height()};
+        }
+        renderer.render(commandBuffer(), renderTarget()->pixelSize(), scissor);
+    }
+
+    void releaseResources() override
+    {
+        renderer.releaseResources();
+        m_lostTextures->store(true);
+    }
+
+    StateFlags changedStates() const override { return ViewportState | ScissorState | BlendState; }
+    RenderingFlags flags() const override { return BoundedRectRendering | NoExternalRendering; }
+    QRectF rect() const override { return bounds; }
+
+private:
+    std::shared_ptr<std::atomic<bool>> m_failed;
+    std::shared_ptr<std::atomic<bool>> m_lostTextures;
+    bool m_ready = false;
+};
 
 std::u16string toU16(const QString &s)
 {
@@ -307,11 +371,47 @@ void AtramentItem::updatePolish()
         m_callbacks.frame();
 }
 
-void AtramentItem::present(const Scene &scene, const Atlas &atlas)
+bool AtramentItem::gpuAvailable() const
+{
+    static const bool shaders = atramentGpuShadersBuilt();
+    if (!shaders || !atramentGpuRendererWanted() || m_gpuShared->failed.load())
+        return false;
+    QQuickWindow *w = window();
+    return w && QSGRendererInterface::isApiRhiBased(w->rendererInterface()->graphicsApi());
+}
+
+void AtramentItem::checkGpuRenderer()
+{
+    if (!m_gpu)
+        return;
+    if (m_gpuShared->failed.load()) {
+        qWarning("Atrament: the GPU renderer cannot draw here; the CPU renderer takes over");
+        requestFrame();
+    } else if (m_gpuShared->lostTextures.exchange(false)) {
+        update(); // a sync, which copies the atlas pages again
+    }
+}
+
+void AtramentItem::present(const Scene &scene, Atlas &atlas)
 {
     const float scale = scaleFactor();
     const int w = std::max(1, int(std::ceil(width() * scale)));
     const int h = std::max(1, int(std::ceil(height() * scale)));
+    m_gpu = gpuAvailable();
+    if (m_gpu) {
+        // Built here, from the scene this thread owns; the render node takes it in the next sync.
+        m_gpuFrame = std::make_shared<const GpuFrame>(m_gpuBuilder.build(scene, atlas, w, h));
+        m_gpuFrameNew = true;
+        m_atlas = &atlas;
+        if (!m_image.isNull()) {
+            m_image = QImage();
+            m_target = RasterTarget{};
+        }
+        update();
+        return;
+    }
+    m_gpuFrame.reset();
+    m_atlas = nullptr;
     if (m_target.width != w || m_target.height != h)
         m_target.resize(w, h);
     m_renderer.render(scene, atlas, m_target, transparent());
@@ -326,9 +426,37 @@ void AtramentItem::present(const Scene &scene, const Atlas &atlas)
 
 QSGNode *AtramentItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
 {
-    if (m_image.isNull() || !window()) {
+    if (!window()) {
         delete old;
         return nullptr;
+    }
+    if (m_gpu && m_gpuFrame) {
+        auto *node = old && old->type() == QSGNode::RenderNodeType ? static_cast<AtramentRenderNode *>(old) : nullptr;
+        if (!node) {
+            delete old;
+            node = new AtramentRenderNode(m_gpuShared);
+            m_gpuFrameNew = true;
+        }
+        if (m_gpuFrameNew) {
+            node->renderer.setFrame(m_gpuFrame);
+            m_gpuFrameNew = false;
+        }
+        // The GUI thread waits: the atlases can be read (and marked clean) here.
+        if (m_atlas)
+            node->renderer.syncAtlas(QRhiRenderer::AtlasSlot::Atlas, *m_atlas);
+        node->renderer.syncAtlas(QRhiRenderer::AtlasSlot::Paths, m_gpuBuilder.pathAtlas());
+        node->bounds = QRectF(0, 0, width(), height());
+        node->scale = scaleFactor();
+        node->markDirty(QSGNode::DirtyMaterial);
+        return node;
+    }
+    if (m_image.isNull()) {
+        delete old;
+        return nullptr;
+    }
+    if (old && old->type() == QSGNode::RenderNodeType) {
+        delete old;
+        old = nullptr;
     }
     auto *node = static_cast<QSGImageNode *>(old);
     if (!node) {
@@ -354,6 +482,12 @@ void AtramentItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
 void AtramentItem::itemChange(ItemChange change, const ItemChangeData &value)
 {
     QQuickItem::itemChange(change, value);
+    if (change == ItemSceneChange) {
+        QObject::disconnect(m_frameSwapped);
+        if (value.window)
+            m_frameSwapped = connect(value.window, &QQuickWindow::frameSwapped, this, &AtramentItem::checkGpuRenderer,
+                                     Qt::QueuedConnection);
+    }
     if ((change == ItemDevicePixelRatioHasChanged || change == ItemSceneChange) && m_callbacks.resized)
         m_callbacks.resized();
 }
