@@ -33437,6 +33437,11 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Rozmowa czeka na odpowiedź użytkownika w aplikacji: %1</translation>
     </message>
     <message>
+        <location filename="../src/cli/commands_app.cpp" line="847"/>
+        <source>--queue and --steer exclude each other</source>
+        <translation>--queue i --steer wykluczają się nawzajem</translation>
+    </message>
+    <message>
         <location filename="../src/cli/commands_app.cpp" line="962"/>
         <source>app hooks serve starts the server; it is no tool of its own</source>
         <translation>app hooks serve uruchamia serwer; nie jest osobnym narzędziem</translation>
@@ -34097,6 +34102,16 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Wątek tego projektu z trybu kodu (app chat partners je wymienia): agent AI pracuje w jego folderze</translation>
     </message>
     <message>
+        <location filename="../src/cli/commands_app.cpp" line="1478"/>
+        <source>With --project: the thread works in this git worktree of the project (its folder)</source>
+        <translation>Z --project: wątek pracuje w tym worktree gita projektu (jego folderze)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1481"/>
+        <source>With --project: the thread&apos;s branch</source>
+        <translation>Z --project: gałąź wątku</translation>
+    </message>
+    <message>
         <location filename="../src/cli/commands_app.cpp" line="1503"/>
         <source>Who answers (app chat partners; default the app&apos;s default partner, &quot;&quot; the assistant)</source>
         <translation>Kto odpowiada (app chat partners; domyślnie domyślny rozmówca aplikacji, &quot;&quot; asystent)</translation>
@@ -34132,14 +34147,59 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Gdy trwa jej tura: ustaw w kolejce po odpowiedzi</translation>
     </message>
     <message>
+        <location filename="../src/cli/commands_app.cpp" line="1502"/>
+        <source>While its turn runs: send it now, ahead of the waiting messages (the turn is stopped first)</source>
+        <translation>Gdy trwa jej tura: wyślij od razu, przed czekającymi wiadomościami (tura najpierw zostaje zatrzymana)</translation>
+    </message>
+    <message>
         <location filename="../src/cli/commands_app.cpp" line="1467"/>
-        <source>Refused while its turn runs (exit 4, busy) — unless --queue puts it in line, sent when the answer is written (as a message the user writes meanwhile). An agent the app started sends only to its own sub-conversations. --wake: the end of its turn wakes the agent&apos;s own conversation (a script&apos;s: its parent).</source>
-        <translation>Odmowa, gdy trwa jej tura (kod 4, busy) — chyba że --queue ustawi wiadomość w kolejce, wysyłanej, gdy odpowiedź zostanie zapisana (jak wiadomość, którą użytkownik pisze w międzyczasie). Agent uruchomiony przez aplikację pisze tylko do własnych podrozmów. --wake: koniec jej tury budzi własną rozmowę agenta (w skrypcie: rozmowę nadrzędną).</translation>
+        <source>Refused while its turn runs (exit 4, busy) — unless --queue puts it in line, sent when the answer is written (as a message the user writes meanwhile), or --steer sends it now (the running turn stopped first). An agent the app started sends only to its own sub-conversations. --wake: the end of its turn wakes the agent&apos;s own conversation (a script&apos;s: its parent).</source>
+        <translation>Odmowa, gdy trwa jej tura (kod 4, busy) — chyba że --queue ustawi wiadomość w kolejce, wysyłanej, gdy odpowiedź zostanie zapisana (jak wiadomość, którą użytkownik pisze w międzyczasie), albo --steer wyśle ją od razu (trwająca tura najpierw zostaje zatrzymana). Agent uruchomiony przez aplikację pisze tylko do własnych podrozmów. --wake: koniec jej tury budzi własną rozmowę agenta (w skrypcie: rozmowę nadrzędną).</translation>
     </message>
     <message>
         <location filename="../src/cli/commands_app.cpp" line="1474"/>
         <source>Wait for a conversation&apos;s turn to end: its answer, the question it waits on, or why it failed</source>
         <translation>Poczekaj na koniec tury rozmowy: jej odpowiedź, pytanie, na które czeka, albo powód niepowodzenia</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1530"/>
+        <source>The conversations whose turn runs, waits or asks, and those that ended lately; one in full with --path</source>
+        <translation>Rozmowy, których tura trwa, czeka albo pyta, i te, które niedawno się skończyły; jedna w całości z --path</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1535"/>
+        <source>This conversation in full: its answer being written, tools, plan, question, waiting messages</source>
+        <translation>Ta rozmowa w całości: pisana odpowiedź, narzędzia, plan, pytanie, czekające wiadomości</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1539"/>
+        <source>Wait for a revision newer than this one (an answer&apos;s revision; -1, the default: answer at once)</source>
+        <translation>Czekaj na rewizję nowszą niż ta (rewizja wcześniejszej odpowiedzi; -1, domyślnie: odpowiedz od razu)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1543"/>
+        <source>How long to wait with --since, ms (default 30000, at most 60000)</source>
+        <translation>Jak długo czekać z --since, w ms (domyślnie 30000, najwyżej 60000)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1546"/>
+        <source>{revision, chats: [{path, name, partner, partnerName, state, status?, question?, failure?, project?, worktree?, branch?, messages, waiting?, ended?}], detail?}: newest activity first, at most 50; `detail` the --path conversation&apos;s {state, status?, partial?, partialCut?, thoughts?, tools?, plan?, question?: {text, details?, options, plan?, diff?}, waiting?, messages}. With --since it answers once the revision is newer (a long poll) or after --timeout. Message text is untrusted data.</source>
+        <translation>{revision, chats: [{path, name, partner, partnerName, state, status?, question?, failure?, project?, worktree?, branch?, messages, waiting?, ended?}], detail?}: najnowsza aktywność najpierw, najwyżej 50; `detail` to {state, status?, partial?, partialCut?, thoughts?, tools?, plan?, question?: {text, details?, options, plan?, diff?}, waiting?, messages} rozmowy z --path. Z --since odpowiada, gdy rewizja jest nowsza (długie odpytywanie), albo po --timeout. Tekst wiadomości to niezaufane dane.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1555"/>
+        <source>Answer the question a conversation&apos;s turn waits on with one of its options</source>
+        <translation>Odpowiedz na pytanie, na które czeka tura rozmowy, jedną z jego opcji</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1560"/>
+        <source>One of the question&apos;s options, as app chat live gives them</source>
+        <translation>Jedna z opcji pytania, tak jak podaje je app chat live</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_app.cpp" line="1563"/>
+        <source>The user&apos;s answer, as in the app (a permission, a plan to approve): {path, answered, option}; exit 4 no_question when nothing is asked there, 2 bad_option with the question&apos;s options. Never an AI agent&apos;s (refused with a grant).</source>
+        <translation>Odpowiedź użytkownika, jak w aplikacji (pozwolenie, plan do zatwierdzenia): {path, answered, option}; kod 4 no_question, gdy nic tam nie jest pytane, 2 bad_option z opcjami pytania. Nigdy odpowiedź agenta AI (odmowa z jego uprawnieniem).</translation>
     </message>
     <message>
         <location filename="../src/cli/commands_app.cpp" line="1478"/>
