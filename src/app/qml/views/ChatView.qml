@@ -105,6 +105,7 @@ FocusScope {
     readonly property bool questionHasDiff: AppController.routeText(root.questionDiff, "path") !== ""
     readonly property list<string> noStrings: []
     readonly property list<var> noVars: []
+    readonly property var noMap: ({})
     readonly property string failure: root.turn !== null ? root.turn.failure : ""
     readonly property bool failedHere: root.failure !== ""
     /// Messages written while this conversation's turn runs: they wait for it ({id, text,
@@ -1593,7 +1594,13 @@ FocusScope {
                         /// It woke the conversation for this sub-conversation ("" none) — the app's message.
                         required property string wakeFrom
                         required property string wakeName
+                        /// Its number in the page (from 1): its work log (WorkspaceChats.workLog).
+                        required property int number
                         readonly property bool mine: message.sender === "user"
+                        readonly property var workLog: message.mine || root.path === "" ? root.noMap
+                                                       : root.chats.workLog(root.path, message.number, root.chats.workLogSerial)
+                        readonly property list<var> workTools: AppController.routeList(message.workLog, "tools")
+                        readonly property list<var> workPlan: AppController.routeList(message.workLog, "plan")
                         /// The user reported or hid it: a line in its place until it is opened.
                         readonly property bool folded: message.flag !== "" && !message.revealed
                         readonly property bool inParts: message.segments.length > 0
@@ -1741,6 +1748,22 @@ FocusScope {
                                             cursorShape: Qt.PointingHandCursor
                                         }
                                     }
+                                }
+                            }
+
+                            // What the AI agent did for this answer, folded (T3 Code's "Worked for …"):
+                            // its tool calls and plan as they ended, kept on this device
+                            // (WorkspaceChats.workLog); a tap on the line opens them.
+                            Loader {
+                                width: Math.min(parent.width, 640)
+                                active: message.workTools.length > 0 || message.workPlan.length > 0
+                                visible: active
+                                sourceComponent: ChatActivity {
+                                    objectName: "chatWorkLog"
+                                    tools: message.workTools
+                                    plan: message.workPlan
+                                    seconds: AppController.routeInt(message.workLog, "seconds", 0)
+                                    finished: true
                                 }
                             }
 

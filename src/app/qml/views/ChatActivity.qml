@@ -11,32 +11,56 @@ import Brulion
 // monospace text (it quotes files and programs). Closed, the calls that run and those that failed
 // stay. "Tool calls in chat" (AppSettings.chatToolCalls, `shown`): "all" — the list open —,
 // "hideFinished" — closed —, "hideAll" — no summary, only failed calls; the plan always shows. The
-// turn's ChatTurn.tools / ChatTurn.plan.
+// turn's ChatTurn.tools / ChatTurn.plan. Once the turn answered (`finished`, its work log above the
+// answer — WorkspaceChats.workLog): one folded line "Worked for 25 s · Ran 2 commands" that opens
+// the plan and the calls as they ended.
 Rectangle {
     id: card
 
     property list<var> tools
     property list<var> plan
+    /// A turn that ended (its work log under its answer, WorkspaceChats.workLog): folded to one line
+    /// "Worked for 25 s · Ran 2 commands" (as T3 Code's) that opens its plan and calls; `seconds` how
+    /// long it took (-1 not known).
+    property bool finished: false
+    property int seconds: -1
     /// AppSettings.chatToolCalls: "all" | "hideFinished" | "hideAll".
     property string shown: AppSettings.chatToolCalls
     /// The list of calls is open (else only the running and the failed ones); a tap on the summary.
-    property bool listOpen: card.shown === "all"
+    property bool listOpen: card.shown === "all" && !card.finished
     /// Every call is shown (else the newest `maxShown`).
     property bool expanded: false
     readonly property int maxShown: 4
     readonly property int hiddenCount: Math.max(0, card.tools.length - card.maxShown)
     readonly property int failedCount: card.countFailed()
-    /// The calls in words ("" none).
-    readonly property string summary: card.tools.length > 0 ? Workspace.chats.toolSummary(card.tools) : ""
-    readonly property bool summaryShown: card.tools.length > 0 && card.shown !== "hideAll"
+    /// The calls in words ("" none); a finished turn's with how long it worked.
+    readonly property string calls: card.tools.length > 0 ? Workspace.chats.toolSummary(card.tools) : ""
+    readonly property string summary: !card.finished ? card.calls
+                                      : card.seconds >= 0 ? (card.calls !== "" ? qsTr("Worked for %1 · %2").arg(card.durationText(card.seconds)).arg(card.calls)
+                                                                               : qsTr("Worked for %1").arg(card.durationText(card.seconds)))
+                                      : card.calls
+    readonly property bool summaryShown: (card.tools.length > 0 || (card.finished && card.plan.length > 0)) && card.shown !== "hideAll"
+    /// The plan shows: always while the turn runs, once it ended only with its list open.
+    readonly property bool planShown: card.plan.length > 0 && (!card.finished || card.listOpen)
 
-    visible: card.plan.length > 0 || card.summaryShown || card.failedCount > 0
+    visible: card.planShown || card.summaryShown || card.failedCount > 0
+
+    /// "25 s", "4 min 5 s", "1 h 2 min".
+    function durationText(total: int): string {
+        if (total < 60)
+            return qsTr("%1 s", "a duration in seconds").arg(total)
+        if (total < 3600)
+            return total % 60 === 0 ? qsTr("%1 min", "a duration in minutes").arg(Math.floor(total / 60))
+                                    : qsTr("%1 min %2 s", "a duration").arg(Math.floor(total / 60)).arg(total % 60)
+        return qsTr("%1 h %2 min", "a duration").arg(Math.floor(total / 3600)).arg(Math.floor((total % 3600) / 60))
+    }
     // A new turn: as the setting says again.
     onToolsChanged: if (card.tools.length === 0) {
-        card.listOpen = card.shown === "all"
+        card.listOpen = card.shown === "all" && !card.finished
         card.expanded = false
     }
-    onShownChanged: card.listOpen = card.shown === "all"
+    onShownChanged: card.listOpen = card.shown === "all" && !card.finished
+    readonly property list<var> noSteps: []
     implicitHeight: column.implicitHeight + 2 * Theme.space2
     radius: Theme.radiusLg
     color: Theme.bgSunken
@@ -59,7 +83,7 @@ Rectangle {
         if (card.shown === "hideAll")
             return false
         if (!card.listOpen)
-            return status === "in_progress" || status === "pending"
+            return !card.finished && (status === "in_progress" || status === "pending")
         return card.expanded || index >= card.tools.length - card.maxShown
     }
     /// `text` (ChatTurn.status) is the title of one of the calls: with "Hide all", ChatView says
@@ -83,7 +107,7 @@ Rectangle {
 
         // The plan.
         Repeater {
-            model: card.plan
+            model: card.planShown ? card.plan : card.noSteps
             delegate: RowLayout {
                 id: step
                 required property var modelData

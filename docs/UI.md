@@ -2207,6 +2207,16 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   time, as any partner's; a turn of tool calls without words writes their summary line and their
   titles as a list ("Edited 1 file", then "- Edit Dom.md"; an agent on another computer keeps only
   the titles: "Took 2 steps").
+* **The work log** (T3 Code's "Worked for …"): once a turn with tool calls or a plan answered, what
+  it did stays above its answer — one folded line (`chatWorkLog`, ChatActivity with `finished`:
+  "Worked for 25 s · Edited 1 file · ran 1 command") that opens its plan and its calls as they
+  ended, their output and "Show the change". `WorkspaceChats.workLog(path, number)` (the answer's
+  number in the page, from 1; `workLogSerial`), kept in the notebook's device state (LocalStore
+  `chat/worklog`, not in the page: another device shows the answer alone) — 50 turns a
+  conversation, 200 conversations, the newest 200 calls of a turn, an output's last 4000 characters,
+  a change's texts while they are 40 000 characters at most (`workLogEntry()`). A command's output
+  that is one fenced block (Claude Code's "```console") shows without the fence
+  (`WorkspaceAgents::plainOutput()`). "Hide all" hides the line too.
 * **Tool calls in chat** (Settings → Extensions → AI agents, `chatToolCallsRow` /
   `chatToolCallsSetting`; `AppSettings.chatToolCalls`, key `ai/chatToolCalls`, this device's — T3
   Code's setting): **Show all** (`all`, the default: the list open), **Hide finished**

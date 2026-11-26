@@ -410,11 +410,16 @@ QList<AgentConfig> WorkspaceAgents::presets()
 
 QString WorkspaceAgents::toolsProgram()
 {
+    // Next to the app (installed, packaged), else in a build tree's src/cli beside src/app — a build's
+    // app with another version's brulion-cli from PATH would offer options that one does not know
+    // (an agent's MCP server then fails to start) —, else on PATH.
     const QDir dir(QCoreApplication::applicationDirPath());
-    for (const QString &name : {u"brulion-cli"_s, u"brulion-cli.exe"_s}) {
-        const QFileInfo cli(dir.filePath(name));
-        if (cli.isFile() && cli.isExecutable())
-            return QDir::cleanPath(cli.absoluteFilePath());
+    for (const QString &folder : {QString(), u"../cli/"_s}) {
+        for (const QString &name : {u"brulion-cli"_s, u"brulion-cli.exe"_s}) {
+            const QFileInfo cli(dir.filePath(folder + name));
+            if (cli.isFile() && cli.isExecutable())
+                return QDir::cleanPath(cli.absoluteFilePath());
+        }
     }
     return QStandardPaths::findExecutable(u"brulion-cli"_s);
 }
@@ -1731,6 +1736,21 @@ QString WorkspaceAgents::failureText(const QString &name, const acp::Failure &fa
 
 // ---- what a turn and a session show -------------------------------------------------------------------
 
+QString WorkspaceAgents::plainOutput(const QString &text)
+{
+    // (Claude Code's agent sends a command's output as Markdown: one fenced block, "```console".)
+    const QString t = text.trimmed();
+    if (!t.startsWith(u"```"_s) || !t.endsWith(u"```"_s) || t.size() < 6)
+        return text;
+    const qsizetype firstEnd = t.indexOf(u'\n');
+    const qsizetype lastStart = t.lastIndexOf(u'\n');
+    if (firstEnd < 0 || lastStart <= firstEnd || t.mid(lastStart + 1).trimmed() != u"```"_s)
+        return text;
+    const QString inner = t.mid(firstEnd + 1, lastStart - firstEnd - 1);
+    // (Only one block: a fence inside means it was more than that.)
+    return inner.contains(u"\n```"_s) || inner.startsWith(u"```"_s) ? text : inner;
+}
+
 QVariantList WorkspaceAgents::tools(const QString &path) const
 {
     QVariantList out;
@@ -1739,7 +1759,7 @@ QVariantList WorkspaceAgents::tools(const QString &path) const
     if (!turn)
         return out;
     for (const acp::ToolCall &t : turn->tools) {
-        QString output = t.output;
+        QString output = plainOutput(t.output);
         const Terminal *term = m_terminals.value(t.terminal);
         if (term || m_released.contains(t.terminal)) {
             const QByteArray bytes = term ? term->output : m_released.value(t.terminal).second;

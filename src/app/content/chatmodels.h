@@ -94,7 +94,9 @@ public:
         RevealedRole,
         SegmentsRole,
         WakeFromRole,
-        WakeNameRole
+        WakeNameRole,
+        /// The message's number in its page (counted from 1, the user's too): WorkspaceChats.workLog().
+        NumberRole
     };
     explicit ChatMessageModel(QObject *parent = nullptr);
 

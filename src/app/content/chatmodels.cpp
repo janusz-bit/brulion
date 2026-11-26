@@ -455,6 +455,7 @@ QVariant ChatMessageModel::data(const QModelIndex &index, int role) const
     case RevealedRole: return !r.flag.isEmpty() && m_revealed.contains(r.number);
     case WakeFromRole: return r.wakeFrom;
     case WakeNameRole: return r.wakeName;
+    case NumberRole: return r.number;
     default: return {};
     }
 }
@@ -468,7 +469,7 @@ QHash<int, QByteArray> ChatMessageModel::roleNames() const
             {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"},
             {FlagRole, "flag"},           {RevealedRole, "revealed"},
             {SegmentsRole, "segments"},   {WakeFromRole, "wakeFrom"},
-            {WakeNameRole, "wakeName"}};
+            {WakeNameRole, "wakeName"},   {NumberRole, "number"}};
 }
 
 void ChatMessageModel::setOwnOnly(bool own)

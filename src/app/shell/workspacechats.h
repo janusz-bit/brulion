@@ -48,6 +48,7 @@
 #include "chatsecrets.h"
 #include "hookserver.h"
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -170,6 +171,7 @@ private:
     QString m_nextPartial; // what comes, said by m_partialTimer
     QString m_nextThoughts;
     QList<std::pair<qint64, int>> m_samples; // the request's {writing ms, tokens}, for its speed
+    QElapsedTimer m_clock;                   // since the turn started (its work log's time)
     QTimer m_partialTimer;
 };
 
@@ -235,6 +237,8 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(brulion::shell::HookServer *hooks READ hooks CONSTANT FINAL)
     /// Changes whenever a thread's checkpoints change (checkpoints() asks again).
     Q_PROPERTY(int checkpointSerial READ checkpointSerial NOTIFY checkpointsChanged FINAL)
+    /// Changes whenever a turn's work log is kept (workLog() asks again).
+    Q_PROPERTY(int workLogSerial READ workLogSerial NOTIFY workLogChanged FINAL)
     /// Who answers a new conversation (setDefaultPartner()): the device's choice while it answers
     /// here (one of partners()), else "" — the built-in assistant.
     Q_PROPERTY(QString defaultPartner READ defaultPartner NOTIFY defaultPartnerChanged FINAL)
@@ -323,6 +327,22 @@ public:
     Q_INVOKABLE QString lastCheckpoint(const QString &path, int serial = 0) const;
     static constexpr int MaxCheckpoints = 30;
     int checkpointSerial() const { return m_checkpointSerial; }
+    /// What an AI agent's turn did, kept once it answered (as T3 Code's "Worked for …"): the answer
+    /// `number` (the page's messages counted from 1) → {seconds, tools: [{title, kind, status,
+    /// output, diffPath, diffOld, diffNew}], plan: [{content, status}]} — {} when not known (no tool
+    /// call and no plan, another device's turn, older than what is kept). Kept in the notebook's
+    /// device state ("chat/worklog"): MaxWorkLogTurns turns a conversation, MaxWorkLogConversations
+    /// conversations, an output's last MaxWorkLogOutput characters, a change's texts up to
+    /// MaxWorkLogDiff characters. `serial` only makes a binding ask again.
+    Q_INVOKABLE QVariantMap workLog(const QString &path, int number, int serial = 0) const;
+    static constexpr int MaxWorkLogTurns = 50;
+    static constexpr int MaxWorkLogConversations = 200;
+    static constexpr int MaxWorkLogCalls = 200;
+    static constexpr int MaxWorkLogOutput = 4000;
+    static constexpr int MaxWorkLogDiff = 40000;
+    int workLogSerial() const { return m_workLogSerial; }
+    /// A turn's tools and plan bounded as workLog() keeps them (pure; tested).
+    static QJsonObject workLogEntry(int number, qint64 seconds, const QVariantList &tools, const QVariantList &plan);
     /// Sets the thread's worktree and branch ("" both: back to the project's folder).
     Q_INVOKABLE bool setThreadWorktree(const QString &path, const QString &worktree, const QString &branch);
     /// The AI's turn again on the conversation as it is (its last message the user's): after a
@@ -687,6 +707,7 @@ Q_SIGNALS:
     /// defaultPartner() may have changed.
     void defaultPartnerChanged();
     void checkpointsChanged();
+    void workLogChanged();
     void questionsChanged();
     void agentsChanged();
     void queueChanged();
@@ -793,6 +814,9 @@ private:
     QHash<QString, int> m_checkpointing;
     int m_checkpointToken = 0;
     int m_checkpointSerial = 0;
+    int m_workLogSerial = 0;
+    /// Keeps what turn `t` did (its tools and plan, how long) for the answer `number` of `path`.
+    void keepWorkLog(const ChatTurn *t, const QString &path, int number);
     /// The agent's turn of `t` after a snapshot of the thread's `folder` (checkpoints()).
     void checkpointThenRun(ChatTurn *t, const QString &folder, int message, const QString &partner,
                            const QVariantList &history, const QString &page);

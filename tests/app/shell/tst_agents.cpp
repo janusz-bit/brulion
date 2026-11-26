@@ -74,6 +74,7 @@
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QTest>
 #include <QUrl>
 
@@ -1769,9 +1770,20 @@ private Q_SLOTS:
         QCOMPARE(call.value(u"kind"_s).toString(), u"execute"_s);
         QVERIFY2(call.value(u"output"_s).toString().contains(u"drugi"_s), qPrintable(call.value(u"output"_s).toString()));
         QVERIFY(turn->tools().isEmpty()); // (the turn ended)
+        // … but its work log stays with the answer (message 2): the call as it ended, how long.
+        QVariantMap log = chats->workLog(path, 2);
+        QVERIFY2(!log.isEmpty(), "the work log of the answer");
+        QCOMPARE(log.value(u"tools"_s).toList().last().toMap().value(u"title"_s).toString(), u"Run sh"_s);
+        QVERIFY(log.value(u"tools"_s).toList().last().toMap().value(u"output"_s).toString().contains(u"drugi"_s));
+        QVERIFY(log.value(u"seconds"_s).toInt() >= 0);
+        QVERIFY(chats->workLog(path, 1).isEmpty()); // (the user's question)
+        QVERIFY(chats->workLog(u"Inna.md"_s, 2).isEmpty());
         // A plan.
+        QSignalSpy kept(chats, &WorkspaceChats::workLogChanged);
         QCOMPARE(chats->send(path, u"Zrób plan"_s), path);
         QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QCOMPARE(kept.size(), 1);
+        QCOMPARE(chats->workLog(path, 4).value(u"plan"_s).toList().size(), 2);
         QCOMPARE(seenPlan.size(), 2);
         QCOMPARE(seenPlan.at(1).toMap().value(u"content"_s).toString(), u"Napisać plan"_s);
         QCOMPARE(seenPlan.at(1).toMap().value(u"status"_s).toString(), u"in_progress"_s);
@@ -1951,6 +1963,95 @@ private Q_SLOTS:
         QCOMPARE(turn->failure(), QString());
         QVERIFY(ws->read(path).contains(u"czynsz"_s, Qt::CaseInsensitive));
         qInfo() << "usage:" << chats->agentUsage(path);
+    }
+
+    // A real agent's thread in a real git project (docs/CODE.md), when one is named:
+    // BRULION_REAL_ACP_AGENT="npx -y @agentclientprotocol/claude-agent-acp" (or codex-acp). The agent fixes a bug in
+    // the project's file — its questions (may it edit?) allowed —, the turn's checkpoint is taken before it, and git
+    // shows exactly that file changed since the checkpoint; a second turn in the same session knows the first.
+    void realAgentThread()
+    {
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        if (QStandardPaths::findExecutable(u"git"_s).isEmpty())
+            QSKIP("git is not installed");
+        auto ws = open({AgentConfig{u"real"_s, u"Real"_s, command, true}});
+        WorkspaceChats *chats = ws->chats();
+        shell::CodeProjects *projects = ws->projects();
+        QByteArray kept;
+        projects->setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
+        const QString folder = m_tmp.filePath(u"Kalkulator %1"_s.arg(m_n));
+        QVERIFY(writeRaw(folder + u"/calc.py"_s, "def add(a, b):\n    return a - b\n\n\ndef mul(a, b):\n    return a * b\n"));
+        QVERIFY(writeRaw(folder + u"/README.md"_s, "# Kalkulator\n\nDodawanie i mnożenie.\n"));
+        for (const QStringList &args :
+             {QStringList{u"init"_s, u"-q"_s, u"-b"_s, u"main"_s}, QStringList{u"add"_s, u"-A"_s},
+              QStringList{u"-c"_s, u"user.name=Ala"_s, u"-c"_s, u"user.email=a@b.c"_s, u"commit"_s, u"-qm"_s, u"start"_s}})
+            QCOMPARE(QProcess::execute(u"git"_s, QStringList{u"-C"_s, folder} + args), 0);
+        const QString id = projects->add(folder);
+        QVERIFY(!id.isEmpty());
+        // An option chosen before the first message (BRULION_REAL_ACP_OPTION="model=…"), as in realAgent().
+        if (const QString option = qEnvironmentVariable("BRULION_REAL_ACP_OPTION"); option.contains(u'=')) {
+            QSignalSpy checked(chats, &WorkspaceChats::agentChecked);
+            chats->checkAgent(u"real"_s);
+            QTRY_COMPARE_WITH_TIMEOUT(checked.size(), 1, 240000);
+            const QString name = option.section(u'=', 0, 0);
+            qInfo() << "choices of" << name << chats->agentChoices(QString(), u"acp:real"_s, name);
+            chats->setAgentOption(QString(), u"acp:real"_s, name, option.section(u'=', 1));
+        }
+
+        // Its questions (may it edit calc.py?) allowed as they come.
+        QString path;
+        QStringList asked;
+        QTimer answers;
+        answers.setInterval(200);
+        QObject::connect(&answers, &QTimer::timeout, chats, [&] {
+            if (path.isEmpty() || !chats->asking(path))
+                return;
+            const QStringList options = chats->questionOptions(path);
+            asked << chats->questionText(path);
+            QString allow = options.value(0);
+            for (const QString &o : options) {
+                if (o.contains(u"allow"_s, Qt::CaseInsensitive) && !o.contains(u"always"_s, Qt::CaseInsensitive)) {
+                    allow = o;
+                    break;
+                }
+            }
+            chats->answer(path, allow);
+        });
+        answers.start();
+        path = chats->startThread(id,
+                                  u"W pliku calc.py funkcja add odejmuje zamiast dodawać. Popraw tylko ją — nie "
+                                  u"zmieniaj innych plików, niczego nie uruchamiaj, nie commituj — i odpowiedz "
+                                  u"jednym krótkim zdaniem po polsku."_s,
+                                  {}, u"acp:real"_s);
+        QVERIFY(!path.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 600000);
+        qInfo().noquote() << ws->read(path);
+        qInfo() << "asked:" << asked;
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QFile calc(folder + u"/calc.py"_s);
+        QVERIFY(calc.open(QIODevice::ReadOnly));
+        const QByteArray fixed = calc.readAll();
+        QVERIFY2(fixed.contains("a + b") && fixed.contains("a * b"), fixed.constData());
+        // The turn's checkpoint, and git's view of what the turn changed: calc.py alone.
+        QCOMPARE(chats->checkpoints(path).size(), 1);
+        const QString checkpoint = chats->lastCheckpoint(path);
+        QProcess diff;
+        diff.start(u"git"_s, {u"-C"_s, folder, u"diff"_s, u"--name-only"_s, u"refs/brulion/checkpoints/"_s + checkpoint});
+        QVERIFY(diff.waitForFinished(30000));
+        QCOMPARE(QString::fromUtf8(diff.readAllStandardOutput()).trimmed(), u"calc.py"_s);
+        QVERIFY(!ws->read(path).contains(u"🤖 \n"_s));
+        qInfo() << "usage:" << chats->agentUsage(path);
+
+        // A second turn: the same session remembers the first; a second checkpoint.
+        QCOMPARE(chats->send(path, u"Którą funkcję poprawiłeś? Odpowiedz samą nazwą funkcji."_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 600000);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        const QString page = ws->read(path);
+        qInfo().noquote() << page;
+        QVERIFY(page.section(u"🤖"_s, -1).contains(u"add"_s));
+        QCOMPARE(chats->checkpoints(path).size(), 2);
     }
 
     void realRemoteAgent()
@@ -2164,6 +2265,41 @@ private Q_SLOTS:
         QCOMPARE(resources, (QStringList{u"Zakupy.md"_s, u"Dom.md"_s}));
     }
 
+    // A work log's bounds (WorkspaceChats::workLogEntry): the newest calls, an output's end, a change's
+    // texts only while small, a plan's steps.
+    void workLogBounds()
+    {
+        QVariantList tools;
+        for (int i = 0; i < WorkspaceChats::MaxWorkLogCalls + 5; ++i)
+            tools << QVariantMap{{u"title"_s, u"Krok %1 — zażółć"_s.arg(i)}, {u"kind"_s, u"read"_s},
+                                 {u"status"_s, u"completed"_s}};
+        QVariantMap last{{u"title"_s, u"Uruchom testy"_s},
+                         {u"kind"_s, u"execute"_s},
+                         {u"status"_s, u"failed"_s},
+                         {u"output"_s, QString(QString(10000, u'x') + u"KONIEC"_s)},
+                         {u"diffPath"_s, u"src/żółw.py"_s},
+                         {u"diffOld"_s, u"a\n"_s},
+                         {u"diffNew"_s, u"b\n"_s}};
+        tools << last;
+        QVariantMap huge = last;
+        huge.insert(u"diffNew"_s, QString(WorkspaceChats::MaxWorkLogDiff, u'y'));
+        tools << huge;
+        const QJsonObject entry = WorkspaceChats::workLogEntry(4, 75, tools, {QVariantMap{{u"content"_s, u"Napisać testy"_s},
+                                                                                          {u"status"_s, u"completed"_s}}});
+        QCOMPARE(entry.value(u"n"_s).toInt(), 4);
+        QCOMPARE(entry.value(u"seconds"_s).toInt(), 75);
+        const QJsonArray calls = entry.value(u"tools"_s).toArray();
+        QCOMPARE(calls.size(), WorkspaceChats::MaxWorkLogCalls);
+        const QJsonObject kept = calls.at(calls.size() - 2).toObject();
+        QCOMPARE(kept.value(u"title"_s).toString(), u"Uruchom testy"_s);
+        QVERIFY(kept.value(u"output"_s).toString().endsWith(u"KONIEC"_s));
+        QCOMPARE(kept.value(u"output"_s).toString().size(), WorkspaceChats::MaxWorkLogOutput + 1); // (…)
+        QCOMPARE(kept.value(u"diffPath"_s).toString(), u"src/żółw.py"_s);
+        // (A change too large to keep: its call without it.)
+        QVERIFY(!calls.last().toObject().contains(u"diffPath"_s));
+        QCOMPARE(entry.value(u"plan"_s).toArray().at(0).toObject().value(u"content"_s).toString(), u"Napisać testy"_s);
+    }
+
     void autoAnswers()
     {
         acp::Permission edit{u"Edit Dom.md"_s, QString(), {{u"a"_s, u"Allow"_s, u"allow_once"_s}, {u"r"_s, u"Reject"_s, u"reject_once"_s}}};
@@ -2188,6 +2324,25 @@ private Q_SLOTS:
         QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, plan), QString());
         acp::Permission rejectOnly{u"x"_s, QString(), {{u"r"_s, u"No"_s, u"reject_once"_s}}};
         QCOMPARE(WorkspaceAgents::autoAnswer(u"all"_s, rejectOnly), QString());
+    }
+
+    void plainOutput_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("console") << u"```console\nok\nżółw\n```"_s << u"ok\nżółw"_s;
+        QTest::newRow("spaces") << u"  ```\n$ ls\n```  \n"_s << u"$ ls"_s;
+        QTest::newRow("plain") << u"zwykły tekst"_s << u"zwykły tekst"_s;
+        QTest::newRow("two blocks") << u"```\na\n```\n```\nb\n```"_s << u"```\na\n```\n```\nb\n```"_s;
+        QTest::newRow("text after") << u"```\na\n```\npotem"_s << u"```\na\n```\npotem"_s;
+        QTest::newRow("one line") << u"```ok```"_s << u"```ok```"_s;
+        QTest::newRow("empty block") << u"```\n```"_s << u"```\n```"_s;
+    }
+    void plainOutput()
+    {
+        QFETCH(QString, text);
+        QFETCH(QString, expected);
+        QCOMPARE(WorkspaceAgents::plainOutput(text), expected);
     }
 
     void pureParts()

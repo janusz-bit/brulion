@@ -284,6 +284,9 @@ public:
     QString approvals(const QString &path) const;
     /// Sets it for `path` (and as the mode of the next new conversations); "" `path`: only that.
     void setApprovals(const QString &path, const QString &mode);
+    /// A tool call's output as plain text: the inside of the one fenced block it is, when it is one
+    /// ("```console\nok\n```" → "ok"), else as it is.
+    static QString plainOutput(const QString &text);
     /// The option an agent's question is answered with by itself under `mode` ("" none: it is
     /// asked): the first allow_once option, else allow_always.
     static QString autoAnswer(const QString &mode, const acp::Permission &permission);

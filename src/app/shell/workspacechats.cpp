@@ -39,6 +39,7 @@
 #include <QPointer>
 
 #include <algorithm>
+#include <limits>
 
 using namespace Qt::StringLiterals;
 
@@ -202,6 +203,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         t->m_key = path;
         m_byKey.insert(path, t);
         t->m_running = true;
+        t->m_clock.start();
         t->m_queued = false;
         t->m_place = 0;
         t->m_omitted = 0;
@@ -861,6 +863,105 @@ QVariantList WorkspaceChats::checkpoints(const QString &path, int serial) const
     return out;
 }
 
+namespace {
+
+const QString WorkLogKey = u"chat/worklog"_s;
+
+/// The end of `text`, at most `limit` characters ("…" in front when cut).
+QString lastPart(const QString &text, int limit)
+{
+    return text.size() <= limit ? text : u"…"_s + text.right(limit);
+}
+
+} // namespace
+
+QJsonObject WorkspaceChats::workLogEntry(int number, qint64 seconds, const QVariantList &tools,
+                                         const QVariantList &plan)
+{
+    QJsonArray calls;
+    for (qsizetype i = std::max<qsizetype>(0, tools.size() - MaxWorkLogCalls); i < tools.size(); ++i) {
+        const QVariantMap m = tools.at(i).toMap();
+        QJsonObject call{{u"title"_s, m.value(u"title"_s).toString().left(500)},
+                         {u"kind"_s, m.value(u"kind"_s).toString().left(40)},
+                         {u"status"_s, m.value(u"status"_s).toString().left(20)}};
+        if (const QString output = m.value(u"output"_s).toString(); !output.isEmpty())
+            call.insert(u"output"_s, lastPart(output, MaxWorkLogOutput));
+        // A change of a file: its path, and its texts while they are small enough to keep.
+        if (const QString diffPath = m.value(u"diffPath"_s).toString(); !diffPath.isEmpty()) {
+            const QString oldText = m.value(u"diffOld"_s).toString();
+            const QString newText = m.value(u"diffNew"_s).toString();
+            if (oldText.size() + newText.size() <= MaxWorkLogDiff) {
+                call.insert(u"diffPath"_s, diffPath.left(1000));
+                call.insert(u"diffOld"_s, oldText);
+                call.insert(u"diffNew"_s, newText);
+            }
+        }
+        calls.append(call);
+    }
+    QJsonArray steps;
+    for (const QVariant &v : plan) {
+        const QVariantMap m = v.toMap();
+        steps.append(QJsonObject{{u"content"_s, m.value(u"content"_s).toString().left(500)},
+                                 {u"status"_s, m.value(u"status"_s).toString().left(20)}});
+        if (steps.size() >= 50)
+            break;
+    }
+    return QJsonObject{{u"n"_s, number}, {u"seconds"_s, seconds}, {u"tools"_s, calls}, {u"plan"_s, steps}};
+}
+
+void WorkspaceChats::keepWorkLog(const ChatTurn *t, const QString &path, int number)
+{
+    LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store || number <= 0 || (t->m_tools.isEmpty() && t->m_plan.isEmpty()))
+        return;
+    const qint64 seconds = t->m_clock.isValid() ? t->m_clock.elapsed() / 1000 : 0;
+    QJsonObject all = store->get(WorkLogKey).toObject();
+    const QString key = path.toLower();
+    QJsonObject entry = workLogEntry(number, seconds, t->m_tools, t->m_plan);
+    entry.insert(u"at"_s, QDateTime::currentMSecsSinceEpoch());
+    QJsonArray list = all.value(key).toArray();
+    // (A number answered again — the conversation rewound: the newer turn's.)
+    for (qsizetype i = list.size() - 1; i >= 0; --i) {
+        if (list.at(i).toObject().value(u"n"_s).toInt() >= number)
+            list.removeAt(i);
+    }
+    list.append(entry);
+    while (list.size() > MaxWorkLogTurns)
+        list.removeFirst();
+    all.insert(key, list);
+    // The conversations answered longest ago go first.
+    while (all.size() > MaxWorkLogConversations) {
+        QString oldest;
+        qint64 when = std::numeric_limits<qint64>::max();
+        for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+            const QJsonArray turns = it.value().toArray();
+            const qint64 last = turns.isEmpty() ? 0 : qint64(turns.last().toObject().value(u"at"_s).toDouble());
+            if (last < when) {
+                when = last;
+                oldest = it.key();
+            }
+        }
+        all.remove(oldest);
+    }
+    store->set(WorkLogKey, all);
+    ++m_workLogSerial;
+    Q_EMIT workLogChanged();
+}
+
+QVariantMap WorkspaceChats::workLog(const QString &path, int number, int serial) const
+{
+    Q_UNUSED(serial);
+    const LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store || path.isEmpty() || number <= 0)
+        return {};
+    for (const QJsonValue &v : store->get(WorkLogKey).toObject().value(path.toLower()).toArray()) {
+        const QJsonObject o = v.toObject();
+        if (o.value(u"n"_s).toInt() == number)
+            return o.toVariantMap();
+    }
+    return {};
+}
+
 QString WorkspaceChats::lastCheckpoint(const QString &path, int serial) const
 {
     const QVariantList all = checkpoints(path, serial);
@@ -1042,6 +1143,7 @@ bool WorkspaceChats::startTurn(ChatTurn *t)
     t->m_key = t->m_path;
     m_byKey.insert(t->m_key, t);
     t->m_running = true;
+    t->m_clock.start();
     t->m_queued = false;
     t->m_place = 0;
     t->m_omitted = from;
@@ -1100,15 +1202,19 @@ void WorkspaceChats::answered(const QString &key, const QString &text)
     const QString path = t->m_path;
     bool ok = false;
     const QString content = m_workspace->exists(path) ? m_workspace->read(path, &ok) : QString();
-    if (!ok
-        || !m_workspace->write(path, chat::appendMessage(content, chat::Role::Assistant, text, m_workspace->now(),
-                                                         m_extensions->language()))) {
+    const QString next = ok ? chat::appendMessage(content, chat::Role::Assistant, text, m_workspace->now(),
+                                                  m_extensions->language())
+                            : QString();
+    if (!ok || !m_workspace->write(path, next)) {
         qCWarning(logging::lcApp) << "AI chat: the answer could not be written to" << path;
         endTurn(t);
         setFailure(t, tr("The answer could not be saved."));
         wake(path, int(chat::Wake::Failed), t->m_failure);
         return;
     }
+    // What the turn did, kept for the answer (its number: the page's last message) before the turn
+    // ends and forgets it.
+    keepWorkLog(t, path, int(chat::parse(next).messages.size()));
     // Written before the turn ends: a view shows the message in place of the answer being
     // written, never neither of them.
     Q_EMIT written(path);
