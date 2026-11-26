@@ -96,6 +96,9 @@ FocusScope {
     /// This conversation's turn ("" a new one's: only its failure).
     readonly property ChatTurn turn: root.chats.turn(root.path)
     readonly property bool busyHere: root.path !== "" && root.turn !== null && root.turn.running
+    /// The computer whose app runs this turn ("" this device's own): followed here — its question
+    /// answered, Stop and what is written go there (Workspace.chats.computerChats).
+    readonly property string remoteHere: root.busyHere ? root.turn.remoteHost : ""
     /// It waits for the model on the device, which answers another conversation.
     readonly property bool queuedHere: root.busyHere && root.turn.queued
     /// The change the AI asks a yes for, in this conversation (shown here, or waiting behind
@@ -1253,6 +1256,14 @@ FocusScope {
                     event.accepted = true
                 }
                 onAccepted: if (conversations.count > 0 && conversations.query !== "") root.openRow(0)
+            }
+
+            // What the desktop app on the user's other computers is doing: followed and steered here.
+            ChatComputerList {
+                Layout.fillWidth: true
+                Layout.bottomMargin: Theme.space2
+                current: root.path
+                onOpened: (path) => root.open(path, false)
             }
 
             ListView {
@@ -2588,6 +2599,8 @@ FocusScope {
                                     readonly property string text: AppController.routeText(waiting.modelData, "text")
                                     readonly property list<string> pictures: root.routeList(waiting.modelData, "pictures")
                                     readonly property int pictureCount: waiting.pictures.length
+                                    /// It waits on the computer running the turn: shown, not handled from here.
+                                    readonly property bool there: AppController.routeFlag(waiting.modelData, "remote")
                                     objectName: "chatWaiting"
                                     Layout.fillWidth: true
                                     implicitHeight: waitingBubble.height
@@ -2628,12 +2641,14 @@ FocusScope {
                                                     color: Theme.fgFaint
                                                 }
                                                 BText {
-                                                    text: root.heldHere ? qsTr("held") : qsTr("waits")
+                                                    text: waiting.there ? qsTr("waits on %1").arg(root.remoteHere)
+                                                                        : root.heldHere ? qsTr("held") : qsTr("waits")
                                                     variant: "caption"
                                                     color: Theme.fgFaint
                                                 }
                                                 BIconButton {
                                                     objectName: "chatWaitingNow"
+                                                    visible: !waiting.there
                                                     size: "small"
                                                     label: qsTr("Send now")
                                                     iconName: "zap"
@@ -2641,6 +2656,7 @@ FocusScope {
                                                 }
                                                 BIconButton {
                                                     objectName: "chatWaitingEdit"
+                                                    visible: !waiting.there
                                                     size: "small"
                                                     label: qsTr("Edit")
                                                     iconName: "pencil"
@@ -2648,6 +2664,7 @@ FocusScope {
                                                 }
                                                 BIconButton {
                                                     objectName: "chatWaitingRemove"
+                                                    visible: !waiting.there
                                                     size: "small"
                                                     label: qsTr("Remove")
                                                     iconName: "x"
@@ -2946,6 +2963,27 @@ FocusScope {
                                                              : qsTr("Name the page %1").arg(mentionChip.text)
                             onClicked: root.insertMention(mentionChip.text)
                         }
+                    }
+                }
+
+                // A turn the app on another computer runs: followed here; what is written waits there.
+                RowLayout {
+                    objectName: "chatOnComputer"
+                    Layout.fillWidth: true
+                    visible: root.remoteHere !== ""
+                    spacing: Theme.space2
+                    BIcon {
+                        name: "laptop"
+                        size: Theme.iconSizeSm
+                        color: Theme.fgMuted
+                    }
+                    BText {
+                        objectName: "chatOnComputerText"
+                        Layout.fillWidth: true
+                        text: qsTr("Running on %1 — answer, stop or write from here: your messages wait there.").arg(root.remoteHere)
+                        variant: "caption"
+                        color: Theme.fgMuted
+                        wrapMode: Text.Wrap
                     }
                 }
 

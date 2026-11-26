@@ -5,6 +5,7 @@
 #include "chatschedules.h"
 #include "chattools.h"
 #include "codeprojects.h"
+#include "computerchats.h"
 
 #include "workspace.h"
 #include "workspaceagents.h"
@@ -242,6 +243,27 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
             Q_EMIT questionWaiting(path, text);
     });
     connect(m_workspace, &Workspace::readyChanged, this, &WorkspaceChats::recoverAgentTurns);
+    // The conversations the app on the user's other computers runs (computerchats.h): each one's turn
+    // here follows it, and what the user does with it goes there. Asked while the app is in front,
+    // or while one of them runs (a question of it may come while the phone is in a pocket).
+    ComputerChats *computers = m_agents->computerChats();
+    computers->setLocalMessages([this](const QString &path) { return localMessages(path); });
+    connect(computers, &ComputerChats::chatChanged, this, &WorkspaceChats::mirror);
+    connect(computers, &ComputerChats::changed, this, [this] {
+        ++m_computerSerial;
+        Q_EMIT computerChatsChanged();
+    });
+    connect(computers, &ComputerChats::pageChanged, this, &WorkspaceChats::computerPageCame);
+    if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        connect(app, &QGuiApplication::applicationStateChanged, this, &WorkspaceChats::updateFollowing);
+    connect(this, &WorkspaceChats::shownChanged, this, [this] {
+        // (The conversation shown: its whole turn is asked for — the last one shown of them.)
+        QString shown = isShown(m_lastShown) ? m_lastShown : QString();
+        for (auto it = m_shown.cbegin(); it != m_shown.cend() && shown.isEmpty(); ++it)
+            shown = it.key();
+        m_agents->computerChats()->watch(shown);
+    });
+    QTimer::singleShot(0, this, &WorkspaceChats::updateFollowing);
     connect(m_extensions, &WorkspaceExtensions::aiSettingsChanged, this, [this] {
         Q_EMIT settingsChanged();
         startWaiting(); // (a provider on the network answers every conversation at once)
@@ -300,7 +322,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     connect(m_workspace, &Workspace::pathRemoved, this, [this](const QString &path) {
         if (wakesParent(path))
             setWake(path, QString());
-        if (ChatTurn *t = find(path); t && t->m_running)
+        if (ChatTurn *t = find(path); t && t->m_running && t->m_remoteHost.isEmpty())
             stop(path);
         moveQueue(path, QString());
         m_rewound.remove(path.toLower());
@@ -363,7 +385,9 @@ void WorkspaceChats::questionsMoved()
         if (asks) {
             t->m_cameBack = stamp();
             notifyUser(t->m_path, questionText(t->m_path).section(u'\n', 0, 0).trimmed());
-            wake(t->m_path, int(chat::Wake::Asking), questionText(t->m_path));
+            // (Another computer's turn: its app wakes its parent there.)
+            if (t->m_remoteHost.isEmpty())
+                wake(t->m_path, int(chat::Wake::Asking), questionText(t->m_path));
         } else if (t->m_failure.isEmpty()) {
             t->m_cameBack = 0;
         }
@@ -497,12 +521,23 @@ void WorkspaceChats::addOfferedAgent(const QString &address, const QString &agen
 
 bool WorkspaceChats::asking(const QString &path, int) const
 {
+    if (remote(path)) {
+        const std::optional<ComputerChats::Chat> chat = m_agents->computerChats()->find(path);
+        return chat && chat->row.state == u"asking";
+    }
     return !path.isEmpty()
            && (!m_agents->questionOptions(path).isEmpty() || m_extensions->chatQuestionKind(path) == u"choose");
 }
 
 QString WorkspaceChats::questionText(const QString &path, int) const
 {
+    if (remote(path)) {
+        // (Another computer's: its detail while it is shown here, else the list's line.)
+        if (const acp::RemoteChatDetail *d = m_agents->computerChats()->detail(path); d && !d->question.isEmpty())
+            return d->question.details.isEmpty() ? d->question.text : d->question.text + u'\n' + d->question.details;
+        const std::optional<ComputerChats::Chat> chat = m_agents->computerChats()->find(path);
+        return chat ? chat->row.question : QString();
+    }
     if (!m_agents->questionOptions(path).isEmpty())
         return m_agents->questionText(path);
     if (m_extensions->chatQuestionKind(path) == u"choose")
@@ -513,6 +548,10 @@ QString WorkspaceChats::questionText(const QString &path, int) const
 
 QStringList WorkspaceChats::questionOptions(const QString &path, int) const
 {
+    if (remote(path)) {
+        const acp::RemoteChatDetail *d = m_agents->computerChats()->detail(path);
+        return d && asking(path) ? d->question.options : QStringList();
+    }
     if (const QStringList agent = m_agents->questionOptions(path); !agent.isEmpty())
         return agent;
     return m_extensions->chatQuestionKind(path) == u"choose" ? m_extensions->chatQuestionOptions(path) : QStringList();
@@ -520,11 +559,24 @@ QStringList WorkspaceChats::questionOptions(const QString &path, int) const
 
 QVariantMap WorkspaceChats::questionDiff(const QString &path, int) const
 {
+    if (remote(path)) {
+        const acp::RemoteChatDetail *d = m_agents->computerChats()->detail(path);
+        if (!d || d->question.file.isEmpty())
+            return {};
+        return {{u"path"_s, d->question.file}, {u"oldText"_s, d->question.oldText}, {u"newText"_s, d->question.newText}};
+    }
     return m_agents->questionOptions(path).isEmpty() ? QVariantMap() : m_agents->questionDiff(path);
 }
 
 void WorkspaceChats::answer(const QString &path, const QString &option)
 {
+    if (remote(path)) {
+        m_agents->computerChats()->answer(path, option, [this](const QString &error) {
+            if (!error.isEmpty())
+                Q_EMIT m_workspace->errorOccurred(error);
+        });
+        return;
+    }
     if (!m_agents->questionOptions(path).isEmpty())
         m_agents->answer(path, option);
     else
@@ -533,6 +585,10 @@ void WorkspaceChats::answer(const QString &path, const QString &option)
 
 QString WorkspaceChats::questionPlan(const QString &path, int) const
 {
+    if (remote(path)) {
+        const acp::RemoteChatDetail *d = m_agents->computerChats()->detail(path);
+        return d ? d->question.plan : QString();
+    }
     return m_agents->questionOptions(path).isEmpty() ? QString() : m_agents->questionPlan(path);
 }
 
@@ -705,6 +761,8 @@ void WorkspaceChats::showing(const QString &path, bool shown)
         m_shown.remove(key);
     else
         m_shown.insert(key, n);
+    if (shown)
+        m_lastShown = path;
     Q_EMIT shownChanged();
     if (shown && isUnread(path))
         setUnread(path, false); // (read)
@@ -1205,6 +1263,8 @@ QString WorkspaceChats::sendMessage(const QString &path, const QString &text, co
     }
     if ((message.isEmpty() && sent.isEmpty()) || !m_workspace->ready())
         return {};
+    if (remote(path))
+        return sendToComputer(path, message, sent, acp::SendMode::Queue) ? path : QString();
     if (ChatTurn *t = path.isEmpty() ? nullptr : find(path); t && t->m_running)
         return {};
     const QString language = m_extensions->language();
@@ -1421,6 +1481,14 @@ void WorkspaceChats::stop(const QString &path)
     ChatTurn *t = find(path);
     if (!t || !t->m_running)
         return;
+    if (!t->m_remoteHost.isEmpty()) {
+        // (Another computer's turn: stopped there; its end comes from there.)
+        m_agents->computerChats()->stop(t->m_path, [this](const QString &error) {
+            if (!error.isEmpty())
+                Q_EMIT m_workspace->errorOccurred(error);
+        });
+        return;
+    }
     // (A sub-conversation stopped by the user: its parent hears of it. Its agent's own chatStop
     // took the wake away first.)
     wake(t->m_path, int(chat::Wake::Stopped), QString());
@@ -1450,7 +1518,8 @@ void WorkspaceChats::stop(const QString &path)
 void WorkspaceChats::stopAll()
 {
     for (ChatTurn *t : m_turns.values()) {
-        if (t->m_running)
+        // (Another computer's turns go on there: this device only follows them.)
+        if (t->m_running && t->m_remoteHost.isEmpty())
             stop(t->m_path);
     }
 }
@@ -1496,9 +1565,13 @@ void WorkspaceChats::reset()
         t->m_omitted = 0;
         t->m_asking = false;
         t->m_cameBack = 0;
+        t->m_remoteHost.clear();
+        t->m_remoteQuestion.clear();
+        t->m_remoteWaiting.clear();
         t->clearPartial();
         Q_EMIT t->stateChanged();
     }
+    m_remoteEnded.clear();
     for (const QString &picture : std::exchange(m_added, {}))
         m_workspace->discardImport(picture);
     // (The notebook's waiting messages stay in its device state, for when it opens again.)
@@ -2137,6 +2210,9 @@ bool WorkspaceChats::queue(const QString &path, const QString &text, const QStri
     }
     if (text.trimmed().isEmpty() && sent.isEmpty())
         return false;
+    // (Another computer's turn: in line there, behind what waits there.)
+    if (remote(path))
+        return sendToComputer(path, text.trimmed(), sent, acp::SendMode::Queue);
     loadQueue();
     const QString key = path.toLower();
     if (path.isEmpty() || (!isRunning(path) && m_queued.value(key).isEmpty()))
@@ -2162,8 +2238,19 @@ bool WorkspaceChats::queue(const QString &path, const QString &text, const QStri
 
 QVariantList WorkspaceChats::queued(const QString &path, int) const
 {
-    const_cast<WorkspaceChats *>(this)->loadQueue();
     QVariantList out;
+    if (const ChatTurn *t = find(path); t && t->m_running && !t->m_remoteHost.isEmpty()) {
+        // (Another computer's: they wait there — shown, not taken back or sent ahead from here.)
+        int id = -1;
+        for (const QString &text : t->m_remoteWaiting)
+            out.append(QVariantMap{{u"id"_s, id--},
+                                   {u"text"_s, text},
+                                   {u"pictures"_s, QStringList()},
+                                   {u"from"_s, QString()},
+                                   {u"remote"_s, true}});
+        return out;
+    }
+    const_cast<WorkspaceChats *>(this)->loadQueue();
     for (const Waiting &w : m_queued.value(path.toLower())) {
         const QString from = chat::wakeSource(w.text);
         out.append(QVariantMap{{u"id"_s, w.id},
@@ -2184,6 +2271,8 @@ bool WorkspaceChats::heldForWake(const QString &path, int) const
 
 bool WorkspaceChats::queueHeld(const QString &path, int) const
 {
+    if (remote(path))
+        return false;
     const_cast<WorkspaceChats *>(this)->loadQueue();
     const QString key = path.toLower();
     return m_held.contains(key) && !m_queued.value(key).isEmpty();
@@ -2243,6 +2332,8 @@ void WorkspaceChats::sendNextQueued(const QString &path)
 
 bool WorkspaceChats::sendNow(const QString &path, int id)
 {
+    if (remote(path))
+        return false; // (what waits there is that computer's)
     loadQueue();
     const QString key = path.toLower();
     auto it = m_queued.find(key);
@@ -2278,6 +2369,8 @@ bool WorkspaceChats::sendNow(const QString &path, int id)
 
 bool WorkspaceChats::steer(const QString &path, const QString &text, const QStringList &pictures)
 {
+    if (remote(path))
+        return sendToComputer(path, text.trimmed(), pictures, acp::SendMode::Steer);
     if (path.isEmpty() || !isRunning(path))
         return queue(path, text, pictures);
     loadQueue();
@@ -2756,6 +2849,197 @@ QStringList WorkspaceChats::archiveUntouched()
     }
     if (!out.isEmpty())
         Q_EMIT autoArchived(out, m_autoArchiveDays);
+    return out;
+}
+
+// ---- the conversations the app on the user's other computers runs ---------------------------------
+
+bool WorkspaceChats::remote(const QString &path) const
+{
+    const ChatTurn *t = path.isEmpty() ? nullptr : find(path);
+    return t && t->m_running && !t->m_remoteHost.isEmpty();
+}
+
+int WorkspaceChats::localMessages(const QString &path) const
+{
+    if (path.isEmpty() || !m_workspace->ready() || !m_workspace->exists(path))
+        return 0;
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    return ok ? int(chat::parse(content).messages.size()) : 0;
+}
+
+void WorkspaceChats::updateFollowing()
+{
+    bool running = false;
+    for (const ChatTurn *t : std::as_const(m_turns))
+        running = running || (t->m_running && !t->m_remoteHost.isEmpty());
+    m_agents->computerChats()->setActive(appActive() || running);
+}
+
+bool WorkspaceChats::sendToComputer(const QString &path, const QString &text, const QStringList &pictures,
+                                    acp::SendMode mode)
+{
+    const ChatTurn *t = find(path);
+    const QString host = t ? t->m_remoteHost : QString();
+    if (!pictures.isEmpty()) {
+        Q_EMIT m_workspace->errorOccurred(
+                tr("Pictures do not go to a conversation running on %1 yet: send the text alone.").arg(host));
+        return false;
+    }
+    if (text.isEmpty())
+        return false;
+    m_agents->computerChats()->send(path, text, mode, [this](const QString &error) {
+        if (!error.isEmpty())
+            Q_EMIT m_workspace->errorOccurred(error);
+    });
+    return true;
+}
+
+void WorkspaceChats::mirror(const QString &path)
+{
+    ComputerChats *computers = m_agents->computerChats();
+    const std::optional<ComputerChats::Chat> chat = computers->find(path);
+    ChatTurn *t = find(chat ? chat->row.path : path);
+    // (This device's own turn runs: a computer that lists it is this one, or another that saw it.)
+    if (t && t->m_running && t->m_remoteHost.isEmpty())
+        return;
+    if (chat && chat->row.active()) {
+        if (!t)
+            t = turn(chat->row.path);
+        const acp::RemoteChatDetail *d = computers->detail(chat->row.path);
+        const bool started = !t->m_running;
+        const bool queued = chat->row.state == u"queued";
+        const QString status = d ? d->status : chat->row.status;
+        const bool changed = started || t->m_remoteHost != chat->host || t->m_queued != queued
+                             || t->m_status != status || !t->m_failure.isEmpty();
+        t->m_remoteHost = chat->host;
+        t->m_running = true;
+        t->m_queued = queued;
+        t->m_place = 0;
+        t->m_status = status;
+        t->m_failure.clear();
+        if (started) {
+            t->m_clock.start();
+            t->m_omitted = 0;
+            t->clearPartial();
+            t->setActivity({}, {});
+        }
+        if (d) {
+            t->setPartial(d->partial, d->thoughts, QString());
+            QVariantList tools, plan;
+            for (const acp::RemoteChatTool &tool : d->tools)
+                tools.append(QVariantMap{{u"title"_s, tool.title},
+                                         {u"status"_s, tool.status},
+                                         {u"kind"_s, tool.kind},
+                                         {u"output"_s, QString()}});
+            for (const acp::RemoteChatStep &step : d->plan)
+                plan.append(QVariantMap{{u"content"_s, step.content}, {u"status"_s, step.status}});
+            t->setActivity(tools, plan);
+        }
+        // What it asks, as one string: a change of it is a question that came or went.
+        QString question;
+        if (chat->row.state == u"asking") {
+            question = chat->row.question;
+            if (d && !d->question.isEmpty())
+                question += u'\n' + d->question.text + u'\n' + d->question.details + u'\n'
+                            + d->question.options.join(u'\n') + u'\n' + d->question.plan + u'\n' + d->question.file;
+            if (question.isEmpty())
+                question = u"?"_s;
+        }
+        const QStringList waiting = d ? d->waiting : t->m_remoteWaiting;
+        if (changed) {
+            Q_EMIT t->stateChanged();
+            Q_EMIT stateChanged();
+        }
+        if (question != t->m_remoteQuestion) {
+            t->m_remoteQuestion = question;
+            questionsMoved();
+        }
+        if (waiting != t->m_remoteWaiting) {
+            t->m_remoteWaiting = waiting;
+            queueMoved();
+        }
+        m_remoteEnded.remove(t->m_path.toLower());
+        if (started) {
+            qCInfo(logging::lcApp).noquote() << u"Following %1, running on %2"_s.arg(t->m_path, chat->host);
+            updateFollowing();
+        }
+        return;
+    }
+    if (!t || t->m_remoteHost.isEmpty())
+        return;
+    // Its turn ended there — or that computer is gone (its app quit, the network): followed no more.
+    const QString host = t->m_remoteHost;
+    const bool asked = !t->m_remoteQuestion.isEmpty();
+    t->m_remoteHost.clear();
+    t->m_remoteQuestion.clear();
+    t->m_remoteWaiting.clear();
+    t->m_running = false;
+    t->m_queued = false;
+    t->m_place = 0;
+    t->m_status.clear();
+    t->clearPartial();
+    t->setActivity({}, {});
+    Q_EMIT t->stateChanged();
+    Q_EMIT stateChanged();
+    if (asked)
+        questionsMoved();
+    queueMoved();
+    updateFollowing();
+    if (!chat)
+        return;
+    if (chat->row.state == u"failed") {
+        const QString why = chat->row.failure.isEmpty() ? tr("The turn failed on %1.").arg(host)
+                                                        : tr("On %1: %2").arg(host, chat->row.failure);
+        setFailure(t, why);
+        notifyUser(t->m_path, why.section(u'\n', 0, 0).trimmed());
+        return;
+    }
+    // Answered there (or stopped): the answer comes with its page — here already, or on its way.
+    if (!isShown(t->m_path) && !isSideChat(t->m_path))
+        setUnread(t->m_path, true);
+    m_remoteEnded.insert(t->m_path.toLower());
+    if (localMessages(t->m_path) >= chat->row.messages || !computerPage(t->m_path).isEmpty())
+        computerPageCame(t->m_path);
+}
+
+void WorkspaceChats::computerPageCame(const QString &path)
+{
+    Q_EMIT computerPageChanged(path);
+    if (!m_remoteEnded.remove(path.toLower()))
+        return;
+    // The turn that ended there: its answer in a notification, as one of this device's would be.
+    QString content = computerPage(path);
+    if (content.isEmpty()) {
+        bool ok = false;
+        content = m_workspace->exists(path) ? m_workspace->read(path, &ok) : QString();
+    }
+    const chat::Conversation c = chat::parse(content);
+    if (!c.messages.isEmpty() && c.messages.last().role == chat::Role::Assistant)
+        notifyUser(path, firstLineOf(c.messages.last().text));
+}
+
+QString WorkspaceChats::computerPage(const QString &path) const
+{
+    return path.isEmpty() ? QString() : m_agents->computerChats()->page(path);
+}
+
+QVariantList WorkspaceChats::computerChats(int) const
+{
+    QVariantList out;
+    for (const ComputerChats::Chat &c : m_agents->computerChats()->chats()) {
+        out.append(QVariantMap{{u"path"_s, c.row.path},
+                               {u"name"_s, c.row.name},
+                               {u"state"_s, c.row.state},
+                               {u"host"_s, c.host},
+                               {u"question"_s, c.row.question},
+                               {u"failure"_s, c.row.failure},
+                               {u"status"_s, c.row.status},
+                               {u"project"_s, c.row.project},
+                               {u"partnerName"_s, c.row.partnerName},
+                               {u"here"_s, m_workspace->ready() && m_workspace->exists(c.row.path)}});
+    }
     return out;
 }
 

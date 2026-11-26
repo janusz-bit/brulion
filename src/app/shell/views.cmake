@@ -20,6 +20,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/views/ChatLineageRow.qml
     qml/views/ChatSecretCard.qml
     qml/views/ChatSidePane.qml
+    qml/views/ChatComputerList.qml
     qml/views/ChatDrawingViewer.qml
     qml/views/ChatSegment.qml
     qml/views/ChatSegments.qml
