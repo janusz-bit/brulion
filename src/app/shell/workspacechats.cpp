@@ -21,6 +21,7 @@
 #include "chat/chat.h"
 #include "gitcli/client.h"
 #include "log/categories.h"
+#include "markdown/frontmatter.h"
 #include "util/paths.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
@@ -192,6 +193,23 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
                 Q_EMIT agentHostPaired(ok, text);
             });
     connect(m_agents, &WorkspaceAgents::remembered, this, &WorkspaceChats::agentRemembered);
+    // A thread's page changed (synced from another device too): its newest checkpoint may be
+    // another one now (`checkpoint:`).
+    connect(m_workspace, &Workspace::filesChanged, this, [this](const QStringList &paths) {
+        if (std::ranges::none_of(paths, [](const QString &p) { return chat::inFolder(p); }))
+            return;
+        ++m_checkpointSerial;
+        Q_EMIT checkpointsChanged();
+    });
+    // A thread of another computer's project: the checkpoint that computer took before its turn.
+    connect(m_agents, &WorkspaceAgents::checkpointMade, this, [this](const QString &path, const QString &id) {
+        bool ok = false;
+        const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
+        if (ok && !c.project.isEmpty())
+            keepCheckpoint(path, threadPlace(path).value(u"remoteFolder"_s).toString(), id,
+                           int(std::ranges::count_if(c.messages,
+                                                     [](const chat::Message &m) { return m.role == chat::Role::User; })));
+    });
     // A pairing without a code the computer did not take: its code is asked for.
     connect(m_agents, &WorkspaceAgents::codeNeeded, this, &WorkspaceChats::agentHostNeedsCode);
     // A turn an agent on another computer went on with while this device was gone (Android ended
@@ -779,6 +797,14 @@ QString WorkspaceChats::startThread(const QString &project, const QString &text,
                                        "Settings → Extensions → AI agents."));
         return {};
     }
+    // (Another computer's project: answered by an agent of that computer.)
+    if (m_workspace->projects()->isRemote(project))
+        who = m_agents->threadPartnerFor(project, who);
+    if (who.isEmpty()) {
+        setFailure(turn(QString()), tr("No AI agent of the computer that has this project is paired with this device: "
+                                       "pair one in Settings → Extensions → AI agents."));
+        return {};
+    }
     const ThreadPlace place{project, worktree.trimmed(), branch.trimmed()};
     return sendMessage(QString(), text, QString(), pictures, who, QString(), QString(), &place);
 }
@@ -839,6 +865,7 @@ void WorkspaceChats::keepCheckpoint(const QString &path, const QString &folder, 
     }
     all.insert(path.toLower(), list);
     store->set(CheckpointsKey, all);
+    notePageCheckpoint(path, id);
     // (The oldest ones' refs go too: git may collect their objects.)
     if (!dropped.isEmpty() && m_git)
         m_git->dropCheckpoints(folder, dropped, [](const gitcli::Outcome &) { });
@@ -853,12 +880,25 @@ QVariantList WorkspaceChats::checkpoints(const QString &path, int serial) const
     QVariantList out;
     if (!store || path.isEmpty())
         return out;
+    QStringList ids;
     for (const QJsonValue &v : store->get(CheckpointsKey).toObject().value(path.toLower()).toArray()) {
         const QJsonObject o = v.toObject();
-        if (!o.value(u"id"_s).toString().isEmpty())
+        if (!o.value(u"id"_s).toString().isEmpty()) {
+            ids << o.value(u"id"_s).toString();
             out << QVariantMap{{u"id"_s, o.value(u"id"_s).toString()},
                                {u"at"_s, o.value(u"at"_s).toString()},
                                {u"message"_s, o.value(u"message"_s).toInt()}};
+        }
+    }
+    // The newest turn's, as the page says (a turn another device of the notebook ran).
+    if (const QString newest = pageCheckpoint(path); !newest.isEmpty() && !ids.contains(newest)) {
+        bool ok = false;
+        const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
+        out << QVariantMap{{u"id"_s, newest},
+                           {u"at"_s, QString()},
+                           {u"message"_s, int(std::ranges::count_if(c.messages, [](const chat::Message &m) {
+                                return m.role == chat::Role::User;
+                            }))}};
     }
     return out;
 }
@@ -964,8 +1004,31 @@ QVariantMap WorkspaceChats::workLog(const QString &path, int number, int serial)
 
 QString WorkspaceChats::lastCheckpoint(const QString &path, int serial) const
 {
+    // (The page's names the newest turn's, whichever device ran it.)
+    if (const QString newest = pageCheckpoint(path); !newest.isEmpty())
+        return newest;
     const QVariantList all = checkpoints(path, serial);
     return all.isEmpty() ? QString() : all.last().toMap().value(u"id"_s).toString();
+}
+
+QString WorkspaceChats::pageCheckpoint(const QString &path) const
+{
+    bool ok = false;
+    const QString content = path.isEmpty() ? QString() : m_workspace->read(path, &ok);
+    if (!ok)
+        return {};
+    const markdown::FrontmatterResult fm = markdown::parseFrontmatter(content);
+    const QString id = fm.data.value(u"checkpoint"_s).toString().trimmed();
+    return gitcli::isValidCheckpointId(id) ? id : QString();
+}
+
+void WorkspaceChats::notePageCheckpoint(const QString &path, const QString &id)
+{
+    bool ok = false;
+    const QString content = m_workspace->read(path, &ok);
+    if (!ok || chat::parse(content).project.isEmpty() || pageCheckpoint(path) == id)
+        return;
+    m_workspace->write(path, chat::setField(content, u"checkpoint", id));
 }
 
 QVariantList WorkspaceChats::agentPartners() const
@@ -995,6 +1058,20 @@ QVariantMap WorkspaceChats::threadPlace(const QString &path) const
         return {};
     const CodeProjects *projects = m_workspace->projects();
     const bool known = projects->contains(c.project);
+    if (projects->isRemote(c.project)) {
+        // (Another computer's project: nothing of it is here — its turns, changes and terminal are there.)
+        const QVariantMap p = projects->project(c.project);
+        return {{u"project"_s, c.project},
+                {u"projectName"_s, p.value(u"name"_s)},
+                {u"worktree"_s, c.worktree},
+                {u"branch"_s, c.branch},
+                {u"folder"_s, QString()},
+                {u"known"_s, true},
+                {u"exists"_s, false},
+                {u"remote"_s, true},
+                {u"host"_s, p.value(u"host"_s)},
+                {u"remoteFolder"_s, c.worktree.isEmpty() ? p.value(u"remotePath"_s).toString() : c.worktree}};
+    }
     const QString folder = !c.worktree.isEmpty() ? c.worktree : projects->folderOf(c.project);
     return {{u"project"_s, c.project},
             {u"projectName"_s, known ? projects->nameOf(c.project) : c.project},
@@ -1552,7 +1629,16 @@ QString WorkspaceChats::partnerOf(const QString &path) const
         return {};
     bool ok = false;
     const QString content = m_workspace->read(path, &ok);
-    return ok ? chat::parse(content).partner : QString();
+    if (!ok)
+        return {};
+    // (A thread is answered where its project is: the agent that answers it on this device — its
+    // page may name one of another device of the notebook.)
+    const chat::Conversation c = chat::parse(content);
+    if (!c.project.isEmpty() && WorkspaceAgents::isAgent(c.partner) && m_workspace->projects()->contains(c.project)) {
+        if (const QString here = m_agents->threadPartnerFor(c.project, c.partner); !here.isEmpty())
+            return here;
+    }
+    return c.partner;
 }
 
 bool WorkspaceChats::setPartner(const QString &path, const QString &partner)

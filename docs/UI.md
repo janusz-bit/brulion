@@ -1412,6 +1412,21 @@ mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first butt
   `worktreeWanted()`; only agents among the partners (`chatNewPartner` shown with one agent too); its
   empty state "What should the agent do?" with suggestions (`codeSuggestions`) — over the terminal
   (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
+* **Another computer's projects** (docs/CODE.md "Threads on the phone"; `CodeProjects`' remote ones, from
+  `Workspace.projects.remote`): CodeSidebar lists them after this device's, a `laptop` icon and "on
+  <computer>" (`codeProjectHost_<id>`) beside the name, no "⋯" (a long press: only New thread); it asks the computers for
+  their lists again whenever it is shown. CodeView names the computer in the project's chip ("Sklep · nixos",
+a `laptop` icon), no
+  terminal, editor or script buttons, and **CodeRemoteChanges** (`qml/code/CodeRemoteChanges.qml`,
+  `codeRemoteChanges`) in place of the Changes panel — beside the thread when wide (`code/changesOpen`),
+  under it when narrow, shown with the changes' toggle (not kept): "Changes and the terminal are on
+  <computer>: here they are read-only." (`codeRemoteNote`), refresh (`codeRemoteRefresh`), This turn / All
+  changes (`codeRemoteMode`, with the turn's checkpoint), the files (`codeRemoteChangeList`, rows
+  `codeRemoteChange`: the letter in its colour, the name, its folder dimmed, +N −N) and a file's diff
+  (`codeRemoteDiffPane`, `BDiffView`: beside the list when wide, in its place with Back when narrow) —
+  what that computer's git says (`RemoteProjects.requestChanges` / `requestDiff`), refreshed when the
+  thread's page changes. Local / New worktree work as for this device's projects: the worktree is made
+  there.
 
 ## Notifications
 
@@ -1973,7 +1988,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   `Workspace.chats.share`, `src/app/shell/agentshare.h`): "Share agents with the phone"
   (`AppSettings.acpShare`, key `ai/share`, off by default) runs `brulion-cli acp serve` for the
   notebook that is open — never the documentation — with this device's agents (programs only; their
-  list in `<app data>/agent-share/agents.json`) while the app runs (`ServerProcess`,
+  list in `<app data>/agent-share/agents.json`) and Code mode's projects of this device (`--projects
+  <app data>/agent-share/projects.json`, written again whenever the projects change: the phone's
+  threads of them run here, docs/CODE.md "Threads on the phone") while the app runs (`ServerProcess`,
   `src/app/shell/serverprocess.h`: started again after a crash with waits of 2 s … 1 min, a refusal
   left as it is, stopped with its standard input — `--stop-on-eof` — when it is turned off, the
   notebook or the agents change, or the app quits; every line of its log in the event log). The

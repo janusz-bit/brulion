@@ -19,6 +19,7 @@
 //   AgentLimits      uncreatable — Workspace.chats.limits (Claude Code's and Codex's subscription limits)
 //   AgentUsage       uncreatable — Workspace.chats.usage (what they used, from their session logs)
 //   NotificationCenter uncreatable — Workspace.notifications (what the app told the user)
+//   RemoteProjects   uncreatable — Workspace.projects.remote (Code mode's projects of other computers)
 //   ChatLineage, ChatSchedules uncreatable — Workspace.chats.lineage / .schedules (sub-conversations,
 //                    scheduled conversations)
 //   ChatSecrets, HookServer uncreatable — Workspace.chats.secrets / .hooks (a secret an agent asks
@@ -58,6 +59,7 @@
 #include "hookserver.h"
 #include "notificationcenter.h"
 #include "recentnotebooks.h"
+#include "remoteprojects.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
 #include "themepages.h"
@@ -333,6 +335,13 @@ struct CodeProjectsForeign {
     QML_FOREIGN(brulion::shell::CodeProjects)
     QML_NAMED_ELEMENT(CodeProjects)
     QML_UNCREATABLE("Use Workspace.projects")
+};
+
+struct RemoteProjectsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::RemoteProjects)
+    QML_NAMED_ELEMENT(RemoteProjects)
+    QML_UNCREATABLE("Use Workspace.projects.remote")
 };
 
 struct NotificationCenterForeign {

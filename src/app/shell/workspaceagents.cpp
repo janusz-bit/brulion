@@ -3,8 +3,10 @@
 #include "chatlineage.h"
 #include "chattools.h"
 #include "codeprojects.h"
+#include "remoteprojects.h"
 #include "workspace.h"
 
+#include "acp/codehost.h"
 #include "chat/chat.h"
 #include "log/categories.h"
 #include "markdown/encrypted.h"
@@ -17,6 +19,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QLocale>
 #if QT_CONFIG(process) // (not in the browser: AI agents run in the desktop app)
 #include <QProcess>
@@ -90,6 +93,8 @@ constexpr int MaxAppHandles = 64;
 /// The key of an agent's check (no conversation's path starts with it).
 const QString CheckKey = u"\x1f" "check"_s;
 const QString StoreKey = u"acp/sessions"_s;
+/// The projects the computers paired here offered last (RemoteProjects).
+const QString RemoteProjectsKey = u"code/remoteProjects"_s;
 /// The approvals of conversations ({path → mode}) and the mode chosen last ("" key).
 const QString ApprovalsKey = u"chat/approvals"_s;
 
@@ -207,6 +212,22 @@ QVariantMap agentOptionRow(const acp::ConfigOption &o)
 WorkspaceAgents::WorkspaceAgents(Workspace *workspace, QObject *parent)
     : QObject(parent), m_workspace(workspace), m_activityTimer(new QTimer(this))
 {
+    // Code mode's projects of the computers whose agents are paired here: listed with this
+    // device's (CodeProjects), their last lists kept in the notebook's device state.
+    m_remoteProjects = new RemoteProjects(this);
+    m_remoteProjects->setTransport([this] { return transport(); });
+    m_remoteProjects->setStorage(
+            [this]() -> QByteArray {
+                LocalStore *local = m_workspace && m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+                return local ? QJsonDocument(local->get(RemoteProjectsKey).toObject()).toJson(QJsonDocument::Compact)
+                             : QByteArray();
+            },
+            [this](const QByteArray &json) {
+                if (LocalStore *local = m_workspace && m_workspace->vault() ? m_workspace->vault()->store() : nullptr)
+                    local->set(RemoteProjectsKey, QJsonDocument::fromJson(json).object());
+            });
+    if (m_workspace)
+        m_workspace->projects()->setRemote(m_remoteProjects);
     m_activityTimer->setSingleShot(true);
     m_activityTimer->setInterval(100);
     connect(m_activityTimer, &QTimer::timeout, this, [this] {
@@ -692,6 +713,13 @@ void WorkspaceAgents::setAgents(const QList<AgentConfig> &agents)
             m_processes.value(id)->config = *same;
     }
     m_agents = agents;
+    // (The computers of the agents paired here: their projects asked for.)
+    QList<RemoteProjects::Computer> computers;
+    for (const AgentConfig &a : m_agents) {
+        if (a.isRemote() && !a.token.isEmpty())
+            computers.append({a.url, a.token, a.host});
+    }
+    m_remoteProjects->setComputers(computers);
     Q_EMIT sessionChanged(QString());
 }
 
@@ -749,9 +777,11 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
             p->client->respondError(id, acp::MethodNotFound, u"Method not found: %1"_s.arg(method));
         });
         // Its tools there reach this app (acp/apptunnel.h): the stream says this app answers them,
-        // and with "Let it change the app" a grant of its own, answered in process.
+        // and with "Let it change the app" a grant of its own, answered in process. Its threads of
+        // Code mode work in that computer's projects (acp/codehost.h).
+        p->remote->setFeatures(m_appControl.isSet() ? QStringList{QString(acp::AppFeature), QString(acp::CodeFeature)}
+                                                    : QStringList{QString(acp::CodeFeature)});
         if (m_appControl.isSet()) {
-            p->remote->setFeatures({QString(acp::AppFeature)});
             p->client->setExtensionHandler([this, p](const QJsonValue &id, const QString &method,
                                                      const QJsonObject &params) { appCall(p, id, method, params); });
             if (config.tools && config.appAccess)
@@ -808,6 +838,14 @@ void WorkspaceAgents::connectClient(Process *p)
         learn(id, path);
         Q_EMIT sessionChanged(path);
     });
+    // The checkpoint the computer of a thread's project took before its turn (acp/codehost.h).
+    connect(client, &acp::Client::extensionNotified, this,
+            [this](const QString &path, const QString &method, const QJsonObject &params) {
+                if (path.isEmpty() || method != acp::CheckpointMethod)
+                    return;
+                if (const std::optional<acp::RemoteCheckpoint> c = acp::readCheckpoint(params))
+                    Q_EMIT checkpointMade(path, c->id, c->at);
+            });
     connect(client, &acp::Client::sessionStarted, this, [this, id](const QString &path, const QString &session, bool resumed) {
         // A new session saw the conversation up to its newest message (its first prompt).
         if (!resumed && m_turns.value(path) == id) {
@@ -1129,8 +1167,23 @@ acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Proce
 
 void WorkspaceAgents::run(const QString &path, const QString &partner, const QVariantList &history, const QString &page)
 {
-    const QString id = partner.trimmed().mid(Prefix.size());
-    const AgentConfig *agent = config(id);
+    // A thread of Code mode runs where its project is: this device's agents for one of its own, the
+    // agents of the computer whose project it is for one of another (the partner's, else the same
+    // agent there, else its first).
+    const CodePlace code = codePlace(path);
+    const QString asked = partner.trimmed().mid(Prefix.size());
+    const AgentConfig *agent = code.project.isEmpty() ? config(asked) : threadAgent(code, asked);
+    const QString id = agent ? agent->id : asked;
+    if (!code.project.isEmpty() && code.remote && !agent) {
+        Q_EMIT failed(path, tr("The project “%1” is on %2: pair this device with an AI agent shared there (Settings → "
+                               "Extensions → AI agents).")
+                                    .arg(code.name, code.host));
+        return;
+    }
+    if (!code.project.isEmpty() && !code.remote && !agent && config(asked)) {
+        Q_EMIT failed(path, tr("A thread of a project runs with an AI agent of this computer: choose one of them."));
+        return;
+    }
     if (!agent && !available() && !remoteAvailable()) {
         Q_EMIT failed(path, tr("AI agents run only in the desktop app: choose another partner for this conversation."));
         return;
@@ -1158,12 +1211,6 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         Q_EMIT failed(path, tr("There is no question to answer: write one."));
         return;
     }
-    // A thread of Code mode works in its project's folder (or its own worktree), on this computer.
-    const CodePlace code = codePlace(path);
-    if (!code.project.isEmpty() && agent->isRemote()) {
-        Q_EMIT failed(path, tr("A thread of a project runs with an AI agent of this computer: choose one of them."));
-        return;
-    }
     if (!code.project.isEmpty() && !code.error.isEmpty()) {
         Q_EMIT failed(path, code.error);
         return;
@@ -1178,6 +1225,14 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         Q_EMIT failed(path, tr("AI agents run only in the desktop app: choose another partner for this conversation."));
         return;
     }
+    // (A computer whose server runs no threads — an older one — would let the agent work in its
+    // notebook instead: refused. Before its stream started, its projects' list said it does.)
+    if (code.remote && p->remote && p->remote->isStarted()
+        && !p->remote->hostFeatures().contains(QString(acp::CodeFeature))) {
+        Q_EMIT failed(path, tr("%1 runs no threads of Code mode: update Brulion there, and share its agents again.")
+                                    .arg(code.host));
+        return;
+    }
     // A sub-conversation (an agent's task for this one) gets no live tools; the chat's grant goes
     // with the conversation (none from ChatLineage::MaxDepth levels down).
     const bool child = m_isChild && m_isChild(path);
@@ -1190,6 +1245,11 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
         input.sessionMeta = QJsonObject{{acp::AppMetaKey, acp::AppSession{appHandle(p, path, remoteControl, chatToken),
                                                                           remoteControl, !chatToken.isEmpty()}
                                                                   .toJson()}};
+    // A thread of that computer's project: the session works there (its folder or the worktree).
+    if (code.remote) {
+        input.cwd = code.folder;
+        input.sessionMeta.insert(acp::CodeMetaKey, acp::CodeSession{code.project, code.worktree, code.branch}.toJson());
+    }
 
     // The user's newest message, its pictures as pictures (a link to the file where the agent
     // takes none — or where a picture cannot be read).
@@ -1238,8 +1298,8 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
                         || p->remote->hostFeatures().contains(QString(acp::AppFeature));
     if (!code.project.isEmpty())
         input.firstPrompt << acp::Block::textBlock(codeContext(code.name, code.folder, code.branch,
-                                                               tools && !p->grant.isEmpty() && !child,
-                                                               tools && !chatToken.isEmpty()));
+                                                               tools && !p->grant.isEmpty() && !child && tunnel,
+                                                               tools && !chatToken.isEmpty() && tunnel));
     else
         input.firstPrompt << acp::Block::textBlock(context(root, conversation, pagePath.isEmpty() ? QString() : page,
                                                            tools, !p->grant.isEmpty() && !child && tunnel,
@@ -1263,6 +1323,13 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     const int seenNow = int(history.size()) - 1;
     const std::optional<Stored> record = stored(path);
     const bool current = record && record->agent == id && record->seen == seenNow;
+    // (A thread that works in another folder now — its worktree set or gone: its session is made, or
+    // resumed, there.)
+    if (!code.project.isEmpty()) {
+        if (const auto was = m_threadFolders.constFind(path); was != m_threadFolders.cend() && *was != code.folder)
+            p->client->forget(path);
+        m_threadFolders.insert(path, code.folder);
+    }
     if (!current)
         p->client->forget(path);
     else if (!p->client->hasSession(path))
@@ -1504,6 +1571,11 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
     }
     r.failures = 0;
     r.failingSince = -1;
+    // (A thread's turn: the checkpoint that computer took before it, which this device missed.)
+    if (!turn.checkpoint.isEmpty() && (r.turn.isEmpty() || turn.id == r.turn) && r.checkpoint != turn.checkpoint) {
+        r.checkpoint = turn.checkpoint;
+        Q_EMIT checkpointMade(path, turn.checkpoint, turn.checkpointAt);
+    }
     if (!r.turn.isEmpty() && turn.id != r.turn) {
         // The computer's last turn of the session is another one: the question never reached it
         // (this device was gone before it was sent).
@@ -2044,6 +2116,16 @@ WorkspaceAgents::CodePlace WorkspaceAgents::codePlace(const QString &path) const
     place.project = c.project;
     place.name = projects->contains(c.project) ? projects->nameOf(c.project) : c.project;
     place.branch = c.worktree.isEmpty() ? QString() : c.branch;
+    // A project of another computer: its folder (or the worktree) there, never looked for here.
+    if (projects->isRemote(c.project)) {
+        const std::optional<RemoteProjects::Project> r = m_remoteProjects->find(c.project);
+        place.remote = true;
+        place.url = r->url;
+        place.host = r->host;
+        place.worktree = c.worktree.isEmpty() ? QString() : QDir::cleanPath(c.worktree);
+        place.folder = place.worktree.isEmpty() ? QDir::cleanPath(r->path) : place.worktree;
+        return place;
+    }
     place.folder = !c.worktree.isEmpty() ? c.worktree : projects->folderOf(c.project);
     if (place.folder.isEmpty())
         place.error = tr("The project “%1” is not on this device: add its folder in Code mode.").arg(c.project);
@@ -2052,6 +2134,46 @@ WorkspaceAgents::CodePlace WorkspaceAgents::codePlace(const QString &path) const
     else
         place.folder = QDir::cleanPath(QFileInfo(place.folder).absoluteFilePath());
     return place;
+}
+
+const AgentConfig *WorkspaceAgents::threadAgent(const CodePlace &code, const QString &id) const
+{
+    // Where the project is decides: this device's agents for one of its own, that computer's for one
+    // of another computer.
+    const auto fits = [&code](const AgentConfig &a) {
+        return code.remote ? a.isRemote() && acp::normalizeRemoteBase(a.url).toString() == code.url : !a.isRemote();
+    };
+    const AgentConfig *named = config(id);
+    if (named && fits(*named) && runs(*named))
+        return named;
+    // The same agent of the other side: its id there (an agent paired from a computer keeps it as
+    // `remote`; the app names it "<computer>-<id>") …
+    const QString there = named && named->isRemote() ? named->remote : id;
+    for (const AgentConfig &a : m_agents) {
+        if (!fits(a) || !runs(a))
+            continue;
+        if (code.remote ? a.remote == there || there.endsWith(u'-' + a.remote) : a.id == there || there.endsWith(u'-' + a.id))
+            return &a;
+    }
+    // … else the first one there.
+    for (const AgentConfig &a : m_agents) {
+        if (fits(a) && runs(a) && (a.isRemote() || !splitCommand(a.command).isEmpty()))
+            return &a;
+    }
+    return nullptr;
+}
+
+QString WorkspaceAgents::threadPartnerFor(const QString &project, const QString &partner) const
+{
+    CodePlace code;
+    code.project = project;
+    const CodeProjects *projects = m_workspace->projects();
+    if (projects->isRemote(project)) {
+        code.remote = true;
+        code.url = m_remoteProjects->find(project)->url;
+    }
+    const AgentConfig *a = threadAgent(code, partner.trimmed().mid(Prefix.size()));
+    return a ? QString(Prefix + a->id) : QString();
 }
 
 QString WorkspaceAgents::codeFile(const QString &folder, const QString &file)
@@ -2570,6 +2692,8 @@ void WorkspaceAgents::abandon()
 
 void WorkspaceAgents::reset()
 {
+    m_remoteProjects->reload(); // (the next notebook's lists, once it is open)
+    m_threadFolders.clear();
     m_released.clear();
     m_turns.clear();
     m_renamedDuringTurn.clear();

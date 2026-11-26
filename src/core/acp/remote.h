@@ -22,11 +22,14 @@
 //          messages after N (those up to N are dropped on the host), at once or within S seconds (a
 //          long poll)
 //   DELETE streams/<id>                       → the agent's process ends
-//   GET    sessions/<id>/turn?wait=S          → {turn, state, text, tools, stopReason, error, asking, question} —
+//   GET    sessions/<id>/turn?wait=S          → {turn, state, text, tools, stopReason, error, asking, question,
+//                                                checkpoint} —
 //          the last turn of a session, for a device that lost the stream it ran in (RemoteTurn)
 //   POST   sessions/<id>/turn {question, optionId} → the turn — the device's answer to the question
 //          of the agent that waits in it (RemoteTurn::question)
 //   DELETE sessions/<id>/turn                 → the agent stops that turn
+//   GET    projects, POST projects/<id>/worktrees, GET projects/<id>/changes | diff — Code mode's
+//          projects of the host and its threads' worktrees and changes (acp/codehost.h)
 //
 // Every request but pair carries "Authorization: Bearer <token>". A stream survives a phone that
 // sleeps or loses the network for a while: the host keeps what the agent says until it is fetched.
@@ -122,6 +125,10 @@ struct RemoteError {
 /// The error of an answer (RemoteError::Kind::None for a 2xx answer that is a JSON object; the
 /// object in `object`).
 RemoteError remoteErrorOf(const sync::HttpResponse &response, QJsonObject *object = nullptr);
+/// A request of the host's API: `endpoint` under `base` (remoteUrl(), its query after "?"), the
+/// device's token ("" none), a JSON body (nullptr none), the time limits of every request.
+sync::HttpRequest remoteRequest(const QByteArray &method, const QUrl &base, const QString &endpoint,
+                                const QString &token, const QJsonObject *body);
 
 /// A device paired with the host (POST pair).
 struct RemotePairing {
@@ -160,6 +167,9 @@ struct RemoteTurn {
     /// Running: the question that waits for this device (an older host keeps none: it answers
     /// "cancelled" while `asking`).
     RemoteQuestion question{};
+    /// A thread's turn (acp/codehost.h): the checkpoint the host took before it ("" none).
+    QString checkpoint{};
+    QString checkpointAt{};
     static std::optional<RemoteTurn> fromJson(const QJsonObject &o);
 };
 

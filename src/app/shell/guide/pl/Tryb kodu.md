@@ -36,6 +36,9 @@ Wątek jest zapisany jako strona w folderze `AI` Twojego notatnika, z nazwą pro
 ## Zmiany i terminal
 Obok wątku panel **Zmiany** pokazuje zmiany projektu względem gita — każdy plik z jego różnicami; po turze agenta zobaczysz tylko to, co zmieniła ta tura, i możesz ją **cofnąć**. Stamtąd robisz **commit**, **push** i **pull request** (z zalogowanym wierszem poleceń GitHuba `gh`). Pod wątkiem **terminal** uruchamia powłoki w folderze wątku (ikona terminala w nagłówku go pokazuje i chowa). **Otwórz w edytorze** (ikona `</>`) otwiera folder w Twoim edytorze: jego polecenie — `code`, `zed`, `cursor` — ustawisz w Ustawieniach → Rozszerzenia → Tryb kodu.
 
+## Na telefonie
+Komputer, który udostępnia telefonowi swoich agentów ([[AI#Agent na innym komputerze]]), udostępnia też swoje projekty: na telefonie tryb kodu pokazuje je z nazwą komputera. Napisz w wątku — zaczętym na komputerze albo nowym, **Lokalnie** albo w **nowym worktree** — a agent pracuje na tamtym komputerze, w projekcie, jakbyś przy nim siedział. Punkt kontrolny każdej tury powstaje tam, więc z powrotem przy komputerze panel **Zmiany** pokaże, co zmieniła tura z telefonu. Na telefonie widzisz pliki zmienione w ostatniej turze i ich różnice; commit, push i terminal są na komputerze.
+
 ## Dla ciekawych
 - Agent wątku dostaje narzędzia czatu Brulionu — powiadomienie Cię, zapytanie innego agenta, prośbę o sekret — ale żadnych Twoich notatek ([[Wiersz poleceń i agenci AI]]).
 - Poproszony „daj znać, gdy testy przejdą”, może wysłać Ci własne powiadomienie ([[AI#Powiadomienia od agenta]]).

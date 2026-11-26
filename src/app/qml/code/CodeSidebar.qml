@@ -13,6 +13,9 @@ import Brulion
 // the list (its folder and threads stay). A thread's row opens it (route {view: "code", path}),
 // its menu archives or deletes it. "Add a project…" picks a folder. AppShell shows it in place of
 // ShellSidebar while AppSettings.appMode is "code"; on phones it is the drawer's content.
+// The projects of the user's other computers (CodeProjects' remote ones: their threads run there)
+// follow this device's, with the computer's name and only their threads' entries in the menu; their
+// lists are asked for again whenever the panel is shown.
 Rectangle {
     id: sidebar
 
@@ -54,6 +57,15 @@ Rectangle {
     color: Theme.bgSunken
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Projects")
+
+    // (The other computers' projects: asked for again when shown.)
+    function refreshRemote(): void {
+        const remote = Workspace.projects.remote
+        if (remote !== null && sidebar.visible)
+            remote.refresh()
+    }
+    onVisibleChanged: sidebar.refreshRemote()
+    Component.onCompleted: sidebar.refreshRemote()
 
     ColumnLayout {
         anchors.fill: parent
@@ -137,6 +149,9 @@ Rectangle {
         readonly property string projectId: AppController.routeText(section.modelData, "id")
         readonly property string projectName: AppController.routeText(section.modelData, "name")
         readonly property string projectPath: AppController.routeText(section.modelData, "path")
+        /// Another computer's project: its name there; nothing of it on this device.
+        readonly property bool remote: AppController.routeFlag(section.modelData, "remote")
+        readonly property string host: AppController.routeText(section.modelData, "host")
         readonly property bool open: !sidebar.folded(section.projectId)
 
         Layout.fillWidth: true
@@ -186,14 +201,25 @@ Rectangle {
                     color: Theme.fgFaint
                 }
                 BIcon {
-                    name: "folder"
+                    name: section.remote ? "laptop" : "folder"
                     size: Theme.iconSize
                     color: Theme.fgMuted
                 }
                 BText {
                     Layout.fillWidth: true
+                    // (The name first: the computer's after it gives way.)
+                    Layout.minimumWidth: Math.min(implicitWidth, projectRow.width * 0.45)
                     text: section.projectName
                     font.weight: Theme.weightSemiBold
+                    elide: Text.ElideRight
+                }
+                BText {
+                    objectName: "codeProjectHost_" + section.projectId
+                    visible: section.remote
+                    Layout.maximumWidth: projectRow.width * 0.3
+                    text: qsTr("on %1").arg(section.host)
+                    variant: "small"
+                    color: Theme.fgFaint
                     elide: Text.ElideRight
                 }
                 BIconButton {
@@ -206,6 +232,8 @@ Rectangle {
                 BIconButton {
                     id: projectMore
                     objectName: "codeProjectMore_" + section.projectId
+                    // (Another computer's project: nothing but a new thread, the "+" before it.)
+                    visible: !section.remote
                     size: "small"
                     iconName: "ellipsis"
                     label: qsTr("More: %1").arg(section.projectName)
@@ -223,6 +251,7 @@ Rectangle {
                 }
                 BMenuItem {
                     objectName: "codeProjectEditor"
+                    visible: !section.remote
                     text: qsTr("Open in editor")
                     iconName: "code"
                     onTriggered: {
@@ -232,19 +261,25 @@ Rectangle {
                 }
                 BMenuItem {
                     objectName: "codeProjectFolder"
+                    visible: !section.remote
                     text: qsTr("Show the folder")
                     iconName: "folder-open"
                     onTriggered: Workspace.projects.openFolder(section.projectPath)
                 }
                 BMenuItem {
                     objectName: "codeProjectSettings"
+                    visible: !section.remote
                     text: qsTr("Name and scripts…")
                     iconName: "sliders-horizontal"
                     onTriggered: projectDialog.openFor(section.projectId)
                 }
-                BMenuSeparator {}
+                BMenuSeparator {
+                    visible: !section.remote
+                    height: visible ? implicitHeight : 0
+                }
                 BMenuItem {
                     objectName: "codeProjectRemove"
+                    visible: !section.remote
                     text: qsTr("Remove from the list")
                     iconName: "x"
                     danger: true

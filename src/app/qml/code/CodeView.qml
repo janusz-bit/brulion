@@ -20,6 +20,10 @@ import Brulion
 // project's folder or its own git worktree and branch (a new thread chooses: Local / New worktree,
 // CodeProjects.createWorktree before its first message) —, the script buttons, Open in editor and
 // the panels' toggles (kept per device: "code/changesOpen", "code/terminalOpen").
+// A project of another computer (its threads run there, docs/CODE.md "Threads on the phone"): the
+// computer's name in the header, no terminal, editor or scripts here, and CodeRemoteChanges — that
+// computer's changes of the thread, read-only — in place of the Changes panel (under the thread
+// when narrow, opened with the changes' toggle).
 FocusScope {
     id: root
 
@@ -40,6 +44,13 @@ FocusScope {
                                      : Workspace.projects.folderOf(root.project)
     readonly property string branch: AppController.routeText(root.place, "branch")
     readonly property bool worktree: AppController.routeText(root.place, "worktree") !== ""
+    /// The project is another computer's: its name, the thread's worktree there.
+    readonly property bool remote: root.path !== "" ? AppController.routeFlag(root.place, "remote")
+                                                    : Workspace.projects.isRemote(root.project)
+    readonly property string host: root.path !== "" ? AppController.routeText(root.place, "host")
+                                                    : AppController.routeText(Workspace.projects.project(root.project), "host")
+    /// Narrow (a phone): the other computer's changes under the thread, only when asked for.
+    property bool remoteChangesShown: false
     readonly property list<var> scripts: AppController.routeList(Workspace.projects.project(root.project), "scripts")
     /// A new thread gets a git worktree of its own (this device's choice, kept).
     property bool useWorktree: AppSettings.value("code/newWorktree", false) === true
@@ -58,6 +69,14 @@ FocusScope {
         root.place = root.path !== "" ? Workspace.chats.threadPlace(root.path) : root.noPlace
     }
     readonly property var noPlace: ({})
+    function refreshRemoteChanges(): void {
+        const wide = remoteWide.item as CodeRemoteChanges
+        if (wide !== null)
+            wide.refresh()
+        const narrow = remoteNarrow.item as CodeRemoteChanges
+        if (narrow !== null)
+            narrow.refresh()
+    }
     function setChangesOpen(on: bool): void {
         root.changesOpen = on
         AppSettings.setValue("code/changesOpen", on)
@@ -124,6 +143,7 @@ FocusScope {
                 return
             root.refreshPlace()
             changes.git.refresh()
+            root.refreshRemoteChanges()
         }
     }
     Connections {
@@ -193,6 +213,8 @@ FocusScope {
             id: header
             objectName: "codeHeader"
             Layout.fillWidth: true
+            // (Never wider than the view: on a phone it would push the thread out of the window.)
+            Layout.maximumWidth: root.width - 2 * Theme.space3
             Layout.leftMargin: Theme.space3
             Layout.rightMargin: Theme.space3
             Layout.topMargin: Theme.space2
@@ -202,8 +224,11 @@ FocusScope {
             BChip {
                 id: projectChip
                 objectName: "codeProjectChip"
-                iconName: "folder"
-                text: root.projectName !== "" ? root.projectName : qsTr("No project")
+                // (Another computer's project: that computer's name with it.)
+                iconName: root.remote ? "laptop" : "folder"
+                text: root.projectName === "" ? qsTr("No project")
+                      : root.remote && root.host !== "" && root.path !== "" ? root.projectName + " · " + root.host
+                      : root.projectName
                 interactive: root.path === ""
                 Accessible.name: qsTr("Project: %1").arg(projectChip.text)
                 onClicked: projectMenu.popup(projectChip, 0, projectChip.height)
@@ -259,6 +284,7 @@ FocusScope {
                 }
                 BIconButton {
                     objectName: "codeOpenEditor"
+                    visible: !root.remote
                     iconName: "code"
                     label: qsTr("Open in editor")
                     enabled: root.folder !== ""
@@ -269,6 +295,7 @@ FocusScope {
                 }
                 BIconButton {
                     objectName: "codeTerminalToggle"
+                    visible: !root.remote
                     iconName: "terminal"
                     label: root.terminalOpen ? qsTr("Hide the terminal") : qsTr("Show the terminal")
                     checked: root.terminalOpen
@@ -277,9 +304,15 @@ FocusScope {
                 BIconButton {
                     objectName: "codeChangesToggle"
                     iconName: "git-compare"
-                    label: root.changesOpen ? qsTr("Hide the changes") : qsTr("Show the changes")
-                    checked: root.changesOpen
-                    onClicked: root.setChangesOpen(!root.changesOpen)
+                    readonly property bool shown: root.remote && !root.wide ? root.remoteChangesShown : root.changesOpen
+                    label: shown ? qsTr("Hide the changes") : qsTr("Show the changes")
+                    checked: shown
+                    onClicked: {
+                        if (root.remote && !root.wide)
+                            root.remoteChangesShown = !root.remoteChangesShown
+                        else
+                            root.setChangesOpen(!root.changesOpen)
+                    }
                 }
             }
         }
@@ -338,6 +371,34 @@ FocusScope {
                         // (A link a program printed, Ctrl+click: opened as a note's link would be.)
                         onLinkActivated: (url) => pageTools.openLink(url, "")
                     }
+                }
+                // Another computer's project, narrow: its changes under the thread.
+                Loader {
+                    id: remoteNarrow
+                    visible: active
+                    active: root.remote && !root.wide && root.remoteChangesShown && root.project !== ""
+                    C.SplitView.preferredHeight: 320
+                    C.SplitView.minimumHeight: 160
+                    sourceComponent: CodeRemoteChanges {
+                        project: root.project
+                        worktree: AppController.routeText(root.place, "worktree")
+                        checkpoint: root.path !== "" ? Workspace.chats.lastCheckpoint(root.path, Workspace.chats.checkpointSerial) : ""
+                        host: root.host
+                    }
+                }
+            }
+            // … wide: beside it, as the Changes panel.
+            Loader {
+                id: remoteWide
+                visible: active
+                active: root.remote && root.wide && root.changesOpen && root.project !== ""
+                C.SplitView.preferredWidth: 420
+                C.SplitView.minimumWidth: 260
+                sourceComponent: CodeRemoteChanges {
+                    project: root.project
+                    worktree: AppController.routeText(root.place, "worktree")
+                    checkpoint: root.path !== "" ? Workspace.chats.lastCheckpoint(root.path, Workspace.chats.checkpointSerial) : ""
+                    host: root.host
                 }
             }
             GitChangesPanel {

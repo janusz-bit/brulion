@@ -1,5 +1,8 @@
 #include "agentshare.h"
 
+#include "codeprojects.h"
+
+#include "acp/codehost.h"
 #include "acp/hostoffer.h"
 #include "acp/remote.h"
 #include "log/categories.h"
@@ -81,6 +84,14 @@ AgentShare::AgentShare(Workspace *workspace, WorkspaceAgents *agents, QObject *p
             readOffers();
         });
         watchVault();
+        // The projects changed while it runs: the file again (the server reads it again by itself).
+        connect(m_workspace->projects(), &CodeProjects::changed, this, [this] {
+            if (m_server->state() == ServerProcess::State::Running || m_server->state() == ServerProcess::State::Starting) {
+                QString error;
+                if (writeProjectsFile(&error).isEmpty())
+                    qCWarning(logging::lcApp, "AI agents for the phone: %s", qUtf8Printable(error));
+            }
+        });
     }
 }
 
@@ -220,6 +231,7 @@ void AgentShare::apply()
     Launch l;
     l.root = m_root;
     l.agentsFile = file;
+    l.projectsFile = writeProjectsFile(&error);
     l.address = m_address;
     l.trust = m_trust;
     l.port = m_port;
@@ -298,6 +310,36 @@ void AgentShare::announced(const QJsonObject &result)
     else
         removeOffer();
     readOffers();
+}
+
+QString AgentShare::writeProjectsFile(QString *error) const
+{
+    // This computer's projects of Code mode, as the server reads them (acp/codehost.h): the server
+    // reads the file again when it changes, so a project added runs threads at once.
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + u"/agent-share"_s;
+    if (!m_workspace || !QDir().mkpath(dir)) {
+        *error = tr("Cannot write the projects' list (%1)").arg(dir);
+        return {};
+    }
+    QList<acp::HostProject> projects;
+    const CodeProjects *code = m_workspace->projects();
+    for (const CodeProjects::Project &p : code->projects()) {
+        if (acp::isProjectId(p.id) && QDir::isAbsolutePath(p.path))
+            projects.append({p.id, p.name, QDir::cleanPath(p.path), code->worktreesRoot()});
+    }
+    const QString path = dir + u"/projects.json"_s;
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        *error = tr("Cannot write the projects' list: %1").arg(file.errorString());
+        return {};
+    }
+    file.write(acp::hostProjectsJson(projects));
+    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!file.commit()) {
+        *error = tr("Cannot write the projects' list: %1").arg(file.errorString());
+        return {};
+    }
+    return path;
 }
 
 QString AgentShare::writeAgentsFile(QString *error) const
@@ -551,6 +593,9 @@ QStringList AgentShare::serveArguments(const Launch &l, QString *error)
     // (--compact: a refusal is one line of JSON, as the first line of a server that serves.)
     QStringList args{u"--vault"_s, l.root, u"--compact"_s, u"acp"_s, u"serve"_s, u"--agents"_s, l.agentsFile,
                      u"--stop-on-eof"_s};
+    // (Code mode's projects of this computer: the devices' threads work in them.)
+    if (!l.projectsFile.isEmpty())
+        args << u"--projects"_s << l.projectsFile;
     const QString port = QString::number(l.port);
     const auto trust = [&args, &l] {
         if (!l.trust)

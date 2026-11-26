@@ -1,5 +1,7 @@
 #include "acp/remote.h"
 
+#include "acp/codehost.h"
+
 #include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -141,10 +143,8 @@ RemoteError remoteErrorOf(const sync::HttpResponse &response, QJsonObject *objec
     return e;
 }
 
-namespace {
-
-sync::HttpRequest apiRequest(const QByteArray &method, const QUrl &base, const QString &endpoint, const QString &token,
-                             const QJsonObject *body)
+sync::HttpRequest remoteRequest(const QByteArray &method, const QUrl &base, const QString &endpoint,
+                                const QString &token, const QJsonObject *body)
 {
     sync::HttpRequest r;
     r.method = method;
@@ -161,13 +161,11 @@ sync::HttpRequest apiRequest(const QByteArray &method, const QUrl &base, const Q
     return r;
 }
 
-} // namespace
-
 void pairRemote(sync::HttpTransport *transport, const QUrl &base, const QString &code, const QString &device,
                 std::function<void(const RemotePairing &, const RemoteError &)> done)
 {
     const QJsonObject body{{u"code"_s, normalizePairingCode(code)}, {u"device"_s, device}};
-    transport->send(apiRequest("POST", base, u"pair"_s, QString(), &body), [done](const sync::HttpResponse &response) {
+    transport->send(remoteRequest("POST", base, u"pair"_s, QString(), &body), [done](const sync::HttpResponse &response) {
         QJsonObject o;
         RemoteError e = remoteErrorOf(response, &o);
         RemotePairing p;
@@ -186,7 +184,7 @@ void pairRemote(sync::HttpTransport *transport, const QUrl &base, const QString 
 void fetchRemoteInfo(sync::HttpTransport *transport, const QUrl &base, const QString &token,
                      std::function<void(const RemoteInfo &, const RemoteError &)> done)
 {
-    transport->send(apiRequest("GET", base, u"info"_s, token, nullptr), [done](const sync::HttpResponse &response) {
+    transport->send(remoteRequest("GET", base, u"info"_s, token, nullptr), [done](const sync::HttpResponse &response) {
         QJsonObject o;
         RemoteError e = remoteErrorOf(response, &o);
         RemoteInfo info;
@@ -232,6 +230,13 @@ std::optional<RemoteTurn> RemoteTurn::fromJson(const QJsonObject &o)
         t.question.request = QJsonObject{{u"toolCall"_s, question.value(u"toolCall"_s)},
                                          {u"options"_s, question.value(u"options"_s)}};
     }
+    // (A thread's turn: the checkpoint taken before it, acp/codehost.h.)
+    const QJsonObject checkpoint = o.value(u"checkpoint"_s).toObject();
+    if (const std::optional<RemoteCheckpoint> c = readCheckpoint(
+                QJsonObject{{u"sessionId"_s, o.value(u"session"_s)}, {u"checkpoint"_s, checkpoint}})) {
+        t.checkpoint = c->id;
+        t.checkpointAt = c->at;
+    }
     return t;
 }
 
@@ -241,7 +246,7 @@ void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QSt
     // (The address encodes what a path cannot carry; the host decodes it.)
     const QString endpoint =
             u"sessions/%1/turn?wait=%2"_s.arg(session, QString::number(std::clamp(waitSeconds, 0, RemoteWaitSeconds)));
-    sync::HttpRequest request = apiRequest("GET", base, endpoint, token, nullptr);
+    sync::HttpRequest request = remoteRequest("GET", base, endpoint, token, nullptr);
     request.timeoutMs += std::clamp(waitSeconds, 0, RemoteWaitSeconds) * 1000; // (the long poll's own wait)
     transport->send(request, [done](const sync::HttpResponse &response) {
         QJsonObject o;
@@ -260,7 +265,7 @@ void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QSt
 void cancelRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session)
 {
     const QString endpoint = u"sessions/%1/turn"_s.arg(session);
-    transport->send(apiRequest("DELETE", base, endpoint, token, nullptr), [](const sync::HttpResponse &) { });
+    transport->send(remoteRequest("DELETE", base, endpoint, token, nullptr), [](const sync::HttpResponse &) { });
 }
 
 void answerRemoteQuestion(sync::HttpTransport *transport, const QUrl &base, const QString &token,
@@ -268,7 +273,7 @@ void answerRemoteQuestion(sync::HttpTransport *transport, const QUrl &base, cons
                           std::function<void(const RemoteTurn &, const RemoteError &)> done)
 {
     const QJsonObject body{{u"question"_s, question}, {u"optionId"_s, optionId}};
-    transport->send(apiRequest("POST", base, u"sessions/%1/turn"_s.arg(session), token, &body),
+    transport->send(remoteRequest("POST", base, u"sessions/%1/turn"_s.arg(session), token, &body),
                     [done](const sync::HttpResponse &response) {
                         QJsonObject o;
                         RemoteError e = remoteErrorOf(response, &o);
@@ -314,7 +319,7 @@ qint64 RemoteStream::now() const
 sync::HttpRequest RemoteStream::request(const QByteArray &method, const QString &endpoint,
                                         const QJsonObject *body) const
 {
-    return apiRequest(method, m_base, endpoint, m_token, body);
+    return remoteRequest(method, m_base, endpoint, m_token, body);
 }
 
 int RemoteStream::retryDelay(int failures) const

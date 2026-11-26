@@ -36,6 +36,9 @@ A thread is kept as a page in your notebook's `AI` folder, with its project name
 ## Changes and terminal
 Beside the thread, the **Changes** panel shows the project's changes against git — each file with its diff; after an agent's turn you can see just what that turn changed and **revert the turn**. From there you **commit**, **push** and **create a pull request** (with the GitHub command line `gh` signed in). Under the thread, the **terminal** runs shells in the thread's folder (the terminal icon in the header shows and hides it). **Open in editor** (the `</>` icon) opens the folder in your editor: set its command — `code`, `zed`, `cursor` — in Settings → Extensions → Code mode.
 
+## On the phone
+A computer that shares its agents with your phone ([[AI#An agent on another computer]]) shares its projects too: on the phone, Code mode lists them with the computer's name. Write in a thread — one you started on the computer, or a new one, **Local** or in a **new worktree** — and the agent works on that computer, in the project, as if you were sitting at it. The checkpoint of each turn is taken there, so back at the computer the **Changes** panel shows what the phone's turn changed. On the phone you see the last turn's changed files and their diffs; committing, pushing and the terminal are at the computer.
+
 ## For the curious
 - An agent of a thread gets Brulion's chat tools — notify you, ask another agent, ask for a secret — but none of your notes ([[Command line and AI agents]]).
 - Asked "let me know when the tests pass", it can send you a notification of its own ([[AI#Notifications from the agent]]).
