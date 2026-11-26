@@ -10,6 +10,8 @@
 #   TerminalRegistry      every thread's terminals, kept while another thread is shown; limits
 #   TerminalView          the screen painted (dirty rows only, once a frame), keys, mouse, selection,
 #                         the clipboard, the input method, links under Ctrl, the find bar's matches
+#   TerminalAtrament      the screen drawn by Atrament instead (`atrament: true`; where Atrament is
+#                         built): an Atrament item over the view painting its TerminalPicture
 #   shellLaunch()         how Windows' shells (PowerShell, cmd, Git Bash) start and run a command
 # The emulator is the core module term (src/core/term), the pty src/platform/pty.h (POSIX, ConPTY on
 # Windows; none on Android and in the browser: `available` false and the panel says so). Tests:
@@ -26,12 +28,22 @@ qt_add_library(brulion_terminal STATIC
     ${_brulion_terminal_dir}/terminalthread.h ${_brulion_terminal_dir}/terminalthread.cpp
     ${_brulion_terminal_dir}/terminalregistry.h ${_brulion_terminal_dir}/terminalregistry.cpp
     ${_brulion_terminal_dir}/terminalview.h ${_brulion_terminal_dir}/terminalview.cpp
+    ${_brulion_terminal_dir}/terminalpicture.h
     ${_brulion_terminal_dir}/shelllaunch.h ${_brulion_terminal_dir}/shelllaunch.cpp
 )
 target_include_directories(brulion_terminal PUBLIC ${_brulion_terminal_dir})
 target_link_libraries(brulion_terminal
     PUBLIC Qt6::Core Qt6::Gui Qt6::Quick brulion_core_term
     PRIVATE brulion_platform)
+# Drawn by Atrament where it is built (docs/CODE-TERMINAL.md "Drawn by Atrament").
+if(TARGET brulion_atrament_qt)
+    target_sources(brulion_terminal PRIVATE
+        ${_brulion_terminal_dir}/terminalatrament.h ${_brulion_terminal_dir}/terminalatrament.cpp)
+    # QuickPrivate: the item is left out of the accessibility tree (the view speaks for the screen).
+    find_package(Qt6 REQUIRED COMPONENTS QuickPrivate)
+    target_link_libraries(brulion_terminal PUBLIC brulion_atrament_qt PRIVATE Qt6::QuickPrivate)
+    target_compile_definitions(brulion_terminal PUBLIC BRULION_TERMINAL_ATRAMENT)
+endif()
 qt_extract_metatypes(brulion_terminal)
 brulion_set_warnings(brulion_terminal)
 

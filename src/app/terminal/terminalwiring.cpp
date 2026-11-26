@@ -9,9 +9,25 @@
 
 #include <QPointer>
 
+#if defined(BRULION_HAS_ATRAMENT) && defined(BRULION_TERMINAL_ATRAMENT)
+#include "atramentview.h"
+#include "terminalatrament.h"
+#endif
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::terminal {
+
+#if defined(BRULION_HAS_ATRAMENT) && defined(BRULION_TERMINAL_ATRAMENT)
+namespace {
+// Terminals drawn by Atrament (TerminalView.atrament) use the process's App: AtramentView's, with
+// the app's bundled fonts. Set before any QML runs.
+[[maybe_unused]] const bool atramentProvided = [] {
+    TerminalAtrament::setAppProvider([]() -> atrament::App * { return &AtramentView::atramentApp(); });
+    return true;
+}();
+} // namespace
+#endif
 
 TerminalRegistry *registryForQml()
 {

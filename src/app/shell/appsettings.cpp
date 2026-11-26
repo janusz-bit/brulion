@@ -100,7 +100,9 @@ constexpr auto kWebPictures = "editor/webPicturesShown"_L1;
 constexpr auto kPictureFrames = "editor/pictureFrames"_L1;
 constexpr auto kLightPictureBacking = "editor/lightPictureBacking"_L1;
 constexpr auto kCodeLineNumbers = "editor/codeLineNumbers"_L1;
+constexpr auto kTerminalAtrament = "code/terminalAtrament"_L1;
 constexpr auto kSpellCheck = "spelling/enabled"_L1;
+constexpr auto kEditorAtrament = "editor/atrament"_L1;
 constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
 constexpr auto kSpellLanguages = "spelling/languages"_L1;
 constexpr auto kSpellWholePage = "spelling/wholePage"_L1;
@@ -1530,6 +1532,28 @@ void AppSettings::setCodeLineNumbers(bool on)
 {
     if (store(kCodeLineNumbers, on, codeLineNumbers()))
         Q_EMIT codeLineNumbersChanged();
+}
+
+bool AppSettings::terminalAtrament() const
+{
+    return m_settings->value(kTerminalAtrament, false).toBool();
+}
+
+void AppSettings::setTerminalAtrament(bool on)
+{
+    if (store(kTerminalAtrament, on, terminalAtrament()))
+        Q_EMIT terminalAtramentChanged();
+}
+
+bool AppSettings::editorAtrament() const
+{
+    return m_settings->value(kEditorAtrament, false).toBool();
+}
+
+void AppSettings::setEditorAtrament(bool on)
+{
+    if (store(kEditorAtrament, on, editorAtrament()))
+        Q_EMIT editorAtramentChanged();
 }
 
 bool AppSettings::spellCheck() const

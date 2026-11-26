@@ -29,8 +29,8 @@ PWA (it can be "installed" from the browser menu), and it keeps notes in the bro
 
 | Component | Version | Source |
 |---|---|---|
-| Qt for WebAssembly | 6.12.0 `wasm_singlethread` | `aqt install-qt all_os wasm 6.12.0 wasm_singlethread` (aqtinstall 3.3.0) |
-| Host Qt (moc, rcc, qmlcachegen, lrelease…) | 6.12.0 `linux_gcc_64` | `aqt install-qt linux desktop 6.12.0 linux_gcc_64` |
+| Qt for WebAssembly | 6.12.0 `wasm_singlethread` | `aqt install-qt all_os wasm 6.12.0 wasm_singlethread -m qtshadertools` (aqtinstall 3.3.0) |
+| Host Qt (moc, rcc, qmlcachegen, lrelease, qsb…) | 6.12.0 `linux_gcc_64` | `aqt install-qt linux desktop 6.12.0 linux_gcc_64 -m qtshadertools` |
 | Emscripten | **5.0.5** | `emsdk install 5.0.5 && emsdk activate 5.0.5` |
 
 Qt 6.12 requires **exactly** Emscripten 5.0.5 (documentation
@@ -69,7 +69,14 @@ and configurable through environment variables:
 
 On NixOS the script enters `nix shell` by itself (cmake, ninja, ccache, python3) and adds to
 `NIX_LD_LIBRARY_PATH` the libraries that the prebuilt Qt tools from aqt need (glib, krb5,
-brotli) — this requires `programs.nix-ld`. Other systems need cmake ≥ 3.24, ninja,
+brotli; Qt Shader Tools' `qsb` links QtGui: xkbcommon, GL, X11, fontconfig, FreeType, D-Bus) — this
+requires `programs.nix-ld`. Qt Shader Tools compile the shaders of Atrament's GPU renderer
+(docs/ATRAMENT.md), which draws on WebGL 2 here through QRhi's OpenGL ES backend (GLSL ES 3.0);
+`--setup` adds the module to a Qt installed before without it. Atrament and its HarfBuzz cost the
+download little (2026-11-26, MinSizeRel, the same tree with `BRULION_ATRAMENT=OFF scripts/wasm-build.sh`
+and without): `brulion.wasm` +0.19 MiB raw (80.84 → 81.03 MiB), +0.11 MiB with brotli (16.32 →
+16.43 MiB), the single file +0.19 MiB — much of our HarfBuzz is presumably the same code as the one
+inside Qt's static QtGui, which `wasm-opt` merges. Other systems need cmake ≥ 3.24, ninja,
 python3, git, and for `--setup` also `uvx` (uv) or `aqt`.
 
 **The Raspberry Pi (dev machine) does not build WebAssembly** — linking a Qt app

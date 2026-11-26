@@ -24,3 +24,14 @@ endif()
 if(TARGET brulion_terminal)
     brulion_add_test(tst_terminal_shell SOURCES tst_terminal_shell.cpp LIBS brulion_terminal)
 endif()
+# The terminal drawn by Atrament (terminalatrament.h), where Atrament is built: TerminalScreen's
+# pixels on Atrament's test platform (colours, selection, matches, the cursor's shapes, the preedit,
+# glyphs and their cache), the grid's metrics from Atrament's fonts, TerminalView with
+# `atrament: true` in an offscreen window (the host's CPU renderer under the software scene graph).
+if(TARGET brulion_terminal AND TARGET brulion_atrament_qt)
+    brulion_add_test(tst_terminal_atrament SOURCES tst_terminal_atrament.cpp
+        LIBS brulion_terminal brulion_atrament_qt brulion_core_term Qt6::Quick)
+    target_compile_definitions(tst_terminal_atrament PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    set_tests_properties(tst_terminal_atrament PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+endif()

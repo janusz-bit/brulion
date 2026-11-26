@@ -18,6 +18,8 @@
 #                  [$QT_ROOT/6.12.0/gcc_64]
 #   BUILD_DIR [build-wasm]  DIST_DIR [dist-wasm]  BUILD_TYPE [MinSizeRel]  JOBS [nproc]
 #   SINGLE_FILE    the single-file version [dist-wasm-single/brulion.html]
+#   BRULION_ATRAMENT  OFF: without Atrament, the own UI framework (docs/ATRAMENT.md) — to measure
+#                  its size [ON]
 #
 # Needs cmake >= 3.24, ninja, python3, git; --setup also uvx (or aqt) for aqtinstall. On NixOS
 # the script enters a `nix shell` with these by itself (and needs programs.nix-ld).
@@ -42,6 +44,7 @@ BUILD_DIR=${BUILD_DIR:-build-wasm}
 DIST_DIR=${DIST_DIR:-dist-wasm}
 SINGLE_FILE=${SINGLE_FILE:-dist-wasm-single/brulion.html}
 BUILD_TYPE=${BUILD_TYPE:-MinSizeRel}
+ATRAMENT=${BRULION_ATRAMENT:-ON}
 JOBS=${JOBS:-$(nproc 2>/dev/null || echo 4)}
 
 do_setup=0
@@ -84,13 +87,22 @@ setup() {
   "$EMSDK/emsdk" install "$EMSDK_VERSION" >&2
   "$EMSDK/emsdk" activate "$EMSDK_VERSION" >&2
 
+  # With Qt Shader Tools: the shaders of Atrament's GPU renderer (WebGL 2 here: GLSL ES 3.0),
+  # compiled by the host's qsb (docs/ATRAMENT.md). A Qt installed before without it gets it now
+  # (--noarchives: only the module).
   if [[ ! -f "$QT_WASM/lib/cmake/Qt6/qt.toolchain.cmake" ]]; then
-    log "installing Qt $QT_VERSION wasm_singlethread into $QT_ROOT"
-    aqt install-qt all_os wasm "$QT_VERSION" wasm_singlethread -O "$QT_ROOT" >&2
+    log "installing Qt $QT_VERSION wasm_singlethread with qtshadertools into $QT_ROOT"
+    aqt install-qt all_os wasm "$QT_VERSION" wasm_singlethread -O "$QT_ROOT" -m qtshadertools >&2
+  elif [[ ! -f "$QT_WASM/lib/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake" ]]; then
+    log "adding qtshadertools to Qt $QT_VERSION wasm_singlethread"
+    aqt install-qt all_os wasm "$QT_VERSION" wasm_singlethread -O "$QT_ROOT" --noarchives -m qtshadertools >&2
   fi
   if [[ ! -d "$QT_HOST/lib/cmake/Qt6" ]]; then
-    log "installing host Qt $QT_VERSION linux_gcc_64 into $QT_ROOT"
-    aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_ROOT" >&2
+    log "installing host Qt $QT_VERSION linux_gcc_64 with qtshadertools into $QT_ROOT"
+    aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_ROOT" -m qtshadertools >&2
+  elif [[ ! -f "$QT_HOST/lib/cmake/Qt6ShaderToolsTools/Qt6ShaderToolsToolsConfig.cmake" ]]; then
+    log "adding qtshadertools (qsb) to the host Qt $QT_VERSION linux_gcc_64"
+    aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_ROOT" --noarchives -m qtshadertools >&2
   fi
 }
 
@@ -103,13 +115,15 @@ if [[ $do_build == 1 && -z "${BRULION_FORCE_LOCAL:-}" && -r /proc/meminfo ]]; th
 fi
 
 # NixOS: cmake/ninja/ccache/python from nixpkgs; emsdk's clang/node and aqt's Qt host tools are
-# prebuilt binaries that run through nix-ld — Qt's host tools also need glib, krb5 and brotli.
+# prebuilt binaries that run through nix-ld — Qt's host tools also need glib, krb5 and brotli, and
+# qsb (Qt Shader Tools) QtGui's xkbcommon, GL, X11, fontconfig, FreeType and D-Bus.
 if [[ -e /etc/NIXOS && -z ${BRULION_WASM_IN_NIX_SHELL:-} && ($do_build == 1 || $do_setup == 1) ]]; then
   [[ -e /lib64/ld-linux-x86-64.so.2 ]] ||
     die "NixOS without nix-ld: emsdk and Qt's host tools are prebuilt binaries (enable programs.nix-ld)"
   log "NixOS: entering nix shell (cmake, ninja, ccache, python3) with nix-ld libraries"
   libs=$(nix build --no-link --print-out-paths nixpkgs#glib.out nixpkgs#krb5.lib \
-    nixpkgs#brotli.lib nixpkgs#keyutils.lib) || die "nix build of the host-tool libraries failed"
+    nixpkgs#brotli.lib nixpkgs#keyutils.lib nixpkgs#libxkbcommon nixpkgs#libGL nixpkgs#libx11 \
+    nixpkgs#fontconfig.lib nixpkgs#freetype nixpkgs#dbus.lib) || die "nix build of the host-tool libraries failed"
   ld_path=
   for p in $libs; do ld_path+="$p/lib:"; done
   export NIX_LD_LIBRARY_PATH="${ld_path}${NIX_LD_LIBRARY_PATH:-/run/current-system/sw/share/nix-ld/lib}"
@@ -160,7 +174,7 @@ if [[ $do_build == 1 ]]; then
   # executable and point at C:/.)
   log "configure ($BUILD_TYPE) in $BUILD_DIR"
   cmake -S "$root" -B "$BUILD_DIR" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$toolchain" \
-    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DQT_HOST_PATH="$QT_HOST" "${launcher[@]}" >&2
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DQT_HOST_PATH="$QT_HOST" -DBRULION_ATRAMENT="$ATRAMENT" "${launcher[@]}" >&2
   # The QML plugins linked into the app (qmlimportscanner's list, written at configure time):
   # only the Basic style, no QtQuick.Dialogs (docs/PERFORMANCE.md L9).
   imports=$BUILD_DIR/src/app/.qt/qml_imports/brulion_conf.cmake

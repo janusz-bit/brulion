@@ -141,18 +141,18 @@ jobs:
             ${{ steps.sdk.outputs.cmake }}
           key: android-ndk-${{ env.NDK_VERSION }}-cmake-${{ env.SDK_CMAKE_VERSION }}
 
-      # The host Qt (moc, rcc, qmlcachegen, androiddeployqt…) is shared with wasm.yml.
+      # The host Qt (moc, rcc, qmlcachegen, androiddeployqt, qsb…) is shared with wasm.yml.
       - name: Cache the host Qt
         uses: actions/cache@v6
         with:
           path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/gcc_64
-          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-aqt${{ env.AQT_VERSION }}
+          key: qt-${{ env.QT_VERSION }}-linux_gcc_64-aqt${{ env.AQT_VERSION }}-shadertools
 
       - name: Cache Qt for Android
         uses: actions/cache@v6
         with:
           path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/android_arm64_v8a
-          key: qt-${{ env.QT_VERSION }}-android_arm64_v8a-aqt${{ env.AQT_VERSION }}-multimedia
+          key: qt-${{ env.QT_VERSION }}-android_arm64_v8a-aqt${{ env.AQT_VERSION }}-multimedia-shadertools
 
       - uses: gradle/actions/setup-gradle@v6
         with:

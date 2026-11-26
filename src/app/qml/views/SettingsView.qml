@@ -1209,6 +1209,16 @@ Item {
                 checked: AppSettings.taskStatusHistory
                 onToggled: AppSettings.taskStatusHistory = checked
             }
+            // Experimental: pages drawn by Atrament, Brulion's own UI framework (docs/ATRAMENT.md
+            // "The block editor in Atrament (M2)"), where it is built.
+            SettingSwitch {
+                objectName: "settingsEditorAtrament"
+                visible: DeviceInfo.atrament
+                text: qsTr("Draw the editor with Atrament")
+                description: qsTr("Experimental: Brulion's own renderer draws pages instead of Qt. For reading only so far: text is drawn, other blocks are placeholders, and blocks cannot be edited.")
+                checked: AppSettings.editorAtrament
+                onToggled: AppSettings.editorAtrament = checked
+            }
             // Spell checking (docs/UI.md "Spell checking"): only where this device can check.
             SettingSwitch {
                 objectName: "settingsSpellCheck"
@@ -2857,6 +2867,16 @@ Item {
                         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                         onEditingFinished: Workspace.projects.clonesRoot = text
                     }
+                }
+                // Experimental: terminals drawn by Atrament, Brulion's own UI framework
+                // (docs/CODE-TERMINAL.md "Drawn by Atrament", docs/ATRAMENT.md M3).
+                SettingSwitch {
+                    objectName: "codeTerminalAtramentSetting"
+                    visible: TerminalRegistry.atramentAvailable
+                    text: qsTr("Draw terminals with Atrament")
+                    description: qsTr("Experimental: Brulion's own renderer draws the terminal on the graphics card instead of Qt. Keys, the mouse and selection work as before.")
+                    checked: AppSettings.terminalAtrament
+                    onToggled: AppSettings.terminalAtrament = checked
                 }
             }
 

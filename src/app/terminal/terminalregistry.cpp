@@ -1,5 +1,7 @@
 #include "terminalregistry.h"
 
+#include "terminalview.h"
+
 #include "terminalsession.h"
 #include "terminalthread.h"
 
@@ -67,6 +69,11 @@ TerminalRegistry *TerminalRegistry::instance()
 bool TerminalRegistry::available()
 {
     return TerminalSession::available();
+}
+
+bool TerminalRegistry::atramentAvailable()
+{
+    return TerminalView::atramentAvailable();
 }
 
 QStringList TerminalRegistry::keys() const

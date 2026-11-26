@@ -29,6 +29,11 @@
 // (the panel's toggle, split, next terminal…). find() highlights every match in the scrollback and
 // the screen (found again a moment after output), findOlder() / findNewer() step through them. A
 // right click the program does not take: contextMenuRequested().
+//
+// `atrament: true` draws the screen with Atrament (terminalatrament.h, docs/CODE-TERMINAL.md
+// "Drawn by Atrament") where it is built and the app gave it an App: an Atrament item over the
+// view paints each frame's TerminalPicture with the GPU renderer, and the cell metrics come from
+// Atrament's fonts. Keys, mouse, selection and the input method stay this item's.
 #pragma once
 
 #include <QColor>
@@ -41,6 +46,7 @@
 #include <QStringList>
 #include <QTimer>
 
+#include "terminalpicture.h"
 #include "terminalsession.h"
 
 #include "term/screentext.h"
@@ -52,7 +58,9 @@ struct Line;
 
 namespace brulion::terminal {
 
-class TerminalView : public QQuickPaintedItem {
+class TerminalAtrament;
+
+class TerminalView : public QQuickPaintedItem, private TerminalPictureSource {
     Q_OBJECT
     Q_PROPERTY(brulion::terminal::TerminalSession *session READ session WRITE setSession NOTIFY sessionChanged FINAL)
     /// A monospace font (the default: the system's fixed font).
@@ -95,6 +103,8 @@ class TerminalView : public QQuickPaintedItem {
     Q_PROPERTY(QString findText READ findText NOTIFY findChanged FINAL)
     Q_PROPERTY(int findCount READ findCount NOTIFY findChanged FINAL)
     Q_PROPERTY(int findIndex READ findIndex NOTIFY findChanged FINAL)
+    /// Drawn by Atrament (set: asked for; read: drawn so — false where Atrament is not built).
+    Q_PROPERTY(bool atrament READ atrament WRITE setAtrament NOTIFY atramentChanged FINAL)
 
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
@@ -140,6 +150,10 @@ public:
     QString findText() const { return m_findText; }
     int findCount() const { return int(m_matches.size()); }
     int findIndex() const { return m_findCurrent; }
+    bool atrament() const { return m_atrament != nullptr; }
+    void setAtrament(bool on);
+    /// Atrament can draw terminals here (built, and an App given: TerminalAtrament::available()).
+    static bool atramentAvailable();
 
     /// Matches looked for at most.
     static constexpr int MaxMatches = 10000;
@@ -202,6 +216,7 @@ Q_SIGNALS:
     void appShortcutsChanged();
     void hoveredLinkChanged();
     void findChanged();
+    void atramentChanged();
 
 protected:
     bool event(QEvent *event) override;
@@ -283,6 +298,12 @@ private:
     QColor resolve(quint32 rawColor, bool foreground) const;
     void paintRow(QPainter *painter, int viewRow, const term::Line &line, int lineIndex);
     void paintCursor(QPainter *painter);
+    /// A repaint of everything (the painter's texture, or Atrament's next frame), or of `rect`.
+    void repaint();
+    void repaint(const QRect &rect);
+    /// The painted item's fill: the background, nothing under Atrament's item.
+    void applyFill();
+    void terminalPicture(TerminalPicture &picture) const override;
 
     QPointer<TerminalSession> m_session;
     QFont m_font;
@@ -348,6 +369,9 @@ private:
     QList<term::TextRange> m_matches;
     int m_findCurrent = -1;
     QTimer m_findTimer; // found again a moment after output
+
+    /// Atrament's item drawing the screen (atrament), owned.
+    TerminalAtrament *m_atrament = nullptr;
 };
 
 } // namespace brulion::terminal

@@ -73,6 +73,10 @@ if(TARGET brulion_platform)
 endif()
 
 add_subdirectory(core)
+# Atrament, the own UI framework (src/atrament, docs/ATRAMENT.md).
+if(BRULION_ATRAMENT)
+    add_subdirectory(atrament)
+endif()
 # The QML modules of the uninstalled app's tests (their ENVIRONMENT sets QML_IMPORT_PATH to it, so
 # the environment's own paths never reach them): Qt's folder of QML modules (qtdeclarative's) and,
 # where Qt Multimedia lives in a folder of its own (Nix: a store path per Qt module), its

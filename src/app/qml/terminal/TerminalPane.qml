@@ -73,6 +73,8 @@ FocusScope {
         padding: Theme.space2
         focus: true
         appShortcuts: pane.appShortcuts
+        // Drawn by Atrament where it is built (Settings → Code mode; docs/CODE-TERMINAL.md).
+        atrament: AppSettings.terminalAtrament
 
         Accessible.role: Accessible.Terminal
         Accessible.name: pane.session !== null ? pane.session.title : qsTr("Terminal")

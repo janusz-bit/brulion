@@ -360,7 +360,8 @@ palette), `foreground`, `background`, `cursorColor`, `selectionColor` (each with
 palette and `RESET`), `ansiColors` (16; fewer: the default palette), `padding`, `appShortcuts`
 (portable key chords left to the app's shortcuts); read-only `columns`, `rows`, `cellWidth`,
 `cellHeight`, `historySize`, `hasSelection`, `selectedText`, `accessibleText`, `mouseReporting`,
-`hoveredLink`, `findText`, `findCount`, `findIndex`; `scrollOffset` (rw). Methods: `copy()`,
+`hoveredLink`, `findText`, `findCount`, `findIndex`; `scrollOffset` (rw); `atrament` (drawn by
+Atrament, below). Methods: `copy()`,
 `paste()`, `selectAll()`, `clearSelection()`, `scrollToBottom()`, `scrollToTop()`, `scrollLines(n)`,
 `visibleText()`, `clear()`, `find(text, caseSensitive)`, `findOlder()`, `findNewer()`, `clearFind()`,
 `chatText()`; static `chatBlock(title, folder, text)`. Signals: `linkActivated(url)` (Ctrl+click on an
@@ -426,6 +427,44 @@ existing file's path or a `file:` URL), `contextMenuRequested(x, y)`, `findReque
 * Accessibility: the panel sets `Accessible.role: Accessible.Terminal`, the session's title as the
   name and `accessibleText` (the visible rows, rebuilt at most every 300 ms and only while an
   assistive technology is active) as the description.
+
+### Drawn by Atrament
+
+`atrament: true` (the panel binds Settings → Code mode → "Draw terminals with Atrament",
+`AppSettings.terminalAtrament`, a device setting, off by default) draws the screen with Atrament,
+Brulion's own UI framework (docs/ATRAMENT.md, M3), where it is built (`BRULION_ATRAMENT`: the
+switch is shown when `TerminalRegistry.atramentAvailable`). The first view of the app Atrament
+draws.
+
+* `TerminalAtrament` (`src/app/terminal/terminalatrament.h`, only in builds with Atrament) puts an
+  `AtramentItem` over the view — a child of its size, disabled, taking no mouse, hover, focus or
+  input method, left out of the accessibility tree — showing a `TerminalScreen`, an Atrament view of the process's App
+  (`AtramentView::atramentApp()`, which the app hands over at start: `TerminalAtrament::
+  setAppProvider`). Keys, the mouse, selection, links, the find bar, the input method and
+  accessibility stay `TerminalView`'s, unchanged.
+* Every repaint the view asked for (`update(rect)`) becomes a frame of the Atrament window (whole:
+  Atrament builds a frame's scene from scratch, there are no dirty rows). The frame asks the view
+  for a `TerminalPicture` (`terminalpicture.h`: the screen, the scroll offset, the metrics, the
+  colours, the selection, the matches, the link, the preedit, the cursor's focus, blink and the
+  program running) and paints what `paint()` paints, in the same order: the background, row and run
+  backgrounds as quads, the matches and the selection, each cell's glyphs at its own column, the
+  underline / double underline / strike-out / overline, the link's underline, the cursor (block with
+  the cell's text in the background colour, underline, bar, an outline without the focus, nothing
+  while blinking off or once the program ended) and the preedit.
+* Glyphs come from Atrament's font collection (the app's bundled fonts): the view's family when
+  Atrament has it, else Brulion JetBrains Mono; bold from the bold face, italic falls back to the
+  upright one (JetBrains Mono is bundled upright only). A cell's text (a character, or a character
+  with its combining marks) is shaped once per style with HarfBuzz — the face that has it found by
+  the collection's fallback (Brulion Emoji, Inter) — and its glyphs kept relative to the cell; a
+  frame paints them from that cache (at most 8 192 entries, emptied when the family or size
+  changes). Fallback glyphs never shift the grid: each cell is placed at its column.
+* The cell metrics are Atrament's: the advance of "M" and ascent + descent of the face, rounded to
+  device pixels as the QPainter path rounds Qt's, the lines (underline, strike-out) on whole device
+  pixels. Switching changes the grid (and the program's size) when the two fonts differ.
+* The painted item keeps a transparent 1 × 1 texture while Atrament draws (`textureSize`), so the
+  view itself holds no screen-sized texture; the frames go through Atrament's GPU renderer inside
+  Qt Quick's render pass (its CPU renderer where Qt Quick has no QRhi: the software backend).
+  Switching back restores the item's own painting.
 
 ### TerminalPanel
 
@@ -545,8 +584,12 @@ noted):
 * Threads' terminals: a hidden one costs its scrollback and its program; nothing polls an idle
   session (busy is looked at after output or input, and every 2 s only while a job runs).
 
-The next step, if full-screen redraws at high DPI ever need it, is a scene-graph item with a glyph
-atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedItem.
+Drawn by Atrament instead ("Drawn by Atrament" above), the same 200 × 60 screen is 9 121 primitives;
+its scene is built in 1.7 ms with -O3 (9 ms in the Debug build) where QPainter paints the whole view
+in 3.4 ms (6 ms) — `tst_terminal_atrament` prints both — and the GPU draws it from the glyph atlas
+every view shares (the CPU renderer, where it draws, rasterizes it in 1.9 ms). Atrament builds the
+whole frame each time where the painted item repaints dirty rows only: a frame's cost follows the
+cells on screen, not what changed.
 
 ## Not done yet
 
@@ -558,6 +601,10 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
 * Resizable splits (they share the tab equally); a split's own direction inside another (a tab is
   all side by side or all stacked).
 * Grapheme clustering of emoji ZWJ sequences, flags and skin tones (widths follow wcwidth()).
+* Drawn by Atrament: colour emoji (Atrament's colour glyphs come later, docs/ATRAMENT.md D7: Brulion
+  Emoji's outlines meanwhile), a system font chosen as the code font (Atrament has the bundled ones
+  only), italic (no italic face bundled), and the terminal's own input in Atrament (with Atrament's
+  own platforms, M4).
 * Shell integration (OSC 133 / 633 prompts and command marks), OSC 4 palette queries, DECRQSS,
   XTGETTCAP, the kitty keyboard protocol, sixel / kitty graphics.
 
@@ -603,4 +650,14 @@ atlas (QSGTextNode per row or a custom geometry node) instead of QQuickPaintedIt
   Windows: the user's shell (PowerShell or cmd.exe) in its folder, commands through it with their
   exit codes (a native program's, a missing command's), a tab's label over the console's title, stop
   and restart.
+* `tests/app/terminal/tst_terminal_atrament` (where Atrament is built): `TerminalScreen` on
+  Atrament's test platform — the pixels of ANSI, 256 and true colour backgrounds, inverse video, the
+  selection and the find bar's matches over them, the cursor's shapes and states (filled, outlined,
+  blinking off, the program ended, bar, underline), the preedit, glyphs of "M", "ż", bold, an emoji
+  over two cells and "e" with a combining accent each inside its cell, the glyph cache kept between
+  frames and emptied for another size, a 200 × 60 screen's primitives (and both renderers' times) —,
+  the grid's metrics from Atrament's fonts (whole and half pixels, an unknown family, the faces), and
+  `TerminalView` with `atrament: true` in an offscreen window: nothing without an App, its item over
+  the view and its size, none of the accessibility tree's, the pixels through the scene graph, a drag selecting as before, back to
+  QPainter and on again.
 * `tst_qml_compiled`: the panel's QML is compiled to C++ in full.

@@ -13979,110 +13979,110 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>To nie jest rewizja: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="664"/>
+        <location filename="../src/core/gitcli/client.cpp" line="674"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="395"/>
         <source>Write a commit message first</source>
         <translation>Najpierw napisz opis commita</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="678"/>
+        <location filename="../src/core/gitcli/client.cpp" line="688"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="440"/>
         <source>Nothing to commit</source>
         <translation>Nie ma czego zatwierdzać</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="688"/>
+        <location filename="../src/core/gitcli/client.cpp" line="698"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="452"/>
         <source>Committed</source>
         <translation>Zatwierdzono</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="689"/>
+        <location filename="../src/core/gitcli/client.cpp" line="699"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="452"/>
         <source>Committed %1</source>
         <translation>Zatwierdzono %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="704"/>
+        <location filename="../src/core/gitcli/client.cpp" line="714"/>
         <source>HEAD is detached: switch to a branch to push it</source>
         <translation>HEAD jest odłączony: przełącz na gałąź, żeby wypchnąć zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="715"/>
-        <location filename="../src/core/gitcli/client.cpp" line="730"/>
+        <location filename="../src/core/gitcli/client.cpp" line="725"/>
+        <location filename="../src/core/gitcli/client.cpp" line="740"/>
         <source>Pushed %1 to %2</source>
         <translation>Wypchnięto %1 do %2</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="723"/>
+        <location filename="../src/core/gitcli/client.cpp" line="733"/>
         <source>The repository has no remote to push to</source>
         <translation>Repozytorium nie ma zdalnego repozytorium, do którego można wypchnąć zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="748"/>
+        <location filename="../src/core/gitcli/client.cpp" line="758"/>
         <source>Already up to date</source>
         <translation>Wszystko jest już aktualne</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="749"/>
+        <location filename="../src/core/gitcli/client.cpp" line="759"/>
         <source>Pulled</source>
         <translation>Pobrano zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="757"/>
-        <location filename="../src/core/gitcli/client.cpp" line="770"/>
-        <location filename="../src/core/gitcli/client.cpp" line="804"/>
+        <location filename="../src/core/gitcli/client.cpp" line="767"/>
+        <location filename="../src/core/gitcli/client.cpp" line="780"/>
+        <location filename="../src/core/gitcli/client.cpp" line="814"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="408"/>
         <source>“%1” cannot be a branch&apos;s name</source>
         <translation>„%1” nie może być nazwą gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="762"/>
+        <location filename="../src/core/gitcli/client.cpp" line="772"/>
         <source>Created the branch %1</source>
         <translation>Utworzono gałąź %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="778"/>
+        <location filename="../src/core/gitcli/client.cpp" line="788"/>
         <source>Switched to %1</source>
         <translation>Przełączono na %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="805"/>
+        <location filename="../src/core/gitcli/client.cpp" line="815"/>
         <source>No folder for the worktree</source>
         <translation>Nie podano folderu dla worktree</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="816"/>
+        <location filename="../src/core/gitcli/client.cpp" line="826"/>
         <source>Added a worktree at %1</source>
         <translation>Dodano worktree w %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="831"/>
+        <location filename="../src/core/gitcli/client.cpp" line="841"/>
         <source>Removed the worktree %1</source>
         <translation>Usunięto worktree %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="839"/>
+        <location filename="../src/core/gitcli/client.cpp" line="849"/>
         <source>A pull request needs a title</source>
         <translation>Pull request wymaga tytułu</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="844"/>
+        <location filename="../src/core/gitcli/client.cpp" line="854"/>
         <source>The GitHub CLI (gh) is not installed: install it to create pull requests</source>
         <translation>Nie zainstalowano GitHub CLI (gh): bez niego nie można tworzyć pull requestów</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="864"/>
+        <location filename="../src/core/gitcli/client.cpp" line="874"/>
         <source>Created the pull request</source>
         <translation>Utworzono pull request</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="867"/>
+        <location filename="../src/core/gitcli/client.cpp" line="877"/>
         <source>A pull request for this branch exists already</source>
         <translation>Pull request dla tej gałęzi już istnieje</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="871"/>
+        <location filename="../src/core/gitcli/client.cpp" line="881"/>
         <location filename="../src/core/gitcli/client_history.cpp" line="30"/>
         <source>Sign in to GitHub first: run “gh auth login” in a terminal</source>
         <translation>Najpierw zaloguj się do GitHuba: uruchom „gh auth login” w terminalu</translation>
@@ -21827,7 +21827,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="40"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="553"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3101"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3111"/>
         <source>Settings</source>
         <translation>Ustawienia</translation>
     </message>
@@ -21851,8 +21851,8 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="88"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3127"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3174"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3137"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3184"/>
         <source>Reminders</source>
         <translation>Przypomnienia</translation>
     </message>
@@ -21863,7 +21863,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="94"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3312"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3322"/>
         <source>Application</source>
         <translation>Aplikacja</translation>
     </message>
@@ -22197,7 +22197,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="132"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="165"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3337"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3347"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
@@ -23187,7 +23187,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1968"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2349"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3074"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3084"/>
         <source>Remove</source>
         <translation>Usuń</translation>
     </message>
@@ -23348,42 +23348,42 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Z narzędziami Brulionu może też zmieniać tę działającą aplikację na żywo (Luau, rozszerzenia do końca tego uruchomienia, motyw, ustawienia, elementy okna); górny pasek pokazuje, co zmienił, a Ty możesz to wszystko cofnąć.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3001"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3011"/>
         <source>In this notebook</source>
         <translation>W tym notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3006"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3016"/>
         <source>Write an extension</source>
         <translation>Napisz rozszerzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3007"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3017"/>
         <source>A new page with an example: a command, a view and a reaction. The Luau console evaluates code and shows what extensions print.</source>
         <translation>Nowa strona z przykładem: polecenie, widok i reakcja. Konsola Luau wykonuje kod i pokazuje, co wypisują rozszerzenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3012"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3022"/>
         <source>New extension</source>
         <translation>Nowe rozszerzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3023"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3033"/>
         <source>Console</source>
         <translation>Konsola</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3057"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3067"/>
         <source>May: %1</source>
         <translation>Może: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3058"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3068"/>
         <source>Uses the code of: %1</source>
         <translation>Używa kodu: %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3059"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3069"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Sprawdzenie typów: %n ostrzeżenie, %1</numerusform>
@@ -23392,64 +23392,64 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3061"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3071"/>
         <source>From %1 — for this run of the app only</source>
         <translation>Od: %1 — tylko do końca tego uruchomienia aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3066"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3076"/>
         <source>Live</source>
         <translation>Na żywo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3082"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3092"/>
         <source>Line %1</source>
         <translation>Wiersz %1</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2740"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3083"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3093"/>
         <source>Code</source>
         <translation>Kod</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3115"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3125"/>
         <source>Switch on</source>
         <translation>Włącz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3115"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3125"/>
         <source>Switch off</source>
         <translation>Wyłącz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3129"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3139"/>
         <source>In the browser, reminders appear only while Brulion is open in a tab or as an installed app.</source>
         <translation>W przeglądarce przypomnienia pojawiają się tylko wtedy, gdy Brulion jest otwarty w karcie lub jako zainstalowana aplikacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3131"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3141"/>
         <source>Reminders and alarms are scheduled in Android and ring even when Brulion is closed.</source>
         <translation>Przypomnienia i alarmy są planowane w Androidzie i dzwonią nawet przy zamkniętym Brulionie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3132"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3142"/>
         <source>Reminders appear as system notifications while Brulion runs (also in the tray).</source>
         <translation>Przypomnienia pojawiają się jako powiadomienia systemowe, gdy Brulion działa (także w zasobniku).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3135"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3145"/>
         <source>Reminders and alarms</source>
         <translation>Przypomnienia i alarmy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3136"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3146"/>
         <source>Notify me about ⏰ reminders and ring ⏰! alarms.</source>
         <translation>Powiadamiaj o przypomnieniach (⏰) i włączaj alarmy (⏰!).</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2365"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3144"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3154"/>
         <source>Notifications</source>
         <translation>Powiadomienia</translation>
     </message>
@@ -23813,332 +23813,352 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Folder na własne worktree gita wątków, z podfolderem dla każdego projektu. Puste: %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2861"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2853"/>
+        <source>Draw terminals with Atrament</source>
+        <translation>Rysuj terminale Atramentem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2854"/>
+        <source>Experimental: Brulion&apos;s own renderer draws the terminal on the graphics card instead of Qt. Keys, the mouse and selection work as before.</source>
+        <translation>Eksperymentalne: terminal rysuje na karcie graficznej własny renderer Brulionu zamiast Qt. Klawisze, mysz i zaznaczanie działają jak dotąd.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Draw the editor with Atrament</source>
+        <translation>Rysuj edytor Atramentem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Experimental: Brulion&apos;s own renderer draws pages instead of Qt. For reading only so far: text is drawn, other blocks are placeholders, and blocks cannot be edited.</source>
+        <translation>Eksperymentalne: strony rysuje własny renderer Brulionu zamiast Qt. Na razie tylko do czytania: tekst jest rysowany, inne bloki to zaślepki, a bloków nie da się edytować.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2871"/>
         <source>claude.ai and ChatGPT</source>
         <translation>claude.ai i ChatGPT</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2862"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2872"/>
         <source>Their apps can search and change this notebook while Brulion runs.</source>
         <translation>Ich aplikacje mogą przeszukiwać i zmieniać ten notatnik, gdy Brulion działa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2869"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2879"/>
         <source>Connector server</source>
         <translation>Serwer łącznika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2870"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2880"/>
         <source>Running.</source>
         <translation>Działa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2871"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2881"/>
         <source>Starting…</source>
         <translation>Uruchamia się…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2872"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2882"/>
         <source>Stopped: %1 Starting it again…</source>
         <translation>Zatrzymał się: %1 Uruchamiam go ponownie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2873"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2883"/>
         <source>Not running: %1</source>
         <translation>Nie działa: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2874"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2884"/>
         <source>Off.</source>
         <translation>Wyłączony.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2882"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2892"/>
         <source>Connector URL</source>
         <translation>Adres łącznika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2884"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2894"/>
         <source>claude.ai: Settings → Connectors → Add custom connector. ChatGPT: Developer mode → Create app.</source>
         <translation>claude.ai: Ustawienia → Łączniki → Dodaj własny łącznik. ChatGPT: tryb dewelopera → Utwórz aplikację.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2885"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2895"/>
         <source>Only this computer reaches it: set a public https address below.</source>
         <translation>Dociera do niego tylko ten komputer: ustaw niżej adres publiczny https.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2898"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2908"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2901"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2911"/>
         <source>Copied.</source>
         <translation>Skopiowano.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2906"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2916"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2926"/>
         <source>Password</source>
         <translation>Hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2907"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2917"/>
         <source>Set. You type it when an app connects.</source>
         <translation>Ustawione. Wpisujesz je, gdy aplikacja się łączy.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2908"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2918"/>
         <source>Needed: at least 8 characters, typed when an app connects.</source>
         <translation>Potrzebne: co najmniej 8 znaków, wpisywane, gdy aplikacja się łączy.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2915"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2925"/>
         <source>New password</source>
         <translation>Nowe hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2923"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2933"/>
         <source>The password is saved on this device.</source>
         <translation>Hasło jest zapisane na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2925"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2935"/>
         <source>At least 8 characters.</source>
         <translation>Co najmniej 8 znaków.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2932"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2940"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2942"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2950"/>
         <source>Public address</source>
         <translation>Adres publiczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2933"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2943"/>
         <source>An https address that reaches the port, e.g. from tailscale funnel %1.</source>
         <translation>Adres https, który prowadzi do portu, np. z tailscale funnel %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2946"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2954"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2956"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2964"/>
         <source>Port</source>
         <translation>Port</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2947"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2957"/>
         <source>Where it listens on this computer (127.0.0.1).</source>
         <translation>Gdzie nasłuchuje na tym komputerze (127.0.0.1).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2965"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2975"/>
         <source>Only reading</source>
         <translation>Tylko odczyt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2966"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2976"/>
         <source>The apps can search and read, never change a note.</source>
         <translation>Aplikacje mogą szukać i czytać, ale nigdy nie zmienią notatki.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2974"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2984"/>
         <source>Requests</source>
         <translation>Zapytania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2975"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2985"/>
         <source>Its last lines; also in the event log.</source>
         <translation>Ostatnie wiersze; są też w rejestrze zdarzeń.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2980"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2990"/>
         <source>Hide</source>
         <translation>Ukryj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2980"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2990"/>
         <source>Show</source>
         <translation>Pokaż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3145"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3155"/>
         <source>Needed to show reminders.</source>
         <translation>Potrzebne do wyświetlania przypomnień.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3150"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3160"/>
         <source>Exact alarms</source>
         <translation>Dokładne alarmy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3151"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3161"/>
         <source>Without it Android may deliver reminders a few minutes late.</source>
         <translation>Bez tego Android może dostarczać przypomnienia z kilkuminutowym opóźnieniem.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3156"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3166"/>
         <source>Alarms over the lock screen</source>
         <translation>Alarmy na ekranie blokady</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3157"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3167"/>
         <source>Lets an alarm show its full screen like a clock app.</source>
         <translation>Pozwala alarmowi zająć cały ekran, jak w aplikacji zegara.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3161"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3171"/>
         <source>Reminder sound</source>
         <translation>Dźwięk przypomnień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3165"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3175"/>
         <source>Alarm sound</source>
         <translation>Dźwięk alarmów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3169"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3179"/>
         <source>System notification settings</source>
         <translation>Ustawienia powiadomień systemowych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3170"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3180"/>
         <source>Sound, vibration and Do Not Disturb of Brulion&apos;s notifications in Android — when a sound does not play as chosen here.</source>
         <translation>Dźwięk, wibracje i tryb „Nie przeszkadzać” powiadomień Brulionu w Androidzie — gdy dźwięk nie brzmi tak, jak wybrano tutaj.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3180"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3190"/>
         <source>Alarms</source>
         <translation>Alarmy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3185"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3188"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3195"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3198"/>
         <source>Snooze</source>
         <translation>Drzemka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3186"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3196"/>
         <source>How long “Snooze” postpones a reminder.</source>
         <translation>Na ile „Drzemka” odkłada przypomnienie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3189"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3189"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3190"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3190"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3199"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3199"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="3200"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="3200"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3201"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3201"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3245"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3246"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3210"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3210"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3211"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3211"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3255"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3256"/>
         <source>%1 min</source>
         <translation>%1 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3196"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3199"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3206"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3209"/>
         <source>Alarms ring for</source>
         <translation>Czas dzwonienia alarmu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3197"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3207"/>
         <source>An alarm stops by itself after this time.</source>
         <translation>Po tym czasie alarm wyłączy się sam.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3207"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3217"/>
         <source>Show missed reminders</source>
         <translation>Pokazuj pominięte przypomnienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3208"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3218"/>
         <source>Reminders that were due while the device was off appear when Brulion starts.</source>
         <translation>Przypomnienia, które przypadły, gdy urządzenie było wyłączone, pojawią się po uruchomieniu Brulionu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3226"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3236"/>
         <source>While Brulion is closed, Android checks the notebook now and then, so reminders added on your other devices ring too.</source>
         <translation>Gdy Brulion jest zamknięty, Android co jakiś czas zagląda do notatnika, więc dzwonią też przypomnienia dodane na innych urządzeniach.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3258"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3268"/>
         <source>Test</source>
         <translation>Test</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3259"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3269"/>
         <source>Check that notifications get through.</source>
         <translation>Sprawdź, czy powiadomienia docierają.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3261"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3271"/>
         <source>Send a test notification</source>
         <translation>Wyślij powiadomienie testowe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3317"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3327"/>
         <source>Keep running in the system tray</source>
         <translation>Zostań w zasobniku systemowym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3319"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3329"/>
         <source>Closing the window keeps Brulion in the tray, so reminders still ring.</source>
         <translation>Po zamknięciu okna Brulion zostaje w zasobniku, więc przypomnienia nadal dzwonią.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3320"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3330"/>
         <source>No system tray was found on this desktop.</source>
         <translation>Na tym pulpicie nie znaleziono zasobnika systemowego.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3331"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3334"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3341"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3344"/>
         <source>Click on the tray icon</source>
         <translation>Kliknięcie ikony w zasobniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3332"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3342"/>
         <source>A double click always shows the window. The calendar shows the month with its tasks and reminders; it is also in the icon&apos;s menu.</source>
         <translation>Podwójne kliknięcie zawsze pokazuje okno. Kalendarz pokazuje miesiąc z zadaniami i przypomnieniami; jest też w menu ikony.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3336"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3346"/>
         <source>Window</source>
         <translation>Okno</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3349"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3359"/>
         <source>Start when you sign in</source>
         <translation>Uruchamiaj po zalogowaniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3351"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3361"/>
         <source>Not in a separate profile (BRULION_PROFILE): Windows starts the default one.</source>
         <translation>Niedostępne w osobnym profilu (BRULION_PROFILE): Windows uruchomiłby profil domyślny.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3353"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3363"/>
         <source>Brulion starts hidden in the tray, so reminders ring from the moment you sign in.</source>
         <translation>Brulion uruchamia się ukryty w zasobniku, więc przypomnienia dzwonią od chwili zalogowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3354"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3364"/>
         <source>Brulion starts after you sign in.</source>
         <translation>Brulion uruchamia się po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3364"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3374"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3365"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3375"/>
         <source>What the app and the sync did, step by step. It stays on this device; share it when something does not work.</source>
         <translation>Co robiła aplikacja i synchronizacja, krok po kroku. Zostaje na tym urządzeniu; udostępnij go, gdy coś nie działa.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3370"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3380"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n ostrzeżenie lub błąd</numerusform>
@@ -24147,43 +24167,43 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3382"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3392"/>
         <source>Detailed log</source>
         <translation>Szczegółowy rejestr</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3383"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3393"/>
         <source>Also writes every request to the server (never note contents or passwords). Turn it on when syncing gives trouble.</source>
         <translation>Zapisuje też każde żądanie do serwera (nigdy treści notatek ani haseł). Włącz, gdy synchronizacja sprawia kłopot.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3391"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3401"/>
         <source>Check for new versions</source>
         <translation>Sprawdzaj nowe wersje</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3524"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3534"/>
         <source>AI agents and scripts can then see and use Brulion (brulion-cli app). Any program you run could read your notes too: turn it on only while you need it.</source>
         <translation>Agenci AI i skrypty mogą wtedy widzieć i obsługiwać Brulion (brulion-cli app). Każdy uruchomiony przez Ciebie program mógłby też czytać notatki: włączaj tylko na czas potrzeby.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3398"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3408"/>
         <source>Version</source>
         <translation>Wersja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3399"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3409"/>
         <source>Brulion %1 · %2</source>
         <translation>Brulion %1 · %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3401"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3411"/>
         <source>About</source>
         <translation>O programie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2006"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3409"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3419"/>
         <source>Licence</source>
         <translation>Licencja</translation>
     </message>
@@ -24327,109 +24347,109 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Zostaw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3002"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3012"/>
         <source>Your extensions are pages tagged #rozszerzenie (or #extension). Code from another device, a sync or an import runs only after you approve it.</source>
         <translation>Twoje rozszerzenia to strony z tagiem #rozszerzenie (albo #extension). Kod z innego urządzenia, synchronizacji albo importu działa dopiero po Twoim zatwierdzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3092"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3102"/>
         <source>Read and run</source>
         <translation>Przeczytaj i uruchom</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3109"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3119"/>
         <source>Copy to another notebook</source>
         <translation>Skopiuj do innego notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3392"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3402"/>
         <source>Once a day Brulion asks GitHub for a newer version. Nothing about your notes is sent.</source>
         <translation>Raz dziennie Brulion pyta GitHuba o nowszą wersję. Nic o Twoich notatkach nie jest wysyłane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3410"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3420"/>
         <source>Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Fonts: Inter, Literata, JetBrains Mono; emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).</source>
         <translation>Wolne oprogramowanie: GNU Affero General Public License 3.0 lub nowsza (AGPL-3.0). Ikony: Lucide (ISC). Czcionki: Inter, Literata, JetBrains Mono; emoji i symbole: Noto Emoji, Noto Sans Math (OFL 1.1).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3412"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3422"/>
         <source>Read</source>
         <translation>Czytaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3420"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3430"/>
         <source>Source code</source>
         <translation>Kod źródłowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3438"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3448"/>
         <source>Browser extension (Web Clipper)</source>
         <translation>Rozszerzenie przeglądarki (Web Clipper)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3445"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3455"/>
         <source>Save articles, selections, whole pages and screenshots from Chrome, Chromium, Brave, Edge and Firefox into this notebook, with their pictures. Install the extension in the browser, then connect the browsers here — once.</source>
         <translation>Zapisuj artykuły, zaznaczenia, całe strony i zrzuty ekranu z Chrome, Chromium, Brave, Edge i Firefoksa w tym notatniku, razem z obrazkami. Zainstaluj rozszerzenie w przeglądarce, a potem raz połącz tutaj przeglądarki.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3468"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3478"/>
         <source>Broken</source>
         <translation>Zepsuta</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3468"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3478"/>
         <source>Connected</source>
         <translation>Połączona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3480"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3490"/>
         <source>Connect again</source>
         <translation>Połącz ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3480"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3490"/>
         <source>Connect browsers</source>
         <translation>Połącz przeglądarki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3489"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3499"/>
         <source>Disconnect</source>
         <translation>Rozłącz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3495"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3505"/>
         <source>How to install the extension</source>
         <translation>Jak zainstalować rozszerzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3519"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3529"/>
         <source>For developers</source>
         <translation>Dla programistów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3523"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3533"/>
         <source>Allow agents to control the app (local socket)</source>
         <translation>Pozwól agentom sterować aplikacją (gniazdo lokalne)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3539"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3549"/>
         <source>The socket could not be opened: %1</source>
         <translation>Nie udało się otworzyć gniazda: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3542"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3552"/>
         <source>On for this run (started with --remote-control).</source>
         <translation>Włączone na to uruchomienie (opcja --remote-control).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3543"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3553"/>
         <source>Listening at %1</source>
         <translation>Nasłuchuje na %1</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="529"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3374"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3423"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3384"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3433"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
@@ -24512,18 +24532,18 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Rozszerzenia dodają do Brulionu widoki, polecenia i reakcje. Czytają i zapisują tylko otwarty notatnik, zwykłym Markdownem, który czytają też inne aplikacje.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3224"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3242"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3234"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3252"/>
         <source>Check notes in the background</source>
         <translation>Sprawdzaj notatki w tle</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3233"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3243"/>
         <source>Last check %1: the notebook could not be read.</source>
         <translation>Ostatnie sprawdzenie %1: nie udało się przeczytać notatnika.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3235"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3245"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Ostatnie sprawdzenie %1: %n przypomnienie, synchronizacja się nie udała.</numerusform>
@@ -24532,7 +24552,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3237"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3247"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Ostatnie sprawdzenie %1: %n przypomnienie.</numerusform>
@@ -24541,12 +24561,12 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3244"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3254"/>
         <source>Off</source>
         <translation>Wyłączone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3247"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3257"/>
         <source>1 h</source>
         <translation>1 godz.</translation>
     </message>
@@ -31339,22 +31359,22 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Proces zakończył się z kodem %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="78"/>
+        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="80"/>
         <source>Terminal</source>
         <translation>Terminal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="169"/>
+        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="171"/>
         <source>Jump to latest</source>
         <translation>Przejdź do najnowszych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="229"/>
+        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="231"/>
         <source>Restart</source>
         <translation>Uruchom ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="239"/>
+        <location filename="../src/app/qml/terminal/TerminalPane.qml" line="241"/>
         <source>Close terminal</source>
         <translation>Zamknij terminal</translation>
     </message>
@@ -42775,8 +42795,8 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::AppScripting</name>
     <message>
-        <location filename="../src/app/shell/appscripting.cpp" line="605"/>
-        <location filename="../src/app/shell/appscripting.cpp" line="785"/>
+        <location filename="../src/app/shell/appscripting.cpp" line="552"/>
+        <location filename="../src/app/shell/appscripting.cpp" line="732"/>
         <source>The command “%1” cannot run now.</source>
         <translation>Polecenia „%1” nie można teraz uruchomić.</translation>
     </message>
@@ -42784,48 +42804,48 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::AppSettings</name>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1091"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1092"/>
         <source>with Brulion&apos;s tools</source>
         <translation>z narzędziami Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1091"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1092"/>
         <source>without Brulion&apos;s tools</source>
         <translation>bez narzędzi Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1092"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1093"/>
         <source>No command yet: Edit… sets it.</source>
         <translation>Brak polecenia: ustaw je przez Edytuj…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1094"/>
-        <location filename="../src/app/shell/appsettings.cpp" line="1099"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1095"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1100"/>
         <source>may change the app</source>
         <translation>może zmieniać aplikację</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1263"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1264"/>
         <source>My agent</source>
         <translation>Mój agent</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1791"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1803"/>
         <source>Phone storage › %1</source>
         <translation>Pamięć telefonu › %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1793"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1805"/>
         <source>Memory card › %1</source>
         <translation>Karta pamięci › %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1097"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1098"/>
         <source>On %1 — not paired: remove it and pair again</source>
         <translation>Na %1 — niesparowany: usuń go i sparuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appsettings.cpp" line="1098"/>
+        <location filename="../src/app/shell/appsettings.cpp" line="1099"/>
         <source>On %1 (%2) · %3</source>
         <translation>Na %1 (%2) · %3</translation>
     </message>
@@ -48177,12 +48197,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::terminal::TerminalView</name>
     <message>
-        <location filename="../src/app/terminal/terminalview.cpp" line="1617"/>
+        <location filename="../src/app/terminal/terminalview.cpp" line="1746"/>
         <source>Terminal output (%1):</source>
         <translation>Wyjście terminala (%1):</translation>
     </message>
     <message>
-        <location filename="../src/app/terminal/terminalview.cpp" line="1618"/>
+        <location filename="../src/app/terminal/terminalview.cpp" line="1747"/>
         <source>Terminal output (%1, in %2):</source>
         <translation>Wyjście terminala (%1, w %2):</translation>
     </message>
@@ -48215,6 +48235,14 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/main.cpp" line="809"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
+    </message>
+</context>
+<context>
+    <name>EditorAtramentPage</name>
+    <message>
+        <location filename="../src/app/qml/editor/EditorAtramentPage.qml" line="1"/>
+        <source>Page</source>
+        <translation>Strona</translation>
     </message>
 </context>
 </TS>
