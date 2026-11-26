@@ -27,6 +27,14 @@
 // and links out refused), worktrees made for new threads (a free name, a base, refusals), sessions in a
 // worktree under the root or one git lists, refused in anything else, a session resumed in a new
 // stream, and a server without projects refusing threads.
+// The app's own conversations (acp/appchats.h) relayed to a paired device over a stand-in app — a
+// control socket of the test's with the agent sharing's grant —, through the device's own requests
+// (fetchRemoteChats … answerRemoteChat): info's feature only while the link is up, 503 without the
+// app (not listening yet, gone, its grant revoked), the link back once it listens again, every
+// endpoint with what it hands the app, the app's answer sanitized, the long poll (answered on a
+// change, dropped when the device leaves, bounded per device), the app's errors mapped, malformed
+// requests, tokens refused, and chats/page's limits (outside AI/, "..", an encrypted page, a missing
+// one, a page too big).
 #include "acphost.h"
 #include "cli_p.h"
 #include "hostsync.h"
@@ -40,7 +48,9 @@
 #include "sync/http.h"
 
 #include "controlprotocol.h"
+#include "controlserver.h"
 
+#include "acp/appchats.h"
 #include "acp/apptunnel.h"
 #include "acp/codehost.h"
 
@@ -1533,6 +1543,357 @@ private Q_SLOTS:
         QVERIFY(!lastServerArgs().contains(u"--app-control"_s));
         t.reset();
         m_host.reset();
+    }
+
+    // ---- The app's own conversations (acp/appchats.h) ----------------------------------------------
+
+    void appChats()
+    {
+        // The stand-in app: a control socket of its own, the agent sharing's grant — not listening yet.
+        const QString appKey = m_tmp.filePath(u"aplikacja"_s);
+        auto app = std::make_unique<ipc::ControlServer>();
+        app->setOpen(false);
+        const QString grant = app->addGrant(u"agent sharing"_s, ipc::GrantScope::Share);
+        QList<std::pair<QString, QJsonObject>> heard;
+        QList<ipc::ControlReply> held;
+        qint64 revision = 1000;
+        const QString path = u"AI/2026-11-26 Popraw testy.md"_s;
+        const auto answer = [&revision, &path](const QJsonObject &params) {
+            QJsonObject o{{u"revision"_s, double(revision)},
+                          {u"chats"_s,
+                           QJsonArray{QJsonObject{{u"path"_s, path},
+                                                  {u"name"_s, u"Popraw testy"_s},
+                                                  {u"partner"_s, u"acp:claude"_s},
+                                                  {u"partnerName"_s, u"Claude Code"_s},
+                                                  {u"state"_s, u"running"_s},
+                                                  {u"status"_s, u"Czytam „Dom”…"_s},
+                                                  {u"project"_s, u"brulion"_s},
+                                                  {u"messages"_s, 3},
+                                                  {u"waiting"_s, 1}},
+                                      // (Passed on only as the device's side takes them: these go.)
+                                      QJsonObject{{u"path"_s, u"../poza.md"_s}, {u"state"_s, u"running"_s}},
+                                      QJsonObject{{u"path"_s, u"AI/Inna.md"_s}, {u"state"_s, u"wybucha"_s}}}}};
+            if (params.value(u"path"_s).toString() == path)
+                o.insert(u"detail"_s, QJsonObject{{u"path"_s, path},
+                                                  {u"state"_s, u"asking"_s},
+                                                  {u"partial"_s, QString(u"Początek "_s + QString(70000, u'ż'))},
+                                                  {u"question"_s, QJsonObject{{u"text"_s, u"Zapisać Zgoda.md?"_s},
+                                                                              {u"options"_s, QJsonArray{u"Allow"_s, u"Reject"_s}}}},
+                                                  {u"messages"_s, 3}});
+            return o;
+        };
+        app->setHandler([&](const ipc::ControlRequest &request, ipc::ControlReply reply) {
+            if (request.method == u"hello")
+                return reply.ok(QJsonObject{{u"protocol"_s, 1}, {u"shareOnly"_s, request.shareOnly}});
+            heard.append({request.method, request.params});
+            const QString p = request.params.value(u"path"_s).toString();
+            if (request.method == u"chatLive") {
+                if (request.params.value(u"since"_s).toInteger(-1) >= revision
+                    && request.params.value(u"timeout"_s).toInt() > 0)
+                    return held.append(reply);
+                return reply.ok(answer(request.params));
+            }
+            if (p == u"AI/Zajęta.md")
+                return reply.fail(u"busy"_s, u"Jej tura trwa"_s);
+            if (p == u"AI/Nie ma.md")
+                return reply.fail(u"not_found"_s, u"Nie ma takiej rozmowy"_s);
+            if (p == u"AI/Dziwna.md")
+                return reply.fail(u"explode"_s, u"Coś dziwnego"_s);
+            if (request.method == u"chatAnswer") {
+                if (p == u"AI/Bez pytania.md")
+                    return reply.fail(u"no_question"_s, u"Nic nie jest pytane"_s);
+                if (request.params.value(u"option"_s).toString() != u"Allow")
+                    return reply.fail(u"bad_option"_s, u"To nie jest opcja"_s);
+                return reply.ok(QJsonObject{{u"path"_s, p}, {u"answered"_s, true}});
+            }
+            if (request.method == u"chatStart") {
+                if (request.params.value(u"project"_s).toString() == u"cudzy")
+                    return reply.fail(u"refused"_s, u"Nie wolno"_s);
+                if (request.params.value(u"project"_s).toString() == u"pusty")
+                    return reply.ok(QJsonObject{{u"path"_s, u"Dom.md"_s}}); // (no conversation)
+                return reply.ok(QJsonObject{{u"path"_s, u"AI/2026-11-26 Nowy wątek.md"_s}, {u"state"_s, u"running"_s}});
+            }
+            if (request.method == u"chatStop")
+                return reply.ok(QJsonObject{{u"path"_s, p}, {u"stopped"_s, true}});
+            reply.ok(QJsonObject{{u"path"_s, p}, {u"state"_s, u"running"_s}});
+        });
+
+        AcpHostOptions o = options();
+        o.appSocket = appKey;
+        o.appToken = grant;
+        o.maxChatPollsPerDevice = 2;
+        startHost(*m_ctx, o);
+        const QString token = pair(u"Telefon Ali"_s);
+        const auto features = [&] {
+            return http("GET", u"info"_s, {}, bearer(token)).json.value(u"features"_s).toArray();
+        };
+        const auto chats = [&](qint64 since, int wait, const QString &which) {
+            std::pair<acp::RemoteChats, acp::RemoteError> out;
+            bool done = false;
+            acp::fetchRemoteChats(m_transport.get(), QUrl(m_base), token, since, wait, which,
+                                  [&](const acp::RemoteChats &c, const acp::RemoteError &e) {
+                                      out = {c, e};
+                                      done = true;
+                                  });
+            if (!QTest::qWaitFor([&done] { return done; }, kTimeoutMs))
+                out.second.kind = acp::RemoteError::Kind::Network;
+            return out;
+        };
+        const auto waitDone = [](const bool &done) { return QTest::qWaitFor([&done] { return done; }, kTimeoutMs); };
+
+        // No app yet: no feature, 503.
+        QVERIFY(!m_host->appLinked());
+        QVERIFY(!features().contains(QString(acp::ChatsFeature)));
+        auto [none, unavailable] = chats(-1, 0, QString());
+        QCOMPARE(unavailable.status, 503);
+        QCOMPARE(unavailable.code, u"app_unavailable"_s);
+        QCOMPARE(http("POST", u"chats/stop"_s, R"({"path":"AI/a.md"})", bearer(token)).status, 503);
+        QCOMPARE(http("GET", u"chats/page?path=AI%2Fa.md"_s, {}, bearer(token)).status, 503);
+        // It listens: the link comes up by itself (said in the log), the feature with it.
+        QVERIFY(app->listen(appKey));
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->appLinked(), kTimeoutMs);
+        QVERIFY(features().contains(QString(acp::ChatsFeature)));
+        QVERIFY(std::ranges::any_of(m_log, [](const QString &l) { return l.contains(u"conversations are shared"_s); }));
+
+        // GET chats: the app's chatLive, sanitized on the way.
+        auto [list, e] = chats(-1, 0, QString());
+        QVERIFY2(!e.failed(), qPrintable(e.detail));
+        QCOMPARE(list.revision, 1000);
+        QCOMPARE(list.chats.size(), 1);
+        QCOMPARE(list.chats.first().path, path);
+        QCOMPARE(list.chats.first().status, u"Czytam „Dom”…"_s);
+        QCOMPARE(list.chats.first().waiting, 1);
+        QVERIFY(!list.detail);
+        QCOMPARE(heard.last().first, u"chatLive"_s);
+        QCOMPARE(heard.last().second, (QJsonObject{{u"since"_s, -1}, {u"timeout"_s, 0}}));
+        // One in full: the answer's end, cut.
+        auto [full, e2] = chats(-1, 0, path);
+        QVERIFY(!e2.failed());
+        QVERIFY(full.detail);
+        QVERIFY(full.detail->partialCut);
+        QCOMPARE(full.detail->partial.size(), acp::MaxLiveTextChars);
+        QCOMPARE(full.detail->question.options, (QStringList{u"Allow"_s, u"Reject"_s}));
+        QCOMPARE(heard.last().second.value(u"path"_s).toString(), path);
+
+        // The long poll: the app holds it until its revision changes.
+        bool polled = false;
+        std::pair<acp::RemoteChats, acp::RemoteError> after;
+        acp::fetchRemoteChats(m_transport.get(), QUrl(m_base), token, 1000, 5, path,
+                              [&](const acp::RemoteChats &c, const acp::RemoteError &err) {
+                                  after = {c, err};
+                                  polled = true;
+                              });
+        QTRY_COMPARE(held.size(), 1);
+        QCOMPARE(heard.last().second, (QJsonObject{{u"since"_s, 1000}, {u"timeout"_s, 5000}, {u"path"_s, path}}));
+        QCOMPARE(m_host->chatPolls(), 1);
+        QTest::qWait(200);
+        QVERIFY(!polled);
+        revision = 1001;
+        held.takeFirst().ok(answer({}));
+        QVERIFY(waitDone(polled));
+        QVERIFY(!after.second.failed());
+        QCOMPARE(after.first.revision, 1001);
+        QCOMPARE(m_host->chatPolls(), 0);
+        // Its device gone: dropped here (the app's late answer goes nowhere).
+        {
+            QNetworkRequest r(QUrl(m_base + u"/acp/v1/chats?since=1001&wait=20"_s));
+            r.setRawHeader("Authorization", "Bearer " + token.toUtf8());
+            QNetworkReply *gone = m_nam->get(r);
+            QTRY_COMPARE(held.size(), 1);
+            QCOMPARE(m_host->chatPolls(), 1);
+            gone->abort();
+            gone->deleteLater();
+            QTRY_COMPARE_WITH_TIMEOUT(m_host->chatPolls(), 0, kTimeoutMs);
+            held.takeFirst().ok(answer({}));
+        }
+        // Two at once of one device; a third: 429.
+        {
+            QNetworkRequest r(QUrl(m_base + u"/acp/v1/chats?since=1001&wait=20"_s));
+            r.setRawHeader("Authorization", "Bearer " + token.toUtf8());
+            QNetworkReply *one = m_nam->get(r);
+            QNetworkReply *two = m_nam->get(r);
+            QTRY_COMPARE(held.size(), 2);
+            QCOMPARE(http("GET", u"chats?since=1001&wait=20"_s, {}, bearer(token)).status, 429);
+            for (QNetworkReply *reply : {one, two}) {
+                reply->abort();
+                reply->deleteLater();
+            }
+            QTRY_COMPARE_WITH_TIMEOUT(m_host->chatPolls(), 0, kTimeoutMs);
+            for (const ipc::ControlReply &h : std::as_const(held))
+                h.ok(answer({}));
+            held.clear();
+        }
+        // Malformed: a revision that is none, a path outside the conversations, a bad escape.
+        QCOMPARE(http("GET", u"chats?since=abc"_s, {}, bearer(token)).status, 400);
+        QCOMPARE(http("GET", u"chats?since=-5"_s, {}, bearer(token)).status, 400);
+        HttpResult r = http("GET", u"chats?path=..%2FDom.md"_s, {}, bearer(token));
+        QCOMPARE(r.status, 400);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"code"_s).toString(), u"bad_path"_s);
+        QCOMPARE(http("GET", u"chats?path=Dom.md"_s, {}, bearer(token)).status, 400);
+        QCOMPARE(http("GET", u"chats?path=%ZZ"_s, {}, bearer(token)).status, 400);
+        QCOMPARE(http("DELETE", u"chats"_s, {}, bearer(token)).status, 405);
+        QCOMPARE(http("GET", u"chats/send"_s, {}, bearer(token)).status, 405);
+        QCOMPARE(http("POST", u"chats/explode"_s, "{}", bearer(token)).status, 404);
+        // Not paired, a wrong token, a web page's Origin: refused before the app hears of it.
+        const qsizetype before = heard.size();
+        QCOMPARE(http("GET", u"chats"_s).status, 401);
+        QCOMPARE(http("GET", u"chats"_s, {}, bearer(u"bat_nieznany"_s)).status, 401);
+        QCOMPARE(http("POST", u"chats/answer"_s, R"({"path":"AI/a.md","option":"Allow"})", bearer(u"zly"_s)).status, 401);
+        QCOMPARE(http("GET", u"chats"_s, {}, {{"Authorization"_ba, "Bearer "_ba + token.toUtf8()},
+                                              {"Origin"_ba, "https://zly.example.com"_ba}})
+                         .status,
+                 403);
+        QCOMPARE(heard.size(), before);
+
+        // The device's requests, each as the app hears it.
+        const auto done = [&](std::function<void(std::function<void(const acp::RemoteError &)>)> request) {
+            acp::RemoteError out;
+            bool finished = false;
+            request([&](const acp::RemoteError &err) {
+                out = err;
+                finished = true;
+            });
+            if (!QTest::qWaitFor([&finished] { return finished; }, kTimeoutMs))
+                out.kind = acp::RemoteError::Kind::Network;
+            return out;
+        };
+        acp::RemoteError err = done([&](auto cb) {
+            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Skręć: gęślą jaźń"_s,
+                                acp::SendMode::Steer, cb);
+        });
+        QVERIFY2(!err.failed(), qPrintable(err.detail));
+        QCOMPARE(heard.last().first, u"chatSend"_s);
+        QCOMPARE(heard.last().second,
+                 (QJsonObject{{u"path"_s, path}, {u"text"_s, u"Skręć: gęślą jaźń"_s}, {u"mode"_s, u"steer"_s}}));
+        err = done([&](auto cb) {
+            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Potem"_s, acp::SendMode::Queue, cb);
+        });
+        QVERIFY(!err.failed());
+        QCOMPARE(heard.last().second.value(u"mode"_s).toString(), u"queue"_s);
+        err = done([&](auto cb) {
+            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Teraz"_s, acp::SendMode::Now, cb);
+        });
+        QVERIFY(!err.failed());
+        QVERIFY(!heard.last().second.contains(u"mode"_s));
+        // A thread started there: its path.
+        QString started;
+        bool startedDone = false;
+        acp::startRemoteThread(m_transport.get(), QUrl(m_base), token, u"brulion"_s, u"Napraw żółwia"_s,
+                               u"acp:claude"_s, u"/home/ala/drzewa/brulion/zolw"_s, u"brulion/zolw"_s,
+                               [&](const QString &p, const acp::RemoteError &e3) {
+                                   started = p;
+                                   err = e3;
+                                   startedDone = true;
+                               });
+        QVERIFY(waitDone(startedDone));
+        QVERIFY2(!err.failed(), qPrintable(err.detail));
+        QCOMPARE(started, u"AI/2026-11-26 Nowy wątek.md"_s);
+        QCOMPARE(heard.last().first, u"chatStart"_s);
+        QCOMPARE(heard.last().second, (QJsonObject{{u"project"_s, u"brulion"_s},
+                                                   {u"text"_s, u"Napraw żółwia"_s},
+                                                   {u"partner"_s, u"acp:claude"_s},
+                                                   {u"worktree"_s, u"/home/ala/drzewa/brulion/zolw"_s},
+                                                   {u"branch"_s, u"brulion/zolw"_s}}));
+        err = done([&](auto cb) { acp::stopRemoteChat(m_transport.get(), QUrl(m_base), token, path, cb); });
+        QVERIFY(!err.failed());
+        QCOMPARE(heard.last().first, u"chatStop"_s);
+        QCOMPARE(heard.last().second, (QJsonObject{{u"path"_s, path}}));
+        err = done([&](auto cb) { acp::answerRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Allow"_s, cb); });
+        QVERIFY(!err.failed());
+        QCOMPARE(heard.last().first, u"chatAnswer"_s);
+        QCOMPARE(heard.last().second, (QJsonObject{{u"path"_s, path}, {u"option"_s, u"Allow"_s}}));
+
+        // The app's errors, mapped (its message passed on).
+        struct Mapped {
+            QString endpoint;
+            QByteArray body;
+            int status;
+            QString code;
+        };
+        for (const Mapped &m : QList<Mapped>{
+                     {u"chats/send"_s, R"({"path":"AI/Zajęta.md","text":"x"})", 409, u"busy"_s},
+                     {u"chats/stop"_s, R"({"path":"AI/Nie ma.md"})", 404, u"not_found"_s},
+                     {u"chats/answer"_s, R"({"path":"AI/Bez pytania.md","option":"Allow"})", 409, u"no_question"_s},
+                     {u"chats/answer"_s, R"({"path":"AI/a.md","option":"Może"})", 400, u"bad_option"_s},
+                     {u"chats/start"_s, R"({"project":"cudzy","text":"x"})", 403, u"refused"_s},
+                     {u"chats/start"_s, R"({"project":"pusty","text":"x"})", 502, u"bad_answer"_s},
+                     {u"chats/send"_s, R"({"path":"AI/Dziwna.md","text":"x"})", 502, u"explode"_s},
+                     // (Refused here, before the app.)
+                     {u"chats/send"_s, R"({"path":"AI/a.md"})", 400, u"bad_request"_s},
+                     {u"chats/send"_s, R"({"path":"AI/a.md","text":"x","mode":"zaraz"})", 400, u"bad_mode"_s},
+                     {u"chats/send"_s, R"({"path":"Dom.md","text":"x"})", 400, u"bad_path"_s},
+                     {u"chats/send"_s, R"({"path":"AI/../Dom.md","text":"x"})", 400, u"bad_path"_s},
+                     {u"chats/send"_s, "nie json", 400, u"bad_request"_s},
+                     {u"chats/start"_s, R"({"text":"x"})", 400, u"bad_request"_s},
+                     {u"chats/start"_s, R"({"project":"p","text":"x","worktree":7})", 400, u"bad_request"_s},
+                     {u"chats/answer"_s, R"({"path":"AI/a.md"})", 400, u"bad_option"_s},
+                 }) {
+            r = http("POST", m.endpoint, m.body, bearer(token));
+            QVERIFY2(r.status == m.status, qPrintable(m.endpoint + u' ' + QString::fromUtf8(m.body) + u" → "_s
+                                                       + QString::number(r.status)));
+            QCOMPARE(r.json.value(u"error"_s).toObject().value(u"code"_s).toString(), m.code);
+        }
+        r = http("POST", u"chats/send"_s, R"({"path":"AI/Zajęta.md","text":"x"})", bearer(token));
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"message"_s).toString(), u"Jej tura trwa"_s);
+
+        // chats/page: the page as this computer has it — only a conversation's, never too big.
+        writeFile(m_vault + u"/AI/2026-11-26 Popraw testy.md"_s, "- 🧑 Popraw testy\n  czas:: 2026-11-26 10:00\n");
+        writeFile(m_vault + u"/AI/Duża.md"_s, QByteArray(acp::MaxRemotePageBytes + 1, 'x'));
+        writeFile(m_vault + u"/AI/Tajne.mdenc"_s, "zaszyfrowane");
+        QString text;
+        bool paged = false;
+        acp::fetchRemoteChatPage(m_transport.get(), QUrl(m_base), token, path,
+                                 [&](const QString &t, const acp::RemoteError &e4) {
+                                     text = t;
+                                     err = e4;
+                                     paged = true;
+                                 });
+        QVERIFY(waitDone(paged));
+        QVERIFY2(!err.failed(), qPrintable(err.detail));
+        QCOMPARE(text, u"- 🧑 Popraw testy\n  czas:: 2026-11-26 10:00\n"_s);
+        const auto page = [&](const QString &query) {
+            return http("GET", u"chats/page?path="_s + QString::fromLatin1(QUrl::toPercentEncoding(query)), {},
+                        bearer(token));
+        };
+        QCOMPARE(page(u"AI/Duża.md"_s).status, 413);
+        QCOMPARE(page(u"AI/Nie ma.md"_s).status, 404);
+        QCOMPARE(page(u"Dom.md"_s).status, 400);
+        QCOMPARE(page(u"AI/../Dom.md"_s).status, 400);
+        QCOMPARE(page(u"AI/Tajne.mdenc"_s).status, 400);
+        QCOMPARE(page(u"/etc/passwd"_s).status, 400);
+        QCOMPARE(http("GET", u"chats/page"_s, {}, bearer(token)).status, 400);
+        QCOMPARE(http("GET", u"chats/page?path=AI%2Fa.md"_s).status, 401);
+
+        // The app goes: a poll waiting fails, the feature goes — and both come back with it.
+        bool failedPoll = false;
+        acp::RemoteError gone;
+        acp::fetchRemoteChats(m_transport.get(), QUrl(m_base), token, 1001, 10, QString(),
+                              [&](const acp::RemoteChats &, const acp::RemoteError &e5) {
+                                  gone = e5;
+                                  failedPoll = true;
+                              });
+        QTRY_COMPARE(held.size(), 1);
+        held.clear();
+        app->close();
+        QVERIFY(waitDone(failedPoll));
+        QCOMPARE(gone.status, 503);
+        QCOMPARE(gone.code, u"app_unavailable"_s);
+        QTRY_VERIFY(!m_host->appLinked());
+        QVERIFY(!features().contains(QString(acp::ChatsFeature)));
+        QVERIFY(std::ranges::any_of(m_log, [](const QString &l) { return l.contains(u"app does not answer"_s); }));
+        QVERIFY(app->listen(appKey)); // (started again: its grants outlive the socket)
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->appLinked(), kTimeoutMs);
+        auto [back, e6] = chats(-1, 0, QString());
+        QVERIFY2(!e6.failed(), qPrintable(e6.detail));
+        QCOMPARE(back.revision, 1001);
+        // Its grant revoked: down for good.
+        QVERIFY(app->revokeGrant(grant));
+        QTRY_VERIFY(!m_host->appLinked());
+        QTest::qWait(500);
+        QVERIFY(!m_host->appLinked());
+        QCOMPARE(chats(-1, 0, QString()).second.status, 503);
+        m_host.reset();
+        app.reset();
     }
 
     // ---- Code mode's threads (acp/codehost.h) -------------------------------------------------------

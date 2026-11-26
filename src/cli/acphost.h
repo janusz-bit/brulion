@@ -53,6 +53,21 @@
 //   since a checkpoint (GET projects/<id>/changes, …/diff). A worktree a device names is taken only
 //   under the project's worktrees root or when `git worktree list` of the project lists it.
 //
+// * The app's own conversations (core acp/appchats.h; the desktop app's agent sharing starts this
+//   server with a grant of its own: BRULION_APP_SOCKET and BRULION_APP_SHARE_TOKEN in its
+//   environment, taken out of it at once — the agents and their terminals never see them): a lasting
+//   asynchronous link to the app's control socket (ipc::AsyncControlClient — hello with the grant,
+//   requests multiplexed, connected again with a backoff while the app is gone or not listening yet,
+//   every request waiting failed when it drops). While it is up, GET info names acp::ChatsFeature
+//   and a paired device follows the conversations the app runs and steers them: GET chats (a long
+//   poll of the app's chatLive, its answer sanitized through acp::RemoteChats), GET chats/page (the
+//   conversation's page read here, never an encrypted one, MaxRemotePageBytes at most), POST
+//   chats/send | start | stop | answer (chatSend, chatStart, chatStop, chatAnswer). The link down: 503
+//   app_unavailable; the app's errors mapped (not_found 404, busy and no_question 409, bad_option,
+//   bad_params and ambiguous_ref 400, refused 403, not_ready 503, others 502) with its message; a
+//   device's long poll dropped when its connection closes, maxChatPolls of them at once
+//   (maxChatPollsPerDevice a device), the rest 429 too_many_requests.
+//
 // Plain HTTP on 127.0.0.1 behind a reverse proxy that adds HTTPS (in the user's own network, a
 // tailnet — the agents can run commands here), plain HTTP on this computer's tailnet address
 // (--tailscale: WireGuard encrypts it), or HTTPS itself with --tls-cert / --tls-key. Host
@@ -93,6 +108,7 @@ namespace brulion::gitcli {
 class Client;
 }
 namespace brulion::ipc {
+class AsyncControlClient;
 class ControlServer;
 class ControlReply;
 struct ControlRequest;
@@ -285,6 +301,13 @@ struct AcpHostOptions {
     /// one stream that wait at once at most.
     int appCallTimeoutMs = 15000;
     int maxAppCalls = 4;
+    /// The app that started this server (its agent sharing): its control socket and the grant it gave
+    /// (BRULION_APP_SOCKET, BRULION_APP_SHARE_TOKEN; "" none — no conversations of the app here).
+    QString appSocket;
+    QString appToken;
+    /// GET chats waiting for the app at once at most, and of one device.
+    int maxChatPolls = 32;
+    int maxChatPollsPerDevice = 4;
     QString tlsCertificate;
     QString tlsKey;
     QStringList allowedHosts;
@@ -337,6 +360,10 @@ public:
     /// The tunnel's socket ("" when the app's calls are not tunnelled: --no-app-tools, no tools,
     /// no private runtime folder).
     QString tunnelSocket() const;
+    /// The link to the app that started it is up (its hello accepted: GET info names ChatsFeature).
+    bool appLinked() const;
+    /// GET chats waiting for the app now.
+    int chatPolls() const { return int(m_chatPolls.size()); }
     std::function<void(const QString &line)> log;
 
     /// Tests: the time now (default the system's).
@@ -446,6 +473,17 @@ private:
     /// A thread's file or terminal request: the place of its session ("" folder: none — the notebook's).
     CodePlace codeSessionOf(const Stream *s, const QJsonObject &params) const;
 
+    // The app's own conversations (acp/appchats.h), over the link to the app.
+    void chatsRequest(const PairedDevice &device, const QStringList &parts, const http::Request &request,
+                      const http::Reply &reply);
+    /// `method` of the app with `params`: `answer` makes the device's answer of the app's result, or
+    /// the app's error is mapped (appError()); nothing is sent to a device that left.
+    void relay(const QString &method, const QJsonObject &params, int timeoutMs, const http::Reply &reply,
+               std::function<http::Response(const QJsonObject &result)> answer);
+    http::Response chatPage(const http::Request &request) const;
+    /// The device's long polls whose connection closed: dropped.
+    void dropLeftPolls();
+
     void startAgent(Stream *s);
     void fromAgent(Stream *s, const QByteArray &line);
     void toAgent(Stream *s, const QJsonObject &message);
@@ -503,6 +541,14 @@ private:
         QString client;
     };
     QHash<QString, TunnelGrant> m_tunnelGrants;
+    std::unique_ptr<ipc::AsyncControlClient> m_app; ///< the link to the app (its agent sharing)
+    struct ChatPoll {
+        QString device;
+        http::Reply reply;
+    };
+    QHash<quint64, ChatPoll> m_chatPolls; ///< GET chats waiting for the app, by a serial
+    quint64 m_nextPoll = 1;
+    QTimer *m_pollCheck = nullptr;
     QTimer *m_maintenance = nullptr;
     QDateTime m_certModified;
     QDateTime m_keyModified;
