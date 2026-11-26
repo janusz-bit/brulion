@@ -332,7 +332,7 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
 ## What is not there yet
 
 * Windows: the terminal (ConPTY); everything else of Code mode is untried there.
-* A commit message or a pull request's text written by AI when left empty, and the rest of
+* A pull request's text written by AI (the commit message is: "Write with AI"), and the rest of
   docs/CODE-GIT.md "Not done (yet)".
 * Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and
   the terminal of a project of another computer (the phone shows its changes read-only); a new

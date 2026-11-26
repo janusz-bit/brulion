@@ -204,7 +204,8 @@ toasts).
 | `revision` | int | bumps on every change of the state above |
 | `gitAvailable`, `ghAvailable` | bool | `git` / `gh` found on PATH |
 
-**Invokables** — `refresh()`; `requestDiff(path, checkpoint)` ("" = against HEAD; a renamed row's
+**Invokables** — `refresh()`; `requestPatch(paths)` (the checked files' changes as text for the AI: `patchReady(text)`);
+`requestDiff(path, checkpoint)` ("" = against HEAD; a renamed row's
 old text from its old path); `commit(message, push, createPr, prTitle, prBody, draft)` (T3 Code's
 "Commit" / "Commit and push" / "Commit, push and create PR"; `prTitle` "" = the message's first
 line); `push()`; `pull()`; `branches()`; `createBranch(name)`; `checkout(name)`;
@@ -344,7 +345,13 @@ the composer, where several comments collect before sending.
 which the panel checks against the default branch): the files (`gitCommitFiles`:
 `gitCommitFile_<i>` checkboxes — all checked, or the staged ones when something is staged;
 `gitCommitAll` All / None) and what the commit takes (`gitCommitMode`: everything / the staged
-changes / only the checked files as they are), the message (`gitCommitMessage`), "Commit on a new
+changes / only the checked files as they are), the message (`gitCommitMessage`; **Write with AI**
+`gitCommitWriteAi` — T3 Code's AI-written message — while the owner says the AI can (`aiAvailable`):
+the checked files' changes from `CodeGit.requestPatch(paths)` → `patchReady(text)` (`git diff HEAD`
+of the tracked ones with two lines of context, a new file's first lines, at most
+`MaxPatchChars`), a question to the owner (`writeRequested(system, prompt)` → the panel's
+`writeWithAi`; CodeView's `AiAsk`, the AI of Settings → Extensions → AI, src/app/shell/aiask.h)
+whose answer fills the field (`aiWritten(ok, text)`; a failure under it: `gitCommitAiError`)), "Commit on a new
 branch" (`gitCommitNewBranch`, `gitCommitBranchName` — made of the message until edited), the choice
 `gitCommitChoice_commit` / `_push` / `_pr` (the last only with gh; push and PR not on a detached HEAD
 unless on a new branch), and for a pull request its title (`gitPrTitle`, the message's first line
@@ -409,11 +416,8 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
 
 ## Not done (yet)
 
-* A commit message (and a pull request's title and description) written by AI when left empty, as
-  T3 Code does: the app has the C++ for it (`WorkspaceExtensions::sendAi`, what the editor's
-  `WritingSession` uses), but no QML-facing object the panel could be handed without depending on
-  `src/app/shell` — a small "ask the AI once" type there (`ask(system, prompt)` → `answered(id, ok,
-  text)`) would do.
+* A pull request's title and description written by AI (the commit message is: "Write with AI"), and
+  the message written by itself when the field is left empty (T3 Code's way: here a button asks).
 * A turn's changes exclude what the user changed between turns in T3 Code; here they count to the
   turn before them (the snapshots are of the whole working tree).
 * Hunks of untracked, conflicted or binary files; lines (not whole hunks) staged; the hunks of the

@@ -17,3 +17,8 @@ ChatView	Also put the project's files back as they were before this message	Przy
 ChatView	The files could not be put back: the thread's folder is not on this device.	Nie udało się przywrócić plików: folderu wątku nie ma na tym urządzeniu.	
 brulion::shell::WorkspaceChats	The files could not be put back: %1	Nie udało się przywrócić plików: %1	
 brulion::shell::WorkspaceChats	The files are back as they were before that message (%n file(s) changed).	Pliki są jak przed tą wiadomością (zmieniono %n plik). | Pliki są jak przed tą wiadomością (zmieniono %n pliki). | Pliki są jak przed tą wiadomością (zmieniono %n plików).	
+GitCommitDialog	Write with AI	Napisz z AI	
+GitCommitDialog	Writing…	AI pisze…	
+GitCommitDialog	The changes could not be read.	Nie udało się odczytać zmian.	
+CodeView	Set up the AI first (Settings → Extensions → AI).	Najpierw skonfiguruj AI (Ustawienia → Rozszerzenia → AI).	
+brulion::shell::AiAsk	The AI gave no text: try again.	AI nie dało żadnego tekstu: spróbuj ponownie.	

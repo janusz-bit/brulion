@@ -106,6 +106,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/agentusage.h ${_brulion_shell_dir}/agentusage.cpp
     ${_brulion_shell_dir}/serverprocess.h ${_brulion_shell_dir}/serverprocess.cpp
     ${_brulion_shell_dir}/writingsession.h ${_brulion_shell_dir}/writingsession.cpp
+    ${_brulion_shell_dir}/aiask.h ${_brulion_shell_dir}/aiask.cpp
     ${_brulion_shell_dir}/aireportdraft.h ${_brulion_shell_dir}/aireportdraft.cpp
     ${_brulion_shell_dir}/workspaceencryption.h ${_brulion_shell_dir}/workspaceencryption.cpp
     ${_brulion_shell_dir}/encryptedpagehost.h ${_brulion_shell_dir}/encryptedpagehost.cpp

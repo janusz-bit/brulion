@@ -6,6 +6,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QLocale>
 #include <QSet>
@@ -554,6 +555,57 @@ void CodeGit::requestDiff(const QString &path, const QString &checkpoint)
                 Q_EMIT diffFailed(path, t.error);
             else
                 Q_EMIT diffReady(path, t.oldText, t.newText, t.binary, t.tooLarge);
+        });
+    });
+}
+
+void CodeGit::requestPatch(const QStringList &paths)
+{
+    const int generation = m_generation;
+    withRepo([this, generation, paths](bool isRepo) {
+        if (generation != m_generation)
+            return;
+        if (!isRepo || paths.isEmpty()) {
+            Q_EMIT patchReady(QString());
+            return;
+        }
+        // The new files (untracked: no diff against HEAD) by their first lines, read here.
+        QStringList tracked;
+        QString added;
+        for (const QString &path : paths) {
+            const QVariantMap row = rowFor(m_changes, path);
+            if (row.value(u"status"_s).toString() != u"untracked"_s) {
+                tracked << path;
+                continue;
+            }
+            QFile file(QDir(m_info.topLevel).filePath(path));
+            QString head;
+            if (!row.value(u"binary"_s).toBool() && file.open(QIODevice::ReadOnly))
+                head = QString::fromUtf8(file.read(4000));
+            added += u"New file "_s + path + u":\n"_s + head + (head.endsWith(u'\n') || head.isEmpty() ? u""_s : u"\n"_s);
+        }
+        const auto finish = [this, generation, added](const QString &diff) {
+            if (generation != m_generation)
+                return;
+            QString text = diff + (diff.isEmpty() || added.isEmpty() ? QString() : u"\n"_s) + added;
+            if (text.size() > MaxPatchChars)
+                text = text.left(MaxPatchChars) + u"\n…"_s;
+            Q_EMIT patchReady(text);
+        };
+        if (tracked.isEmpty()) {
+            finish(QString());
+            return;
+        }
+        gitcli::RunOptions options;
+        options.readOnly = true;
+        options.maxOutput = 4 * MaxPatchChars;
+        QStringList args{u"diff"_s, u"--no-color"_s, u"--no-ext-diff"_s, u"--no-textconv"_s, u"-U2"_s};
+        if (m_hasCommits)
+            args << u"HEAD"_s;
+        args << u"--"_s << tracked;
+        m_client.git(m_info.topLevel, args, options, [finish](const gitcli::RunResult &r) {
+            // (A diff cut where it was too long still says the most of it.)
+            finish(r.failure.isEmpty() || r.outputCut ? QString::fromUtf8(r.out) : QString());
         });
     });
 }

@@ -37,8 +37,47 @@ BDialog {
 
     signal commitRequested(string message, list<string> paths, string newBranch, bool push, bool createPr,
                            string prTitle, string prBody, bool draft, string prBase)
+    /// T3 Code's AI-written commit message: the owner can ask the AI (GitChangesPanel.aiAvailable)
+    /// — "Write with AI" asks git for the checked files' changes (CodeGit.requestPatch), then the
+    /// owner (writeRequested(system, prompt)) for the message, which comes back by aiWritten().
+    property bool aiAvailable: false
+    property bool aiWriting: false
+    signal writeRequested(string system, string prompt)
+    function aiWritten(ok: bool, text: string): void {
+        if (!dialog.aiWriting)
+            return
+        dialog.aiWriting = false
+        if (ok)
+            messageField.text = text
+        else
+            dialog.aiError = text
+    }
+    property string aiError
+    function writeWithAi(): void {
+        if (dialog.git === null || dialog.checked.length === 0 || dialog.aiWriting)
+            return
+        dialog.aiError = ""
+        dialog.aiWriting = true
+        dialog.git.requestPatch(dialog.checked)
+    }
+    Connections {
+        target: dialog.git
+        function onPatchReady(text: string) {
+            if (!dialog.aiWriting)
+                return
+            if (text === "") {
+                dialog.aiWriting = false
+                dialog.aiError = qsTr("The changes could not be read.")
+                return
+            }
+            dialog.writeRequested("You write git commit messages. Reply with the commit message alone: a subject line of at most 72 characters in the imperative mood, then, when the change needs it, a blank line and a short body explaining what changed and why. Plain text: no quotes, no Markdown, no code fences. Write in the language of the changes' own comments and identifiers, English when unsure.",
+                                  "Branch: " + dialog.git.branch + "\n\nThe changes (git diff):\n\n" + text)
+        }
+    }
 
     function openFor(): void {
+        dialog.aiWriting = false
+        dialog.aiError = ""
         messageField.text = ""
         prTitleField.text = ""
         prBodyField.text = ""
@@ -158,11 +197,39 @@ BDialog {
     }
 
     // ---- The message -------------------------------------------------------------------------------
-    BText {
+    RowLayout {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space2
-        text: qsTr("Message")
-        variant: "label"
+        spacing: Theme.space2
+        BText {
+            Layout.fillWidth: true
+            text: qsTr("Message")
+            variant: "label"
+        }
+        BSpinner {
+            visible: dialog.aiWriting
+            size: Theme.iconSizeSm
+        }
+        BButton {
+            objectName: "gitCommitWriteAi"
+            visible: dialog.aiAvailable
+            size: "small"
+            variant: "ghost"
+            iconName: "sparkles"
+            text: dialog.aiWriting ? qsTr("Writing…") : qsTr("Write with AI")
+            enabled: !dialog.aiWriting && dialog.checked.length > 0
+            onClicked: dialog.writeWithAi()
+        }
+    }
+    BText {
+        objectName: "gitCommitAiError"
+        Layout.fillWidth: true
+        visible: dialog.aiError !== ""
+        text: dialog.aiError
+        textFormat: Text.PlainText
+        variant: "caption"
+        color: Theme.dangerText
+        wrapMode: Text.Wrap
     }
     BTextArea {
         id: messageField

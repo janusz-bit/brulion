@@ -125,6 +125,7 @@ private Q_SLOTS:
     void watcherInWorktree();
     void poll();
     void diff();
+    void patchForTheAi();
     void commit();
     void commitAndPush();
     void commitPushAndPullRequest();
@@ -412,6 +413,32 @@ void TestCodeGit::diff()
     git.requestDiff(u"../poza.txt"_s, QString());
     QTRY_COMPARE_WITH_TIMEOUT(failed.count(), 1, Wait);
     QCOMPARE(failed.at(0).at(0).toString(), u"../poza.txt"_s);
+}
+
+// The checked files' changes as text for the AI's commit message (requestPatch): the tracked ones'
+// diff against HEAD, a new file's first lines, nothing of a file not asked for.
+void TestCodeGit::patchForTheAi()
+{
+    Repo repo;
+    repo.write(u"calc.py"_s, "def add(a, b):\n    return a - b\n");
+    repo.write(u"inny.txt"_s, "bez zmian\n");
+    repo.commitAll(u"a"_s);
+    repo.write(u"calc.py"_s, "def add(a, b):\n    return a + b\n");
+    repo.write(u"inny.txt"_s, "zmieniony, nie zaznaczony\n");
+    repo.write(u"żółw.md"_s, "# Żółw\nnowy plik\n");
+    CodeGit git;
+    git.setFolder(repo.root);
+    QTRY_VERIFY_WITH_TIMEOUT(git.changeCount() == 3, Wait);
+    QSignalSpy ready(&git, &CodeGit::patchReady);
+    git.requestPatch({u"calc.py"_s, u"żółw.md"_s});
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 1, Wait);
+    const QString text = ready.at(0).at(0).toString();
+    QVERIFY2(text.contains(u"-    return a - b"_s) && text.contains(u"+    return a + b"_s), qPrintable(text));
+    QVERIFY2(text.contains(u"New file żółw.md:\n# Żółw\nnowy plik\n"_s), qPrintable(text));
+    QVERIFY(!text.contains(u"inny.txt"_s));
+    git.requestPatch({});
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, Wait);
+    QCOMPARE(ready.at(1).at(0).toString(), QString());
 }
 
 void TestCodeGit::commit()

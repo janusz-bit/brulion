@@ -8,6 +8,8 @@
 // request counted in aiPending.
 #include "../fakeaiserver.h"
 
+#include "aiask.h"
+
 #include "pagecontroller.h"
 #include "workspace.h"
 #include "workspaceextensions.h"
@@ -53,6 +55,36 @@ class TestWritingSession : public QObject {
 
 private Q_SLOTS:
     void initTestCase() { QVERIFY(m_tmp.isValid()); }
+
+    // AiAsk (Code mode's commit message written by AI): one question, its answer as text — a fence
+    // around all of it taken off; nothing asked without the AI set up or a prompt.
+    void anAiAskAnswersOnce()
+    {
+        FakeAiServer server;
+        server.answers = {u"```\nNaprawiono dodawanie w calc.py\n\nadd zwraca a + b.\n```"_s};
+        auto ws = open(u"Dom.md"_s, u"- x\n"_s, server);
+        QVERIFY(ws);
+        brulion::shell::AiAsk ask;
+        QVERIFY(!ask.available());
+        QVERIFY(!ask.ask(u"system"_s, u"prompt"_s)); // (no workspace)
+        QSignalSpy availableChanged(&ask, &brulion::shell::AiAsk::availableChanged);
+        ask.setWorkspace(ws.get());
+        QVERIFY(ask.available());
+        QVERIFY(availableChanged.size() >= 1);
+        QVERIFY(!ask.ask(u"system"_s, u"  "_s));
+        QSignalSpy answered(&ask, &brulion::shell::AiAsk::answered);
+        QVERIFY(ask.ask(u"You write git commit messages."_s, u"diff --git a/calc.py b/calc.py\n-    return a - b\n+    return a + b\n"_s));
+        QVERIFY(ask.busy());
+        QTRY_COMPARE_WITH_TIMEOUT(answered.size(), 1, 10000);
+        QVERIFY(!ask.busy());
+        QVERIFY(answered.first().at(0).toBool());
+        QCOMPARE(answered.first().at(1).toString(), u"Naprawiono dodawanie w calc.py\n\nadd zwraca a + b."_s);
+        QVERIFY(FakeAiServer::lastUserText(server.requests.first()).contains(u"return a + b"_s));
+        // Pure: a fence around the whole answer only.
+        QCOMPARE(brulion::shell::AiAsk::cleaned(u"  Zażółć  \n"_s), u"Zażółć"_s);
+        QCOMPARE(brulion::shell::AiAsk::cleaned(u"```text\nA\n```"_s), u"A"_s);
+        QCOMPARE(brulion::shell::AiAsk::cleaned(u"a ```b``` c"_s), u"a ```b``` c"_s);
+    }
 
     void aRewriteOfPartOfABlock()
     {

@@ -77,6 +77,7 @@
 #include "workspacereminders.h"
 #include "workspacesync.h"
 #include "writingsession.h"
+#include "aiask.h"
 
 #include <QJSEngine>
 #include <QtQml/qqmlregistration.h>
@@ -384,6 +385,14 @@ struct WritingSessionForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::WritingSession)
     QML_NAMED_ELEMENT(WritingSession)
+};
+
+// One question to the AI of the user's settings, answered as text (aiask.h): Code mode's commit
+// message written from the changes.
+struct AiAskForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AiAsk)
+    QML_NAMED_ELEMENT(AiAsk)
 };
 
 struct AiReportDraftForeign {

@@ -207,6 +207,12 @@ public:
     /// A file's old text — in HEAD (`checkpoint` "") or in the checkpoint — and its text now:
     /// diffReady() or diffFailed(). A renamed row's old text comes from its old path.
     Q_INVOKABLE void requestDiff(const QString &path, const QString &checkpoint);
+    /// What `paths` change, as a text for the AI to write a commit message or a pull request's text
+    /// from (GitCommitDialog's "Write with AI"): `git diff HEAD` of the tracked ones (two lines of
+    /// context, no colour, no external diff or text conversion), each new file's first lines,
+    /// MaxPatchChars at most ("…" when cut): patchReady(text) — "" when nothing could be read.
+    Q_INVOKABLE void requestPatch(const QStringList &paths);
+    static constexpr int MaxPatchChars = 60000;
     /// Everything staged (`git add -A`) and committed with `message`; then pushed (`push` or
     /// `createPr`), then a pull request opened (`createPr`; `prTitle` "" = the message's first
     /// line): actionFinished("commit", ok, message, the pull request's url).
@@ -365,6 +371,7 @@ Q_SIGNALS:
     /// requestDiff()'s answer: the texts ("" when binary or tooLarge).
     void diffReady(const QString &path, const QString &oldText, const QString &newText, bool binary, bool tooLarge);
     void diffFailed(const QString &path, const QString &message);
+    void patchReady(const QString &text);
     /// An action ended: "commit", "push", "pull", "createBranch", "checkout", "pullRequest",
     /// "restore", "dropCheckpoints", "addWorktree", "removeWorktree" (and a failed "checkpoint").
     /// `message` is for the user; `url` a pull request's address (addWorktree: the new folder).

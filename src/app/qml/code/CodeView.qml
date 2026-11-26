@@ -995,6 +995,12 @@ FocusScope {
                                 AppController.toast(qsTr("Copied: %1").arg(text), "success")
                         }
                         onOpenUrl: (url) => Workspace.openUrl(url)
+                        // (T3 Code's AI-written commit message: the AI of the user's settings.)
+                        aiAvailable: commitWriter.available
+                        onWriteWithAi: (system, prompt) => {
+                            if (!commitWriter.ask(system, prompt))
+                                changes.aiWritten(false, qsTr("Set up the AI first (Settings → Extensions → AI)."))
+                        }
                     }
                     Loader {
                         id: filesLoader
@@ -1040,6 +1046,12 @@ FocusScope {
     PageTools {
         id: pageTools
         workspace: Workspace
+    }
+    // One question to the AI: the commit dialog's "Write with AI".
+    AiAsk {
+        id: commitWriter
+        workspace: Workspace
+        onAnswered: (ok, text) => changes.aiWritten(ok, text)
     }
 
     BMenu {

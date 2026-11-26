@@ -12,8 +12,7 @@ done in the repository simply disappears from the list.
   the terminal on Windows (ConPTY) and Code mode tried on Windows and macOS at all; the terminal's
   resizable splits;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
-  a commit message and a pull request's text written by AI when left empty (a small "ask the AI
-  once" QML type in src/app/shell over `WorkspaceExtensions::sendAi`, handed to the panel), a turn's
+  a pull request's text written by AI (the commit message is: "Write with AI", AiAsk), a turn's
   changes without what the user changed between turns, `--skip` while rebasing, `git fetch` of its
   own (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
   the phone through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and
