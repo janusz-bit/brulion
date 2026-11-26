@@ -18,6 +18,8 @@
 #                  [$QT_ROOT/6.12.0/gcc_64]
 #   BUILD_DIR [build-wasm]  DIST_DIR [dist-wasm]  BUILD_TYPE [MinSizeRel]  JOBS [nproc]
 #   SINGLE_FILE    the single-file version [dist-wasm-single/brulion.html]
+#   BRULION_ATRAMENT  OFF: without Atrament, the own UI framework (docs/ATRAMENT.md) — to measure
+#                  its size [ON]
 #
 # Needs cmake >= 3.24, ninja, python3, git; --setup also uvx (or aqt) for aqtinstall. On NixOS
 # the script enters a `nix shell` with these by itself (and needs programs.nix-ld).
@@ -42,6 +44,7 @@ BUILD_DIR=${BUILD_DIR:-build-wasm}
 DIST_DIR=${DIST_DIR:-dist-wasm}
 SINGLE_FILE=${SINGLE_FILE:-dist-wasm-single/brulion.html}
 BUILD_TYPE=${BUILD_TYPE:-MinSizeRel}
+ATRAMENT=${BRULION_ATRAMENT:-ON}
 JOBS=${JOBS:-$(nproc 2>/dev/null || echo 4)}
 
 do_setup=0
@@ -171,7 +174,7 @@ if [[ $do_build == 1 ]]; then
   # executable and point at C:/.)
   log "configure ($BUILD_TYPE) in $BUILD_DIR"
   cmake -S "$root" -B "$BUILD_DIR" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$toolchain" \
-    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DQT_HOST_PATH="$QT_HOST" "${launcher[@]}" >&2
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DQT_HOST_PATH="$QT_HOST" -DBRULION_ATRAMENT="$ATRAMENT" "${launcher[@]}" >&2
   # The QML plugins linked into the app (qmlimportscanner's list, written at configure time):
   # only the Basic style, no QtQuick.Dialogs (docs/PERFORMANCE.md L9).
   imports=$BUILD_DIR/src/app/.qt/qml_imports/brulion_conf.cmake

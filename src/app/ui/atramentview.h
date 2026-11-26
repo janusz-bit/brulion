@@ -1,8 +1,9 @@
 // AtramentView — an Atrament view inside the app's QML (docs/ATRAMENT.md D12, M2): the way views move
 // from QML to Atrament one at a time. `AtramentView { view: "gallery" }` shows the named view of
 // the process's one Atrament App (its fonts: the app's bundled ones, ":/fonts/ui" and ":/fonts").
-// Built where Atrament is (BRULION_ATRAMENT: HarfBuzz found); `brulion --atrament` opens
-// qml/dev/AtramentDemo.qml.
+// Built where Atrament is (BRULION_ATRAMENT: with the app on every platform); `brulion --atrament`
+// opens qml/dev/AtramentDemo.qml (developer QML: desktop builds, and debuggable APKs — `adb shell am
+// start … --es applicationArguments --atrament`).
 #pragma once
 
 #include "qthost.h"

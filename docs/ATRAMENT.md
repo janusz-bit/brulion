@@ -126,7 +126,10 @@ runs on (Vulkan, Metal, Direct3D, OpenGL ES 3 / OpenGL 3.3):
   (`AtlasPage::cleanRevision`) — copied in Qt Quick's sync, uploaded before its render pass.
 * **Opacity** inherited from Qt Quick multiplies every primitive (as Qt Quick fades its own nodes;
   the CPU fallback's texture fades as one image).
-* Shaders: Vulkan GLSL 440 in `src/atrament/qt/shaders/`, compiled by `qt_add_shaders`. Measured
+* Shaders: Vulkan GLSL 440 in `src/atrament/qt/shaders/`, compiled by `qt_add_shaders` (Qt Shader
+  Tools' `qsb`, in every build's Qt: SPIR-V for Vulkan, GLSL ES 3.0 for Android's OpenGL ES and the
+  browser's WebGL 2, GLSL 3.30, HLSL for Direct3D 11, MSL; a Qt without Shader Tools builds the
+  host with the CPU renderer only). Measured
   against the CPU renderer on every primitive kind, masks, scales and atlas updates within 2 levels
   per channel (3 where translucent layers stack) on Intel, NVIDIA and llvmpipe Vulkan and on
   llvmpipe OpenGL (`tst_atrament_qt`).
@@ -188,6 +191,26 @@ class InputHandler {
 A focused element that edits text installs one for the frame; the host maps it onto Qt's
 `inputMethodQuery` / `QInputMethodEvent`, later onto `text-input-v3`, `InputConnection`, TSF and
 a hidden `<textarea>` in the browser.
+
+**Through Qt** (`qt/qthost.h`): Qt's input methods — its Android input context over
+`InputConnection`, IBus and Fcitx, the browser's hidden input, Windows' — expect a field as Qt's own
+controls keep it, with the preedit *outside* the text, at the caret; Atrament's marked text is part
+of the text (as in NSTextInputClient). `AtramentItem` converts both ways: the text it reports
+(`ImSurroundingText`, the text before and after the caret, the selection) leaves the composition
+out, the caret and anchor sit where it is, and a `QInputMethodEvent` is applied with Qt's meaning —
+the old preedit goes, the commit replaces `replacementStart` / `replacementLength` around the caret
+(typing replaces a selection), a `Selection` attribute sets caret and anchor, the new preedit is
+marked at the caret with the `Cursor` attribute inside it — with the common cases one handler call
+each, so that a composition stays one undo step (an input method that marks a word already there,
+Android's `setComposingRegion`, adds none). The item also answers the queries with an argument
+(`ImCursorPosition` at a point, for Android's selection handles; the text before or after the
+caret of a length), emits `cursorPositionChanged()` whenever the field's text, selection or
+composition changes (Android's input context listens to it and tells the keyboard:
+`InputMethodManager.updateSelection`), sets the input item's rectangle to the field, shows the
+virtual keyboard when a field takes the focus or is tapped and hides it when none has the focus,
+asks the input method to commit before a press and makes it forget a composition that ended
+without it (another field, a press, the focus gone; the field keeps the text). Tested with the
+event sequences of Qt's Android input context for Gboard (`tests/atrament/qt/tst_atrament_qt_input`).
 
 ### Accessibility
 
@@ -302,7 +325,10 @@ Rules of thumb:
   item is a `QQuickItem` like any other; one `App` serves every item of the process. In the app's
   QML, `AtramentView { view: "gallery" }` (src/app/ui/atramentview.h) shows a named view of the
   process's App; `brulion --atrament` opens it in a window of the design system
-  (qml/dev/AtramentDemo.qml).
+  (qml/dev/AtramentDemo.qml, developer QML: desktop builds and debuggable APKs — on a phone
+  `adb shell am start -n io.github.januszbit.brulion.test/io.github.januszbit.brulion.android.BrulionActivity
+  --es applicationArguments --atrament` for the APK of
+  `BRULION_ANDROID_ID_SUFFIX=.test BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo scripts/android-build.sh`).
 
 ## Code
 
@@ -316,9 +342,12 @@ Rules of thumb:
   Headers relative to `src/atrament` (`#include "text/textlayout.h"`).
 * Tests: `tests/atrament/<area>/tst_atrament_<area>*.cpp` (QtTest is only the runner; golden
   images go through `QImage` in the tests, never in the framework).
-* External dependency: HarfBuzz (pkg-config `harfbuzz`; vendored for the Android, Windows and
-  browser builds when Atrament ships there). CMake option `BRULION_ATRAMENT` (default ON where
-  HarfBuzz is found).
+* External dependency: HarfBuzz 14.5.1, vendored in `3rdparty/harfbuzz` (the release's files its
+  amalgamation needs, 4.9 MB of sources; `scripts/harfbuzz-vendor.sh <tag>` updates it) and
+  compiled as one static library with hidden symbols — the same sources on every platform, never
+  the system's (the same shaping and outlines everywhere, nothing to find or download; Qt's own copy
+  never meets it). CMake option `BRULION_ATRAMENT` (default: with the app — Linux, Windows,
+  Android, the browser).
 
 ## Testing
 

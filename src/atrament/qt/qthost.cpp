@@ -190,9 +190,10 @@ void applyInputMethodEvent(InputHandler &h, const QInputMethodEvent &e)
             h.replaceText(range, commit);
             // Where Qt leaves the caret: after what was committed, else where it was less what
             // went before it.
-            const int qtCaret = !commit.empty() ? start + int(commit.size())
-                                : rs <= 0       ? caret - std::min(-rs, rl)
-                                                : caret;
+            const int qtCaret = std::clamp(!commit.empty() ? start + int(commit.size())
+                                           : rs <= 0       ? caret - std::min(-rs, rl)
+                                                           : caret,
+                                           0, h.textLength());
             const auto after = h.selection();
             if (after && (after->focus != qtCaret || after->anchor != qtCaret))
                 h.setSelection({qtCaret, qtCaret});
