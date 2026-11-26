@@ -376,7 +376,7 @@ void TestAtramentAccessibility::textInputThroughTheTree()
     auto events = h.tw.takeAccessibilityEvents();
     QCOMPARE(countEvents(events, AccessibilityEvent::Type::Focus, input), 1);
 
-    const AccessibilityActionRequest setValue{AccessibilityAction::SetValue, u"Łucja Żółć", {}, 0};
+    const AccessibilityActionRequest setValue{AccessibilityAction::SetValue, u"Łucja Żółć", {}, 0, {}};
     QVERIFY(w.performAccessibilityAction(input, setValue));
     QCOMPARE(q(field.read(h.app).text()), QStringLiteral("Łucja Żółć"));
     h.tw.settle();
@@ -390,7 +390,7 @@ void TestAtramentAccessibility::textInputThroughTheTree()
             QVERIFY(e.oldText.empty());
     }
 
-    const AccessibilityActionRequest selectRange{AccessibilityAction::SetSelection, {}, {6, 10}, 0};
+    const AccessibilityActionRequest selectRange{AccessibilityAction::SetSelection, {}, {6, 10}, 0, {}};
     QVERIFY(w.performAccessibilityAction(input, selectRange));
     h.tw.settle();
     node = w.accessibilityTree().find(input);
@@ -400,7 +400,7 @@ void TestAtramentAccessibility::textInputThroughTheTree()
     QCOMPARE(countEvents(events, AccessibilityEvent::Type::SelectionChanged, input), 1);
     QCOMPARE(countEvents(events, AccessibilityEvent::Type::ValueChanged), 0);
 
-    const AccessibilityActionRequest replaceRange{AccessibilityAction::ReplaceText, u"Lu", {0, 1}, 0};
+    const AccessibilityActionRequest replaceRange{AccessibilityAction::ReplaceText, u"Lu", {0, 1}, 0, {}};
     QVERIFY(w.performAccessibilityAction(input, replaceRange));
     QCOMPARE(q(field.read(h.app).text()), QStringLiteral("Luucja Żółć"));
     h.tw.settle(); // keys move the caret over the layout on screen
@@ -408,7 +408,7 @@ void TestAtramentAccessibility::textInputThroughTheTree()
     h.tw.simulateKeystrokes(u"end");
     h.tw.simulateTyping(u"!");
     QVERIFY(w.performAccessibilityAction(
-            input, AccessibilityActionRequest{AccessibilityAction::ReplaceText, u"\n", {0, 0}, 0}));
+            input, AccessibilityActionRequest{AccessibilityAction::ReplaceText, u"\n", {0, 0}, 0, {}}));
     h.tw.settle();
     QCOMPARE(q(w.accessibilityTree().find(input)->value), QStringLiteral(" Luucja Żółć!"));
     // The text's characters are where the layout put them.

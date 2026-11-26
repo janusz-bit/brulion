@@ -107,7 +107,7 @@ public:
     bool performAccessibilityAction(AccessNodeId node, const AccessibilityActionRequest &request);
     bool performAccessibilityAction(AccessNodeId node, AccessibilityAction action)
     {
-        return performAccessibilityAction(node, AccessibilityActionRequest{action, {}, {}, 0});
+        return performAccessibilityAction(node, AccessibilityActionRequest{action, {}, {}, 0, {}});
     }
 
     // --- used by elements during paint (no-ops returning nullptr while disabled or hidden)

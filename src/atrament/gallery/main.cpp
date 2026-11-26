@@ -3,7 +3,7 @@
 //
 //   atrament-gallery [--section 0-3]
 //   atrament-gallery --screenshot out.png [--size 1280x800] [--scale 2] [--section 1]
-//                    [--hover x,y] [--frames n]
+//                    [--hover x,y] [--frames n] [--accessibility]   (prints the semantic tree)
 
 #include "gallery.h"
 #include "qthost.h"
@@ -21,7 +21,8 @@ using namespace brulion::atrament;
 
 namespace {
 
-int screenshot(const QString &file, Size size, float scale, int section, std::optional<Point> hover, int frames)
+int screenshot(const QString &file, Size size, float scale, int section, std::optional<Point> hover, int frames,
+               bool accessibility)
 {
     auto platform = std::make_shared<TestPlatform>();
     App app(platform, gallery::loadFonts());
@@ -29,6 +30,7 @@ int screenshot(const QString &file, Size size, float scale, int section, std::op
     Entity<gallery::Gallery> root = app.newEntity<gallery::Gallery>();
     root.update(app, [section](gallery::Gallery &g, Context<gallery::Gallery> &) { g.section = section; });
     Window &w = app.openWindow(tw, root);
+    w.setAccessibilityEnabled(accessibility);
     tw.settle();
     if (hover)
         tw.simulateMouseMove(*hover);
@@ -46,6 +48,10 @@ int screenshot(const QString &file, Size size, float scale, int section, std::op
     if (!out.convertToFormat(QImage::Format_ARGB32).save(file)) {
         QTextStream(stderr) << "cannot write " << file << '\n';
         return 1;
+    }
+    if (accessibility) {
+        const std::u16string tree = w.accessibilityTree().dump();
+        QTextStream(stdout) << QString::fromUtf16(tree.data(), qsizetype(tree.size()));
     }
     QTextStream(stdout) << "frame " << w.frameCount() << ": " << w.lastFrameStats().primitives << " primitives, build "
                         << build / frames / 1000.0 << " ms, raster " << present / frames / 1000.0 << " ms (mean of "
@@ -72,7 +78,9 @@ int main(int argc, char **argv)
     QCommandLineOption hoverOption(QStringLiteral("hover"), QStringLiteral("Pointer at x,y"), QStringLiteral("x,y"));
     QCommandLineOption framesOption(QStringLiteral("frames"), QStringLiteral("Frames to render"), QStringLiteral("n"),
             QStringLiteral("3"));
-    parser.addOptions({ screenshotOption, sizeOption, scaleOption, sectionOption, hoverOption, framesOption });
+    QCommandLineOption accessibilityOption(QStringLiteral("accessibility"), QStringLiteral("Print the frame's accessibility tree (with --screenshot)"));
+    parser.addOptions(
+            {screenshotOption, sizeOption, scaleOption, sectionOption, hoverOption, framesOption, accessibilityOption});
     parser.process(qapp);
 
     const QStringList wh = parser.value(sizeOption).split(QLatin1Char('x'));
@@ -85,7 +93,7 @@ int main(int argc, char **argv)
             hover = Point { xy.value(0).toFloat(), xy.value(1).toFloat() };
         }
         return screenshot(parser.value(screenshotOption), size, parser.value(scaleOption).toFloat(), section, hover,
-                std::max(1, parser.value(framesOption).toInt()));
+                          std::max(1, parser.value(framesOption).toInt()), parser.isSet(accessibilityOption));
     }
 
     auto platform = std::make_shared<QtPlatform>();

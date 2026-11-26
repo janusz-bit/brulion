@@ -75,6 +75,7 @@ enum class AccessibilityAction : std::uint8_t {
     SetValue,     // a text input's whole text, a slider's number
     SetSelection, // a text input's selection / caret
     ReplaceText,  // a range of a text input's text
+    ScrollTo,     // a scrolling node's content to an offset
 };
 
 constexpr std::uint16_t actionBit(AccessibilityAction a)
@@ -115,6 +116,7 @@ struct AccessibilityActionRequest {
     std::u16string_view text; // SetValue, ReplaceText
     Range range;              // ReplaceText: the range replaced; SetSelection: anchor = start, focus = end
     float number = 0;         // SetValue of a range
+    Point offset;             // ScrollTo: the content's offset
 };
 
 using AccessNodeId = std::uint64_t; // 0: none

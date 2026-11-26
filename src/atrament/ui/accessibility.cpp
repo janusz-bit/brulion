@@ -169,6 +169,17 @@ const AccessibilityNode *AccessibilityTree::hitTest(Point p) const
 
 namespace {
 
+// Line breaks as \n: one node per line.
+void appendEscaped(std::u16string &out, std::u16string_view s)
+{
+    for (char16_t c : s) {
+        if (c == u'\n')
+            out += u"\\n";
+        else
+            out += c;
+    }
+}
+
 void appendAscii(std::u16string &out, const char *s)
 {
     while (*s)
@@ -199,12 +210,12 @@ std::u16string AccessibilityTree::dump() const
         }
         if (!n->name.empty()) {
             out += u" \"";
-            out += n->name;
+            appendEscaped(out, n->name);
             out += u'"';
         }
         if (!n->value.empty()) {
             out += u" = \"";
-            out += n->value;
+            appendEscaped(out, n->value);
             out += u'"';
         }
         if (n->hasRange) {
@@ -213,7 +224,7 @@ std::u16string AccessibilityTree::dump() const
         }
         if (!n->description.empty()) {
             out += u" (";
-            out += n->description;
+            appendEscaped(out, n->description);
             out += u')';
         }
         if (n->rowIndex >= 0) {

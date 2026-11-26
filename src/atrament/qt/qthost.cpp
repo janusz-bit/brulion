@@ -1,5 +1,6 @@
 #include "qthost.h"
 
+#include "qtaccessibility.h"
 #include "text/fonts.h"
 #include "ui/app.h"
 #include "ui/window.h"
@@ -261,10 +262,12 @@ AtramentItem::AtramentItem(QQuickItem *parent)
     setAcceptHoverEvents(true);
     setAcceptedMouseButtons(Qt::AllButtons);
     setActiveFocusOnTab(true);
+    m_accessibility = std::make_unique<AtramentAccessibility>(this);
 }
 
 AtramentItem::~AtramentItem()
 {
+    m_accessibility.reset(); // its interfaces ask the window
     if (m_app && m_window)
         m_app->closeWindow(*m_window);
 }
@@ -273,6 +276,13 @@ void AtramentItem::attach(App &app, const AnyView &root)
 {
     m_app = &app;
     m_window = &app.openWindow(*this, root);
+    m_accessibility->setWindow(m_window);
+}
+
+void AtramentItem::accessibilityChanged(const std::vector<AccessibilityEvent> &events)
+{
+    if (m_accessibility)
+        m_accessibility->treeChanged(events);
 }
 
 Size AtramentItem::contentSize() const

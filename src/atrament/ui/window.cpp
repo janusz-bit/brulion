@@ -160,8 +160,12 @@ void Window::draw()
         if (m_accessibilityEnabled && m_platform) {
             // The previous frame's tree is intact until the next frame starts.
             diffAccessibilityTrees(m_frames[1 - buildIndex].accessibility, frame.accessibility, m_accessEvents);
-            if (!m_accessEvents.empty())
+            if (!m_accessEvents.empty()) {
+                // A bridge answering questions in the call must not start a frame inside this one.
+                m_drawing = true;
                 m_platform->accessibilityChanged(m_accessEvents);
+                m_drawing = false;
+            }
         }
     });
 }
@@ -290,6 +294,17 @@ bool Window::performAccessibilityAction(AccessNodeId id, const AccessibilityActi
         case AccessibilityAction::ScrollForward:
         case AccessibilityAction::ScrollBackward:
             return scrollPage(*node, request.action == AccessibilityAction::ScrollForward);
+        case AccessibilityAction::ScrollTo: {
+            if (!node->scrollState)
+                return false;
+            ScrollState &st = *node->scrollState;
+            const Point target{node->scrollX ? request.offset.x : st.offset.x,
+                               node->scrollY ? request.offset.y : st.offset.y};
+            if (!st.scrollBy(target - st.offset))
+                return false;
+            refresh();
+            return true;
+        }
         default: return false;
         }
     });
