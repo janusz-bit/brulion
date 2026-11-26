@@ -9,8 +9,10 @@
 
 #include <QDir>
 #include <QFile>
+#if QT_CONFIG(process)
 #include <QProcess>
 #include <QProcessEnvironment>
+#endif
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -220,6 +222,7 @@ void CodeSearch::cancel()
     if (m_cancel)
         m_cancel->store(true);
     m_cancel.reset();
+#if QT_CONFIG(process)
     if (m_process) {
         QProcess *p = m_process;
         m_process = nullptr;
@@ -228,6 +231,7 @@ void CodeSearch::cancel()
         p->waitForFinished(1000);
         p->deleteLater();
     }
+#endif
     m_buffer.clear();
     if (m_running) {
         m_running = false;
@@ -268,10 +272,12 @@ void CodeSearch::finish(const QString &error)
     m_running = false;
     m_done = true;
     m_error = error;
+#if QT_CONFIG(process)
     if (m_process) {
         m_process->deleteLater();
         m_process = nullptr;
     }
+#endif
     Q_EMIT stateChanged();
 }
 
@@ -316,6 +322,7 @@ void CodeSearch::add(const QList<SearchMatch> &matches)
 
 void CodeSearch::runRipgrep()
 {
+#if QT_CONFIG(process)
     m_engine = u"rg"_s;
     auto *p = new QProcess(this);
     m_process = p;
@@ -363,10 +370,14 @@ void CodeSearch::runRipgrep()
         p->kill();
     });
     p->start();
+#else
+    runGitGrep(); // (no programs here: Brulion's own search)
+#endif
 }
 
 void CodeSearch::readRipgrep()
 {
+#if QT_CONFIG(process)
     if (!m_process)
         return;
     m_buffer += m_process->readAllStandardOutput();
@@ -383,6 +394,7 @@ void CodeSearch::readRipgrep()
     add(matches);
     if (m_truncated && m_process && m_process->state() != QProcess::NotRunning)
         m_process->kill();
+#endif
 }
 
 void CodeSearch::runGitGrep()
