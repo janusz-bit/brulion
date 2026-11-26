@@ -47,6 +47,10 @@ public:
     /// Fewer lines drop the oldest.
     void setScrollbackLimit(int lines);
     void clearHistory();
+    /// The user's "Clear" (the panel's menu): the scrollback goes and, on the main screen, the rows
+    /// above the cursor's — the cursor's row (the prompt being typed) becomes the first, the rows
+    /// below it are blanked. The alternate screen (a full-screen program draws it) stays as it is.
+    void clearKeepingCursorLine();
     /// The text of lineAt(index) without trailing spaces.
     QString lineText(int index) const { return lineAt(index).trimmedText(); }
     /// The screen's text, rows joined with "\n", trailing spaces of each row dropped.

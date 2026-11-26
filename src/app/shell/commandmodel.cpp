@@ -91,6 +91,14 @@ constexpr UiAction kUiActions[] = {
         {u"encrypt.newPage", u"newEncryptedPage"},
         {u"theme.toggle", u"toggleTheme"},
         {u"about", u"about"},
+        // Code mode's terminal panel (CodeView: TerminalPanel).
+        {u"terminal.toggle", u"terminal:toggle"},
+        {u"terminal.new", u"terminal:new"},
+        {u"terminal.splitRight", u"terminal:splitRight"},
+        {u"terminal.splitDown", u"terminal:splitDown"},
+        {u"terminal.close", u"terminal:close"},
+        {u"terminal.next", u"terminal:next"},
+        {u"terminal.previous", u"terminal:previous"},
 };
 
 /// The uiAction of the command `id`, "" for a command that runs in C++.
@@ -388,6 +396,24 @@ static QList<Command> buildCommands(const AppController *app)
              u"folder-plus"_s,
              {},
              ready},
+            // The thread's terminals (docs/CODE-TERMINAL.md "Keys"): Ctrl+` as in VS Code (Ctrl+J,
+            // T3 Code's, is today's journal), the rest Ctrl+Shift chords the terminal leaves to the
+            // app (TerminalView: Ctrl+letters are the program's) — T3 Code's mod+d, mod+shift+d,
+            // mod+w with Shift, its Ctrl+Alt+] / [ as they are.
+            {u"terminal.toggle"_s, CommandModel::tr("Show or hide the terminal"), CommandModel::tr("Code mode"),
+             u"terminal"_s, u"Ctrl+`"_s, ready && view == u"code"},
+            {u"terminal.new"_s, CommandModel::tr("New terminal"), CommandModel::tr("Code mode: a shell in the thread's folder"),
+             u"plus"_s, u"Ctrl+Shift+T"_s, ready && view == u"code"},
+            {u"terminal.splitRight"_s, CommandModel::tr("Split terminal right"), CommandModel::tr("Code mode"),
+             u"columns-2"_s, u"Ctrl+Shift+D"_s, ready && view == u"code"},
+            {u"terminal.splitDown"_s, CommandModel::tr("Split terminal down"), CommandModel::tr("Code mode"),
+             u"rows-2"_s, u"Ctrl+Alt+Shift+D"_s, ready && view == u"code"},
+            {u"terminal.close"_s, CommandModel::tr("Close terminal"), CommandModel::tr("Code mode"), u"x"_s,
+             u"Ctrl+Shift+W"_s, ready && view == u"code"},
+            {u"terminal.next"_s, CommandModel::tr("Next terminal"), CommandModel::tr("Code mode"), u"chevron-right"_s,
+             u"Ctrl+Alt+]"_s, ready && view == u"code"},
+            {u"terminal.previous"_s, CommandModel::tr("Previous terminal"), CommandModel::tr("Code mode"),
+             u"chevron-left"_s, u"Ctrl+Alt+["_s, ready && view == u"code"},
             {u"go.notifications"_s,
              CommandModel::tr("Notifications"),
              CommandModel::tr("Reminders, AI answers, agents and extensions that told you something"),

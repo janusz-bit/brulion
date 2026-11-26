@@ -8,8 +8,8 @@ import Brulion
 // an AI agent's thread of a project — the conversation (ChatView as a thread: routeView "code", no
 // list; CodeSidebar lists the threads) with, beside it, the Changes panel (GitChangesPanel: the
 // project's working tree against git, a turn's changes, commit / push / pull request) and under it
-// the Terminal panel (TerminalPanel: shells in the thread's folder; the project's script buttons
-// run there).
+// the Terminal panel (TerminalPanel: the thread's terminals — TerminalRegistry keeps them, running,
+// while another thread is shown —; the project's script buttons run there).
 //
 //   {view: "code"}                          a new thread of the last project used (or the first)
 //   {view: "code", new: true, project}      a new thread of `project`
@@ -72,28 +72,68 @@ FocusScope {
         root.pendingScriptName = name
         root.runPending()
     }
-    /// The script asked for, run once the terminal of the folder is there.
+    /// The script asked for, run once the thread's terminal panel is there.
     property string pendingScript
     property string pendingScriptName
     function runPending(): void {
         const panel = terminalLoader.item as TerminalPanel
-        if (root.pendingScript === "" || panel === null || panel.folder !== root.folder)
+        if (root.pendingScript === "" || panel === null || panel.threadKey !== root.terminalKey)
             return
         panel.run(root.pendingScript, root.pendingScriptName)
         root.pendingScript = ""
     }
-    /// The folder the terminal works in: the thread's, taken when the terminal is first shown or
-    /// the thread's folder changes (its shells end then).
-    property string terminalFolder
+    /// Whose terminals the panel shows (TerminalRegistry: a thread's stay, running, while another
+    /// thread is shown): the thread's page, a new thread's folder until its first message.
+    readonly property string terminalKey: root.path !== "" ? root.path : root.folder
+    /// The panel is made the first time it is shown, then kept.
     property bool terminalWanted: false
-    onFolderChanged: root.followFolder()
     onTerminalOpenChanged: root.followFolder()
     function followFolder(): void {
         if (root.terminalOpen)
             root.terminalWanted = true
-        if (root.terminalWanted && root.terminalFolder !== root.folder) {
-            root.terminalFolder = ""
-            root.terminalFolder = root.folder
+    }
+    /// A terminal command of the palette or its shortcut (CommandModel's "terminal.*", uiAction
+    /// "terminal:…"): the panel shown (made) first; `terminal:toggle` shows or hides it.
+    property string pendingTerminalAction
+    function terminalAction(action: string): void {
+        if (!Js.startsWith(action, "terminal:") || !root.visible)
+            return
+        if (action === "terminal:toggle" && root.terminalOpen) {
+            root.setTerminalOpen(false)
+            chat.forceActiveFocus()
+            return
+        }
+        root.setTerminalOpen(true)
+        root.pendingTerminalAction = action
+        root.runTerminalAction()
+    }
+    function runTerminalAction(): void {
+        const panel = terminalLoader.item as TerminalPanel
+        const action = root.pendingTerminalAction
+        if (action === "" || panel === null)
+            return
+        root.pendingTerminalAction = ""
+        switch (action) {
+        case "terminal:new": panel.newTerminal(); break
+        case "terminal:splitRight": panel.split(Qt.Horizontal); break
+        case "terminal:splitDown": panel.split(Qt.Vertical); break
+        case "terminal:close": panel.closeCurrent(); break
+        case "terminal:next": panel.focusNext(1); break
+        case "terminal:previous": panel.focusNext(-1); break
+        default: panel.focusTerminal(); break
+        }
+    }
+    Connections {
+        target: AppController
+        function onUiActionRequested(action: string) { root.terminalAction(action) }
+    }
+    Connections {
+        target: chat
+        // A new thread's first message made its page (the route follows a moment later): its
+        // terminals — keyed by its folder until now — are the thread's.
+        function onPathChanged() {
+            if (root.path === "" && chat.path !== "" && root.folder !== "")
+                TerminalRegistry.rekey(root.folder, chat.path)
         }
     }
 
@@ -322,21 +362,32 @@ FocusScope {
                             AppController.toast(qsTr("No git here: the thread works in the project's folder."), "warning")
                     }
                 }
-                // The thread's terminal: made for its folder (another thread's folder: a new one),
-                // only once shown.
+                // The thread's terminals (TerminalRegistry's: kept while another thread is shown),
+                // the panel made once first shown.
                 Loader {
                     id: terminalLoader
                     visible: root.terminalOpen && root.folder !== ""
-                    active: root.terminalWanted && root.terminalFolder !== ""
+                    active: root.terminalWanted
                     C.SplitView.preferredHeight: 260
                     C.SplitView.minimumHeight: 120
-                    onLoaded: root.runPending()
+                    onLoaded: {
+                        root.runPending()
+                        root.runTerminalAction()
+                    }
                     sourceComponent: TerminalPanel {
                         objectName: "codeTerminal"
-                        folder: root.terminalFolder
+                        threadKey: root.terminalKey
+                        folder: root.folder
+                        shown: root.terminalOpen && root.folder !== ""
                         dark: Theme.dark
                         // (A link a program printed, Ctrl+click: opened as a note's link would be.)
                         onLinkActivated: (url) => pageTools.openLink(url, "")
+                        // (A file path: in the editor for now.)
+                        onFileActivated: (path, line, column) => {
+                            if (!Workspace.projects.openInEditor(path))
+                                AppController.toast(qsTr("The editor could not be started: set its command in Settings → Extensions → Code mode."), "error")
+                        }
+                        onAddToChat: (text) => chat.addToComposer(text)
                     }
                 }
             }

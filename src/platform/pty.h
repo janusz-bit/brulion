@@ -52,6 +52,14 @@ public:
     bool isRunning() const;
     /// The child's process id (0 when none runs).
     qint64 processId() const;
+    /// A program other than the child itself is in the terminal's foreground: a job the shell
+    /// started (`npm run dev`, `vim`) — the panel's "a program is running" (POSIX: the pty's
+    /// foreground process group, tcgetpgrp() on the master, is not the child's own). False when
+    /// none runs, and where a backend cannot tell.
+    bool hasForegroundJob() const;
+    /// The current directory of the program in the terminal's foreground (the job, else the
+    /// child) where the system says (Linux: /proc/<pid>/cwd); "" elsewhere and when none runs.
+    QString currentDirectory() const;
 
     /// Input for the program; queued while the pty's buffer is full. False when none runs.
     bool write(const QByteArray &data);

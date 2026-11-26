@@ -106,20 +106,26 @@ agent works the panel polls git every 2 s; each answer written refreshes it.
 
 ## Terminal
 
-The Terminal panel (`TerminalPanel`, `TerminalSession`, `TerminalView`: `src/app/terminal`; core
-`src/core/term`; `src/platform/pty.h`) is described in **docs/CODE-TERMINAL.md**: shells and the
-project's scripts in tabs, in the thread's folder (CodeView makes the panel for the thread's folder
-when it is first shown, and again for another thread's folder), a real pseudo-terminal and an xterm
-emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8 links opened by
-Ctrl+click, OSC 52 ignored). POSIX desktops; Windows, Android and the browser say there is no
-terminal (ConPTY: not yet).
+The Terminal panel (`TerminalPanel`, `TerminalSession`, `TerminalView`, `TerminalRegistry`:
+`src/app/terminal`; core `src/core/term`; `src/platform/pty.h`) is described in
+**docs/CODE-TERMINAL.md**: each thread's terminals, kept — running, with their scrollback — while
+another thread is shown (`TerminalRegistry`, keyed by the thread's page; a new thread's by its folder
+until its first message), ended when the thread is deleted, their idle ones when it is archived;
+tabs of up to four terminals side by side or stacked, the project's scripts in new tabs; a find bar
+over the scrollback, a context menu with Add to chat (the selection or the screen into the
+thread's field), URLs and file paths (`path:line:column`) opened with Ctrl+click, marks on tabs
+(new output, a bell, the exit code), shortcuts (Ctrl+\` shows or hides it); a real pseudo-terminal
+and an xterm emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8 links,
+OSC 52 ignored). POSIX desktops; Windows, Android and the browser say there is no terminal (ConPTY:
+not yet).
 
 ## What is not there yet
 
 * Windows: the terminal (ConPTY); everything else of Code mode is untried there.
 * Staging or discarding single files or hunks, stash, merge conflicts, pull requests from forks or to
   another base in the UI (docs/CODE-GIT.md).
-* A thread's terminals kept while another thread is shown (they end when the folder changes).
+* The sidebar's mark of a thread whose terminal runs a program (`TerminalRegistry.busyKeys`), a
+  thread's terminal layout restored after a restart.
 * Threads on the phone: a thread's agent runs on this computer only (an agent on another computer
   answers the notebook's conversations, docs/UI.md "AI agents (ACP)").
 * Tried with the protocol's fake agent and real git, not yet with a real Claude Code and Codex in a

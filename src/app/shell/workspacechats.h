@@ -697,6 +697,9 @@ Q_SIGNALS:
     /// archiveUntouched() archived `paths`, untouched for `days` (AppController's toast, with Undo).
     void autoArchived(const QStringList &paths, int days);
     void changesChanged();
+    /// setArchived() wrote `path` archived (`on`) or brought it back — also archiveUntouched()'s
+    /// (the terminals of an archived thread end: TerminalRegistry).
+    void archivedChanged(const QString &path, bool on);
     /// An AI agent asks something in the conversation `path`, which no chat view shows: `text`
     /// says who asks what (AppController shows it as a toast with Open).
     void questionWaiting(const QString &path, const QString &text);

@@ -19,17 +19,31 @@
 // scrolls back — or goes to the program when it asked for the mouse (Shift bypasses that), or
 // becomes arrow keys on the alternate screen (less, man). Ctrl+click on an OSC 8 link:
 // linkActivated(). The input method's committed text is typed; its preedit shows at the cursor.
+//
+// Links without OSC 8 (term/links.h): with Ctrl held, the URL or file path under the pointer is
+// underlined (looked for in that line only, a path only once the file is found: relative to the
+// session's current directory) and Ctrl+click opens it — linkActivated(url), fileActivated(path,
+// line, column). The terminal's own keys besides copy and paste: Ctrl+Shift+A selects all,
+// Ctrl+Shift+F asks for the find bar (findRequested()), Ctrl+Shift+Home / End jump to the start /
+// the latest output. `appShortcuts` are chords the app's shortcuts keep even while a program runs
+// (the panel's toggle, split, next terminal…). find() highlights every match in the scrollback and
+// the screen (found again a moment after output), findOlder() / findNewer() step through them. A
+// right click the program does not take: contextMenuRequested().
 #pragma once
 
 #include <QColor>
 #include <QFont>
+#include <QKeyCombination>
 #include <QList>
 #include <QPointer>
 #include <QQuickPaintedItem>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 
 #include "terminalsession.h"
+
+#include "term/screentext.h"
 
 namespace brulion::term {
 class Screen;
@@ -73,6 +87,14 @@ class TerminalView : public QQuickPaintedItem {
     Q_PROPERTY(QString accessibleText READ accessibleText NOTIFY accessibleTextChanged FINAL)
     /// The program asked for mouse events (the wheel and clicks go to it; Shift selects anyway).
     Q_PROPERTY(bool mouseReporting READ mouseReporting NOTIFY modesChanged FINAL)
+    /// Key chords (portable text: "Ctrl+Alt+]") left to the app's shortcuts while a program runs.
+    Q_PROPERTY(QStringList appShortcuts READ appShortcuts WRITE setAppShortcuts NOTIFY appShortcutsChanged FINAL)
+    /// What a Ctrl+click opens now: the URL or the file's path under the pointer ("": none).
+    Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged FINAL)
+    /// The find bar's text ("": no search) and its matches: how many, the current one (-1: none).
+    Q_PROPERTY(QString findText READ findText NOTIFY findChanged FINAL)
+    Q_PROPERTY(int findCount READ findCount NOTIFY findChanged FINAL)
+    Q_PROPERTY(int findIndex READ findIndex NOTIFY findChanged FINAL)
 
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
@@ -112,6 +134,15 @@ public:
     QString selectedText() const;
     QString accessibleText() const { return m_accessibleText; }
     bool mouseReporting() const;
+    QStringList appShortcuts() const { return m_appShortcuts; }
+    void setAppShortcuts(const QStringList &sequences);
+    QString hoveredLink() const { return m_link.valid ? m_link.target : QString(); }
+    QString findText() const { return m_findText; }
+    int findCount() const { return int(m_matches.size()); }
+    int findIndex() const { return m_findCurrent; }
+
+    /// Matches looked for at most.
+    static constexpr int MaxMatches = 10000;
 
     /// The selection to the clipboard.
     Q_INVOKABLE void copy();
@@ -124,6 +155,23 @@ public:
     Q_INVOKABLE void scrollLines(int lines) { setScrollOffset(m_scrollOffset + lines); }
     /// The rows in view, joined with "\n" (trailing spaces dropped).
     Q_INVOKABLE QString visibleText() const;
+    /// To the oldest line of the scrollback.
+    Q_INVOKABLE void scrollToTop() { setScrollOffset(historySize()); }
+    /// The session's "Clear": its scrollback and screen (TerminalSession::clear()).
+    Q_INVOKABLE void clear();
+    /// Highlights every occurrence of `text` (case-insensitive unless `caseSensitive`) and shows
+    /// the newest; their number. "" ends the search.
+    Q_INVOKABLE int find(const QString &text, bool caseSensitive);
+    /// The match before the current one (up, older output; wrapping), the one after it.
+    Q_INVOKABLE void findOlder();
+    Q_INVOKABLE void findNewer();
+    Q_INVOKABLE void clearFind() { find(QString(), false); }
+    /// For the chat (the panel's "Add to chat"): the selection, else the rows in view, as a fenced
+    /// block under a line naming the terminal and its folder; "" when there is no text.
+    Q_INVOKABLE QString chatText() const;
+    /// The block chatText() makes of `text` (trailing blank lines dropped; a fence longer than any
+    /// run of backticks in it).
+    static QString chatBlock(const QString &title, const QString &folder, const QString &text);
 
     /// The 16 default ANSI colours of the dark or the light palette.
     static QList<QColor> defaultAnsiColors(bool dark);
@@ -142,8 +190,18 @@ Q_SIGNALS:
     void selectionChanged();
     void accessibleTextChanged();
     void modesChanged();
-    /// Ctrl+click on a hyperlink the program printed (OSC 8).
+    /// Ctrl+click on a hyperlink the program printed (OSC 8) or on a web address in the text.
     void linkActivated(const QString &url);
+    /// Ctrl+click on a path of an existing file in the text (or a file: URL): its absolute path,
+    /// line and column (1-based; 0: none given).
+    void fileActivated(const QString &path, int line, int column);
+    /// A right click (or a long press) the program does not take, at (x, y) in the view.
+    void contextMenuRequested(qreal x, qreal y);
+    /// Ctrl+Shift+F (Cmd+F): the owner opens its find bar.
+    void findRequested();
+    void appShortcutsChanged();
+    void hoveredLinkChanged();
+    void findChanged();
 
 protected:
     bool event(QEvent *event) override;
@@ -153,7 +211,9 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
     void hoverMoveEvent(QHoverEvent *event) override;
+    void hoverLeaveEvent(QHoverEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void focusInEvent(QFocusEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
@@ -173,6 +233,15 @@ private:
         friend bool operator==(TextPos a, TextPos b) = default;
     };
     enum class SelectionUnit { Character, Word, Line };
+    /// The link under the pointer (Ctrl held), in Screen::lineAt() lines.
+    struct HoverLink {
+        bool valid = false;
+        bool file = false;
+        term::TextRange range;
+        QString target; // the URL, or the file's absolute path
+        int line = 0;
+        int column = 0;
+    };
 
     const term::Screen *screen() const;
     void onContentChanged();
@@ -198,6 +267,17 @@ private:
     TextPos lineStart(TextPos at) const;
     TextPos lineEnd(TextPos at) const;
     void copyToSelectionClipboard();
+    void updateShown();
+    bool isAppShortcut(const QKeyEvent *event) const;
+    void updateLink(QPointF point);
+    void clearLink();
+    bool linkAt(QPointF point, HoverLink *link) const;
+    void activate(const HoverLink &link);
+    void updateLines(int first, int last);
+    void runFind(bool keepPlace);
+    void revealMatch(int index);
+    void onCleared();
+    void paintMatches(QPainter *painter, int lineIndex, qreal top);
     void applyColorsToSession();
     QColor resolve(quint32 rawColor, bool foreground) const;
     void paintRow(QPainter *painter, int viewRow, const term::Line &line, int lineIndex);
@@ -250,6 +330,23 @@ private:
     bool m_flushingSync = false;
     QTimer m_accessibleTimer; // accessibleText at most a few times a second
     QString m_accessibleText;
+
+    bool m_shown = false; // the session counts this view as showing it
+    QStringList m_appShortcuts;
+    QList<QKeyCombination> m_appKeys;
+
+    // The link under the pointer while Ctrl is held.
+    bool m_hovering = false;
+    QPointF m_hoverPoint;
+    HoverLink m_link;
+    term::TextRange m_noLink{{1, 0}, {0, 0}}; // the last word found to be no link (no stat again)
+
+    // The find bar's search.
+    QString m_findText;
+    bool m_findCase = false;
+    QList<term::TextRange> m_matches;
+    int m_findCurrent = -1;
+    QTimer m_findTimer; // found again a moment after output
 };
 
 } // namespace brulion::terminal

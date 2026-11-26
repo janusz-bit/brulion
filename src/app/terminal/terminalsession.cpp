@@ -3,7 +3,10 @@
 #include "pty.h"
 #include "term/keys.h"
 
+#include <QDir>
 #include <QFileInfo>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -24,6 +27,10 @@ bool appImageVariable(const QString &entry)
 }
 
 constexpr int MaxTitleLength = 80;
+/// Whether a job runs, looked at this long after output or input…
+constexpr int BusyCheckDelay = 120;
+/// … and this often while one runs (a job that prints nothing would end unseen otherwise).
+constexpr int BusyPollInterval = 2000;
 
 } // namespace
 
@@ -33,10 +40,16 @@ TerminalSession::TerminalSession(QObject *parent)
     connect(m_pty, &platform::Pty::dataReceived, this, &TerminalSession::onData);
     connect(m_pty, &platform::Pty::finished, this, &TerminalSession::onFinished);
     connect(&m_terminal, &term::Terminal::reply, this, &TerminalSession::writeBytes);
-    connect(&m_terminal, &term::Terminal::bell, this, &TerminalSession::bell);
+    connect(&m_terminal, &term::Terminal::bell, this, &TerminalSession::onBell);
     connect(&m_terminal, &term::Terminal::titleChanged, this, &TerminalSession::titleChanged);
     connect(&m_terminal, &term::Terminal::workingDirectoryChanged, this, &TerminalSession::workingDirectoryChanged);
     connect(&m_terminal, &term::Terminal::modesChanged, this, &TerminalSession::modesChanged);
+    m_busySoon.setSingleShot(true);
+    m_busySoon.setInterval(BusyCheckDelay);
+    connect(&m_busySoon, &QTimer::timeout, this, &TerminalSession::checkBusy);
+    m_busyPoll.setInterval(BusyPollInterval);
+    m_busyPoll.setTimerType(Qt::VeryCoarseTimer);
+    connect(&m_busyPoll, &QTimer::timeout, this, &TerminalSession::checkBusy);
 }
 
 TerminalSession::~TerminalSession()
@@ -93,6 +106,72 @@ QString TerminalSession::title() const
     return programName();
 }
 
+QString TerminalSession::currentDirectory() const
+{
+    if (const QString live = m_pty->currentDirectory(); !live.isEmpty())
+        return live;
+    if (const QString reported = m_terminal.workingDirectory(); !reported.isEmpty())
+        return reported;
+    if (!m_folder.isEmpty() && QFileInfo(m_folder).isDir())
+        return m_folder;
+    return QDir::homePath();
+}
+
+void TerminalSession::setShown(bool shown)
+{
+    m_shownBy = std::max(0, m_shownBy + (shown ? 1 : -1));
+    if (m_shownBy > 0)
+        setMarks(false, false);
+}
+
+void TerminalSession::setMarks(bool activity, bool bell)
+{
+    if (activity == m_activity && bell == m_bellRung)
+        return;
+    m_activity = activity;
+    m_bellRung = bell;
+    Q_EMIT marksChanged();
+}
+
+void TerminalSession::onBell()
+{
+    if (m_shownBy == 0)
+        setMarks(m_activity, true);
+    Q_EMIT bell();
+}
+
+void TerminalSession::setBusy(bool busy)
+{
+    if (busy == m_busy)
+        return;
+    m_busy = busy;
+    // (Idle, it becomes busy only after input or with output: no need to look in between.)
+    if (busy)
+        m_busyPoll.start();
+    else
+        m_busyPoll.stop();
+    Q_EMIT busyChanged();
+}
+
+void TerminalSession::checkBusy()
+{
+    // The session's own command is the program (the shell may exec it: no job of its own).
+    setBusy(m_running && (!m_command.isEmpty() || m_pty->hasForegroundJob()));
+}
+
+void TerminalSession::checkBusySoon()
+{
+    if (m_running && !m_busySoon.isActive())
+        m_busySoon.start();
+}
+
+void TerminalSession::clear()
+{
+    m_terminal.screen().clearKeepingCursorLine();
+    Q_EMIT cleared();
+    Q_EMIT contentChanged();
+}
+
 bool TerminalSession::available()
 {
     return platform::Pty::available();
@@ -139,6 +218,7 @@ bool TerminalSession::start()
     Q_EMIT runningChanged();
     Q_EMIT titleChanged();
     Q_EMIT started();
+    checkBusy();
     return true;
 }
 
@@ -160,8 +240,10 @@ void TerminalSession::paste(const QString &text)
 
 void TerminalSession::writeBytes(const QByteArray &bytes)
 {
-    if (m_running && !bytes.isEmpty())
+    if (m_running && !bytes.isEmpty()) {
         m_pty->write(bytes);
+        checkBusySoon();
+    }
 }
 
 void TerminalSession::resize(int columns, int rows)
@@ -180,6 +262,9 @@ void TerminalSession::resize(int columns, int rows)
 void TerminalSession::onData(const QByteArray &data)
 {
     m_terminal.feed(data);
+    if (m_shownBy == 0 && !m_activity)
+        setMarks(true, m_bellRung);
+    checkBusySoon();
     Q_EMIT contentChanged();
 }
 
@@ -188,6 +273,9 @@ void TerminalSession::onFinished(int exitCode, bool crashed)
     m_running = false;
     m_exited = true;
     m_exitCode = crashed ? 128 + exitCode : exitCode;
+    m_busyPoll.stop();
+    m_busySoon.stop();
+    setBusy(false);
     Q_EMIT runningChanged();
     Q_EMIT exited(m_exitCode);
 }

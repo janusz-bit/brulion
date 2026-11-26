@@ -218,6 +218,30 @@ void Screen::clearHistory()
     markAllDirty();
 }
 
+void Screen::clearKeepingCursorLine()
+{
+    clearHistory();
+    if (m_alternate)
+        return;
+    const int row = m_cursor.row;
+    if (row > 0) {
+        // The cursor's row and the rows under it move up; what scrolled out above is gone.
+        for (int i = 0; i + row < m_rows; ++i)
+            m_mainLines[i] = std::move(m_mainLines[i + row]);
+        m_cursor.row = 0;
+        if (m_hasSavedMain)
+            m_savedMain.row = std::max(0, m_savedMain.row - row);
+    }
+    for (int i = 1; i < m_rows; ++i) {
+        Line &line = m_mainLines[i];
+        line.cells.fill(Cell(), m_columns);
+        line.clusters.clear();
+        line.wrapped = false;
+    }
+    m_mainLines[0].wrapped = false;
+    markAllDirty();
+}
+
 QString Screen::text() const
 {
     QString out;

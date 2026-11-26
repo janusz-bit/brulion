@@ -15,6 +15,10 @@
 //                hyperlinks (OSC 8); OSC 52 — the clipboard — ignored
 //   keys.h       encodeKey / encodePaste / encodeText / encodeFocus / encodeMouse: the input the
 //                program gets for a key (Qt's key codes, QtCore), a paste, a mouse event
+//   screentext.h logicalLine(), findText(): rows joined where the text wrapped, mapped back to
+//                cells — the scrollback's search
+//   links.h      findLinks(), resolvePath(): URLs and file paths (path:line:column) in the output
+//                that no OSC 8 marked
 //
 //   brulion::term::Terminal t(80, 24);
 //   t.feed("\x1b[1;31mzażółć\x1b[0m gęślą jaźń\r\n");
@@ -24,6 +28,8 @@
 #include "term/cell.h"
 #include "term/charwidth.h"
 #include "term/keys.h"
+#include "term/links.h"
 #include "term/parser.h"
 #include "term/screen.h"
+#include "term/screentext.h"
 #include "term/terminal.h"

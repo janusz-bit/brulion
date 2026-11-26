@@ -1411,7 +1411,11 @@ mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first butt
   (its navigations name route `code`), `showList: false`, `project`, `wantsWorktree` /
   `worktreeWanted()`; only agents among the partners (`chatNewPartner` shown with one agent too); its
   empty state "What should the agent do?" with suggestions (`codeSuggestions`) — over the terminal
-  (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
+  (`codeTerminal`, `TerminalPanel` — the thread's terminals, `TerminalRegistry.thread(path or the new
+  thread's folder)`: tabs, splits, the find bar, the context menu with Add to chat into the thread's
+  field, Ctrl+click on a file path opens it in the editor; its commands `terminal.*` — Ctrl+\` shows
+  or hides it — are uiActions `terminal:…` CodeView carries out, docs/CODE-TERMINAL.md "Keys"), and
+  the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
 
 ## Notifications
 
