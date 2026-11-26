@@ -4,3 +4,9 @@ ChatActivity	%1 s	%1 s	a duration in seconds
 ChatActivity	%1 min	%1 min	a duration in minutes
 ChatActivity	%1 min %2 s	%1 min %2 s	a duration
 ChatActivity	%1 h %2 min	%1 h %2 min	a duration
+ChatView	Find in the conversation	Znajdź w rozmowie	
+ChatView	No matches	Brak wyników	
+ChatView	%1 of %2	%1 z %2	
+ChatView	Older match	Starszy wynik	
+ChatView	Newer match	Nowszy wynik	
+ChatView	Close find	Zamknij wyszukiwanie	

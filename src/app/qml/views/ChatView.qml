@@ -144,6 +144,55 @@ FocusScope {
     /// -1 none) and the one shown so, tinted for a moment.
     property int seekLine: -1
     property int foundLine: -1
+    /// Find in the conversation (Ctrl+F where the list of conversations is not shown — a thread of
+    /// Code mode, a phone —, as T3 Code's find in thread): the matching rows, the one shown (from
+    /// the newest; Enter goes to an older one, Shift+Enter back).
+    property bool findOpen: false
+    property list<int> findRows
+    property int findIndex: -1
+    property string findQuery
+    readonly property list<int> noRows: []
+    function openFind(): void {
+        root.findOpen = true
+        findField.forceActiveFocus()
+        findField.selectAll()
+    }
+    function closeFind(): void {
+        root.findOpen = false
+        root.findRows = root.noRows
+        root.findIndex = -1
+        root.findQuery = ""
+        root.foundLine = -1
+        input.forceActiveFocus()
+    }
+    function runFind(query: string): void {
+        if (query === root.findQuery && root.findRows.length > 0) {
+            root.stepFind(-1)
+            return
+        }
+        root.findQuery = query
+        root.findRows = messages.rowsMatching(query)
+        root.findIndex = root.findRows.length - 1
+        root.showFound()
+    }
+    function stepFind(delta: int): void {
+        const n = root.findRows.length
+        if (n === 0)
+            return
+        root.findIndex = (root.findIndex + delta + n) % n
+        root.showFound()
+    }
+    function showFound(): void {
+        if (root.findIndex < 0 || root.findIndex >= root.findRows.length) {
+            root.foundLine = -1
+            return
+        }
+        const row = root.findRows[root.findIndex]
+        foundTimer.stop()
+        root.following = false
+        list.positionViewAtIndex(row, ListView.Center)
+        root.foundLine = messages.lineOf(row)
+    }
     /// The answer as it is written: what the model thinks first, then its words.
     readonly property bool liveShown: root.busyHere && !root.queuedHere && !root.asking
                                       && (root.turn.partial !== "" || root.turn.thoughts !== "")
@@ -207,6 +256,10 @@ FocusScope {
         root.linkNote = ""
         root.seekLine = root.path !== "" ? AppController.routeInt(root.route, "line", -1) : -1
         root.foundLine = -1
+        root.findOpen = false
+        root.findRows = root.noRows
+        root.findIndex = -1
+        root.findQuery = ""
         const prompt = AppController.routeText(root.route, "prompt")
         root.knownDefault = root.chats.defaultPartner
         if (root.starting && AppController.routeFlag(root.route, "fromLink")) {
@@ -1001,6 +1054,12 @@ FocusScope {
             searchField.selectAll()
         }
     }
+    // … and where the list is not shown, find in the conversation.
+    Shortcut {
+        sequence: ShortcutMap.sequences["page.find"] || ""
+        enabled: root.visible && !root.listShown && root.path !== "" && root.activeFocus
+        onActivated: root.openFind()
+    }
     Connections {
         target: root.chats
         function onWritten(path: string) {
@@ -1548,6 +1607,64 @@ FocusScope {
                     }
                     onObjectAdded: (index, object) => partnerMenu.insertItem(index, object as Item)
                     onObjectRemoved: (index, object) => partnerMenu.removeItem(object as Item)
+                }
+            }
+
+            // Find in the conversation (Ctrl+F; root.openFind): the field, which match of how many,
+            // older / newer, close.
+            RowLayout {
+                objectName: "chatFind"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space3
+                Layout.topMargin: Theme.space1
+                visible: root.findOpen
+                spacing: Theme.space2
+                BSearchField {
+                    id: findField
+                    objectName: "chatFindField"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 420
+                    placeholderText: qsTr("Find in the conversation")
+                    onSearch: (query) => root.runFind(query)
+                    onEscapePressed: root.closeFind()
+                    Keys.onPressed: (event) => {
+                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier)) {
+                            root.stepFind(1)
+                            event.accepted = true
+                        }
+                    }
+                }
+                BText {
+                    objectName: "chatFindCount"
+                    visible: root.findQuery !== ""
+                    text: root.findRows.length === 0 ? qsTr("No matches")
+                                                     : qsTr("%1 of %2").arg(root.findRows.length - root.findIndex).arg(root.findRows.length)
+                    variant: "caption"
+                    color: Theme.fgMuted
+                }
+                BIconButton {
+                    objectName: "chatFindOlder"
+                    iconName: "chevron-up"
+                    label: qsTr("Older match")
+                    enabled: root.findRows.length > 0
+                    onClicked: root.stepFind(-1)
+                }
+                BIconButton {
+                    objectName: "chatFindNewer"
+                    iconName: "chevron-down"
+                    label: qsTr("Newer match")
+                    enabled: root.findRows.length > 0
+                    onClicked: root.stepFind(1)
+                }
+                BIconButton {
+                    objectName: "chatFindClose"
+                    iconName: "x"
+                    label: qsTr("Close find")
+                    onClicked: root.closeFind()
+                }
+                Item {
+                    Layout.fillWidth: true
                 }
             }
 

@@ -124,6 +124,9 @@ public:
     Q_INVOKABLE int rowOfLine(int line) const;
     /// The first line in the page of the message at `row` (-1 for a bad row).
     Q_INVOKABLE int lineOf(int row) const;
+    /// The rows whose text holds `query` — case and Polish marks aside ("zolw" finds "Żółw"), every
+    /// word of it in any order —, in order ([] for a blank query): find in the conversation.
+    Q_INVOKABLE QList<int> rowsMatching(const QString &query) const;
     /// `markdown` as a message of this conversation shows it (renderMessage): the answer being
     /// written, before it is one of the rows.
     Q_INVOKABLE QString render(const QString &markdown) const;

@@ -767,6 +767,18 @@ private Q_SLOTS:
         QVERIFY(value(model, 0, "day").toString() != value(model, 2, "day").toString());
         QCOMPARE(value(model, 3, "time").toString(), QString());
         QCOMPARE(value(model, 1, "markdown").toString(), u"Tak"_s); // (no time line in the text)
+        // Their numbers in the page (a work log's key) and find in the conversation.
+        QCOMPARE(value(model, 3, "number").toInt(), 4);
+        QCOMPARE(model.rowsMatching(u"  "_s), QList<int>());
+        QCOMPARE(model.rowsMatching(u"DZIŚ"_s), QList<int>{2});
+        QCOMPARE(model.rowsMatching(u"bez"_s), QList<int>{3});
+        QCOMPARE(model.rowsMatching(u"czasu bez"_s), QList<int>{3}); // (every word, any order)
+        QCOMPARE(model.rowsMatching(u"22:10"_s), QList<int>()); // (the time is no part of the text)
+        QVERIFY(ws->write(u"AI/2026-11-14 Plan.md"_s,
+                          ws->read(u"AI/2026-11-14 Plan.md"_s) + u"- 🧑 Żółw i dziś\n- 🤖 Zolw, tak\n"_s));
+        model.refreshNow();
+        QCOMPARE(model.rowsMatching(u"zolw"_s), (QList<int>{4, 5}));
+        QCOMPARE(model.rowsMatching(u"dzis"_s), (QList<int>{2, 4}));
     }
 
     void renameAndDelete()

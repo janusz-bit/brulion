@@ -521,6 +521,20 @@ int ChatMessageModel::lineOf(int row) const
     return row >= 0 && row < m_rows.size() ? m_rows.at(row).line : -1;
 }
 
+QList<int> ChatMessageModel::rowsMatching(const QString &query) const
+{
+    QList<int> out;
+    const QStringList words = text::foldKey(query).split(u' ', Qt::SkipEmptyParts);
+    if (words.isEmpty())
+        return out;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        const QString folded = text::foldKey(m_rows.at(i).text);
+        if (std::ranges::all_of(words, [&folded](const QString &w) { return folded.contains(w); }))
+            out << i;
+    }
+    return out;
+}
+
 int ChatMessageModel::rowOfLine(int line) const
 {
     int found = -1;

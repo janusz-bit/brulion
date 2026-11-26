@@ -1513,6 +1513,12 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   scrolled to the middle and its bubble has the accent's border for 2.5 s). The model keeps the
   messages' text (and its folded form) it read at its last refresh, so a keystroke reads no page;
   nothing found: "No conversation found" (`chatNoMatch`).
+* **Find in the conversation** (T3 Code's find in thread): where the list is not shown — a thread of
+  Code mode, a conversation on a phone — Ctrl+F (`page.find`) opens a find bar over the messages
+  (`chatFind`: `chatFindField`, `chatFindCount` "2 of 5", `chatFindOlder` / `chatFindNewer`,
+  `chatFindClose`): the messages holding every word typed, case and Polish marks aside
+  (`ChatMessageModel.rowsMatching`), from the newest; Enter goes to an older match, Shift+Enter to
+  a newer one, the match's message has the accent's border, Escape closes it.
 * **Keyboard** (desktop): the find command's key (Ctrl+F, `page.find`) while the chat has the focus
   goes to the search field, ↓ there to the first row; ↑ / ↓ move in the list without opening
   (`keyNavigationEnabled`), Enter opens the row (a match at its message), **Alt+1 … Alt+9** open the
