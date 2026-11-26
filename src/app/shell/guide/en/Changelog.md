@@ -7,6 +7,16 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.32.0 — November 26, 2026
+
+**New**
+- **Clone a repository in Code mode** — **Clone a repository…** (in the projects' menu, the empty states and the palette) makes a project of a repository that is not on this computer yet, as in T3 Code: one of your GitHub repositories (listed through the GitHub CLI), `owner/name`, any git address or a repository's page. It clones in the background into `~/.brulion/projects/<name>` or a folder you pick (**Settings → Extensions → Code mode → Cloned repositories** changes the default), tries https when ssh cannot sign in (and the other way round), and opens a new thread in the project when it is done ([[Code mode#Projects]]).
+- **The notes back from the server** — when every synced note vanishes from the notebook folder (a lost memory card, a folder emptied by another program), sync still pauses instead of deleting them on the server, and the Sync center now offers **Download the notes from the server** (**Copy the notes from the folder** for a phone's folder): one sync that works like the very first one — the notes come back and nothing is deleted on either side ([[Sync]]).
+- **Atrament, to try** — Brulion's own way of drawing its interface, meant to take over from Qt Quick one view at a time and to need less memory: **Settings → Extensions → Code mode → Draw terminals with Atrament** draws Code mode's terminal on the graphics card, and **Settings → Editor → Draw the editor with Atrament** draws pages — for reading only so far: text, headings, quotes, lists and tasks, with links that open and task boxes that tick; other blocks keep their place empty. Both stay off until you turn them on.
+
+**Fixes**
+- **Add a project…** in the palette opens the folder picker (it did nothing).
+
 ## 0.31.0 — November 26, 2026
 
 **New**

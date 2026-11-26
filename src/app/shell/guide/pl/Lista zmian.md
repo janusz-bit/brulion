@@ -7,6 +7,16 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.32.0 — 26 listopada 2026
+
+**Nowe**
+- **Klonowanie repozytorium w trybie Kod** — **Sklonuj repozytorium…** (w menu projektów, w pustych widokach i w palecie) robi projekt z repozytorium, którego nie ma jeszcze na tym komputerze, jak w T3 Code: z jednego z Twoich repozytoriów na GitHubie (lista przez GitHub CLI), z `właściciel/nazwa`, z dowolnego adresu gita albo ze strony repozytorium. Klonuje w tle do `~/.brulion/projects/<nazwa>` albo do wybranego folderu (domyślny zmienisz w **Ustawieniach → Rozszerzenia → Tryb kodu → Sklonowane repozytoria**), gdy ssh nie może się zalogować, próbuje https (i odwrotnie), a na koniec otwiera nowy wątek w projekcie ([[Tryb kodu#Projekty]]).
+- **Notatki z powrotem z serwera** — gdy z folderu notatnika znikną wszystkie synchronizowane notatki (zgubiona karta pamięci, folder opróżniony przez inny program), synchronizacja jak dotąd się wstrzymuje, zamiast usunąć je na serwerze, a centrum synchronizacji proponuje teraz **Pobierz notatki z serwera** (**Skopiuj notatki z folderu** dla folderu telefonu): jedną synchronizację, która działa jak pierwsza — notatki wracają, a nic nie jest usuwane po żadnej stronie ([[Synchronizacja]]).
+- **Atrament do wypróbowania** — własny sposób rysowania interfejsu Brulionu, który ma widok po widoku zastąpić Qt Quick i potrzebować mniej pamięci: **Ustawienia → Rozszerzenia → Tryb kodu → Rysuj terminale Atramentem** rysuje terminal trybu Kod na karcie graficznej, a **Ustawienia → Edytor → Rysuj edytor Atramentem** rysuje strony — na razie tylko do czytania: tekst, nagłówki, cytaty, listy i zadania, z linkami, które się otwierają, i polami zadań, które się zaznaczają; inne bloki zostawiają puste miejsce. Oba są wyłączone, dopóki ich nie włączysz.
+
+**Poprawki**
+- **Dodaj projekt…** w palecie otwiera wybór folderu (wcześniej nic nie robiło).
+
 ## 0.31.0 — 26 listopada 2026
 
 **Nowe**
