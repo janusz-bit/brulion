@@ -41,8 +41,12 @@ struct FontRun {
     // Free for the caller (an index into its style runs): every glyph carries it, so the painter
     // knows its colour, underline, …
     std::uint32_t styleIndex = 0;
-    // OpenType features as HarfBuzz parses them ("tnum", "-liga", "ss01=1"), empty for defaults.
+    // OpenType features as HarfBuzz parses them ("tnum", "-liga", "ss01=1"), separated by commas
+    // or spaces; empty for defaults.
     std::u16string features;
+    // The text's language as a BCP 47 tag ("pl", "en-GB") for language-specific forms; empty for
+    // none (never the process's locale, so layouts are the same everywhere).
+    std::u16string language;
 };
 
 struct PositionedGlyph {
@@ -113,6 +117,8 @@ private:
     std::vector<PositionedGlyph> m_glyphs;
     // x of each offset 0..length on the unwrapped shaped text (caret positions before wrapping).
     std::vector<float> m_offsetX;
+    // Per line: the width a selection past the line's end gives its break (a space of its font).
+    std::vector<float> m_breakWidths;
 };
 
 struct ParagraphStyle {
