@@ -90,9 +90,15 @@ drawer's content in Code mode), `qml/code/CodeProjectDialog.qml`; docs/UI.md "Co
 ## Changes, checkpoints, commits
 
 The Changes panel (`GitChangesPanel`, `CodeGit`: `src/app/gitpanel`; core `src/core/gitcli`) is
-described in **docs/CODE-GIT.md**: the working tree's changes against git with a diff per file, the
-branch (switch, create), ahead / behind, Commit… (commit, commit and push, commit, push and create a
-pull request with `gh`), Push, Pull, Create PR…, and a turn's changes with **Revert this turn…**.
+described in **docs/CODE-GIT.md**: T3 Code's diff sources (Latest turn / Turn N — what one turn
+changed —, Uncommitted, the branch against a base, one of the newest 100 commits) with a diff per
+file (side by side or stacked, wrapped, whitespace hidden, find, a tree of files; hunks staged,
+unstaged or thrown away; lines commented into the chat's composer), a file's actions (open, copy the
+path, stage, unstage, discard, take a side of a conflict), the branch (switch, create, stash), its pull
+request's badge, ahead / behind, one quick action from the state (Commit… with a checklist of files
+and a new branch, Push, Pull, Create PR… into a chosen base and from forks, Publish…, Initialize git;
+pushing to the default branch asks first), a banner for a merge / rebase / cherry-pick with its
+conflicts, and a turn's **Revert this turn…** / **Revert to before turn N…**.
 
 **Checkpoints of threads**: before each turn of a thread's agent, `WorkspaceChats` takes a snapshot of
 the thread's folder (`gitcli::Client::checkpoint`: a temporary index, `refs/brulion/checkpoints/<id>`;
@@ -100,9 +106,12 @@ the user's index, HEAD and stash never move) and starts the agent once it is mad
 says "Saving a checkpoint…" meanwhile; a folder that is no git repository, or git missing, starts the
 turn without one; Stop meanwhile starts nothing. `WorkspaceChats.checkpoints(path)` lists them ({id,
 at, message}: kept in the notebook's device state `code/checkpoints`, at most 30 a thread, the older
-refs dropped), `lastCheckpoint(path)` the newest — CodeView gives it to the panel as its `checkpoint`
-("This turn" shows what the agent's last turn changed, "Revert this turn…" puts it back). While the
-agent works the panel polls git every 2 s; each answer written refreshes it.
+refs dropped), `lastCheckpoint(path)` the newest — CodeView gives the list to the panel as its
+`checkpoints` (turn N's own changes: checkpoint N against checkpoint N + 1, the newest against the
+working tree; "Revert this turn…" takes that turn out, "Revert to before turn N…" puts checkpoint N
+back). While the agent works the panel polls git every 2 s; each answer written refreshes it. The
+panel's review comments go into the thread's composer (`ChatView.addToComposer`); its Open in editor
+uses `Workspace.projects.openInEditor` for the file.
 
 ## Terminal
 
@@ -117,8 +126,8 @@ terminal (ConPTY: not yet).
 ## What is not there yet
 
 * Windows: the terminal (ConPTY); everything else of Code mode is untried there.
-* Staging or discarding single files or hunks, stash, merge conflicts, pull requests from forks or to
-  another base in the UI (docs/CODE-GIT.md).
+* A commit message or a pull request's text written by AI when left empty, and the rest of
+  docs/CODE-GIT.md "Not done (yet)".
 * A thread's terminals kept while another thread is shown (they end when the folder changes).
 * Threads on the phone: a thread's agent runs on this computer only (an agent on another computer
   answers the notebook's conversations, docs/UI.md "AI agents (ACP)").

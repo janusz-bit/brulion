@@ -355,7 +355,7 @@ Item {
     function pushGuarded(): void {
         if (repo.onDefaultBranch) {
             panel.pendingAction = "push"
-            guardDialog.openFor(repo.branchNameFor(repo.subjectOf(repo.branch)))
+            guardDialog.openFor("")
             return
         }
         repo.push()
@@ -462,6 +462,7 @@ Item {
 
     onFolderChanged: {
         panel.closeDiff()
+        panel.turnIndex = -1
         panel.commitOid = ""
         panel.baseRef = ""
         apply.restart()

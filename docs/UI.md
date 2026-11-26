@@ -1411,7 +1411,12 @@ mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first butt
   (its navigations name route `code`), `showList: false`, `project`, `wantsWorktree` /
   `worktreeWanted()`; only agents among the partners (`chatNewPartner` shown with one agent too); its
   empty state "What should the agent do?" with suggestions (`codeSuggestions`) — over the terminal
-  (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
+  (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`:
+  docs/CODE-GIT.md "The panel" — the diff sources Latest turn / Turn N / Uncommitted / Branch /
+  Commits, `GitDiffView` with hunks, find and review comments, the file menu, the quick action, the
+  merge / rebase banner). CodeView gives it the thread's `checkpoints` and turns its signals into the
+  editor (`openFile`), the composer (`addToChat` → `chat.addToComposer`), the clipboard (`copyText`)
+  and the browser (`openUrl`).
 
 ## Notifications
 

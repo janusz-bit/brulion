@@ -10,9 +10,12 @@ done in the repository simply disappears from the list.
   and the terminal are there (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
   real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
   mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
-  staging and discarding single files or hunks, stash, merge conflicts, pull requests from forks or
-  to another base in the UI; a worktree removed with its thread; threads continued from the phone
-  through `acp serve` (a project's folder on that computer).
+  a worktree removed with its thread; threads continued from the phone through `acp serve` (a
+  project's folder on that computer); in the Changes panel (docs/CODE-GIT.md "Not done (yet)"): a
+  commit message and a pull request's text written by AI when left empty (a small "ask the AI once"
+  QML type in src/app/shell over `WorkspaceExtensions::sendAi`, handed to the panel), a turn's
+  changes without what the user changed between turns, single lines (not whole hunks) and the hunks
+  of other sources staged or thrown away, `--skip` while rebasing, `git fetch` of its own.
 
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
   Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and

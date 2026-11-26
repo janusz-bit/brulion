@@ -25,6 +25,13 @@
 // `folder` is a work tree's top-level folder (repository() finds it from any folder inside). The
 // paths of the results are relative to it, '/'-separated, as git writes them.
 //
+// Beyond those: history and comparisons (log(), changesBetween(), mergeBase(), defaultBranch()),
+// remotes and gh (pullRequestTarget() for forks, pullRequestFor(), publish(), initRepository()),
+// single files and hunks (stage(), unstage(), discard(), resolve(), applyHunk()), commits of chosen
+// files refused with conflict markers (commit()), merges and rebases in progress (operationIn(),
+// abortOperation(), continueOperation()) and stashes — paths always as literal pathspecs,
+// revisions checked (isSafeRevision()).
+//
 // Checkpoints (checkpoint(), changesSince(), restore(), dropCheckpoints()): a snapshot of the
 // whole work tree — untracked files included, ignored ones not — as a commit kept by the ref
 // refs/brulion/checkpoints/<id>, made through a temporary index (GIT_INDEX_FILE, a copy of the
@@ -380,7 +387,7 @@ public:
     void revertBetween(const QString &folder, const QString &base, const QString &target,
                        std::function<void(const Outcome &)> done);
 
-    // ---- History, branches, remotes (history.cpp) ------------------------------------------------
+    // ---- History, branches, remotes (client_history.cpp) ------------------------------------------------
 
     /// The newest `max` commits of `revision` ("" HEAD), newest first. None in a new repository.
     void log(const QString &folder, const QString &revision, int max, std::function<void(const CommitList &)> done);
@@ -403,7 +410,7 @@ public:
     /// GitHub repository for a folder without a remote, pushed (Outcome::url its address).
     void publish(const QString &folder, const QString &name, bool isPublic, std::function<void(const Outcome &)> done);
 
-    // ---- Files, hunks, commits (files.cpp) --------------------------------------------------------
+    // ---- Files, hunks, commits (client_files.cpp) --------------------------------------------------------
 
     /// `git add` of the paths (a deleted file's deletion too).
     void stage(const QString &folder, const QStringList &paths, std::function<void(const Outcome &)> done);
@@ -431,7 +438,7 @@ public:
     /// them): Outcome::value the new commit's id.
     void commit(const QString &folder, const CommitRequest &request, std::function<void(const Outcome &)> done);
 
-    // ---- Merges, rebases, stashes (operations.cpp) -------------------------------------------------
+    // ---- Merges, rebases, stashes (client_operations.cpp) -------------------------------------------------
 
     /// What is in progress in a work tree whose git folder is `gitDir` (RepoInfo::gitDir): files
     /// git keeps meanwhile (MERGE_HEAD, rebase-merge/, rebase-apply/, CHERRY_PICK_HEAD,

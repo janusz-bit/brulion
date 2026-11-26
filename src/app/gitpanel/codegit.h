@@ -1,6 +1,8 @@
 // CodeGit — one folder's git for the "Code" mode's changes panel (qml/gitpanel/GitChangesPanel.qml,
-// docs/CODE-GIT.md): the branch, its upstream and the working tree's changes kept up to date, a
-// file's diff, commit / push / pull, branches, pull requests (gh), worktrees and the checkpoints of
+// docs/CODE-GIT.md): the branch, its upstream, its pull request and the working tree's changes kept
+// up to date, other comparisons (a turn, the branch against a base, a commit), a file's diff, files
+// and hunks staged or thrown away, commits of chosen files, push / pull, branches, pull requests
+// (gh, forks), publishing, merges and rebases in progress, stashes, worktrees and the checkpoints of
 // an agent's turns. Everything runs asynchronously through gitcli::Client (src/core/gitcli); the
 // results come as properties and signals, never as calls into the rest of the app.
 //

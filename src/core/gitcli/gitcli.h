@@ -12,9 +12,15 @@
 //   parseWorktrees()  `git worktree list --porcelain [-z]`
 //   parseBranches()   `git branch --format=<branchFormat()>`
 //   parsePullRequestUrl()  the URL `gh pr create` prints (also in its "already exists" error)
+//   parseLog(), parseStashes(), parseRemotes(), parseRemoteUrl(), forkTarget(),
+//   parsePullRequestView()   history, stashes, remotes, the fork a pull request comes from, gh's JSON
+//                     (history.cpp)
+//   parsePatch(), hunksTouching(), patchOf(), hasConflictMarkers()   one file's unified diff, the
+//                     hunks that change some lines, a patch of some of them, git's conflict
+//                     markers (patch.cpp)
 //
 // and small rules the client and the app share (isValidBranchName(), isValidCheckpointId(),
-// isSafeRelativePath(), looksBinary(), subjectOf()). Malformed input never crashes a parser: a
+// isSafeRelativePath(), isSafeRevision(), isValidRepositoryName(), looksBinary(), subjectOf()). Malformed input never crashes a parser: a
 // record that does not read is skipped, a truncated one at the end dropped. Paths are git's bytes
 // as UTF-8 (with -z git never quotes them: spaces, newlines and any letters come through as they
 // are).

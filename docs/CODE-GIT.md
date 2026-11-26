@@ -2,18 +2,21 @@
 
 The "Code" mode works on projects that are git repositories: an agent's thread runs in a
 project's folder or in a worktree of its own. This part is the git underneath — the working
-tree's changes and their diffs, commit / push / pull, branches, worktrees, pull requests through
-the GitHub CLI, and **checkpoints**: a snapshot of the working tree before each agent turn, so the
-user can see what the turn changed and put the files back. It has two layers:
+tree's changes and their diffs (of an agent's turn, uncommitted, the branch against a base, a
+commit), single files and hunks staged, unstaged or thrown away, commits of chosen files, push /
+pull, branches, worktrees, stashes, merges and rebases stopped on conflicts, pull requests through
+the GitHub CLI (from forks, into any base; the branch's own as a badge), publishing and `git init`,
+and **checkpoints**: a snapshot of the working tree before each agent turn, so the user can see what
+the turn changed and put the files back. It has two layers:
 
 | Layer | Where | What |
 |---|---|---|
 | core module `gitcli` | `src/core/gitcli/` (QtCore only, namespace `brulion::gitcli`) | parsers of git's machine-readable output (`gitcli.h`) and `Client` (`client.h`), which runs `git` and `gh` asynchronously with QProcess; checkpoints in `checkpoints.cpp` |
-| app area `gitpanel` | `src/app/gitpanel/` (library `brulion_gitpanel`), `src/app/qml/gitpanel/` | `CodeGit` (QML type): one folder's git, kept up to date, as properties and signals; the changes panel and its dialogs |
+| app area `gitpanel` | `src/app/gitpanel/` (library `brulion_gitpanel`), `src/app/qml/gitpanel/` | `CodeGit` (QML type): one folder's git, kept up to date, as properties and signals; `gitdiffrows.h`: the panel's diff rows, file tree and review comments; the changes panel and its dialogs |
 
 Tests: `tests/core/gitcli` (`tst_gitcli`: parsers, no git needed; `tst_gitcli_repo`: `Client` with
 real git in temporary repositories) and `tests/app/gitpanel` (`tst_codegit`: `CodeGit` with real
-git). The tests with real git skip themselves where `git` is not on PATH; the Nix check build has
+git; `tst_gitdiffrows`: the pure rows). The tests with real git skip themselves where `git` is not on PATH; the Nix check build has
 it (`nix/package.nix`, `nativeCheckInputs`). Pull requests are tested with a fake `gh` (a shell
 script: Unix only).
 
@@ -31,14 +34,22 @@ with `-z` (never quoted: spaces, tabs, newlines and any letters as they are), de
 | `parseWorktrees()` | `git worktree list --porcelain`, with `-z` or with newlines: path, HEAD, branch, bare, detached, locked / prunable with their reasons |
 | `parseBranches()` | `git branch [-a] --format=<branchFormat()>` — seven NUL-terminated fields per record (refname, oid, upstream, track, HEAD, worktree path, symref), so no field needs escaping; symbolic refs (origin/HEAD) and the "(HEAD detached at …)" line left out |
 | `parsePullRequestUrl()` | the last `http(s)://…/pull/<n>` in what `gh pr create` printed, also in its "already exists" error |
+| `parseLog()` | `git log --format=<logFormat()>` — six NUL-terminated fields a commit (id, parents, author's name, e-mail, time, subject) |
+| `parseStashes()` | `git stash list --format=<stashFormat()>` — `stash@{n}`, the commit, the time, the message (and the branch it names) |
+| `parseRemotes()`, `parseRemoteUrl()`, `forkTarget()` | `git remote -v`; a remote's URL as host / owner / name (scp-like, https with a token, ssh with a port; never a local path); the fork case: the branch pushed to one remote and an `upstream` remote another repository on the same host → `--repo <upstream>` (with the host for GitHub Enterprise) and `--head <owner>:<branch>` |
+| `parsePullRequestView()` | `gh pr view --json number,url,state,isDraft,title,baseRefName` — state "open" / "draft" / "merged" / "closed"; invalid without a number or an http(s) URL |
+| `parsePatch()`, `hunksTouching()`, `patchOf()` | one file's unified diff: the header and the hunks (counts that do not add up drop a hunk; `\ No newline` lines kept; a CR stays its line's), each with the lines it changes on each side (a deletion counts on the new side at the line it comes before, an insertion on the old side likewise, a replaced line at itself); the hunks that change a range of lines; a patch of some hunks for `git apply` — the new sides' starts counted again as if only they were applied (`reverse`: the old sides', for `git apply -R`) |
+| `hasConflictMarkers()` | a line that starts with `<<<<<<<` or `>>>>>>>` followed by a space or nothing |
 
 `changeOf()` turns an entry into one word for the UI (`Change`: Modified, Added, Deleted, Renamed,
 Untracked, Conflicted, Ignored — a copy is Added, a type change Modified), `changeName()` /
 `changeLetter()` give "modified" / "M" and so on. Rules shared with the app: `isValidBranchName()`
 (git's `check-ref-format --branch` rules, a little stricter; letters of any language allowed),
 `isValidCheckpointId()`, `isSafeRelativePath()` (relative, `/`-separated, no empty, `.`, `..` or
-`.git` part, no backslash, no drive), `looksBinary()` (git's own test: a NUL in the first 8000
-bytes), `subjectOf()` (a message's first non-blank line).
+`.git` part, no backslash, no drive), `isSafeRevision()` (no leading `-`, no space, control
+character, `:` or backslash: every revision the client hands git), `isValidRepositoryName()`
+(`name` or `owner/name` of `[A-Za-z0-9._-]`), `looksBinary()` (git's own test: a NUL in the first
+8000 bytes), `subjectOf()` (a message's first non-blank line).
 
 ## The client (`client.h`)
 
@@ -60,7 +71,7 @@ to it. Where processes cannot run (WebAssembly) every call fails with a message.
 |---|---|---|
 | `repository(folder)` | `rev-parse --is-bare-repository --path-format=absolute --absolute-git-dir --git-common-dir --show-toplevel` | `RepoInfo`: isRepo, topLevel, gitDir (`.git/worktrees/<name>` in a linked worktree), commonDir, bare |
 | `status(folder)` | `status --porcelain=v2 --branch -z --untracked-files=all`, then `diff <HEAD or the empty tree> --numstat -z -M` — untracked files counted through a copy of the index where they are intent-to-add (`add --intent-to-add --pathspec-from-file`, literal pathspecs), at most 2000 | `StatusReport`: the parsed status and `FileChange` rows (change, staged, unstaged, additions, deletions, binary, modes) |
-| `fileTexts(folder, {path, oldPath, base})` | `cat-file blob <base>:<oldPath or path>`; the new text read from disk (a symbolic link's target as git stores it) | `FileTexts`: oldText, newText, oldExists, newExists, binary, tooLarge (> 2 MiB) |
+| `fileTexts(folder, {path, oldPath, base, target})` | `cat-file blob <base>:<oldPath or path>`; the new text read from disk (a symbolic link's target as git stores it), or with `target` `cat-file blob <target>:<path>` | `FileTexts`: oldText, newText, oldExists, newExists, binary, tooLarge (> 2 MiB) |
 | `branches(folder)` | `branch -a --sort=-committerdate --format=…` | `BranchList` |
 | `worktrees(folder)` | `worktree list --porcelain -z` | `WorktreeList` |
 | `commitAll(folder, message)` | `add -A`, `commit --file=-` (the message on standard input; hooks run) | `Outcome` (value: the commit) — "Nothing to commit", an empty message refused |
@@ -70,8 +81,23 @@ to it. Where processes cannot run (WebAssembly) every call fails with a message.
 | `checkout(folder, name)` | `switch <name>`; a remote-tracking branch without a local one: `switch --track <name>` | `Outcome` |
 | `addWorktree(folder, path, branch, base)` | `worktree add [-b <branch>] -- <path> [<base>]` | `Outcome` (value: the folder) |
 | `removeWorktree(folder, path, force)` | `worktree remove [--force] -- <path>` (without force git refuses one with changes) | `Outcome` |
-| `createPullRequest(folder, {title, body, draft, head, base})` | `gh pr create --title … --body … [--draft] [--head …] [--base …]` in the folder | `Outcome` with `url`; an existing pull request for the branch is a success with its url; gh missing or not signed in say so ("run gh auth login") |
-| `checkpoint`, `changesSince`, `restore`, `dropCheckpoints`, `checkpoints` | below | |
+| `createPullRequest(folder, {title, body, draft, head, base, repo})` | `gh pr create --title … --body … [--draft] [--head …] [--base …] [--repo …]` in the folder | `Outcome` with `url`; an existing pull request for the branch is a success with its url; gh missing or not signed in say so ("run gh auth login") |
+| `log(folder, revision, max)` | `log -n <max> --format=<logFormat()> <revision or HEAD> --` | `CommitList` (none, no error, in a new repository) |
+| `mergeBase(folder, a, b)` | `merge-base a b` | `Outcome` (value: the commit; "no commit in common" otherwise) |
+| `defaultBranch(folder)` | `symbolic-ref refs/remotes/origin/HEAD`, else `main` / `master` (remote-tracking first), else init.defaultBranch's branch when it exists | `DefaultBranch`: name ("main"), ref to compare with ("origin/main" or "main") |
+| `remotes(folder)`, `pullRequestTarget(folder, branch)` | `remote -v`; with `for-each-ref --format=%(push:remotename)` (git's own rules: pushRemote, pushDefault, the branch's remote) `forkTarget()` | `RemoteList`; `ForkTarget` {repo, head} |
+| `pullRequestFor(folder, head, repo)` | `gh pr view [<head>] [--repo …] --json number,url,state,isDraft,title,baseRefName` | `PullRequestStatus`: ok (gh answered), found, the pull request; "no pull requests found" is an answer |
+| `initRepository(folder)`, `publish(folder, name, isPublic)` | `init`; `gh repo create <name> --private\|--public --source <folder> --remote origin --push` | `Outcome` (publish: `url` the repository's address gh printed) |
+| `stage(folder, paths)`, `unstage(folder, paths)` | `add -A` / `restore --staged` (before the first commit `rm --cached -r --ignore-unmatch`), the paths as literal pathspecs on standard input (`--pathspec-from-file=- --pathspec-file-nul`, `GIT_LITERAL_PATHSPECS=1`) | `Outcome` |
+| `discard(folder, path, oldPath)` | refused for a conflicted file (`ls-files -u`), a folder, a path that leaves the work tree or goes through a link; paths HEAD has (`ls-tree`): `restore --source=HEAD --staged --worktree`; others: `rm --cached`, then the file to the system's trash (`QFile::moveToTrash`; deleted where there is none) | `Outcome` |
+| `resolve(folder, path, Ours \| Theirs \| Resolved)` | `checkout --ours\|--theirs` + `add` (a side without the file — `ls-files -u` has no stage 2 / 3 — `rm`); Resolved: refused while `hasConflictMarkers()`, else `add` | `Outcome` |
+| `applyHunk(folder, path, Stage \| Unstage \| Discard, first, last)` | git's own diff of the file (`diff -U3` index → work tree; Unstage `diff --cached` HEAD → index), `hunksTouching()` the lines (the work tree's; HEAD's for Unstage), `patchOf()` → `apply --cached` / `apply --cached -R` / `apply -R` (the work tree) | `Outcome`; a binary file or lines without such changes say so |
+| `conflictMarkers(folder, paths)` | the files read 16 (or 4 MiB) at a time from the event loop: those with `hasConflictMarkers()` (binary, missing, > 2 MiB ones not) | the paths |
+| `commit(folder, {message, mode, paths, untracked, newBranch})` | refused when a file of `paths` holds conflict markers (naming them); `switch -c <newBranch>` first; mode "all": `add -A` + `commit --file=-`; "staged": `commit --file=-` (the index as it is); "paths": the untracked ones `add`ed, then `commit --only --file=- --pathspec-from-file=<temp> --pathspec-file-nul` (the work tree's text of those paths only; what is staged of other files stays staged) — on failure the added files go out of the index again | `Outcome` (value: the commit) |
+| `operationIn(gitDir)` (static) | the files git keeps meanwhile: `rebase-merge/`, `rebase-apply/` (`applying`: am), `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD` | `Operation` ("merge", "rebase", "cherryPick", "revert", "apply") |
+| `abortOperation(folder, op)`, `continueOperation(folder, op)` | `<merge\|rebase\|cherry-pick\|revert\|am> --abort`; a merge `commit --no-edit` (its MERGE_MSG), the others `--continue` — `GIT_EDITOR=true`, `GIT_SEQUENCE_EDITOR=true` (never an editor) | `Outcome` ("Resolve every conflicted file first" while some are) |
+| `stashes(folder)`, `stashPush(folder, message)`, `stashApply(folder, oid, drop)`, `stashDrop(folder, oid)` | `stash list`; `stash push --include-untracked [--message …]`; `stash apply <commit>` (Pop: then dropped); `stash drop stash@{n}` with n found again by the commit just before (the stash stack is shared by the repository's worktrees) | `StashList`, `Outcome` |
+| `checkpoint`, `changesSince`, `changesBetween`, `revertBetween`, `restore`, `dropCheckpoints`, `checkpoints` | below | |
 
 ## Checkpoints
 
@@ -103,6 +129,17 @@ error); the objects go with git's next gc.
 (steps 1–3), then `diff-tree -r -z -M --raw --numstat <checkpoint>^{tree} <now>` — added, deleted,
 modified, renamed files with lines added / deleted. `fileTexts()` with `base =
 checkpointRef(id)` gives a file's text in the checkpoint for the diff.
+
+**Between any two** (`changesBetween(folder, base, target)`): the same with `base` any revision
+(`""` the empty tree, `hash-object -t tree --stdin` of nothing: SHA-1 or SHA-256) and `target` a
+revision or `""` the working tree's snapshot — a turn's own changes (its checkpoint and the next
+one), a commit's (its first parent, or nothing for a root commit), a branch's (the commit it shares
+with a base, `mergeBase()`, and the working tree).
+
+**An older turn undone alone** (`revertBetween(folder, base, target)`): `diff-tree -p --binary
+--no-renames <base> <target>` applied in reverse to the work tree (`apply -R`: all or nothing — when
+a later turn changed the same lines, nothing is written and the message says so). The index and HEAD
+stay; files the turn added go, files it deleted come back.
 
 **Restore** (`restore(folder, id)`) puts the working tree back to the snapshot:
 
@@ -147,7 +184,16 @@ toasts).
 | `loaded` | bool | the first refresh of this folder is done |
 | `isRepo`, `topLevel` | bool, string | the work tree's top folder |
 | `branch`, `upstream`, `ahead`, `behind`, `detached`, `hasCommits`, `headOid` | | from `# branch.*` |
-| `changes` | list | rows `{path, oldPath, status, letter, staged, unstaged, additions, deletions, binary, name, dir}` — status "modified" \| "added" \| "deleted" \| "renamed" \| "untracked" \| "conflicted", letter M A D R U C, additions/deletions -1 when unknown, `name` the file's name, `dir` its folder ("" at the top); at most `maxRows` (2000) |
+| `changes` | list | rows `{path, oldPath, status, letter, staged, unstaged, additions, deletions, binary, name, dir, kind, depth, collapsed, fileCount}` — status "modified" \| "added" \| "deleted" \| "renamed" \| "untracked" \| "conflicted", letter M A D R U C, additions/deletions -1 when unknown, `name` the file's name, `dir` its folder ("" at the top), `kind` "file" and the tree's other keys (treeRows()); at most `maxRows` (2000) |
+| `changePaths`, `stagedPaths`, `conflictPaths`, `conflictCount` | | every changed path (beyond maxRows too), those with something staged, the conflicted ones |
+| `operation` | string | a merge, rebase … stopped here: "merge" \| "rebase" \| "cherryPick" \| "revert" \| "apply" ("" none) — `Client::operationIn()` at each refresh |
+| `defaultBranch`, `defaultBranchRef`, `onDefaultBranch` | string, string, bool | `Client::defaultBranch()` (asked again when the branch, its upstream, the config or origin/HEAD change) |
+| `hasRemote`, `remoteNames` | bool, list | the repository's remotes |
+| `pullRequest` | map | the branch's pull request `{number, url, state ("open" \| "draft" \| "merged" \| "closed"), title, baseRefName}` ({} none); asked (gh, the fork's `--repo` / `owner:branch` when there is one) when the branch or its upstream changes, after a push or a pull request, on `refreshPullRequest()` — a failing gh (offline) keeps what was known. For the panel's badge and the sidebar |
+| `primaryAction` | string | T3 Code's quick action: "commit" (changes), "push" (no upstream, or ahead), "pull" (behind), "openPr" (it has an open one), "createPr" (pushed, gh, not the default branch), "publish" (no remote, gh), "init" (no repository); "" nothing (or an operation in progress) |
+| `compareActive`, `compareBase`, `compareTarget`, `comparisonBase`, `compareChanges`, `compareLoaded`, `compareError` | | compare()'s comparison: its rows (as `changes`', staged always false), the base it used (merge-base's commit) |
+| `commitList` | list | after `commits()`: `{oid, shortOid, subject, author, time, when ("5 minutes ago"), parentOid}`, the newest 100 of HEAD |
+| `stashList` | list | after `stashes()`: `{index, oid, message, branch, time, when}`, the newest first |
 | `changeCount` | int | all changes (also beyond maxRows) |
 | `turnChanges`, `turnLoaded`, `turnError` | list, bool, string | the same rows since `turnCheckpoint` (staged always false); `turnError` when they cannot be had (the checkpoint is gone) |
 | `branchList` | list | after `branches()`: `{name, remote, current, upstream, ahead, behind, gone, worktreePath}` — the current one first, then local ones, then remote ones no local branch tracks |
@@ -167,11 +213,33 @@ ahead); `checkpoint()` → id; `changesSince(checkpoint)`; `restore(checkpoint)`
 `dropCheckpoints(ids)`; `worktrees()`; `addWorktree(path, branch, base)`;
 `removeWorktree(path, force)`; helpers `subjectOf(message)`, `isValidBranchName(name)`.
 
+The diff sources: `compare(on, base, target, mergeBase)` (`target` "" the working tree; `mergeBase`:
+the commit HEAD shares with `base`, recomputed with each refresh); `requestDiffBetween(path,
+oldPath, base, target)`; `commits()`; `turnRows(checkpoints)` (WorkspaceChats.checkpoints() →
+`{index, id, number, label ("Turn 3"), at, latest, base, target}`, the newest first: a turn's
+checkpoint and the next one's ref). Files and hunks: `stage(paths)`, `unstage(paths)`,
+`discard(path, oldPath)`, `resolve(path, "ours" | "theirs" | "resolved")`, `stageHunk(path, first,
+last)` / `discardHunk` (the work tree's lines) / `unstageHunk` (HEAD's lines). Commits:
+`commitFiles(message, paths, newBranch, push, createPr, prTitle, prBody, draft, prBase)` —
+`commitModeFor(paths)`: every changed file → "all", exactly the staged ones → "staged" (also a merge
+in progress → "all"), else "paths" (new files among them added); `createPullRequestTo(title, body,
+draft, base)` (from a fork: `pullRequestTarget()`); `refreshPullRequest()`; `initRepository()`;
+`publish(name, isPublic)`; `revertBetween(base, target)`. Merges and stashes: `abortOperation()`,
+`continueOperation()`, `stashes()`, `stashPush(message)`, `stashApply(oid)`, `stashPop(oid)`,
+`stashDrop(oid)`. Pure helpers for the panel (gitdiffrows.h): `diffRows(old, new, split,
+ignoreWhitespace, context)`, `findRows(rows, query)`, `longestLine(rows)`, `lineHtml(…)`,
+`treeRows(changes, collapsed)`, `reviewComment(path, rows, from, to, comment)`, `rowOf(rows, path)`,
+`branchNameFor(message)`, `isValidRepositoryName(name)`, `unavailableReason(action)` (why "commit",
+"push", "pull", "createPr", "publish", "init", "stash" cannot run now — a disabled entry's tooltip).
+
 **Signals** — `diffReady(path, oldText, newText, binary, tooLarge)`, `diffFailed(path, message)`,
 `actionFinished(action, ok, message, url)` with action "commit", "push", "pull", "createBranch",
 "checkout", "pullRequest", "restore", "dropCheckpoints", "addWorktree" (`url`: the new folder),
-"removeWorktree", or a failed "checkpoint"; `checkpointMade(id, ok, message)`,
-`changesSinceReady(checkpoint, rows)`, `branchesReady(rows)`, `worktreesReady(rows)`.
+"removeWorktree", "stage", "unstage", "discard", "resolve", "stageHunk", "unstageHunk",
+"discardHunk", "init", "publish" (`url`: the repository), "revertTurn", "abort", "continue",
+"stash", "stashApply", "stashPop", "stashDrop", or a failed "checkpoint"; `checkpointMade(id, ok,
+message)`, `changesSinceReady(checkpoint, rows)`, `branchesReady(rows)`, `worktreesReady(rows)`,
+`pullRequestChanged()`, `compareChanged()`, `commitListChanged()`, `stashListChanged()`.
 
 **`checkpoint()`** returns the new id at once and queues the snapshot; `checkpointMade(id, ok,
 message)` says when it exists. The agent's turn must start after that signal — files written
@@ -195,36 +263,108 @@ running ends where it ran, and answers for the old folder are ignored.
 
 ## The panel (`src/app/qml/gitpanel`)
 
-**`GitChangesPanel`** — properties `folder`, `checkpoint` ("" none), `checkpointLabel` ("Turn 3"),
-`pollInterval`, `mode` ("turn" | "all"); read-only `git` (its CodeGit), `rows`, `selectedPath`;
-functions `openDiff(path)`, `closeDiff()`, `setMode(value)`, `openCommit()`, `openPullRequest()`,
-`openBranchMenu()`, `openNewBranch()`; signal `actionFinished(action, ok, message, url)`.
+**`GitChangesPanel`** — properties `folder`, `checkpoints` (WorkspaceChats.checkpoints(): the
+thread's turns), `checkpoint` / `checkpointLabel` (one turn instead, kept for older owners),
+`pollInterval`, `source` ("turn" | "uncommitted" | "branch" | "commit"; "turn" without turns shows
+Uncommitted), `turnIndex` (-1 the latest), `baseRef` ("" the default branch), `commitOid`; view
+options kept per device in AppSettings (`code/diffSplit`, `code/diffWrap`,
+`code/diffHideWhitespace`, `code/diffTree`); read-only `git` (its CodeGit), `rows`, `selectedPath`,
+`mode` ("turn" | "all"); functions `setSource(value)` / `setMode(value)`, `showTurn(index)`,
+`setBase(ref)`, `pickCommit(oid, parent, title)`, `openDiff(path, oldPath)`, `closeDiff()`,
+`openCommit()`, `openPullRequest()`, `openBranchMenu()`, `openNewBranch()`, `run(action)`. Signals —
+the owner does what the panel cannot: `actionFinished(action, ok, message, url)` (toasts; a disabled
+entry chosen on a touch screen says why this way too), `openFile(absolutePath, line)` (CodeView:
+`Workspace.projects.openInEditor`), `addToChat(text)` (CodeView: `ChatView.addToComposer`),
+`copyText(text)`, `openUrl(url)` (the pull request).
 
-* Header: the branch (`gitBranchButton` → `gitBranchMenu`: `gitBranchItem_<i>`, `gitNewBranch` →
-  `gitNewBranchDialog` with `gitNewBranchName`), ahead / behind (`gitAheadBehind`: `gitAhead`,
-  `gitBehind`) or "not pushed" (`gitNoUpstream`), a spinner (`gitBusy`), `gitRefresh`.
-* With a checkpoint: `gitChangesMode` ("This turn" / "All changes") and `gitTurnLabel`.
-* The list `gitChangeList` of `GitChangeRow`s (`gitChange_<i>`: `gitChangeLetter` in the status's
-  colour, `gitChangeName`, `gitChangeDir` dimmed — or "from <old path>" for a rename —,
-  `gitChangeBinary`, `gitChangeAdditions`, `gitChangeDeletions`); more than 2000: `gitHiddenCount`.
-* A click shows the file's diff (`gitDiffPane`: `gitDiffPath`, `gitDiffView` — BDiffView, unified
-  on narrow widths —, `gitDiffMessage` for a binary or too large file or a failure): beside the
-  list when the panel is at least 760 px wide (`gitDiffClose`), in its place otherwise
-  (`gitDiffBack`). The diff follows refreshes and closes when its file has no changes any more.
-* Empty states: `gitNoChanges`, `gitTurnError`, `gitNotRepo` ("Not a git repository" with a hint;
-  "No folder"; git not installed).
-* Footer (`gitFooter`): `gitCommit` → `GitCommitDialog`, `gitPush` (with no upstream or ahead),
-  `gitPull` (with an upstream), `gitCreatePr` (only with gh) → `GitPullRequestDialog`,
-  `gitRevertTurn` (with a checkpoint) → `gitRevertDialog` (BConfirmDialog, destructive); the last
-  failure in `gitError`.
+* Header (`gitHeader`): the branch (`gitBranchButton` → `gitBranchMenu`: `gitBranchItem_<i>`,
+  `gitNewBranch` → `gitNewBranchDialog` with `gitNewBranchName`, `gitStashes` → the stashes), the
+  pull request's badge (`gitPrBadge`: "#12 open" / draft / merged / closed; a click opens it), ahead /
+  behind (`gitAheadBehind`: `gitAhead`, `gitBehind`) or "not pushed" / "no remote"
+  (`gitNoUpstream`), a spinner (`gitBusy`), the view options (`gitViewOptions` → `gitOptionsMenu`:
+  `gitOptSplit` — side by side, on panels at least 760 px wide —, `gitOptWrap`, `gitOptWhitespace`,
+  `gitOptTree`, `gitOptFind`), `gitRefresh` (also asks for the pull request again).
+* The source (`gitSourceRow`): `gitSource` → `gitSourceMenu` — "Latest turn" and "Turn N" for each
+  older one (`gitSource_turn_<i>`, the newest first, with their time), `gitSource_uncommitted`,
+  `gitSource_branch` (then `gitBaseButton` → `gitBaseMenu`: `gitBase_<i>`, local and remote-tracking
+  branches, "default" marked), `gitSource_commits` (then `gitCommitPick` → `gitCommitMenu`:
+  `gitCommitItem_<i>` — subject, short id, when; until one is picked `gitPickCommit`); for a turn its
+  time (`gitTurnLabel`). A turn's own changes are its checkpoint against the next one's (the latest:
+  against the working tree) — changes the user made between two turns count to the turn before
+  them.
+* A merge, rebase, cherry-pick, revert or `git am` stopped (`gitOperationBanner`): what it is
+  (`gitOperationTitle`), how many files are conflicted (`gitOperationHint`), each conflicted file
+  (`gitConflict_<i>`: `gitConflictOurs`, `gitConflictTheirs`, `gitConflictResolved`,
+  `gitConflictOpen`), `gitAbort` (confirmed: `gitAbortDialog`) and `gitContinue` ("Commit the merge" /
+  "Continue", once no file is conflicted). The quick action is hidden meanwhile.
+* The list `gitChangeList` of `GitChangeRow`s — flat (`gitChange_<i>`: `gitChangeLetter` in the
+  status's colour, `gitChangeName`, `gitChangeDir` dimmed — or "from <old path>" for a rename —, a dot
+  when something is staged (`gitChangeStaged`, amber when only partly), `gitChangeBinary`,
+  `gitChangeAdditions`, `gitChangeDeletions`, `gitChangeMore` on hover) or a tree (`gitFolder_<i>`:
+  a chevron folds it, chains of single folders in one row, the count of files under it); more than
+  2000: `gitHiddenCount`. A right click, a long press, ⋯ or the Menu key: `gitFileMenu` —
+  `gitFileOpen`, `gitFileCopyPath`, and for Uncommitted `gitFileStage`, `gitFileUnstage`,
+  `gitFileOurs` / `gitFileTheirs` / `gitFileResolved` (a conflicted file), `gitFileDiscard`
+  (confirmed: `gitDiscardDialog` — a new file goes to the trash).
+* A click shows the file's diff (`gitDiffPane`: `gitDiffPath`, `gitDiffMore` — the file's menu —,
+  `GitDiffView`, `gitDiffMessage` for a binary or too large file or a failure): beside the list when
+  the panel is at least 760 px wide (`gitDiffClose`), in its place otherwise (`gitDiffBack`). The diff
+  follows refreshes and closes when its file has no changes any more.
+* Empty states: `gitNoChanges` (per source), `gitTurnError` (the comparison failed: a checkpoint
+  gone, a base with nothing in common), `gitNotRepo` ("Not a git repository" with
+  `gitInitButton`; "No folder"; git not installed).
+* Footer (`gitFooter`): the quick action `gitPrimary` (CodeGit.primaryAction: "Commit…", "Push N",
+  "Pull N", "Create PR…", "Open PR #12", "Publish…", "Initialize git"; "Up to date" disabled) and
+  `gitMoreActions` → `gitActionsMenu` (`gitCommit`, `gitPush`, `gitPull`, `gitCreatePr`,
+  `gitPublish`, `gitStash`, `gitNewBranchAction`; a disabled entry says why in its tooltip:
+  CodeGit.unavailableReason()); for a turn `gitRevertTurn` (that turn alone: the latest restores its
+  checkpoint, an older one `revertBetween()`) and `gitRevertTo` ("Revert to before turn N…": its
+  checkpoint restored, later turns' changes go too) → `gitRevertDialog`; the last failure in
+  `gitError`. Push (the quick action or the menu) on the default branch asks first.
 
-**`GitCommitDialog`** (`gitCommitDialog`; property `git`, `openFor()`): the message
-(`gitCommitMessage`), the choice `gitCommitChoice_commit` / `_push` / `_pr` (the last only with gh,
-push and PR not on a detached HEAD), and for a pull request its title (`gitPrTitle`, the message's
-first line until edited), description (`gitPrBody`) and `gitPrDraft`.
+**`GitDiffView`** (`gitDiffView`; properties `git`, `path`, `oldText`, `newText`, `split`, `wrap`,
+`ignoreWhitespace`, `expanded`, `canStage` / `canUnstage` / `canDiscard`; signals
+`hunkRequested(action, first, last)`, `commented(text)`): the rows of CodeGit.diffRows
+(`gitDiffRows`) — a header per hunk (`gitHunk_<i>`: "@@ -a,b +c,d @@" and, for Uncommitted files
+that are tracked and not conflicted, `gitHunkStage` / `gitHunkUnstage` / `gitHunkDiscard` —
+discarding asks first), "N unchanged lines" rows that show the whole file, changed words marked,
+line numbers; long lines wrapped or, stacked, scrolled sideways (side by side: elided); hidden
+whitespace changes (`gitDiffIdentical` when nothing else changed). **Find** (Ctrl+F while the diff
+has focus, or the options' "Find in the diff"): `gitDiffFindBar` (`gitDiffFind`,
+`gitDiffFindCount` "3 of 12", `gitDiffFindPrevious` / `gitDiffFindNext` — Shift+Enter / Enter —,
+`gitDiffFindClose`; Escape), the whole file shown while searching, matches marked, the current one's
+row highlighted. **Review comments**: a click on a line selects it, Shift+click (a long press on touch
+screens) extends the selection; `gitDiffCommentBar` (`gitDiffSelection`, `gitDiffComment`,
+`gitDiffCommentAdd` "Add to chat", `gitDiffCommentCancel`) — the file, the lines ("lines 10–14", or
+"old line 3" for deleted ones), the lines in a fenced block (the file's language; `diff` with + / −
+when deleted lines are among them; the fence longer than any run of backticks) and the comment go to
+the composer, where several comments collect before sending.
+
+**`GitCommitDialog`** (`gitCommitDialog`; property `git`, `openFor()`, signal `commitRequested(…)`,
+which the panel checks against the default branch): the files (`gitCommitFiles`:
+`gitCommitFile_<i>` checkboxes — all checked, or the staged ones when something is staged;
+`gitCommitAll` All / None) and what the commit takes (`gitCommitMode`: everything / the staged
+changes / only the checked files as they are), the message (`gitCommitMessage`), "Commit on a new
+branch" (`gitCommitNewBranch`, `gitCommitBranchName` — made of the message until edited), the choice
+`gitCommitChoice_commit` / `_push` / `_pr` (the last only with gh; push and PR not on a detached HEAD
+unless on a new branch), and for a pull request its title (`gitPrTitle`, the message's first line
+until edited), description (`gitPrBody`), base (`gitPrBase`, a `GitBasePicker`) and `gitPrDraft`.
+
+**`GitDefaultBranchDialog`** (`gitDefaultBranchDialog`): a commit and push or a push on the default
+branch — Cancel, Continue, or `gitGuardBranch` "Create a branch and continue" (`gitGuardBranchName`).
 
 **`GitPullRequestDialog`** (`gitPullRequestDialog`; property `git`, `openFor()`):
-`gitPullRequestTitle`, `gitPullRequestBody`, `gitPullRequestDraft`.
+`gitPullRequestTitle`, `gitPullRequestBody`, `gitPullRequestBase` (`GitBasePicker`: the default
+branch unless another is chosen; a remote-tracking branch as its name on the remote),
+`gitPullRequestDraft`. From a fork (an "upstream" remote that is another repository) the pull request
+goes into the upstream repository (`--repo`, `--head owner:branch`).
+
+**`GitPublishDialog`** (`gitPublishDialog`): the name (`gitPublishName`, the folder's by default) and
+`gitPublishVisibility` (private / public) for `gh repo create … --source --remote origin --push`.
+
+**`GitStashDialog`** (`gitStashDialog`): `gitStashMessage` and "Stash changes" (untracked files
+too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStashPop`,
+`gitStashDrop` — confirmed by `gitDropStashDialog`; `gitNoStashes`).
 
 ## Security
 
@@ -250,17 +390,38 @@ first line until edited), description (`gitPrBody`) and `gitPrDraft`.
   run by themselves — refreshes, diffs, branches, snapshots — turn `core.fsmonitor` off; diffs use
   `--no-ext-diff --no-textconv`; `cat-file` reads blobs without filters. A commit runs the
   repository's hooks, as `git commit` does. Open only folders you would run git in.
-* **gh.** Only `gh pr create`, with the title, body, `--draft`, `--head` the user gave, in the
-  project's folder, with gh's own sign-in (`gh auth login`); Brulion never sees or stores a
-  GitHub token. gh pushes nothing itself: the branch is pushed with git first.
+* **gh.** Only `gh pr create` (the title, body, `--draft`, `--head`, `--base`, `--repo` the user
+  or the remotes gave), `gh pr view … --json` (the branch's pull request) and `gh repo create <name>
+  --private|--public --source <folder> --remote origin --push` (Publish…, the name checked:
+  `[A-Za-z0-9._-]`, `owner/name`), in the project's folder, with gh's own sign-in (`gh auth login`);
+  Brulion never sees or stores a GitHub token. `gh pr create` pushes nothing itself: the branch is
+  pushed with git first.
+* **Paths and revisions as data.** Paths reach git as literal pathspecs (`--pathspec-from-file=-`
+  with `GIT_LITERAL_PATHSPECS=1`, or `:(literal)`): a file called `:(glob)*` or `-n` is that file.
+  Every revision is checked (`isSafeRevision()`: no leading `-`, no `:`); hunks reach `git apply`
+  as patches made of git's own diff of the file, on standard input.
+* **Throwing away.** `discard()` refuses a conflicted file, a folder (a nested repository) and a path
+  through a symbolic link; files HEAD does not have go to the system's trash (deleted where there is
+  none: another volume without a trash folder). A hunk thrown away and Discard… ask first.
+* **Merges and rebases.** Continue never opens an editor (`GIT_EDITOR=true`,
+  `GIT_SEQUENCE_EDITOR=true`); "Mark resolved" refuses a file that still holds conflict markers, as a
+  commit does.
 
 ## Not done (yet)
 
-* Staging single files or hunks, discarding a file's changes, stash, merge / rebase conflicts
-  beyond listing them as "conflicted".
-* Pull requests for forks (`--head owner:branch`) and a base branch chosen in the UI (the core
-  takes `base`).
+* A commit message (and a pull request's title and description) written by AI when left empty, as
+  T3 Code does: the app has the C++ for it (`WorkspaceExtensions::sendAi`, what the editor's
+  `WritingSession` uses), but no QML-facing object the panel could be handed without depending on
+  `src/app/shell` — a small "ask the AI once" type there (`ask(system, prompt)` → `answered(id, ok,
+  text)`) would do.
+* A turn's changes exclude what the user changed between turns in T3 Code; here they count to the
+  turn before them (the snapshots are of the whole working tree).
+* Hunks of untracked, conflicted or binary files; lines (not whole hunks) staged; the hunks of the
+  other sources (a turn, the branch) staged or thrown away.
+* Skipping a commit while rebasing or cherry-picking (`--skip`); editing the message of a merge.
+* Fetching (`git fetch`) by itself: ahead / behind and Pull follow what the last fetch, pull or push
+  brought.
 * Watching the whole working tree for changes git does not see (the panel relies on
   `pollInterval`, actions and explicit refreshes).
-* The panel is not wired into the "Code" mode's shell here (`src/app/qml/shell`): the owner gives
-  it `folder` / `checkpoint` and turns `actionFinished` into toasts.
+* Expand / collapse all files of a source at once (the panel shows one file's diff at a time) and the
+  diff's own colours for colour-blind users.
