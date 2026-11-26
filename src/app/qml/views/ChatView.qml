@@ -487,6 +487,17 @@ FocusScope {
         input.cursorPosition = root.chats.mentionEnd(typed, caret, title)
         input.forceActiveFocus()
     }
+    /// Text added to the field from elsewhere — Code mode's "Add to chat" of a terminal's selection
+    /// or a diff's lines —, at its end after a blank line, the field focused (nothing is sent).
+    function addToComposer(text: string): void {
+        const added = Js.trim(text)
+        if (added === "")
+            return
+        const typed = Js.trimEnd("" + input.text)
+        input.text = typed === "" ? added + "\n" : typed + "\n\n" + added + "\n"
+        input.cursorPosition = input.length
+        input.forceActiveFocus()
+    }
     /// A message's text as a quote at the field's start.
     function quoteMessage(markdown: string): void {
         const quote = root.chats.quote(markdown)
