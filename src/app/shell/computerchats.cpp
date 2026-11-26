@@ -89,6 +89,7 @@ void ComputerChats::setComputers(const QList<Computer> &computers)
         lost = lost || !p->rows.isEmpty();
         forget(p);
         m_polls.removeAt(i);
+        p->retry->deleteLater();
         delete p;
     }
     for (const Computer &c : clean) {
@@ -314,11 +315,13 @@ void ComputerChats::apply(Poll *p, const acp::RemoteChats &chats, bool withDetai
     for (const acp::RemoteChat &c : std::as_const(p->rows))
         before.insert(key(c.path), c);
     bool listChanged = before.size() != chats.chats.size();
+    QList<const acp::RemoteChat *> changedRows;
     for (const acp::RemoteChat &c : chats.chats) {
         const auto it = before.constFind(key(c.path));
         if (it == before.cend() || !(*it == c)) {
             touched.insert(c.path);
-            listChanged = listChanged || it == before.cend() || it->state != c.state;
+            listChanged = true;
+            changedRows.append(&c);
         }
         before.remove(key(c.path));
     }
@@ -329,6 +332,7 @@ void ComputerChats::apply(Poll *p, const acp::RemoteChats &chats, bool withDetai
                                     return c.path.compare(m_watched, Qt::CaseInsensitive) == 0;
                                 });
     p->rows = chats.chats;
+    const int detailMessages = p->detail ? p->detail->messages : -1;
     if (withDetail) {
         std::optional<acp::RemoteChatDetail> detail = chats.detail;
         if (detail && detail->path.compare(m_watched, Qt::CaseInsensitive) != 0)
@@ -344,9 +348,11 @@ void ComputerChats::apply(Poll *p, const acp::RemoteChats &chats, bool withDetai
     // A conversation of the watched path that runs there now: its detail at once.
     if (newlyListed)
         askNow(p);
-    for (const acp::RemoteChat &c : std::as_const(p->rows))
-        maybeFetchPage(p, c.path, c.messages);
-    if (p->detail)
+    // (Pages are read again only when a row changed: an answer being written changes the detail
+    // alone, many times a second.)
+    for (const acp::RemoteChat *c : std::as_const(changedRows))
+        maybeFetchPage(p, c->path, c->messages);
+    if (p->detail && p->detail->messages != detailMessages)
         maybeFetchPage(p, p->detail->path, p->detail->messages);
     if (listChanged)
         Q_EMIT changed();
