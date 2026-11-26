@@ -1313,9 +1313,14 @@ FocusScope {
             id: binding
             required property string action
             required property string sequence
+            // (Code mode's own actions only there; one whose key a Code mode action has: not there.)
+            required property string scope
+            required property bool shadowed
             Shortcut {
                 sequence: binding.sequence
                 enabled: shell.shortcutEnabled(binding.action)
+                         && (binding.scope === "code" ? AppSettings.appMode === "code"
+                                                      : !(binding.shadowed && AppSettings.appMode === "code"))
                 onActivated: shell.runShortcut(binding.action)
             }
         }
@@ -1329,6 +1334,8 @@ FocusScope {
         model: 9
         delegate: Shortcut {
             required property int index
+            // (In Code mode Ctrl+1–9 open its threads: CodeSidebar.)
+            enabled: AppSettings.appMode !== "code"
             sequence: "Ctrl+" + (index + 1)
             // Ctrl+9: the last tab, as in browsers.
             onActivated: AppController.selectTabAt(index === 8 ? -1 : index)

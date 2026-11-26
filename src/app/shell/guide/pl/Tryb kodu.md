@@ -13,28 +13,28 @@ Przełączasz **górnym przyciskiem paska ikon** (ikona `</>`; w trybie kodu iko
 > Agenta AI w **Ustawieniach → Rozszerzenia → Agenci AI** ([[AI#Własny agent AI (ACP)]]) — na komputerze: agenci działają w aplikacji na komputer.
 
 ## Projekty
-**Dodaj projekt…** (ikona folderu obok *Projekty* albo w palecie) i wybierz jego folder. Pod każdym projektem są jego wątki; **+** zaczyna nowy wątek, **⋯** (albo prawy przycisk) otwiera go w edytorze, pokazuje folder, ustawia **nazwę i skrypty** i zdejmuje projekt z listy — jego folder i wątki zostają. Projekty są zapisane tylko na tym urządzeniu.
+**Dodaj projekt…** (ikona folderu obok *Projekty* albo w palecie) i wybierz jego folder. Pod każdym projektem są jego wątki; **+** zaczyna nowy wątek, **⋯** (albo prawy przycisk) otwiera go w edytorze, pokazuje folder, **przypina** go (przypięte projekty są na górze), przesuwa (albo przeciągnij go myszą), otwiera **ustawienia projektu** i zdejmuje projekt z listy — jego folder i wątki zostają. Projekty są zapisane tylko na tym urządzeniu.
 
-**Skrypty** to przyciski projektu nad wątkiem — po jednym wierszu, `nazwa: polecenie`:
+**Ustawienia projektu** — nazwa, emoji jako ikona, agent i miejsce pracy nowych wątków oraz **skrypty**: przyciski nad wątkiem, które uruchamiają polecenie w nowej karcie terminala, w folderze wątku. Każdy ma nazwę, polecenie, ikonę, skrót klawiszowy (tylko w trybie kodu; także w palecie jako *Uruchom: …*) i może **uruchamiać się po utworzeniu worktree** — z *Zaczekaj na niego, zanim agent zacznie* pierwsza wiadomość czeka, aż się skończy (instalacja, budowanie).
 
-```
-dev: npm run dev
-test: npm test
-```
-
-Kliknięcie uruchamia polecenie w folderze wątku, w nowej karcie terminala.
+Projekt z plikiem **`t3.json`** (plik projektu T3 Code) wnosi swoje skrypty, ikonę (`iconPath`) i miejsce pracy nowych wątków (`defaultThreadEnvMode`): Brulion czyta go znowu, gdy się zmieni, i nigdy go nie zapisuje. Jego skrypty mają oznaczenie *z t3.json*; zmieniony staje się Twój i zastępuje skrypt pliku o tej nazwie. Polecenie uruchamia się tylko wtedy, gdy Ty je uruchomisz.
 
 ## Wątki
-Nowy wątek zaczyna się od Twojej pierwszej wiadomości. Nad nią wybierasz, gdzie agent pracuje:
+Nowy wątek zaczyna się od Twojej pierwszej wiadomości. Nad nią wybierasz, gdzie agent pracuje (**Ctrl+Shift+X**):
 - **Lokalnie** — w samym folderze projektu;
-- **Nowy worktree** — we własnym worktree git na nowej gałęzi (`brulion/<nazwa>`), więc kilku agentów może pracować naraz i nie wchodzić sobie w drogę. Worktree trafiają do `~/.brulion/worktrees` (zmienisz to w Ustawieniach → Rozszerzenia → Tryb kodu).
+- **Nowy worktree** — we własnym worktree git na nowej gałęzi (`brulion/<nazwa>`; prefiks jest w Ustawieniach), od wybranej gałęzi (*Od main*; zdalna jest najpierw pobierana), więc kilku agentów może pracować naraz i nie wchodzić sobie w drogę. Worktree trafiają do `~/.brulion/worktrees` (zmienisz to w Ustawieniach → Rozszerzenia → Tryb kodu);
+- **istniejący worktree** — także *Nowy wątek w tym worktree* w menu wątku.
 
-W wątku działa wszystko z [[AI|czatu z AI]]: pisanie, gdy agent odpowiada, model i wysiłek agenta, zatwierdzanie i plany, limity subskrypcji, pytania na boku, pytanie innych agentów. Panel boczny pokazuje stan każdego wątku: kółko, gdy agent pracuje, znak zapytania, gdy o coś pyta, czerwony znak po błędzie, kropkę, gdy odpowiedź jest nieprzeczytana. Prawy przycisk archiwizuje wątek albo przenosi go do kosza.
+**Gałąź** w nagłówku otwiera wybór gałęzi (**Ctrl+Shift+G**): przełącz się na gałąź, wpisz nową nazwę, by ją utworzyć, albo wpisz `#123`, `123` lub adres pull requesta, by go **pobrać** — w folderze projektu albo w nowym worktree, gdzie pracuje nad nim nowy wątek (agent wie, który to pull request). Brulion nie przełącza gałęzi, gdy agent pracuje w tym folderze.
+
+W wątku działa wszystko z [[AI|czatu z AI]]: pisanie, gdy agent odpowiada, model i wysiłek agenta, zatwierdzanie i plany, limity subskrypcji, pytania na boku, pytanie innych agentów. Panel boczny pokazuje stan każdego wątku: *Plan* albo *Zgoda?*, gdy czeka na Ciebie, kółko, gdy agent pracuje, *Błąd* na czerwono, kropkę, gdy odpowiedź jest nieprzeczytana; przypięte wątki są na górze. Wątki odfiltrujesz po tytule albo gałęzi i posortujesz po ostatniej aktywności albo dacie utworzenia. Menu wątku zmienia jego nazwę (także **F2** albo podwójne kliknięcie nazwy w nagłówku), przypina go, oznacza jako nieprzeczytany, kopiuje ścieżkę, gałąź albo link, archiwizuje go albo przenosi do kosza — gdy ma własny worktree, którego nie używa inny wątek, Brulion pyta, czy usunąć też worktree (gałąź zostaje; *Cofnij* przywraca jedno i drugie).
+
+**Klawisze** w trybie kodu: **Ctrl+Shift+O** nowy wątek, **Ctrl+Shift+N** nowy wątek lokalny, **Ctrl+1–9** wątki z panelu bocznego, **Ctrl+Shift+[** / **]** poprzedni i następny, **Ctrl+O** otwórz w edytorze, **Ctrl+D** zmiany. Zmienisz je w Ustawieniach → Skróty klawiszowe.
 
 Wątek jest zapisany jako strona w folderze `AI` Twojego notatnika, z nazwą projektu — nigdy w dzienniku i nigdy w czacie z AI o notatkach.
 
 ## Zmiany i terminal
-Obok wątku panel **Zmiany** pokazuje zmiany projektu względem gita — każdy plik z jego różnicami; po turze agenta zobaczysz tylko to, co zmieniła ta tura, i możesz ją **cofnąć**. Stamtąd robisz **commit**, **push** i **pull request** (z zalogowanym wierszem poleceń GitHuba `gh`). Pod wątkiem **terminal** uruchamia powłoki w folderze wątku (ikona terminala w nagłówku go pokazuje i chowa). **Otwórz w edytorze** (ikona `</>`) otwiera folder w Twoim edytorze: jego polecenie — `code`, `zed`, `cursor` — ustawisz w Ustawieniach → Rozszerzenia → Tryb kodu.
+Obok wątku panel **Zmiany** pokazuje zmiany projektu względem gita — każdy plik z jego różnicami; po turze agenta zobaczysz tylko to, co zmieniła ta tura, i możesz ją **cofnąć**. Stamtąd robisz **commit**, **push** i **pull request** (z zalogowanym wierszem poleceń GitHuba `gh`). Pod wątkiem **terminal** uruchamia powłoki w folderze wątku (ikona terminala w nagłówku go pokazuje i chowa). **Otwórz w** (ikona `</>`, **Ctrl+O**) otwiera folder w Twoim edytorze; strzałka obok wymienia edytory znalezione na tym komputerze — VS Code, Cursor, Zed, środowiska JetBrains… — i menedżer plików, i zapamiętuje ten, który wybierzesz (własne polecenie wpiszesz w Ustawieniach → Rozszerzenia → Tryb kodu).
 
 ## Dla ciekawych
 - Agent wątku dostaje narzędzia czatu Brulionu — powiadomienie Cię, zapytanie innego agenta, prośbę o sekret — ale żadnych Twoich notatek ([[Wiersz poleceń i agenci AI]]).

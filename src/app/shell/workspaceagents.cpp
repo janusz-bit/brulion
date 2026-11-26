@@ -8,6 +8,7 @@
 #include "chat/chat.h"
 #include "log/categories.h"
 #include "markdown/encrypted.h"
+#include "markdown/frontmatter.h"
 #include "sync/http.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
@@ -1234,7 +1235,7 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
     if (!code.project.isEmpty())
         input.firstPrompt << acp::Block::textBlock(codeContext(code.name, code.folder, code.branch,
                                                                tools && !p->grant.isEmpty() && !child,
-                                                               tools && !chatToken.isEmpty()));
+                                                               tools && !chatToken.isEmpty(), code.pullRequest));
     else
         input.firstPrompt << acp::Block::textBlock(context(root, conversation, pagePath.isEmpty() ? QString() : page,
                                                            tools, !p->grant.isEmpty() && !child && tunnel,
@@ -2017,11 +2018,13 @@ WorkspaceAgents::CodePlace WorkspaceAgents::codePlace(const QString &path) const
 {
     CodePlace place;
     bool ok = false;
-    const chat::Conversation c = path.isEmpty() ? chat::Conversation{} : chat::parse(m_workspace->read(path, &ok));
+    const QString content = path.isEmpty() ? QString() : m_workspace->read(path, &ok);
+    const chat::Conversation c = path.isEmpty() ? chat::Conversation{} : chat::parse(content);
     if (!ok || c.project.isEmpty())
         return place;
     const CodeProjects *projects = m_workspace->projects();
     place.project = c.project;
+    place.pullRequest = markdown::parseFrontmatter(content).data.value(u"pr"_s).toString().simplified().left(200);
     place.name = projects->contains(c.project) ? projects->nameOf(c.project) : c.project;
     place.branch = c.worktree.isEmpty() ? QString() : c.branch;
     place.folder = !c.worktree.isEmpty() ? c.worktree : projects->folderOf(c.project);
@@ -2042,7 +2045,7 @@ QString WorkspaceAgents::codeFile(const QString &folder, const QString &file)
 }
 
 QString WorkspaceAgents::codeContext(const QString &name, const QString &folder, const QString &branch, bool app,
-                                     bool chat)
+                                     bool chat, const QString &pullRequest)
 {
     QStringList lines;
     lines << u"You are working on the software project \"%1\" in the folder %2, for the user of Brulion's Code "
@@ -2050,6 +2053,9 @@ QString WorkspaceAgents::codeContext(const QString &name, const QString &folder,
     if (!branch.isEmpty())
         lines << u"That folder is a git worktree of its own on the branch \"%1\": commit there; the user merges it or "
                  u"opens a pull request from the app."_s.arg(branch);
+    if (!pullRequest.isEmpty())
+        lines << u"The branch checked out there is that of the pull request %1: the user wants you to work on it (review "
+                 u"it, fix it, finish it); its commits go to that pull request when pushed."_s.arg(pullRequest);
     lines << u"The user sees the project's changes as a git diff after each of your turns and can revert a turn, "
              u"commit, push and open a pull request in the app."_s;
     if (app)

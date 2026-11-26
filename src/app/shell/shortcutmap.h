@@ -20,6 +20,12 @@
 //
 // QML: `ShortcutMap.sequences[id]` binds a Shortcut's sequence (AppShell: one Shortcut per action;
 // the views: find, replace, Markdown source, add property); the palette shows them (CommandModel).
+//
+// Scopes: an action is everywhere ("", the default) or only in Code mode ("code": its commands and
+// the shown project's scripts, docs/CODE.md "Shortcuts"). Shortcuts are unique within a scope; a
+// Code mode action may have the shortcut of an action that is everywhere — it wins in Code mode (the
+// other one is "shadowed" there: AppShell turns it off) — and keys reserved for what Code mode never
+// shows (drawings, the PDF viewer, the canvas, the tabs' Ctrl+1–9, the AI chat's list).
 #pragma once
 
 #include <QHash>
@@ -37,7 +43,8 @@ class ShortcutMap : public QObject {
     Q_OBJECT
     /// The shortcut of every action that has one: { id: "Ctrl+J", … }.
     Q_PROPERTY(QVariantMap sequences READ sequences NOTIFY changed FINAL)
-    /// The same as a list [{ id, action (= id), sequence }].
+    /// The same as a list [{ id, action (= id), sequence, scope, shadowed (a Code mode action has
+    /// its shortcut: off in Code mode) }].
     Q_PROPERTY(QVariantList bindings READ bindings NOTIFY changed FINAL)
     /// The bindings AppShell's Shortcut objects handle: without the views' own (find, replace,
     /// Markdown source, a page property: "page.find", "page.replace", "page.source",
@@ -51,6 +58,7 @@ public:
         QString id;
         QString title;
         QString defaultSequence; ///< portable text, "" for none
+        QString scope{};         ///< "" everywhere, "code" Code mode only
     };
 
     explicit ShortcutMap(AppSettings *settings, QObject *parent = nullptr);
@@ -70,8 +78,12 @@ public:
     Q_INVOKABLE QString defaultSequence(const QString &id) const;
     /// `id` has a custom shortcut (or none instead of its default).
     Q_INVOKABLE bool isCustom(const QString &id) const;
-    /// The action whose shortcut `sequence` is ("" for none).
+    /// The action whose shortcut `sequence` is ("" for none): the one that is everywhere, else the
+    /// Code mode one.
     Q_INVOKABLE QString actionFor(const QString &sequence) const;
+    /// The action of `scope` ("" everywhere, "code") whose shortcut `sequence` is ("" none).
+    Q_INVOKABLE QString actionIn(const QString &sequence, const QString &scope) const;
+    Q_INVOKABLE QString scopeOf(const QString &id) const;
     Q_INVOKABLE QString title(const QString &id) const;
 
     /// Whether `sequence` can be `id`'s shortcut: { status, message, sequence (normalized),
@@ -80,6 +92,9 @@ public:
     /// PDF viewer use it; AltGr letters), "conflict" (another action's: conflictId), "unknown"
     /// (no such action). `message` says it in the UI language ("" for ok).
     Q_INVOKABLE QVariantMap check(const QString &id, const QString &sequence) const;
+    /// check() for a shortcut of `scope` that is no action of the list yet (a project's script
+    /// being edited): "conflict" with an action of that scope other than `except`.
+    Q_INVOKABLE QVariantMap checkIn(const QString &scope, const QString &sequence, const QString &except) const;
     /// Make `sequence` `id`'s shortcut. A conflict is refused unless `takeOver`: the other action
     /// then has none. False when refused (check() says why); stored at once.
     Q_INVOKABLE bool assign(const QString &id, const QString &sequence, bool takeOver = false);
@@ -102,6 +117,9 @@ public:
     /// Where `normalized` is used without being a command ("text", "blocks", "drawing", "pdf",
     /// "altgr"), "" when it is free.
     static QString reservedUse(const QString &normalized);
+    /// reservedUse() for an action of `scope`: Code mode's may use the keys of what it never shows
+    /// (drawings, the PDF viewer, the canvas, the tabs' Ctrl+1–9, the AI chat's list).
+    static QString reservedIn(const QString &normalized, const QString &scope);
     /// `normalized` types text (no Ctrl, Alt or Meta, and no function key).
     static bool typesText(const QString &normalized);
 
@@ -110,6 +128,9 @@ Q_SIGNALS:
 
 private:
     const Action *find(const QString &id) const;
+    /// m_owner's key of `sequence` in `scope`.
+    static QString ownerKey(const QString &scope, const QString &sequence);
+    QVariantMap judge(const QString &id, const QString &scope, const QString &sequence) const;
     void load();
     void rebuild();
     void store(const QString &id);
@@ -122,7 +143,7 @@ private:
     QHash<QString, QString> m_custom;
     /// The resolved shortcuts: id -> portable text (only those that have one).
     QHash<QString, QString> m_effective;
-    QHash<QString, QString> m_owner; ///< portable text -> id
+    QHash<QString, QString> m_owner; ///< ownerKey(scope, portable text) -> id
 };
 
 } // namespace brulion::shell

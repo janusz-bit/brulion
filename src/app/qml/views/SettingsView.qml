@@ -2718,8 +2718,17 @@ Item {
             // Code mode (docs/CODE.md): projects and AI agents' threads as in T3 Code — the mode, the
             // editor "Open in editor" starts, where new worktrees go. This device's.
             SettingsGroup {
+                id: codeGroup
                 objectName: "codeSettings"
                 visible: AppSettings.acpAvailable
+                readonly property list<var> editors: Workspace.projects.editors
+                /// An editor's name of CodeProjects.editors (its id when it is not there).
+                function editorName(id: string): string {
+                    for (let i = 0; i < codeGroup.editors.length; ++i)
+                        if (AppController.routeText(codeGroup.editors[i], "id") === id)
+                            return AppController.routeText(codeGroup.editors[i], "name")
+                    return id
+                }
                 heading: qsTr("Code mode")
                 note: qsTr("Projects — folders of this computer — and AI agents' threads in them, as in T3 Code: each thread in the project's folder or a git worktree of its own, with its changes, a terminal, commits and pull requests. Its threads are kept as pages in AI/, never in the journal.")
                 ShellSettingRow {
@@ -2733,18 +2742,94 @@ Item {
                         onActivated: (value) => AppSettings.appMode = "" + value
                     }
                 }
+                // "Open in…": the editors of this computer, the preferred one, a command of the user's.
                 ShellSettingRow {
-                    title: qsTr("Editor")
-                    description: qsTr("The command “Open in editor” runs with the folder after it: code, zed, cursor, idea… Empty: the system's file manager.")
+                    title: qsTr("Open in")
+                    description: qsTr("The editor Ctrl+O and the header's button open a thread's folder in: one found on this computer, the custom command below or the file manager.")
+                    BButton {
+                        id: editorButton
+                        objectName: "codePreferredEditorSetting"
+                        size: "small"
+                        variant: "secondary"
+                        iconName: "code"
+                        text: codeGroup.editorName(Workspace.projects.effectiveEditor)
+                        Accessible.name: qsTr("Open in: %1").arg(editorButton.text)
+                        onClicked: {
+                            Workspace.projects.rescanEditors()
+                            editorMenu.popup(editorButton, 0, editorButton.height)
+                        }
+                        BMenu {
+                            id: editorMenu
+                            Instantiator {
+                                model: Workspace.projects.editors
+                                delegate: BMenuItem {
+                                    id: editorItem
+                                    required property var modelData
+                                    readonly property string editorId: AppController.routeText(editorItem.modelData, "id")
+                                    text: AppController.routeText(editorItem.modelData, "name")
+                                    checkable: true
+                                    checked: Workspace.projects.effectiveEditor === editorItem.editorId
+                                    onTriggered: Workspace.projects.preferredEditor = editorItem.editorId
+                                }
+                                onObjectAdded: (index, object) => editorMenu.insertItem(index, object as Item)
+                                onObjectRemoved: (index, object) => editorMenu.removeItem(object as Item)
+                            }
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Custom editor command")
+                    description: qsTr("Run with the folder or file after it, as “Custom command” of Open in: code -n, emacsclient -c… Empty: none.")
                     BTextField {
                         objectName: "codeEditorSetting"
                         Layout.preferredWidth: Theme.compact ? -1 : 260
                         Layout.fillWidth: Theme.compact
                         text: Workspace.projects.editorCommand
-                        placeholderText: "code"
-                        accessibleName: qsTr("Editor")
+                        placeholderText: "code -n"
+                        accessibleName: qsTr("Custom editor command")
                         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                         onEditingFinished: Workspace.projects.editorCommand = text
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("New threads work")
+                    description: qsTr("Unless the project's own settings say otherwise; “As t3.json says”: a project's t3.json (defaultThreadEnvMode), else Local.")
+                    BSegmented {
+                        objectName: "codeNewThreadEnvSetting"
+                        accessibleName: qsTr("New threads work")
+                        model: [{ value: "", text: qsTr("As t3.json says") }, { value: "local", text: qsTr("Local") },
+                                { value: "worktree", text: qsTr("New worktree") }]
+                        currentValue: Workspace.projects.newThreadEnvDefault
+                        onActivated: (value) => Workspace.projects.newThreadEnvDefault = "" + value
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Branch prefix")
+                    description: qsTr("The start of a new worktree's branch: %1fix-the-cart. Empty: none.").arg(Workspace.projects.branchPrefix)
+                    BTextField {
+                        objectName: "codeBranchPrefixSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 160
+                        Layout.fillWidth: Theme.compact
+                        text: Workspace.projects.branchPrefix
+                        placeholderText: "brulion/"
+                        accessibleName: qsTr("Branch prefix")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                        onEditingFinished: {
+                            Workspace.projects.branchPrefix = text
+                            text = Workspace.projects.branchPrefix // (one a branch cannot have: the one before)
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Worktrees of deleted threads")
+                    description: qsTr("When a thread with a worktree of its own goes to the trash and no other thread uses it. Its branch always stays; “Delete” asks when the worktree has uncommitted changes.")
+                    BSegmented {
+                        objectName: "codeDeletedWorktreesSetting"
+                        accessibleName: qsTr("Worktrees of deleted threads")
+                        model: [{ value: "ask", text: qsTr("Ask") }, { value: "delete", text: qsTr("Delete") },
+                                { value: "keep", text: qsTr("Keep") }]
+                        currentValue: Workspace.projects.deletedWorktrees
+                        onActivated: (value) => Workspace.projects.deletedWorktrees = "" + value
                     }
                 }
                 ShellSettingRow {

@@ -588,6 +588,25 @@ void ChatListModel::setQuery(const QString &query)
     rebuild();
 }
 
+void ChatListModel::setFilter(const QString &filter)
+{
+    if (m_filter == filter)
+        return;
+    m_filter = filter;
+    Q_EMIT filterChanged();
+    rebuild();
+}
+
+void ChatListModel::setSortBy(const QString &sort)
+{
+    const QString clean = sort == u"created" ? sort : u"activity"_s;
+    if (m_sortBy == clean)
+        return;
+    m_sortBy = clean;
+    Q_EMIT sortByChanged();
+    rebuild();
+}
+
 void ChatListModel::setShowArchived(bool show)
 {
     if (m_showArchived == show)
@@ -656,6 +675,12 @@ void ChatListModel::refresh()
             e.pinned = conversation.pinned;
             e.archived = conversation.archived;
             e.project = conversation.project;
+            e.worktree = conversation.worktree;
+            e.branch = conversation.worktree.isEmpty() ? QString() : conversation.branch;
+            const QDateTime started = conversation.messages.first().time.isValid()
+                                              ? conversation.messages.first().time
+                                              : QDateTime(QDate::fromString(date, Qt::ISODate), QTime(0, 0));
+            e.created = started.isValid() ? started.toMSecsSinceEpoch() : 0;
             e.texts.reserve(conversation.messages.size());
             for (const chat::Message &m : conversation.messages)
                 e.texts.append({m.line, m.text, text::foldKey(m.text)});
@@ -673,6 +698,8 @@ void ChatListModel::rebuild()
     shell::WorkspaceChats *chats = ws ? ws->chats() : nullptr;
     const QStringList terms = searchTerms(m_query);
     const bool searching = !terms.isEmpty();
+    // (Code mode's filter: the title and the branch, not the messages.)
+    const QStringList filterTerms = searchTerms(m_filter);
     const auto hasAll = [&terms](const QString &folded) {
         return std::ranges::all_of(terms, [&folded](const QString &t) { return folded.contains(t); });
     };
@@ -684,6 +711,11 @@ void ChatListModel::rebuild()
             : m_project == u"*" ? e.project.isEmpty()
                                 : e.project != m_project)
             continue;
+        if (!filterTerms.isEmpty()) {
+            const QString folded = e.foldedTitle + u' ' + text::foldKey(e.branch);
+            if (!std::ranges::all_of(filterTerms, [&folded](const QString &t) { return folded.contains(t); }))
+                continue;
+        }
         Row r;
         if (searching) {
             if (hasAll(e.foldedTitle)) {
@@ -726,6 +758,9 @@ void ChatListModel::rebuild()
         r.pinned = e.pinned;
         r.archived = e.archived;
         r.project = e.project;
+        r.worktree = e.worktree;
+        r.branch = e.branch;
+        r.created = e.created;
         r.section = e.archived ? u"archived"_s : e.pinned ? u"pinned"_s : u"recent"_s;
         if (chats) {
             r.asking = chats->asking(e.path);
@@ -738,9 +773,12 @@ void ChatListModel::rebuild()
         next.append(r);
     }
     const auto rank = [](const Row &r) { return r.archived ? 2 : r.pinned ? 0 : 1; };
-    std::sort(next.begin(), next.end(), [&rank](const Row &a, const Row &b) {
+    const bool byCreation = m_sortBy == u"created";
+    std::sort(next.begin(), next.end(), [&rank, byCreation](const Row &a, const Row &b) {
         if (rank(a) != rank(b))
             return rank(a) < rank(b);
+        if (byCreation && a.created != b.created)
+            return a.created > b.created;
         // What needs the user first: by when it came back to them.
         if ((a.cameBack > 0) != (b.cameBack > 0))
             return a.cameBack > 0;
@@ -796,6 +834,8 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
     case MatchMatchesRole: return positions(r.matchMatches);
     case MatchLineRole: return r.matchLine;
     case ProjectRole: return r.project;
+    case BranchRole: return r.branch;
+    case WorktreeRole: return r.worktree;
     default: return {};
     }
 }
@@ -822,7 +862,9 @@ QHash<int, QByteArray> ChatListModel::roleNames() const
             {MatchTextRole, "matchText"},
             {MatchMatchesRole, "matchMatches"},
             {MatchLineRole, "matchLine"},
-            {ProjectRole, "project"}};
+            {ProjectRole, "project"},
+            {BranchRole, "branch"},
+            {WorktreeRole, "worktree"}};
 }
 
 int ChatListModel::rowOf(const QString &path) const
@@ -834,6 +876,15 @@ int ChatListModel::rowOf(const QString &path) const
 QString ChatListModel::pathAt(int row) const
 {
     return row >= 0 && row < m_rows.size() ? m_rows.at(row).path : QString();
+}
+
+QStringList ChatListModel::paths() const
+{
+    QStringList out;
+    out.reserve(m_rows.size());
+    for (const Row &r : m_rows)
+        out << r.path;
+    return out;
 }
 
 int ChatListModel::matchLineAt(int row) const

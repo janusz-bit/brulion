@@ -4,8 +4,10 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "codeprojects.h"
 #include "shortcutmap.h"
 #include "workspace.h"
+#include "workspacechats.h"
 
 #include "notebook/tasktools.h"
 #include "util/paths.h"
@@ -29,16 +31,20 @@ struct Command {
     QString icon;
     QString shortcut;
     bool enabled = true;
+    /// "" everywhere, "code" only in Code mode (its shortcut too: ShortcutMap's scopes).
+    QString scope{};
 };
 
 /// `c` for the palette, with the shortcut it has now (ShortcutMap: custom or default).
 QVariantMap toMap(const Command &c, const ShortcutMap *shortcuts)
 {
+    // (A command that is not a shortcut action — a project's script while another project is shown —
+    // shows its own.)
     return {{u"id"_s, c.id},
             {u"title"_s, c.title},
             {u"subtitle"_s, c.subtitle},
             {u"icon"_s, c.icon},
-            {u"shortcut"_s, shortcuts ? shortcuts->sequence(c.id) : c.shortcut},
+            {u"shortcut"_s, shortcuts && !shortcuts->title(c.id).isEmpty() ? shortcuts->sequence(c.id) : c.shortcut},
             {u"enabled"_s, c.enabled}};
 }
 
@@ -148,6 +154,12 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
             Q_EMIT commandsChanged();
         });
     }
+    // Code mode's scripts: the shown project's (its scripts changed, another project shown).
+    connect(app->workspace()->projects(), &CodeProjects::changed, this, [this] {
+        refreshShortcutActions();
+        Q_EMIT commandsChanged();
+    });
+    connect(app, &AppController::currentRouteChanged, this, &CommandModel::refreshShortcutActions);
     // The extensions' commands load after the app started (the notebook's pages): Settings →
     // Keyboard shortcuts lists them once they are there.
     connect(app->workspace()->extensions(), &WorkspaceExtensions::commandsChanged, this,
@@ -163,7 +175,7 @@ void CommandModel::refreshShortcutActions()
     const QList<ShortcutMap::Action> &now = shortcuts->actions();
     const bool same =
             actions.size() == now.size() && std::ranges::equal(actions, now, [](const auto &a, const auto &b) {
-                return a.id == b.id && a.title == b.title && a.defaultSequence == b.defaultSequence;
+                return a.id == b.id && a.title == b.title && a.defaultSequence == b.defaultSequence && a.scope == b.scope;
             });
     if (!same)
         shortcuts->setActions(actions);
@@ -380,8 +392,9 @@ static QList<Command> buildCommands(const AppController *app)
              CommandModel::tr("New thread"),
              CommandModel::tr("Code mode: an AI agent's new thread in a project"),
              u"plus"_s,
-             {},
-             ready && app->workspace()->projects()->count() > 0},
+             u"Ctrl+Shift+O"_s,
+             ready && app->workspace()->projects()->count() > 0,
+             u"code"_s},
             {u"code.addProject"_s,
              CommandModel::tr("Add a project…"),
              CommandModel::tr("Code mode: a folder AI agents work in"),
@@ -769,9 +782,76 @@ static QList<Command> encryptionCommands(const AppController *app, bool editor)
     };
 }
 
+/// The project Code mode shows ("" none): a new thread's (the route's), a thread's, else the last one
+/// used.
+static QString codeProject(const AppController *app)
+{
+    const QVariantMap route = app->currentRoute();
+    if (route.value(u"view"_s).toString() != u"code")
+        return {};
+    const CodeProjects *projects = app->workspace()->projects();
+    const QString path = route.value(u"path"_s).toString();
+    QString id = path.isEmpty() ? route.value(u"project"_s).toString()
+                                : app->workspace()->chats()->threadPlace(path).value(u"project"_s).toString();
+    if (id.isEmpty() && path.isEmpty())
+        id = app->settings()->value(u"code/lastProject"_s).toString();
+    if (!projects->contains(id) && path.isEmpty() && projects->count() > 0)
+        id = projects->list().first().toMap().value(u"id"_s).toString();
+    return projects->contains(id) ? id : QString();
+}
+
+/// Code mode's commands (docs/CODE.md "Shortcuts"): the thread's, the header's, and the shown
+/// project's scripts ("Run: Testy — kalkulator", id `code.script.<project>.<script>`) with the
+/// shortcuts they were given. Their shortcuts work in Code mode only (ShortcutMap's scope "code").
+/// Those that need the view on screen come back to it as uiActions "code:<what>" (CodeView,
+/// CodeSidebar).
+static QList<Command> codeCommands(const AppController *app)
+{
+    const bool ready = app->status() == u"ready";
+    const bool inCode = ready && app->currentRoute().value(u"view"_s).toString() == u"code"
+                        && app->workspace()->projects()->count() > 0;
+    const bool thread = inCode && !app->currentRoute().value(u"path"_s).toString().isEmpty();
+    QList<Command> out{
+            {u"code.newLocalThread"_s, CommandModel::tr("New local thread"),
+             CommandModel::tr("Code mode: a new thread in the project's own folder"), u"hard-drive"_s,
+             u"Ctrl+Shift+N"_s, ready && app->workspace()->projects()->count() > 0, u"code"_s},
+            {u"code.previousThread"_s, CommandModel::tr("Previous thread"), CommandModel::tr("Code mode"),
+             u"arrow-up"_s, u"Ctrl+Shift+["_s, inCode, u"code"_s},
+            {u"code.nextThread"_s, CommandModel::tr("Next thread"), CommandModel::tr("Code mode"), u"arrow-down"_s,
+             u"Ctrl+Shift+]"_s, inCode, u"code"_s},
+            {u"code.renameThread"_s, CommandModel::tr("Rename thread"), CommandModel::tr("Code mode"), u"pencil"_s,
+             u"F2"_s, thread, u"code"_s},
+            {u"code.branches"_s, CommandModel::tr("Branches…"),
+             CommandModel::tr("Code mode: switch or create a branch, check out a pull request"), u"git-branch"_s,
+             u"Ctrl+Shift+G"_s, inCode, u"code"_s},
+            {u"code.environment"_s, CommandModel::tr("Where the new thread works…"),
+             CommandModel::tr("Code mode: local, a new worktree or this worktree"), u"folder-tree"_s,
+             u"Ctrl+Shift+X"_s, inCode && !thread, u"code"_s},
+            {u"code.openInEditor"_s, CommandModel::tr("Open in editor"),
+             CommandModel::tr("Code mode: the thread's folder in your editor"), u"code"_s, u"Ctrl+O"_s, inCode,
+             u"code"_s},
+            {u"code.toggleChanges"_s, CommandModel::tr("Show or hide the changes"),
+             CommandModel::tr("Code mode: the Changes panel"), u"git-compare"_s, u"Ctrl+D"_s, inCode, u"code"_s},
+    };
+    if (const QString project = inCode ? codeProject(app) : QString(); !project.isEmpty()) {
+        const CodeProjects *projects = app->workspace()->projects();
+        const QString name = projects->nameOf(project);
+        for (const QVariant &v : projects->scripts(project)) {
+            const QVariantMap script = v.toMap();
+            out.append({u"code.script."_s + project + u'.' + script.value(u"id"_s).toString(),
+                        CommandModel::tr("Run: %1 — %2").arg(script.value(u"name"_s).toString(), name),
+                        script.value(u"command"_s).toString().simplified().left(120),
+                        script.value(u"iconName"_s).toString(), script.value(u"shortcut"_s).toString(), true,
+                        u"code"_s});
+        }
+    }
+    return out;
+}
+
 static QList<Command> allCommands(const AppController *app)
 {
     QList<Command> out = buildCommands(app);
+    insertAfter(out, u"code.newThread"_s, codeCommands(app));
     const auto source = std::ranges::find(std::as_const(out), u"page.source"_s, &Command::id);
     const bool editor = source != out.cend() && source->enabled;
     insertAfter(out, u"page.source"_s, editorCommands(app, editor));
@@ -838,7 +918,7 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
     // one an earlier extension's command took.
     QSet<QString> taken{u"Ctrl+K"_s};
     for (const Command &c : commands)
-        if (!c.id.startsWith(u"ext.") && !c.shortcut.isEmpty())
+        if (!c.id.startsWith(u"ext.") && !c.shortcut.isEmpty() && c.scope.isEmpty())
             taken.insert(ShortcutMap::normalize(c.shortcut));
     for (const Command &c : commands) {
         QString title = c.title;
@@ -853,6 +933,15 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
         else if (c.id == u"view.vim")
             title = tr("Vim keys");
         QString shortcut = c.shortcut;
+        if (c.scope == u"code" && !c.id.startsWith(u"code.script."))
+            title = tr("Code mode: %1").arg(title);
+        if (c.id.startsWith(u"code.script.")) {
+            // (The script's own shortcut: its default; one Code mode may not use, none.)
+            const QString n = ShortcutMap::normalize(shortcut);
+            shortcut = n.isEmpty() || ShortcutMap::typesText(n) || !ShortcutMap::reservedIn(n, c.scope).isEmpty()
+                               ? QString()
+                               : n;
+        }
         if (c.id.startsWith(u"ext.")) {
             title = c.subtitle + u": "_s + c.title; // ("Licznik słów: Policz słowa")
             const QString n = ShortcutMap::normalize(shortcut);
@@ -863,7 +952,7 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
             if (!shortcut.isEmpty())
                 taken.insert(shortcut);
         }
-        out.append({c.id, title, shortcut});
+        out.append({c.id, title, shortcut, c.scope});
     }
     return out;
 }
@@ -915,10 +1004,20 @@ bool CommandModel::run(const QString &id)
         m_app->openPage(path);
     } else if (id == u"mode.code" || id == u"mode.notes") {
         m_app->settings()->setAppMode(id.mid(5));
-    } else if (id == u"code.newThread") {
-        const QString project = m_app->currentRoute().value(u"project"_s).toString();
+    } else if (id == u"code.newThread" || id == u"code.newLocalThread") {
+        // (The project shown — a thread's too —, else the last one used.)
+        QString project = codeProject(m_app);
+        if (project.isEmpty())
+            project = m_app->currentRoute().value(u"project"_s).toString();
         m_app->settings()->setAppMode(u"code"_s);
-        m_app->navigate({{u"view"_s, u"code"_s}, {u"new"_s, true}, {u"project"_s, project}});
+        QVariantMap route{{u"view"_s, u"code"_s}, {u"new"_s, true}, {u"project"_s, project}};
+        if (id == u"code.newLocalThread")
+            route.insert(u"env"_s, u"local"_s);
+        m_app->navigate(route);
+    } else if (id.startsWith(u"code.script.")) {
+        m_app->requestUiAction(u"code:script:"_s + id.section(u'.', 3));
+    } else if (id.startsWith(u"code.")) {
+        m_app->requestUiAction(u"code:"_s + id.mid(5));
     } else if (id == u"code.addProject") {
         m_app->settings()->setAppMode(u"code"_s);
         m_app->navigate({{u"view"_s, u"code"_s}, {u"addProject"_s, true}});

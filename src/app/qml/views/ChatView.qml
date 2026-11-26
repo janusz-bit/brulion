@@ -60,6 +60,8 @@ FocusScope {
     property string project
     property string newWorktree
     property string newBranch
+    /// … on that pull request ("#123 Title", "" none): its agent is told (WorkspaceChats.startThread).
+    property string newPullRequest
     readonly property bool codeThread: root.routeView === "code"
     /// The list of conversations beside the conversation (CodeView: its sidebar lists the threads).
     property bool showList: true
@@ -340,7 +342,8 @@ FocusScope {
             return
         }
         const sent = root.path === "" && root.codeThread
-                     ? root.chats.startThread(root.project, text, root.attached, root.newPartner, root.newWorktree, root.newBranch)
+                     ? root.chats.startThread(root.project, text, root.attached, root.newPartner, root.newWorktree, root.newBranch,
+                                              root.newPullRequest)
                      : root.chats.send(root.path, text, root.path === "" ? root.page : "", root.attached,
                                        root.path === "" ? root.newPartner : "")
         if (sent === "")
@@ -369,7 +372,8 @@ FocusScope {
             root.chats.setDraft(root.draftPath, input.text)
     }
     function loadDraft(): void {
-        root.draftPath = root.path
+        // (A new thread of Code mode: its project's draft — CodeSidebar shows it.)
+        root.draftPath = root.path !== "" || !root.codeThread ? root.path : "code:" + AppController.routeText(root.route, "project")
         root.draftLoaded = true
         input.text = root.chats.draft(root.path)
         input.cursorPosition = input.length

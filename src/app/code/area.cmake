@@ -8,4 +8,12 @@ qt_target_qml_sources(brulion
         qml/code/CodeView.qml
         qml/code/CodeSidebar.qml
         qml/code/CodeProjectDialog.qml
+        qml/code/CodeProjectSection.qml
+        qml/code/CodeThreadRow.qml
+        qml/code/CodeScriptsEditor.qml
+        qml/code/CodeBranchPicker.qml
+        qml/code/CodePullRequestDialog.qml
+        qml/code/CodeSetupBanner.qml
+        qml/code/CodeOpenIn.qml
+        qml/code/CodeThreadTitle.qml
 )

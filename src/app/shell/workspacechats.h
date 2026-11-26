@@ -235,6 +235,9 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(brulion::shell::HookServer *hooks READ hooks CONSTANT FINAL)
     /// Changes whenever a thread's checkpoints change (checkpoints() asks again).
     Q_PROPERTY(int checkpointSerial READ checkpointSerial NOTIFY checkpointsChanged FINAL)
+    /// Changes whenever a draft is kept or forgotten (draft() asks again: Code mode's sidebar shows a
+    /// project's draft of a new thread).
+    Q_PROPERTY(int draftSerial READ draftSerial NOTIFY draftsChanged FINAL)
     /// Who answers a new conversation (setDefaultPartner()): the device's choice while it answers
     /// here (one of partners()), else "" — the built-in assistant.
     Q_PROPERTY(QString defaultPartner READ defaultPartner NOTIFY defaultPartnerChanged FINAL)
@@ -293,9 +296,12 @@ public:
     /// folder) —, answered by the AI agent `partner` ("" the default partner when it is an agent,
     /// else the first agent), its first message `text` and `pictures`; no line in the journal.
     /// Its path ("" when it did not start: why in turn("")'s failure).
+    /// `pullRequest` ("" none): the pull request it works on ("#123 Title"), its page's `pr:` — the
+    /// agent's first context names it.
     Q_INVOKABLE QString startThread(const QString &project, const QString &text,
                                     const QStringList &pictures = QStringList(), const QString &partner = QString(),
-                                    const QString &worktree = QString(), const QString &branch = QString());
+                                    const QString &worktree = QString(), const QString &branch = QString(),
+                                    const QString &pullRequest = QString());
     /// startThread() as a sub-conversation of `parent` whose end wakes `wakes` ("" none): an AI
     /// agent's or a script's task in a project (ChatControl's chatStart with `project`).
     QString startThreadFrom(const QString &project, const QString &text, const QString &partner, const QString &parent,
@@ -323,8 +329,18 @@ public:
     Q_INVOKABLE QString lastCheckpoint(const QString &path, int serial = 0) const;
     static constexpr int MaxCheckpoints = 30;
     int checkpointSerial() const { return m_checkpointSerial; }
+    int draftSerial() const { return m_draftSerial; }
     /// Sets the thread's worktree and branch ("" both: back to the project's folder).
     Q_INVOKABLE bool setThreadWorktree(const QString &path, const QString &worktree, const QString &branch);
+    /// The threads that work in `folder` (a worktree's, or a project's own: the threads without a
+    /// worktree), their paths — not archived ones only, every thread of the notebook.
+    Q_INVOKABLE QStringList threadsIn(const QString &folder) const;
+    /// A turn of a thread that works in `folder` runs (or waits in line, or saves its checkpoint):
+    /// its branch must not be switched under it.
+    Q_INVOKABLE bool runningIn(const QString &folder) const;
+    /// "Mark unread" (Code mode's thread menu): the conversation is unread again, as if its answer
+    /// had just come while no view showed it.
+    Q_INVOKABLE void markUnread(const QString &path);
     /// The AI's turn again on the conversation as it is (its last message the user's): after a
     /// failure or a stop. False when it cannot run now.
     Q_INVOKABLE bool retry(const QString &path);
@@ -687,6 +703,7 @@ Q_SIGNALS:
     /// defaultPartner() may have changed.
     void defaultPartnerChanged();
     void checkpointsChanged();
+    void draftsChanged();
     void questionsChanged();
     void agentsChanged();
     void queueChanged();
@@ -738,6 +755,7 @@ private:
         QString project;
         QString worktree;
         QString branch;
+        QString pullRequest{};
     };
     QString sendMessage(const QString &path, const QString &text, const QString &page, const QStringList &pictures,
                         const QString &partner, const QString &parent, const QString &wakes, const ThreadPlace *thread);
@@ -767,6 +785,7 @@ private:
     WorkspaceExtensions *m_extensions = nullptr;
     WorkspaceAgents *m_agents = nullptr;
     int m_questionSerial = 0;
+    int m_draftSerial = 0;
     int m_agentSerial = 0;
     bool m_agentPairing = false;
     AgentShare *m_share = nullptr;

@@ -834,6 +834,27 @@ private Q_SLOTS:
         QVERIFY(place.value(u"exists"_s).toBool());
         QCOMPARE(chats->threadFolder(path), QDir::cleanPath(folder));
         QVERIFY(chats->threadPlace(u"Dom.md"_s).isEmpty());
+        // The threads of a folder (a deleted thread's worktree: another one uses it?); unread again.
+        QCOMPARE(chats->threadsIn(folder + u"/"_s), QStringList{path});
+        QVERIFY(chats->threadsIn(m_tmp.filePath(u"inny"_s)).isEmpty());
+        QVERIFY(!chats->runningIn(folder));
+        chats->showing(path, true); // (read: a view shows it)
+        QVERIFY(!chats->isUnread(path));
+        chats->showing(path, false);
+        chats->markUnread(path);
+        QVERIFY(chats->isUnread(path));
+        chats->markUnread(u"Dom.md"_s);
+        QVERIFY(!chats->isUnread(u"Dom.md"_s));
+        // A thread on a pull request's branch: its page and the agent's first context name it.
+        const QString onPr = chats->startThread(id, u"Popraw testy"_s, {}, {}, {}, {}, u"#7 Popraw \"kalkulator\""_s);
+        QVERIFY(!onPr.isEmpty());
+        QVERIFY(chats->runningIn(folder));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(onPr)->running(), 20000);
+        QVERIFY2(ws->read(onPr).contains(u"pr: \"#7 Popraw 'kalkulator'\""_s), qPrintable(ws->read(onPr)));
+        const QString prContext =
+                promptOf(logged(u"session/prompt"_s).last()).at(0).toObject().value(u"text"_s).toString();
+        QVERIFY2(prContext.contains(u"pull request #7 Popraw 'kalkulator'"_s), qPrintable(prContext));
+        QCOMPARE(chats->threadsIn(folder).size(), 2);
         // The project's files, through the client: read and written in its folder.
         QCOMPARE(chats->send(path, u"czytaj"_s), path);
         QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 20000);
@@ -886,14 +907,6 @@ private Q_SLOTS:
         QCOMPARE(shell::CodeProjects::slug(u"…"_s), u"project"_s);
         QCOMPARE(shell::CodeProjects::splitCommand(u"code --new-window \"a b\" c\\ d"_s),
                  (QStringList{u"code"_s, u"--new-window"_s, u"a b"_s, u"c d"_s}));
-        const QVariantList scripts =
-                shell::CodeProjects::parseScripts(u"dev: npm run dev\n\n  npm test  \nhttp://x\nzły klucz: echo\n"_s);
-        QCOMPARE(scripts.size(), 4);
-        QCOMPARE(scripts.at(0).toMap().value(u"name"_s).toString(), u"dev"_s);
-        QCOMPARE(scripts.at(0).toMap().value(u"command"_s).toString(), u"npm run dev"_s);
-        QCOMPARE(scripts.at(1).toMap().value(u"command"_s).toString(), u"npm test"_s);
-        QCOMPARE(scripts.at(2).toMap().value(u"command"_s).toString(), u"http://x"_s);
-        QCOMPARE(scripts.at(3).toMap().value(u"command"_s).toString(), u"zły klucz: echo"_s);
 
         QByteArray kept;
         {
@@ -908,8 +921,10 @@ private Q_SLOTS:
             QCOMPARE(projects.nameOf(u"ala-2"_s), u"Druga Ala"_s);
             projects.move(u"ala-2"_s, 0);
             QCOMPARE(projects.list().first().toMap().value(u"id"_s).toString(), u"ala-2"_s);
-            projects.setScriptsText(u"ala"_s, u"dev: make run\ntest: ctest"_s);
-            QCOMPARE(projects.scriptsText(u"ala"_s), u"dev: make run\ntest: ctest"_s);
+            projects.setScripts(u"ala"_s, {QVariantMap{{u"name"_s, u"dev"_s}, {u"command"_s, u"make run"_s}},
+                                           QVariantMap{{u"name"_s, u"Testy żółwia"_s}, {u"command"_s, u"ctest"_s},
+                                                       {u"icon"_s, u"test"_s}, {u"shortcut"_s, u"Ctrl+Alt+T"_s}}});
+            QCOMPARE(projects.scripts(u"ala"_s).size(), 2);
             const QVariantMap tree = projects.worktreeFor(u"ala"_s, u"Napraw błąd #12"_s);
             QVERIFY(tree.value(u"folder"_s).toString().endsWith(u"/ala/napraw-blad-12"_s));
             QCOMPARE(tree.value(u"branch"_s).toString(), u"brulion/napraw-blad-12"_s);
@@ -922,7 +937,12 @@ private Q_SLOTS:
         QCOMPARE(again.list().first().toMap().value(u"name"_s).toString(), u"Druga Ala"_s);
         QCOMPARE(again.editorCommand(), u"zed"_s);
         QCOMPARE(again.worktreesRoot(), QDir::cleanPath(m_tmp.filePath(u"drzewa"_s)));
-        QCOMPARE(again.scriptsText(u"ala"_s), u"dev: make run\ntest: ctest"_s);
+        const QVariantList scripts = again.scripts(u"ala"_s);
+        QCOMPARE(scripts.size(), 2);
+        QCOMPARE(scripts.at(1).toMap().value(u"name"_s).toString(), u"Testy żółwia"_s);
+        QCOMPARE(scripts.at(1).toMap().value(u"id"_s).toString(), u"testy-zolwia"_s);
+        QCOMPARE(scripts.at(1).toMap().value(u"iconName"_s).toString(), u"circle-check"_s);
+        QCOMPARE(scripts.at(1).toMap().value(u"shortcut"_s).toString(), u"Ctrl+Alt+T"_s);
         // Broken or doubled entries are left out.
         again.setStorage(
                 [] {
