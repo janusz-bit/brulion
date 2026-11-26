@@ -140,13 +140,18 @@ void closeHandle(HANDLE &handle)
     handle = nullptr;
 }
 
-/// Waits for a thread at most `ms`, then lets it go (closing the handle does not stop it): true
-/// when it ended.
-bool joinThread(HANDLE &thread, DWORD ms)
+/// Ends a reader or writer thread that was told to stop: its blocking call cancelled until it is
+/// gone (a cancel can come just before its next call), at most 2 s; then the thread is let go
+/// (closing its handle does not stop it). True when it ended.
+bool stopThread(HANDLE &thread)
 {
     if (!thread)
         return true;
-    const bool ended = ::WaitForSingleObject(thread, ms) == WAIT_OBJECT_0;
+    bool ended = false;
+    for (int i = 0; i < 40 && !ended; ++i) {
+        ::CancelSynchronousIo(thread);
+        ended = ::WaitForSingleObject(thread, 50) == WAIT_OBJECT_0;
+    }
     closeHandle(thread);
     return ended;
 }
@@ -299,6 +304,8 @@ struct Channel {
     /// The console is closing: the reader reads on without waiting for room (conhost may block
     /// until its last frame is read).
     bool draining = false;
+    /// The run is being cleaned up: the reader stops before its next read.
+    bool stopReading = false;
     QByteArray input;
     bool stopWriting = false;
     bool inputBroken = false;
@@ -329,12 +336,20 @@ DWORD WINAPI readerMain(void *argument)
     delete static_cast<std::shared_ptr<Channel> *>(argument);
     std::vector<char> buffer(ReadChunk);
     for (;;) {
+        HANDLE pipe = nullptr;
         {
             std::unique_lock lock(c->mutex);
-            c->outputTaken.wait(lock, [&c] { return c->draining || c->output.size() < MaxBufferedOutput; });
+            c->outputTaken.wait(lock, [&c] {
+                return c->stopReading || c->draining || c->output.size() < MaxBufferedOutput;
+            });
+            if (c->stopReading) {
+                c->outputEnded = true;
+                return 0;
+            }
+            pipe = c->outputRead;
         }
         DWORD n = 0;
-        const BOOL ok = ::ReadFile(c->outputRead, buffer.data(), ReadChunk, &n, nullptr);
+        const BOOL ok = ::ReadFile(pipe, buffer.data(), ReadChunk, &n, nullptr);
         const std::lock_guard lock(c->mutex);
         if (!ok || n == 0) {
             // ERROR_BROKEN_PIPE: conhost is gone; ERROR_OPERATION_ABORTED: CancelSynchronousIo().
@@ -416,7 +431,7 @@ struct Pty::Private {
     void finish();
     void closeConsole();
     void endTree();
-    void stopThreads(DWORD readerMs);
+    void stopThreads();
     void cleanup();
 };
 
@@ -502,31 +517,25 @@ void Pty::Private::maybeFinish()
         finish();
 }
 
-void Pty::Private::stopThreads(DWORD readerMs)
+void Pty::Private::stopThreads()
 {
     if (channel) {
         const std::lock_guard lock(channel->mutex);
         channel->receiver = nullptr;
         channel->stopWriting = true;
+        channel->stopReading = true;
         channel->draining = true;
         channel->inputQueued.notify_all();
         channel->outputTaken.notify_all();
     }
-    if (writer) {
-        ::CancelSynchronousIo(writer); // (a WriteFile conhost does not take)
-        joinThread(writer, 1000);
+    stopThread(writer); // (a WriteFile conhost does not take)
+    // The reader: at the end of the output already, or its read cancelled. Once it is gone our end
+    // of the pipe is closed, so conhost's last writes fail instead of waiting for a reader (and
+    // ClosePseudoConsole returns); never while it may still read from it.
+    if (stopThread(reader) && channel) {
+        const std::lock_guard lock(channel->mutex);
+        closeHandle(channel->outputRead);
     }
-    if (reader && ::WaitForSingleObject(reader, readerMs) != WAIT_OBJECT_0) {
-        // No end of the output: the read cancelled and our end of the pipe closed, so conhost's
-        // writes fail instead of waiting for a reader (and ClosePseudoConsole can return).
-        ::CancelSynchronousIo(reader);
-        joinThread(reader, 1000);
-        if (channel) {
-            const std::lock_guard lock(channel->mutex);
-            closeHandle(channel->outputRead);
-        }
-    }
-    closeHandle(reader);
 }
 
 void Pty::Private::cleanup()
@@ -542,7 +551,7 @@ void Pty::Private::cleanup()
     if (settleTimer)
         settleTimer->stop();
     closeConsole();
-    stopThreads(0);
+    stopThreads();
     channel.reset();
     if (job && !terminating) {
         // The program ended by itself: what it started without a console (an editor, a browser)
