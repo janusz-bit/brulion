@@ -1,0 +1,1 @@
+brulion_add_test(tst_atrament_base SOURCES tst_atrament_base.cpp LIBS brulion_atrament_base)

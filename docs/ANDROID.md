@@ -1605,7 +1605,9 @@ package and the name of every APK it builds.
 On NixOS the script re-runs itself in `nix shell` (ccache, `jdk21_headless`, unzip). The prebuilt
 binaries (the NDK, the Qt tools from aqt, `aapt2` downloaded by Gradle, CMake from the SDK) need
 **nix-ld** (`programs.nix-ld.enable = true`); the Qt tools additionally need glib, krb5, brotli
-and keyutils — the script adds them to `NIX_LD_LIBRARY_PATH` (from `nix build nixpkgs#…`). CMake
+and keyutils, and `qsb` (Qt Shader Tools: the shaders of Atrament's GPU renderer, docs/ATRAMENT.md)
+links QtGui with xkbcommon, GL, X11, fontconfig, FreeType and D-Bus — the script adds them to
+`NIX_LD_LIBRARY_PATH` (from `nix build nixpkgs#…`). CMake
 from nixpkgs **is not suitable**: it is patched so that it does not search `/usr` — also in the
 NDK sysroot, so it does not find the EGL/GLES headers and Qt6Gui does not configure. So by default
 CMake from the Android SDK is used (`BRULION_ANDROID_CMAKE=system` picks the one from `PATH`).
@@ -1631,7 +1633,9 @@ missing):
 
 ```sh
 uvx --from aqtinstall==3.3.0 aqt install-qt all_os android 6.12.0 android_arm64_v8a \
-  -O ~/.cache/brulion-qt --autodesktop      # + linux_gcc_64 (host Qt)
+  -O ~/.cache/brulion-qt -m qtmultimedia qtshadertools
+uvx --from aqtinstall==3.3.0 aqt install-qt linux desktop 6.12.0 linux_gcc_64 \
+  -O ~/.cache/brulion-qt -m qtshadertools   # the host Qt (moc, rcc, qmlcachegen, qsb…)
 JAVA_HOME=$(nix build --no-link --print-out-paths nixpkgs#jdk21_headless)/lib/openjdk \
   ~/.cache/brulion-android-sdk/cmdline-tools/latest/bin/sdkmanager \
   --sdk_root=$HOME/.cache/brulion-android-sdk --install "ndk;27.2.12479018" "cmake;3.31.6"
@@ -1723,6 +1727,7 @@ arm64-v8a APK (`tests/bench/mobile/size-report.py apk`):
 | identical code folded where no address of it is compared (2026-11-19: lld's `--icf=safe`, with `-faddrsig`, which the NDK's Clang leaves out on Android unless asked; the C++ generated from QML repeats itself a lot) | `cmake/BrulionSize.cmake` (Release, MinSizeRel, RelWithDebInfo) | `libbrulion` −3.83 MB (58.75 → 54.93 MB), APK 116.7 → 112.7 MB, download −1.07 MB |
 | the native libraries compressed in the APK (2026-11-20: Gradle's `useLegacyPackaging`, `android:extractNativeLibs="true"`) instead of stored for loading straight from it: Android unpacks them when the app is installed or updated. The APK file — what GitHub, F-Droid and IzzyOnDroid hand out whole — is less than half as big; on the device the APK and the unpacked libraries (111 MB) take some 40 MB more than the uncompressed APK did, and an install or update takes the unpacking. Google Play compresses its download either way (unchanged). The 16 KB check still holds: no library is stored, every 64-bit one has 16 KB segments | `src/app/CMakeLists.txt` (`QT_ANDROID_LEGACY_PACKAGING`) | APK file 112.7 → 43.5 MB |
 | no QML source text in the resources (`DISCARD_QML_CONTENTS`; the compiled units always match the bundled Qt) | `src/app/CMakeLists.txt` (Release, MinSizeRel) | −1.1 MB |
+| Atrament, the own UI framework (2026-11-26): the framework, its Qt Quick host and gallery, and HarfBuzz 14.5.1 (vendored, its own static copy beside Qt's) in `libbrulion` — the Release APK with and without it, the same tree | `BRULION_ATRAMENT` (top-level `CMakeLists.txt`; `BRULION_ATRAMENT=OFF scripts/android-build.sh` without it) | `libbrulion` +1.44 MB (83.51 → 85.02 MB), APK +0.70 MB (56.90 → 57.60 MB) |
 
 In total 83.15 MB → 81.02 MB (download size, compressed: 27.46 → 27.18 MB); without OpenSSL it
 would be 76.5 MB. Since 2026-10-30 (without the unused styles and QtQuick.Dialogs): 96.23 →
@@ -1771,7 +1776,7 @@ OpenSSL, no `qmltooling`, 16 KB alignment).
 
 | Component | Source (`nix/android.nix`) |
 |---|---|
-| Qt for Android 6.12.0 (qtbase, qtdeclarative, qtsvg, qtmultimedia) | `.7z` archives from the Qt repository (the same ones aqt downloads), separately per module and ABI — an add-on such as qtmultimedia from its own package (`qt.qt6.6120.addons.qtmultimedia.<arch>`) —, SHA-256 hashes published by Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
+| Qt for Android 6.12.0 (qtbase, qtdeclarative, qtsvg, qtmultimedia, qtshadertools) | `.7z` archives from the Qt repository (the same ones aqt downloads), separately per module and ABI — an add-on such as qtmultimedia from its own package (`qt.qt6.6120.addons.qtmultimedia.<arch>`) —, SHA-256 hashes published by Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
 | Host Qt (moc, rcc, qmlcachegen, androiddeployqt, lrelease…) | nixpkgs `qt6` — **the same version** as Qt for Android (checked at evaluation) |
 | SDK (platform 36, build-tools 36.0.0), NDK r27c, CMake 3.31.6 + Ninja | nixpkgs `androidenv` (the SDK licence accepted in `flake.nix`) |
 | Gradle / AGP | Gradle 9 from nixpkgs (JDK 21) instead of the wrapper from Qt's template; AGP 9.0.0, Kotlin, androidx — from `nix/android/gradle-deps.json` (mitm-cache), shared by all ABIs |

@@ -77,6 +77,7 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     m_gallery = arguments.contains(u"--gallery"_s);
     m_section = valueAfter(arguments, u"--section"_s);
     m_editor = arguments.contains(u"--editor"_s);
+    m_atrament = arguments.contains(u"--atrament"_s);
     m_editorScript = valueAfter(arguments, u"--editor-script"_s);
     m_screenshot = valueAfter(arguments, u"--screenshot"_s);
     m_dumpLayout = valueAfter(arguments, u"--dump-layout"_s);
@@ -160,6 +161,10 @@ QString DevTools::rootComponent() const
 {
     if (m_editor)
         return u"EditorPlayground"_s;
+#ifdef BRULION_HAS_ATRAMENT
+    if (m_atrament)
+        return u"AtramentDemo"_s;
+#endif
     return m_gallery ? u"Gallery"_s : u"Main"_s;
 }
 

@@ -297,7 +297,9 @@ Application → Check for new versions** turns it off.
 3.3.0 does not know the Qt 6.11 repository layout for Windows) together with the **Qt PDF** module (`modules:
 qtpdf`, a Qt repository extension: PDF thumbnails, the PDF viewer with search, and PDF pages
 as a drawing backdrop, `src/platform/pdfpages_qtpdf.cpp`; `windeployqt` adds `Qt6Pdf.dll`, about
-5 MB — the `QtQuick.Pdf` QML module is not used), MSVC from `ilammy/msvc-dev-cmd`, ccache
+5 MB — the `QtQuick.Pdf` QML module is not used), Qt Multimedia and **Qt Shader Tools**
+(`qtshadertools`: `qsb` compiles the shaders of Atrament's GPU renderer, HLSL for Direct3D 11 —
+docs/ATRAMENT.md; nothing of it is deployed), MSVC from `ilammy/msvc-dev-cmd`, ccache
 from Chocolatey (compilation cache in the Actions cache, saved right after the build), the
 release archives of llama.cpp and whisper.cpp in the Actions cache (keyed by their pins), CMake +
 Ninja, Release, then `scripts/windows-build.ps1` step by step: build, tests, packages, package
@@ -315,9 +317,10 @@ the build 86 minutes of it (the job's limit: 150 minutes). It runs like `appimag
 
 Needed: Visual Studio 2022 with the "Desktop development with C++" workload (it has CMake
 and Ninja), Qt 6.12.0 for MSVC (the Qt installer or aqt newer than 3.3.0:
-`aqt install-qt windows desktop 6.12.0 win64_msvc2022_64 -O C:\Qt -m qtpdf`; without `qtpdf` Brulion
-builds without PDFs: no thumbnails, PDF viewer or PDF backdrop — a PDF then opens
-in the system's default app), Inno Setup 6 (`winget install JRSoftware.InnoSetup`). A clone with Git for Windows
+`aqt install-qt windows desktop 6.12.0 win64_msvc2022_64 -O C:\Qt -m qtpdf qtmultimedia qtshadertools`;
+without `qtpdf` Brulion builds without PDFs: no thumbnails, PDF viewer or PDF backdrop — a PDF then
+opens in the system's default app; without `qtshadertools` Atrament's views are drawn by its CPU
+renderer), Inno Setup 6 (`winget install JRSoftware.InnoSetup`). A clone with Git for Windows
 keeps LF line endings thanks to `.gitattributes` (`* -text`) — the tests compare bytes. In PowerShell
 in the repository directory:
 

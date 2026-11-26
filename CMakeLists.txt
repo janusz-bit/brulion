@@ -131,6 +131,14 @@ else()
 endif()
 
 add_subdirectory(src/core)
+# Atrament, Brulion's own UI framework (docs/ATRAMENT.md): built with the app on every platform
+# (Linux, Windows, Android, the browser), over the vendored HarfBuzz (3rdparty/harfbuzz). Its Qt
+# host (src/atrament/qt) shows its views in the app's QML (AtramentView).
+option(BRULION_ATRAMENT "Build Atrament, the own UI framework (docs/ATRAMENT.md)" ${BRULION_BUILD_APP})
+if(BRULION_ATRAMENT)
+    add_subdirectory(3rdparty/harfbuzz)
+    add_subdirectory(src/atrament)
+endif()
 # llama.cpp for the model on the device and search by meaning (BRULION_LOCAL_AI, 3rdparty/llama):
 # after the core modules, whose runners and plugins (src/core/ai, speech, semantic) it gives the
 # names of its processor plugins and its output folder.

@@ -272,12 +272,14 @@ echo "CMake $(cmake --version | head -n 1 | cut -d' ' -f3), Ninja $(ninja --vers
 
 # Qt PDF (`qtpdf`, an extension of Qt's repository: about 4.5 MB) draws the PDF pages of drawings'
 # backdrops (src/platform/pdfpages_qtpdf.cpp); Qt Multimedia (`qtmultimedia`, with Qt's own FFmpeg)
-# plays audio and video in notes and records voice notes (src/app/media). A Qt installed before
-# without them gets them now.
+# plays audio and video in notes and records voice notes (src/app/media); Qt Shader Tools
+# (`qtshadertools`: qsb) compiles the shaders of Atrament's GPU renderer (docs/ATRAMENT.md). A Qt
+# installed before without them gets them now.
 if [[ ! -f $QT_DIR/lib/cmake/Qt6/Qt6Config.cmake || ! -f $QT_DIR/lib/cmake/Qt6Pdf/Qt6PdfConfig.cmake
-  || ! -f $QT_DIR/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake ]]; then
-  [[ $QT_DIR == "$QT_ROOT/$QT_VERSION/$qt_subdir" ]] || die "QT_DIR=$QT_DIR has no lib/cmake/Qt6 with Qt6Pdf and Qt6Multimedia"
-  info "Installing Qt $QT_VERSION $aqt_arch with qtpdf and qtmultimedia (aqt $AQT_VERSION) into $QT_ROOT"
+  || ! -f $QT_DIR/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake
+  || ! -f $QT_DIR/lib/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake ]]; then
+  [[ $QT_DIR == "$QT_ROOT/$QT_VERSION/$qt_subdir" ]] || die "QT_DIR=$QT_DIR has no lib/cmake/Qt6 with Qt6Pdf, Qt6Multimedia and Qt6ShaderTools"
+  info "Installing Qt $QT_VERSION $aqt_arch with qtpdf, qtmultimedia and qtshadertools (aqt $AQT_VERSION) into $QT_ROOT"
   mkdir -p "$QT_ROOT"
   # Qt mirrors occasionally serve a truncated archive ("Bad offset for central directory"):
   # retry a few times before giving up.
@@ -286,7 +288,7 @@ if [[ ! -f $QT_DIR/lib/cmake/Qt6/Qt6Config.cmake || ! -f $QT_DIR/lib/cmake/Qt6Pd
   for attempt in 1 2 3; do
     base=()
     [[ -n ${mirrors[attempt - 1]} ]] && base=(--base "${mirrors[attempt - 1]}")
-    aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT" -m qtpdf qtmultimedia "${base[@]}" && break
+    aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT" -m qtpdf qtmultimedia qtshadertools "${base[@]}" && break
     ((attempt < 3)) || die "aqt failed to install Qt $QT_VERSION $aqt_arch"
     info "aqt failed (attempt $attempt), retrying with another mirror in 20 s"
     sleep 20

@@ -4,6 +4,8 @@
 //   --gallery              load the component gallery instead of Main.qml
 //   --section <id>         gallery: show only this section (popups in it open by themselves)
 //   --editor               load the block editor playground (qml/dev/EditorPlayground.qml)
+//   --atrament             load Atrament's gallery in a QML window (qml/dev/AtramentDemo.qml,
+//                          docs/ATRAMENT.md; builds with Atrament only)
 //   --editor-script <name> playground: put the editor into a state for screenshots (editing,
 //                          suggest, slash, date, zoom, source, reminder, …; see the playground)
 //   --screenshot <file>    after loading (+ --delay ms, default 800) save the window as an
@@ -139,6 +141,7 @@ private:
     void takeScreenshot(const QPointer<QQuickWindow> &window);
 
     bool m_gallery = false;
+    bool m_atrament = false;
     QString m_section;
     bool m_editor = false;
     QString m_editorScript;

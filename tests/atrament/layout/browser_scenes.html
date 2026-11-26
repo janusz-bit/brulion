@@ -1,0 +1,144 @@
+<!doctype html>
+<!--
+  The browser half of tst_atrament_layout's browserScenes: Chromium lays out each scene and the
+  page prints the C++ data rows (every node's border box relative to its parent's, in document
+  order) for TestAtramentLayout::browserScenes_data(). A new scene goes into `scenes` below; then
+
+    nix shell nixpkgs#chromium -c chromium --headless=new --no-sandbox --disable-gpu \
+        --user-data-dir=<scratch dir> --virtual-time-budget=3000 --dump-dom file://$PWD/browser_scenes.html
+
+  and copy the rows out of <pre id="out"> (formatted as the existing ones, inside the
+  clang-format off block). Text is inline-blocks of the word widths with a 10 px word spacing and
+  20 px lines — the test's Paragraph measure function.
+-->
+<html><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid transparent; scrollbar-width: none; }
+body { display: block; }
+div { display: flex; }
+div.t { display: block; font-size: 0; word-spacing: 10px; line-height: 0; }
+div.t > span { display: inline-block; height: 20px; vertical-align: top; }
+div.win { display: block; position: relative; }
+</style></head><body><pre id="out"></pre>
+<script>
+// Scene syntax: a node is (css | children…), a leaf (css), a text [word widths | css].
+const scenes = [
+  ['flex-basis 0 texts, auto row', 800, 600, '(| [40 40 40|flex-grow:1;flex-basis:0px] [60 60|flex-grow:1;flex-basis:0px])'],
+  ['flex-basis 0 texts, narrow window', 150, 600, '(| [40 40 40|flex-grow:1;flex-basis:0px] [60 60|flex-grow:1;flex-basis:0px])'],
+  ['text basis 0 beside basis auto', 800, 600, '(width:400px| [100 100 100|flex-grow:1;flex-basis:0px] [100 100|flex-grow:1])'],
+  ['wrapping row, fit-content', 250, 600, '(flex-wrap:wrap;column-gap:10px| (width:100px;height:20px) (width:100px;height:20px) (width:100px;height:20px))'],
+  ['list of rows with growing text', 800, 600, '(flex-direction:column;width:320px;padding:12px;row-gap:6px| (column-gap:8px;align-items:center| (width:20px;height:20px;flex-shrink:0) [50 30 70 40 60 50|flex-grow:1] (width:12px;height:12px;flex-shrink:0)) (column-gap:8px| [80 80 80|flex-grow:1] [30|]))'],
+  ['column, flex-start texts', 800, 600, '(flex-direction:column;width:300px;align-items:flex-start| [50 50 50 50 50 50 50 50|] [30 30|])'],
+  ['column, centred texts', 800, 600, '(flex-direction:column;width:300px;align-items:center| [50 50|] [50 50 50 50 50 50|])'],
+  ['grow with max and min', 800, 600, '(width:500px| (flex-grow:1;max-width:100px;height:10px) (flex-grow:1;height:10px) (flex-grow:2;min-width:250px;height:10px))'],
+  ['wrap, each line grows', 800, 600, '(flex-wrap:wrap;width:300px;row-gap:4px| (flex-grow:1;flex-basis:120px;height:10px) (flex-grow:1;flex-basis:120px;height:10px) (flex-grow:1;flex-basis:120px;height:10px) (flex-grow:3;flex-basis:50px;height:10px))'],
+  ['sidebar and content', 800, 600, '(width:100%;height:100%| (flex-direction:column;width:200px;flex-shrink:0;padding:8px;row-gap:4px| [60 40|] [70 50 30|] [40|]) (flex-direction:column;flex-grow:1;min-width:0| (height:40px;flex-shrink:0;padding:0px 10px;align-items:center| [80 60|flex-grow:1] (width:24px;height:24px)) (flex-direction:column;flex-grow:1;overflow:hidden;padding:10px;row-gap:10px| [50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50|] [40 40 40|])))'],
+  ['nested row keeps its longest word', 800, 600, '(width:200px| (flex-grow:1| [300|]) (width:50px;height:10px))'],
+  ['nested row with min-width 0', 800, 600, '(width:200px| (flex-grow:1;min-width:0px| [300|]) (width:50px;height:10px))'],
+  ['column, percentage basis of auto height', 800, 600, '(flex-direction:column;width:200px| (flex-basis:50%| [50 50 50 50|]) (height:30px))'],
+  ['column shrinks to a min-height', 800, 600, '(flex-direction:column;width:100px;height:100px| (height:80px;min-height:60px) (height:80px))'],
+  ['margins in wrapped lines', 800, 600, '(flex-wrap:wrap;width:220px| (width:100px;height:20px;margin:5px) (width:100px;height:30px;margin:5px 10px) (width:100px;height:10px;margin:0px 0px 0px auto))'],
+  ['column auto margins', 800, 600, '(flex-direction:column;width:100px;height:200px| (height:30px;margin-top:auto) (height:30px) (height:30px;margin-bottom:auto) (height:30px))'],
+  ['absolute in column-reverse', 800, 600, '(flex-direction:column-reverse;width:200px;height:200px;padding:10px;align-items:center| (height:50px;width:50px) (position:absolute;width:40px;height:40px))'],
+  ['column space-between, auto height', 800, 600, '(flex-direction:column;justify-content:space-between;width:100px| (height:20px) (height:30px))'],
+  ['row-reverse wrap with gaps', 800, 600, '(flex-direction:row-reverse;flex-wrap:wrap;width:250px;column-gap:10px;row-gap:5px| (width:100px;height:20px) (width:100px;height:20px) (width:100px;height:20px))'],
+  ['absolute text, static centre', 800, 600, '(width:300px;height:100px;justify-content:center| [60 60 60 60 60|position:absolute;top:10px])'],
+  ['scrolled column beside a growing item', 800, 600, '(width:400px;height:300px| (flex-direction:column;width:150px;overflow:auto| (height:500px;flex-shrink:0)) (flex-grow:1))'],
+  ['stretched lines with min and max', 800, 600, '(flex-wrap:wrap;width:200px;height:100px| (width:120px;max-height:30px) (width:120px;min-height:70px))'],
+  ['column of texts that shrink', 800, 600, '(flex-direction:column;width:100px;height:100px| [40 40 40 40 40 40|overflow:hidden] [40 40 40 40 40 40|overflow:hidden])'],
+  ['card grid', 800, 600, '(flex-wrap:wrap;width:520px;padding:10px;column-gap:10px;row-gap:10px;align-content:flex-start| (flex-direction:column;width:160px;padding:8px;border-width:1px| (height:90px) [70 50 80|margin-top:6px] [40 30|]) (flex-direction:column;width:160px;padding:8px;border-width:1px| (height:90px) [70|margin-top:6px]) (flex-direction:column;width:160px;padding:8px;border-width:1px| (height:90px) [70 50 80 60 40 30|margin-top:6px]) (flex-direction:column;width:160px;padding:8px;border-width:1px| (height:90px)))'],
+  ['toolbar with spacer', 800, 600, '(width:500px;height:40px;align-items:center;padding:0px 8px;column-gap:4px| (width:32px;height:32px) [60 40|] (flex-grow:1) (width:32px;height:32px) (width:32px;height:32px;margin-left:12px))'],
+  ['row in fit-content column', 400, 600, '(flex-direction:column;align-items:flex-start;padding:4px| (column-gap:6px| [30 30 30 30 30 30 30 30|] (width:16px;height:16px;flex-shrink:0)) (width:50px;height:10px))'],
+  ['column grow in definite height', 800, 600, '(flex-direction:column;width:200px;height:400px| (height:50px) (flex-grow:1;flex-direction:column| [40 40 40 40 40|]) (flex-grow:2) (height:30px;flex-shrink:0))'],
+  ['nested wrapping text column in row', 800, 600, '(width:500px;column-gap:10px;align-items:flex-start| (flex-direction:column;flex-grow:1;flex-basis:0px| [50 50 50 50 50 50 50 50|] [20|]) (flex-direction:column;flex-grow:2;flex-basis:0px| [90 90 90 90 90|]))'],
+  ['max-width centred column', 800, 600, '(flex-direction:column;width:100%;align-items:center;padding:20px| (flex-direction:column;width:100%;max-width:300px;row-gap:8px| [80 80 80 80 80|] (height:40px)))'],
+  ['percentage of a stretched column', 800, 600, '(height:200px| (flex-direction:column;width:100px| (height:50%;width:50%)))'],
+  ['aspect ratio under a min-width', 800, 600, '(width:300px;height:50px;align-items:flex-start| (aspect-ratio:2;width:20px;min-width:40px) (aspect-ratio:2;height:10px;max-height:6px))'],
+  ['column wrap with align-content and gaps', 800, 600, '(flex-direction:column;flex-wrap:wrap;height:100px;width:200px;align-content:space-between;row-gap:10px;column-gap:5px| (width:40px;height:40px) (width:50px;height:40px) (width:40px;height:40px) (width:30px;height:20px))'],
+  ['auto margin in a wrapped line', 800, 600, '(flex-wrap:wrap;width:250px;justify-content:center| (width:100px;height:10px) (width:100px;height:10px) (width:100px;height:10px;margin-left:auto))'],
+  ['absolute text with right inset', 800, 600, '(width:300px;height:100px;padding:5px| [40 40 40 40 40 40 40 40|position:absolute;right:10px;bottom:0px])'],
+  ['absolute text with left inset', 800, 600, '(width:300px;height:100px| [40 40 40 40 40 40 40 40|position:absolute;left:150px])'],
+  ['percentage basis in an auto row', 800, 600, '(| [40 40|flex-grow:1;flex-basis:0%] [60|flex-grow:1;flex-basis:0%])'],
+  ['stretch with max-width in a column', 800, 600, '(flex-direction:column;width:300px| [50 50 50 50 50 50|max-width:120px] (height:10px;max-width:50%) (height:10px;width:80%;align-self:center))'],
+  ['padded bordered text shrinks', 800, 600, '(width:150px| [40 40 40 40|padding:5px;border-width:2px] (width:60px;height:10px))'],
+  ['column cannot shrink below wrapped rows', 800, 600, '(flex-direction:column;width:200px;height:50px| (| [50 50 50 50 50 50|]) (height:40px))'],
+  ['auto column with growing items', 800, 600, '(flex-direction:column;width:100px| (height:20px;flex-grow:1) (height:30px;flex-grow:2))'],
+  ['min-height above the row height', 800, 600, '(width:300px;height:50px| (width:50px;min-height:80px) (width:50px))'],
+  ['negative margins', 800, 600, '(width:300px;height:100px| (width:100px;height:50px;margin:-10px -20px 0px 0px) (width:100px;height:50px;margin-left:-30px) (width:100px;height:50px;margin-top:-5px))'],
+  ['column-reverse with auto margins', 800, 600, '(flex-direction:column-reverse;width:100px;height:200px| (height:30px;margin-bottom:auto) (height:40px))'],
+  ['centred overflow in a column', 800, 600, '(flex-direction:column;width:100px;height:100px;justify-content:center| (height:80px;flex-shrink:0) (height:60px;flex-shrink:0))'],
+  ['wrapped lines centred', 800, 600, '(flex-wrap:wrap;width:200px;align-items:center| (width:90px;height:20px) (width:90px;height:50px) (width:90px;height:30px) (width:90px;height:10px))'],
+  ['gaps and space-between', 800, 600, '(width:300px;column-gap:20px;justify-content:space-between| (width:50px;height:10px) (width:50px;height:10px) (width:50px;height:10px))'],
+  ['percentage min, max and margins', 800, 600, '(flex-direction:column;width:400px;height:300px| (min-height:20%;width:10%) (max-width:50%;height:10px;margin:5% 10%) (height:10%;flex-shrink:0))'],
+  ['row with a max-height stretches less', 800, 600, '(width:300px;max-height:40px| (width:50px;height:100px) (width:50px))'],
+  ['flex base above the max', 800, 600, '(width:400px| (flex-basis:300px;max-width:100px;flex-grow:1;height:10px) (flex-basis:100px;flex-grow:1;height:10px))'],
+  ['text stretched up to a max-width', 800, 600, '(flex-direction:column;width:400px| [60 60 60 60 60 60|max-width:200px;padding:0px 10px])'],
+  ['deep auto layout', 800, 600, '(flex-direction:column;padding:10px;row-gap:5px| (column-gap:5px| (flex-direction:column| [30 30|] [50|]) (flex-direction:column;justify-content:flex-end| (width:20px;height:5px))) (padding:3px;border-width:1px| [100 100 100|]))'],
+  ['auto root column, percentage width', 800, 600, '(flex-direction:column| [40 40 40|] (width:50%;height:10px))'],
+  ['auto root row, percentage margin', 800, 600, '(| (width:100px;height:10px) (width:20px;height:10px;margin-left:10%))'],
+  ['outline blocks', 800, 600, '(flex-direction:column;width:300px;row-gap:2px| (column-gap:6px| (width:6px;height:6px;margin-top:7px;flex-shrink:0) [60 40 70 50 30 80 40|]) (column-gap:6px;padding-left:20px| (width:6px;height:6px;margin-top:7px;flex-shrink:0) [30|]))'],
+];
+
+function parse(spec) {
+  let i = 0;
+  function skip() { while (spec[i] === ' ') i++; }
+  function node() {
+    skip();
+    const open = spec[i++];
+    const close = open === '(' ? ')' : ']';
+    let head = '';
+    while (spec[i] !== '|' && spec[i] !== close) head += spec[i++];
+    let css = '', kids = [], words = null;
+    if (open === '[') {
+      words = head.trim().split(/\s+/).map(Number);
+      i++; // |
+      while (spec[i] !== ']') css += spec[i++];
+      i++;
+      return { css, words };
+    }
+    css = head;
+    if (spec[i] === '|') {
+      i++;
+      for (;;) { skip(); if (spec[i] === ')') break; kids.push(node()); }
+    }
+    i++;
+    return { css, kids };
+  }
+  return node();
+}
+function build(n) {
+  const d = document.createElement('div');
+  d.style.cssText = n.css;
+  if (n.words) {
+    d.className = 't';
+    d.innerHTML = n.words.map(w => `<span style="width:${w}px"></span>`).join(' ');
+  } else {
+    for (const k of n.kids) d.appendChild(build(k));
+  }
+  d._spec = n;
+  return d;
+}
+function collect(d, out) {
+  const r = d.getBoundingClientRect(), p = d.parentElement.getBoundingClientRect();
+  out.push(r.left - p.left, r.top - p.top, r.width, r.height);
+  if (!d._spec.words) for (const k of d.children) collect(k, out);
+}
+const fmt = v => { const s = (Math.round(v * 1000) / 1000).toString(); return s.includes('.') || s.includes('e') ? s + 'f' : s; };
+const lines = [];
+for (const [name, w, h, spec] of scenes) {
+  const win = document.createElement('div');
+  win.className = 'win';
+  win.style.width = w + 'px';
+  win.style.height = h + 'px';
+  const root = build(parse(spec));
+  root.style.position = 'absolute';
+  root.style.left = '0';
+  root.style.top = '0';
+  win.appendChild(root);
+  document.body.appendChild(win);
+  const out = [];
+  collect(root, out);
+  lines.push(`    QTest::newRow("${name}") << ${w}.0f << ${h}.0f << QStringLiteral("${spec}")\n            << QList<float>{ ${out.map(fmt).join(', ')} };`);
+}
+document.getElementById('out').textContent = lines.join('\n');
+</script></body></html>
