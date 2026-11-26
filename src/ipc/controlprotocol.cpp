@@ -473,39 +473,60 @@ const QList<MethodSpec> &controlMethods()
         out.append(method(u"changes"_s, u"The live changes not reverted, oldest first"_s, {}));
         out.append(method(u"revert"_s, u"Undo the live changes (of one client, or everyone's)"_s,
                           {param(u"who"_s, ParamType::String)}));
-        // The AI chat (docs/CLI.md "Conversations"): what an AI agent's chat grant may call.
-        const auto chat = [&out](MethodSpec m) {
+        // The AI chat (docs/CLI.md "Conversations"): what an AI agent's chat grant may call — and,
+        // `share`, the agent sharing's for the user's phone (the conversations followed, steered).
+        const auto chat = [&out](MethodSpec m, bool share = false) {
             m.chat = true;
+            m.share = share;
             out.append(std::move(m));
         };
         const QStringList destinations{u"new"_s, u"continue"_s};
         chat(method(u"chats"_s,
                     u"The conversations, newest change first: path, name, partner, state, parent (parent: only "
                     u"its sub-conversations)"_s,
-                    {param(u"parent"_s, ParamType::String), range(u"limit"_s, ParamType::Integer, 1, 500)}));
+                    {param(u"parent"_s, ParamType::String), range(u"limit"_s, ParamType::Integer, 1, 500)}),
+             true);
         chat(method(u"chatRead"_s,
                     u"A conversation's messages from a position (0 the first), long texts cut with the offset "
                     u"to go on from"_s,
                     {param(u"path"_s, ParamType::String, true), range(u"from"_s, ParamType::Integer, 0, 1e7),
-                     range(u"limit"_s, ParamType::Integer, 1, 200), range(u"offset"_s, ParamType::Integer, 0, 1e9)}));
+                     range(u"limit"_s, ParamType::Integer, 1, 200), range(u"offset"_s, ParamType::Integer, 0, 1e9)}),
+             true);
         chat(method(u"chatStart"_s,
                     u"Start a conversation with a partner (\"\" the assistant, acp:<id>, an extension's); its "
-                    u"turn runs (wake: its end wakes the parent conversation)"_s,
+                    u"turn runs (wake: its end wakes the parent conversation; project: a thread of Code mode, in "
+                    u"its folder or a worktree of it)"_s,
                     {param(u"text"_s, ParamType::String, true), param(u"partner"_s, ParamType::String),
                      param(u"page"_s, ParamType::String), param(u"parent"_s, ParamType::String),
-                     param(u"wake"_s, ParamType::Bool), param(u"project"_s, ParamType::String)}));
+                     param(u"wake"_s, ParamType::Bool), param(u"project"_s, ParamType::String),
+                     param(u"worktree"_s, ParamType::String), param(u"branch"_s, ParamType::String)}),
+             true);
         chat(method(u"chatSend"_s,
-                    u"Send a message into a conversation whose turn does not run (queue: in line after it); its "
-                    u"turn runs (wake: its end wakes the parent conversation)"_s,
+                    u"Send a message into a conversation whose turn does not run (mode queue: in line after it; "
+                    u"steer: now, its turn stopped first); its turn runs (wake: its end wakes the parent "
+                    u"conversation)"_s,
                     {param(u"path"_s, ParamType::String, true), param(u"text"_s, ParamType::String, true),
-                     param(u"queue"_s, ParamType::Bool), param(u"wake"_s, ParamType::Bool)}));
+                     param(u"queue"_s, ParamType::Bool), oneOf(u"mode"_s, {u"now"_s, u"queue"_s, u"steer"_s}),
+                     param(u"wake"_s, ParamType::Bool)}),
+             true);
         chat(method(u"chatWait"_s,
                     u"Wait up to ms for a conversation's turn to end: its answer, the question it waits on, or "
                     u"why it failed"_s,
-                    {param(u"path"_s, ParamType::String, true), range(u"ms"_s, ParamType::Integer, 0, 600000)}));
+                    {param(u"path"_s, ParamType::String, true), range(u"ms"_s, ParamType::Integer, 0, 600000)}),
+             true);
         chat(method(u"chatStop"_s, u"Stop a conversation's turn (nothing of it is written)"_s,
-                    {param(u"path"_s, ParamType::String, true)}));
-        chat(method(u"chatPartners"_s, u"Who may answer a conversation here: id, name, kind"_s, {}));
+                    {param(u"path"_s, ParamType::String, true)}),
+             true);
+        chat(method(u"chatPartners"_s, u"Who may answer a conversation here: id, name, kind"_s, {}), true);
+        // The conversations whose turns run now, as they go (a long poll: answered when the revision
+        // is past `since`, or after `timeout` ms), one of them in full (`path`).
+        chat(method(u"chatLive"_s,
+                    u"The conversations whose turn runs, waits or asks (and those that ended lately), newest "
+                    u"activity first, one in full (path): its answer being written, tools, plan, question; "
+                    u"waits up to timeout ms for a revision past since"_s,
+                    {range(u"since"_s, ParamType::Integer, -1, 1e15), range(u"timeout"_s, ParamType::Integer, 0, 60000),
+                     param(u"path"_s, ParamType::String)}),
+             true);
         chat(method(u"chatSchedules"_s, u"The scheduled conversations of the open notebook, with their next run"_s,
                     {}));
         chat(method(u"chatScheduleAdd"_s,
@@ -540,6 +561,13 @@ const QList<MethodSpec> &controlMethods()
                     u"conversation); at most 10 of a conversation an hour"_s,
                     {param(u"text"_s, ParamType::String, true), param(u"title"_s, ParamType::String),
                      param(u"page"_s, ParamType::String), param(u"path"_s, ParamType::String)}));
+        // The user's answer to the question a conversation's turn waits on (the phone's, through the
+        // agent sharing; a script's): never an AI agent's — not one of the chat grant's methods.
+        MethodSpec answer = method(u"chatAnswer"_s,
+                                   u"Answer the question a conversation's turn waits on with one of its options"_s,
+                                   {param(u"path"_s, ParamType::String, true), param(u"option"_s, ParamType::String, true)});
+        answer.share = true;
+        out.append(std::move(answer));
         // A webhook's request (docs/CLI.md "Webhooks"): only for the app's own hook server.
         MethodSpec hook = method(u"chatHook"_s,
                                  u"A webhook's request for a scheduled conversation (brulion-cli app hooks serve, "

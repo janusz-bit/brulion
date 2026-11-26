@@ -92,6 +92,9 @@ struct ControlRequest {
     /// The grant covers only the webhooks' method (MethodSpec::hook; GrantScope::Hook: the app's own
     /// `brulion-cli app hooks serve`).
     bool hookOnly = false;
+    /// The grant covers only the methods a device of the agent sharing needs (MethodSpec::share;
+    /// GrantScope::Share: the app's own `brulion-cli acp serve`, which acts for the user's phone).
+    bool shareOnly = false;
 };
 
 /// Stable error codes.
@@ -173,6 +176,10 @@ struct MethodSpec {
     /// The webhooks' method (chatHook, docs/CLI.md "Webhooks"): only a connection with a hook grant
     /// (the app's `brulion-cli app hooks serve`) may call it, and such a connection nothing else.
     bool hook = false;
+    /// A method of the AI chat the agent sharing's grant may call (`acp serve` for the user's phone:
+    /// the conversations followed and steered, docs/CLI.md "AI agents for other devices" → "The
+    /// app's own conversations") — never the schedules, secrets, notifications or the webhooks'.
+    bool share = false;
 };
 
 /// Every method of the protocol, in documentation order.

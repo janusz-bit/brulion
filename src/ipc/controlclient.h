@@ -45,6 +45,10 @@ public:
     /// servers HOME, PATH, LANG … only — no XDG_RUNTIME_DIR, XDG_DATA_HOME or BRULION_PROFILE.
     static constexpr auto InstanceVariable = "BRULION_APP_INSTANCE";
     static constexpr auto DeviceVariable = "BRULION_APP_DEVICE";
+    /// The grant of the app's agent sharing (GrantScope::Share) in the environment of the `acp serve`
+    /// the app starts, next to its control socket in SocketVariable (docs/CLI.md "AI agents for other
+    /// devices" → "The app's own conversations"); acp serve takes both out of its environment at once.
+    static constexpr auto ShareTokenVariable = "BRULION_APP_SHARE_TOKEN";
     /// The tunnel's socket from the environment ("" none: the app of this desktop).
     static QString tunnelSocket();
     /// Who connect() says it is (default: the environment's); "" sends nothing of it.
