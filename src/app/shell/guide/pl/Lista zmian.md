@@ -7,6 +7,18 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.31.0 — 26 listopada 2026
+
+**Nowe**
+- **Tryb Kod — Twoi agenci programiści w Twoich projektach** — Claude Code, Codex albo OpenCode pracuje w wątkach Twojego projektu, jak w T3 Code: wątek we własnym drzewie roboczym gita z wybranej gałęzi (także z pull requesta: `#123`), skrypty projektu z jego `t3.json`, terminal dla każdego wątku z podziałami i szukaniem (PowerShell albo cmd na Windows), Ctrl+P i szukanie w plikach projektu, `@`, by podać agentowi plik, oraz powiadomienie, gdy wątek Cię potrzebuje. Przełączasz górnym przyciskiem paska albo z palety ([[Tryb kodu]]).
+- **Zmiany, commity i pull requesty** — panel Zmian pokazuje, co zmieniła tura, niezatwierdzona praca, gałąź albo commit; dodajesz do indeksu, wycofujesz albo odrzucasz plik lub fragment, zatwierdzasz zaznaczone pliki (z wiadomością napisaną przez AI, jeśli chcesz), wypychasz, otwierasz pull request — także do innej bazy albo z forka — i cofasz jedną turę albo wracasz do stanu sprzed niej.
+- **Praca, którą widać** — nad odpowiedzią agenta zwinięty dziennik („Czas pracy: 25 s · zmieniono 1 plik · uruchomiono 1 polecenie”) rozwija się do planu i wywołań narzędzi z wynikami i diffami; Ctrl+F szuka w wątku; **Edytuj od tego miejsca** może przywrócić też pliki projektu.
+- **Wątki z telefonu** — wątek trybu Kod toczy się dalej na telefonie przez komputer, który udostępnia swoich agentów: tura biegnie tam, w projekcie, a telefon pokazuje jej zmiany.
+
+**Zmiany**
+- **Trzecia część pamięci** — Brulion zajmuje około 130 MB piętnaście sekund po starcie zamiast około 400 MB i około 140 MB z ukrytym oknem; przy 10 000 notatek około 280 MB zamiast 700 MB. Widoki, okna dialogowe i menu powstają przy pierwszym użyciu i znikają, gdy są ukryte, a indeks jest o jedną trzecią mniejszy.
+- **Rozszerzenia z wiersza poleceń czytają ustawienia notatnika** — w `brulion-cli extension run` `b.app.get` i `b.app.settings()` widzą własne ustawienia notatnika.
+
 ## 0.30.0 — 25 listopada 2026
 
 **Nowe**
