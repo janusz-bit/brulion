@@ -22,11 +22,19 @@
 //   box-sizing         border-box (always: width and height include padding and border)
 //
 // Leaves may have a measure function (text, pictures): it is asked for a size given the known
-// dimensions and the available space, as Taffy and Yoga do.
+// dimensions and the available space, as Taffy and Yoga do. Results are cached for the length of
+// one compute().
 //
 // Percentages resolve against the containing block's size when that is definite, else they act
 // as auto. A node's result is its border box relative to its parent's border box; `absolute()`
 // gives positions relative to the root.
+//
+// A container of auto size is sized by its content: a row as fit-content (its max-content width,
+// at most the available width, at least its min-content width), a column as high as its content
+// (as a block); the cross size is that of its lines. The root's margins are ignored (it is
+// placed at (0, 0)); give it a size (100 %) to fill the window. Not supported: order,
+// wrap-reverse, baselines, writing modes, `flex-basis: content` (an indefinite percentage acts as
+// it), the line-wide max-content flex fraction of 9.9.1 (as in browsers).
 
 #include "base/geometry.h"
 
@@ -121,7 +129,12 @@ struct AvailableSpace {
 // A leaf's size: `knownWidth` / `knownHeight` are set when the layout already decided that
 // dimension (the result must then use it); the available space bounds the rest. A text leaf
 // wraps at a definite available width, takes its longest word for MinContent and its unwrapped
-// width for MaxContent.
+// width for MaxContent. All sizes are of the leaf's content box (inside its padding and border).
+// An intrinsic width (a row's item measured for its base size or its minimum) is asked for with a
+// max-content available height: intrinsic widths do not depend on the height there is.
+// Sizes are taken to follow fit-content: one that fits within the available space it was
+// measured in is reused for any smaller space it still fits within (and a max-content size for
+// any definite space it fits within), so a measure function is not called again for those.
 using MeasureFunction = std::function<Size(std::optional<float> knownWidth, std::optional<float> knownHeight,
         AvailableSpace availableWidth, AvailableSpace availableHeight)>;
 
