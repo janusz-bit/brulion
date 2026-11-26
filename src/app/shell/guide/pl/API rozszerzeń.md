@@ -513,7 +513,7 @@ end, { label = "Ile otwartych zadań" })
 | `b.app.commands()` | polecenia palety, każde `{ id, title, shortcut, enabled }` |
 | `b.app.run(id)` | uruchamia jedno z nich: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
 | `b.app.settings()` | ustawienia, które rozszerzenie może zmienić, z wartościami i tym, co przyjmują: tego urządzenia (`scope = "device"`), potem własne ustawienia notatnika (`scope = "notebook"`, zapisane w `.brulion/config.json` i synchronizowane: `journalsFolder`, `journalFileFormat`, `journalTemplate`, `templatesFolder`, `newPagesFolder`, `weekStartsOn`, `defaultReminderTime`, fiszkowe `flashcards.tags`, `flashcards.clozeBold` …, `themePage`) |
-| `b.app.get(klucz)`, `b.app.set(klucz, wartość)` | jedno ustawienie: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; ustawienia notatnika dla każdego jego urządzenia: `b.app.set("journalsFolder", "Dziennik")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Motywy/Sepia.md")` |
+| `b.app.get(klucz)`, `b.app.set(klucz, wartość)` | jedno ustawienie: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)`; ustawienia notatnika dla każdego jego urządzenia: `b.app.set("journalsFolder", "Dziennik")`, `b.app.set("weekStartsOn", "sunday")`, `b.app.set("themePage", "Motywy/Sepia.md")`; `brulion-cli extension run` czyta tylko ustawienia notatnika (`b.app.get("journalsFolder")`) |
 | `b.app.navigate(widok)` | pokazuje widok: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
 | `b.app.open(strona, { line = 12, side = true })` | otwiera stronę, w danym wierszu, w panelu bocznym |
 | `b.app.back()` | wraca |

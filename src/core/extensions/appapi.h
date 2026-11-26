@@ -204,13 +204,40 @@ bool tagStyleFrom(const QVariantMap &table, TagStyle *out, QString *error);
 /// A TagStyle as a table (b.app.tagStyles()): {extension, tag, tint, fill, bar}.
 QVariantMap tagStyleTable(const TagStyle &style);
 
+// ---- The notebook's settings (b.app.settings / get / set, scope "notebook") ------------------------
+
+/// A setting of the notebook (.brulion/config.json, synced), not of a device: the app's b.app lists
+/// them after the device's while a notebook is open, and `brulion-cli extension run`, which has no
+/// app, reads them from the notebook itself.
+struct NotebookSetting {
+    QString key;         ///< b.app.get's name, its key in the config ("journalsFolder"; "flashcards.tags"
+                         ///< inside the "flashcards" object)
+    QString kind;        ///< "path" | "text" | "choice" | "toggle"
+    QStringList options; ///< choice: its values
+    QString label;       ///< what it is, in English
+};
+
+/// Every setting of the notebook, in Settings → Notebook's order.
+const QList<NotebookSetting> &notebookSettings();
+/// The setting `key` (exact), nullptr when there is none.
+const NotebookSetting *notebookSetting(QStringView key);
+/// `setting`'s value in a notebook's config as notebook::vaultConfigJson gives it: a toggle a bool,
+/// weekStartsOn its day's name ("monday"), the others their text.
+QVariant notebookSettingValue(const NotebookSetting &setting, const QVariantMap &config);
+/// `value` (checked already) as the change of the config Workspace::setConfig takes:
+/// {"journalsFolder": "Dziennik"}, {"flashcards": {"tags": "fiszki"}}, {"weekStartsOn": 1}.
+QVariantMap notebookSettingChange(const NotebookSetting &setting, const QVariant &value);
+/// b.app.settings()'s rows of the notebook's settings: {key, scope = "notebook", group = "notebook",
+/// kind, label, value, options?}.
+QVariantList notebookSettingRows(const QVariantMap &config);
+
 // ---- The app's operations (Host::app) -------------------------------------------------------------
 
 /// The operations b.app asks of the app through Host::app(), each with its arguments:
 ///   state                       → {view, route, page?, path?, date?, sidePanel, platform, touch,
 ///                                  narrow, dark, width, height, language, version}
 ///   commands                    → [{id, title, subtitle, shortcut, enabled}]
-///   settings                    → [{key, kind, value, options?, min?, max?, label, group}]
+///   settings                    → [{key, scope, kind, value, options?, min?, max?, label, group}]
 ///   get {key}                   → the value
 ///   set {key, value}            → nothing (applied at once)
 ///   navigate {route}            → nothing (shown after the call)

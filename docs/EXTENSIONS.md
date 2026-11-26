@@ -1827,7 +1827,9 @@ page: call it from a command, an action or a hook). `theme`, `contribute`, `inpu
 they work at the top level, and what an extension set goes away when it is loaded again, switched
 off or removed. A macro or a template variable only reads (`b.app.state()` works there; a change
 is an error). In `brulion-cli extension run` there is no app: `b.app.state()` says
-`platform = "cli"`, and the changes are listed in the result's `app` instead of being made.
+`platform = "cli"`, `b.app.settings()` and `b.app.get` give the notebook's own settings, read from
+its `.brulion/config.json` (a device's setting is an error there), and the changes are listed in
+the result's `app` instead of being made.
 
 ### Theme
 

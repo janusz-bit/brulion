@@ -1568,11 +1568,11 @@ private Q_SLOTS:
         QTRY_VERIFY(turn->running());
         QVERIFY(chats->queue(path, u"Za nazwą"_s));
         const int cancels = int(logged(u"session/cancel"_s).size());
+        const int sessions = int(logged(u"session/new"_s).size());
         chats->stop(path);
-        // (Renamed once the agent ended the cancelled turn: a session is not renamed while a turn
-        // of it is on its way.)
+        // Renamed while the cancelled turn's answer is still on its way: the session goes along,
+        // and the next turn goes on in it (no new session).
         QTRY_VERIFY(logged(u"session/cancel"_s).size() > cancels);
-        QTest::qWait(300 * BRULION_TEST_SLOWDOWN);
         const QString renamed = chats->rename(path, u"Nowa nazwa"_s);
         QCOMPARE(renamed, u"AI/2026-11-20 Nowa nazwa.md"_s);
         QCOMPARE(chats->queued(renamed).size(), 1);
@@ -1587,6 +1587,7 @@ private Q_SLOTS:
         QVERIFY2(chats->queued(renamed).isEmpty(), qPrintable(ws->read(renamed) + u"\nfailure: "_s + renamedTurn->failure()));
         QVERIFY2(ws->read(renamed).endsWith(u"- 🤖 Odpowiedź na: I jeszcze to\n  czas:: 2026-11-20 09:15\n"_s),
                  qPrintable(ws->read(renamed)));
+        QCOMPARE(logged(u"session/new"_s).size(), sessions);
     }
 
     /// "Edit from here" takes the message and the rest out (an agent's next turn: a new session

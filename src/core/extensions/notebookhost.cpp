@@ -1,5 +1,6 @@
 #include "extensions/notebookhost.h"
 
+#include "extensions/appapi.h"
 #include "extensions/blockedit.h"
 #include "extensions/pageextension.h"
 #include "extensions/sandbox.h"
@@ -10,6 +11,7 @@
 #include "markdown/tasks.h"
 #include "notebook/itemref.h"
 #include "notebook/journals.h"
+#include "notebook/json.h"
 #include "notebook/pages.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -930,11 +932,17 @@ QVariant NotebookHost::app(const QString &extension, const QString &operation, c
                            {u"width"_s, 0},           {u"height"_s, 0},
                            {u"sidePanel"_s, false},   {u"language"_s, m_options.uiLanguage},
                            {u"version"_s, QString()}};
-    if (operation == u"commands" || operation == u"settings")
+    // The notebook's own settings are there without the app (.brulion/config.json); a device's are not.
+    if (operation == u"commands")
         return QVariantList();
+    if (operation == u"settings")
+        return notebookSettingRows(notebook::vaultConfigJson(m_vault.config()).toVariantMap());
     if (operation == u"get") {
-        *error = u"no setting “%1” here: brulion-cli runs extensions without the app"_s.arg(
-                args.value(u"key"_s).toString());
+        const QString key = args.value(u"key"_s).toString();
+        if (const NotebookSetting *setting = notebookSetting(key))
+            return notebookSettingValue(*setting, notebook::vaultConfigJson(m_vault.config()).toVariantMap());
+        *error = u"no setting “%1” here: brulion-cli runs extensions without the app, so only the notebook's own "
+                 u"settings are there (b.app.settings())"_s.arg(key);
         return {};
     }
     QVariantMap asked = args;
