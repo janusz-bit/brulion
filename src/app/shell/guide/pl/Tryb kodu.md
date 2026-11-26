@@ -36,6 +36,14 @@ Wątek jest zapisany jako strona w folderze `AI` Twojego notatnika, z nazwą pro
 ## Zmiany i terminal
 Obok wątku panel **Zmiany** pokazuje zmiany projektu względem gita — każdy plik z jego różnicami; po turze agenta zobaczysz tylko to, co zmieniła ta tura, i możesz ją **cofnąć**. Stamtąd robisz **commit**, **push** i **pull request** (z zalogowanym wierszem poleceń GitHuba `gh`). Pod wątkiem **terminal** uruchamia powłoki w folderze wątku (ikona terminala w nagłówku go pokazuje i chowa). **Otwórz w edytorze** (ikona `</>`) otwiera folder w Twoim edytorze: jego polecenie — `code`, `zed`, `cursor` — ustawisz w Ustawieniach → Rozszerzenia → Tryb kodu.
 
+## Pliki i wyszukiwanie
+Panel obok wątku ma trzy karty: **Zmiany**, **Pliki** i **Szukaj**.
+- **Ctrl+P** (albo *Przejdź do pliku…* w palecie) znajduje plik projektu po kilku literach nazwy — `cvw` znajdzie `CodeView.qml`; Enter otwiera go w karcie **Pliki**, Ctrl+Enter w Twoim edytorze.
+- **Pliki** pokazują plik tylko do odczytu, z kolorami i numerami wierszy (obrazy jako obrazy). Kliknij wiersz — Shift+klik albo przeciągnięcie po numerach zaznacza więcej — i wybierz **Skomentuj…**: wiersze z Twoim komentarzem trafiają do wiadomości wątku, żeby agent się nimi zajął.
+- **Ctrl+Shift+F** szuka tekstu we wszystkich plikach projektu (bez ignorowanych); wynik otwiera plik w swoim wierszu. `Aa`, `ab` i `.*` to wielkość liter, całe słowa i wyrażenia regularne.
+- Wpisz **@** w wiadomości wątku, żeby wskazać plik albo folder projektu (`@src/main.cpp`); agent dostaje też same wskazane pliki.
+- Plik, do którego agent podlinkuje w odpowiedzi, otwiera się w karcie Pliki w swoim wierszu.
+
 ## Dla ciekawych
 - Agent wątku dostaje narzędzia czatu Brulionu — powiadomienie Cię, zapytanie innego agenta, prośbę o sekret — ale żadnych Twoich notatek ([[Wiersz poleceń i agenci AI]]).
 - Poproszony „daj znać, gdy testy przejdą”, może wysłać Ci własne powiadomienie ([[AI#Powiadomienia od agenta]]).

@@ -36,6 +36,14 @@ A thread is kept as a page in your notebook's `AI` folder, with its project name
 ## Changes and terminal
 Beside the thread, the **Changes** panel shows the project's changes against git — each file with its diff; after an agent's turn you can see just what that turn changed and **revert the turn**. From there you **commit**, **push** and **create a pull request** (with the GitHub command line `gh` signed in). Under the thread, the **terminal** runs shells in the thread's folder (the terminal icon in the header shows and hides it). **Open in editor** (the `</>` icon) opens the folder in your editor: set its command — `code`, `zed`, `cursor` — in Settings → Extensions → Code mode.
 
+## Files and search
+The panel beside the thread has three tabs: **Changes**, **Files** and **Search**.
+- **Ctrl+P** (or *Go to file…* in the palette) finds a file of the project by a few letters of its name — `cvw` finds `CodeView.qml`; Enter opens it in the **Files** tab, Ctrl+Enter in your editor.
+- **Files** shows the file read-only, with colours and line numbers (pictures as pictures). Click a line — Shift+click or a drag over the numbers for more — and choose **Comment…**: the lines and your comment go into the thread's message, for the agent to act on.
+- **Ctrl+Shift+F** searches the text of every file of the project (ignored files left out); a result opens the file at its line. `Aa`, `ab` and `.*` match case, whole words and regular expressions.
+- Type **@** in a thread's message to name a file or folder of the project (`@src/main.cpp`); the agent also gets the named files themselves.
+- A file the agent links to in its answer opens in the Files tab at its line.
+
 ## For the curious
 - An agent of a thread gets Brulion's chat tools — notify you, ask another agent, ask for a secret — but none of your notes ([[Command line and AI agents]]).
 - Asked "let me know when the tests pass", it can send you a notification of its own ([[AI#Notifications from the agent]]).

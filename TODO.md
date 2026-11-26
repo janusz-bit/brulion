@@ -7,12 +7,16 @@ done in the repository simply disappears from the list.
 
 * **Code mode: what is still missing** — projects, AI agents' threads in a project's folder or a
   worktree of their own, the Changes panel with turn checkpoints, commits, pushes and pull requests,
-  and the terminal are there (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
+  the terminal and the project's files — picker, viewer, search, @-mentions — are there
+  (docs/CODE.md). Missing: tried with a real Claude Code and Codex in a
   real project (the fake ACP agent and real git so far); the terminal on Windows (ConPTY) and Code
   mode tried on Windows and macOS at all; a thread's terminals kept while another thread shows;
   staging and discarding single files or hunks, stash, merge conflicts, pull requests from forks or
   to another base in the UI; a worktree removed with its thread; threads continued from the phone
-  through `acp serve` (a project's folder on that computer).
+  through `acp serve` (a project's folder on that computer); in the file viewer (docs/CODE-FILES.md):
+  editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, find within the file shown, the
+  index following the disk through a file watcher; in a thread's composer: mentions of threads,
+  models and pull requests (`#`), review comments as chips instead of text.
 
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
   Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and

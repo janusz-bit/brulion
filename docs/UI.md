@@ -1412,6 +1412,26 @@ mode (`AppSettings.appMode`: "notes" | "code") switches on the rail's first butt
   `worktreeWanted()`; only agents among the partners (`chatNewPartner` shown with one agent too); its
   empty state "What should the agent do?" with suggestions (`codeSuggestions`) — over the terminal
   (`codeTerminal`, `TerminalPanel`), and the Changes panel beside them (`codeChanges`, `GitChangesPanel`).
+* **The right panel's tabs** (`codeRightPanel`, `CodePanelTabs`: `codeTabChanges`, `codeTabFiles`,
+  `codeTabSearch`; kept in `code/rightTab`; docs/CODE-FILES.md): Changes (`codeChanges`), **Files**
+  (`codeFiles`, `CodeFilesPanel`: a header `codeFilesHeader` — recent files `codeFilesRecent`, the path
+  `codeFilesPath`, Go to file… `codeFilesGoTo`, Copy path `codeFilesCopyPath`, Open in editor
+  `codeFilesOpenEditor`, Reload `codeFilesReload` —, `codeFilesTruncated` over a big file's start, the
+  lines `codeFileView` / `codeFileLines` with rows `codeFileLine_<n>`, a picture `codeFilePicture`, a
+  message `codeFilesMessage` for binary, missing, folders, outside; no file: `codeFilesEmpty` with
+  `codeFilesEmptyGoTo` and `codeFilesRecentList`; lines selected: `codeFileSelectionBar` with
+  `codeFileComment` → `codeFileCommentDialog` (`codeFileCommentField`, "Add to chat") and
+  `codeFileCopyLines`, a right click `codeFileLineMenu`) and **Search** (`codeSearchPanel`,
+  `CodeSearchPanel`: `codeSearchField`, toggles `codeSearchCase` / `codeSearchWord` / `codeSearchRegex`,
+  `codeSearchStatus`, `codeSearchEngine`, `codeSearchStop`, results `codeSearchResults` with rows
+  `codeSearchFile` and `codeSearchMatch`, `codeSearchEmpty`). The **file picker** (`codeFilePicker`,
+  `CodeFilePicker`: `codeFilePickerField`, `codeFilePickerList` with `codeFilePickerRow`s): Print page's
+  key (Ctrl+P) in Code mode, the palette's "Go to file…"; Search's key (Ctrl+Shift+F) and "Search in the
+  project" open the Search tab (AppShell's `runShortcut()` → uiActions `code:findFile`, `code:search`).
+  In a thread `@` offers the folder's files and folders (`chatMentions`, CodeFileIndex; Tab or Enter
+  takes the first), and a link of an answer or a tool call's file (`chatToolFile`) to a file of the
+  folder opens it in the Files tab at its line (ChatView's `filesFolder`, `fileLinkActivated(path,
+  line)` → `CodeView.openFileInViewer(path, line)`).
 
 ## Notifications
 

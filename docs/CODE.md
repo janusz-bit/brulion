@@ -114,12 +114,25 @@ emulator (colours, the alternate screen, mouse reporting, bracketed paste, OSC 8
 Ctrl+click, OSC 52 ignored). POSIX desktops; Windows, Android and the browser say there is no
 terminal (ConPTY: not yet).
 
+## Files
+
+The project's files beside the thread are described in **docs/CODE-FILES.md** (core
+`src/core/codefiles`, area `src/app/codefiles`): the right panel's tabs Changes | **Files** |
+**Search**, the file picker (Ctrl+P in Code mode: a fuzzy match over the folder's index from `git
+ls-files` or a walk of the folder), the file viewer (syntax colours, line numbers, pictures, a line
+marked; lines selected → a review comment in the composer), the project search (Ctrl+Shift+F:
+ripgrep, git grep or Brulion's own), a thread's **@-mentions** of its files and folders (each named
+file also sent to the agent as a `resource_link`) and links of answers and tool calls to the
+thread's files opening the viewer at their line (`CodeView.openFileInViewer(path, line)`).
+
 ## What is not there yet
 
 * Windows: the terminal (ConPTY); everything else of Code mode is untried there.
 * Staging or discarding single files or hunks, stash, merge conflicts, pull requests from forks or to
   another base in the UI (docs/CODE-GIT.md).
 * A thread's terminals kept while another thread is shown (they end when the folder changes).
+* Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within
+  the file shown, mentions of threads and pull requests (docs/CODE-FILES.md "Not done").
 * Threads on the phone: a thread's agent runs on this computer only (an agent on another computer
   answers the notebook's conversations, docs/UI.md "AI agents (ACP)").
 * Tried with the protocol's fake agent and real git, not yet with a real Claude Code and Codex in a
