@@ -426,6 +426,16 @@ public:
     /// "asking" | "failed" | "idle"), host, question, failure, status, project, partnerName, here (this
     /// device has its page)}]. Each one's turn here follows it (ChatTurn.remoteHost).
     Q_INVOKABLE QVariantList computerChats(int serial = 0) const;
+    /// The app on the computer of the project `project` (another computer's, whose app shares its
+    /// conversations now) starts this device's new threads of it: startThreadThere().
+    Q_INVOKABLE bool startsThere(const QString &project) const;
+    /// A new thread of `project` started by the app on its computer — answered by `partner` (this
+    /// device's agent of that computer; "" its default), in `worktree` there ("" the project's folder)
+    /// — whose turn this device follows: the request's number (0: not started — pictures do not go
+    /// there yet, no such computer), threadStartedThere() says how it went.
+    Q_INVOKABLE int startThreadThere(const QString &project, const QString &text, const QStringList &pictures,
+                                     const QString &partner = QString(), const QString &worktree = QString(),
+                                     const QString &branch = QString());
     /// The page of `path` as the computer running it has it, while its messages outnumber this
     /// device's copy (the notebook's sync is slower) — ChatMessageModel shows it —, else "".
     Q_INVOKABLE QString computerPage(const QString &path) const;
@@ -798,6 +808,8 @@ Q_SIGNALS:
     void computerChatsChanged();
     /// computerPage(`path`) changed.
     void computerPageChanged(const QString &path);
+    /// startThreadThere()'s request `request` started the thread `path` there ("" and `error`: not).
+    void threadStartedThere(int request, const QString &path, const QString &error);
     void agentsChanged();
     void queueChanged();
     /// rewind() took messages out of `path`: AppController offers Undo (undoRewind()).
@@ -911,6 +923,7 @@ private:
     /// Threads whose message is on its way to the app of their project's computer: their address.
     QHash<QString, QString> m_routing;
     bool m_sendHere = false; ///< sendMessage() runs the turn here (that computer's app did not take it)
+    int m_nextStart = 1;     ///< startThreadThere()'s requests
     /// Turns that ended on another computer whose answer is not here yet (its notification waits for
     /// the page), by path in lower case.
     QSet<QString> m_remoteEnded;

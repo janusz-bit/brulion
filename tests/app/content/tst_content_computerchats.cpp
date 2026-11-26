@@ -508,6 +508,58 @@ private Q_SLOTS:
         }
     }
 
+    void newThreadStartedThere()
+    {
+        auto ws = open(false);
+        WorkspaceChats *c = ws->chats();
+        QVERIFY(!c->startsThere(u"brulion"_s)); // (no such project yet)
+        QTRY_VERIFY(m_computer.waiting(u"projects"_s));
+        m_computer.take(u"projects"_s)
+                ->done(FakeComputer::json(200, QJsonObject{{u"projects"_s, QJsonArray{QJsonObject{
+                                                                               {u"id"_s, u"brulion"_s},
+                                                                               {u"name"_s, u"Brulion"_s},
+                                                                               {u"path"_s, u"/home/ala/brulion"_s}}}}}));
+        QTRY_VERIFY(ws->projects()->isRemote(u"brulion"_s));
+        QVERIFY(!c->startsThere(u"brulion"_s)); // (its app not heard from yet)
+        poll(chats(1, {}));
+        QTRY_VERIFY(c->startsThere(u"brulion"_s));
+        QSignalSpy started(c, &WorkspaceChats::threadStartedThere);
+        QCOMPARE(c->startThreadThere(u"brulion"_s, u"Zdjęcie"_s, {u"attachments/a.png"_s}), 0); // (pictures: not there yet)
+        const int request = c->startThreadThere(u"brulion"_s, u"  Popraw testy żółwia  "_s, {}, u"acp:claude-nixos"_s,
+                                                u"/home/ala/.brulion/worktrees/brulion/popraw"_s, u"t3/popraw"_s);
+        QVERIFY(request > 0);
+        std::optional<FakeComputer::Pending> start = m_computer.take(u"chats/start"_s);
+        QVERIFY(start);
+        // (This device's agent of that computer: its id there.)
+        QCOMPARE(start->body(), (QJsonObject{{u"project"_s, u"brulion"_s},
+                                              {u"text"_s, u"Popraw testy żółwia"_s},
+                                              {u"partner"_s, u"acp:claude"_s},
+                                              {u"worktree"_s, u"/home/ala/.brulion/worktrees/brulion/popraw"_s},
+                                              {u"branch"_s, u"t3/popraw"_s}}));
+        start->done(FakeComputer::json(201, QJsonObject{{u"path"_s, Path}}));
+        QTRY_COMPARE(started.count(), 1);
+        QCOMPARE(started.at(0).at(0).toInt(), request);
+        QCOMPARE(started.at(0).at(1).toString(), Path);
+        QCOMPARE(c->agents()->computerChats()->watched(), Path);
+        // It runs there; its page from there (this device has none yet): where it works too.
+        QTRY_VERIFY(m_computer.waiting(u"chats"_s, 0));
+        acp::RemoteChat running = row(u"running"_s);
+        running.worktree = u"/home/ala/.brulion/worktrees/brulion/popraw"_s;
+        m_computer.take(u"chats"_s, 0)->done(FakeComputer::json(200, chats(2, {running})));
+        QTRY_VERIFY(c->isRunning(Path));
+        QTRY_VERIFY(m_computer.waiting(u"chats/page"_s));
+        m_computer.take(u"chats/page"_s)->done(FakeComputer::json(200, QJsonObject{{u"path"_s, Path}, {u"text"_s, Page}}));
+        QTRY_COMPARE(c->threadPlace(Path).value(u"project"_s).toString(), u"brulion"_s);
+        QVERIFY(c->threadPlace(Path).value(u"remote"_s).toBool());
+        // Refused there: said, nothing started.
+        const int refused = c->startThreadThere(u"brulion"_s, u"Jeszcze jeden"_s, {});
+        m_computer.take(u"chats/start"_s)->done(FakeComputer::error(400, u"bad_worktree"_s, u"Not a worktree of it"_s));
+        QTRY_COMPARE(started.count(), 2);
+        QCOMPARE(started.at(1).at(0).toInt(), refused);
+        QCOMPARE(started.at(1).at(1).toString(), QString());
+        QVERIFY(started.at(1).at(2).toString().contains(u"Not a worktree of it"_s));
+    }
+
     void restartedComputerCountsAnew()
     {
         auto ws = open();

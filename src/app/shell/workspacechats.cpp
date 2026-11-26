@@ -1162,7 +1162,10 @@ QVariantMap WorkspaceChats::threadPlace(const QString &path) const
     if (path.isEmpty() || !m_workspace->ready())
         return {};
     bool ok = false;
-    const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
+    // (A thread another computer's app runs that this device's copy lacks yet: that computer's page.)
+    const QString theirs = computerPage(path);
+    const chat::Conversation c = chat::parse(theirs.isEmpty() ? m_workspace->read(path, &ok) : theirs);
+    ok = ok || !theirs.isEmpty();
     if (!ok || c.project.isEmpty())
         return {};
     const CodeProjects *projects = m_workspace->projects();
@@ -3031,6 +3034,46 @@ bool WorkspaceChats::sendToComputer(const QString &path, const QString &text, co
             Q_EMIT self->m_workspace->errorOccurred(words);
     });
     return true;
+}
+
+bool WorkspaceChats::startsThere(const QString &project) const
+{
+    const std::optional<RemoteProjects::Project> p =
+            project.isEmpty() ? std::nullopt : m_agents->remoteProjects()->find(project);
+    return p && m_workspace->projects()->isRemote(project) && m_agents->computerChats()->attached(p->url);
+}
+
+int WorkspaceChats::startThreadThere(const QString &project, const QString &text, const QStringList &pictures,
+                                     const QString &partner, const QString &worktree, const QString &branch)
+{
+    const std::optional<RemoteProjects::Project> p =
+            project.isEmpty() ? std::nullopt : m_agents->remoteProjects()->find(project);
+    const QString message = text.trimmed();
+    if (!p || message.isEmpty())
+        return 0;
+    if (!pictures.isEmpty()) {
+        Q_EMIT m_workspace->errorOccurred(
+                tr("Pictures do not go to a conversation running on %1 yet: send the text alone.").arg(p->host));
+        return 0;
+    }
+    // (This device's agent of that computer: its id there.)
+    QString there;
+    const QString id = partner.trimmed().startsWith(u"acp:"_s) ? partner.trimmed().mid(4) : QString();
+    for (const AgentConfig &a : m_agents->agents()) {
+        if (a.id == id && a.isRemote() && acp::normalizeRemoteBase(a.url).toString() == p->url)
+            there = u"acp:"_s + a.remote;
+    }
+    const int request = m_nextStart++;
+    const QPointer<WorkspaceChats> self(this);
+    m_agents->computerChats()->start(p->url, project, message, there, worktree, branch,
+                                     [self, request](const QString &path, const QString &error) {
+                                         if (!self)
+                                             return;
+                                         if (!path.isEmpty())
+                                             self->m_agents->computerChats()->watch(path);
+                                         Q_EMIT self->threadStartedThere(request, path, error);
+                                     });
+    return request;
 }
 
 QString WorkspaceChats::threadComputer(const QString &path) const
