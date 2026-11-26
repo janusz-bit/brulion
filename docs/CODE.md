@@ -205,8 +205,20 @@ sub-conversations, scheduled conversations, notifications, unread marks, search.
 
 ## The view
 
-`qml/code/CodeView.qml` (route `code`), `qml/code/CodeSidebar.qml` (AppShell's page panel and the
-drawer's content in Code mode), `qml/code/CodeProjectDialog.qml`; docs/UI.md "Code mode".
+`qml/code/CodeView.qml` (route `code`; its header's `CodeThreadTitle`, `CodeOpenIn`,
+`CodeBranchPicker`, `CodePullRequestDialog`, `CodeSetupBanner`), `qml/code/CodeSidebar.qml` (AppShell's
+page panel and the drawer's content in Code mode; `CodeProjectSection`, `CodeThreadRow`),
+`qml/code/CodeProjectDialog.qml` (`CodeScriptsEditor` over `shell/codescriptsmodel.h`); docs/UI.md
+"Code mode".
+
+**Setup scripts** (T3 Code's `runOnWorktreeCreate`): once a new thread's worktree is made
+(`createWorktree`, before its first message is sent), the project's scripts that run then start in
+the thread's terminal, in the worktree — those not waited for at once, those to wait for (`async:
+false`, "Wait for it before the agent starts") one after another while `CodeSetupBanner` says "Setting
+up the worktree…"; when they all ended with code 0 the message goes, when one failed (its exit code,
+or it did not start) the banner says which and the user sends anyway or not (the message stays in
+the field, the worktree stays: the next Send goes there without setting it up again). Without a
+terminal on the device the scripts are skipped, said in a toast, and the message goes.
 
 ## Changes, checkpoints, commits
 
