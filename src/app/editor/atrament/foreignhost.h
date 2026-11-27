@@ -31,13 +31,13 @@
 #include <QModelIndex>
 #include <QObject>
 #include <QPointer>
+#include <QQmlComponent>
+#include <QQuickItem>
 
 #include <unordered_map>
 #include <vector>
 
-class QQmlComponent;
 class QQmlPropertyMap;
-class QQuickItem;
 
 namespace brulion::atrament {
 class AtramentItem;

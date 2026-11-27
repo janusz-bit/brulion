@@ -16,11 +16,10 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QQuickItem> // (sourceEdit() converts the QPointer inline: the type must be complete)
 #include <QString>
 
 #include <memory>
-
-class QQuickItem;
 
 namespace brulion::editor {
 

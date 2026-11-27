@@ -1,14 +1,47 @@
 #include "scene/vectoricon.h"
 
 #include <algorithm>
-#include <charconv>
 #include <cmath>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace brulion::atrament {
 
 namespace {
+
+// The value of an SVG number the scanner below checked ([sign] digits [. digits] [e [sign]
+// digits]), computed here: std::from_chars for floating point is missing from the C++ libraries
+// of Android's NDK and of Emscripten, and strtof follows the C locale's decimal point.
+double decimalValue(std::string_view s)
+{
+    std::size_t i = 0;
+    double sign = 1;
+    if (i < s.size() && (s[i] == '-' || s[i] == '+'))
+        sign = s[i++] == '-' ? -1 : 1;
+    double value = 0;
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9')
+        value = value * 10 + (s[i++] - '0');
+    if (i < s.size() && s[i] == '.') {
+        ++i;
+        double scale = 0.1;
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9') {
+            value += (s[i++] - '0') * scale;
+            scale /= 10;
+        }
+    }
+    if (i < s.size() && (s[i] == 'e' || s[i] == 'E')) {
+        ++i;
+        int expSign = 1;
+        if (i < s.size() && (s[i] == '-' || s[i] == '+'))
+            expSign = s[i++] == '-' ? -1 : 1;
+        int exponent = 0;
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9' && exponent < 400)
+            exponent = exponent * 10 + (s[i++] - '0');
+        value *= std::pow(10.0, expSign * exponent);
+    }
+    return sign * value;
+}
 
 bool isSpace(char c)
 {
@@ -84,12 +117,8 @@ public:
             if (j > expDigits)
                 i = j;
         }
-        std::size_t from = start;
-        if (m_s[from] == '+')
-            ++from;
-        float value = 0;
-        const auto r = std::from_chars(m_s.data() + from, m_s.data() + i, value);
-        if (r.ec != std::errc() || !std::isfinite(value))
+        const float value = float(decimalValue(m_s.substr(start, i - start)));
+        if (!std::isfinite(value))
             return std::nullopt;
         m_i = i;
         return value;
