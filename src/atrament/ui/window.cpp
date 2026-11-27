@@ -965,24 +965,13 @@ const TextPaintStyle &paintStyleOf(std::span<const TextPaintStyle> styles, std::
 
 } // namespace
 
-float alignedLineX(const TextLine &line, TextAlign align, float boxWidth)
+void Window::paintText(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles)
 {
-    if (align == TextAlign::Center)
-        return std::max(0.0f, (boxWidth - line.width) / 2);
-    if (align == TextAlign::Right)
-        return std::max(0.0f, boxWidth - line.width);
-    return 0;
+    paintTextBackgrounds(layout, origin, styles);
+    paintTextGlyphs(layout, origin, styles);
 }
 
-void Window::paintText(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles, TextAlign align,
-        float boxWidth)
-{
-    paintTextBackgrounds(layout, origin, styles, align, boxWidth);
-    paintTextGlyphs(layout, origin, styles, align, boxWidth);
-}
-
-void Window::paintTextBackgrounds(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles,
-        TextAlign align, float boxWidth)
+void Window::paintTextBackgrounds(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles)
 {
     if (!m_building)
         return;
@@ -1014,17 +1003,16 @@ void Window::paintTextBackgrounds(const TextLayout &layout, Point origin, std::s
                 top = middle - 0.5f;
                 bottom = middle + 0.5f;
             }
-            const float x = origin.x + alignedLineX(line, align, boxWidth);
-            const Rect r = Rect::fromLTRB(x + piece.rect.left() - bg.paddingX, origin.y + top,
-                    x + piece.rect.right() + bg.paddingX, origin.y + bottom);
+            // (piece.rect is where the layout aligned its line.)
+            const Rect r = Rect::fromLTRB(origin.x + piece.rect.left() - bg.paddingX, origin.y + top,
+                    origin.x + piece.rect.right() + bg.paddingX, origin.y + bottom);
             paintQuad(r, Background::solid(bg.color), {}, transparent(), Corners::all(bg.pill ? 1e6f : bg.radius));
         }
         i = j;
     }
 }
 
-void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles,
-        TextAlign align, float boxWidth)
+void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles)
 {
     if (!m_building)
         return;
@@ -1033,7 +1021,6 @@ void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<c
     const auto &glyphs = layout.glyphs();
     const FontCollection &fonts = m_app.textSystem().fonts();
     for (const TextLine &line : layout.lines()) {
-        const float dx = alignedLineX(line, align, boxWidth);
         const float top = origin.y + line.top;
         if (top > mask.bottom() || top + line.height < mask.top())
             continue; // off screen: a long paragraph in a scrolled list
@@ -1065,11 +1052,14 @@ void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<c
                 segments.push_back(Segment { g.styleIndex, x, x, g.face, g.fontSize, shiftAt(g.cluster) });
             }
         }
+        // (A truncated paragraph's last line: under its ellipsis too.)
+        const bool clamped = layout.truncated() && &line == &layout.lines().back();
         if (!segments.empty())
-            segments.back().x1 = std::max(segments.back().x0, layout.caretX(line.end, CaretAffinity::Upstream));
+            segments.back().x1 = std::max(segments.back().x0, clamped ? line.x + line.width
+                                                                      : layout.caretX(line.end, CaretAffinity::Upstream));
         for (std::uint32_t i = line.firstGlyph; i < end; ++i) {
             const PositionedGlyph &g = glyphs[i];
-            paintGlyph(g.face, g.glyph, g.fontSize, { origin.x + dx + g.position.x, origin.y + g.position.y },
+            paintGlyph(g.face, g.glyph, g.fontSize, { origin.x + g.position.x, origin.y + g.position.y },
                     styleOf(g.styleIndex).color);
         }
         for (const Segment &s : segments) {
@@ -1080,20 +1070,20 @@ void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<c
             const float baseline = origin.y + line.baseline - s.shift;
             if (style.overline) {
                 const float thickness = std::max(1.0f, metrics.underlineThickness * s.fontSize);
-                paintQuad(Rect::fromXYWH(origin.x + dx + s.x0, baseline - metrics.ascent * s.fontSize, s.x1 - s.x0, thickness),
+                paintQuad(Rect::fromXYWH(origin.x + s.x0, baseline - metrics.ascent * s.fontSize, s.x1 - s.x0, thickness),
                         Background::solid(style.color), {}, transparent(), {});
             }
             if (style.underline) {
                 const UnderlineStyle &u = *style.underline;
                 const float thickness = std::max(u.thickness, metrics.underlineThickness * s.fontSize);
                 const Color color = u.color.isTransparent() ? style.color : u.color;
-                paintUnderline({ origin.x + dx + s.x0, baseline + std::max(1.0f, metrics.underlinePosition * s.fontSize) },
+                paintUnderline({ origin.x + s.x0, baseline + std::max(1.0f, metrics.underlinePosition * s.fontSize) },
                         s.x1 - s.x0, thickness, color, u.wavy);
             }
             if (style.strikethrough) {
                 const float thickness = std::max(1.0f, metrics.strikeoutThickness * s.fontSize);
                 const float y = baseline - (metrics.strikeoutPosition > 0 ? metrics.strikeoutPosition : 0.3f) * s.fontSize;
-                paintQuad(Rect::fromXYWH(origin.x + dx + s.x0, y - thickness / 2, s.x1 - s.x0, thickness),
+                paintQuad(Rect::fromXYWH(origin.x + s.x0, y - thickness / 2, s.x1 - s.x0, thickness),
                         Background::solid(style.color), {}, transparent(), {});
             }
         }

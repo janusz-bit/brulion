@@ -215,9 +215,9 @@ struct TextLayout::Builder {
     static void wrap(TextLayout &layout, const FontCollection &fonts, const std::vector<ResolvedRun> &runs,
                      std::vector<PositionedGlyph> glyphs, const std::vector<int> &graphemes,
                      const std::vector<BreakKind> &breaks, const ParagraphStyle &style);
-    // The grapheme boundary of a line nearest to x (from the line's start); the line's end only
-    // when `softEnd` allows it or the line does not end at a wrap.
-    static int nearest(const TextLayout &layout, std::size_t line, float x, bool softEnd);
+    // The grapheme boundary of a line nearest to `at` (the layout's x); the line's end only when
+    // `softEnd` allows it or the line does not end at a wrap.
+    static int nearest(const TextLayout &layout, std::size_t line, float at, bool softEnd);
     static float x(const TextLayout &layout, int offset)
     {
         return offset >= 0 && std::size_t(offset) < layout.m_offsetX.size() ? layout.m_offsetX[std::size_t(offset)]
@@ -507,6 +507,65 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
     if (n == 0)
         lines.push_back(TextLine{});
 
+    // At most maxLines lines: the last one shown ends with an ellipsis where text was left out.
+    layout.m_truncated = false;
+    if (style.maxLines > 0 && lines.size() > std::size_t(style.maxLines)) {
+        lines.resize(std::size_t(style.maxLines));
+        TextLine &last = lines.back();
+        layout.m_truncated = true;
+        // The ellipsis in the font of the text before it (a fallback's when that has none; three
+        // full stops when nobody has one).
+        auto runOf = [&](int offset) {
+            auto it = std::upper_bound(runs.begin(), runs.end(), offset,
+                                       [](int o, const ResolvedRun &run) { return o < run.end; });
+            return it == runs.end() ? runs.size() - 1 : std::size_t(it - runs.begin());
+        };
+        const ResolvedRun &run = runs[runOf(std::max(last.start, last.end - 1))];
+        PositionedGlyph mark;
+        mark.fontSize = run.fontSize;
+        mark.styleIndex = run.styleIndex;
+        int marks = 1;
+        float advance = 0;
+        auto glyphOf = [&](FaceId face, char32_t c) -> bool {
+            hb_font_t *font = fonts.hbFont(face);
+            hb_codepoint_t g = 0;
+            if (!font || !hb_font_get_nominal_glyph(font, c, &g))
+                return false;
+            mark.face = face;
+            mark.glyph = g;
+            advance = float(hb_font_get_glyph_h_advance(font, g)) * run.fontSize
+                      / float(std::max(1, fonts.unitsPerEm(face)));
+            return true;
+        };
+        if (!glyphOf(run.face, U'\u2026')) {
+            const FaceId fallback = fonts.faceFor(U'\u2026', run.face);
+            if (fallback == kNoFace || !glyphOf(fallback, U'\u2026')) {
+                marks = 3;
+                glyphOf(run.face, U'.');
+            }
+        }
+        const float ellipsis = advance * float(marks);
+        // Shortened by whole graphemes until the ellipsis fits; no spaces before it.
+        const float room = wrapWidth ? *wrapWidth + kWidthEpsilon : std::numeric_limits<float>::infinity();
+        int cut = visibleEnd(last.start, last.end);
+        while (cut > last.start && widthOf(last.start, cut) + ellipsis > room) {
+            auto it = std::lower_bound(graphemes.begin(), graphemes.end(), cut);
+            cut = it == graphemes.begin() ? last.start : std::max(last.start, *std::prev(it));
+            cut = visibleEnd(last.start, cut);
+        }
+        last.end = cut;
+        last.next = n;
+        last.width = widthOf(last.start, cut) + ellipsis;
+        // The glyphs from the cut on go; the ellipsis follows the rest, at the cut.
+        glyphs.erase(std::find_if(glyphs.begin(), glyphs.end(), [cut](const PositionedGlyph &g) { return g.cluster >= cut; }),
+                     glyphs.end());
+        mark.cluster = cut;
+        for (int k = 0; k < marks; ++k) {
+            mark.position = {X[std::size_t(cut)] + advance * float(k), 0};
+            glyphs.push_back(mark);
+        }
+    }
+
     // Line metrics from the runs' own fonts (not their fallbacks', so an emoji never makes a line
     // taller), CSS's half-leading, and the glyphs placed on their lines.
     struct RunMetrics {
@@ -590,6 +649,25 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
     }
     layout.m_size = {width, top};
 
+    // Each line in the paragraph's box (Alignment): its x, its glyphs with it.
+    float box = width;
+    if (style.alignWidth && std::isfinite(*style.alignWidth))
+        box = std::max(0.0f, *style.alignWidth);
+    else if (wrapWidth)
+        box = *wrapWidth;
+    layout.m_boxWidth = box;
+    layout.m_align = style.align;
+    for (TextLine &line : lines) {
+        if (style.align == TextAlign::Center)
+            line.x = std::max(0.0f, (box - line.width) / 2);
+        else if (style.align == TextAlign::Right)
+            line.x = std::max(0.0f, box - line.width);
+        if (line.x == 0)
+            continue;
+        for (std::uint32_t i = line.firstGlyph; i < line.firstGlyph + line.glyphCount; ++i)
+            placed[i].position.x += line.x;
+    }
+
     // The inline boxes on their lines.
     layout.m_inlineBoxes.clear();
     for (const ResolvedRun &run : runs) {
@@ -597,7 +675,7 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
             continue;
         const int li = layout.lineIndex(run.start);
         const TextLine &line = lines[std::size_t(li)];
-        const float x = X[std::size_t(run.start)] - X[std::size_t(line.start)];
+        const float x = line.x + X[std::size_t(run.start)] - X[std::size_t(line.start)];
         layout.m_inlineBoxes.push_back(
                 PlacedInlineBox{run.start, run.end, li,
                                 Rect::fromLTRB(x, line.baseline - run.box->ascent, x + run.box->width,
@@ -606,9 +684,10 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
     }
 }
 
-int TextLayout::Builder::nearest(const TextLayout &layout, std::size_t li, float px, bool softEnd)
+int TextLayout::Builder::nearest(const TextLayout &layout, std::size_t li, float at, bool softEnd)
 {
     const TextLine &line = layout.m_lines[li];
+    const float px = at - line.x; // from the line's start
     const bool wraps = line.end == line.next && li + 1 < layout.m_lines.size() && line.end > line.start;
     const int end = wraps && !softEnd ? layout.previousCaretStop(line.end) : line.end;
     const float origin = x(layout, line.start);
@@ -650,7 +729,7 @@ float TextLayout::caretX(int offset, CaretAffinity affinity) const
         return 0;
     const TextLine &line = m_lines[std::size_t(lineIndex(offset, affinity))];
     const int o = std::clamp(offset, line.start, line.end);
-    return Builder::x(*this, o) - Builder::x(*this, line.start);
+    return line.x + Builder::x(*this, o) - Builder::x(*this, line.start);
 }
 
 Rect TextLayout::caretRect(int offset, CaretAffinity affinity) const
@@ -692,7 +771,7 @@ std::vector<Rect> TextLayout::selectionRects(Range range) const
             break;
         if (!last && a >= line.next)
             continue;
-        const float origin = Builder::x(*this, line.start);
+        const float origin = Builder::x(*this, line.start) - line.x;
         const float x0 = Builder::x(*this, std::clamp(a, line.start, line.end)) - origin;
         float x1;
         if (b > line.end)
@@ -720,10 +799,10 @@ std::vector<LineRect> TextLayout::glyphRects(Range range) const
         const int to = std::min(b, line.end);
         if (from >= to)
             continue;
-        const float origin = Builder::x(*this, line.start);
+        const float origin = Builder::x(*this, line.start) - line.x;
         const float x0 = Builder::x(*this, from) - origin;
         // Hanging spaces at a wrap are not shown: the piece ends at the line's visible end.
-        const float x1 = std::min(Builder::x(*this, to) - origin, line.width);
+        const float x1 = std::min(Builder::x(*this, to) - origin, line.x + line.width);
         if (x1 - x0 < 0.5f)
             continue;
         float ascent = 0;
@@ -812,7 +891,8 @@ TextLayout TextLayout::Builder::rewrap(const FontCollection &fonts, const TextLa
                                        std::span<const FontRun> runs, const ParagraphStyle &style)
 {
     const std::u16string &text = layout.m_text;
-    if (layout.m_offsetX.size() != text.size() + 1 || layout.m_lines.empty())
+    // (A truncated layout lacks the glyphs it left out: shaped again.)
+    if (layout.m_offsetX.size() != text.size() + 1 || layout.m_lines.empty() || layout.m_truncated)
         return build(fonts, text, runs, style);
     TextLayout out;
     out.m_text = text;
@@ -820,7 +900,7 @@ TextLayout TextLayout::Builder::rewrap(const FontCollection &fonts, const TextLa
     // Back to the unwrapped positions the shaper gave.
     std::vector<PositionedGlyph> glyphs = layout.m_glyphs;
     for (const TextLine &line : layout.m_lines) {
-        const float originX = layout.m_offsetX[std::size_t(line.start)];
+        const float originX = layout.m_offsetX[std::size_t(line.start)] - line.x;
         for (std::uint32_t i = line.firstGlyph; i < line.firstGlyph + line.glyphCount && i < glyphs.size(); ++i) {
             glyphs[i].position.x += originX;
             glyphs[i].position.y -= line.baseline;

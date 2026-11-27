@@ -8,10 +8,11 @@
 // under the header) and the columns, formula cells tinted; each cell's text is its rendering
 // (`html`, the InlineRenderer's) read into RenderedText and drawn with renderedSpans() — links,
 // chips, tags clickable through Text::link —, aligned as its column says (formulas right without
-// one), in the header's weight for the header, wrapped inside its column when it is wider. The
-// columns get TableBlockView's natural widths (tableColumnWidths(), measured by Atrament's text
-// layout) and share what the page has beyond them in proportion to them (flex-grow), as the QML
-// table stretches them; a table wider than the page scrolls sideways inside its row.
+// one), in the header's weight for the header, on one line ending with "…" when it is longer (a
+// header: its lines). The columns get TableBlockView's natural widths (tableColumnWidths(),
+// measured by Atrament's text layout) and share what the page has beyond them in proportion to
+// them (flex-grow), as the QML table stretches them; a table wider than the page scrolls sideways
+// inside its row.
 //
 // Editing: a click on a cell edits it (editCell()): a TextInput in the cell over the cell's text
 // (a formula as written), the controller editing no block meanwhile (TableBlockView.startCell);
@@ -21,7 +22,8 @@
 // the last cell), ↑/↓ the cell above / below and past the header or the last row the block there,
 // ←/→ at the text's edge the cell beside, Ctrl+Enter a new row below, Alt+↑/↓ / Alt+←/→ move the
 // row / the column with the cell, Alt+Enter the link at the caret, Ctrl+V of several cells pastes
-// them from this one, Esc cancels the cell's typing and selects the table, Ctrl+Z / Ctrl+Y the
+// them from this one and selects them (tableselection.cpp: the cell selection; tablefilters.cpp:
+// the filter row), a right-click opens the cell's menu, Esc cancels the cell's typing and selects the table, Ctrl+Z / Ctrl+Y the
 // page's undo with the cell edited on. ↑/↓ from the block above or below edit the header's or the
 // last row's cell under the caret (the controller's editing row becoming the table:
 // tableEditingRowChanged()).
@@ -31,7 +33,9 @@
 #include "editorhost.h"
 #include "editstyles.h"
 #include "pagecontroller.h"
+#include "pageicons.h"
 #include "tablelayout.h"
+#include "tablerows_p.h"
 #include "text/textsystem.h"
 
 #include <QCoreApplication>
@@ -64,27 +68,6 @@ QString tableText(const char *source)
 
 } // namespace
 
-// The table of a row as last read: the role's map, its grid, the columns' natural widths and each
-// cell's rendering.
-struct PageView::TableEntry {
-    QVariantMap data;
-    TableGrid grid;
-    std::vector<float> widths;
-    std::vector<markdown::RenderedText> header;
-    std::vector<std::vector<markdown::RenderedText>> rows;
-    std::uint64_t frame = 0;
-    const markdown::RenderedText *rendered(int r, int c) const
-    {
-        if (c < 0 || c >= grid.columnCount())
-            return nullptr;
-        if (r == -1)
-            return &header[std::size_t(c)];
-        if (r < 0 || r >= grid.rowCount())
-            return nullptr;
-        return &rows[std::size_t(r)][std::size_t(c)];
-    }
-};
-
 std::size_t PageView::CellKeyHash::operator()(const CellKey &k) const noexcept
 {
     return std::hash<quint64>()(k.uid) ^ (std::size_t(k.r + 2) * 0x9e3779b97f4a7c15ull) ^ (std::size_t(k.c) << 20);
@@ -115,11 +98,9 @@ bool PageView::isTable(int row) const
     const QModelIndex index = m_model->index(row, 0);
     if (index.data(BlockListModel::ViewRole).toString() != u"table")
         return false;
-    // A table whose filter row is shown stays the QML view's (its fields are TableBlockView's); a
-    // table the calculator cannot read too.
+    // A table the calculator cannot read stays the QML view's.
     const QVariantMap data = index.data(BlockListModel::TableDataRole).toMap();
-    return !data.value(QStringLiteral("header")).toStringList().isEmpty()
-           && !data.value(QStringLiteral("filtering")).toBool();
+    return !data.value(QStringLiteral("header")).toStringList().isEmpty();
 }
 
 const PageView::TableEntry *PageView::tableEntry(int row) const
@@ -254,6 +235,11 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
         m_tablesPurged = m_frame;
         std::erase_if(m_cellFrames, [this](const auto &kv) { return kv.second.frame + 2 < m_frame; });
         std::erase_if(m_tables, [this](const auto &kv) { return !kv.second || kv.second->frame + 2 < m_frame; });
+        // (A filter field goes with its table, or when the table no longer filters.)
+        std::erase_if(m_filterFields, [this](const auto &kv) {
+            const auto it = m_tables.find(kv.first.uid);
+            return it == m_tables.end() || !it->second || !it->second->grid.filtering;
+        });
     }
     const TableEntry *entry = tableEntry(int(row));
     if (!entry)
@@ -285,6 +271,11 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
             std::move(header).child(renderTableCell(row, uid, grid, -1, c, false));
         std::move(rows).child(std::move(header));
     }
+    // The filter fields under it (tablefilters.cpp).
+    if (grid.filtering)
+        std::move(rows).child(renderFilterRow(row, uid, *entry));
+    else
+        std::erase_if(m_filterFields, [uid](const auto &kv) { return kv.first.uid == uid; });
     bool first = true;
     for (const int r : grid.shownRows(editing ? m_cellRow : -2)) {
         at::Div tr = at::div().id(at::ElementId::number(std::uint64_t(r) + 1)).flexRow().role(at::Role::Row);
@@ -312,13 +303,17 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
                              .textSize(look.fontSize)
                              .lineHeight(look.lineHeight)
                              .child(at::div().id(u"table").flexRow().overflowXScroll().child(std::move(rows)));
-    // "+ Row" / "+ Column" while a cell is edited or the table is selected, always on touch UIs.
-    if (editable && (editing || index.data(BlockListModel::IsSelectedRole).toBool() || m_metrics.touch)) {
+    // "+ Row" / "+ Column" while a cell is edited or the table is selected, always on touch UIs;
+    // while it filters, how many rows show and "Clear filters" (also in reading mode).
+    const bool adds = editable && (editing || index.data(BlockListModel::IsSelectedRole).toBool() || m_metrics.touch);
+    if (adds || grid.filtering) {
         const at::EntityId self = m_selfId;
-        auto button = [&](std::u16string_view id, const QString &label, bool addColumn) {
+        // (0: add a row, 1: add a column, 2: clear the filters.)
+        auto button = [&](std::u16string_view id, const QString &label, int action) {
             const at::Color ink = m_palette.text;
             return at::div()
                     .id(id)
+                    .relative()
                     .flexRow()
                     .itemsCenter()
                     .gap(5)
@@ -331,19 +326,26 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
                     .fontMedium()
                     .role(at::Role::Button)
                     .hover([hover = look.hover](at::Style &s) { s.background = at::Background::solid(hover); })
-                    .onClick([self, row, addColumn](const at::ClickEvent &, at::Window &, at::App &a) {
+                    .onClick([self, row, action](const at::ClickEvent &, at::Window &, at::App &a) {
                         a.updateEntity<PageView>(self, [&](PageView &v, at::Context<PageView> &) {
                             if (!v.m_controller)
                                 return;
-                            if (addColumn)
+                            if (action == 1)
                                 v.m_controller->addTableColumn(int(row));
-                            else
+                            else if (action == 0)
                                 v.m_controller->addTableRow(int(row));
+                            else
+                                v.m_controller->setTableFilterOpen(int(row), false);
                         });
                     })
-                    // The plus (Atrament has no icons yet: two bars).
-                    .child(at::canvas([ink](at::Rect b, at::Window &w, at::App &) {
+                    // The plus (two bars), the ×.
+                    .child(at::canvas([ink, action](at::Rect b, at::Window &w, at::App &) {
                                const at::Point c = b.center();
+                               if (action == 2) {
+                                   if (const auto icon = pageIcon(QStringLiteral("x")))
+                                       w.paintIcon(*icon, at::Rect::fromXYWH(c.x - 6, c.y - 6, 12, 12), ink);
+                                   return;
+                               }
                                const float arm = 5, t = 1.5f;
                                w.paintQuad(at::Rect::fromXYWH(c.x - arm, c.y - t / 2, 2 * arm, t), at::Background::solid(ink),
                                            {}, at::transparent(), at::Corners::all(t / 2));
@@ -354,12 +356,35 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
                                    .flexShrink0())
                     .child(at::text(u16View(label)));
         };
-        std::move(column).child(at::div()
-                                        .flexRow()
-                                        .gap(4)
-                                        .mt(4)
-                                        .child(button(u"addRow", tableText("Row"), false))
-                                        .child(button(u"addColumn", tableText("Column"), true)));
+        at::Div bar = at::div().flexRow().flexWrap().itemsCenter().gap(4).mt(4);
+        if (adds)
+            std::move(bar).child(button(u"addRow", tableText("Row"), 0)).child(button(u"addColumn", tableText("Column"), 1));
+        if (grid.filtering) {
+            // (TableBlockView's filterStatus and clearFilters, the line under the add buttons when
+            // both do not fit side by side.)
+            const QString status = filterStatus(grid);
+            PageView *recorder = this;
+            const CellKey clearKey{uid, kClearFiltersRow, 0};
+            m_cellFrames[clearKey].frame = m_frame;
+            std::move(bar).child(at::div()
+                                         .id(u"filterStatus")
+                                         .flexRow()
+                                         .itemsCenter()
+                                         .gap(4)
+                                         .ml(adds ? 8 : 4)
+                                         .child(at::div()
+                                                        .textSize(look.statusTextSize)
+                                                        .lineHeight(std::round(look.statusTextSize * 1.4f))
+                                                        .textColor(look.muted)
+                                                        .child(at::text(u16View(status))))
+                                         .child(button(u"clearFilters", tableText("Clear filters"), 2)
+                                                        .child(at::canvas([recorder, clearKey](at::Rect b, at::Window &, at::App &) {
+                                                                   recorder->m_cellFrames[clearKey].bounds = b;
+                                                               })
+                                                                       .absolute()
+                                                                       .inset(0))));
+        }
+        std::move(column).child(std::move(bar));
     }
     if (editing) {
         const at::EntityId self = m_selfId;
@@ -414,21 +439,45 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
     // column on the left (TableBlockView's Rectangles); where the cell is, for clicks and ↑/↓.
     const at::Color top = firstBodyRow ? look.borderStrong : look.borderSubtle;
     const bool formulaTint = cell.formula && !edited;
+    // In the selected rectangle of cells; the cursor cell of it (outlined).
+    const bool picked = !edited && cellSelected(int(row), r, c);
+    const bool funnel = header && grid.filtered(c);
+    const bool cursorCell = picked && m_cellSel.cells.cursorRow == r && m_cellSel.cells.cursorColumn == c;
+    if (picked)
+        std::move(d).selected(true);
     std::move(d).child(
-            at::canvas([self, key, top, header, c, edited, formulaTint](at::Rect b, at::Window &w, at::App &) {
+            at::canvas([self, key, top, header, c, edited, formulaTint, picked, cursorCell, funnel](at::Rect b, at::Window &w, at::App &) {
                 const TableLook &look = self->m_tableLook;
                 self->m_cellFrames[key].bounds = b;
                 if (edited)
                     w.paintQuad(b, at::Background::solid(look.input), at::Edges::all(2), look.focusRing, at::Corners::all(2));
                 else if (formulaTint)
                     w.paintQuad(b.inset(at::Edges::all(1)), at::Background::solid(look.formula), {}, at::transparent(), {});
+                if (picked)
+                    w.paintQuad(b.inset(at::Edges::all(1)), at::Background::solid(look.picked),
+                                cursorCell ? at::Edges::all(2) : at::Edges{}, look.focusRing, {});
                 if (!header)
                     w.paintQuad(at::Rect::fromXYWH(b.left(), b.top(), b.width(), 1), at::Background::solid(top), {},
                                 at::transparent(), {});
                 if (c > 0)
                     w.paintQuad(at::Rect::fromXYWH(b.left(), b.top(), 1, b.height()),
                                 at::Background::solid(look.borderSubtle), {}, at::transparent(), {});
+                if (funnel) {
+                    // (BIcon "filter", 12 px, 4 px in from the right.)
+                    if (const auto icon = pageIcon(QStringLiteral("filter")))
+                        w.paintIcon(*icon, at::Rect::fromXYWH(b.right() - 16, b.center().y - 6, 12, 12), look.accent);
+                    else
+                        w.paintQuad(at::Rect::fromXYWH(b.right() - 13, b.center().y - 3, 6, 6), at::Background::solid(look.accent),
+                                    {}, at::transparent(), at::Corners::all(3));
+                }
             })
+                    // The selection's cursor cell shown (sideways in the table, the table in the page).
+                    .onPrepaint([self, key](at::Rect b, at::Window &w, at::App &) {
+                        if (self->m_revealCell && *self->m_revealCell == key) {
+                            self->m_revealCell.reset();
+                            w.revealRect(b);
+                        }
+                    })
                     .absolute()
                     .inset(0));
     // Its text, as wide as the cell (a column: the text stretched across it), aligned as its
@@ -445,13 +494,28 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
             std::move(d).fontFamily(look.monoFamily);
         frame.text = at::TextLayoutHandle{};
         std::move(body).child(*m_cellInput);
+        // A right-click on it: its editing ends (its text kept), the table stays the current
+        // block, the cell's menu opens (TableBlockView's cellArea).
+        std::move(d).onMouseDown(at::MouseButton::Right,
+                                 [selfId, row, r, c](const at::MouseDownEvent &e, at::Window &w, at::App &a) {
+                                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &cx) {
+                                         v.closeCell(cx);
+                                         if (v.m_controller)
+                                             v.m_controller->setSelectedRow(int(row));
+                                         if (v.onCellMenu)
+                                             v.onCellMenu(int(row), r, c, e.position);
+                                         else if (v.onBlockMenu)
+                                             v.onBlockMenu(int(row), e.position);
+                                     });
+                                     w.stopPropagation();
+                                 });
         return std::move(d).child(std::move(body));
     }
-    // (Aligned by placing the text, as wide as its lines, at the right or in the middle: a Text's
-    // own alignment moves its glyphs, not its links' hit regions nor its layout handle's offsets.)
+    // One line (a header: its `<br>` lines), a longer text ending with "…" (TableBlockView's elide).
+    std::move(body).lineClamp(header ? grid.headerLines : 1);
     switch (shownAlign(grid, r, c)) {
-    case TableAlign::Right: std::move(body).flexRow().justifyEnd(); break;
-    case TableAlign::Center: std::move(body).flexRow().justifyCenter(); break;
+    case TableAlign::Right: std::move(body).textRight(); break;
+    case TableAlign::Center: std::move(body).textCenter(); break;
     default: break;
     }
     if (!cell.error.isEmpty())
@@ -470,6 +534,15 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
                                  [selfId, row, r, c, href](const at::ClickEvent &click, at::Window &, at::App &a) {
                                      a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &cx) {
                                          v.cellLinkClicked(row, r, c, href, click.up.position, cx);
+                                     });
+                                 },
+                                 // Its menu: a right-click, a finger held on it (a date chip's, a link's).
+                                 [selfId, row, r, c, href](at::Point p, at::Window &, at::App &a) {
+                                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) {
+                                         if (v.m_touchGrips && v.onLongPressRow)
+                                             v.onLongPressRow(int(row)); // (the selection mode: the row's)
+                                         else if (v.onCellLinkMenu)
+                                             v.onCellLinkMenu(int(row), r, c, href, p);
                                      });
                                  });
         i = j;
@@ -512,11 +585,14 @@ void PageView::connectTables(at::Context<PageView> &cx)
     m_tableConnections.list.push_back(QObject::connect(controller, &PageController::editingRowChanged, controller, [app, self] {
         app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) { v.tableEditingRowChanged(c); });
     }));
-    // Blocks selected around the table (Shift+click, the QML list's keys): the cell's editing ends.
+    // Blocks selected around the table (Shift+click, the QML list's keys): the cell's editing ends,
+    // as does a cell selection.
     m_tableConnections.list.push_back(QObject::connect(controller, &PageController::selectionChanged, controller, [app, self] {
         app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) {
             if (v.m_cellUid && v.m_controller && v.m_controller->selectionCount() > 0)
                 v.stopEditingCell(c);
+            if (v.m_cellSel.uid && !v.m_keepCellSelection && v.m_controller && v.m_controller->selectionCount() > 0)
+                v.clearCellSelection(c);
         });
     }));
 }
@@ -527,9 +603,10 @@ void PageView::tableEditingRowChanged(at::Context<PageView> &cx)
     const int row = ctl ? ctl->editingRow() : -1;
     if (row < 0)
         return;
-    // Another block edited: the cell's editing ends.
+    // Another block edited: the cell's editing ends, a cell selection too.
     if (m_cellUid)
         stopEditingCell(cx);
+    clearCellSelection(cx);
     if (!isTable(row) || ctl->readOnly())
         return;
     // The controller edits a table Atrament draws (↑/↓ from the block above or below, the QML
@@ -589,7 +666,8 @@ bool PageView::editCell(int row, int tableRow, int column, int cursor, at::Conte
     const QString shown = cell->display;
     const bool formula = cell->formula;
     const quint64 uid = m_model->uidAt(row);
-    // No block is edited or selected meanwhile (TableBlockView.startCell).
+    // No block is edited or selected meanwhile (TableBlockView.startCell), no cells.
+    clearCellSelection(cx);
     m_cellUid = 0;
     m_controller->setSelectedRow(-1);
     m_controller->stopEditing();
@@ -631,7 +709,64 @@ bool PageView::editCell(int row, int tableRow, int column, int cursor, at::Conte
     cx.notify();
     if (onEditingStarted)
         onEditingStarted();
+    if (onCellEditingChanged)
+        onCellEditingChanged(row);
     return true;
+}
+
+bool PageView::editFirstCell(int row, at::Context<PageView> &cx)
+{
+    const TableEntry *e = isTable(row) ? tableEntry(row) : nullptr;
+    if (!e)
+        return false;
+    const std::vector<int> shown = e->grid.shownRows(-2);
+    return editCell(row, shown.empty() ? -1 : shown.front(), 0, -1, cx);
+}
+
+void PageView::nextCell(at::Context<PageView> &cx)
+{
+    const TableCell cell = editedCell();
+    const TableEntry *e = cell.row >= 0 ? tableEntry(cell.row) : nullptr;
+    if (!e)
+        return;
+    if (cell.column + 1 < e->grid.columnCount())
+        goToCell(cell.row, cell.tableRow, cell.column + 1, -1, cx);
+    else
+        goToCell(cell.row, e->grid.nextShownRow(cell.tableRow, 1), 0, -1, cx);
+}
+
+void PageView::undoInCell(bool redo, at::Context<PageView> &cx)
+{
+    // The page's undo, the cell edited on with the text the step left in it (the touch toolbar's
+    // undoInCell); a step that took the caret to a block leaves the table.
+    PageController *ctl = m_controller.data();
+    const TableCell cell = editedCell();
+    if (!ctl || cell.row < 0)
+        return;
+    commitCellComposition(cx);
+    const quint64 uid = m_cellUid;
+    stopEditingCell(cx);
+    if (onUndo)
+        onUndo(redo);
+    else if (redo)
+        ctl->redo();
+    else
+        ctl->undo();
+    if (ctl->editingRow() >= 0)
+        return;
+    const int now = m_model->rowOfUid(uid);
+    if (now >= 0 && editCell(now, cell.tableRow, cell.column, -1, cx))
+        return;
+    if (now >= 0)
+        ctl->setSelectedRow(now);
+    if (onEscape)
+        onEscape();
+}
+
+void PageView::closeCell(at::Context<PageView> &cx)
+{
+    commitCellComposition(cx);
+    stopEditingCell(cx);
 }
 
 void PageView::focusCellInput(at::Context<PageView> &cx)
@@ -660,6 +795,8 @@ void PageView::stopEditingCell(at::Context<PageView> &cx)
         }
     }
     cx.notify();
+    if (onCellEditingChanged)
+        onCellEditingChanged(-1);
 }
 
 void PageView::commitCellComposition(at::Context<PageView> &cx)
@@ -759,8 +896,18 @@ void PageView::cellClicked(std::size_t row, int tableRow, int column, const at::
         m_dragSelected = false;
         return;
     }
+    // Shift+click with a cell of this table edited or cells selected: the cells up to this one.
+    const quint64 uid = m_model->uidAt(int(row));
+    const bool shift = click.up.modifiers.shift || click.down.modifiers.shift;
+    if (shift && !m_touchGrips && (m_cellUid == uid || m_cellSel.uid == uid)) {
+        if (m_cellUid == uid)
+            extendCellsFromEdited(tableRow, column, cx);
+        else
+            selectCells(int(row), m_cellSel.cells.anchorRow, m_cellSel.cells.anchorColumn, tableRow, column, cx);
+        return;
+    }
     // (The edited cell's field places its caret itself.)
-    if (m_cellUid && m_cellUid == m_model->uidAt(int(row)) && m_cellRow == tableRow && m_cellColumn == column)
+    if (m_cellUid && m_cellUid == uid && m_cellRow == tableRow && m_cellColumn == column)
         return;
     const int cursor = click.fromAccessibility ? -1 : cellCursorAt(int(row), tableRow, column, click.up.position);
     if (onCellEditRequest && onCellEditRequest(int(row), tableRow, column, cursor, click.up.modifiers))
@@ -808,27 +955,7 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
 
     if (ctrl && !m.alt) {
         if (k.key == u"z" || k.key == u"y") {
-            // The page's undo, the cell edited on with the text the step left in it (the touch
-            // toolbar's undoInCell); a step that took the caret to a block leaves the table.
-            commitCellComposition(cx);
-            const bool redo = k.key == u"y" || m.shift;
-            const quint64 uid = m_cellUid;
-            stopEditingCell(cx);
-            if (onUndo)
-                onUndo(redo);
-            else if (redo)
-                ctl->redo();
-            else
-                ctl->undo();
-            if (ctl->editingRow() >= 0)
-                return true;
-            const int now = m_model->rowOfUid(uid);
-            if (now >= 0 && editCell(now, r, c, -1, cx))
-                return true;
-            if (now >= 0)
-                ctl->setSelectedRow(now);
-            if (onEscape)
-                onEscape();
+            undoInCell(k.key == u"y" || m.shift, cx);
             return true;
         }
         if (k.key == u"enter" && !m.shift) {
@@ -839,12 +966,11 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
             return true;
         }
         if (k.key == u"v" && !m.shift && ctl->clipboardCellCount() >= 2) {
-            // Several cells: pasted from this one down and right (TableBlockView's pasteCells()).
+            // Several cells: pasted from this one down and right, then selected (TableBlockView's
+            // pasteCells(); rows added below the last one).
             commitCellComposition(cx);
-            const QList<int> rows = grid.rowsFrom(r);
             stopEditingCell(cx);
-            ctl->pasteClipboardCells(row, rows, c, 1, 1);
-            editCell(row, r, c, -1, cx);
+            pasteCellsAt(row, r, c, 1, 1, cx);
             return true;
         }
         return false;
@@ -885,10 +1011,7 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
     }
     if (k.key == u"tab" && !ctrl && !m.alt) {
         if (!m.shift) {
-            if (c + 1 < grid.columnCount())
-                goToCell(row, r, c + 1, -1, cx);
-            else
-                goToCell(row, grid.nextShownRow(r, 1), 0, -1, cx);
+            nextCell(cx);
         } else if (c > 0) {
             goToCell(row, r, c - 1, -1, cx);
         } else if (r > -1) {
@@ -908,6 +1031,17 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
             ctl->setSelectedRow(now);
         if (onEscape)
             onEscape();
+        return true;
+    }
+    if ((k.key == u"up" || k.key == u"down" || k.key == u"left" || k.key == u"right") && m.shift && !ctrl && !m.alt) {
+        // Shift+arrows (a horizontal one at the text's edge): the cell is left, the cells from it to
+        // the one beside selected (TableBlockView's arrow()).
+        if (composing)
+            return false;
+        if ((k.key == u"left" && caret > 0) || (k.key == u"right" && caret < length))
+            return false;
+        const auto [toRow, toColumn] = neighbourCell(grid, r, c, k.key);
+        extendCellsFromEdited(toRow, toColumn, cx);
         return true;
     }
     if ((k.key == u"up" || k.key == u"down") && !m.any()) {

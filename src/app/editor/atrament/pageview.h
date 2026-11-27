@@ -514,8 +514,9 @@ private:
     // Tab / Shift+Tab the next / previous cell (a new row after the last), Enter the cell below,
     // ↑/↓ across rows and out of the table to the blocks above and below, ←/→ at the text's edge
     // the next cell, Ctrl+Enter a row below, Alt+arrows move the row or the column, Esc cancels the
-    // cell's typing and selects the table, Ctrl+Z / Ctrl+Y the page's undo (the cell stays edited).
-    // Off, and for a table showing its filter row: tables are foreign rows (the QML delegate).
+    // cell's typing and selects the table, Ctrl+Z / Ctrl+Y the page's undo (the cell stays edited);
+    // the cell selection (tableselection.cpp) and the filter row (tablefilters.cpp) below. Off:
+    // tables are foreign rows (the QML delegate).
 public:
     struct TableLook {
         atrament::Color background = atrament::rgb(0xffffff);           // Theme.bgElevated: the grid
@@ -528,6 +529,9 @@ public:
         atrament::Color error = atrament::rgb(0xa8382d);                // Theme.dangerText: #ERR, #CYCLE
         atrament::Color input = atrament::rgb(0xffffff);                // Theme.bgElevated2: the edited cell
         atrament::Color hover = atrament::rgba(0x0000000e);             // Theme.bgHover: a button under the mouse
+        atrament::Color picked = atrament::rgba(0x3b5bdb29);            // Theme.accent at 16 %: a selected cell
+        atrament::Color accent = atrament::rgb(0x3b5bdb);               // Theme.accent: a filtered column's funnel
+        atrament::Color muted = atrament::rgb(0x6b6f76);                // Theme.fgMuted: the rows shown
         std::u16string fontFamily = u"Brulion Inter";                   // Theme.fontUi
         std::u16string monoFamily = u"Brulion JetBrains Mono";          // Theme.fontMono: a formula edited
         float fontSize = 14;                                            // Theme.textBase
@@ -535,8 +539,11 @@ public:
         float rowHeight = 32;                                           // 40 on touch UIs
         float cellPadding = 12;                                         // Theme.space3
         float radius = 10;                                              // Theme.radius
-        float buttonHeight = 28;                                        // Theme.controlHeightSm
+        float buttonHeight = 28;                                        // Theme.controlHeightSm (a filter field too)
         float buttonTextSize = 12;                                      // Theme.textSm
+        float filterHeight = 36;                                        // the filter row (48 on touch UIs)
+        float fieldTextSize = 13;                                       // Theme.textControl: a filter field
+        float statusTextSize = 11;                                      // Theme.textXs: the rows shown
     };
     void setDrawsTables(bool on, const TableLook &look, atrament::Context<PageView> &cx);
     bool drawsTables() const { return m_drawsTables; }
@@ -554,6 +561,22 @@ public:
     bool editCell(int row, int tableRow, int column, int cursor, atrament::Context<PageView> &cx);
     // Ends the editing of the cell (what was typed stays).
     void stopEditingCell(atrament::Context<PageView> &cx);
+    // Enter on a selected table (TableBlockView.focusFirstCell): its first row's first cell, the
+    // header's when it has no rows.
+    bool editFirstCell(int row, atrament::Context<PageView> &cx);
+    // The touch toolbar's cell tools (TableBlockView's nextCell(), undoInCell(), redoInCell(),
+    // closeCell()): the next cell (Tab), the page's undo / redo with the same cell edited on, the
+    // cell's editing ended (its text kept, the composition committed).
+    void nextCell(atrament::Context<PageView> &cx);
+    void undoInCell(bool redo, atrament::Context<PageView> &cx);
+    void closeCell(atrament::Context<PageView> &cx);
+    // A cell started or stopped being edited: its table's model row (−1: none is edited) — the
+    // editor's editingTable, the touch toolbar's cell tools.
+    std::function<void(int row)> onCellEditingChanged;
+    // A right-click or a finger held on a link or a chip of a cell's text (TableBlockView.cellMenu:
+    // a date chip's menu, a link's) at window point `at`; in the touch selection mode a finger held
+    // there is the row's long press (onLongPressRow).
+    std::function<void(int row, int tableRow, int column, const QString &href, atrament::Point at)> onCellLinkMenu;
     // The edited cell's field (null before the first cell is edited).
     const atrament::Entity<atrament::TextInput> *cellInput() const { return m_cellInput ? &*m_cellInput : nullptr; }
     // Where the last frame drew cell (`tableRow`, `column`) of the table in `row` (window px), and
@@ -573,6 +596,57 @@ public:
     // A right-click on a cell at window point `at`: the block menu with the cell's Row and Column
     // submenus (BlockEditor.openCellBlockMenuAt); unset: onBlockMenu.
     std::function<void(int row, int tableRow, int column, atrament::Point at)> onCellMenu;
+
+    // --- The cell selection (tableselection.cpp; TableBlockView's): a rectangle of one table's
+    // cells from an anchor to a cursor cell (−1 the header). Shift+arrows from the edited cell (a
+    // horizontal one at its text's edge) and Shift+click on a cell of its table make it,
+    // Shift+click moves its end; while it is there no cell is edited and its keys are the page's
+    // (cellRangeKey: the arrows, Home / End, Tab, Enter / F2 or a typed character editing the
+    // cursor cell, Delete, Ctrl+C / X / V / A / Z / Y, Esc). It ends when a cell or a block is
+    // edited, blocks are selected, or with Esc.
+    struct CellSelection {
+        int row = -1; // the table's model row (−1: none)
+        int anchorRow = -2;
+        int anchorColumn = -1;
+        int cursorRow = -2;
+        int cursorColumn = -1;
+        int top() const { return std::min(anchorRow, cursorRow); }
+        int bottom() const { return std::max(anchorRow, cursorRow); }
+        int left() const { return std::min(anchorColumn, cursorColumn); }
+        int right() const { return std::max(anchorColumn, cursorColumn); }
+    };
+    CellSelection cellSelection() const;
+    // Selects cells (anchor)…(cursor) of the table in `row` — the edited cell left, no block
+    // selected or edited, the keys the selection's; false when there is no such cell.
+    bool selectCells(int row, int anchorRow, int anchorColumn, int cursorRow, int cursorColumn,
+                     atrament::Context<PageView> &cx);
+    void clearCellSelection(atrament::Context<PageView> &cx);
+    bool cellSelected(int row, int tableRow, int column) const;
+    // The selection's rows as shown, from its top one down.
+    QList<int> selectedTableRows() const;
+    // Ctrl+C / Ctrl+X (TSV), Delete, Ctrl+V over the selection (its toasts: onNotice).
+    void copyCells(bool cut, atrament::Context<PageView> &cx);
+    void clearCells(atrament::Context<PageView> &cx);
+    void pasteCells(atrament::Context<PageView> &cx);
+    // --- The filter row (tablefilters.cpp): while a table filters (PageController::
+    // setTableFilterOpen) a field per column under its header — typing filters its rows
+    // (setTableFilter: nothing written), Esc empties a field and in an empty one hides the row and
+    // selects the table, Enter leaves it —, the funnel of a filtered column in the header, and
+    // under the grid how many rows show with "Clear filters". focusFilter() gives column
+    // `column`'s field the keys (false: no such table, or it does not filter).
+    bool focusFilter(int row, int column, atrament::Context<PageView> &cx);
+    // cellBounds(row, kFilterRow, c): where the last frame drew column c's filter field;
+    // cellBounds(row, kClearFiltersRow, 0): its "Clear filters".
+    static constexpr int kFilterRow = -3;
+    static constexpr int kClearFiltersRow = -4;
+    // Column `column`'s filter field has the focus.
+    bool filterFocused(int row, int column) const;
+    // "2 of 3 rows shown" (TableBlockView's filterStatus).
+    static QString filterStatus(const struct TableGrid &grid);
+    // A toast for the host (BlockEditor.notice): the text and "success", "info" or "error".
+    std::function<void(const QString &text, const QString &level)> onNotice;
+    // The cell selection was made or moved (`selected`), or it ended.
+    std::function<void(bool selected)> onCellSelectionChanged;
 
 private:
     bool isTable(int row) const;
@@ -597,6 +671,22 @@ private:
     void leaveTable(int row, bool up, float x, atrament::Context<PageView> &cx);
     int columnAtX(quint64 uid, int columns, float x) const;
     void focusCellInput(atrament::Context<PageView> &cx);
+    // The cell selection's keys (tableselection.cpp), and its steps.
+    bool cellRangeKey(const atrament::Keystroke &key, atrament::Context<PageView> &cx);
+    void extendCellsFromEdited(int tableRow, int column, atrament::Context<PageView> &cx);
+    static std::pair<int, int> neighbourCell(const struct TableGrid &grid, int r, int c, std::u16string_view key);
+    void pasteCellsAt(int row, int tableRow, int column, int rowCount, int columnCount, atrament::Context<PageView> &cx);
+    bool editCellWith(int row, int tableRow, int column, const QString &typed, atrament::Context<PageView> &cx);
+    // The filter row's fields (tablefilters.cpp).
+    struct FilterField {
+        atrament::Entity<atrament::TextInput> input;
+        atrament::Subscription changed;
+    };
+    atrament::AnyElement renderFilterRow(std::size_t row, quint64 uid, const TableEntry &entry);
+    std::shared_ptr<FilterField> filterField(quint64 uid, int column, const struct TableGrid &grid);
+    void filterChanged(quint64 uid, int column);
+    bool filterKey(quint64 uid, int column, const atrament::Keystroke &k, atrament::Window &w,
+                   atrament::Context<PageView> &cx);
     // Keeps the controller's signals while the view lives (setController's).
     void connectTables(atrament::Context<PageView> &cx);
     struct Connections {
@@ -632,6 +722,13 @@ private:
     mutable std::unordered_map<CellKey, CellFrame, CellKeyHash> m_cellFrames;
     mutable std::unordered_map<quint64, std::shared_ptr<TableEntry>> m_tables;
     std::uint64_t m_tablesPurged = 0;
+    struct CellSelectionState {
+        quint64 uid = 0; // the table's block (0: nothing selected)
+        CellSelection cells;
+    } m_cellSel;
+    bool m_keepCellSelection = false;    // (an undo of the selection's own: blocks it selects end nothing)
+    std::optional<CellKey> m_revealCell; // the cursor cell to bring into view in the next frame
+    std::unordered_map<CellKey, std::shared_ptr<FilterField>, CellKeyHash> m_filterFields; // (uid, kFilterRow, c)
     // --- Pictures, files, embedded blocks and query results drawn by Atrament (docs/ATRAMENT.md
     // M2 step 5; mediarows.cpp, queryrows.cpp, picturecache.h). A block's pictures and files below
     // its text (EmbedView, PdfEmbedTile), its embedded pages, sections and blocks (TransclusionView)

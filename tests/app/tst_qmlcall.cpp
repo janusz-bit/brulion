@@ -41,6 +41,7 @@ QtObject {
     function receive(index: int): void { received = index }
     function receiveText(text: string): void { seen = text }
     function boxSize(b: Box): int { return b === null ? -1 : b.size }
+    function itself(): QtObject { return root }
 }
 )";
 } // namespace
@@ -96,6 +97,10 @@ private Q_SLOTS:
         QCOMPARE(call.object(object.get(), u"box"_s), made);
         QVERIFY(!call.set(object.get(), u"box"_s, QVariant::fromValue<QObject *>(object.get())));
         QCOMPARE(call.object(object.get(), u"box"_s), made);
+        // A call's object result as an object; anything else none.
+        QCOMPARE(call.objectOf(call.call(object.get(), u"itself"_s)), object.get());
+        QCOMPARE(call.objectOf(call.call1(object.get(), u"twice"_s, 2)), nullptr);
+        QCOMPARE(call.objectOf(QVariant()), nullptr);
     }
 
     void connectsSignalsToFunctions()

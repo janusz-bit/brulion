@@ -76,6 +76,7 @@ void Text::buildRuns(Window &window)
     m_lineHeight = base.resolvedLineHeight();
     m_align = base.align;
     m_whiteSpace = base.whiteSpace;
+    m_maxLines = m_ownMaxLines > 0 ? m_ownMaxLines : base.maxLines;
     auto paintStyle = [](const TextStyle &s) {
         return TextPaintStyle { s.color, s.underline, s.strikethrough, s.background, s.overline };
     };
@@ -159,68 +160,18 @@ void Text::buildRuns(Window &window)
     }
 }
 
-std::shared_ptr<const TextLayout> Text::layoutAt(std::optional<float> wrapWidth)
+std::shared_ptr<const TextLayout> Text::layoutAt(std::optional<float> wrapWidth, std::optional<float> boxWidth)
 {
     ParagraphStyle style;
     style.wrapWidth = m_whiteSpace == WhiteSpace::NoWrap ? std::nullopt : wrapWidth;
     style.lineHeight = m_lineHeight;
-    std::shared_ptr<const TextLayout> layout = m_app->textSystem().layout(
-            std::u16string_view(m_text.data(), m_text.size()), std::span<const FontRun>(m_runs.data(), m_runs.size()),
-            style);
-    if (m_maxLines <= 0 || layout->lines().size() <= std::size_t(m_maxLines) || !style.wrapWidth)
-        return layout;
-    std::shared_ptr<const TextLayout> clamped = clampedLayout(*layout, style);
-    return clamped ? clamped : layout;
-}
-
-std::shared_ptr<const TextLayout> Text::clampedLayout(const TextLayout &full, const ParagraphStyle &style)
-{
-    if (m_runs.empty() || m_maxLines <= 0 || std::size_t(m_maxLines) > full.lines().size())
-        return nullptr;
-    const TextLine &last = full.lines()[std::size_t(m_maxLines - 1)];
-    // The ellipsis in the run of the last character shown on that line (not as an inline box).
-    const int lastChar = std::max(last.start, last.end - 1);
-    FontRun ellipsis = m_runs.back();
-    int runStart = 0;
-    for (const FontRun &r : m_runs) {
-        if (lastChar < runStart + r.length) {
-            ellipsis = r;
-            break;
-        }
-        runStart += r.length;
-    }
-    ellipsis.length = 1;
-    ellipsis.inlineBox.reset();
-    static constexpr char16_t kEllipsis = u'…';
-    TextSystem &ts = m_app->textSystem();
-    const float ellipsisWidth =
-            ts.layout(std::u16string_view(&kEllipsis, 1), std::span<const FontRun>(&ellipsis, 1), ParagraphStyle{})
-                    ->size()
-                    .width;
-    // Where the line is cut: the last grapheme boundary from which the ellipsis still fits, the
-    // spaces before it dropped.
-    const float width = style.wrapWidth ? *style.wrapWidth : full.size().width;
-    int cut = last.end;
-    while (cut > last.start && full.caretX(cut, CaretAffinity::Upstream) + ellipsisWidth > width)
-        cut = std::min(cut - 1, full.previousCaretStop(cut));
-    while (cut > last.start && (m_text[std::size_t(cut - 1)] == u' ' || m_text[std::size_t(cut - 1)] == u'\t'))
-        --cut;
-    std::u16string shown(m_text.data(), std::size_t(cut));
-    shown.push_back(kEllipsis);
-    std::vector<FontRun> runs;
-    int left = cut;
-    for (const FontRun &r : m_runs) {
-        if (left <= 0)
-            break;
-        FontRun piece = r;
-        piece.length = std::min(r.length, left);
-        if (piece.length < r.length)
-            piece.inlineBox.reset(); // (a caret stop never falls inside a box: none is cut)
-        runs.push_back(std::move(piece));
-        left -= r.length;
-    }
-    runs.push_back(std::move(ellipsis));
-    return ts.layout(shown, runs, style);
+    style.maxLines = m_maxLines;
+    // Aligned in the element's box: the wrap width, or (not wrapping) the box prepaint gives.
+    style.align = m_align;
+    if (m_align != TextAlign::Left)
+        style.alignWidth = boxWidth;
+    return m_app->textSystem().layout(std::u16string_view(m_text.data(), m_text.size()),
+            std::span<const FontRun>(m_runs.data(), m_runs.size()), style);
 }
 
 NodeId Text::requestLayout(Window &window, App &app)
@@ -239,7 +190,7 @@ NodeId Text::requestLayout(Window &window, App &app)
                     wrap = std::max(0.0f, availableWidth.value);
                 else if (availableWidth.kind == AvailableSpace::Kind::MinContent)
                     wrap = 0.0f;
-                self->m_layout = self->layoutAt(wrap);
+                self->m_layout = self->layoutAt(wrap, std::nullopt);
                 Size size = self->m_layout->size();
                 if (knownWidth)
                     size.width = *knownWidth;
@@ -251,10 +202,12 @@ NodeId Text::requestLayout(Window &window, App &app)
 
 void Text::prepaint(Rect bounds, Window &window, App &)
 {
-    // The layout's last measure may have been at another width (min-content while sizing).
+    // The layout's last measure may have been at another width (min-content while sizing), and
+    // aligned lines go in the element's own box.
     const bool wraps = m_whiteSpace != WhiteSpace::NoWrap;
-    if (!m_layout || (wraps && (!m_layout->wrapWidth() || std::abs(*m_layout->wrapWidth() - bounds.width()) > 0.01f)))
-        m_layout = layoutAt(wraps ? std::optional<float>(bounds.width()) : std::nullopt);
+    if (!m_layout || (wraps && (!m_layout->wrapWidth() || std::abs(*m_layout->wrapWidth() - bounds.width()) > 0.01f))
+        || (m_align != TextAlign::Left && std::abs(m_layout->boxWidth() - bounds.width()) > 0.01f))
+        m_layout = layoutAt(wraps ? std::optional<float>(bounds.width()) : std::nullopt, bounds.width());
     if (m_layoutHandle) {
         m_layoutHandle->layout = m_layout;
         m_layoutHandle->bounds = bounds;
@@ -298,7 +251,7 @@ void Text::paintObjects(Rect bounds, Window &window)
         if (object.range.start != box.start || !object.object->paint)
             continue;
         const TextLine &line = lines[std::size_t(box.line)];
-        const Point at { bounds.left() + alignedLineX(line, m_align, bounds.width()), bounds.top() };
+        const Point at = bounds.origin; // (the box is where the layout aligned its line)
         InlineObjectPaint p;
         p.bounds = box.bounds.translated(at);
         if (!p.bounds.intersects(mask) && !p.bounds.isEmpty())
@@ -321,8 +274,7 @@ void Text::paint(Rect bounds, Window &window, App &)
                 m_layout && m_layout->length() == int(m_text.size()) ? m_layout.get() : nullptr);
     if (!m_layout)
         return;
-    window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()),
-            m_align, bounds.width());
+    window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()));
     paintObjects(bounds, window);
     if (m_links.empty() || !m_linkState)
         return;

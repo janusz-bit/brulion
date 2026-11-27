@@ -31,7 +31,8 @@ import Brulion
 // / `linkparts-menu` show them (a part hovered / a folder part's menu); `propstest` checks the
 // page properties panel with real input (PropertiesSelfTest.qml) and exits; `readingtest` checks
 // reading mode with real input (ReadingSelfTest.qml) and exits; `atramenttest` runs the outline and
-// keys parts of `selftest` against the page drawn by Atrament (AtramentSelfTest.qml) and exits; `spelltest` checks spell
+// keys parts of `selftest` against the page drawn by Atrament (AtramentSelfTest.qml) and exits; `atramenttabletest`
+// runs `tabletest`'s checks against a table drawn by Atrament (AtramentTableSelfTest.qml) and exits; `spelltest` checks spell
 // checking's marks and menu with real input on word lists (SpellingSelfTest.qml) and exits; `properties` /
 // `properties-phone` show the panel expanded on a page with every type; `copylink` /
 // `copylink-document` show the block menu's "Copy link" (outline / document),
@@ -406,6 +407,17 @@ ApplicationWindow {
             host: host
         }
     }
+    // ---- A table drawn by Atrament (`--editor-script atramenttabletest`) -------------------------
+    Loader {
+        id: atramentTableTestLoader
+        active: false
+        sourceComponent: AtramentTableSelfTest {
+            appWindow: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
     // ---- The page properties panel (`--editor-script propstest`) --------------------------------
     Loader {
         id: propertiesTestLoader
@@ -547,6 +559,9 @@ ApplicationWindow {
             break
         case "atramenttest":
             (atramentTestLoader.item as AtramentSelfTest).steps()
+            break
+        case "atramenttabletest":
+            (atramentTableTestLoader.item as AtramentTableSelfTest).steps()
             break
         }
     }
@@ -4370,6 +4385,9 @@ ApplicationWindow {
             break
         case "atramenttest":
             atramentTestLoader.active = true
+            break
+        case "atramenttabletest":
+            atramentTableTestLoader.active = true
             break
         case "linkparts":
         case "linkparts-menu": {

@@ -167,6 +167,32 @@ public:
 * `TextLayout`: a paragraph wrapped at a width — lines of glyph runs, ascent/descent/line height,
   and the editing queries: caret position for an offset, offset for a point, selection rectangles
   for a range, the next/previous grapheme and word boundary.
+* **Alignment** (a style's `textRight()` / `textCenter()`; `ParagraphStyle::align` and
+  `alignWidth`): the layout places each line in the paragraph's box itself (`TextLine::x`, the box
+  `TextLayout::boxWidth()`: `alignWidth`, else the wrap width, else the widest line), and every
+  position it gives is the placed one — glyphs, carets, hit tests, ↑/↓, selection and glyph
+  rectangles, inline boxes. Whoever draws or asks the layout adds no offset of its own
+  (`Window::paintText` has no alignment parameters any more): a right-aligned or centred `Text`'s
+  links' hit regions, its inline objects, its `TextLayoutHandle`'s offsets and its accessibility
+  bounds are where its glyphs are, and a `TextInput` aligns its text, caret, selection and
+  placeholder in its width. A `Text` aligns in its own box — a wrapping one at its wrap width, one
+  that does not wrap in the width prepaint gives it (laid out again when that differs); `size()`
+  stays the widest line, what the text needs. Decision: the alignment lives in the layout, not in
+  the painter — the painter's offset was the bug (tables placed their text instead), and a
+  second offset in every consumer would be the next one. Tested by
+  `tests/atrament/text/tst_atrament_text_layout` (`aligned`: every query against the left-aligned
+  layout moved by its line's x, rewrapping, the cache) and `tests/atrament/ui/tst_atrament_align`
+  (the glyphs' ink against a link's node and click, the handle's offsets, an object's box, wrapped
+  lines, a field's caret).
+* **Line clamp** (`lineClamp(n)` on an element, `TextStyle::maxLines`; `ParagraphStyle::
+  maxLines`): at most n lines; when text was left out the last one is shortened by whole graphemes
+  until "…" (U+2026 in the font of the text before it, a fallback's, else three full stops) fits
+  the wrap width, spaces before it dropped, and ends with it — CSS's `line-clamp` with
+  `text-overflow: ellipsis`. The text keeps its offsets: the last line's `next` is the text's end,
+  offsets past its end are at its end for carets and hit tests, `TextLayout::truncated()` says it
+  happened (a truncated layout is shaped again when rewrapped: it lacks the glyphs it left out). A
+  screen reader reads the whole text; a `TextInput` shows all of it. Tested by
+  `tst_atrament_text_layout` (`maxLines`) and `tst_atrament_align`.
 * **Background shapes** (`TextBackground`, `ui/style.h`: a span's `style.background`): a pill
   (`pill`), a rounded box (`radius`) or a square box behind a span's glyphs, `paddingX` beyond them
   on each side, `inset` in from their extent — the fonts' ascent above and descent below the
@@ -444,6 +470,14 @@ ScrollTo. After each frame the window compares the tree with the previous frame'
 platform the differences (`PlatformWindow::accessibilityChanged`): nodes added and removed (the
 topmost of each part), children changed, focus, name, description, value (with the old text),
 selection, states, role, the focused node's bounds, scrolling.
+
+**Tables**: a `Role::Table` node's `Row` children are its rows (other children — a filter's
+fields — are none), their `Cell` and `ColumnHeader` children its cells, in order; the Qt bridge
+gives a table Qt's `QAccessibleTableInterface` (rows and columns counted, the cell at a row and a
+column, a column's description from its header, the selected cells, rows and columns; selecting
+through it is the view's own keys') and its cells `QAccessibleTableCellInterface` (their row and
+column, an extent of one, the column's header cell, selected, the table). Tested by
+`tests/atrament/qt/tst_atrament_qt_accessibility` (`tableInterfaces`).
 
 **The Qt bridge** (`qt/qtaccessibility.h`): AtramentItem's `QAccessibleInterface` (from a factory,
 so it answers before Qt Quick's) has the root node's children as its own; every node an
@@ -1059,9 +1093,11 @@ scrolling, `tst_atrament_editor`) before the next:
    alignments (`:--`, `:-:`, `--:`), TableBlockView's natural column widths (the header's lines and
    each cell's visible text measured by Atrament's text layout, 56…280 px) shared out in proportion
    to them on a wider page (flex-grow), a table wider than the page scrolled sideways inside its row
-   (the wheel with Shift, a touchpad, a finger), a cell longer than its column wrapped (the QML table
-   elides it). A click or a tap on a cell edits it at the character under the pointer
-   (`BlockListModel::tableCellText`: the cell rendered with its source map; a formula as written,
+   (the wheel with Shift, a touchpad, a finger), a cell longer than its column on one line ending
+   with "…" (a header: its `<br>` lines; "Text", line clamp), as TableBlockView elides it, each cell
+   aligned by Atrament's own text alignment ("Text": its links, its layout handle's offsets and the
+   caret a click puts are where its glyphs are). A click or a tap on a cell edits it at the
+   character under the pointer (`BlockListModel::tableCellText`: the cell rendered with its source map; a formula as written,
    the caret at its end): a TextInput styled by EditStyler's Inline rules, each change written by
    `PageController::setTableCell(…, typing)` (one undo step per cell, nothing waits for the cell to
    be left), the controller editing no block meanwhile. The keys, TableBlockView's cell field's:
@@ -1070,28 +1106,77 @@ scrolling, `tst_atrament_editor`) before the next:
    stops — past the header or the last row the block above / below (↑/↓ from those edit the
    header's or the last row's cell under the caret), ←/→ at the text's edge the cell beside,
    Ctrl+Enter a row below, Alt+↑/↓ and Alt+←/→ move the row / the column with the cell, Alt+Enter
-   the link at the caret, Ctrl+V of several cells pastes them from this one, Esc cancels the cell's
-   typing (`cancelTableCell`) and selects the table, Ctrl+Z / Ctrl+Y the page's undo with the cell
+   the link at the caret, Ctrl+V of several cells pastes them from this one (then selected), Esc
+   cancels the cell's typing (`cancelTableCell`) and selects the table, Ctrl+Z / Ctrl+Y the page's undo with the cell
    edited on (the touch toolbar's undo in a cell). "+ Row" / "+ Column" under the grid while a cell
    is edited or the table is selected (always on touch UIs); a right-click on a cell opens the block
-   menu with its Row and Column (`tableCellMenuRequested` → `BlockEditor.openCellBlockMenuAt`). For
+   menu with its Row and Column (`tableCellMenuRequested` → `BlockEditor.openCellBlockMenuAt`) —
+   also on the edited cell, whose editing ends first (the table stays the current block) —, and a
+   right-click or a finger held on a cell's link or chip its own menu (`link(range, onClick,
+   onMenu)` → `AtramentView.tableLinkMenuRequested` → `BlockEditor.openCellTokenMenu`, else the
+   link's menu; in the touch selection mode a finger held there is the row's long press). For
    screen readers a table of rows of cells — Atrament's new generic roles `Table`, `Row`, `Cell`,
    `ColumnHeader` (`ui/accessibility.h`, mapped to Qt's in `qt/qtaccessibility.cpp`) —, each cell
-   named by its text and described by its column's header, the edited one a text input "Cell …". A
-   table showing its filter row stays the QML view's (its fields), as every table does with
-   `drawsTables` off. Tested by `tests/atrament/editor/tst_atrament_tables` (TableSelfTest's checks
-   of the keys among them). **Not yet** for tables: the cell selection (Shift+arrows and Shift+click
-   over cells; copying, cutting, emptying and pasting a rectangle; typing over a selected cell), the
-   filter row, the block menu's items that edit a cell afterwards (a new row's or column's: they
-   change the table, `BlockEditor.editTableCell` finds no QML table to edit), Enter on a selected
-   table editing its first cell, the touch toolbar's cell tools (the next cell, undo / redo, More)
-   and the cell kept above them, a long press on a cell's chip (its menu), tooltips (a formula's
-   error, link previews), an ellipsis for a cell longer than its column, dragging the sideways
-   scroll bar, the app's Alt+← / Alt+→ (Back, Forward) still taking those keys before the cell,
-   Qt's table interfaces for screen readers (`QAccessibleTableInterface`: rows and columns counted,
-   a cell's coordinates). In Atrament itself: a `Text` aligned right or centred moves its glyphs
-   but not its links' hit regions nor its layout handle's offsets — cells are aligned by placing
-   their text instead.
+   named by its text and described by its column's header, the edited one a text input "Cell …", the
+   table with Qt's table interfaces ("Accessibility" above). With `drawsTables` off every table is the QML view's. Tested by `tests/atrament/editor/
+   tst_atrament_tables` (TableSelfTest's checks of the keys, of the cell selection and of the filter
+   row among them) and `tst_editor_qml_atrament_table[_touch]` (qml/dev/AtramentTableSelfTest.qml,
+   `--editor-script atramenttabletest --atrament-editor`: TableSelfTest's steps with real input
+   against the page drawn by Atrament — the cell's block menus and their new cells edited after
+   them, the keys in a cell, sorting, the filter row, CSV, the cell selection with Shift+arrows and
+   Shift+click, copying, cutting, emptying, pasting, typing over a cell, Enter on the selected
+   table; on a phone the toolbar's More, Next cell, Undo, Redo and Hide keyboard with the edited
+   cell above it; TableSelfTest's chart part is the chart's, drawn by Atrament too, and left out).
+   * **The cell selection** (`tableselection.cpp`; TableBlockView's): Shift+arrows from the edited
+     cell (a horizontal one at its text's edge) and Shift+click on a cell of its table select a
+     rectangle from it; Shift+click moves its end. While it is there no cell is edited and its keys
+     are the page's (the window's root key listener, before the block selection's:
+     `PageView::cellRangeKey`): the arrows move it, with Shift its end (the header and the last row
+     stop), Home / End the row's first / last cell, with Ctrl the table's, Tab / Shift+Tab the
+     next / previous cell (a new row after the last cell), Enter / F2 edit the cursor cell, a typed
+     character edits it with that character in place of its text (written at once), Delete /
+     Backspace empty the cells, Ctrl+C / Ctrl+X copy and cut them as TSV, Ctrl+V pastes the
+     clipboard over them (TSV, CSV, a Markdown table, lines; one value fills the selection; rows
+     added past the last) with the pasted cells selected after — as a paste of several cells from
+     the edited cell does —, Ctrl+A every cell, Ctrl+Z / Ctrl+Y the page's undo with the selection
+     kept, Esc ends it with the table selected; each change one undo step (`PageController.
+     copyTableCells` / `clearTableCells` / `pasteClipboardCells`), its toasts through
+     `PageView::onNotice` (`AtramentView.noticeRequested` → `BlockEditor.notice`, in TableBlockView's
+     translations). It ends when a cell or a block is edited or blocks are selected. Drawn in the
+     cells: Theme.accent's tint, the cursor cell outlined in the focus ring and scrolled into view,
+     also sideways (`canvas(…).onPrepaint(f)`, new in Atrament: a painter that also runs in prepaint,
+     where the scroll containers around are known); selected cells are selected for screen
+     readers. Its Ctrl keys win over the application's shortcuts (`AtramentView.cellsSelected`).
+   * **The filter row** (`tablefilters.cpp`): while a table filters (the block menu's "Filter
+     rows", "Filter by this column…") a field per column under the header — BTextField's look,
+     "Filter" in it, named "Filter of column …" for screen readers, its × emptying it —; typing
+     filters the rows (`PageController::setTableFilter`: nothing written; a composed word once
+     committed), Esc empties a field and in an empty one hides the row and selects the table, Enter
+     leaves the field; a filtered column's header has the funnel (BIcon "filter" in Theme.accent);
+     under the grid "N of M rows shown" and "Clear filters" next to "+ Row" / "+ Column" (also in
+     reading mode). `PageView::focusFilter` gives a column's field the keys.
+   * **The editor reaches a table drawn by Atrament as it reaches a TableBlockView**:
+     `AtramentView.tableAt(row)` is an `AtramentTableItem` (an item never shown, the view's) with
+     TableBlockView's functions and properties by name — `startCell`, `focusFirstCell`,
+     `openFilter`, `inSelection`, `selectedRows`, `selectionLeft` / `Right`, `nextCell`,
+     `undoInCell`, `redoInCell`, `closeCell`, `cellLength`, `cellRowCount`, `cellAlignOf`,
+     `commitComposition`, `blockIndex`, `editRow`, `editColumn`, `columns`, `filtering` —, which
+     `BlockEditor.tableAt` returns first (through the new `QmlCall.objectOf`): the block menu's Row
+     and Column items edit their new cell afterwards (`BlockEditor.editTableCell`), "Filter by this
+     column…" gives its field the keys, a right-click on selected cells offers the cells' commands
+     (`BlockMenu.readPicked`). While a cell is edited that item is the editor's `editingTable`
+     (`AtramentView.tableEditingChanged`, `editedTable()`): the touch toolbar's cell tools work on it
+     (Undo and Redo with the cell edited on, Next cell, More: the table's block menu at its row,
+     Hide keyboard; `cellHasKeys` for the toolbar), and the Atrament page ends at the toolbar's top
+     while a toolbar of typing is docked (BlockEditor's `atramentLoader`), so the edited cell — and an
+     edited block's caret — stays above it: Atrament's field keeps its caret in view when the window
+     gets another size. Enter on a selected table edits its first cell (`AtramentView.
+     editFirstTableCell`, `PageView::editFirstCell`), and Alt+←/→/↑/↓ in a cell move its row or
+     column instead of being the app's Back and Forward (the page's ShortcutOverride while
+     `AtramentView.editTableRow` is a row). The tools are `PageView::nextCell`, `undoInCell`,
+     `closeCell`, `onCellEditingChanged`.
+   **Not yet** for tables: tooltips (a formula's error, a truncated cell's text, link previews),
+   dragging the sideways scroll bar (Atrament draws none).
    **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
    `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.
    drawsPictures` / `drawsFiles` / `drawsTransclusions` / `drawsQueries`, all on, and `mediaLook`).
@@ -1214,6 +1299,8 @@ scrolling, `tst_atrament_editor`) before the next:
   block menu (and a finger held on a tag the selection mode), a revealed row left short of the view
   past estimated heights, `BlockEditor.ensureRowVisible` doing nothing for the Atrament page,
   suggestions opening in code, a task box with no status menu.
+  `tst_editor_qml_atrament_table[_touch]` (qml/dev/AtramentTableSelfTest.qml) does the same with
+  `tabletest`'s table steps (step 5's tables entry).
 
 ### Open questions
 

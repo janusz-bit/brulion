@@ -718,7 +718,10 @@ everything near the bottom, the same way on Android, in the browser and with a s
   (`BlockEditor.ensureEditVisible()`, the journal's `ensureVisible()` with the toolbar's height;
   a day's editor asks the journal list, `BlockEditor.scroller`), checked again when the view's
   height changes — not while the keyboard slides, once it has settled; the source's caret
-  likewise.
+  likewise. The page drawn by Atrament ends at the toolbar's top while a toolbar of typing is
+  docked on it (BlockEditor's `atramentLoader`): its edited block's caret or table cell is kept in
+  view as Atrament's field keeps its caret when the window gets another size (docs/ATRAMENT.md
+  "Input methods").
 * **Popups**: bottom sheets (`BDialog`) sit on the keyboard and centred dialogs stay above it;
   menus (`BMenu.bottomMargin`) stay above it, the editor's task status menu also above the
   toolbar, and below the status bar of an edge-to-edge window (`BMenu.topMargin`, the window's
@@ -4599,7 +4602,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   CSV** and **Save as CSV…** (`EditorDialogs.saveTableCsv`: the save `FilePicker`, the browser's
   download), docs/SYNTAX.md "Sorting and filtering tables", "CSV". Filtering shows a row of
   `BTextField`s under the header — one per column, the menu's column focused, Escape in an empty
-  field closes the row — and hides the rows that do not match (`BlockListModel.setTableFilter`:
+  field closes the row (the page drawn by Atrament draws the same fields, its cell selection and
+  the touch toolbar's cell tools the same way: docs/ATRAMENT.md M2 step 5, tables) — and hides the rows that do not match (`BlockListModel.setTableFilter`:
   view state of the block, nothing written, kept while the page is open; the edited row stays
   shown); a filtered column's header has a funnel, the line under the grid counts the rows shown
   next to "Clear filters". `/Table from CSV…` picks a file (`EditorDialogs.pickCsvTable`, the

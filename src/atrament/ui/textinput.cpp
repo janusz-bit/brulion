@@ -32,6 +32,7 @@ public:
         const TextStyle &base = window.textStyle();
         m_lineHeight = base.resolvedLineHeight();
         m_textColor = base.color;
+        m_align = base.align;
         m_whiteSpace = m_input->multiline() ? WhiteSpace::Normal : WhiteSpace::NoWrap;
         FontRun run;
         run.face = resolveFace(m_app, base);
@@ -101,7 +102,7 @@ public:
         }
         if (empty) {
             // The placeholder, faded, in the same layout position.
-            auto placeholder = placeholderLayout();
+            auto placeholder = placeholderLayout(bounds.width());
             const TextPaintStyle style { m_textColor.fadedBy(0.45f), std::nullopt, false, std::nullopt };
             window.paintText(*placeholder, bounds.origin, std::span<const TextPaintStyle>(&style, 1));
         } else {
@@ -329,19 +330,26 @@ private:
         Purpose purpose() override { return input() && input()->multiline() ? Purpose::Multiline : Purpose::Text; }
     };
 
+    // `wrap`: the field's width (a one-line field does not wrap at it); aligned lines go in it.
     std::shared_ptr<const TextLayout> layoutAt(std::optional<float> wrap)
     {
         ParagraphStyle style;
         style.wrapWidth = m_whiteSpace == WhiteSpace::NoWrap ? std::nullopt : wrap;
         style.lineHeight = m_lineHeight;
+        style.align = m_align;
+        if (m_align != TextAlign::Left)
+            style.alignWidth = wrap;
         const std::u16string &text = m_input->text();
         return m_app.textSystem().layout(text, std::span<const FontRun>(m_runs.data(), m_runs.size()), style);
     }
 
-    std::shared_ptr<const TextLayout> placeholderLayout()
+    std::shared_ptr<const TextLayout> placeholderLayout(float width)
     {
         ParagraphStyle style;
         style.lineHeight = m_lineHeight;
+        style.align = m_align;
+        if (m_align != TextAlign::Left)
+            style.alignWidth = width;
         const std::u16string_view text = m_placeholder;
         FontRun run = m_baseRun;
         run.length = int(text.size());
@@ -443,6 +451,7 @@ private:
     FontRun m_baseRun;
     float m_lineHeight = 0;
     Color m_textColor;
+    TextAlign m_align = TextAlign::Left;
     WhiteSpace m_whiteSpace = WhiteSpace::Normal;
     std::shared_ptr<const TextLayout> m_layout;
 };

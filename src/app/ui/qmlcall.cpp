@@ -230,7 +230,11 @@ QVariant QmlCall::get(QObject *object, const QString &name) const
 
 QObject *QmlCall::object(QObject *object, const QString &name) const
 {
-    const QVariant value = get(object, name);
+    return objectOf(get(object, name));
+}
+
+QObject *QmlCall::objectOf(const QVariant &value) const
+{
     return value.metaType().flags().testFlag(QMetaType::PointerToQObject) ? value.value<QObject *>() : nullptr;
 }
 

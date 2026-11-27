@@ -248,7 +248,7 @@ at::AnyElement PageView::keyLayer()
                        return;
                    bool handled = false;
                    app.updateEntity<PageView>(id, [&](PageView &v, at::Context<PageView> &c) {
-                       handled = v.selectionKey(down->keystroke, c);
+                       handled = v.cellRangeKey(down->keystroke, c) || v.selectionKey(down->keystroke, c);
                    });
                    if (handled)
                        w.stopPropagation();

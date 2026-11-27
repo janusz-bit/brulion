@@ -948,6 +948,12 @@ void AtramentView::applyTableStyle()
         look.error = colour("error", look.error);
         look.input = colour("input", look.input);
         look.hover = colour("hover", look.hover);
+        look.picked = colour("picked", look.picked);
+        look.accent = colour("accent", look.accent);
+        look.muted = colour("muted", look.muted);
+        look.filterHeight = number("filterHeight", look.filterHeight);
+        look.fieldTextSize = number("fieldTextSize", look.fieldTextSize);
+        look.statusTextSize = number("statusTextSize", look.statusTextSize);
         look.fontFamily = family("fontFamily", look.fontFamily);
         look.monoFamily = family("monoFamily", look.monoFamily);
         look.fontSize = number("fontSize", look.fontSize);
@@ -1000,8 +1006,89 @@ void AtramentView::connectTables()
             Q_EMIT guard->tableCellMenuRequested(row, tableRow, column, grid.rowCount(), grid.columnCount(), align,
                                                  scene.x(), scene.y());
         };
+        page.onNotice = [guard](const QString &text, const QString &level) {
+            if (guard)
+                Q_EMIT guard->noticeRequested(text, level);
+        };
+        page.onCellSelectionChanged = [guard](bool selected) {
+            if (!guard)
+                return;
+            guard->m_cellsSelected = selected;
+            Q_EMIT guard->cellSelectionChanged();
+            for (const auto &kv : guard->m_tableItems)
+                if (kv.second)
+                    Q_EMIT kv.second->changed();
+        };
+        page.onCellEditingChanged = [guard](int row) {
+            if (!guard || guard->m_editedTableRow == row)
+                return;
+            guard->m_editedTableRow = row;
+            Q_EMIT guard->tableEditingChanged();
+            for (const auto &kv : guard->m_tableItems)
+                if (kv.second)
+                    Q_EMIT kv.second->changed();
+        };
+        page.onCellLinkMenu = [guard](int row, int tableRow, int column, const QString &href, at::Point p) {
+            if (guard)
+                Q_EMIT guard->tableLinkMenuRequested(row, tableRow, column, href, p.x, p.y);
+        };
     });
 #endif
+}
+
+bool AtramentView::editFirstTableCell(int row)
+{
+    bool done = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
+                                                 at::Context<brulion::editor::atr::PageView> &cx) {
+            done = page.editFirstCell(row, cx);
+        });
+#else
+    Q_UNUSED(row)
+#endif
+    return done;
+}
+
+int AtramentView::rowOfUid(quint64 uid) const
+{
+    auto *model = qobject_cast<brulion::editor::BlockListModel *>(m_pageModel.data());
+    return model && uid ? model->rowOfUid(uid) : -1;
+}
+
+QQuickItem *AtramentView::tableAt(int row)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    auto *model = qobject_cast<brulion::editor::BlockListModel *>(m_pageModel.data());
+    if (!m_page || !model || row < 0 || row >= model->rowCount() || !m_drawsTables
+        || model->index(row, 0).data(brulion::editor::BlockListModel::ViewRole).toString() != u"table"
+        || !m_page->entity.read(runtime().app).drawsRow(row))
+        return nullptr;
+    const quint64 uid = model->uidAt(row);
+    // (Tables gone from the page take their items with them.)
+    for (auto it = m_tableItems.begin(); it != m_tableItems.end();) {
+        if (!it->second || model->rowOfUid(it->first) < 0) {
+            if (it->second && it->first != uid)
+                it->second->deleteLater();
+            it = m_tableItems.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    QPointer<AtramentTableItem> &item = m_tableItems[uid];
+    if (!item)
+        item = new AtramentTableItem(this, uid);
+    return item.data();
+#else
+    Q_UNUSED(row)
+    return nullptr;
+#endif
+}
+
+QQuickItem *AtramentView::editedTable()
+{
+    return m_editedTableRow >= 0 ? tableAt(m_editedTableRow) : nullptr;
 }
 
 bool AtramentView::editTableCell(int row, int tableRow, int column, int cursor)
@@ -1100,4 +1187,344 @@ bool AtramentView::event(QEvent *e)
     }
 #endif
     return AtramentItem::event(e);
+}
+
+// --- AtramentTableItem: a table drawn by Atrament as BlockEditor reaches a TableBlockView ---------
+
+AtramentTableItem::AtramentTableItem(AtramentView *view, quint64 uid)
+    : QQuickItem(nullptr)
+    , m_view(view)
+    , m_uid(uid)
+{
+    setParent(view);
+    setVisible(false);
+}
+
+int AtramentTableItem::blockIndex() const
+{
+    return m_view ? m_view->rowOfUid(m_uid) : -1;
+}
+
+const brulion::editor::atr::PageView *AtramentTableItem::page() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_view && m_view->m_page)
+        return &m_view->m_page->entity.read(runtime().app);
+#endif
+    return nullptr;
+}
+
+void AtramentTableItem::step(const Step &f)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    const int row = blockIndex();
+    if (!m_view || !m_view->m_page || row < 0)
+        return;
+    m_view->m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
+                                                     at::Context<brulion::editor::atr::PageView> &cx) {
+        f(page, cx, row);
+    });
+#else
+    Q_UNUSED(f)
+#endif
+}
+
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+namespace {
+using brulion::editor::atr::PageView;
+using brulion::editor::atr::TableGrid;
+
+TableGrid gridOf(const AtramentView *view, int row)
+{
+    auto *model = view ? qobject_cast<brulion::editor::BlockListModel *>(view->pageModel()) : nullptr;
+    if (!model || row < 0 || row >= model->rowCount())
+        return {};
+    return brulion::editor::atr::readTableGrid(
+            model->index(row, 0).data(brulion::editor::BlockListModel::TableDataRole).toMap());
+}
+} // namespace
+
+int AtramentTableItem::editRow() const
+{
+    const PageView *p = page();
+    const int row = blockIndex();
+    const PageView::TableCell cell = p ? p->editedCell() : PageView::TableCell{};
+    return row >= 0 && cell.row == row ? cell.tableRow : -2;
+}
+
+int AtramentTableItem::editColumn() const
+{
+    const PageView *p = page();
+    const int row = blockIndex();
+    const PageView::TableCell cell = p ? p->editedCell() : PageView::TableCell{};
+    return row >= 0 && cell.row == row ? cell.column : -1;
+}
+
+int AtramentTableItem::columns() const
+{
+    return gridOf(m_view.data(), blockIndex()).columnCount();
+}
+
+int AtramentTableItem::cellRowCount() const
+{
+    return gridOf(m_view.data(), blockIndex()).rowCount();
+}
+
+bool AtramentTableItem::filtering() const
+{
+    return gridOf(m_view.data(), blockIndex()).filtering;
+}
+
+QString AtramentTableItem::cellAlignOf(int c) const
+{
+    switch (gridOf(m_view.data(), blockIndex()).align(c)) {
+    case brulion::editor::atr::TableAlign::Left: return QStringLiteral("left");
+    case brulion::editor::atr::TableAlign::Center: return QStringLiteral("center");
+    case brulion::editor::atr::TableAlign::Right: return QStringLiteral("right");
+    case brulion::editor::atr::TableAlign::Default: break;
+    }
+    return {};
+}
+
+QString AtramentTableItem::rawText(int r, int c) const
+{
+    const TableGrid grid = gridOf(m_view.data(), blockIndex());
+    const brulion::editor::atr::TableGridCell *cell = grid.cell(r, c);
+    return cell ? cell->text : QString();
+}
+
+QStringList AtramentTableItem::headerTexts() const
+{
+    QStringList out;
+    for (const auto &h : gridOf(m_view.data(), blockIndex()).header)
+        out.append(h.text);
+    return out;
+}
+
+QString AtramentTableItem::headerText(int c) const
+{
+    const TableGrid grid = gridOf(m_view.data(), blockIndex());
+    return c >= 0 && c < grid.columnCount() ? grid.header[std::size_t(c)].text : QString();
+}
+
+bool AtramentTableItem::isRowShown(int r) const
+{
+    return gridOf(m_view.data(), blockIndex()).rowShown(r);
+}
+
+int AtramentTableItem::shownRowCount() const
+{
+    return int(gridOf(m_view.data(), blockIndex()).shownRows(-2).size());
+}
+
+bool AtramentTableItem::filterFocused(int c) const
+{
+    const PageView *p = page();
+    return p && p->filterFocused(blockIndex(), c);
+}
+
+QString AtramentTableItem::filterStatusText() const
+{
+    const TableGrid grid = gridOf(m_view.data(), blockIndex());
+    return grid.filtering ? PageView::filterStatus(grid) : QString();
+}
+
+qreal AtramentTableItem::cellCenterX(int r, int c) const
+{
+    const QRectF b = cellRect(r, c);
+    return b.isEmpty() ? -1 : b.center().x();
+}
+
+qreal AtramentTableItem::cellCenterY(int r, int c) const
+{
+    const QRectF b = cellRect(r, c);
+    return b.isEmpty() ? -1 : b.center().y();
+}
+
+QList<int> AtramentTableItem::shownRows() const
+{
+    QList<int> out;
+    for (const int r : gridOf(m_view.data(), blockIndex()).shownRows(editRow()))
+        out.append(r);
+    return out;
+}
+
+bool AtramentTableItem::hasSelection() const
+{
+    const PageView *p = page();
+    const int row = blockIndex();
+    return p && row >= 0 && p->cellSelection().row == row;
+}
+
+bool AtramentTableItem::inSelection(int r, int c) const
+{
+    const PageView *p = page();
+    const int row = blockIndex();
+    return p && row >= 0 && p->cellSelected(row, r, c);
+}
+
+QList<int> AtramentTableItem::selectedRows() const
+{
+    return hasSelection() ? page()->selectedTableRows() : QList<int>{};
+}
+
+int AtramentTableItem::selectionTop() const
+{
+    return hasSelection() ? page()->cellSelection().top() : -2;
+}
+
+int AtramentTableItem::selectionBottom() const
+{
+    return hasSelection() ? page()->cellSelection().bottom() : -2;
+}
+
+int AtramentTableItem::selectionLeft() const
+{
+    return hasSelection() ? page()->cellSelection().left() : -1;
+}
+
+int AtramentTableItem::selectionRight() const
+{
+    return hasSelection() ? page()->cellSelection().right() : -1;
+}
+
+QString AtramentTableItem::cellText() const
+{
+    const PageView *p = page();
+    const auto *input = p && editRow() > -2 ? p->cellInput() : nullptr;
+    if (!input)
+        return {};
+    const std::u16string &t = input->read(runtime().app).text();
+    return QString(reinterpret_cast<const QChar *>(t.data()), qsizetype(t.size()));
+}
+
+int AtramentTableItem::cellCursor() const
+{
+    const PageView *p = page();
+    const auto *input = p && editRow() > -2 ? p->cellInput() : nullptr;
+    return input ? input->read(runtime().app).selection().focus : -1;
+}
+
+QRectF AtramentTableItem::cellRect(int r, int c) const
+{
+    const PageView *p = page();
+    const int row = blockIndex();
+    const std::optional<at::Rect> b = p && row >= 0 ? p->cellBounds(row, r, c) : std::nullopt;
+    return b ? QRectF(b->left(), b->top(), b->width(), b->height()) : QRectF();
+}
+
+void AtramentTableItem::startCell(int r, int c)
+{
+    step([r, c](PageView &page, at::Context<PageView> &cx, int row) { page.editCell(row, r, c, -1, cx); });
+}
+
+void AtramentTableItem::focusFirstCell()
+{
+    step([](PageView &page, at::Context<PageView> &cx, int row) { page.editFirstCell(row, cx); });
+}
+
+void AtramentTableItem::openFilter(int c)
+{
+    // (TableBlockView.openFilter: the filter row shown, the keys in column c's field.)
+    step([c](PageView &page, at::Context<PageView> &cx, int row) {
+        if (page.controller())
+            page.controller()->setTableFilterOpen(row, true);
+        page.focusFilter(row, c, cx);
+    });
+}
+
+void AtramentTableItem::select(int anchorRow, int anchorColumn, int cursorRow, int cursorColumn)
+{
+    step([=](PageView &page, at::Context<PageView> &cx, int row) {
+        page.selectCells(row, anchorRow, anchorColumn, cursorRow, cursorColumn, cx);
+    });
+}
+
+void AtramentTableItem::clearSelection()
+{
+    if (hasSelection())
+        step([](PageView &page, at::Context<PageView> &cx, int) { page.clearCellSelection(cx); });
+}
+
+void AtramentTableItem::nextCell()
+{
+    if (editRow() > -2)
+        step([](PageView &page, at::Context<PageView> &cx, int) { page.nextCell(cx); });
+}
+
+void AtramentTableItem::undoInCell()
+{
+    if (editRow() > -2)
+        step([](PageView &page, at::Context<PageView> &cx, int) { page.undoInCell(false, cx); });
+}
+
+void AtramentTableItem::redoInCell()
+{
+    if (editRow() > -2)
+        step([](PageView &page, at::Context<PageView> &cx, int) { page.undoInCell(true, cx); });
+}
+
+void AtramentTableItem::closeCell()
+{
+    if (editRow() > -2)
+        step([](PageView &page, at::Context<PageView> &cx, int) { page.closeCell(cx); });
+}
+#else
+int AtramentTableItem::editRow() const { return -2; }
+int AtramentTableItem::editColumn() const { return -1; }
+int AtramentTableItem::columns() const { return 0; }
+int AtramentTableItem::cellRowCount() const { return 0; }
+bool AtramentTableItem::filtering() const { return false; }
+QString AtramentTableItem::cellAlignOf(int) const { return {}; }
+QString AtramentTableItem::rawText(int, int) const { return {}; }
+QStringList AtramentTableItem::headerTexts() const { return {}; }
+QList<int> AtramentTableItem::shownRows() const { return {}; }
+QString AtramentTableItem::headerText(int) const { return {}; }
+bool AtramentTableItem::isRowShown(int) const { return false; }
+int AtramentTableItem::shownRowCount() const { return 0; }
+bool AtramentTableItem::filterFocused(int) const { return false; }
+QString AtramentTableItem::filterStatusText() const { return {}; }
+qreal AtramentTableItem::cellCenterX(int, int) const { return -1; }
+qreal AtramentTableItem::cellCenterY(int, int) const { return -1; }
+bool AtramentTableItem::hasSelection() const { return false; }
+bool AtramentTableItem::inSelection(int, int) const { return false; }
+QList<int> AtramentTableItem::selectedRows() const { return {}; }
+int AtramentTableItem::selectionTop() const { return -2; }
+int AtramentTableItem::selectionBottom() const { return -2; }
+int AtramentTableItem::selectionLeft() const { return -1; }
+int AtramentTableItem::selectionRight() const { return -1; }
+QString AtramentTableItem::cellText() const { return {}; }
+int AtramentTableItem::cellCursor() const { return -1; }
+QRectF AtramentTableItem::cellRect(int, int) const { return {}; }
+void AtramentTableItem::startCell(int, int) { }
+void AtramentTableItem::focusFirstCell() { }
+void AtramentTableItem::openFilter(int) { }
+void AtramentTableItem::select(int, int, int, int) { }
+void AtramentTableItem::clearSelection() { }
+void AtramentTableItem::nextCell() { }
+void AtramentTableItem::undoInCell() { }
+void AtramentTableItem::redoInCell() { }
+void AtramentTableItem::closeCell() { }
+#endif
+
+int AtramentTableItem::selectedCellCount() const
+{
+    return hasSelection() ? int(selectedRows().size()) * (selectionRight() - selectionLeft() + 1) : 0;
+}
+
+bool AtramentTableItem::cellHasKeys() const
+{
+    return m_view && m_view->hasActiveFocus() && editRow() > -2;
+}
+
+int AtramentTableItem::cellLength() const
+{
+    return editRow() > -2 ? int(cellText().size()) : -1;
+}
+
+void AtramentTableItem::commitComposition()
+{
+    // (The edited cell's word the keyboard composes.)
+    if (m_view && editRow() > -2)
+        m_view->commitComposition();
 }

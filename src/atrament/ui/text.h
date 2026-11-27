@@ -7,6 +7,13 @@
 //
 // A string converts to a text element by itself: `.child(u"Zażółć gęślą jaźń")`.
 //
+// Aligned right or centred (`textRight()`, `textCenter()`), each line goes where the paragraph's
+// layout places it in the element's box (TextLayout "Alignment"): its links' hit regions, its
+// inline objects, its layout handle's offsets and its nodes for screen readers with it.
+//
+// `lineClamp(n)` on an element around it: at most n lines, the last one ending with "…" where text
+// was left out (TextLayout::truncated()); a screen reader still reads the whole text.
+//
 // Links (hit regions in text, docs/ATRAMENT.md M2 "What is new"): `.link(range, onClick)` makes a
 // range of the text clickable — the pointing hand over it, underlined while hovered, a click (or a
 // finger's tap) runs `onClick` and goes no further, and a screen reader finds a link node named by
@@ -136,13 +143,11 @@ public:
     }
     // An inline object over `range` (a span with only an object).
     Text &&inlineObject(Range range, InlineObjectSize size, InlineObjectPainter painter = {}) &&;
-    // At most `lines` lines (CSS's line-clamp; 0: no limit): the text past them is left out and the
-    // last line shown ends with "…" in the style of its last character, cut at a grapheme where
-    // the ellipsis fits the width (spaces before it dropped). The layout — carets, hit tests,
-    // links, trackLayout's handle — is of the text shown.
+    // At most `lines` lines (CSS's line-clamp; 0: the `lineClamp` of the elements around, if any):
+    // the layout's own truncation (ParagraphStyle::maxLines) — the last line shown ends with "…".
     Text &&maxLines(int lines) &&
     {
-        m_maxLines = lines > 0 ? lines : 0;
+        m_ownMaxLines = lines > 0 ? lines : 0;
         return std::move(*this);
     }
     Text &&id(ElementId id) &&
@@ -164,8 +169,8 @@ public:
 
 private:
     void buildRuns(Window &window);
-    std::shared_ptr<const TextLayout> layoutAt(std::optional<float> wrapWidth);
-    std::shared_ptr<const TextLayout> clampedLayout(const TextLayout &full, const ParagraphStyle &style);
+    // `boxWidth`: the box aligned lines go in (none: the wrap width, else the widest line).
+    std::shared_ptr<const TextLayout> layoutAt(std::optional<float> wrapWidth, std::optional<float> boxWidth);
     void paintObjects(Rect bounds, Window &window);
 
     ArenaU16String m_text;
@@ -189,6 +194,7 @@ private:
     TextAlign m_align = TextAlign::Left;
     WhiteSpace m_whiteSpace = WhiteSpace::Normal;
     int m_maxLines = 0;
+    int m_ownMaxLines = 0; // maxLines(): over the inherited lineClamp
     App *m_app = nullptr;
     std::shared_ptr<const TextLayout> m_layout;
     std::shared_ptr<TextLayoutHandle::State> m_layoutHandle;

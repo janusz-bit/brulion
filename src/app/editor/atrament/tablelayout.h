@@ -34,7 +34,11 @@ struct TableGrid {
     std::vector<std::vector<TableGridCell>> rows; // each as wide as the header
     std::vector<bool> shown;                     // per row: passes the filters
     int headerLines = 1;                         // a header's `<br>` lines (1…3)
-    bool filtering = false;                      // the filter row is shown (the QML view's)
+    bool filtering = false;                      // the filter row is shown
+    std::vector<QString> filters;                // per column: its filter's text ("": none)
+    int shownCount = 0;                          // how many rows pass the filters
+    // Column `c` has a filter (its funnel in the header).
+    bool filtered(int c) const;
 
     int columnCount() const { return int(header.size()); }
     int rowCount() const { return int(rows.size()); }
@@ -50,6 +54,12 @@ struct TableGrid {
     // The rows shown from row `r` down to the last one (`r` itself whatever the filters say):
     // a paste's rows (BlockViews::tableRowsFrom).
     QList<int> rowsFrom(int r) const;
+    // The rows shown between `from` and `to` (either way round), both ends whatever the filters
+    // say, from the top one down: a cell selection's rows (BlockViews::tableRowsBetween).
+    QList<int> rowsBetween(int from, int to) const;
+    // The row `steps` shown rows below `r` (rowsFrom(r)'s; its last one past the end:
+    // BlockViews::tableRowAfter).
+    int rowAfter(int r, int steps) const;
 };
 
 // The `tableData` role as a grid; an empty grid for anything else.

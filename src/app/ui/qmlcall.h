@@ -67,6 +67,8 @@ public:
     Q_INVOKABLE QVariant get(QObject *object, const QString &name) const;
     /// `object`'s property `name` as an object (null for anything else).
     Q_INVOKABLE QObject *object(QObject *object, const QString &name) const;
+    /// A value (a call's result) as an object: null for anything else.
+    Q_INVOKABLE QObject *objectOf(const QVariant &value) const;
     /// Writes `object`'s property `name` (converted to its type); false when it has none or the
     /// value does not convert.
     Q_INVOKABLE bool set(QObject *object, const QString &name, const QVariant &value) const;

@@ -301,12 +301,33 @@ private:
 
 // --- a node's interface
 
+// A table (Role::Table): its Row children are its rows, their Cell and ColumnHeader children its
+// cells, in order — what Atrament's elements describe for a grid; other children (a filter's
+// fields) are no rows. Qt's table and cell interfaces count and find them.
+bool isCellRole(Role r)
+{
+    return r == Role::Cell || r == Role::ColumnHeader;
+}
+
+std::vector<const AccessibilityNode *> childrenOf(const AccessibilityTree &tree, const AccessibilityNode &n, bool cells)
+{
+    std::vector<const AccessibilityNode *> out;
+    for (const int i : tree.childIndexes(n)) {
+        const AccessibilityNode *c = tree.node(i);
+        if (c && (cells ? isCellRole(c->role) : c->role == Role::Row))
+            out.push_back(c);
+    }
+    return out;
+}
+
 class NodeInterface final : public QAccessibleInterface,
                             public QAccessibleActionInterface,
                             public QAccessibleTextInterface,
                             public QAccessibleEditableTextInterface,
                             public QAccessibleValueInterface,
-                            public QAccessibleViewportInterface {
+                            public QAccessibleViewportInterface,
+                            public QAccessibleTableInterface,
+                            public QAccessibleTableCellInterface {
 public:
     NodeInterface(AtramentAccessibility *bridge, AccessNodeId id) : m_bridge(bridge), m_id(id) { }
 
@@ -450,8 +471,175 @@ public:
         case QAccessible::ValueInterface: return n->hasRange ? static_cast<QAccessibleValueInterface *>(this) : nullptr;
         case QAccessible::ViewportInterface:
             return n->scrolls ? static_cast<QAccessibleViewportInterface *>(this) : nullptr;
+        case QAccessible::TableInterface:
+            return n->role == Role::Table ? static_cast<QAccessibleTableInterface *>(this) : nullptr;
+        case QAccessible::TableCellInterface:
+            return isCellRole(n->role) && tableOf(*n) ? static_cast<QAccessibleTableCellInterface *>(this) : nullptr;
         default: return nullptr;
         }
+    }
+
+    // --- a table's rows and cells (see childrenOf above)
+    std::vector<const AccessibilityNode *> rows() const
+    {
+        const AccessibilityNode *n = node();
+        return n ? childrenOf(*m_bridge->tree(), *n, false) : std::vector<const AccessibilityNode *>{};
+    }
+    const AccessibilityNode *cellNode(int row, int column) const
+    {
+        const std::vector<const AccessibilityNode *> r = rows();
+        if (row < 0 || std::size_t(row) >= r.size())
+            return nullptr;
+        const std::vector<const AccessibilityNode *> cells = childrenOf(*m_bridge->tree(), *r[std::size_t(row)], true);
+        return column >= 0 && std::size_t(column) < cells.size() ? cells[std::size_t(column)] : nullptr;
+    }
+    // A cell's row and table (nullptr: not in one).
+    const AccessibilityNode *rowOf(const AccessibilityNode &cell) const
+    {
+        const AccessibilityNode *r = m_bridge->tree()->parentOf(cell);
+        return r && r->role == Role::Row ? r : nullptr;
+    }
+    const AccessibilityNode *tableOf(const AccessibilityNode &cell) const
+    {
+        const AccessibilityNode *r = rowOf(cell);
+        const AccessibilityNode *t = r ? m_bridge->tree()->parentOf(*r) : nullptr;
+        return t && t->role == Role::Table ? t : nullptr;
+    }
+    QList<QAccessibleInterface *> interfacesOf(const std::vector<const AccessibilityNode *> &nodes) const
+    {
+        QList<QAccessibleInterface *> out;
+        for (const AccessibilityNode *c : nodes)
+            if (QAccessibleInterface *i = m_bridge->interfaceFor(c->id))
+                out.append(i);
+        return out;
+    }
+    std::vector<const AccessibilityNode *> selectedCellNodes() const
+    {
+        std::vector<const AccessibilityNode *> out;
+        for (const AccessibilityNode *r : rows())
+            for (const AccessibilityNode *c : childrenOf(*m_bridge->tree(), *r, true))
+                if (c->states.selected)
+                    out.push_back(c);
+        return out;
+    }
+
+    // QAccessibleTableInterface
+    QAccessibleInterface *caption() const override { return nullptr; }
+    QAccessibleInterface *summary() const override { return nullptr; }
+    QAccessibleInterface *cellAt(int row, int column) const override
+    {
+        const AccessibilityNode *c = cellNode(row, column);
+        return c ? m_bridge->interfaceFor(c->id) : nullptr;
+    }
+    int selectedCellCount() const override { return int(selectedCellNodes().size()); }
+    QList<QAccessibleInterface *> selectedCells() const override { return interfacesOf(selectedCellNodes()); }
+    QString columnDescription(int column) const override
+    {
+        // The column's header (the first row's, when it is one).
+        const AccessibilityNode *c = cellNode(0, column);
+        return c && c->role == Role::ColumnHeader ? toQString(c->name) : QString();
+    }
+    QString rowDescription(int) const override { return {}; }
+    int selectedColumnCount() const override { return int(selectedColumns().size()); }
+    int selectedRowCount() const override { return int(selectedRows().size()); }
+    int columnCount() const override
+    {
+        std::size_t most = 0;
+        for (const AccessibilityNode *r : rows())
+            most = std::max(most, childrenOf(*m_bridge->tree(), *r, true).size());
+        return int(most);
+    }
+    int rowCount() const override { return int(rows().size()); }
+    QList<int> selectedColumns() const override
+    {
+        QList<int> out;
+        for (int c = 0; c < columnCount(); ++c)
+            if (isColumnSelected(c))
+                out.append(c);
+        return out;
+    }
+    QList<int> selectedRows() const override
+    {
+        QList<int> out;
+        for (int r = 0; r < rowCount(); ++r)
+            if (isRowSelected(r))
+                out.append(r);
+        return out;
+    }
+    bool isColumnSelected(int column) const override
+    {
+        const int n = rowCount();
+        for (int r = 0; r < n; ++r) {
+            const AccessibilityNode *c = cellNode(r, column);
+            if (!c || !c->states.selected)
+                return false;
+        }
+        return n > 0;
+    }
+    bool isRowSelected(int row) const override
+    {
+        const std::vector<const AccessibilityNode *> r = rows();
+        if (row < 0 || std::size_t(row) >= r.size())
+            return false;
+        const std::vector<const AccessibilityNode *> cells = childrenOf(*m_bridge->tree(), *r[std::size_t(row)], true);
+        return !cells.empty() && std::all_of(cells.begin(), cells.end(), [](const AccessibilityNode *c) { return c->states.selected; });
+    }
+    // (The view selects its cells with its own keys.)
+    bool selectRow(int) override { return false; }
+    bool selectColumn(int) override { return false; }
+    bool unselectRow(int) override { return false; }
+    bool unselectColumn(int) override { return false; }
+    void modelChange(QAccessibleTableModelChangeEvent *) override { }
+
+    // QAccessibleTableCellInterface
+    bool isSelected() const override
+    {
+        const AccessibilityNode *n = node();
+        return n && n->states.selected;
+    }
+    QList<QAccessibleInterface *> columnHeaderCells() const override
+    {
+        // The column's header cell above it (none for a header itself).
+        const AccessibilityNode *n = node();
+        const AccessibilityNode *t = n ? tableOf(*n) : nullptr;
+        if (!t || n->role == Role::ColumnHeader)
+            return {};
+        const int column = columnIndex();
+        for (const AccessibilityNode *r : childrenOf(*m_bridge->tree(), *t, false)) {
+            const std::vector<const AccessibilityNode *> cells = childrenOf(*m_bridge->tree(), *r, true);
+            if (column >= 0 && std::size_t(column) < cells.size() && cells[std::size_t(column)]->role == Role::ColumnHeader)
+                return interfacesOf({cells[std::size_t(column)]});
+        }
+        return {};
+    }
+    QList<QAccessibleInterface *> rowHeaderCells() const override { return {}; }
+    int columnIndex() const override
+    {
+        const AccessibilityNode *n = node();
+        const AccessibilityNode *r = n ? rowOf(*n) : nullptr;
+        if (!r)
+            return -1;
+        const std::vector<const AccessibilityNode *> cells = childrenOf(*m_bridge->tree(), *r, true);
+        const auto it = std::find(cells.begin(), cells.end(), n);
+        return it == cells.end() ? -1 : int(it - cells.begin());
+    }
+    int rowIndex() const override
+    {
+        const AccessibilityNode *n = node();
+        const AccessibilityNode *t = n ? tableOf(*n) : nullptr;
+        if (!t)
+            return -1;
+        const std::vector<const AccessibilityNode *> r = childrenOf(*m_bridge->tree(), *t, false);
+        const auto it = std::find(r.begin(), r.end(), rowOf(*n));
+        return it == r.end() ? -1 : int(it - r.begin());
+    }
+    int columnExtent() const override { return 1; }
+    int rowExtent() const override { return 1; }
+    QAccessibleInterface *table() const override
+    {
+        const AccessibilityNode *n = node();
+        const AccessibilityNode *t = n ? tableOf(*n) : nullptr;
+        return t ? m_bridge->interfaceFor(t->id) : nullptr;
     }
 
     // QAccessibleActionInterface

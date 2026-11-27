@@ -710,6 +710,12 @@ NodeId Canvas::requestLayout(Window &window, App &)
     return window.requestLayout(m_style.layout, {});
 }
 
+void Canvas::prepaint(Rect bounds, Window &window, App &app)
+{
+    if (m_prepaint)
+        m_prepaint(bounds, window, app);
+}
+
 void Canvas::paint(Rect bounds, Window &window, App &app)
 {
     const bool fade = m_style.opacity < 1;

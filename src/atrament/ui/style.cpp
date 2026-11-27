@@ -26,6 +26,8 @@ void TextStyleRefinement::applyTo(TextStyle &s) const
         s.align = *align;
     if (whiteSpace)
         s.whiteSpace = *whiteSpace;
+    if (maxLines)
+        s.maxLines = *maxLines;
     if (underline)
         s.underline = *underline;
     if (strikethrough)

@@ -291,6 +291,20 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                     ENVIRONMENT "${_playground_env}"
                     TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
             endforeach()
+            # `tabletest`'s checks against a table drawn by Atrament (`--editor-script atramenttabletest`,
+            # qml/dev/AtramentTableSelfTest.qml): the cell's block menu, new cells edited after it, the
+            # keys in a cell, sorting, the filter row, CSV, the cell selection, the touch toolbar's tools.
+            foreach(_atrt "tst_editor_qml_atrament_table;1280x800;" "tst_editor_qml_atrament_table_touch;412x915;--touch")
+                list(GET _atrt 0 _atrt_test)
+                list(GET _atrt 1 _atrt_size)
+                list(GET _atrt 2 _atrt_touch)
+                add_test(NAME ${_atrt_test}
+                    COMMAND brulion --editor --editor-script atramenttabletest --atrament-editor --no-single-instance
+                        --size ${_atrt_size} ${_atrt_touch} --now "2026-10-15 10:00" --locale pl)
+                set_tests_properties(${_atrt_test} PROPERTIES
+                    ENVIRONMENT "${_playground_env}"
+                    TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+            endforeach()
         endif()
         # Path parts of a link to a page in a folder (`--editor-script linkpartstest`,
         # qml/dev/LinkPartsSelfTest.qml): [[Firma/Adam cośtam]] as two links — hover (one part
