@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Templates as T
 import Brulion
 
 // AtramentSelfTest — the editor's own self-test (EditorPlayground's `selftest`: its outline and
@@ -146,6 +147,7 @@ QtObject {
         test.slashCommands()
         test.chips()
         test.sources()
+        test.spelling()
     }
     function reading(): void {
         if (window.at()) {
@@ -795,6 +797,81 @@ QtObject {
         if (window.at()) test.check(test.suggestionsClosed() && !(test.popup() !== null && test.popup().visible),
                                     "a calculation opens no suggestions either")
         if (window.at()) page.stopEditing()
+    }
+
+    // Spell checking in the Atrament field (SpellingSelfTest's correction, on word lists): the
+    // misspelled word marked (not a known one, not in code, a link or a tag), a right-click on it
+    // (a tap with a finger) opening the spelling's menu with its corrections first, a correction
+    // replacing the word with the caret after it, one undo step bringing it back.
+    readonly property list<string> polishWords: ["ala", "ma", "kota", "kot", "psa", "zapisz", "jest", "fajny", "notatnik"]
+    readonly property list<string> englishWords: ["meeting", "team"]
+    function spellMenu(): BMenu { return editor.textMenu }
+    function spellMenuOpen(): bool { return test.spellMenu() !== null && test.spellMenu().opened }
+    function suggestion(text: string): T.MenuItem {
+        const menu = test.spellMenu()
+        for (let i = 0; menu && i < menu.count; ++i) {
+            const it = menu.itemAt(i) as T.MenuItem
+            if (it && it.objectName === "spellSuggestion" && it.text === text)
+                return it
+        }
+        return null
+    }
+    /// The middle of `word`'s first occurrence in the edited text (spot), false when it is not there.
+    function findWord(word: string): bool {
+        const w = word
+        const at = Js.indexOf(test.editText(), w)
+        const v = test.view() as AtramentView
+        if (at < 0 || !v)
+            return false
+        test.spot = v.editPoint(at + Math.floor(w.length / 2))
+        return test.spot.x >= 0
+    }
+    function wordMarked(word: string): bool {
+        const v = test.view() as AtramentView
+        return test.findWord(word) && v !== null && v.misspelledWordAt(test.spot.x, test.spot.y) !== ""
+    }
+    function spelling(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            SpellCheck.useWordLists(Js.withKey(Js.withKey({}, "pl", test.polishWords), "en", test.englishWords))
+            SpellCheck.languageSetting = "pl,en"
+            SpellCheck.enabled = true
+            host.setFile("Pisownia.md", "- Ala ma kotta i psa\n- Zapisz `kotta` w [[kotta]] #kotta\n")
+            page.path = "Pisownia.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && test.rowOf("Ala ma") === 0 && SpellCheck.active, "the page to check opens")
+        if (window.at()) editor.startEditing(0, 0)
+        if (window.at()) window.waitStep(test.editing(0) && test.wordMarked("kotta"), "“kotta” is marked in the edited Atrament field")
+        if (window.at()) test.check(!test.wordMarked("Ala") && !test.wordMarked("psa"), "known words are not marked")
+        if (window.at()) {
+            test.findWord("kotta")
+            if (window.touchRun)
+                window.tapPoint(test.view(), test.spot.x, test.spot.y)
+            else
+                window.rightClick(test.view(), test.spot.x, test.spot.y)
+        }
+        if (window.at()) window.waitStep(test.spellMenuOpen() && test.suggestion("kota") !== null,
+                                         (window.touchRun ? "a tap" : "a right-click") + " on the marked word offers “kota”")
+        if (window.at()) {
+            test.check(window.menuIndexOf(test.spellMenu(), "spellSuggestion") === 0, "corrections come first")
+            const target = test.suggestion("kota")
+            if (target)
+                window.tapItem(target)
+        }
+        if (window.at()) window.waitStep(!test.spellMenuOpen() && Js.indexOf(host.file("Pisownia.md"), "Ala ma kota i psa") >= 0
+                                         && test.editText() === "Ala ma kota i psa",
+                                         "the word is replaced: " + test.editText())
+        if (window.at()) test.check(test.editing(0) && test.editCursor() === 11, "the caret is after it: " + test.editCursor())
+        if (window.at()) test.key(Qt.Key_Z, Qt.ControlModifier)
+        if (window.at()) window.waitStep(test.editText() === "Ala ma kotta i psa", "one undo step brings it back: " + test.editText())
+        if (window.at()) editor.startEditing(1, 0)
+        if (window.at()) window.waitStep(test.editing(1), "the block of code, a link and a tag is edited")
+        if (window.at()) test.check(!test.wordMarked("kotta"), "a word in code, a link or a tag is not marked")
+        if (window.at()) {
+            page.stopEditing()
+            SpellCheck.enabled = false
+        }
     }
 
     Component.onCompleted: window.runSteps("atramenttest")

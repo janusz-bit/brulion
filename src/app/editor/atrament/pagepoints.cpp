@@ -41,4 +41,17 @@ std::optional<at::Point> PageView::taskBoxPoint(int row) const
     return at::Point{t->bounds().left() - marker / 2, t->bounds().top() + m_metrics.lineHeight / 2};
 }
 
+std::optional<at::Point> PageView::editPoint(int offset) const
+{
+    if (!m_input || !m_app || editedRow() < 0)
+        return std::nullopt;
+    const at::TextInput &input = m_input->read(*m_app);
+    if (offset < 0 || offset > int(input.text().size()))
+        return std::nullopt;
+    const std::optional<at::Rect> caret = input.boundsForRange(at::Range{offset, offset});
+    if (!caret)
+        return std::nullopt;
+    return at::Point{caret->left() + 0.5f, caret->top() + caret->height() / 2};
+}
+
 } // namespace brulion::editor::atr

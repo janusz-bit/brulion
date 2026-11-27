@@ -199,6 +199,11 @@ public:
     // the self-tests click.
     Q_INVOKABLE QPointF linkPoint(int row, const QString &hrefPart) const;
     Q_INVOKABLE QPointF taskBoxPoint(int row) const;
+    // Where the caret before `offset` of the edited field is ((−1, −1): none), and the misspelled
+    // word at a point of this item in the edited text or a drawn row ("" when none): the self-tests'
+    // clicks on a word, their look at the spell marks.
+    Q_INVOKABLE QPointF editPoint(int offset) const;
+    Q_INVOKABLE QString misspelledWordAt(qreal x, qreal y) const;
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();

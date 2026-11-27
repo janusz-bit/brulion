@@ -231,6 +231,33 @@ QPointF AtramentView::linkPoint(int row, const QString &hrefPart) const
     return {-1, -1};
 }
 
+QPointF AtramentView::editPoint(int offset) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        if (const auto p = m_page->entity.read(runtime().app).editPoint(offset))
+            return {p->x, p->y};
+#endif
+    Q_UNUSED(offset);
+    return {-1, -1};
+}
+
+QString AtramentView::misspelledWordAt(qreal x, qreal y) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page) {
+        const auto &page = m_page->entity.read(runtime().app);
+        const at::Point p{float(x), float(y)};
+        const int row = page.editedRow() >= 0 ? page.editedRow() : page.rowAtY(float(y));
+        if (const auto m = page.misspelledAt(row, p))
+            return m->word;
+    }
+#endif
+    Q_UNUSED(x);
+    Q_UNUSED(y);
+    return {};
+}
+
 QPointF AtramentView::taskBoxPoint(int row) const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR

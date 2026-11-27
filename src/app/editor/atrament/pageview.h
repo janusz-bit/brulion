@@ -263,6 +263,9 @@ public:
     // middle, window px, by the last frame): what the self-tests in the app click (pagepoints.cpp).
     std::optional<atrament::Point> linkPoint(int row, const QString &hrefPart) const;
     std::optional<atrament::Point> taskBoxPoint(int row) const;
+    // Where the caret before offset `offset` of the edited field is (its middle, window px; nothing
+    // when no block is edited or past its text): the self-tests click a word of the field there.
+    std::optional<atrament::Point> editPoint(int offset) const;
     // What the host does instead of the view's own handling (each unset: the view's default).
     // A click or a tap asking to edit `row` at `cursor` (modifiers: Shift / Ctrl+click select
     // blocks in the QML editor) — true when the host handled it.

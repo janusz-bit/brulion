@@ -136,6 +136,7 @@ private Q_SLOTS:
     void chipAndTagMenus();
     void revealPastEstimatedRows();
     void sourcesAreNoProse();
+    void pointsInTheEditedText();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -1075,6 +1076,23 @@ void TestAtramentEditing::sourcesAreNoProse()
     h.tw.settle();
     QCOMPARE(h.view().editState().row, 2);
     QVERIFY(!h.view().editState().prose);
+}
+
+// Where a character of the edited text is (AtramentView.editPoint: the self-tests' clicks on a
+// word of the field): a click there puts the caret before it.
+void TestAtramentEditing::pointsInTheEditedText()
+{
+    Harness h(u"- Ala ma kotta i psa\n- drugi\n"_s);
+    QVERIFY(!h.view().editPoint(3));
+    h.controller.startEditing(0, -1);
+    h.tw.settle();
+    const std::optional<at::Point> p = h.view().editPoint(9);
+    QVERIFY(p);
+    h.tw.simulateClick(*p);
+    h.tw.settle();
+    QCOMPARE(h.controller.editingRow(), 0);
+    QCOMPARE(h.inputCaret(), 9);
+    QVERIFY(!h.view().editPoint(400));
 }
 
 QTEST_MAIN(TestAtramentEditing)
