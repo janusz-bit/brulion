@@ -61,7 +61,7 @@ bool plainKey(const at::Keystroke &k, std::u16string_view name)
 
 bool PageView::editableView(const QString &view, bool drawableText) const
 {
-    return drawableText && (view == u"text" || view == u"heading" || view == u"quote");
+    return drawableText && (view == u"text" || view == u"heading" || view == u"quote" || view == u"callout");
 }
 
 bool PageView::editsRow(int row) const
@@ -226,7 +226,7 @@ void PageView::inputChanged(at::Context<PageView> &cx)
         return;
     const int caret = input.selection().focus;
     const QString view = m_model->index(row, 0).data(BlockListModel::ViewRole).toString();
-    const bool multiline = view == u"quote";
+    const bool multiline = view == u"quote" || view == u"callout";
     if (!multiline && !m_softBreak) {
         // Line breaks that did not come from Shift+Enter: an input method's Enter (Android commits
         // "\n" as text) splits the block, pasted Markdown becomes blocks.
@@ -317,7 +317,7 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
     const QModelIndex index = m_model->index(row, 0);
     const QString view = index.data(BlockListModel::ViewRole).toString();
     const QString kind = index.data(BlockListModel::KindRole).toString();
-    const bool multiline = view == u"quote";
+    const bool multiline = view == u"quote" || view == u"callout";
     const bool document = ctl->documentMode();
     const at::TextLayout *layout = input.layout();
     auto lineOf = [layout](int offset) { return layout ? layout->lineIndex(offset) : 0; };

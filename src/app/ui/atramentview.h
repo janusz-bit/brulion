@@ -38,6 +38,14 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(qreal contentX MEMBER m_contentX NOTIFY styleChanged FINAL)
     Q_PROPERTY(qreal contentWidth MEMBER m_contentWidth NOTIFY styleChanged FINAL)
     Q_PROPERTY(qreal arrowColumn MEMBER m_arrowColumn NOTIFY styleChanged FINAL)
+    // Callouts' frames: the colours of their types, the fill's opacity, the corner radius.
+    Q_PROPERTY(QColor calloutInfo MEMBER m_calloutInfo NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor calloutSuccess MEMBER m_calloutSuccess NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor calloutWarning MEMBER m_calloutWarning NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor calloutDanger MEMBER m_calloutDanger NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor calloutQuote MEMBER m_calloutQuote NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal calloutFill MEMBER m_calloutFill NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal calloutRadius MEMBER m_calloutRadius NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool touchUi MEMBER m_touchUi NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor textColor MEMBER m_textColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor mutedColor MEMBER m_mutedColor NOTIFY styleChanged FINAL)
@@ -155,4 +163,11 @@ private:
     qreal m_bandRadius = 6;
     qreal m_arrowColumn = 16;
     bool m_touchUi = false;
+    QColor m_calloutInfo{0x3b, 0x82, 0xf6};
+    QColor m_calloutSuccess{0x16, 0xa3, 0x4a};
+    QColor m_calloutWarning{0xd9, 0x77, 0x06};
+    QColor m_calloutDanger{0xe2, 0x57, 0x4c};
+    QColor m_calloutQuote{0x8c, 0x95, 0x9f};
+    qreal m_calloutFill = 0.10;
+    qreal m_calloutRadius = 10;
 };

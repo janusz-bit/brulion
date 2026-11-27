@@ -23,6 +23,13 @@ AtramentView {
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm
+    calloutInfo: Theme.info
+    calloutSuccess: Theme.success
+    calloutWarning: Theme.warning
+    calloutDanger: Theme.marginRed
+    calloutQuote: Theme.fgFaint
+    calloutFill: Theme.dark ? 0.12 : 0.10
+    calloutRadius: Theme.radius
     fontSize: editor ? editor.fontSize : 16
     lineHeight: editor ? editor.lineHeight : 24
     indentStep: editor ? editor.indentStep : 26

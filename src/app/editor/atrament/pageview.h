@@ -107,6 +107,19 @@ public:
         float radius = 6;
     };
     void setSelectionLook(const SelectionLook &look);
+    // Callouts' frames (BlockPartCallout: Theme.info, success, warning, marginRed, fgFaint; the fill
+    // is the tint at `fill` opacity).
+    struct CalloutLook {
+        atrament::Color info = atrament::rgb(0x3b82f6);
+        atrament::Color success = atrament::rgb(0x16a34a);
+        atrament::Color warning = atrament::rgb(0xd97706);
+        atrament::Color danger = atrament::rgb(0xe2574c);
+        atrament::Color quote = atrament::rgb(0x8c959f);
+        float fill = 0.10f;
+        float radius = 10;
+        atrament::Color tint(const QString &type) const;
+    };
+    void setCalloutLook(const CalloutLook &look);
     const PageMetrics &metrics() const { return m_metrics; }
     const PagePalette &palette() const { return m_palette; }
     // What a click asks of the editor: a link of row `row` (its href: `page:`, `tag:`, a URL…)
@@ -232,6 +245,7 @@ private:
     atrament::App *m_app = nullptr;
     SelectionLook m_selectionLook;
     quint64 m_hoveredUid = 0; // the row under the mouse (its fold arrow shows)
+    CalloutLook m_calloutLook;
 };
 
 } // namespace atr

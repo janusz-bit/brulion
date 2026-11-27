@@ -251,6 +251,15 @@ void AtramentView::applyStyle()
         p.background = atColor(m_backgroundColor);
         page.setStyle(m, p);
         page.setSelectionLook({atColor(m_bandColor), atColor(m_ringColor), float(m_bandRadius)});
+        PageView::CalloutLook callouts;
+        callouts.info = atColor(m_calloutInfo);
+        callouts.success = atColor(m_calloutSuccess);
+        callouts.warning = atColor(m_calloutWarning);
+        callouts.danger = atColor(m_calloutDanger);
+        callouts.quote = atColor(m_calloutQuote);
+        callouts.fill = float(m_calloutFill);
+        callouts.radius = float(m_calloutRadius);
+        page.setCalloutLook(callouts);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), cx);
         cx.notify();

@@ -117,6 +117,7 @@ private Q_SLOTS:
     void selectedBlocksOnABand();
     void shiftArrowsSelectBlocks();
     void bulletAndMenu();
+    void calloutDrawnAndEdited();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -522,6 +523,27 @@ void TestAtramentEditing::bulletAndMenu()
     QCOMPARE(menuRow, 2);
     QCOMPARE(menuAt.x, p.x);
     QCOMPARE(h.controller.editingRow(), -1);
+}
+
+void TestAtramentEditing::calloutDrawnAndEdited()
+{
+    Harness h(u"> [!tip] Wskazówka\n> Zażółć gęślą jaźń\n\n- punkt\n"_s);
+    QCOMPARE(h.model()->index(0).data(BlockListModel::ViewRole).toString(), u"callout"_s);
+    QVERIFY(h.view().drawsRow(0));
+    QVERIFY(h.view().editsRow(0));
+    // The frame: the success colour's tint behind the text.
+    const auto *t = h.view().rowText(0);
+    QVERIFY(t);
+    const at::Pixel fill = h.tw.pixel(int(t->bounds().right()) + 4, int(t->bounds().top()) + 2);
+    QVERIFY2(fill.g > fill.r && fill.g > fill.b, qPrintable(u"%1 %2 %3"_s.arg(fill.r).arg(fill.g).arg(fill.b)));
+    // Edited: Enter is a line break carrying its "> ".
+    h.clickInto(0, 3);
+    QCOMPARE(h.controller.editingRow(), 0);
+    h.tw.simulateKeystrokes(u"ctrl-end");
+    h.tw.simulateKeystrokes(u"enter");
+    h.tw.simulateTyping(u"dalej");
+    QCOMPARE(h.model()->rowCount(), 2);
+    QVERIFY2(h.editText(0).endsWith(u"\n> dalej"_s), qPrintable(h.editText(0)));
 }
 
 QTEST_MAIN(TestAtramentEditing)

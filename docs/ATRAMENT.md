@@ -602,8 +602,8 @@ scrolling, `tst_atrament_editor`) before the next:
    `ListView`'s rows when Settings → Editor → "Draw the editor with Atrament"
    (`AppSettings.editorAtrament`, shown where `DeviceInfo.atrament`) is on; tested by
    `tests/atrament/editor/tst_atrament_editor`. **Not yet**: foreign rows are placeholders of their
-   height (no QML delegate placed over them), callouts are foreign, a tap does not edit a block,
-   the page's title and properties above the blocks are not shown. Links, chips and tags open
+   height (no QML delegate placed over them), the page's title and properties above the blocks are
+   not shown. (Callouts and a tap that edits a block came with step 2.) Links, chips and tags open
    (`AtramentView.linkActivated` → `BlockEditor.activateLink`) and a task's box toggles it
    (`taskToggled` → `PageController.toggleTask`), through the hit regions below.
 2. **Editing text rows.** The styled input in the edited row: typing, the keymaps, Enter / Backspace
@@ -638,7 +638,12 @@ scrolling, `tst_atrament_editor`) before the next:
    caretItem` / `caretBox`), its keys come back while it is open (`suggestionsOpen`,
    `suggestionKeyPressed`) and accepting one commits the composition first
    (`AtramentView.commitComposition`); slash commands follow. An empty paragraph shows "Type / for
-   commands". Tested by `tests/atrament/editor/tst_atrament_editing`. **Not yet**: spell marks and
+   commands". Also built with it: callouts drawn and edited by Atrament (BlockPartCallout's tinted
+   frame and bar; Enter a line break with its "> "), the outline's fold arrows (under the mouse,
+   while folded, always on touch; a click folds), the bullet's click zooming into its block, a
+   right-click opening the block menu, Shift+↑/↓ past a block's text selecting blocks
+   (`BlockEditor.extendBlocksFrom`), Ctrl+A on a block's whole text selecting every block.
+   Tested by `tests/atrament/editor/tst_atrament_editing`. **Not yet**: spell marks and
    the find bar's tint in the edited text, Vim, the touch toolbar's formatting buttons (they act on
    an InlineEditor), the reminder chips while editing.
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,

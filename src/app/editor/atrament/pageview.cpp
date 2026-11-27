@@ -78,7 +78,7 @@ namespace {
 
 bool drawable(const QString &view)
 {
-    return view == u"text" || view == u"heading" || view == u"quote";
+    return view == u"text" || view == u"heading" || view == u"quote" || view == u"callout";
 }
 
 } // namespace
@@ -179,6 +179,26 @@ PageView::~PageView()
 void PageView::setSelectionLook(const SelectionLook &look)
 {
     m_selectionLook = look;
+}
+
+void PageView::setCalloutLook(const CalloutLook &look)
+{
+    m_calloutLook = look;
+    m_extents.markAllEstimated();
+}
+
+at::Color PageView::CalloutLook::tint(const QString &type) const
+{
+    // (BlockPartCallout's mapping of Obsidian's types.)
+    if (type == u"tip" || type == u"success" || type == u"check" || type == u"done")
+        return success;
+    if (type == u"warning" || type == u"caution" || type == u"attention")
+        return warning;
+    if (type == u"danger" || type == u"error" || type == u"bug" || type == u"failure")
+        return danger;
+    if (type == u"quote" || type == u"cite")
+        return quote;
+    return info;
 }
 
 void PageView::setStyle(const PageMetrics &metrics, const PagePalette &palette)
@@ -465,6 +485,18 @@ at::AnyElement PageView::renderRow(std::size_t row)
     at::Div column = at::div().flex1().minW(0);
     if (view == u"quote")
         std::move(column).borderL(3).borderColor(m_palette.guide).pl(12).textColor(m_palette.muted);
+    if (view == u"callout") {
+        // BlockPartCallout: a tinted, rounded frame with a bar of its type's colour on the left.
+        const at::Color tint = m_calloutLook.tint(index.data(BlockListModel::CalloutTypeRole).toString());
+        std::move(column)
+                .bg(tint.fadedBy(m_calloutLook.fill))
+                .rounded(m_calloutLook.radius)
+                .borderL(3)
+                .borderColor(tint)
+                .pl(16)
+                .pr(12)
+                .py(12);
+    }
     // (The edited text of a closed task is written plainly: InlineEditor strikes nothing.)
     if (closed && !edited)
         std::move(column).lineThrough().textColor(m_palette.muted);
