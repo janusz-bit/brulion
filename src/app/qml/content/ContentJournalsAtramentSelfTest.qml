@@ -16,7 +16,9 @@ import Brulion
 //   * the find bar's query reaches the stream (every day tints it), its matches counted in days;
 //   * a zoom into a block of a day: Back (JournalsView.stepBack) zooms out;
 //   * the view's state (the day at the top and the offset) saved and restored, "Go to day";
-//   * only the days near the view are made (a stream scrolled to its end keeps a few).
+//   * only the days near the view are made (a stream scrolled to its end keeps a few);
+//   * the touch toolbar on a simulated keyboard: docked on the stream's frame (one), staying put
+//     while the stream scrolls, the caret of a block typed into near it kept above it.
 // Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
 // Registered only where Atrament is built (it names AtramentView).
 Item {
@@ -47,6 +49,11 @@ Item {
     property string savedDate: ""
     property string expectedDate: ""
     property point _at: Qt.point(0, 0)
+    property rect _rect: Qt.rect(0, 0, 0, 0)
+    property Item _slot: null
+    property Item _child: null
+    property Item _frame: null
+    property real slotY: 0
 
     DevEvents { id: events }
     DevBlock { id: block }
@@ -128,11 +135,55 @@ Item {
         }
     }
 
+    // ---- The touch toolbar, docked on the stream's frame (the editor's dockHost) ---------------
+    function visibleSlots(): int {
+        test._slot = null
+        test._frame = test.editor.dockHost
+        let count = 0
+        const n = DevTest.childCount(test._frame)
+        for (let i = 0; i < n; ++i) {
+            test._child = DevTest.childAt(test._frame, i)
+            if (test._child.objectName === "editToolbarSlot" && test._child.visible) {
+                if (count === 0)
+                    test._slot = test._child
+                count += 1
+            }
+        }
+        return count
+    }
+    function slotTop(): real {
+        if (test.visibleSlots() !== 1)
+            return -1
+        test._at = test._slot.mapToItem(null, 0, 0)
+        return test._at.y
+    }
+    function slotBottom(): real {
+        if (test.visibleSlots() !== 1)
+            return -1
+        test._at = test._slot.mapToItem(null, 0, test._slot.height)
+        return test._at.y
+    }
+    function windowHeight(): real {
+        return test.Window.window ? test.Window.window.height : 0
+    }
+    function near(a: real, b: real): bool {
+        return Math.abs(a - b) <= 1
+    }
+    /// The bottom of the edited block's caret in the window (1e9: none).
+    function caretBottom(): real {
+        if (test.stream.editRow < 0)
+            return 1e9
+        test._rect = test.stream.editCaretRect
+        test._at = test.stream.mapToItem(null, test._rect.x, test._rect.y + test._rect.height)
+        return test._at.y
+    }
+
     function runSteps(): void {
         runStepsToday()
         runStepsAcross()
         runStepsSelection()
         runStepsViews()
+        runStepsToolbar()
     }
     function runStepsToday(): void {
         // ---- A notebook with two months of days ------------------------------------------------
@@ -319,6 +370,50 @@ Item {
             test.waitFor(test.dayLoaded(0))
         if (test.at())
             test.check(test.dayShows(0, "Kupić mleko"), "scrolled back, today shows the text")
+    }
+
+    function runStepsToolbar(): void {
+        // ---- The touch toolbar on a keyboard (simulated) -------------------------------------------
+        if (test.at()) {
+            test.stream.scrollToDay(6, false)
+            KeyboardInsets.simulated = 300
+        }
+        if (test.at())
+            test.waitFor(test.dayLoaded(6) && test.dayLoaded(7))
+        if (test.at()) {
+            test.stream.activateDay(7)
+            test.editor.startEditing(test.day(7).lastVisibleRow(), -1)
+        }
+        if (test.at())
+            test.waitFor(!Theme.touchUi || (test.stream.editRow >= 0 && test.visibleSlots() === 1
+                                             && test.near(test.slotBottom(), test.windowHeight() - 300)))
+        if (test.at()) {
+            if (Theme.touchUi) {
+                test.check(test.visibleSlots() === 1 && test.near(test.slotBottom(), test.windowHeight() - 300),
+                           "the touch toolbar sits on the keyboard, docked on the stream's frame: " + test.slotBottom())
+                test.check(test.caretBottom() <= test.slotTop() + 0.5,
+                           "the edited block's caret is above the toolbar: " + test.caretBottom() + " ≤ " + test.slotTop())
+                test.slotY = test.slotTop()
+                test.typeKeys(" — zażółć gęślą jaźń, źdźbło i łódź, zażółć gęślą jaźń, źdźbło i łódź")
+            }
+        }
+        if (test.at())
+            test.waitFor(!Theme.touchUi || test.caretBottom() <= test.slotTop() + 0.5)
+        if (test.at()) {
+            if (Theme.touchUi) {
+                test.check(test.caretBottom() <= test.slotTop() + 0.5, "typing near the keyboard keeps the caret above the toolbar")
+                test.stream.scrollBy(-120)
+            }
+        }
+        if (test.at()) {
+            if (Theme.touchUi)
+                test.check(test.visibleSlots() === 1 && test.near(test.slotTop(), test.slotY),
+                           "scrolling the stream leaves the toolbar on the keyboard: " + test.slotTop() + " = " + test.slotY)
+            test.day(7).stopEditing()
+            KeyboardInsets.simulated = -1
+        }
+        if (test.at())
+            test.waitFor(test.visibleSlots() === 0)
     }
 
     property bool inStep: false
