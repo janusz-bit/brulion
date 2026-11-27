@@ -1,5 +1,7 @@
 #include "agentusage/history.h"
 
+#include "agentusage/logstream_p.h"
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
@@ -13,6 +15,7 @@
 #include <QtEndian>
 
 #include <algorithm>
+#include <memory>
 #include <optional>
 
 using namespace Qt::StringLiterals;
@@ -26,7 +29,7 @@ constexpr qint64 DayMs = 24LL * 60 * 60 * 1000;
 constexpr qint64 ChunkBytes = 256 * 1024;
 constexpr qint64 HeadBytes = 4096;
 constexpr qint64 MaxCacheBytes = 256LL * 1024 * 1024;
-constexpr int CacheVersion = 2; // 2: Codex's token_usage_record lines
+constexpr int CacheVersion = 3; // 2: Codex's token_usage_record lines; 3: rollouts by name, compressed ones
 constexpr int MaxDepth = 6;
 
 bool cancelled(const ReadOptions &options)
@@ -76,6 +79,7 @@ struct FileState {
     qint64 headLength = 0; ///< `head` is the hash of this many first bytes
     QByteArray head;
     bool gone = false;     ///< no longer on the disk: its use is kept
+    bool compressed = false; ///< read last as a compressed rollout ("….jsonl.zst")
     bool skipping = false; ///< in the middle of a line too long to read
     qint64 skipped = 0;    ///< lines left out (malformed, too long)
     QString project;       ///< Claude: the last cwd of the file
@@ -85,7 +89,8 @@ struct FileState {
 };
 
 struct Cache {
-    QHash<QString, FileState> files; ///< by absolute path
+    /// By the file's key (Found::key): its absolute path, a Codex rollout's name.
+    QHash<QString, FileState> files;
     QSet<quint64> keys;              ///< every file's keys
 };
 
@@ -112,15 +117,16 @@ bool tokensFrom(const QJsonArray &a, qsizetype at, Tokens *t)
     return true;
 }
 
-QJsonObject fileJson(const QString &path, const FileState &s)
+QJsonObject fileJson(const QString &key, const FileState &s)
 {
-    QJsonObject o{{u"path"_s, path},
+    QJsonObject o{{u"key"_s, key},
                   {u"size"_s, double(s.size)},
                   {u"mtime"_s, double(s.mtime)},
                   {u"offset"_s, double(s.offset)},
                   {u"headLength"_s, double(s.headLength)},
                   {u"head"_s, QString::fromLatin1(s.head.toHex())},
                   {u"gone"_s, s.gone},
+                  {u"compressed"_s, s.compressed},
                   {u"skipping"_s, s.skipping},
                   {u"skipped"_s, double(s.skipped)},
                   {u"project"_s, s.project}};
@@ -181,10 +187,12 @@ std::optional<FileState> fileFrom(const QJsonObject &o)
     s.headLength = o.value(u"headLength").toInteger();
     s.head = QByteArray::fromHex(o.value(u"head").toString().toLatin1());
     s.gone = o.value(u"gone").toBool();
+    s.compressed = o.value(u"compressed").toBool();
     s.skipping = o.value(u"skipping").toBool();
     s.skipped = o.value(u"skipped").toInteger();
     s.project = o.value(u"project").toString();
-    if (s.offset > s.size || s.headLength > HeadBytes)
+    // (A compressed rollout's offset is in its text, which is longer than the file.)
+    if ((!s.compressed && s.offset > s.size) || s.headLength > HeadBytes)
         return std::nullopt;
     if (const QJsonObject c = o.value(u"codex").toObject(); !c.isEmpty()) {
         s.codex.hasTotals = c.value(u"has").toBool();
@@ -242,13 +250,13 @@ std::optional<Cache> loadCache(const QString &file, const QString &sourceKey, bo
     Cache cache;
     for (const QJsonValue &value : root.value(u"files").toArray()) {
         const QJsonObject o = value.toObject();
-        const QString path = o.value(u"path").toString();
+        const QString key = o.value(u"key").toString();
         std::optional<FileState> s = fileFrom(o);
-        if (path.isEmpty() || !s)
+        if (key.isEmpty() || !s)
             return std::nullopt;
         for (const quint64 k : std::as_const(s->keys))
             cache.keys.insert(k);
-        cache.files.insert(path, std::move(*s));
+        cache.files.insert(key, std::move(*s));
     }
     return cache;
 }
@@ -256,10 +264,10 @@ std::optional<Cache> loadCache(const QString &file, const QString &sourceKey, bo
 bool saveCache(const QString &file, const QString &sourceKey, const Cache &cache)
 {
     QJsonArray files;
-    QStringList paths = cache.files.keys();
-    std::ranges::sort(paths);
-    for (const QString &path : std::as_const(paths))
-        files.append(fileJson(path, cache.files.value(path)));
+    QStringList keys = cache.files.keys();
+    std::ranges::sort(keys);
+    for (const QString &key : std::as_const(keys))
+        files.append(fileJson(key, cache.files.value(key)));
     const QJsonObject root{{u"version"_s, CacheVersion},
                            {u"prices"_s, QLatin1String(PricesAsOf)},
                            {u"source"_s, sourceKey},
@@ -281,13 +289,26 @@ bool saveCache(const QString &file, const QString &sourceKey, const Cache &cache
 
 struct Found {
     QString path;
+    /// What the cache knows it by: its absolute path; a Codex rollout by its name ("rollout-….jsonl",
+    /// also when compressed), wherever it is — sessions/ or archived_sessions/ — and however it is kept.
+    QString key;
+    bool compressed = false; ///< a compressed rollout ("rollout-….jsonl.zst")
     QFileInfo info;
 };
 
+/// A Codex rollout's name as the cache knows it: "rollout-….jsonl", its compressed file's too.
+QString rolloutName(const QString &fileName)
+{
+    return fileName.endsWith(u".zst") ? fileName.chopped(4) : fileName;
+}
+
 /// The log files of `source`, by path: no symlink out of its folders, at most MaxDepth deep and
-/// MaxFiles in all; Codex's rollouts once by name (sessions before archived_sessions).
+/// MaxFiles in all; Codex's rollouts once by name (sessions before archived_sessions, a plain file
+/// before its compressed copy).
 QList<Found> discover(const Source &source, const ReadOptions &options, bool *found)
 {
+    const bool codex = source.provider == Provider::Codex;
+    const QStringList patterns = codex ? QStringList{u"*.jsonl"_s, u"*.jsonl.zst"_s} : QStringList{u"*.jsonl"_s};
     QList<Found> out;
     QSet<QString> names;
     for (const QString &folder : source.folders) {
@@ -300,8 +321,7 @@ QList<Found> discover(const Source &source, const ReadOptions &options, bool *fo
             continue;
         const QString prefix = root.endsWith(u'/') ? root : root + u'/';
         QList<Found> here;
-        QDirIterator it(root, {u"*.jsonl"_s}, QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot,
-                        QDirIterator::Subdirectories);
+        QDirIterator it(root, patterns, QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             if (cancelled(options) || out.size() + here.size() >= MaxFiles)
                 break;
@@ -314,17 +334,16 @@ QList<Found> discover(const Source &source, const ReadOptions &options, bool *fo
             }
             if (QStringView(path).mid(prefix.size()).count(u'/') >= MaxDepth)
                 continue;
-            if (source.provider == Provider::Codex && !info.fileName().startsWith(u"rollout-"))
+            if (codex && !info.fileName().startsWith(u"rollout-"))
                 continue;
-            here.append(Found{path, info});
+            const bool compressed = codex && info.fileName().endsWith(u".zst");
+            here.append(Found{path, codex ? rolloutName(info.fileName()) : path, compressed, info});
         }
         std::ranges::sort(here, {}, &Found::path);
         for (const Found &f : std::as_const(here)) {
-            if (source.provider == Provider::Codex) {
-                if (names.contains(f.info.fileName()))
-                    continue;
-                names.insert(f.info.fileName());
-            }
+            if (names.contains(f.key))
+                continue;
+            names.insert(f.key);
             out.append(f);
         }
     }
@@ -355,77 +374,107 @@ public:
     {
         const qint64 size = found.info.size();
         const qint64 mtime = found.info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch();
-        if (!state.gone && state.size == size && state.mtime == mtime && (state.headLength > 0 || size == 0))
+        // (Read at this size and time already — an empty text too: a compressed file broken at once.)
+        if (!state.gone && state.size == size && state.mtime == mtime && state.compressed == found.compressed)
             return true;
-        QFile f(found.path);
-        if (!f.open(QIODevice::ReadOnly))
-            return true; // (another time)
-        // Rewritten (shorter, or other first bytes): read again from the start.
-        bool again = state.gone || size < state.offset;
-        if (!again && state.headLength > 0) {
-            const QByteArray head = f.read(state.headLength);
-            again = head.size() < state.headLength || headHash(head) != state.head;
-        }
-        if (again)
+        // Gone and back, or shorter than what was read: read again from its start.
+        if (state.gone || (!found.compressed && size < state.offset))
             forget(state, m_cache);
-        if (!f.seek(0))
-            return true;
-        const QByteArray head = f.read(std::min(HeadBytes, size));
-        state.headLength = head.size();
-        state.head = headHash(head);
-        if (!f.seek(state.offset))
-            return true;
+        std::optional<Resumed> text = resume(found, state);
+        if (!text)
+            return true; // (another time)
         ++m_stats.filesRead;
-        qint64 position = state.offset; // of the chunk's first byte
-        qint64 consumed = state.offset; // after the last line ended (or skipped)
-        bool skipping = state.skipping;
-        QByteArray pending;
+        m_consumed = state.offset;
+        m_skipping = state.skipping;
+        m_pending.clear();
+        feed(text->carry, state);
         while (true) {
             if (cancelled(m_options))
                 return false;
-            const QByteArray chunk = f.read(ChunkBytes);
+            const QByteArray chunk = text->stream->read(ChunkBytes);
             if (chunk.isEmpty())
                 break;
-            m_stats.bytesRead += chunk.size();
-            qsizetype start = 0;
-            while (start < chunk.size()) {
-                const qsizetype end = chunk.indexOf('\n', start);
-                if (end < 0) {
-                    const qsizetype rest = chunk.size() - start;
-                    if (skipping) {
-                        consumed = position + chunk.size();
-                    } else if (pending.size() + rest > MaxLineBytes) {
-                        pending.clear();
-                        skipping = true;
-                        consumed = position + chunk.size();
-                    } else {
-                        pending.append(chunk.constData() + start, rest);
-                    }
-                    break;
-                }
-                const qsizetype length = end - start;
-                if (skipping) {
-                    skipping = false;
-                    ++state.skipped;
-                } else if (pending.size() + length > MaxLineBytes) {
-                    ++state.skipped;
-                } else {
-                    pending.append(chunk.constData() + start, length);
-                    line(pending, state);
-                }
-                pending.clear();
-                consumed = position + end + 1;
-                start = end + 1;
-            }
-            position += chunk.size();
+            feed(chunk, state);
         }
+        // (The rest of a compressed rollout that could not be read: one line left out.)
+        if (text->stream->failed())
+            ++state.skipped;
         // (A line not ended yet is being written: read it the next time.)
-        state.offset = consumed;
-        state.skipping = skipping;
+        state.offset = m_consumed;
+        state.skipping = m_skipping;
         state.size = size;
         state.mtime = mtime;
+        state.compressed = found.compressed;
         state.gone = false;
         return true;
+    }
+
+private:
+    struct Resumed {
+        std::unique_ptr<LogStream> stream;
+        QByteArray carry; ///< what of the head lies past where the last reading stopped
+    };
+
+    /// The text of `found` from where `state` stopped reading it — the same first bytes as before,
+    /// or (other ones, or a text shorter than what was read) from its start again —, `state`'s head
+    /// set anew; nullopt when it cannot be opened now.
+    std::optional<Resumed> resume(const Found &found, FileState &state)
+    {
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            auto stream = std::make_unique<LogStream>(found.path, found.compressed, m_options.maxUnpackedBytes);
+            if (!stream->open())
+                return std::nullopt;
+            const QByteArray head = stream->read(HeadBytes);
+            if (state.headLength > 0
+                && (head.size() < state.headLength || headHash(head.first(state.headLength)) != state.head))
+                forget(state, m_cache);
+            state.headLength = head.size();
+            state.head = headHash(head);
+            if (state.offset <= head.size())
+                return Resumed{std::move(stream), head.mid(state.offset)};
+            if (stream->skipTo(state.offset))
+                return Resumed{std::move(stream), {}};
+            forget(state, m_cache);
+        }
+        return std::nullopt;
+    }
+
+    /// The next piece of the text: its whole lines parsed, a line too long to read skipped, the
+    /// rest kept for the next piece.
+    void feed(const QByteArray &chunk, FileState &state)
+    {
+        m_stats.bytesRead += chunk.size();
+        const qint64 position = m_consumed + m_pending.size(); // (of the chunk's first byte)
+        qsizetype start = 0;
+        while (start < chunk.size()) {
+            const qsizetype end = chunk.indexOf('\n', start);
+            if (end < 0) {
+                const qsizetype rest = chunk.size() - start;
+                if (m_skipping) {
+                    m_consumed = position + chunk.size();
+                } else if (m_pending.size() + rest > MaxLineBytes) {
+                    m_pending.clear();
+                    m_skipping = true;
+                    m_consumed = position + chunk.size();
+                } else {
+                    m_pending.append(chunk.constData() + start, rest);
+                }
+                return;
+            }
+            const qsizetype length = end - start;
+            if (m_skipping) {
+                m_skipping = false;
+                ++state.skipped;
+            } else if (m_pending.size() + length > MaxLineBytes) {
+                ++state.skipped;
+            } else {
+                m_pending.append(chunk.constData() + start, length);
+                line(m_pending, state);
+            }
+            m_pending.clear();
+            m_consumed = position + end + 1;
+            start = end + 1;
+        }
     }
 
 private:
@@ -466,6 +515,11 @@ private:
     const ReadOptions &m_options;
     qint64 m_since;
     ReadStats &m_stats;
+    // The file being read: after its last line that ended (or was skipped), whether a line too long
+    // is being skipped, the start of a line not ended yet.
+    qint64 m_consumed = 0;
+    bool m_skipping = false;
+    QByteArray m_pending;
 };
 
 struct DayKey {
@@ -539,13 +593,13 @@ History readHistory(const Source &source, const ReadOptions &options, ReadStats 
     for (const Found &f : found) {
         if (cancelled(options))
             break;
-        present.insert(f.path);
-        auto it = cache.files.find(f.path);
+        present.insert(f.key);
+        auto it = cache.files.find(f.key);
         if (it == cache.files.end()) {
             // (Untouched for longer than the history is kept: nothing in it counts.)
             if (f.info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch() < since)
                 continue;
-            it = cache.files.insert(f.path, FileState{});
+            it = cache.files.insert(f.key, FileState{});
         }
         if (!reader.read(f, *it))
             break;

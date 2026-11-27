@@ -2184,7 +2184,16 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   assistant line's `message.usage`, `message.model`, `cwd`, `costUSD` when the log has one, `speed`
   "fast"), each message once by `message.id` + `requestId` (it is logged again while it streams and
   when a session is resumed into a file of its own); Codex's `${CODEX_HOME:-~/.codex}/sessions/YYYY/MM/DD/rollout-*.jsonl`
-  and `archived_sessions` (a rollout once by its name: `session_meta`'s `cwd`, `turn_context`'s
+  and `archived_sessions`, also compressed — `rollout-*.jsonl.zst`: Codex compresses a rollout
+  untouched for a week (zstd level 3, `codex-rs/rollout/src/compression.rs`) when its experimental
+  feature `local_thread_store_compression` is on (off by default from 0.140 to 0.170) or an
+  app-server client asks with the experimental `rollout/compress`, and makes it plain again before
+  it appends to it; read through its frames (the vendored zstd 1.5.7 decoder, `3rdparty/zstd`;
+  `agentusage/logstream_p.h`: a frame's window at most 16 MiB, at most 1 GiB of text, a broken or
+  cut frame ending the file as one skipped line) (a rollout once by its name, wherever it is and
+  however it is kept: archived or compressed later it stays one file of the cache — nothing counted
+  again, only what was appended read —, both files of the moment Codex changes it once;
+  `session_meta`'s `cwd`, `turn_context`'s
   `model`; since Codex 0.154 a `token_usage_record` per API response, counted once by its
   `response_id` — a fork's copies too —, and then the rollout's `token_count` events not: they
   leave out the responses of a turn's own agents; before, `token_count`'s `last_token_usage` — or
@@ -2230,7 +2239,11 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   "What the agents used"). Tests: `tst_agentusage` (synthetic logs of both agents: a streamed
   message, a resumed session, cumulative Codex totals, Codex's response records, a fork, a truncated last line, malformed and
   huge lines, an unknown model, the cache reading only what was appended, a file that shrank or
-  was rewritten, a gone file, days across DST and in a +05:45 zone, the reader's rhythm),
+  was rewritten, a gone file, days across DST and in a +05:45 zone, the reader's rhythm; compressed
+  rollouts made by `zstd` 1.5.7 —
+  `tests/core/agentusage/fixtures/make-fixtures.sh`: as Codex writes them, with a checksum, two
+  frames, cut, broken, a window too large, a line too long —, one compressed, archived or made plain
+  again later, both files at once, the text's limit),
   `tst_shell_agentusage`, `tst_cli_acp_usage`, the shell self-test's `checkAgentUsage` (Claude
   Code's preset with synthetic logs: the row's line, Usage…, 30 and 7 bars, this notebook only).
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that

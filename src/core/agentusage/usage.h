@@ -12,7 +12,8 @@
 //                costUSD. One message is often logged several times while it streams (and again
 //                when a session is resumed into another file): it counts once, by message.id +
 //                requestId, as ccusage counts it.
-//   Codex        ${CODEX_HOME:-~/.codex}/sessions/YYYY/MM/DD/rollout-*.jsonl and archived_sessions:
+//   Codex        ${CODEX_HOME:-~/.codex}/sessions/YYYY/MM/DD/rollout-*.jsonl and archived_sessions
+//                (also compressed by Codex, rollout-*.jsonl.zst: history.h reads them):
 //                session_meta (cwd), turn_context (model), event_msg token_count with
 //                info.total_token_usage (cumulative for the session) and info.last_token_usage
 //                (the turn's) — input_tokens (cached_input_tokens included), output_tokens

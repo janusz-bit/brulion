@@ -1279,7 +1279,9 @@ brulion-cli --vault ~/Notatki acp usage --notebook --format text
 
 * **Where**: Claude Code's `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/*/…/*.jsonl` (also
   `~/.config/claude/projects` without the variable), Codex's `${CODEX_HOME:-~/.codex}/sessions` and
-  `archived_sessions` (`rollout-*.jsonl`) — the variables as this command's environment has them.
+  `archived_sessions` (`rollout-*.jsonl`, and `rollout-*.jsonl.zst` where Codex compressed one —
+  a rollout counts once by its name, archived or compressed) — the variables as this command's
+  environment has them.
   `found: false` when an agent has no such folder.
 * **What counts**: a Claude Code message once (it is logged again while it streams and in a resumed
   session: `message.id` + `requestId`), Codex's turns where its cumulative totals moved (a fork's

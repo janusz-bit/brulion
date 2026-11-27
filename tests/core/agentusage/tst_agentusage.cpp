@@ -9,6 +9,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -17,6 +18,7 @@
 #include <QTest>
 
 #include <cmath>
+#include <utility>
 
 using namespace brulion;
 using namespace brulion::agentusage;
@@ -139,6 +141,31 @@ void touch(const QString &path, int seconds)
     QVERIFY(f.setFileTime(QDateTime::currentDateTimeUtc().addSecs(seconds), QFileDevice::FileModificationTime));
 }
 
+/// A fixture's bytes (tests/core/agentusage/fixtures: make-fixtures.sh).
+QByteArray fixture(const QString &name)
+{
+    QFile f(QStringLiteral(BRULION_AGENTUSAGE_FIXTURES) + u'/' + name);
+    if (!f.open(QIODevice::ReadOnly))
+        qWarning() << "no fixture" << name;
+    return f.readAll();
+}
+
+/// A file's time set to `time` (Codex keeps a rollout's time when it compresses or moves it).
+void setTime(const QString &path, const QDateTime &time)
+{
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadWrite));
+    QVERIFY(f.setFileTime(time, QFileDevice::FileModificationTime));
+}
+
+/// What tests/core/agentusage/fixtures/rollout.jsonl holds: three API responses of gpt-6-astra.
+constexpr qint64 RolloutRequests = 3;
+constexpr qint64 RolloutInput = 4000 + 3000 + 1000; // (not cached)
+constexpr qint64 RolloutCached = 8000 + 12000 + 15000;
+constexpr qint64 RolloutOutput = 900 + 400 + 700;
+
+const QString RolloutName = u"rollout-2026-11-24T08-00-00-019ad3c1-7f2e-7a40-b1c5-5e0d2f8a9b31.jsonl"_s;
+
 Source claudeSource(const QString &root)
 {
     return Source{Provider::Claude, {QDir(root).filePath(u"projects"_s)}};
@@ -193,6 +220,12 @@ private Q_SLOTS:
     void codexForkCountsOnce();
     void codexResponseRecords();
     void codexRecordsHistory();
+    void compressedRollouts_data();
+    void compressedRollouts();
+    void compressedLater();
+    void archivedRolloutCountsOnce();
+    void bothRepresentations();
+    void unpackedLimit();
     void incrementalCache();
     void rewrittenFile();
     void goneFileKeepsItsUse();
@@ -765,6 +798,166 @@ void TestAgentUsage::codexRecordsHistory()
     QCOMPARE(t.tokens.requests, 4);
     QCOMPARE(t.tokens.input + t.tokens.cacheRead, 5200);
     QCOMPARE(t.tokens.output, 610);
+}
+
+void TestAgentUsage::compressedRollouts_data()
+{
+    QTest::addColumn<QByteArray>("bytes");
+    QTest::addColumn<qint64>("requests");
+    QTest::addColumn<qint64>("input");
+    QTest::addColumn<qint64>("cached");
+    QTest::addColumn<qint64>("skipped");
+    QTest::newRow("as Codex compresses it") << fixture(u"rollout.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                            << RolloutCached << qint64(0);
+    QTest::newRow("with a checksum") << fixture(u"rollout-checksum.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                     << RolloutCached << qint64(0);
+    QTest::newRow("two frames") << fixture(u"rollout-frames.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                << RolloutCached << qint64(0);
+    // A line of 5 MiB in the middle: left out, the lines after it read.
+    QTest::newRow("a line too long") << fixture(u"rollout-huge-line.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                     << RolloutCached << qint64(1);
+    // Broken: what came before the break counts, the rest is one line left out.
+    QTest::newRow("no frame after the first") << fixture(u"rollout-garbage.jsonl.zst"_s) << qint64(1) << qint64(4000)
+                                              << qint64(8000) << qint64(1);
+    QTest::newRow("cut short") << fixture(u"rollout-cut.jsonl.zst"_s) << qint64(0) << qint64(0) << qint64(0)
+                               << qint64(1);
+    QTest::newRow("a window too large") << fixture(u"rollout-window.jsonl.zst"_s) << qint64(0) << qint64(0)
+                                        << qint64(0) << qint64(1);
+    QTest::newRow("no zstd at all") << QByteArray("zażółć gęślą jaźń\n") << qint64(0) << qint64(0) << qint64(0)
+                                    << qint64(1);
+    QTest::newRow("empty") << QByteArray() << qint64(0) << qint64(0) << qint64(0) << qint64(1);
+}
+
+void TestAgentUsage::compressedRollouts()
+{
+    // A rollout Codex compressed (local_thread_store_compression, rollout/compress: one untouched for
+    // a week becomes "….jsonl.zst"), read through its frames.
+    QFETCH(QByteArray, bytes);
+    QFETCH(qint64, requests);
+    QFETCH(qint64, input);
+    QFETCH(qint64, cached);
+    QFETCH(qint64, skipped);
+    QTemporaryDir dir;
+    writeFile(dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s), bytes);
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(h.skippedLines, skipped);
+    const Report r = report(h, Query{QDate(2026, 11, 1), QDate(2026, 11, 30), {}});
+    QCOMPARE(r.total.tokens.requests, requests);
+    QCOMPARE(r.total.tokens.input, input);
+    QCOMPARE(r.total.tokens.cacheRead, cached);
+    if (requests > 0) {
+        QCOMPARE(r.models.first().name, u"gpt-6-astra"_s);
+        QCOMPARE(r.projects.first().name, u"/home/ola/Projekty/Żółw"_s);
+        QVERIFY(r.total.costKnown());
+    }
+    if (requests == RolloutRequests) {
+        QCOMPARE(r.total.tokens.output, RolloutOutput);
+        QVERIFY(near(r.total.cost, (RolloutInput * 10.0 + RolloutCached * 1.0 + RolloutOutput * 50.0) / 1e6));
+    }
+    // Unchanged: not opened again, the same use.
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(totalOf(h).tokens.requests, requests);
+    QCOMPARE(h.skippedLines, skipped);
+}
+
+void TestAgentUsage::compressedLater()
+{
+    // A rollout read while Codex wrote it, compressed a week later (the same text, the same time):
+    // nothing counts again; materialized back to plain and appended to: only what is new is read.
+    QTemporaryDir dir;
+    const QString plain = dir.filePath(u"sessions/2026/11/24/"_s + RolloutName);
+    writeFile(plain, fixture(u"rollout.jsonl"_s));
+    const QDateTime written = QFileInfo(plain).lastModified();
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+
+    writeFile(plain + u".zst"_s, fixture(u"rollout.jsonl.zst"_s));
+    setTime(plain + u".zst"_s, written);
+    QVERIFY(QFile::remove(plain));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(stats.bytesRead, 0); // (its text up to where it was read: decoded, not parsed)
+    QCOMPARE(stats.events, 0);
+    QCOMPARE(stats.duplicates, 0);
+    Totals t = totalOf(h);
+    QCOMPARE(t.tokens.requests, RolloutRequests);
+    QCOMPARE(t.tokens.input, RolloutInput);
+    QCOMPARE(h.skippedLines, 0);
+
+    // Resumed in Codex: plain again, one more response appended.
+    const QByteArray more = codexRecord(u"2026-11-24T09:00:00Z"_s, u"resp_9"_s, codexUsageObject(2000, 1000, 100, 0));
+    writeFile(plain, fixture(u"rollout.jsonl"_s) + more);
+    QVERIFY(QFile::remove(plain + u".zst"_s));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(stats.bytesRead, more.size());
+    QCOMPARE(stats.events, 1);
+    t = totalOf(h);
+    QCOMPARE(t.tokens.requests, RolloutRequests + 1);
+    QCOMPARE(t.tokens.input, RolloutInput + 1000);
+}
+
+void TestAgentUsage::archivedRolloutCountsOnce()
+{
+    // The user archives a thread: Codex moves its rollout from sessions/ to archived_sessions/ (its
+    // time kept), later perhaps compressed there. Its use counts once — also of lines no key tells
+    // apart (a response without its id).
+    QTemporaryDir dir;
+    const QString name = u"rollout-2026-11-24T08-00-00-0199.jsonl"_s;
+    const QString live = dir.filePath(u"sessions/2026/11/24/"_s + name);
+    QByteArray log = codexMeta(u"/home/ola/Notatki"_s) + codexTurn(u"gpt-6-astra"_s);
+    log += codexRecord(u"2026-11-24T08:01:00Z"_s, QString(), codexUsageObject(1000, 0, 100, 0));
+    log += codexRecord(u"2026-11-24T08:02:00Z"_s, QString(), codexUsageObject(500, 0, 50, 0));
+    writeFile(live, log);
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(totalOf(h).tokens.requests, 2);
+    const QString archived = dir.filePath(u"archived_sessions/"_s + name);
+    QVERIFY(QDir().mkpath(QFileInfo(archived).path()));
+    QVERIFY(QFile::rename(live, archived));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(totalOf(h).tokens.requests, 2);
+    QCOMPARE(totalOf(h).tokens.input, 1500);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(stats.filesRead, 0); // (the same rollout, the same size and time: not even opened)
+}
+
+void TestAgentUsage::bothRepresentations()
+{
+    // While Codex compresses or materializes a rollout both files are there for a moment: read once.
+    QTemporaryDir dir;
+    const QString plain = dir.filePath(u"archived_sessions/"_s + RolloutName);
+    writeFile(plain, fixture(u"rollout.jsonl"_s));
+    writeFile(plain + u".zst"_s, fixture(u"rollout.jsonl.zst"_s));
+    ReadStats stats;
+    const History h = readHistory(codexSource(dir.path()), options(dir.filePath(u"cache.json"_s)), &stats);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(stats.duplicates, 0);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+}
+
+void TestAgentUsage::unpackedLimit()
+{
+    // A compressed file whose text goes on beyond the limit (a "zip bomb"): the lines within it
+    // count, the rest is one line left out. The first response's lines end at 7 385 bytes.
+    QTemporaryDir dir;
+    writeFile(dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s), fixture(u"rollout.jsonl.zst"_s));
+    for (const auto &[limit, requests] : {std::pair{qint64(4096), qint64(0)}, std::pair{qint64(7500), qint64(1)}}) {
+        ReadOptions o = options(QString());
+        o.maxUnpackedBytes = limit;
+        const History h = readHistory(codexSource(dir.path()), o);
+        QCOMPARE(totalOf(h).tokens.requests, requests);
+        QCOMPARE(h.skippedLines, 1);
+    }
 }
 
 void TestAgentUsage::incrementalCache()
