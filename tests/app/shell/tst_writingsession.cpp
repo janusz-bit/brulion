@@ -8,7 +8,7 @@
 // request counted in aiPending. Code mode's texts by the same AI (codeai): AiAsk's one question (the
 // commit message, the pull request), a new worktree's branch named from the thread's first message,
 // a thread's title regenerated (renamed, kept, failed, nothing asked without the AI; the page deleted
-// or the name taken meanwhile, the notebook closed).
+// or the name taken meanwhile, the notebook closed, the AI not reached).
 #include "../fakeaiserver.h"
 
 #include "aiask.h"
@@ -188,7 +188,8 @@ private Q_SLOTS:
     }
 
     // While the AI writes the title: the page deleted meanwhile is left alone, a name another
-    // conversation has is said, the notebook closed stops the question (no answer comes).
+    // conversation has is said, the notebook closed stops the question (no answer comes); the AI
+    // not reached says why.
     void aRegeneratedTitleMeetsWhatChanged()
     {
         FakeAiServer server;
@@ -227,9 +228,26 @@ private Q_SLOTS:
         chats->reset();
         QVERIFY(!chats->regeneratingTitle(path));
         QVERIFY(titles.size() >= 2);
+        QTRY_COMPARE_WITH_TIMEOUT(ws->extensions()->aiPending(), 0, 3000); // (the question stopped, not left running)
         server.release();
         QTest::qWait(200);
         QCOMPARE(done.size(), 2);
+        QVERIFY(ws->exists(path));
+        // The AI not reached: its error is said.
+        QString closed;
+        {
+            const FakeAiServer gone;
+            closed = gone.url();
+        }
+        brulion::ai::Settings unreachable;
+        unreachable.provider = u"openai"_s;
+        unreachable.baseUrl = closed;
+        unreachable.model = u"fake"_s;
+        ws->extensions()->setAi(unreachable);
+        QVERIFY(chats->regenerateTitle(path));
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 3, 15000);
+        QCOMPARE(done.at(2).at(2).toString(), u"failed"_s);
+        QVERIFY(!done.at(2).at(3).toString().isEmpty());
         QVERIFY(ws->exists(path));
     }
 
