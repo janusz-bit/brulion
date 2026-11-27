@@ -137,6 +137,18 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(bool drawsTables MEMBER m_drawsTables NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap tableLook MEMBER m_tableLook NOTIFY styleChanged FINAL)
 
+    // "page", the edited text's extras (docs/ATRAMENT.md M2 step 2: spell marks, reminder chips,
+    // Vim): the app's SpellCheck (the QML singleton; null: no marks) and the marks' colour
+    // (Theme.danger) — the edited text's prose, and the drawn rows while SpellCheck.wholePage; the
+    // editor's VimSession (BlockEditor.vimSession; its keys before the field's, the caret's shape).
+    Q_PROPERTY(QObject *spellCheck READ spellCheck WRITE setSpellCheck NOTIFY spellCheckChanged FINAL)
+    Q_PROPERTY(QColor spellColor MEMBER m_spellColor NOTIFY spellCheckChanged FINAL)
+    Q_PROPERTY(QObject *vimSession READ vimSession WRITE setVimSession NOTIFY vimSessionChanged FINAL)
+    // The edited block's selection [editSelectionStart, editSelectionEnd) (the touch toolbar's
+    // highlight).
+    Q_PROPERTY(int editSelectionStart READ editSelectionStart NOTIFY editStateChanged FINAL)
+    Q_PROPERTY(int editSelectionEnd READ editSelectionEnd NOTIFY editStateChanged FINAL)
+
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
     ~AtramentView() override;
@@ -192,6 +204,13 @@ public:
     // "page": what a query block's results answer for a link of item `item` ("open:": the item)
     // — QueryResultModel::activateLink / open: { action: "scrollTo", row } …
     Q_INVOKABLE QVariantMap activateQueryLink(int row, int item, const QString &link);
+
+    QObject *spellCheck() const { return m_spellCheck.data(); }
+    void setSpellCheck(QObject *spell);
+    QObject *vimSession() const { return m_vimSession.data(); }
+    void setVimSession(QObject *vim);
+    int editSelectionStart() const;
+    int editSelectionEnd() const;
 
 Q_SIGNALS:
     void viewChanged();
@@ -260,10 +279,25 @@ Q_SIGNALS:
     // activateQueryLink()); the results' answer to a click on an item (BlockEditor.revealRow…).
     void queryLinkActivated(int row, int item, const QString &link, const QString &path, int line, const QString &raw);
     void queryAnswered(int row, const QVariantMap &answer);
+    void spellCheckChanged();
+    void vimSessionChanged();
+    // A right-click on a misspelled word (a tap on one in the edited text on touch UIs) at (x, y)
+    // of this item: `spelling` {from, to, word (as checked), text (as written)} — of the edited
+    // text when `edited` (PageController.replaceRange), else of the block's body
+    // (PageController.replaceInBody; BlockEditor.openRenderedSpellingMenu).
+    void spellingMenuRequested(int row, bool edited, const QVariantMap &spelling, qreal x, qreal y);
+    // A reminder chip of the edited text clicked (`menu` false: BlockEditor.editReminderInText) or
+    // right-clicked / held (`menu` true: its menu) at (x, y): the token's editText range.
+    void reminderChipActivated(int row, int from, int to, bool menu, qreal x, qreal y);
+    // Vim took a key of the edited block (BlockEditor.afterVimKey).
+    void vimKeyHandled();
 
 protected:
     void componentComplete() override;
     void placeHostedChildren() override;
+    // Vim's own Ctrl keys win over the window's shortcuts in its command modes (InlineEditor's
+    // Keys.onShortcutOverride, BlockEditor.vimOwnsShortcut).
+    bool event(QEvent *event) override;
 
 private:
     void attachView();
@@ -338,4 +372,9 @@ private:
     void connectTables();
     bool m_drawsTables = true;
     QVariantMap m_tableLook;
+    // The edited text's extras.
+    void applyExtras();
+    QPointer<QObject> m_spellCheck;
+    QColor m_spellColor{0xc0, 0x39, 0x2b};
+    QPointer<QObject> m_vimSession;
 };

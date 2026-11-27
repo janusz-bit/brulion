@@ -327,16 +327,29 @@ void Window::touchLongPressed()
     // focused it): the finger moving on must not scroll the selection and its handles away.
     InputHandler *handler = inputHandler();
     const std::optional<Rect> field = handler ? handler->inputBounds() : std::nullopt;
-    if (field && field->contains(m_touch.down.position)) {
+    const Frame &f = rendered();
+    // Inside the field only what is drawn in its text takes a long press (an inline object's
+    // listener, its hitbox within the field's bounds).
+    const bool inField = field && field->contains(m_touch.down.position);
+    auto insideField = [&](HitboxId hitbox) {
+        const Rect b = hitboxBounds(hitbox);
+        return field && b.left() >= field->left() - 0.5f && b.right() <= field->right() + 0.5f
+               && b.top() >= field->top() - 0.5f && b.bottom() <= field->bottom() + 0.5f;
+    };
+    bool objectHeld = false;
+    if (inField) {
+        for (const Frame::LongPressEntry &e : f.longPressListeners)
+            objectHeld = objectHeld || (isHovered(e.hitbox) && insideField(e.hitbox));
+    }
+    if (inField && !objectHeld) {
         m_touch.phase = TouchPhaseState::Held;
         m_touch.decided = true;
         return;
     }
     // An element's own long press (a block's menu, a selection mode): the topmost under the finger.
-    const Frame &f = rendered();
     for (std::size_t i = f.longPressListeners.size(); i-- > 0;) {
         const Frame::LongPressEntry &e = f.longPressListeners[i];
-        if (!isHovered(e.hitbox))
+        if (!isHovered(e.hitbox) || (inField && !insideField(e.hitbox)))
             continue;
         cancelTouchPress();
         m_touch.phase = TouchPhaseState::LongPressed;

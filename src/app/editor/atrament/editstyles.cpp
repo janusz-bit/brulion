@@ -54,14 +54,32 @@ EditStyler::EditStyler(const QVariantMap &palette, std::u16string codeFamily, fl
         m_colors[std::size_t(i)] = resolve(palette, colorRolePalette(ColorRole(i)));
     for (int i = 1; i < BackgroundRoles; ++i)
         m_backgrounds[std::size_t(i)] = resolve(palette, backgroundRolePalette(BackgroundRole(i)));
+    // (MarkdownHighlighter::refreshChips' keys and defaults.)
+    auto colour = [&palette](const char *key, const char *fallbackKey, const char *fallback) {
+        return resolve(palette, PaletteColor{QLatin1StringView(key), QLatin1StringView(fallbackKey),
+                                             QLatin1StringView(fallback)})
+                .value_or(at::Color{});
+    };
+    m_reminderBackground = colour("reminderBackground", "", "#38f2b33d");
+    m_alarmBackground = colour("alarmBackground", "", "#f2b33d");
+    m_reminderText = colour("reminderChip", "reminder", "#7a4f00");
+    m_alarmText = colour("alarmChip", "alarm", "#7a4f00");
 }
 
-std::vector<at::TextSpan> EditStyler::spans(std::u16string_view text, MarkdownMode mode, bool luau) const
+std::vector<at::TextSpan> EditStyler::spans(std::u16string_view text, MarkdownMode mode, bool luau,
+                                            Extras *extras) const
 {
     std::vector<at::TextSpan> out;
     StyleOptions options;
     options.mode = mode;
     options.luau = luau;
+    if (extras) {
+        extras->prose.clear();
+        extras->chipsFound.clear();
+        options.reminderChips = extras->chips && mode == MarkdownMode::Inline;
+        options.chipLocale = extras->chipLocale;
+        options.chipToday = extras->chipToday;
+    }
     LineStyles styles;
     int state = 0;
     std::size_t start = 0;
@@ -73,6 +91,14 @@ std::vector<at::TextSpan> EditStyler::spans(std::u16string_view text, MarkdownMo
         options.firstLine = index == 0;
         styleMarkdownLine(line, state, options, &styles);
         state = styles.state;
+        if (extras) {
+            extras->prose.push_back({int(start), int(line.size()), styles.spell});
+            for (LineChip chip : styles.chips) {
+                chip.from += int(start);
+                chip.to += int(start);
+                extras->chipsFound.push_back(std::move(chip));
+            }
+        }
         for (const StyleRun &run : flattenStyles(styles.ops, int(line.size()))) {
             const StyleAttributes &a = run.attributes;
             at::TextStyleRefinement r;

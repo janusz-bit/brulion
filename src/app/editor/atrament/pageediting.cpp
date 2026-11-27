@@ -130,6 +130,12 @@ void PageView::setController(PageController *controller, at::Context<PageView> &
             c.notify();
         });
     }));
+    // The reminder chips' words are in the UI's language, relative to today.
+    auto restyle = [app, self] {
+        app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) { v.restyleInput(c); });
+    };
+    m_controllerConnections.push_back(QObject::connect(controller, &PageController::localeChanged, controller, restyle));
+    m_controllerConnections.push_back(QObject::connect(controller, &PageController::todayChanged, controller, restyle));
     controllerEditingChanged(cx);
 }
 
@@ -150,31 +156,64 @@ void PageView::applyEditStyler(at::Context<PageView> &cx)
     const QString lang = code ? m_model->index(row, 0).data(BlockListModel::LangRole).toString() : QString();
     m_inputCode = code || calc;
     m_inputLanguage = calc ? QStringLiteral("calc") : lang;
-    // The highlighter's spans (EditStyler's rules for the row's kind, else the plain styler),
-    // then the find bar's matches over them.
+    // The highlighter's spans (EditStyler's rules for the row's kind, else the plain styler), the
+    // find bar's matches, the misspelled words and the reminder chips over them (editSpans()); a
+    // calculation's by the code rules (its comments) in the note's face (CalcBlockView's
+    // highlightMode "code").
     at::TextInput::Styler styler;
-    if (m_styles && calc) {
-        // A calculation is note text, not code: the code rules colour its comments, in the
-        // note's face (CalcBlockView's highlightMode "code").
-        styler = [styles = m_styles](std::u16string_view text) {
-            std::vector<at::TextSpan> spans = styles->spans(text, MarkdownMode::Code);
-            for (at::TextSpan &span : spans)
-                span.style.fontFamily.reset();
+    const bool luau = lang == u"luau" || lang == u"lua";
+    const bool asCode = code || calc;
+    if (m_styles || (m_editStyler && !asCode) || !m_find.query.isEmpty() || (!asCode && (editSpellActive() || m_reminderChips)))
+        styler = [this, asCode, luau, calc](std::u16string_view text) {
+            std::vector<at::TextSpan> spans = editSpans(text, asCode, luau);
+            if (calc)
+                for (at::TextSpan &span : spans)
+                    span.style.fontFamily.reset();
             return spans;
         };
-    } else if (m_styles) {
-        styler = m_styles->styler(code ? MarkdownMode::Code : MarkdownMode::Inline, lang == u"luau" || lang == u"lua");
-    } else if (m_editStyler && !code && !calc) {
-        styler = m_editStyler;
-    }
-    if (!m_find.query.isEmpty()) {
-        styler = [this, inner = std::move(styler)](std::u16string_view text) {
-            std::vector<at::TextSpan> spans = inner ? inner(text) : std::vector<at::TextSpan>{};
-            appendFindSpans(QStringView(text.data(), qsizetype(text.size())), spans);
-            return spans;
-        };
-    }
     m_input->update(cx.app(), [&styler](at::TextInput &t, at::Context<at::TextInput> &c) { t.setStyler(styler, c); });
+}
+
+std::vector<at::TextSpan> PageView::editSpans(std::u16string_view text, bool code, bool luau)
+{
+    std::vector<at::TextSpan> spans;
+    EditStyler::Extras extras;
+    extras.chips = !code && m_reminderChips;
+    if (m_controller) {
+        extras.chipLocale = m_controller->locale() == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+        extras.chipToday = m_model ? m_model->today() : QDate();
+    }
+    const bool spelled = !code && editSpellActive();
+    const bool wantsExtras = spelled || extras.chips;
+    const MarkdownMode mode = code ? MarkdownMode::Code : MarkdownMode::Inline;
+    if (m_styles) {
+        spans = m_styles->spans(text, mode, luau, wantsExtras ? &extras : nullptr);
+    } else {
+        if (m_editStyler && !code)
+            spans = m_editStyler(text);
+        if (wantsExtras) {
+            // The lines' prose and chips by the same rules, without a palette's colours.
+            static const EditStyler plain(QVariantMap{}, std::u16string());
+            (void)plain.spans(text, mode, luau, &extras);
+        }
+    }
+    appendFindSpans(QStringView(text.data(), qsizetype(text.size())), spans);
+    m_editSpell.wrong.clear();
+    m_editSpell.suppressed = -1;
+    if (spelled)
+        appendEditSpelling(text, extras.prose, spans);
+    m_editChips.clear();
+    m_editChipsText.assign(text);
+    if (extras.chips)
+        appendEditChips(extras.chipsFound, spans);
+    return spans;
+}
+
+void PageView::restyleInput(at::Context<PageView> &cx)
+{
+    if (m_input)
+        m_input->update(cx.app(), [](at::TextInput &t, at::Context<at::TextInput> &c) { t.restyle(c); });
+    cx.notify();
 }
 
 bool PageView::insertAtCaret(std::u16string text, bool separate, at::Context<PageView> &cx)
@@ -257,6 +296,7 @@ void PageView::loadInput(int row, int cursor, at::Context<PageView> &cx)
         applyEditStyler(cx);
     }
     m_editUid = m_model->uidAt(row);
+    m_editSpell = {};
     {
         const bool code = editsAsCode(row);
         const bool calc = isCalc(row);
@@ -273,15 +313,21 @@ void PageView::loadInput(int row, int cursor, at::Context<PageView> &cx)
     const QModelIndex index = m_model->index(row, 0);
     const bool prompts = index.data(BlockListModel::ViewRole).toString() == u"text";
     const std::u16string placeholder = prompts ? m_editPlaceholder : std::u16string();
+    const int caret = cursor < 0 ? int(value.size()) : std::clamp(cursor, 0, int(value.size()));
+    m_editSpell.caret = caret;
     m_input->update(cx.app(), [&](at::TextInput &t, at::Context<at::TextInput> &c) {
         t.setPlaceholder(placeholder, c);
         if (t.text() != value)
             t.setText(value, c);
-        const int caret = cursor < 0 ? int(value.size()) : std::clamp(cursor, 0, int(value.size()));
         t.setSelection(caret, caret, c);
         // The page's undo stack is the controller's: the field keeps none of its own.
         t.clearUndo();
+        t.restyle(c); // (the spelling and the chips follow the caret and the day, not only the text)
     });
+    // Vim's mode (the caret's shape, no typing in its commands) and its visual selection here.
+    applyVimLook(cx);
+    if (m_vimSelection.row == row)
+        vimSelectionRequested(m_vimSelection.row, m_vimSelection.anchor, m_vimSelection.cursor, cx);
 }
 
 void PageView::controllerTextReset(int row, const QString &text, int cursor, at::Context<PageView> &cx)
@@ -290,10 +336,11 @@ void PageView::controllerTextReset(int row, const QString &text, int cursor, at:
         return;
     const std::u16string value = toU16(text);
     m_lastText = value;
+    const int caret = cursor < 0 ? int(value.size()) : std::clamp(cursor, 0, int(value.size()));
+    m_editSpell.caret = caret;
     m_input->update(cx.app(), [&](at::TextInput &t, at::Context<at::TextInput> &c) {
         if (t.text() != value)
             t.setText(value, c);
-        const int caret = cursor < 0 ? int(value.size()) : std::clamp(cursor, 0, int(value.size()));
         t.setSelection(caret, caret, c);
         t.clearUndo();
     });
@@ -351,10 +398,14 @@ void PageView::inputSelectionChanged(at::Context<PageView> &cx)
 {
     if (!m_input || !m_controller || editedRow() < 0)
         return;
+    // A caret put inside a reminder chip goes to its end (this runs again for its new place).
+    if (snapCaretOutOfChips(cx))
+        return;
     const at::TextInput &input = m_input->read(cx.app());
     // (A change of the text tells the controller its caret with the text.)
     if (input.text() == m_lastText)
         m_controller->setCursorPosition(input.selection().focus);
+    editCaretMoved(input.selection().focus, cx);
     if (onEditStateChanged)
         onEditStateChanged();
 }
@@ -388,6 +439,9 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
     const int row = editedRow();
     if (!m_input || row < 0 || !m_controller)
         return false;
+    // Vim's keys first (BlockEditor.handleEditorKey): its commands, and nothing typed in them.
+    if (vimKey(k, cx))
+        return true;
     PageController *ctl = m_controller.data();
     const at::Modifiers &m = k.modifiers;
     const bool ctrl = m.control || m.platform;

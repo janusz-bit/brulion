@@ -2779,6 +2779,12 @@ character (`vimCaretBox`; visual mode shows the TextEdit's own selection) — sw
 kept, as a TextEdit moves its caret to the end whenever `readOnly` changes. A modifier pressed
 alone (Shift for a capital, AltGr for ą) or a dead key keeps a pending command.
 
+**The page drawn by Atrament** (docs/ATRAMENT.md M2 step 2, `src/app/editor/atrament/pagevim.cpp`):
+the edited block's keys go to the same `VimSession` by `handleEditorKey`'s rules; the field is
+read-only in the command modes (no input method) with a steady block caret — an underline in
+replace mode —, the bar in insert mode; Vim's visual selection is the field's own; zt / zz / zb
+scroll Atrament's list and H M L read its rows; VimStatus is fed as for the QML editor.
+
 **Polish keyboards.** Commands are read from the character a key types, not from its place (Vim's
 way): on the Polish programmer's layout the letters and signs are where Vim has them, and the AltGr
 letters (ą ć ę ł ń ó ś ź ż) are no commands — only arguments (`fą`, `tę`, `rź`, `/żółw`, `ma`…).
@@ -4137,6 +4143,13 @@ documentation notebook.
   the marks show, a tap still edits the block (its word then has the edited block's menu). Not
   drawn by the RenderedTextItem (BRULION_TEXT_ITEM), JournalDayItem or PageItem, nor in
   transclusions and query results.
+* **The page drawn by Atrament** (Settings → Editor → "Draw the editor with Atrament";
+  docs/ATRAMENT.md M2 step 2, `src/app/editor/atrament/pagespell.cpp`): the same words by the same
+  rules — the edited block's prose by the highlighter's `SpellRange`s, the word at the caret left
+  alone while it is typed; the drawn blocks' with `wholePage`, only where shown as written — under a
+  wavy line in `Theme.danger` (Atrament draws one; Qt Quick's is straight). A right-click on a
+  marked word, or a tap on one in the edited block on touch UIs, opens the same spelling items
+  (`BlockEditor.openAtramentSpellingMenu`).
 * **Settings** (Settings → Editor, shown only where `SpellCheck.available`): "Check spelling"
   (`AppSettings.spellCheck`, default on), "Underline in the whole page" (`spellWholePage`,
   `spelling/wholePage`: default on, off on Android — every word on screen would go to the system's

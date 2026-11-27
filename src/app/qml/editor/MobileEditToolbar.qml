@@ -336,7 +336,8 @@ Rectangle {
                 objectName: "toolbarHighlight"
                 iconName: "highlighter"
                 label: qsTr("Highlight")
-                enabled: bar.row >= 0 && bar.edit !== null
+                // (The page drawn by Atrament: its caret and selection, EditorAtramentPage.applyHighlight.)
+                enabled: bar.row >= 0 && (bar.edit !== null || bar.atramentPage !== null)
                 onClicked: { bar.commitComposition(); bar.editor.openHighlightMenuAbove(bar.edit, highlightButton) }
             }
             ToolButton {
