@@ -95,15 +95,18 @@ else
     passthru = {
       inherit binary;
       # What nixpkgs' compiler wrapper asks its compiler (pkgs/build-support/cc-wrapper): the same
-      # answers as nixpkgs' Clang, and its library output — the wrapper's resource directory is
-      # that Clang's builtin headers either way.
-      inherit (nixpkgsClang)
-        isClang
-        langC
-        langCC
-        hardeningUnsupportedFlagsByTargetPlatform
-        lib
-        ;
+      # answers as nixpkgs' Clang gives, and that Clang's library output — the wrapper's resource
+      # directory is its builtin headers either way.
+      isClang = true;
+      langC = true;
+      langCC = true;
+      lib = lib.getLib nixpkgsClang;
+    }
+    // lib.optionalAttrs (nixpkgsClang ? hardeningUnsupportedFlagsByTargetPlatform) {
+      inherit (nixpkgsClang) hardeningUnsupportedFlagsByTargetPlatform;
+    }
+    // lib.optionalAttrs (nixpkgsClang ? hardeningUnsupportedFlags) {
+      inherit (nixpkgsClang) hardeningUnsupportedFlags;
     };
 
     meta = {

@@ -515,4 +515,27 @@ Details in docs/PERFORMANCE.md, "Next steps":
 * **Graph — check by hand and measure on a phone** (layout on a worker thread and drawing through
   the graphics card done, L16b): on a real phone with a large notebook panning, zooming and
   dragging pages while the layout runs; Windows with a graphics card (Direct3D 11) and the browser
-  on a phone; measuring on a Raspberry Pi (software rendering) and in the Android emulator.
+  on a phone; measuring on a Raspberry Pi (software rendering) and in the Android emulator;
+* **A binary cache for the Nix builds** — what cache.nixos.org does not have is fetched or compiled
+  wherever it is first used (docs/PERFORMANCE.md "What Nix costs"): the compiler (nix/clang-release.nix,
+  a 1.9 GB download) and Qt Multimedia over its own FFmpeg (compiled after every nixpkgs update:
+  the app's dev shell on a Raspberry Pi). CI keeps Qt Multimedia for itself only; it could push
+  both, and the packages, to a binary cache the developers' machines read (Cachix: the owner's
+  token as a secret of the repository);
+* **What Nix still costs the program** — the Qt and the libraries of the Nix package are
+  nixpkgs' builds, with the compiler flags the package itself no longer has (zeroed call-used
+  registers, a frame pointer in every function): the app from the Nix package executes 4 % more
+  instructions than the AppImage for the same start (docs/PERFORMANCE.md "What Nix costs"). How
+  much of that a Qt built here without those flags would close is not known — it is hours of
+  compiling wherever the binary cache above is missing.
+  Not measured: that difference in time (a quiet machine), the flags' cycles in the index suite,
+  the arm64 package's size before and after;
+* x86-64 builds outside Nix (the AppImage, Windows) keep no frame pointers, the compiler's choice
+  at `-O3`: a frame pointer in the functions that call others made the Nix package's code 2.5–3 %
+  smaller — 4.8 MB of the app's file — for 1 % of the parsers' time (docs/PERFORMANCE.md "What Nix
+  costs"); the same trade is open for them;
+* `brulion-cli` loads 76 libraries before `main()`, 80–90 ms a call on a Raspberry Pi: it links
+  Qt Gui for the core's `QTextDocument` and `QImage`, which most commands never use;
+* the LLVM project's release of Clang in the builds outside Nix (the AppImages and CI's sanitizer
+  job compile with Ubuntu's Clang 18): whether it is as much faster there as it is against
+  nixpkgs' Clang was not measured.

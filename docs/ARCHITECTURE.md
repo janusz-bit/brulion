@@ -922,7 +922,11 @@ What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §1
   MSVC: Control Flow Guard, CET shadow stack, ASLR and DEP. Each option is tried at configure
   time and left out where the toolchain does not know it; the browser build has none (the
   WebAssembly sandbox). A memory error in a parser of notes that came from anywhere ends in a
-  stop of the program. What it costs: docs/PERFORMANCE.md "Hardened builds".
+  stop of the program. What it costs: docs/PERFORMANCE.md "Hardened builds". The Nix packages
+  and dev shells are built with this list too, not with what nixpkgs' compiler wrapper adds on
+  top of it for every package (zeroed call-used registers, `-fwrapv`, and a frame pointer in leaf
+  functions too, which only the dev shells keep, for profilers: nix/package.nix, flake.nix;
+  docs/PERFORMANCE.md "What Nix costs").
 * Tests: QtTest via CTest (`brulion_add_test`), core in `tests/core/<module>`, app areas in
   `tests/app/<area>` (`QT_QPA_PLATFORM=offscreen`), the command line in `tests/cli` (the real
   `brulion-cli` on temporary notebooks, also its MCP server) and the socket in `tests/ipc`, plus headless QML checks of the real app:

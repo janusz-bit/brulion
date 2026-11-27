@@ -139,10 +139,23 @@ stdenv.mkDerivation (finalAttrs: {
   # _FORTIFY_SOURCE=3 (glibc's checked memcpy, snprintf…) comes from cmake/BrulionHardening.cmake,
   # as on every other Linux build: nixpkgs' Clang wrapper knows only level 2 and, with its fortify
   # hardening on, passes -D_FORTIFY_SOURCE=2 after the build's own flags, so the package ended up
-  # with 2 (docs/PERFORMANCE.md "Build times"). The rest of nixpkgs' hardening stays.
+  # with 2 (docs/PERFORMANCE.md "Build times").
+  #
+  # That file names the mitigations every build of Brulion has. nixpkgs' wrapper added three things
+  # to this build alone, in every function of Brulion and of the libraries compiled with it
+  # (llama.cpp's kernels too): the registers a function used zeroed before it returns
+  # (zerocallusedregs: -fzero-call-used-regs=used-gpr), signed overflow defined as wrapping
+  # (strictoverflow: -fwrapv — no mitigation by itself, and the tests run without it under UBSan)
+  # and a frame pointer kept in every function, leaf functions too (below). Without them the
+  # calculator, the Markdown parser and the index execute 2–4 % fewer instructions — about 1 % of
+  # the first two's time on x86-64, nothing a Raspberry Pi's processor shows — in 3–4 % less code
+  # on arm64 and 1–2 % less on x86-64 (docs/PERFORMANCE.md "What Nix costs"). The rest of nixpkgs'
+  # hardening stays. The dev shells take this list too (flake.nix).
   hardeningDisable = [
     "fortify"
     "fortify3"
+    "zerocallusedregs"
+    "strictoverflow"
   ];
 
   # The programs and libraries without their symbol tables (nixpkgs strips only the debug
@@ -248,7 +261,17 @@ stdenv.mkDerivation (finalAttrs: {
     # (Code mode's project search tests rg itself where it is: docs/CODE-FILES.md.)
     ripgrep
   ];
-  env = lib.optionalAttrs finalAttrs.doCheck {
+  env = {
+    # nixpkgs' wrapper puts -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer in front of every
+    # compile, for profilers — which find no names here: the package has no symbol table
+    # (stripAllList above; a profile wants a build of one's own). After the build's flags, none in
+    # leaf functions again, the compiler's own choice for arm64. On x86-64 the compiler would keep
+    # none at all in an optimised build, and the package keeps the others: without them the
+    # parsers took 1 % less time and the app's file was 4.8 MB larger (docs/PERFORMANCE.md "What
+    # Nix costs").
+    NIX_CFLAGS_COMPILE = "-momit-leaf-frame-pointer";
+  }
+  // lib.optionalAttrs finalAttrs.doCheck {
     FONTCONFIG_FILE = makeFontsConf { fontDirectories = [ dejavu_fonts ]; };
   };
   preCheck = ''

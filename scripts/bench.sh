@@ -50,7 +50,8 @@
 # Environment: JOBS (build jobs, default 2 — the Pi; use JOBS=16 on the laptop), BRULION_BENCH_TMP
 # (where vaults are written; default <build dir>/bench-tmp, i.e. a real disk, not a tmpfs /tmp),
 # BRULION_BENCH_ALLOW_STALE=1 (measure binaries whose source hash differs, with a warning).
-# Must run inside `nix develop` (Qt, cmake, ninja). Holds the machine-wide build lock (like
+# Must run inside the dev shell (Qt, cmake, ninja; `scripts/dev-shell.sh scripts/bench.sh …`, or
+# with `-s cli` for the core's suites alone, without the app). Holds the machine-wide build lock (like
 # scripts/dev-build.sh) for the whole run, so benchmarks never compete with a compilation.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -124,6 +125,8 @@ if [[ ${build} == 1 ]]; then
   if [[ ! -f "${build_dir}/build.ninja" ]] || ! grep -q '^BRULION_BUILD_BENCHMARKS:BOOL=ON' "${build_dir}/CMakeCache.txt"; then
     launcher=()
     command -v ccache >/dev/null 2>&1 && launcher=(-DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+    # devShells.cli (flake.nix; `scripts/dev-shell.sh -s cli`): the core's suites without the app.
+    [[ "${BRULION_BUILD_APP:-}" == OFF ]] && launcher+=(-DBRULION_BUILD_APP=OFF)
     cmake -S . -B "${build_dir}" -G Ninja -DCMAKE_BUILD_TYPE="${build_type}" -DBRULION_BUILD_BENCHMARKS=ON \
       "${launcher[@]}"
   fi

@@ -13,6 +13,22 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **Brulion from Nix** (2026-11-27). Does Nix slow Brulion down? It slowed the building of it far
+  more than the program. The compiler in Nix's package collection is the Clang its authors
+  publish, but built without the optimisations they give their own releases: every file took two
+  thirds longer to compile. The Nix builds now use the authors' release, and compiling takes
+  60–65 % of the processor time it did — on a Raspberry Pi, a computer and GitHub's servers alike
+  — with the same result. The development environment opens in a tenth of a second instead of two
+  seconds on a computer, in a third of a second instead of twelve on a Raspberry Pi, and the
+  checks of the Nix package before a release take 38–43 minutes instead of 77–87. The program
+  itself: Nix adds its own compiler options to everything it builds, and with them Brulion from
+  the Nix package did 6 % more work than the AppImage to start with a notebook of 10,000 notes.
+  Brulion's own code is no longer built with the ones that cost it: the same start takes 2 %
+  less work than before, calculations and Markdown parsing about 1 % less time on a computer, and
+  the package is 2 MB smaller (154 instead of 156 MB). What is left of the difference is the Qt
+  library as Nix builds it, which the program runs on. On a Raspberry Pi the difference in time
+  was too small to measure.
+
 * **Memory** (2026-11-25). Brulion with a small notebook open took about 400 MB of memory on a
   computer, and kept it whether you used it or not. Now it takes about 130 MB a quarter of a
   minute after it started, 180–270 MB while you move between its views, and about 140 MB when its
@@ -3658,6 +3674,219 @@ Reproduce: tests/bench/app/README.md, scenario `memory`. Guards: `tst_memory_pol
 `tst_attachmentindexer` (`ocrLibraryLookedForWhenAsked`), `tst_ui_fonts` (`storedAsTheyAre`),
 `tst_qmlcall`, `tst_vault_contentcache`, `bench_index:memory` (limits.csv: 158 MiB at 10 000
 notes), the shell self-test's "0b" and "0d".
+
+### What Nix costs (2026-11-27)
+
+Does Nix slow the build down, and the program it builds? The build: yes, by the compiler nixpkgs
+builds — two fifths of every compile. The program: yes, a little — the app from the Nix package
+executed 6 % more instructions than the AppImage for the same start, a third of them in Brulion's
+own code, from compiler flags nixpkgs adds to every package (2–3 % of the parsers' time on
+x86-64). That compiler and those flags are gone from the Nix builds; what is left is the Qt
+nixpkgs builds. Measured on the Raspberry Pi 4 (aarch64, four cores, nothing else running), on
+the x86-64 desktop (i5-13450HX; other sessions compiled beside most of it, so its numbers are
+instructions, and cycles and CPU time of pinned runs, with the load named where it matters) and
+on GitHub's runners (4 vCPU, x86-64 and arm64); nixpkgs `d4f25a3e`, Clang 21.1.8. A compile's
+time is CPU time (user + system), the best of three runs; a benchmark's instructions and cycles
+are QtTest's `-perf -perfcounter instructions:u` / `cycles:u`.
+
+**The compiler was the cost — not the wrapper, not the flags.** One source file compiled with
+exactly what the build passes (Raspberry Pi; seconds):
+
+| | nixpkgs' Clang through its wrapper | … without nixpkgs' hardening flags | … without the wrapper | the LLVM project's release of Clang 21.1.8 |
+|---|---:|---:|---:|---:|
+| `markdown/blockdocument.cpp`, `-O0 -g` | 24.73 | 24.54 | 24.37 | 15.21 (61.5 %) |
+| — `-O3` | 39.26 | 38.79 | 38.98 | 23.77 (60.5 %) |
+| `index/vaultindex.cpp`, `-O0 -g` | 33.88 | 33.15 | 33.58 | 21.30 (62.9 %) |
+| — `-O3` | 51.49 | 51.09 | 51.85 | 30.82 (59.9 %) |
+| `index/queryparse.cpp`, `-O0 -g` | 30.02 | 30.27 | 30.53 | 19.09 (63.6 %) |
+| — `-O3` | 46.52 | 46.18 | 45.66 | 27.83 (59.8 %) |
+
+* **The wrapper**: nixpkgs' compiler is a bash script that reads its flags from the environment
+  (67 `-isystem` and 64 `-L` directories in the light shell) and then starts Clang. It costs 35 ms
+  a compile on the Pi (an empty file: 0.114 s through it, 0.078 s without) — nothing next to a
+  real file. The flags it adds (below) cost the compiler nothing either.
+* **nixpkgs' Clang** is a 244 KB driver over the shared `libclang-cpp` and `libLLVM` (1.5 GiB of
+  closure), built like any nixpkgs package: no link-time or profile-guided optimisation. The LLVM
+  project builds its releases as one static program with ThinLTO, PGO and BOLT
+  (`clang/cmake/caches/Release.cmake` in llvm-project). The same version, the same flags:
+  **60–64 % of the time** on the Pi; on GitHub's runners 61–67 % on x86-64 (five files at both
+  levels, mean 63 %) and 62–69 % on arm64 (mean 65 %).
+* **The same output.** The objects of three files at `-O0` and at `-O3` are identical once
+  `.comment` is taken out — the compiler's name, which in the release carries its repository and
+  commit.
+
+So the Nix builds compile with the release (nix/clang-release.nix): its `bin/clang-21`, patched to
+nixpkgs' glibc and libstdc++, takes the place of nixpkgs' Clang *inside* nixpkgs' wrapper
+(flake.nix `brulionStdenv`: the packages, the checks, the dev shells). Nothing else changes hands:
+the wrapper and its flags, the builtin headers and compiler-rt of the wrapper's resource
+directory, libstdc++, glibc and lld are nixpkgs'. The release archive is 1.9 GB — every LLVM tool,
+each linked statically — of which the one file is kept (0.3 GB): a minute on a GitHub runner
+(54–60 s to fetch, unpack and patch) and on the desktop, 3.5 min on the Pi, once. Its Nix hash is of the file, not
+of the archive, so the store path is the same under any nixpkgs and one download (or one push to
+a binary cache: `nix build .#clang-llvm-release`) serves every later build; the archive is checked
+against the SHA-256 GitHub publishes. nix/clang-release.json pins a release per Clang version and
+system (`scripts/clang-release-pin.sh <version>`); `checks.<system>.clang-release` fails when
+flake.lock has moved to a Clang without a pin, and an overlay over another nixpkgs falls back to
+nixpkgs' Clang. The linker stays nixpkgs' lld: links are a small part of a build, and the
+release's lld wants a libxml2 nixpkgs no longer has.
+
+**Entering the shell.** `nix develop -c <command>` evaluates the flake every time, and from a tree
+with uncommitted changes — every tree a build is made from — it first copies the tree into the
+Nix store: **12 s** on the Pi after every edit (11.8–12.0 s; 17–28 s the first time), and one more
+21 MB copy of the sources in the store; 1.7 s on the desktop (0.2 s when nothing has changed since
+the last call). Nothing keeps the shell's packages either: after a garbage collection they are
+fetched and, where cache.nixos.org has none, built again. `scripts/dev-shell.sh <command>`
+evaluates once for a `flake.nix`, `flake.lock` and `nix/`, keeps the result as a Nix profile under
+`~/.cache/brulion/dev-shell` (a garbage collector root, shared by every checkout and worktree) and
+enters that: **0.33 s** on the Pi, 0.07 s on the desktop (tst_scripts_dev_shell).
+`scripts/remote-build.sh` enters the laptop's shell the same way — `nix develop path:.` copied the
+whole tree into the laptop's store for every build (tried in a copy of the tree without `.git`, as
+that script makes one: 8 s the first time, the profile afterwards; not over ssh).
+
+**What cache.nixos.org does not have.** Qt Multimedia over its own FFmpeg (nix/multimedia.nix) is
+compiled wherever the app's shell or package is first used after a nixpkgs update or a garbage
+collection: 3.5 + 5.2 min on GitHub's arm64 runner, 4.5 + 6.5 min on its x86-64 one, before
+anything of Brulion compiles. `devShells.cli` (`scripts/dev-shell.sh -s cli`) is the shell of the
+core, `brulion-cli` and their tests alone — the inputs of the `brulion-cli` package: on the Pi it
+fetches 26 MB over the package's inputs and compiles nothing; `scripts/dev-build.sh` then builds
+with `BRULION_BUILD_APP=OFF` into `./build-cli`, and the core's benchmark suites build that way
+too.
+
+**ccache could not tell the compilers apart.** It takes the compiler's file size and modification
+time for its identity. Here the compiler is the wrapper script: every file of the Nix store has
+the time 1, and two wrappers whose store paths have one length have one size — a nixpkgs update
+with another Clang looks like the same compiler. And what the wrapper adds to a compile comes from
+the environment, which ccache never sees: one file compiled with the wrapper's hardening flags
+and then with none of them (`NIX_HARDENING_ENABLE=`) was answered from the cache with the first
+object (1 hit of 2; the object differs from the one the compiler makes then) — on the Pi and on
+the desktop, where two of the store's Clang wrappers do have one size, 11 556 bytes. The switch
+of 2026-11-19 ("Build times": a Debug build no longer `-O2`) was such a change of the list. The
+dev shells now give ccache the wrapper's store path and its hardening list as the compiler's
+identity (`CCACHE_COMPILERCHECK=string:…`): 0 hits of 2, the right object.
+
+**CI.** The Nix job of v0.32.0's release took 77 min (arm64) and 87 min (x86-64) — the longest
+job of a CI run by hand: after Qt Multimedia (9–11 min), the package (2 612 steps) and the package
+with its tests (4 617 steps) compiled side by side on the runner's four cores for 44–50 and 52–59
+min, the first 2 612 steps of both being the same compiles, then the tests ran for 15 min. Nix
+cannot share objects between two derivations; two runners can build them at the same time. The
+job is two per architecture now — "package" (every check but the test suite, then the package)
+and "tests" — and Qt Multimedia's store paths are kept between runs (`nix-store --export`, 55 MB
+in the repository's cache, restored and imported in a quarter of a minute; the compiler is
+fetched every time: a minute against 0.3 GB of that cache):
+
+| | before (v0.32.0) | first run: Qt Multimedia built (5–8 min) | later runs: Qt Multimedia kept |
+|---|---:|---:|---:|
+| arm64, "package" | 77 min (one job) | 25 min | 19 min |
+| arm64, "tests" | | 40 min | 38 min |
+| x86-64, "package" | 87 min (one job) | 44 min | 23 min |
+| x86-64, "tests" | | 49 min | 43 min |
+
+Alone on its runner, the build of the package with its tests takes 20 min (arm64) and 26 min
+(x86-64) of a "tests" job, the tests the same 15 min; the package's 2 612 steps take 17 and 20
+min beside `brulion-cli`'s 947 (32 min in the first run on x86-64: GitHub's runners differ).
+
+**The program.** nixpkgs' wrapper adds its own flags in front of every compile, whatever the
+build asks for. cmake/BrulionHardening.cmake already gives every build of Brulion the mitigations
+among them (stack protector, stack clash protection, position-independent code, RELRO); three
+came on top in the Nix builds alone, in every function of Brulion and of the libraries compiled
+with it: `-fzero-call-used-regs=used-gpr` (a function zeroes the registers it used before it
+returns), `-fwrapv` (signed overflow wraps) and `-fno-omit-frame-pointer
+-mno-omit-leaf-frame-pointer` (a frame pointer in every function, for profilers). The core's
+benchmark suites built with the same compiler with those flags and without them — the frame
+pointers as the compiler chooses then: none in leaf functions on arm64, none at all on x86-64.
+What nixpkgs' flags cost, as the geometric mean over a suite's rows:
+
+| suite (rows) | Pi 4: instructions | cycles | code | desktop, x86-64: instructions | cycles | code |
+|---|---:|---:|---:|---:|---:|---:|
+| `bench_calc` (25) | +3.6 % | −1.0 … −1.2 % | +3.8 % | +4.1 % | +2.6 % | −1.0 % |
+| `bench_markdown` (66) | +3.3 % | +1.5 … +3.0 % | +3.3 % | +3.3 % | +1.8 % | −1.2 % |
+| `bench_index` (130) | +4.3 % | – | +3.9 % | +3.5 % | – | −0.8 % |
+| `bench_dates` (21) | +0.8 % | −0.7 … −1.0 % | +2.7 % | +0.9 % | +0.4 % | −1.8 % |
+| `bench_text` (36) | +0.1 % | −0.2 … −0.8 % | +4.3 % | +0.5 % | −0.2 % | −1.0 % |
+| `bench_vault` (25; mostly file system calls) | +3.1 % (0.0 % by total) | −1.0 % | +3.6 % | – | – | −0.9 % |
+
+(Code: the programs' `.text`. Cycles on the Pi: two runs, the second on the quiet machine with
+`-median 5`; on the desktop the best of twelve rounds, the builds taking turns on one P-core. The
+index suite's cycles and the vault suite were not taken there — long runs, and other sessions'
+builds had filled the machine: the vault suite's rows wait for the file system and its watcher,
+and single rows' instructions differed by a factor of two between the builds, in both directions.
+GitHub's runners have no counters: callgrind over whole runs of four suites, start-up and Qt's own
+code included, gave +0.05 … +1.2 % instructions on both architectures and the same code sizes.)
+
+More instructions everywhere; in time, 2–3 % of the calculator and the Markdown parser on x86-64,
+and on the Cortex-A72 nothing outside its ±1.5 % but the Markdown parser's +1.5 … +3 %. Two more
+builds on x86-64 take the flags apart — a second run of twelve rounds, four builds taking turns,
+each against the build with all of nixpkgs' flags:
+
+| x86-64 | calculator: instructions | cycles | Markdown: instructions | cycles | code |
+|---|---:|---:|---:|---:|---:|
+| registers not zeroed, no `-fwrapv`; a frame pointer in every function | −2.4 % | −1.5 % | −2.0 % | −0.3 % | −0.9 … −1.6 % |
+| … and none in leaf functions — **the package now** | −2.3 % | −1.3 % | −2.2 % | −0.6 % | −1.1 … −2.0 % |
+| … and none at all: the compiler's own choice at `-O3`, as in the table above | −3.6 % | −2.5 % | −3.1 % | −1.9 % | +0.8 … +1.8 % |
+
+The zeroing is the larger part. A frame pointer in the functions that call others costs the
+parsers another 1 % of their time on x86-64 and *saves* 2.5–3 % of code, mostly because a local is
+addressed through `rbp` in one byte less than through `rsp`. On arm64 the compiler keeps those
+frame pointers by itself, and the code without nixpkgs' flags is 3–4 % smaller (a zeroed register
+is a four-byte instruction there). The Nix package on x86-64, the three ways:
+
+| | 0.32.0: nixpkgs' flags | no frame pointers | **the package now** |
+|---|---:|---:|---:|
+| `bin/.brulion-wrapped` | 119.12 MB | 122.25 MB | 117.42 MB (−1.4 %) |
+| `bin/.brulion-cli-wrapped` | 20.77 MB | 21.07 MB | 20.51 MB (−1.2 %) |
+| `lib/brulion` (llama.cpp, ggml, the plugins) | 16.46 MB | 16.65 MB | 16.37 MB |
+| the package | 156.42 MB | 160.03 MB | 154.36 MB (−2.06 MB, −1.3 %) |
+
+So the Nix packages are built with cmake/BrulionHardening.cmake's list, as every other build of
+Brulion is, and with a frame pointer in the functions that call others (nix/package.nix,
+nix/cli.nix: `hardeningDisable` with `zerocallusedregs` and `strictoverflow`,
+`-momit-leaf-frame-pointer` after the wrapper's flags): on arm64 the code of the other builds, on
+x86-64 theirs with those frame pointers — smaller *and* faster than it was, where the compiler's
+own choice would be 1 % faster again in the parsers and 4.8 MB more of the app's file. What is
+given up: the zeroing of call-used registers, which leaves an attacker who already controls a
+return address fewer useful values in registers — beside the stack protector, CET's shadow stack
+and branch tracking (PAC and BTI on arm64), zero-initialised locals, the checked containers and
+`_FORTIFY_SOURCE=3` that every build keeps. `-fwrapv` is no mitigation by itself, and the tests
+have always run without it under UBSan; a profiler finds no names in the package either way (no
+symbol table). The dev shells take the package's hardening list and keep the wrapper's frame
+pointers in leaf functions too, for profilers.
+
+**The app against the AppImage.** The same version, 0.32.0, on the desktop: the installed Nix
+package (nixpkgs' flags), the package as it is built now, and the AppImage — the Qt Company's Qt
+6.12.0 and Ubuntu's Clang 18 —, run on NixOS through nix-ld with the libraries of nixpkgs'
+AppImage environment, so glibc, libstdc++, FreeType and fontconfig are nixpkgs' for all of them.
+The app starts `offscreen` on a notebook of 10 000 notes, is left for 20 s and closes with a
+screenshot — the same picture from every run, to the byte; a first start, which parses every
+note, and a second in the same home with the saved index. User-space instructions of the whole
+process on the P-cores (`perf stat --no-scale`), the median of five runs (a build's runs lie
+within 0.7–3.5 % of each other):
+
+| | first start | second start |
+|---|---:|---:|
+| the Nix package of 0.32.0 | 17.33 G | 10.84 G |
+| the Nix package now | 16.97 G (−2.1 %) | 10.61 G (−2.1 %) |
+| … with no frame pointers at all | 16.85 G (−2.8 %) | 10.54 G (−2.8 %) |
+| the AppImage | 16.29 G (−6.0 %) | 10.16 G (−6.3 %) |
+
+So Nix did cost the program: 6 % more instructions than the AppImage for the same work. A third
+of that was Brulion's own code under nixpkgs' flags, and is gone; the rest lies between nixpkgs'
+Qt and libraries and the Qt Company's (and between Clang 21 and 18) — nixpkgs compiles its Qt
+with the same three flags; a Qt built here without them would be hours of every CI run and of
+every machine's first build without a binary cache, and was not tried. In time it could not be
+told apart: other sessions' builds ran on the machine (load 11–16), a build's cycles and CPU time
+spread by ±8 % between runs, and their medians — the package before 4–5 % above the package now
+and 1–5 % above the AppImage — are no measurement.
+
+**Starting.** `brulion-cli version` from the Nix package takes 80–90 ms on the Pi. It loads 76
+libraries (it links Qt Gui for the core's `QTextDocument` and `QImage`) and resolves 34 762
+symbols before `main()` (`-z now`, which cmake/BrulionHardening.cmake asks for in every build).
+What is Nix's in it: each library names its own folders to search (its run path), so 267 of the
+344 files the loader tries to open are not there — about 3 ms. The app's programs start through
+nixpkgs' wrapper, a small C program that sets Qt's plugin and QML paths: one more `exec`.
+
+Not measured: the arm64 package's size before and after (by the core's suites, 3–4 % of the
+code), the index suite's cycles, the app against the AppImage in milliseconds (a quiet machine),
+a Qt built without nixpkgs' flags (TODO.md).
 
 ### Budgets
 

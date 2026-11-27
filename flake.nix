@@ -148,10 +148,10 @@
           # time, five times for the C++ of the QML, and code a debugger cannot follow. Without it the
           # build type decides, as with any other compiler: Debug -O0, Release -O3 with
           # _FORTIFY_SOURCE=3 from cmake/BrulionHardening.cmake (docs/PERFORMANCE.md "Build times").
-          hardeningDisable = [
-            "fortify"
-            "fortify3"
-          ];
+          # The rest of the list is the package's (nix/package.nix): a build made here has the code
+          # the package has, but for the frame pointers of leaf functions, which the wrapper keeps
+          # in this shell — for profilers (docs/PERFORMANCE.md "What Nix costs").
+          inherit (brulion) hardeningDisable;
           # ccache tells one compiler from another by its file's size and time, and the compiler here
           # is nixpkgs' wrapper script: every wrapper in the store has the time 1 and, for store
           # paths of one length, one size — and what it adds to a compile (the hardening list above)

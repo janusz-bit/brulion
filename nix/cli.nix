@@ -27,9 +27,11 @@ stdenv.mkDerivation (finalAttrs: {
 
   buildInputs = [ qt6.qtbase ];
 
-  # _FORTIFY_SOURCE=3 from cmake/BrulionHardening.cmake, not the wrapper's 2, and no symbol table
-  # (nix/package.nix).
+  # _FORTIFY_SOURCE=3 from cmake/BrulionHardening.cmake, not the wrapper's 2, none of the flags
+  # nixpkgs' wrapper adds on top of that file's, no frame pointers kept for profilers, and no
+  # symbol table (nix/package.nix).
   inherit (brulion) hardeningDisable stripAllList;
+  env.NIX_CFLAGS_COMPILE = brulion.NIX_CFLAGS_COMPILE;
 
   cmakeFlags = [
     (lib.cmakeBool "BRULION_BUILD_APP" false)
