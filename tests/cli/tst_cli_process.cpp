@@ -663,6 +663,7 @@ private Q_SLOTS:
         QCOMPARE(events.size(), 1);
         QCOMPARE(events.at(0).toObject().value(u"title"_s).toString(), u"Obiad z Zosią"_s);
         QCOMPARE(events.at(0).toObject().value(u"pending"_s).toBool(), true);
+        QCOMPARE(events.at(0).toObject().value(u"end"_s).toString(), u"2026-10-20T14:30"_s);
         r = run(dir, {u"calendar"_s, u"edit"_s, uid, u"--title"_s, u"Obiad z Zosią i Kubą"_s, u"--start"_s,
                       u"2026-10-21"_s});
         QVERIFY2(r.code == 0, qPrintable(r.describe()));
@@ -701,6 +702,14 @@ private Q_SLOTS:
         QVERIFY(!event.contains(u"rule"_s));
         r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"edit"_s, u"rada"_s, u"--reminder"_s, u"2 godz"_s});
         QCOMPARE(r.result().value(u"event"_s).toObject().value(u"reminderMinutes"_s).toInt(), 120);
+        // (what is not given is kept: its description)
+        QCOMPARE(r.result().value(u"event"_s).toObject().value(u"description"_s).toString(), u"Druga linia\nżółw"_s);
+        r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"edit"_s, u"rada"_s, u"--reminder"_s, u"30"_s});
+        QCOMPARE(r.result().value(u"event"_s).toObject().value(u"reminderMinutes"_s).toInt(), 30);
+        // A title of several words needs no quotes.
+        r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"add"_s, u"Spotkanie"_s, u"z"_s, u"Łucją"_s, u"--start"_s,
+                      u"jutro"_s});
+        QCOMPARE(r.result().value(u"event"_s).toObject().value(u"title"_s).toString(), u"Spotkanie z Łucją"_s);
         r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"edit"_s, u"rada"_s, u"--reminder"_s, u"brak"_s});
         QVERIFY(!r.result().value(u"event"_s).toObject().contains(u"reminderMinutes"_s));
         // Deleting is destructive: one occurrence, then the whole meeting.
@@ -755,6 +764,14 @@ private Q_SLOTS:
                  (QJsonObject{{u"running"_s, false}, {u"sameNotebook"_s, true}}));
         r = run(dir, {u"--format"_s, u"text"_s, u"calendar"_s, u"add"_s, u"Koniec"_s, u"--start"_s, u"2026-12-30"_s});
         QVERIFY2(r.out.contains("Brulion takes it when it has this notebook open"), r.out.constData());
+        {
+            // The app runs with this notebook (a stand-in on its socket): it takes it now.
+            brulion::ipc::SingleInstance app(brulion::ipc::SingleInstance::keyFor(appDataDir()));
+            QVERIFY(app.listen());
+            r = cliLive({u"--vault"_s, dir, u"--now"_s, kNow, u"--format"_s, u"text"_s, u"calendar"_s, u"add"_s,
+                         u"Teraz"_s, u"--start"_s, u"2026-12-31"_s});
+            QVERIFY2(r.out.contains("The app takes it now"), r.out.constData());
+        }
         {
             QSettings settings(settingsFile(), QSettings::IniFormat);
             settings.remove(u"vaults/current"_s);

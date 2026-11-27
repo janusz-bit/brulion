@@ -736,6 +736,7 @@ void TestCalDavTasks::eventsFromTheInbox()
     const int logged = dev.store->log().size();
     QCOMPARE(dev.sync->takeInbox(), 2);
     QVERIFY(pendingIntents(folder).isEmpty());
+    QCOMPARE(dev.sync->takeInbox(), 0); // (nothing left)
     QCOMPARE(dev.state().outbox.size(), 2);
     QVERIFY(!changed.isEmpty());
     const QList<LogEntry> log = dev.store->log().mid(logged);

@@ -540,6 +540,11 @@ void TestCalDavEventChange::changed()
     QVERIFY(change);
     QVERIFY(change->data.contains("DTSTART;TZID=Europe/Warsaw:20261123T080000"));
     QVERIFY(change->data.contains("DTEND;TZID=Europe/Warsaw:20261125T160000"));
+    // Without an end: an hour, to the second.
+    i.patch.times.end.reset();
+    change = plannedChange(pracaEntry(), praca(), i, context());
+    QVERIFY(change);
+    QVERIFY(change->data.contains("DTEND;TZID=Europe/Warsaw:20261123T090000\r\n"));
 }
 
 void TestCalDavEventChange::occurrenceChanged()
@@ -654,6 +659,8 @@ void TestCalDavEventChange::uids()
     static const QRegularExpression id(u"^20261120T090102003-[a-z0-9]{8}$"_s);
     const QString i = newIntentId(QDateTime(QDate(2026, 11, 20), QTime(10, 1, 2, 3), QTimeZone("Europe/Warsaw")));
     QVERIFY2(id.match(i).hasMatch(), qPrintable(i));
+    static const QRegularExpression store(u"^c-[a-z0-9]{10}$"_s);
+    QVERIFY(store.match(CalendarStore::newId(u'c')).hasMatch());
 }
 
 void TestCalDavEventChange::acrossTheClockChange()

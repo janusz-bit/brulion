@@ -372,6 +372,26 @@ void TestWorkspaceCalendars::changesFromTheCommandLine()
                      .value(u"location"_s)
                      .toString(),
              u"Sala Żółta"_s);
+    // A new weekly event without a reminder; an edit to no title is said in words.
+    QVERIFY(cal->saveEvent({{u"calendarId"_s, calendarId},
+                            {u"title"_s, u"Basen"_s},
+                            {u"startDate"_s, u"2026-11-22"_s},
+                            {u"startTime"_s, u"07:00"_s},
+                            {u"endDate"_s, u"2026-11-22"_s},
+                            {u"endTime"_s, u"08:00"_s},
+                            {u"rule"_s, u"every week"_s}}));
+    QString basen;
+    for (const planning::ExternalEvent &e : cal->eventsBetween(QDate(2026, 11, 22), QDate(2026, 11, 22))) {
+        if (e.title == u"Basen")
+            basen = e.key;
+    }
+    QVariantMap swim = cal->eventDetails(basen);
+    QCOMPARE(swim.value(u"rule"_s).toString(), u"every week"_s);
+    QCOMPARE(swim.value(u"reminderMinutes"_s).toInt(), -1);
+    QSignalSpy said(cal, &WorkspaceCalendars::errorOccurred);
+    swim.insert(u"title"_s, u"  "_s);
+    QVERIFY(!cal->saveEvent(swim));
+    QCOMPARE(said.size(), 1);
     // Several days: when it is says both ends.
     m_server.putMember(
             u"praca"_s, u"urlop.ics"_s,
