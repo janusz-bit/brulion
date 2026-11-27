@@ -548,6 +548,22 @@ public:
     bool editCell(int row, int tableRow, int column, int cursor, atrament::Context<PageView> &cx);
     // Ends the editing of the cell (what was typed stays).
     void stopEditingCell(atrament::Context<PageView> &cx);
+    // Enter on a selected table (TableBlockView.focusFirstCell): its first row's first cell, the
+    // header's when it has no rows.
+    bool editFirstCell(int row, atrament::Context<PageView> &cx);
+    // The touch toolbar's cell tools (TableBlockView's nextCell(), undoInCell(), redoInCell(),
+    // closeCell()): the next cell (Tab), the page's undo / redo with the same cell edited on, the
+    // cell's editing ended (its text kept, the composition committed).
+    void nextCell(atrament::Context<PageView> &cx);
+    void undoInCell(bool redo, atrament::Context<PageView> &cx);
+    void closeCell(atrament::Context<PageView> &cx);
+    // A cell started or stopped being edited: its table's model row (−1: none is edited) — the
+    // editor's editingTable, the touch toolbar's cell tools.
+    std::function<void(int row)> onCellEditingChanged;
+    // A right-click or a finger held on a link or a chip of a cell's text (TableBlockView.cellMenu:
+    // a date chip's menu, a link's) at window point `at`; in the touch selection mode a finger held
+    // there is the row's long press (onLongPressRow).
+    std::function<void(int row, int tableRow, int column, const QString &href, atrament::Point at)> onCellLinkMenu;
     // The edited cell's field (null before the first cell is edited).
     const atrament::Entity<atrament::TextInput> *cellInput() const { return m_cellInput ? &*m_cellInput : nullptr; }
     // Where the last frame drew cell (`tableRow`, `column`) of the table in `row` (window px), and

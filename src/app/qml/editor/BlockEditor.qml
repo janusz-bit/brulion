@@ -185,10 +185,12 @@ FocusScope {
     function tableCell(): T.TextField {
         return editingTable !== null ? QmlCall.object(editingTable, "cellInput") as T.TextField : null
     }
-    /// The row of `table`'s block (-1: none).
+    /// The row of `table`'s block (-1: none) — a table Atrament draws knows its own.
     function tableRow(table: Item): int {
         const owner = table !== null ? QmlCall.object(table, "block") as BlockDelegate : null
-        return owner !== null ? owner.index : -1
+        if (owner !== null)
+            return owner.index
+        return table !== null && QmlCall.hasProperty(table, "blockIndex") ? QmlCall.integer(QmlCall.get(table, "blockIndex")) : -1
     }
     /// Source mode with its text being edited (SourceEditor: the text has the keyboard).
     property bool sourceEditing: false
@@ -220,7 +222,10 @@ FocusScope {
             return activeEditor !== null && activeEditor.activeFocus
         if (toolbarMode === "cell") {
             const cell = editor.tableCell()
-            return cell !== null && cell.activeFocus
+            if (cell !== null)
+                return cell.activeFocus
+            // (A cell Atrament draws: its page has the keys.)
+            return editingTable !== null && QmlCall.isTrue(QmlCall.get(editingTable, "cellHasKeys"))
         }
         if (toolbarMode === "source")
             return sourceTextEdit !== null && sourceTextEdit.activeFocus
@@ -992,6 +997,8 @@ FocusScope {
             EditorInput.commitPreedit(activeEditor)
         else if (editor.tableRow(editingTable) === row && editor.tableCell() !== null)
             EditorInput.commitPreedit(editor.tableCell())
+        else if (editor.tableRow(editingTable) === row)
+            QmlCall.call(editingTable, "commitComposition")
         copied.map = controller.copyLink(row, kind)
         const ok = copied.map.ok === true
         const reason = copied.reason()
@@ -1586,8 +1593,15 @@ FocusScope {
             editVisibleLater.restart()
     }
 
-    /// The table block shown in `row` (null: another kind of block, or no delegate for it now).
+    /// The table block shown in `row` (null: another kind of block, or no delegate for it now): its
+    /// TableBlockView, or — a table the page drawn by Atrament draws — its AtramentTableItem, which
+    /// has the same functions and properties (reached by name).
     function tableAt(row: int): Item {
+        if (atramentPage !== null) {
+            const drawn = QmlCall.objectOf(QmlCall.call1(atramentPage, "tableAt", row)) as Item
+            if (drawn !== null)
+                return drawn
+        }
         const item = list.itemAtIndex(row) as BlockDelegate
         return item !== null && item.view === "table" ? item.contentItem : null
     }
@@ -3122,7 +3136,15 @@ FocusScope {
     // Atrament is built.
     Loader {
         id: atramentLoader
-        anchors.fill: list
+        // The page ends at the touch toolbar's top while one is docked here for typing: what is
+        // edited (a block's caret, a table's cell) stays above it — Atrament's field keeps its
+        // caret in view when the window gets another size (docs/ATRAMENT.md "Input methods").
+        readonly property real toolbarRoom: editor.toolbarVisible && editor.typingToolbar && editor.dockHost === editor
+                                            ? editor.toolbarHeight : 0
+        x: list.x
+        y: list.y
+        width: list.width
+        height: Math.max(0, list.height - toolbarRoom)
         active: editor.usesAtrament && editor.controller !== null
         visible: active && !editor.controller.sourceMode
         source: active ? "EditorAtramentPage.qml" : ""
@@ -3630,13 +3652,20 @@ FocusScope {
         const cell = QmlCall.object(table, "cellInput") as Item
         if (cell)
             EditorInput.commitPreedit(cell)
+        else
+            QmlCall.call(table, "commitComposition") // (a cell Atrament draws)
         DeviceInfo.hideInputMethod()
         QmlCall.call(table, "closeCell")
         controller.selectedRow = row
-        list.forceActiveFocus()
+        editor.keysHolder.forceActiveFocus()
         list.forceLayout()
         const item = list.itemAtIndex(row) as BlockDelegate
-        openCellBlockMenu(row, item, item ? item.contentLeft : 0, 0, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
+        if (item === null && atramentPage !== null)
+            // (The table drawn by Atrament: the menu at its row.)
+            openCellBlockMenu(row, atramentPage, editor.contentX, QmlCall.number(QmlCall.call1(atramentPage, "rowTop", row)),
+                              cellRow, cellColumn, cellRows, cellColumns, cellAlign)
+        else
+            openCellBlockMenu(row, item, item ? item.contentLeft : 0, 0, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
     }
 
     // ---- Pictures from the internet ------------------------------------------------------------

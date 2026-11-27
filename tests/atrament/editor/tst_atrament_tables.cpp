@@ -219,6 +219,7 @@ private Q_SLOTS:
     void typingOverASelectedCell();
     void cellSelectionDrawnAndRead();
     void filterRow();
+    void cellToolsAndMenus();
 };
 
 void TestAtramentTables::tableDrawnByAtrament()
@@ -1139,6 +1140,87 @@ void TestAtramentTables::filterRow()
     h.tw.settle();
     h.clickCell(1, 0, 0);
     QVERIFY(h.editing(1, 0));
+}
+
+void TestAtramentTables::cellToolsAndMenus()
+{
+    // (TableBlockView's focusFirstCell, the touch toolbar's nextCell / undoInCell / redoInCell /
+    // closeCell, the right-click on the edited cell, a cell's link menu.)
+    Harness h;
+    const QString before = h.controller.text();
+    QList<int> told;
+    QString menuLink;
+    int menuRow = -9, menuColumn = -9, cellMenus = 0;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onCellEditingChanged = [&](int row) { told.append(row); };
+        v.onCellLinkMenu = [&](int row, int r, int c, const QString &href, at::Point) {
+            QCOMPARE(row, TableRow);
+            menuLink = href;
+            menuRow = r;
+            menuColumn = c;
+        };
+        v.onCellMenu = [&](int, int r, int c, at::Point) {
+            ++cellMenus;
+            menuRow = r;
+            menuColumn = c;
+        };
+    });
+    // Enter on a selected table: its first row's first cell.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(v.editFirstCell(TableRow, cx)); });
+    h.tw.settle();
+    QVERIFY(h.editing(0, 0));
+    QCOMPARE(told, (QList<int>{TableRow}));
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(!v.editFirstCell(0, cx)); }); // (no table)
+    // The toolbar's next cell, undo and redo with the cell edited on.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.nextCell(cx); });
+    h.tw.settle();
+    QVERIFY(h.editing(0, 1));
+    h.tw.simulateTyping(u"7");
+    h.tw.settle();
+    QCOMPARE(h.raw(0, 1), u"6,57"_s);
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.undoInCell(false, cx); });
+    h.tw.settle();
+    QVERIFY(h.editing(0, 1));
+    QCOMPARE(h.raw(0, 1), u"6,5"_s);
+    QCOMPARE(h.inputText(), u"6,5"_s);
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.undoInCell(true, cx); });
+    h.tw.settle();
+    QVERIFY(h.editing(0, 1));
+    QCOMPARE(h.raw(0, 1), u"6,57"_s);
+    // "Hide keyboard": the editing ends, the text stays.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.closeCell(cx); });
+    h.tw.settle();
+    QCOMPARE(h.view().editedCell().row, -1);
+    QCOMPARE(told.back(), -1);
+    QCOMPARE(h.raw(0, 1), u"6,57"_s);
+    h.controller.undo();
+    QCOMPARE(h.controller.text(), before);
+    // A right-click on the edited cell: its editing ends, the table stays the current block, the
+    // cell's menu.
+    h.clickCell(1, 1, 0);
+    QVERIFY(h.editing(1, 1));
+    h.tw.simulateClick(h.cell(1, 1).center(), at::MouseButton::Right);
+    h.tw.settle();
+    QCOMPARE(cellMenus, 1);
+    QVERIFY(menuRow == 1 && menuColumn == 1);
+    QCOMPARE(h.view().editedCell().row, -1);
+    QCOMPARE(h.controller.selectedRow(), TableRow);
+    // A cell's link: a right-click on it, a finger held on it — its own menu, not the cell's.
+    const int k = int(h.shown(0, 0).indexOf(u"Castorama"_s));
+    QVERIFY(k > 0);
+    h.tw.simulateClick(h.pointOf(0, 0, k + 3), at::MouseButton::Right);
+    h.tw.settle();
+    QVERIFY2(menuLink.startsWith(u"page:"_s), qPrintable(menuLink));
+    QVERIFY(menuRow == 0 && menuColumn == 0);
+    QCOMPARE(cellMenus, 1);
+    menuLink.clear();
+    using namespace std::chrono_literals;
+    h.tw.simulateTouchDown(h.pointOf(0, 0, k + 3));
+    h.tw.advance(600ms);
+    h.tw.simulateTouchUp(h.pointOf(0, 0, k + 3));
+    h.tw.settle();
+    QVERIFY2(menuLink.startsWith(u"page:"_s), qPrintable(menuLink));
+    QCOMPARE(h.controller.text(), before);
 }
 
 QTEST_MAIN(TestAtramentTables)

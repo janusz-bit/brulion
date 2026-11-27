@@ -428,6 +428,7 @@ PageView::EditState PageView::editState() const
 
 void PageView::commitComposition(at::Context<PageView> &cx)
 {
+    commitCellComposition(cx); // (a table cell's word too)
     if (!m_input || !m_input->read(cx.app()).markedRange())
         return;
     m_input->update(cx.app(), [](at::TextInput &t, at::Context<at::TextInput> &c) { t.unmark(c); });

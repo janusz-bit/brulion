@@ -1085,7 +1085,11 @@ scrolling, `tst_atrament_editor`) before the next:
    typing (`cancelTableCell`) and selects the table, Ctrl+Z / Ctrl+Y the page's undo with the cell
    edited on (the touch toolbar's undo in a cell). "+ Row" / "+ Column" under the grid while a cell
    is edited or the table is selected (always on touch UIs); a right-click on a cell opens the block
-   menu with its Row and Column (`tableCellMenuRequested` → `BlockEditor.openCellBlockMenuAt`). For
+   menu with its Row and Column (`tableCellMenuRequested` → `BlockEditor.openCellBlockMenuAt`) —
+   also on the edited cell, whose editing ends first (the table stays the current block) —, and a
+   right-click or a finger held on a cell's link or chip its own menu (`link(range, onClick,
+   onMenu)` → `AtramentView.tableLinkMenuRequested` → `BlockEditor.openCellTokenMenu`, else the
+   link's menu; in the touch selection mode a finger held there is the row's long press). For
    screen readers a table of rows of cells — Atrament's new generic roles `Table`, `Row`, `Cell`,
    `ColumnHeader` (`ui/accessibility.h`, mapped to Qt's in `qt/qtaccessibility.cpp`) —, each cell
    named by its text and described by its column's header, the edited one a text input "Cell …".
@@ -1119,14 +1123,30 @@ scrolling, `tst_atrament_editor`) before the next:
      leaves the field; a filtered column's header has the funnel (BIcon "filter" in Theme.accent);
      under the grid "N of M rows shown" and "Clear filters" next to "+ Row" / "+ Column" (also in
      reading mode). `PageView::focusFilter` gives a column's field the keys.
-   **Not yet** for tables: the block menu's items that edit a cell afterwards (a new row's or column's: they
-   change the table, `BlockEditor.editTableCell` finds no QML table to edit), Enter on a selected
-   table editing its first cell, the touch toolbar's cell tools (the next cell, undo / redo, More)
-   and the cell kept above them, a long press on a cell's chip (its menu), tooltips (a formula's
-   error, link previews), dragging the sideways
-   scroll bar, the app's Alt+← / Alt+→ (Back, Forward) still taking those keys before the cell.
-   For screen readers the table has Qt's table interfaces ("Accessibility" above). Each cell is aligned by Atrament's own text alignment ("Text": its links,
-   its layout handle's offsets and the caret a click puts where its glyphs are).
+   * **The editor reaches a table drawn by Atrament as it reaches a TableBlockView**:
+     `AtramentView.tableAt(row)` is an `AtramentTableItem` (an item never shown, the view's) with
+     TableBlockView's functions and properties by name — `startCell`, `focusFirstCell`,
+     `openFilter`, `inSelection`, `selectedRows`, `selectionLeft` / `Right`, `nextCell`,
+     `undoInCell`, `redoInCell`, `closeCell`, `cellLength`, `cellRowCount`, `cellAlignOf`,
+     `commitComposition`, `blockIndex`, `editRow`, `editColumn`, `columns`, `filtering` —, which
+     `BlockEditor.tableAt` returns first (through the new `QmlCall.objectOf`): the block menu's Row
+     and Column items edit their new cell afterwards (`BlockEditor.editTableCell`), "Filter by this
+     column…" gives its field the keys, a right-click on selected cells offers the cells' commands
+     (`BlockMenu.readPicked`). While a cell is edited that item is the editor's `editingTable`
+     (`AtramentView.tableEditingChanged`, `editedTable()`): the touch toolbar's cell tools work on it
+     (Undo and Redo with the cell edited on, Next cell, More: the table's block menu at its row,
+     Hide keyboard; `cellHasKeys` for the toolbar), and the Atrament page ends at the toolbar's top
+     while a toolbar of typing is docked (BlockEditor's `atramentLoader`), so the edited cell — and an
+     edited block's caret — stays above it: Atrament's field keeps its caret in view when the window
+     gets another size. Enter on a selected table edits its first cell (`AtramentView.
+     editFirstTableCell`, `PageView::editFirstCell`), and Alt+←/→/↑/↓ in a cell move its row or
+     column instead of being the app's Back and Forward (the page's ShortcutOverride while
+     `AtramentView.editTableRow` is a row). The tools are `PageView::nextCell`, `undoInCell`,
+     `closeCell`, `onCellEditingChanged`.
+   **Not yet** for tables: tooltips (a formula's error, a truncated cell's text, link previews),
+   dragging the sideways scroll bar (Atrament draws none). For screen readers the table has Qt's
+   table interfaces ("Accessibility" above). Each cell is aligned by Atrament's own text alignment
+   ("Text": its links, its layout handle's offsets and the caret a click puts where its glyphs are).
    **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
    `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.
    drawsPictures` / `drawsFiles` / `drawsTransclusions` / `drawsQueries`, all on, and `mediaLook`).

@@ -15,11 +15,100 @@
 #include <QString>
 #include <QVariantMap>
 
+#include <functional>
 #include <memory>
+#include <unordered_map>
 
 namespace brulion::atrament {
 class App;
 }
+
+class AtramentView;
+namespace brulion::editor::atr {
+class PageView;
+}
+namespace brulion::atrament {
+template<class T>
+class Context;
+}
+
+// A table drawn by Atrament as BlockEditor reaches a TableBlockView — by name, through QmlCall
+// (BlockEditor.tableAt, editingTable, BlockMenu.readPicked, MobileEditToolbar's cell tools): the
+// same functions and properties, for the table of one block of an AtramentView's page
+// (AtramentView::tableAt). An item that is never shown (no parent item); the view owns it.
+class AtramentTableItem : public QQuickItem {
+    Q_OBJECT
+    // The table's model row (−1: gone), the edited cell (−2: none, −1 the header) and its column,
+    // the table's columns and rows, its filter row shown, cells selected, the edited cell's field
+    // with the keyboard.
+    Q_PROPERTY(int blockIndex READ blockIndex NOTIFY changed FINAL)
+    Q_PROPERTY(int editRow READ editRow NOTIFY changed FINAL)
+    Q_PROPERTY(int editColumn READ editColumn NOTIFY changed FINAL)
+    Q_PROPERTY(int columns READ columns NOTIFY changed FINAL)
+    Q_PROPERTY(bool filtering READ filtering NOTIFY changed FINAL)
+    Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY changed FINAL)
+    Q_PROPERTY(bool selecting READ hasSelection NOTIFY changed FINAL)
+    Q_PROPERTY(bool cellHasKeys READ cellHasKeys NOTIFY changed FINAL)
+public:
+    AtramentTableItem(AtramentView *view, quint64 uid);
+    quint64 uid() const { return m_uid; }
+    int blockIndex() const;
+    int editRow() const;
+    int editColumn() const;
+    int columns() const;
+    bool filtering() const;
+    bool hasSelection() const;
+    bool cellHasKeys() const;
+    // TableBlockView's functions of the same names.
+    Q_INVOKABLE void startCell(int r, int c);
+    Q_INVOKABLE void focusFirstCell();
+    Q_INVOKABLE void openFilter(int c);
+    Q_INVOKABLE bool inSelection(int r, int c) const;
+    Q_INVOKABLE QList<int> selectedRows() const;
+    Q_INVOKABLE int selectionTop() const;
+    Q_INVOKABLE int selectionBottom() const;
+    Q_INVOKABLE int selectionLeft() const;
+    Q_INVOKABLE int selectionRight() const;
+    Q_INVOKABLE int selectedCellCount() const;
+    Q_INVOKABLE void select(int anchorRow, int anchorColumn, int cursorRow, int cursorColumn);
+    Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE void nextCell();
+    Q_INVOKABLE void undoInCell();
+    Q_INVOKABLE void redoInCell();
+    Q_INVOKABLE void closeCell();
+    Q_INVOKABLE int cellLength() const;
+    Q_INVOKABLE int cellRowCount() const;
+    Q_INVOKABLE QString cellAlignOf(int c) const;
+    Q_INVOKABLE QString rawText(int r, int c) const;
+    Q_INVOKABLE void commitComposition();
+    // For the self-tests: the edited cell's text and caret; where cell (r, c) was drawn in the
+    // view's coordinates (r −1 the header, −3 the filter fields; an empty rectangle: not drawn);
+    // the header's texts, the rows shown.
+    Q_INVOKABLE QString cellText() const;
+    Q_INVOKABLE int cellCursor() const;
+    Q_INVOKABLE QRectF cellRect(int r, int c) const;
+    Q_INVOKABLE QStringList headerTexts() const;
+    Q_INVOKABLE QList<int> shownRows() const;
+    Q_INVOKABLE QString headerText(int c) const;
+    Q_INVOKABLE bool isRowShown(int r) const;
+    Q_INVOKABLE int shownRowCount() const;
+    Q_INVOKABLE bool filterFocused(int c) const;
+    Q_INVOKABLE QString filterStatusText() const;
+    Q_INVOKABLE qreal cellCenterX(int r, int c) const;
+    Q_INVOKABLE qreal cellCenterY(int r, int c) const;
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    // The page drawn by the view (null: none), and a step on it with the table's model row.
+    const brulion::editor::atr::PageView *page() const;
+    using Step = std::function<void(brulion::editor::atr::PageView &,
+                                    brulion::atrament::Context<brulion::editor::atr::PageView> &, int row)>;
+    void step(const Step &f);
+    QPointer<AtramentView> m_view;
+    quint64 m_uid = 0;
+};
 
 class AtramentView : public brulion::atrament::AtramentItem {
     Q_OBJECT
@@ -139,6 +228,8 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // "page": cells of a table drawn by Atrament are selected (their keys are the page's: its Ctrl
     // keys win over the application's shortcuts).
     Q_PROPERTY(bool cellsSelected READ cellsSelected NOTIFY cellSelectionChanged FINAL)
+    // "page": the model row of the table whose cell is edited (−1: none).
+    Q_PROPERTY(int editTableRow READ editTableRow NOTIFY tableEditingChanged FINAL)
 
     // "page", the edited text's extras (docs/ATRAMENT.md M2 step 2: spell marks, reminder chips,
     // Vim): the app's SpellCheck (the QML singleton; null: no marks) and the marks' colour
@@ -214,6 +305,15 @@ public:
     // at `cursor` of its text (−1: its end), when Atrament draws that table.
     Q_INVOKABLE bool editTableCell(int row, int tableRow, int column, int cursor);
     bool cellsSelected() const { return m_cellsSelected; }
+    int editTableRow() const { return m_editedTableRow; }
+    // "page": Enter on a selected table: its first cell edited (false: Atrament does not draw it).
+    Q_INVOKABLE bool editFirstTableCell(int row);
+    // "page": the table Atrament draws in `row` as BlockEditor reaches a TableBlockView (null:
+    // none there), and the one whose cell is edited (null: none).
+    Q_INVOKABLE QQuickItem *tableAt(int row);
+    Q_INVOKABLE QQuickItem *editedTable();
+    // (For AtramentTableItem: the model row of a block.)
+    int rowOfUid(quint64 uid) const;
     // "page": what a query block's results answer for a link of item `item` ("open:": the item)
     // — QueryResultModel::activateLink / open: { action: "scrollTo", row } …
     Q_INVOKABLE QVariantMap activateQueryLink(int row, int item, const QString &link);
@@ -288,6 +388,11 @@ Q_SIGNALS:
     // "success", "info", "error").
     void cellSelectionChanged();
     void noticeRequested(const QString &text, const QString &level);
+    // A cell of a table Atrament draws started or stopped being edited (BlockEditor.editingTable:
+    // editedTable()); a right-click or a finger held on a cell's link or chip at (x, y) of this
+    // item (TableBlockView.cellMenu: the token's menu, else the link's).
+    void tableEditingChanged();
+    void tableLinkMenuRequested(int row, int tableRow, int column, const QString &link, qreal x, qreal y);
     // "page", pictures and files (EmbedView's signals): an embed of `row` clicked — BlockListModel's
     // `embeds` entry: a picture (the viewer; one from the internet: WebPictureViewer), a PDF (the
     // PDF viewer), a file; a picture from the internet's menu asked for at a point of this item.
@@ -402,6 +507,9 @@ private:
     bool m_drawsTables = true;
     QVariantMap m_tableLook;
     bool m_cellsSelected = false;
+    int m_editedTableRow = -1;
+    std::unordered_map<quint64, QPointer<AtramentTableItem>> m_tableItems;
+    friend class AtramentTableItem;
     // The edited text's extras.
     void applyExtras();
     QPointer<QObject> m_spellCheck;

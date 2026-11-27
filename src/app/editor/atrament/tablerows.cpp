@@ -493,6 +493,21 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
             std::move(d).fontFamily(look.monoFamily);
         frame.text = at::TextLayoutHandle{};
         std::move(body).child(*m_cellInput);
+        // A right-click on it: its editing ends (its text kept), the table stays the current
+        // block, the cell's menu opens (TableBlockView's cellArea).
+        std::move(d).onMouseDown(at::MouseButton::Right,
+                                 [selfId, row, r, c](const at::MouseDownEvent &e, at::Window &w, at::App &a) {
+                                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &cx) {
+                                         v.closeCell(cx);
+                                         if (v.m_controller)
+                                             v.m_controller->setSelectedRow(int(row));
+                                         if (v.onCellMenu)
+                                             v.onCellMenu(int(row), r, c, e.position);
+                                         else if (v.onBlockMenu)
+                                             v.onBlockMenu(int(row), e.position);
+                                     });
+                                     w.stopPropagation();
+                                 });
         return std::move(d).child(std::move(body));
     }
     // One line (a header: its `<br>` lines), a longer text ending with "…" (TableBlockView's elide).
@@ -518,6 +533,15 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
                                  [selfId, row, r, c, href](const at::ClickEvent &click, at::Window &, at::App &a) {
                                      a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &cx) {
                                          v.cellLinkClicked(row, r, c, href, click.up.position, cx);
+                                     });
+                                 },
+                                 // Its menu: a right-click, a finger held on it (a date chip's, a link's).
+                                 [selfId, row, r, c, href](at::Point p, at::Window &, at::App &a) {
+                                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) {
+                                         if (v.m_touchGrips && v.onLongPressRow)
+                                             v.onLongPressRow(int(row)); // (the selection mode: the row's)
+                                         else if (v.onCellLinkMenu)
+                                             v.onCellLinkMenu(int(row), r, c, href, p);
                                      });
                                  });
         i = j;
@@ -684,7 +708,64 @@ bool PageView::editCell(int row, int tableRow, int column, int cursor, at::Conte
     cx.notify();
     if (onEditingStarted)
         onEditingStarted();
+    if (onCellEditingChanged)
+        onCellEditingChanged(row);
     return true;
+}
+
+bool PageView::editFirstCell(int row, at::Context<PageView> &cx)
+{
+    const TableEntry *e = isTable(row) ? tableEntry(row) : nullptr;
+    if (!e)
+        return false;
+    const std::vector<int> shown = e->grid.shownRows(-2);
+    return editCell(row, shown.empty() ? -1 : shown.front(), 0, -1, cx);
+}
+
+void PageView::nextCell(at::Context<PageView> &cx)
+{
+    const TableCell cell = editedCell();
+    const TableEntry *e = cell.row >= 0 ? tableEntry(cell.row) : nullptr;
+    if (!e)
+        return;
+    if (cell.column + 1 < e->grid.columnCount())
+        goToCell(cell.row, cell.tableRow, cell.column + 1, -1, cx);
+    else
+        goToCell(cell.row, e->grid.nextShownRow(cell.tableRow, 1), 0, -1, cx);
+}
+
+void PageView::undoInCell(bool redo, at::Context<PageView> &cx)
+{
+    // The page's undo, the cell edited on with the text the step left in it (the touch toolbar's
+    // undoInCell); a step that took the caret to a block leaves the table.
+    PageController *ctl = m_controller.data();
+    const TableCell cell = editedCell();
+    if (!ctl || cell.row < 0)
+        return;
+    commitCellComposition(cx);
+    const quint64 uid = m_cellUid;
+    stopEditingCell(cx);
+    if (onUndo)
+        onUndo(redo);
+    else if (redo)
+        ctl->redo();
+    else
+        ctl->undo();
+    if (ctl->editingRow() >= 0)
+        return;
+    const int now = m_model->rowOfUid(uid);
+    if (now >= 0 && editCell(now, cell.tableRow, cell.column, -1, cx))
+        return;
+    if (now >= 0)
+        ctl->setSelectedRow(now);
+    if (onEscape)
+        onEscape();
+}
+
+void PageView::closeCell(at::Context<PageView> &cx)
+{
+    commitCellComposition(cx);
+    stopEditingCell(cx);
 }
 
 void PageView::focusCellInput(at::Context<PageView> &cx)
@@ -713,6 +794,8 @@ void PageView::stopEditingCell(at::Context<PageView> &cx)
         }
     }
     cx.notify();
+    if (onCellEditingChanged)
+        onCellEditingChanged(-1);
 }
 
 void PageView::commitCellComposition(at::Context<PageView> &cx)
@@ -814,7 +897,8 @@ void PageView::cellClicked(std::size_t row, int tableRow, int column, const at::
     }
     // Shift+click with a cell of this table edited or cells selected: the cells up to this one.
     const quint64 uid = m_model->uidAt(int(row));
-    if (click.up.modifiers.shift && !m_touchGrips && (m_cellUid == uid || m_cellSel.uid == uid)) {
+    const bool shift = click.up.modifiers.shift || click.down.modifiers.shift;
+    if (shift && !m_touchGrips && (m_cellUid == uid || m_cellSel.uid == uid)) {
         if (m_cellUid == uid)
             extendCellsFromEdited(tableRow, column, cx);
         else
@@ -870,27 +954,7 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
 
     if (ctrl && !m.alt) {
         if (k.key == u"z" || k.key == u"y") {
-            // The page's undo, the cell edited on with the text the step left in it (the touch
-            // toolbar's undoInCell); a step that took the caret to a block leaves the table.
-            commitCellComposition(cx);
-            const bool redo = k.key == u"y" || m.shift;
-            const quint64 uid = m_cellUid;
-            stopEditingCell(cx);
-            if (onUndo)
-                onUndo(redo);
-            else if (redo)
-                ctl->redo();
-            else
-                ctl->undo();
-            if (ctl->editingRow() >= 0)
-                return true;
-            const int now = m_model->rowOfUid(uid);
-            if (now >= 0 && editCell(now, r, c, -1, cx))
-                return true;
-            if (now >= 0)
-                ctl->setSelectedRow(now);
-            if (onEscape)
-                onEscape();
+            undoInCell(k.key == u"y" || m.shift, cx);
             return true;
         }
         if (k.key == u"enter" && !m.shift) {
@@ -946,10 +1010,7 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
     }
     if (k.key == u"tab" && !ctrl && !m.alt) {
         if (!m.shift) {
-            if (c + 1 < grid.columnCount())
-                goToCell(row, r, c + 1, -1, cx);
-            else
-                goToCell(row, grid.nextShownRow(r, 1), 0, -1, cx);
+            nextCell(cx);
         } else if (c > 0) {
             goToCell(row, r, c - 1, -1, cx);
         } else if (r > -1) {

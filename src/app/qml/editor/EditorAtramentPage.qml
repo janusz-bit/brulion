@@ -134,6 +134,22 @@ AtramentView {
         if (root.editor)
             root.editor.openCellBlockMenuAt(row, Qt.point(sceneX, sceneY), tableRow, column, rowCount, columnCount, align)
     }
+    // A chip's or a link's own menu in a cell (a right-click, a finger held on it): a date,
+    // reminder, recurrence or priority chip's (the cell's text changes), else the link's.
+    onTableLinkMenuRequested: (row, tableRow, column, link, x, y) => {
+        if (root.editor && !root.editor.openCellTokenMenu(row, tableRow, column, link, root, x, y))
+            root.editor.openBlockLinkMenu(row, link, root, x, y)
+    }
+    // The table whose cell is edited here is the editor's editingTable (TableBlockView's): its
+    // touch toolbar's cell tools, the block menu's "More", the current block.
+    onTableEditingChanged: {
+        if (root.editor)
+            root.editor.setEditingTable(root.editedTable())
+    }
+    Component.onDestruction: {
+        if (root.editor && root.editor.editingTable !== null && QmlCall.hasProperty(root.editor.editingTable, "cellHasKeys"))
+            root.editor.setEditingTable(null)
+    }
     // Pictures, files, embedded blocks and query results drawn by Atrament (docs/ATRAMENT.md M2
     // step 5; drawsPictures, drawsFiles, drawsTransclusions, drawsQueries: on), in EmbedView's,
     // TransclusionView's and QueryBlockView's look. Pictures get their hairline frame and, in a
@@ -432,16 +448,21 @@ AtramentView {
     // selection mode's grips and its "One by one", the toolbar a drag scrolls above.
     selectionGrips: editor ? editor.selectionGrips : false
     selectionPicking: editor ? editor.pickMode : false
-    dragBottomInset: editor && editor.toolbarVisible ? editor.toolbarHeight : 0
+    // (While the toolbar of typing is docked the page ends above it already: BlockEditor's loader.)
+    dragBottomInset: editor && editor.toolbarVisible && !(editor.typingToolbar && editor.dockHost === editor)
+                     ? editor.toolbarHeight : 0
     onSelectionCommand: (command, row) => {
         if (!root.editor || !root.editor.controller)
             return
-        // Enter on a selected table: its delegate takes the keys (its first cell).
+        // Enter on a selected table: its first cell edited (a table drawn here; else its delegate
+        // takes the keys).
         if (command === "edit" && root.editor.controller.blocks.viewAt(row) === "table") {
             root.editor.selectionMode = false
-            const item = root.rowItem(row) as BlockDelegate
-            if (item)
-                item.focusContent()
+            if (!root.editFirstTableCell(row)) {
+                const item = root.rowItem(row) as BlockDelegate
+                if (item)
+                    item.focusContent()
+            }
             root.acceptSelectionCommand()
             return
         }
@@ -452,6 +473,13 @@ AtramentView {
     Keys.onShortcutOverride: (event) => {
         const key = event.key
         const modifiers = event.modifiers
+        // A table cell edited here: Alt+arrows move its row or column (TableBlockView's field),
+        // they are not the app's Back and Forward.
+        if (root.editTableRow >= 0 && (modifiers & Qt.AltModifier) && !(modifiers & Qt.ControlModifier)
+                && (key === Qt.Key_Left || key === Qt.Key_Right || key === Qt.Key_Up || key === Qt.Key_Down)) {
+            event.accepted = true
+            return
+        }
         // (A table's cell selection: its Ctrl keys too.)
         if (!root.editor || !root.editor.controller || root.editor.controller.editingRow >= 0
                 || (root.editor.controller.selectedRow < 0 && !root.cellsSelected) || !(modifiers & Qt.ControlModifier))
