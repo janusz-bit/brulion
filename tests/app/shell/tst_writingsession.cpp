@@ -5,11 +5,13 @@
 // preset asks nothing until one is chosen; a continuation and a summary of the selected blocks
 // (insertAfterBlock, one undo step, at the block's depth); source mode's paragraph at the caret;
 // Try again, Stop (what came is kept), a failure (no model set up, the server's error) and the
-// request counted in aiPending.
+// request counted in aiPending. Code mode's texts by the same AI (codeai): AiAsk's one question (the
+// commit message, the pull request), a new worktree's branch named from the thread's first message.
 #include "../fakeaiserver.h"
 
 #include "aiask.h"
 
+#include "codeprojects.h"
 #include "pagecontroller.h"
 #include "workspace.h"
 #include "workspaceextensions.h"
@@ -17,7 +19,9 @@
 
 #include <QDir>
 #include <QFile>
+#include <QProcess>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -84,6 +88,45 @@ private Q_SLOTS:
         QCOMPARE(brulion::shell::AiAsk::cleaned(u"  Zażółć  \n"_s), u"Zażółć"_s);
         QCOMPARE(brulion::shell::AiAsk::cleaned(u"```text\nA\n```"_s), u"A"_s);
         QCOMPARE(brulion::shell::AiAsk::cleaned(u"a ```b``` c"_s), u"a ```b``` c"_s);
+    }
+
+    // A new worktree's branch named by the AI of the settings from the thread's first message (T3
+    // Code's AI-made branch name); without the AI set up nothing is asked: the message's slug.
+    void anAiNamesAWorktreesBranch()
+    {
+        const QString gitProgram = QStandardPaths::findExecutable(u"git"_s);
+        if (gitProgram.isEmpty())
+            QSKIP("no git");
+        FakeAiServer server;
+        server.answers = {u"```\nfix-cart-total\n```"_s};
+        auto ws = open(u"Dom.md"_s, u"- x\n"_s, server);
+        QVERIFY(ws);
+        const QString repo = m_tmp.filePath(u"koszyk%1"_s.arg(m_n));
+        QVERIFY(QDir().mkpath(repo));
+        QFile file(repo + u"/koszyk.py"_s);
+        QVERIFY(file.open(QIODevice::WriteOnly) && file.write("RABAT = 0\n") > 0);
+        file.close();
+        for (const QStringList &args : {QStringList{u"init"_s, u"-q"_s}, QStringList{u"add"_s, u"-A"_s},
+                                        QStringList{u"-c"_s, u"user.name=Ala"_s, u"-c"_s, u"user.email=ala@example.com"_s,
+                                                    u"-c"_s, u"commit.gpgsign=false"_s, u"commit"_s, u"-qm"_s, u"start"_s}})
+            QCOMPARE(QProcess::execute(gitProgram, QStringList{u"-C"_s, repo} + args), 0);
+        brulion::shell::CodeProjects *projects = ws->projects();
+        projects->setWorktreesRoot(m_tmp.filePath(u"drzewa%1"_s.arg(m_n)));
+        const QString id = projects->add(repo);
+        QSignalSpy created(projects, &brulion::shell::CodeProjects::worktreeCreated);
+        QVERIFY(projects->createWorktree(id, u"Popraw liczenie sumy w koszyku: rabat źle się zaokrągla"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 1, 20000);
+        QVERIFY2(created.first().at(3).toString().isEmpty(), qPrintable(created.first().at(3).toString()));
+        QCOMPARE(created.first().at(2).toString(), u"brulion/fix-cart-total"_s);
+        QCOMPARE(server.requests.size(), 1);
+        QVERIFY(FakeAiServer::lastUserText(server.requests.first()).contains(u"rabat źle się zaokrągla"_s));
+        QCOMPARE(ws->extensions()->aiPending(), 0);
+        // No AI set up: nothing asked, the message's slug.
+        ws->extensions()->setAi(brulion::ai::Settings{});
+        QVERIFY(projects->createWorktree(id, u"Dodaj rabat"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 2, 20000);
+        QCOMPARE(created.at(1).at(2).toString(), u"brulion/dodaj-rabat"_s);
+        QCOMPARE(server.requests.size(), 1);
     }
 
     void aRewriteOfPartOfABlock()

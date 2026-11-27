@@ -141,7 +141,7 @@ target_link_libraries(brulion_shell
            brulion_core_writing
            brulion_core_encryption brulion_core_applock brulion_core_semantic
     PRIVATE Qt6::Network brulion_core_aireport brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
-            brulion_core_github brulion_core_caldav brulion_core_clipper brulion_core_gitcli
+            brulion_core_github brulion_core_caldav brulion_core_clipper brulion_core_gitcli brulion_core_codeai
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
             brulion_ui_memory # viewkeeper.cpp: MemoryPolicy's letGo()

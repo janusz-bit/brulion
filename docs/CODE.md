@@ -142,6 +142,19 @@ Everything through `gitcli::Client` (QProcess argument lists, never a shell; doc
   no branch of that name (`git for-each-ref refs/heads/`) — then `git worktree add -b <branch> -- <folder>
   <base or HEAD>`; a remote-tracking base (`origin/main`) is fetched first (`git fetch -- origin main`;
   offline, what is known of it). `worktreeCreated(project, folder, branch, error)`.
+* **The AI names the branch** (T3 Code's AI-made branch name), when the AI of Settings → Extensions → AI
+  is set up: before the worktree is made, the thread's first message (`title`) goes to it
+  (`setBranchNamer()`; Workspace's asks `codeai::branchName()`: a few lowercase words joined by hyphens,
+  no prefix), and `worktreeName(answer, title, prefix)` makes the name of the answer — its first line
+  or JSON's `branch`, a fence, quotes, a label and a prefix (`feature/…`) taken off
+  (`codeai::readBranchName()`; more than 64 characters is a sentence, no name), then `slug()` — when
+  `branchPrefix` + it is a valid branch name (`gitcli::isValidBranchName`). Anything else — no AI, a
+  failure, no answer within 20 seconds (`BranchNameTimeoutMs`; the question is stopped then), an answer
+  that is no name — gives today's name, the message's slug. The folder takes the same name; a name
+  taken gets `-2`, `-3` … as before. The message waits meanwhile (the header's spinner), as T3 Code's
+  agent waits for its name; the name is known before the worktree exists, so the thread's page names
+  its branch from the start and no branch is renamed under a running agent (T3 Code makes a temporary
+  branch and renames it). Another computer's project: that computer names it (below).
 * `listWorktrees(id)` → `worktreesListed(project, [{folder, branch, detached, exists}])` (not the
   project's own folder); `listBranches(folder)` → `branchesListed(folder, [{name, remote, current,
   isDefault (origin's HEAD, else main / master / trunk), worktree (the folder that has it checked out),
@@ -285,7 +298,8 @@ and starts new ones there.
   folder. A thread's folder changed (its worktree set or gone): the next turn makes its session anew
   there.
 * **A new thread**: Local, or New worktree — made by the computer (`POST projects/<id>/worktrees`,
-  the same naming as `worktreeFor()`), whose folder and branch the thread's page then names.
+  the same naming as `worktreeFor()`, without the phone's AI), whose folder and branch the thread's page
+  then names.
 * **Checkpoints** are taken there, before the prompt reaches the agent; the computer tells the device
   (`_brulion/checkpoint`, also in the turn it keeps for a device that lost the stream), which records
   it as its own (`WorkspaceAgents::checkpointMade` → the thread's checkpoints).

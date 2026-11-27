@@ -9,6 +9,7 @@
 #include "documentpaths.h"
 
 #include "canvas/canvas.h"
+#include "codeai/codeai.h"
 #include "dates/dates.h"
 #include "drawing/excalidrawmd.h"
 #include "encryption/meld.h"
@@ -175,6 +176,10 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_projects = new CodeProjects(this);
     // (A deleted thread's Undo brings its pages back from the trash.)
     m_projects->setRestorer([this](const QStringList &paths) { restoreAll(paths); });
+    // (A new worktree's branch named by the AI when it is set up: T3 Code's AI-made name.)
+    m_projects->setBranchNamer([this](const QString &message, std::function<void(const QString &)> done) {
+        return askBranchName(message, std::move(done));
+    });
     connect(m_reminders, &WorkspaceReminders::fired, this, [this](const QVariantMap &n) {
         m_notifications->record(NotificationCenter::Kind::Reminder, QString(), n.value(u"title"_s).toString(),
                                 n.value(u"body"_s).toString(), n.value(u"path"_s).toString());
@@ -236,6 +241,18 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     });
     if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
         connect(app, &QGuiApplication::applicationStateChanged, this, &Workspace::applicationStateChanged);
+}
+
+std::function<void()> Workspace::askBranchName(const QString &message, std::function<void(const QString &)> done)
+{
+    if (!m_extensions->aiSettings().usable()) {
+        done(QString());
+        return {};
+    }
+    ai::Pending pending = m_extensions->sendAi(codeai::branchName(message), [done](const ai::Reply &reply) {
+        done(reply.ok ? reply.text : QString());
+    });
+    return [pending]() mutable { pending.stop(); };
 }
 
 Workspace::~Workspace()
