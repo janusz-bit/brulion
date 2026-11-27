@@ -138,6 +138,9 @@ public:
     std::size_t anchorRow() const { return m_state->anchorRow; }
     float anchorInto() const { return m_state->anchorInto; }
     const ScrollState &scroll() const { return m_state->scroll; }
+    // Scrolls by `dy` px (clamped to the content as the last frame measured it); the list takes
+    // the new offset in its next frame, as after the wheel (refresh the window).
+    bool scrollBy(float dy) { return m_state->scroll.scrollBy({0, dy}); }
     // The rows changed in front of the anchor: it follows its row.
     void rowsInserted(std::size_t first, std::size_t n);
     void rowsRemoved(std::size_t first, std::size_t n);

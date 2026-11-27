@@ -115,6 +115,9 @@ public:
     // Types `text` at the edited block's caret (in place of its selection), a space before it when
     // `separate` and the character before the caret is no space (the touch toolbar's "#", "/").
     Q_INVOKABLE bool insertAtCaret(const QString &text, bool separate);
+    // Scrolls the page the least that shows [x, y, w, h] of this item with `margin` around it (a
+    // hosted delegate's caret: BlockEditor.ensureVisible).
+    Q_INVOKABLE bool revealArea(qreal x, qreal y, qreal w, qreal h, qreal margin);
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();

@@ -1488,6 +1488,7 @@ FocusScope {
     /// list scrolling the editor (`scroller`).
     function ensureVisible(item: Item, rect: rect): void {
         const height = rect.height
+        const width = rect.width
         if (!item || !editor.alive)
             return
         if (editor.scroller) {
@@ -1496,6 +1497,12 @@ FocusScope {
         }
         if (editor.pageView) {
             editor.pageView.ensureVisible(item, rect, editor.lineHeight)
+            return
+        }
+        if (editor.atramentPage) {
+            // The page drawn by Atrament (a hosted delegate's caret): it scrolls itself.
+            mapPoint(item, editor.atramentPage, rect.x, rect.y)
+            QmlCall.call5(editor.atramentPage, "revealArea", mapped.x, mapped.y, width, height, editor.lineHeight)
             return
         }
         mapPoint(item, listContent, rect.x, rect.y)

@@ -366,6 +366,19 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
                            .size(0));
 }
 
+bool PageView::reveal(at::Rect r, float margin, float viewportHeight, at::Context<PageView> &cx)
+{
+    float dy = 0;
+    if (r.top() < margin)
+        dy = r.top() - margin;
+    else if (r.bottom() > viewportHeight - margin)
+        dy = std::min(r.bottom() - (viewportHeight - margin), r.top() - margin);
+    if (std::abs(dy) < 0.5f || !m_handle.scrollBy(dy))
+        return false;
+    cx.notify();
+    return true;
+}
+
 float PageView::contentHeight() const
 {
     // The header above the rows and the footer below them are the list's too.

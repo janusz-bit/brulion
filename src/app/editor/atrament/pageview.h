@@ -194,6 +194,10 @@ public:
     // its item to it).
     float contentHeight() const;
     std::function<void(float height)> onContentHeight;
+    // Scrolls the page the least that shows window rectangle `r` with `margin` around it inside a
+    // view of `viewportHeight` (a hosted delegate's caret: BlockEditor.ensureVisible); whether it
+    // moved.
+    bool reveal(atrament::Rect r, float margin, float viewportHeight, atrament::Context<PageView> &cx);
     // The rendered text of drawn row `row` as laid out in the last frame (nullptr: not drawn).
     const atrament::TextLayoutHandle *rowText(int row) const;
     // What the host does instead of the view's own handling (each unset: the view's default).

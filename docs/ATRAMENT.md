@@ -682,8 +682,10 @@ Qt Quick's own nodes. Each step below turns kinds of foreign rows into Atrament 
   `tst_atrament_editor_hosting` (a real offscreen Qt Quick window: a code block and a table hosted
   at their rows, following a scroll and released far away, a finger's drag on a MouseArea's and on
   a TapHandler's delegate scrolling, taps staying theirs, the wheel, the accessible children).
-* **Not yet**: the hosted code editor's caret kept in view (`BlockEditor.ensureVisible` knows only the
-  list and `PageItemView`), the editor's find highlight and block selection over hosted rows.
+* A hosted editor's caret (a code block's InlineEditor) stays in view: `BlockEditor.ensureVisible`
+  asks the page drawn by Atrament (`AtramentView.revealArea` → `PageView::reveal` →
+  `ListHandle::scrollBy`, taken by the list in its next frame as the wheel's offset is).
+* **Not yet**: the editor's find highlight and block selection over hosted rows.
 
 ### Steps
 

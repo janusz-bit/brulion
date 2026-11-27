@@ -190,6 +190,26 @@ bool AtramentView::insertAtCaret(const QString &text, bool separate)
     return done;
 }
 
+bool AtramentView::revealArea(qreal x, qreal y, qreal w, qreal h, qreal margin)
+{
+    bool moved = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
+                                                 at::Context<brulion::editor::atr::PageView> &cx) {
+            moved = page.reveal(at::Rect::fromXYWH(float(x), float(y), float(w), float(h)), float(margin),
+                                float(height()), cx);
+        });
+#else
+    Q_UNUSED(x)
+    Q_UNUSED(y)
+    Q_UNUSED(w)
+    Q_UNUSED(h)
+    Q_UNUSED(margin)
+#endif
+    return moved;
+}
+
 bool AtramentView::selectInEdited(int row, int from, int to)
 {
     bool done = false;

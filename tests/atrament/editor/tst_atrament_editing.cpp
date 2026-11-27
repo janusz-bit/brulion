@@ -124,6 +124,7 @@ private Q_SLOTS:
     void mouseDragSelectsBlocks();
     void linkClickWithItsPlace();
     void toolbarInsertsAtTheCaret();
+    void revealScrollsTheLeast();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -694,6 +695,29 @@ void TestAtramentEditing::toolbarInsertsAtTheCaret()
     h.controller.stopEditing();
     h.tw.settle();
     h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(!v.insertAtCaret(u"x", false, cx)); });
+}
+
+void TestAtramentEditing::revealScrollsTheLeast()
+{
+    QString content;
+    for (int k = 0; k < 60; ++k)
+        content += u"- punkt %1 źdźbło\n"_s.arg(k);
+    Harness h(content);
+    QCOMPARE(h.view().handle().scroll().offset.y, 0.0f);
+    // Below the view (400 px tall): scrolled until its bottom and the margin show.
+    bool moved = false;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        moved = v.reveal(at::Rect::fromXYWH(20, 600, 100, 20), 24, 400, cx);
+    });
+    h.tw.settle();
+    QVERIFY(moved);
+    QVERIFY2(std::abs(h.view().handle().scroll().offset.y - (620 - 376)) < 1,
+             qPrintable(QString::number(h.view().handle().scroll().offset.y)));
+    // In view: nothing moves.
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        moved = v.reveal(at::Rect::fromXYWH(20, 200, 100, 20), 24, 400, cx);
+    });
+    QVERIFY(!moved);
 }
 
 QTEST_MAIN(TestAtramentEditing)
