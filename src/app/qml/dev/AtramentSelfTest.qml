@@ -78,6 +78,12 @@ QtObject {
         return v !== null && v.editCaretRect.height > 0 && v.editCaretRect.y >= -0.5
                && v.editCaretRect.y + v.editCaretRect.height <= v.height + 0.5
     }
+    /// The zoom's breadcrumb arrow in the page's header (a QML item hosted over the list), or null.
+    function breadcrumbArrow(): Item {
+        const v = test.view()
+        const header = v ? QmlCall.object(v, "header") as Item : null
+        return header ? DevTest.findWhere(header, "iconName", "arrow-left", true) : null
+    }
     /// The row is laid out and wholly inside the view.
     function rowInView(row: int): bool {
         const at = row
@@ -370,6 +376,60 @@ QtObject {
                                          "zooming out keeps the edited block in view: y " + test.rowTop(test.zoomRow))
         if (window.at()) test.typeKeys("ż")
         if (window.at()) test.check(Js.indexOf(test.info(test.zoomRow).plainText, "źdźbłoż") > 0, "and it takes the keys: " + test.info(test.zoomRow).plainText)
+        // The breadcrumb's arrow (the page's header: a QML item hosted over the list) clicked while
+        // a child of a folded zoom root is edited: the zoom ends, the fold opens over the child,
+        // which stays edited and in view, and the next key typed goes into it.
+        if (window.at()) {
+            page.stopEditing()
+            test.textBefore = page.sourceText
+            test.zoomRow = test.rowOf("Wiersz 145")
+            page.zoomInto(test.zoomRow)
+            editor.startEditing(test.zoomRow, -1)
+        }
+        if (window.at()) window.waitStep(test.editing(test.zoomRow), "a zoomed block is edited")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) window.waitStep(test.editing(test.zoomRow + 1), "Enter in the zoom root adds a child")
+        if (window.at()) test.typeKeys("Dziecko ąę")
+        if (window.at()) page.setFolded(test.zoomRow, true)
+        if (window.at()) {
+            const folded = test.info(test.zoomRow).collapsed
+            const shown = test.info(test.zoomRow + 1).visible
+            const text = test.info(test.zoomRow + 1).plainText
+            test.check(page.zoomBlock === test.zoomRow && folded && page.editingRow === test.zoomRow + 1 && shown
+                       && text === "Dziecko ąę", "a child of a folded zoom root is edited")
+        }
+        if (window.at()) {
+            const arrow = test.breadcrumbArrow()
+            test.check(arrow !== null, "the breadcrumb's arrow is in the page's header")
+            if (arrow)
+                window.tapPoint(arrow, arrow.width / 2, arrow.height / 2)
+        }
+        if (window.at()) {
+            const zoom = page.zoomBlock
+            const row = page.editingRow
+            const shown = test.info(row).visible
+            const folded = test.info(test.zoomRow).collapsed
+            const ok = zoom < 0 && test.editing(test.zoomRow + 1) && shown && !folded && test.caretInView()
+            window.waitStep(ok, "the breadcrumb's arrow clicked: the zoom ends, the edited child stays shown, edited and in view: zoom "
+                            + zoom + ", row " + row)
+        }
+        if (window.at()) {
+            const target = window.activeFocusItem
+            EditorInput.sendKey(target, 0, 0, "ż")
+        }
+        if (window.at()) {
+            const text = test.info(test.zoomRow + 1).plainText
+            const focus = "" + window.activeFocusItem
+            const ok = text === "Dziecko ąęż" && test.editing(test.zoomRow + 1)
+            test.check(ok, "a key typed after the click goes into the edited child: " + text + " (focus " + focus + ")")
+        }
+        if (window.at()) {
+            for (let i = 0; i < 6 && page.sourceText !== test.textBefore; ++i)
+                page.undo()
+            test.check(page.sourceText === test.textBefore, "undo takes the child away again")
+            page.zoomTo(-1)
+            page.stopEditing()
+        }
     }
 
     // Document mode (selftest's document part): list items, paragraphs, Enter leaving a list,
