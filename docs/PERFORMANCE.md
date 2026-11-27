@@ -3659,6 +3659,33 @@ Reproduce: tests/bench/app/README.md, scenario `memory`. Guards: `tst_memory_pol
 `tst_qmlcall`, `tst_vault_contentcache`, `bench_index:memory` (limits.csv: 158 MiB at 10 000
 notes), the shell self-test's "0b" and "0d".
 
+### Atrament's block editor against M2's gate (2026-11-27)
+
+The block editor drawn by Atrament (docs/ATRAMENT.md "The block editor in Atrament (M2)": text rows
+drawn and edited by Atrament, behind Settings → Editor) measured by `tests/bench/bench_atrament_page`
+(Release, Clang, the machine under load 20–45 from other builds — the times are upper bounds):
+a generated 1 000-block page (headings, nested items, tasks, links, tags, emphasis, long wrapped
+items) in a `PageView` on Atrament's test platform at 1280 × 800.
+
+| | |
+|---|---:|
+| the model (`BlockListModel` over the page), per block | 2.2 kB |
+| the view opened (the rows on screen laid out, Atrament's caches) | +0.9 MB |
+| after the wheel through the whole page (every row shown once), per block | +5.2 kB |
+| a second pass through the page, per block | +1 B |
+| a scroll step (120 px): the frame's scene, median / p95 / max | 1.21 / 1.37 / 1.94 ms |
+| … with the CPU renderer at 1280 × 800, median / p95 / max | 2.77 / 3.45 / 4.77 ms |
+| … the first pass (rows laid out and the model's text rendered for the first time) | 1.63 / 1.82 / 2.07 ms |
+| a keystroke in block 500 (the field, `setEditText`, the model's row, the frame) | 1.28 / 1.84 / 2.52 ms |
+
+What it says: the gate's "< 2 KB per block" holds for the view — what Atrament keeps for a block
+it has shown is nothing (the +1 B of the second pass); the 5.2 kB a block costs after it was shown
+once are the model's rendered-text caches (`RowState`'s HTML and its `RenderedText` runs, both
+kept), the QML editor's 100–200 kB per prepared delegate before. Halving those caches (the HTML
+dropped once the runs exist) is the model's next step, not Atrament's. A scroll step costs at most
+5 ms with the CPU renderer drawing the full window — inside 120 fps' 8.3 ms with room to spare;
+the GPU renderer draws the same scene in a dozen draw calls.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
