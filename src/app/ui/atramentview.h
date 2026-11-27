@@ -65,6 +65,11 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // The edited block's Markdown colours (BlockEditor.highlighterPalette: MarkdownHighlighter's
     // keys) and the code face; the field is coloured by the highlighter's rules (editstyles.h).
     Q_PROPERTY(QVariantMap highlighterPalette MEMBER m_highlighterPalette NOTIFY styleChanged FINAL)
+    // Code blocks drawn and edited by Atrament (off: the QML delegate hosts them), and their look:
+    // { background, border, label (colours), radius, fontSize, lineHeight, labelSize } (CodeBlockView's
+    // Theme values; pageview.h CodeLook).
+    Q_PROPERTY(bool drawsCode MEMBER m_drawsCode NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QVariantMap codeLook MEMBER m_codeLook NOTIFY styleChanged FINAL)
     // The find bar's query and options (NoteFind): its matches tinted with findColor.
     Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
     Q_PROPERTY(bool findMatchCase MEMBER m_findMatchCase NOTIFY findChanged FINAL)
@@ -216,6 +221,8 @@ private:
     QString m_placeholderText;
     QString m_editLabel;
     QVariantMap m_highlighterPalette;
+    bool m_drawsCode = false;
+    QVariantMap m_codeLook;
     void applyFind();
     qreal m_contentHeight = 0;
     QString m_findQuery;

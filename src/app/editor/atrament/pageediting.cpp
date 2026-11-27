@@ -7,6 +7,7 @@
 
 #include "blocklistmodel.h"
 #include "editorhost.h"
+#include "editstyles.h"
 #include "pagecontroller.h"
 #include "renderedtextitem.h"
 
@@ -68,6 +69,8 @@ bool PageView::editsRow(int row) const
 {
     if (!m_model || !m_controller || row < 0 || row >= m_model->rowCount())
         return false;
+    if (isCode(row))
+        return true;
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
     return editableView(index.data(BlockListModel::ViewRole).toString(), text.drawable());
@@ -121,11 +124,23 @@ void PageView::applyEditStyler(at::Context<PageView> &cx)
 {
     if (!m_input)
         return;
-    // The highlighter's spans, then the find bar's matches over them.
+    // What the field shows: a code block's code or a text block's Markdown.
+    const int row = editedRow();
+    const bool code = row >= 0 && isCode(row);
+    const QString lang = code ? m_model->index(row, 0).data(BlockListModel::LangRole).toString() : QString();
+    m_inputCode = code;
+    m_inputLanguage = lang;
+    // The highlighter's spans (EditStyler's rules for the row's kind, else the plain styler),
+    // then the find bar's matches over them.
     at::TextInput::Styler styler;
-    if (m_editStyler || !m_find.query.isEmpty()) {
-        styler = [this](std::u16string_view text) {
-            std::vector<at::TextSpan> spans = m_editStyler ? m_editStyler(text) : std::vector<at::TextSpan>{};
+    if (m_styles) {
+        styler = m_styles->styler(code ? MarkdownMode::Code : MarkdownMode::Inline, lang == u"luau" || lang == u"lua");
+    } else if (m_editStyler && !code) {
+        styler = m_editStyler;
+    }
+    if (!m_find.query.isEmpty()) {
+        styler = [this, inner = std::move(styler)](std::u16string_view text) {
+            std::vector<at::TextSpan> spans = inner ? inner(text) : std::vector<at::TextSpan>{};
             appendFindSpans(QStringView(text.data(), qsizetype(text.size())), spans);
             return spans;
         };
@@ -213,6 +228,12 @@ void PageView::loadInput(int row, int cursor, at::Context<PageView> &cx)
         applyEditStyler(cx);
     }
     m_editUid = m_model->uidAt(row);
+    {
+        const bool code = isCode(row);
+        const QString lang = code ? m_model->index(row, 0).data(BlockListModel::LangRole).toString() : QString();
+        if (code != m_inputCode || lang != m_inputLanguage)
+            applyEditStyler(cx);
+    }
     const QString text = m_model->editTextAt(row);
     m_lastText = toU16(text);
     m_softBreak = false;
@@ -268,7 +289,7 @@ void PageView::inputChanged(at::Context<PageView> &cx)
         return;
     const int caret = input.selection().focus;
     const QString view = m_model->index(row, 0).data(BlockListModel::ViewRole).toString();
-    const bool multiline = view == u"quote" || view == u"callout";
+    const bool multiline = view == u"quote" || view == u"callout" || view == u"code";
     if (!multiline && !m_softBreak) {
         // Line breaks that did not come from Shift+Enter: an input method's Enter (Android commits
         // "\n" as text) splits the block, pasted Markdown becomes blocks.
@@ -359,7 +380,8 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
     const QModelIndex index = m_model->index(row, 0);
     const QString view = index.data(BlockListModel::ViewRole).toString();
     const QString kind = index.data(BlockListModel::KindRole).toString();
-    const bool multiline = view == u"quote" || view == u"callout";
+    const bool code = view == u"code";
+    const bool multiline = view == u"quote" || view == u"callout" || code;
     const bool document = ctl->documentMode();
     const at::TextLayout *layout = input.layout();
     auto lineOf = [layout](int offset) { return layout ? layout->lineIndex(offset) : 0; };
@@ -448,9 +470,9 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
     if (k.key == u"enter" && !m.control && !m.alt && !m.platform) {
         commitWord();
         if (m.shift || multiline) {
-            // A line break in the block (a quote's next line carries its "> ").
+            // A line break in the block (a quote's next line carries its "> ", code's none).
             m_softBreak = true;
-            const std::u16string breakText = multiline ? std::u16string(u"\n> ") : std::u16string(u"\n");
+            const std::u16string breakText = multiline && !code ? std::u16string(u"\n> ") : std::u16string(u"\n");
             m_input->update(app, [&](at::TextInput &t, at::Context<at::TextInput> &c) { t.insert(breakText, c); });
             return true;
         }
@@ -496,6 +518,12 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
         if (multiline || caret != length || !selected.isEmpty() || m_input->read(app).markedRange())
             return false;
         ctl->mergeNext(row);
+        return true;
+    }
+    if (k.key == u"tab" && !ctrl && !m.alt && code) {
+        // Code: a tab in the text (Shift+Tab nothing), as CodeBlockView.
+        if (!m.shift)
+            m_input->update(app, [](at::TextInput &t, at::Context<at::TextInput> &c) { t.insert(u"\t", c); });
         return true;
     }
     if (k.key == u"tab" && !ctrl && !m.alt) {
@@ -573,6 +601,8 @@ int PageView::editCursorAt(int row, at::Point p) const
     const std::optional<int> display = it->second.offsetAt(p);
     if (!display)
         return -1;
+    if (isCode(row)) // the code is shown as it is edited
+        return std::clamp(*display, 0, int(m_model->editTextAt(row).size()));
     const QModelIndex index = m_model->index(row, 0);
     const auto rendered = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
     if (!rendered.d)

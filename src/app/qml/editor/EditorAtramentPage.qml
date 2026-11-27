@@ -25,6 +25,19 @@ AtramentView {
     placeholderText: qsTr("Type / for commands")
     editLabel: qsTr("Block text")
     highlighterPalette: editor ? editor.highlighterPalette : ({})
+    // Code blocks drawn and edited by Atrament (CodeBlockView's look); line numbers stay the QML
+    // view's: with them on, code blocks are its rows.
+    drawsCode: !(editor && editor.controller && editor.controller.codeLineNumbers >= 0
+                 ? editor.controller.codeLineNumbers > 0 : AppSettings.codeLineNumbers)
+    codeLook: ({
+        background: Theme.bgSunken,
+        border: Theme.borderSubtle,
+        label: Theme.fgFaint,
+        radius: Theme.radius,
+        fontSize: Theme.textSm,
+        lineHeight: Theme.lineHeightPx(Theme.textSm, 1.5),
+        labelSize: Theme.textXs
+    })
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm

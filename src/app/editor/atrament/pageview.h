@@ -50,6 +50,9 @@ namespace brulion::editor {
 
 class BlockListModel;
 class PageController;
+namespace atr {
+class EditStyler;
+}
 
 namespace atr {
 
@@ -127,6 +130,25 @@ public:
         atrament::Color tint(const QString &type) const;
     };
     void setCalloutLook(const CalloutLook &look);
+    // Code blocks drawn and edited by Atrament (docs/ATRAMENT.md M2 step 5, the first kind of
+    // "Blocks with views"): CodeBlockView's sunken panel, its language label, the code in the code
+    // face coloured by the highlighter's Code mode (Luau for ```luau / ```lua), edited in place
+    // (Enter a line break, Tab a tab). Off: code blocks are foreign rows (the QML delegate).
+    struct CodeLook {
+        atrament::Color background = atrament::rgb(0xf3f1ec); // Theme.bgSunken
+        atrament::Color border = atrament::rgba(0x8c959f33);  // Theme.borderSubtle
+        atrament::Color label = atrament::rgb(0x9aa0a6);      // Theme.fgFaint
+        float radius = 10;                                    // Theme.radius
+        float fontSize = 12;                                  // Theme.textSm
+        float lineHeight = 18;                                // Theme.lineHeightPx(textSm, 1.5)
+        float labelSize = 10;                                 // Theme.textXs
+    };
+    void setDrawsCode(bool on, const CodeLook &look, atrament::Context<PageView> &cx);
+    bool drawsCode() const { return m_drawsCode; }
+    // The highlighter's rules for the edited text: the field takes its Inline styler for text
+    // rows, its Code one (with the block's language) for code (editstyles.h); replaces
+    // setEditStyler's.
+    void setEditStyles(std::shared_ptr<const EditStyler> styles, atrament::Context<PageView> &cx);
     // The find bar's matches tinted in the rows, the edited one too (`query` empty: none).
     void setFind(const QString &query, bool matchCase, bool matchDiacritics, bool wholeWord, atrament::Color color,
                  atrament::Context<PageView> &cx);
@@ -291,6 +313,13 @@ private:
     int m_dragFocus = -1;
     void dragOver(atrament::Point p, atrament::Context<PageView> &cx);
     CalloutLook m_calloutLook;
+    bool m_drawsCode = false;
+    CodeLook m_codeLook;
+    std::shared_ptr<const EditStyler> m_styles;
+    QString m_inputLanguage; // the language the field's code styler colours ("" for text rows)
+    bool m_inputCode = false;
+    atrament::AnyElement renderCodeRow(std::size_t row, const QModelIndex &index, float textX, bool edited);
+    bool isCode(int row) const;
     struct Find {
         QString query;
         bool matchCase = false;

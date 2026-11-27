@@ -338,8 +338,26 @@ void AtramentView::applyStyle()
         callouts.radius = float(m_calloutRadius);
         page.setCalloutLook(callouts);
         // The edited text coloured by the highlighter's rules (markdownstyles.h) in the code face.
-        page.setEditStyler(EditStyler(m_highlighterPalette, p.codeFamily).styler(brulion::editor::MarkdownMode::Inline),
-                           cx);
+        page.setEditStyles(std::make_shared<const EditStyler>(m_highlighterPalette, p.codeFamily), cx);
+        PageView::CodeLook code;
+        auto colour = [this](const char *key, at::Color fallback) {
+            const QVariant v = m_codeLook.value(QString::fromLatin1(key));
+            const QColor c = v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
+            return c.isValid() ? atColor(c) : fallback;
+        };
+        auto number = [this](const char *key, float fallback) {
+            bool ok = false;
+            const double d = m_codeLook.value(QString::fromLatin1(key)).toDouble(&ok);
+            return ok && d > 0 ? float(d) : fallback;
+        };
+        code.background = colour("background", code.background);
+        code.border = colour("border", code.border);
+        code.label = colour("label", code.label);
+        code.radius = number("radius", code.radius);
+        code.fontSize = number("fontSize", code.fontSize);
+        code.lineHeight = number("lineHeight", code.lineHeight);
+        code.labelSize = number("labelSize", code.labelSize);
+        page.setDrawsCode(m_drawsCode, code, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         cx.notify();

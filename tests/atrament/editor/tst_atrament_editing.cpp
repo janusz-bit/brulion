@@ -127,6 +127,7 @@ private Q_SLOTS:
     void toolbarInsertsAtTheCaret();
     void revealScrollsTheLeast();
     void highlighterRulesColourTheField();
+    void codeBlocksDrawnAndEdited();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -762,6 +763,48 @@ void TestAtramentEditing::highlighterRulesColourTheField()
     h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setEditStyler(styler.styler(MarkdownMode::Inline), cx); });
     h.clickInto(0, 2);
     QVERIFY(!h.view().input()->read(h.app).spans().empty());
+}
+
+void TestAtramentEditing::codeBlocksDrawnAndEdited()
+{
+    Harness h(u"Akapit.\n\n```luau\nlocal gęś = 1\nreturn gęś\n```\n\nKoniec.\n"_s);
+    QCOMPARE(h.model()->index(1).data(BlockListModel::ViewRole).toString(), u"code"_s);
+    QVERIFY(!h.view().drawsRow(1)); // a foreign row until the page draws code
+    QVariantMap palette;
+    palette.insert(u"keyword"_s, u"#ff0000"_s);
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.setEditStyles(std::make_shared<const EditStyler>(palette, u"Brulion JetBrains Mono"), cx);
+        v.setDrawsCode(true, PageView::CodeLook{}, cx);
+    });
+    h.tw.settle();
+    QVERIFY(h.view().drawsRow(1));
+    QVERIFY(h.view().editsRow(1));
+    const auto *t = h.view().rowText(1);
+    QVERIFY(t && t->layout());
+    QCOMPARE(str(t->layout()->text()), u"local gęś = 1\nreturn gęś"_s);
+    // Luau's keyword in the keyword colour.
+    bool red = false;
+    const at::Rect b = t->bounds();
+    for (int y = int(b.top()); y < int(b.top()) + 18 && !red; ++y)
+        for (int x = int(b.left()); x < int(b.left()) + 30 && !red; ++x) {
+            const auto p = h.tw.pixel(x, y);
+            red = p.r > 180 && p.g < 110 && p.b < 110;
+        }
+    QVERIFY(red);
+    // A click edits at the character under it (the code is shown as written).
+    h.clickInto(1, 6);
+    QCOMPARE(h.controller.editingRow(), 1);
+    QCOMPARE(h.inputText(), u"local gęś = 1\nreturn gęś"_s);
+    QCOMPARE(h.inputCaret(), 6);
+    QVERIFY(!h.view().input()->read(h.app).spans().empty());
+    // Enter is a line break, Tab a tab: the block stays one.
+    h.tw.simulateKeystrokes(u"ctrl-end enter tab");
+    h.tw.simulateTyping(u"x");
+    QCOMPARE(h.model()->rowCount(), 3);
+    QCOMPARE(h.editText(1), u"local gęś = 1\nreturn gęś\n\tx"_s);
+    // ↑ from the first line goes to the paragraph above.
+    h.tw.simulateKeystrokes(u"ctrl-home up");
+    QCOMPARE(h.controller.editingRow(), 0);
 }
 
 QTEST_MAIN(TestAtramentEditing)

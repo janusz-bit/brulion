@@ -797,6 +797,12 @@ scrolling, `tst_atrament_editor`) before the next:
    glyphs through Atrament's text), charts and Mermaid (their core layouts painted as Atrament paths),
    pictures (`img`), queries, transclusions, properties. When nothing is foreign, M2's gate is
    measured; the QML delegates go in M3.
+   **Built so far** (2026-11-27): code blocks (`PageView::setDrawsCode`, `AtramentView.drawsCode`
+   / `codeLook`): CodeBlockView's sunken panel with its language label, the code in the code face
+   coloured by the highlighter's Code mode (`EditStyler`, Luau for ```luau / ```lua), a click
+   editing it at the character (the code is shown as it is edited), Enter a line break and Tab a
+   tab in the field, ↑/↓ across blocks. With line numbers on (the device's setting or the note's
+   `line-numbers`) code blocks stay the QML view's (no numbers in Atrament yet).
 
 ### Tests
 

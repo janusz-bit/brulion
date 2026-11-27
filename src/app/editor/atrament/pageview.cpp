@@ -2,6 +2,7 @@
 
 #include "blocklistmodel.h"
 #include "editorhost.h"
+#include "editstyles.h"
 #include "pagecontroller.h"
 #include "renderedtextitem.h"
 #include "text/find.h"
@@ -235,6 +236,70 @@ void PageView::setFind(const QString &query, bool matchCase, bool matchDiacritic
     cx.notify();
 }
 
+void PageView::setDrawsCode(bool on, const CodeLook &look, at::Context<PageView> &cx)
+{
+    m_drawsCode = on;
+    m_codeLook = look;
+    m_extents.markAllEstimated();
+    cx.notify();
+}
+
+void PageView::setEditStyles(std::shared_ptr<const EditStyler> styles, at::Context<PageView> &cx)
+{
+    m_styles = std::move(styles);
+    applyEditStyler(cx);
+    cx.notify();
+}
+
+at::AnyElement PageView::renderCodeRow(std::size_t row, const QModelIndex &index, float textX, bool edited)
+{
+    // CodeBlockView: a sunken panel, the language small at its top right, the code in the code
+    // face at Theme.textSm with 1.5 line height, from space4 in and space3 down.
+    const CodeLook &c = m_codeLook;
+    const QString lang = index.data(BlockListModel::LangRole).toString();
+    const quint64 uid = index.data(BlockListModel::UidRole).toString().toULongLong();
+    at::Div panel = at::div()
+                            .ml(textX)
+                            .flex1()
+                            .minW(0)
+                            .flexCol()
+                            .bg(c.background)
+                            .border(1)
+                            .borderColor(c.border)
+                            .rounded(c.radius)
+                            .pt(12)
+                            .pb(12)
+                            .pl(16)
+                            .pr(16)
+                            .fontFamily(m_palette.codeFamily)
+                            .textSize(c.fontSize)
+                            .lineHeight(c.lineHeight);
+    if (!lang.isEmpty())
+        std::move(panel).pr(16 + c.labelSize * 0.62f * float(lang.size()) + 8)
+                .child(at::div()
+                               .absolute()
+                               .top(8)
+                               .right(12)
+                               .textSize(c.labelSize)
+                               .lineHeight(c.labelSize * 1.3f)
+                               .textColor(c.label)
+                               .ariaHidden()
+                               .child(at::text(u16View(lang))));
+    if (edited)
+        return std::move(panel).child(*m_input);
+    const QString code = m_model->editTextAt(int(row));
+    const std::u16string_view text = u16View(code);
+    at::Text body = at::text(text).id(u"code");
+    if (m_styles) {
+        const std::vector<at::TextSpan> spans =
+                m_styles->spans(text, MarkdownMode::Code, lang == u"luau" || lang == u"lua");
+        std::move(body).spans(spans);
+    }
+    std::move(body).trackLayout(m_rowText[uid]);
+    m_rowTextFrame[uid] = m_frame;
+    return std::move(panel).child(std::move(body));
+}
+
 void PageView::setCalloutLook(const CalloutLook &look)
 {
     m_calloutLook = look;
@@ -277,10 +342,18 @@ std::vector<std::size_t> PageView::foreignRows() const
     return rows;
 }
 
+bool PageView::isCode(int row) const
+{
+    return m_drawsCode && m_model && row >= 0 && row < m_model->rowCount()
+           && m_model->index(row, 0).data(BlockListModel::ViewRole).toString() == u"code";
+}
+
 bool PageView::drawsRow(int row) const
 {
     if (!m_model || row < 0 || row >= m_model->rowCount())
         return false;
+    if (isCode(row))
+        return true;
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
     return text.drawable() && drawable(index.data(BlockListModel::ViewRole).toString());
@@ -452,6 +525,30 @@ at::AnyElement PageView::renderRow(std::size_t row)
         return d;
     };
 
+    if (m_drawsCode && view == u"code") {
+        const quint64 codeUid = index.data(BlockListModel::UidRole).toString().toULongLong();
+        const bool codeEdited = m_input && codeUid == m_editUid;
+        m_drawn.push_back(row);
+        at::Div codeRow = line().child(renderCodeRow(row, index, textX, codeEdited));
+        const at::EntityId codeSelf = m_selfId;
+        if (codeEdited)
+            return std::move(codeRow).captureKeyDown([codeSelf](const at::KeyDownEvent &e, at::Window &w, at::App &a) {
+                bool handled = false;
+                a.updateEntity<PageView>(codeSelf, [&](PageView &v, at::Context<PageView> &c) {
+                    handled = v.editorKey(e.keystroke, w, c);
+                });
+                if (handled)
+                    w.stopPropagation();
+            });
+        if (m_controller && !m_controller->readOnly())
+            std::move(codeRow).role(at::Role::None).cursorText().onClick(
+                    [codeSelf, row](const at::ClickEvent &click, at::Window &w, at::App &a) {
+                        a.updateEntity<PageView>(codeSelf, [&](PageView &v, at::Context<PageView> &c) {
+                            v.rowClicked(row, click, w, c);
+                        });
+                    });
+        return codeRow;
+    }
     if (!rendered.drawable() || !drawable(view)) {
         // A foreign row: its QML delegate's place (foreignrows.cpp).
         m_foreign.push_back(row);
