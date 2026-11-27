@@ -156,7 +156,8 @@ components — no Material/Fusion look, so all targets look identical.
   iOS list minimum, other rows 48), bottom navigation, drawer, an editing toolbar
   docked on the on-screen keyboard (the bottom navigation makes way while the keyboard is up;
   when it goes, the navigation comes back and a toolbar that stays docks right on it), dialogs as
-  bottom sheets on the keyboard ("On-screen keyboard" below).
+  bottom sheets on the keyboard — those one types in as cards hanging from the window's top,
+  in one place ("On-screen keyboard" below).
 
 ## Window layout (`qml/Main.qml`, `qml/shell/AppShell.qml`)
 
@@ -625,7 +626,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   it: Android's report and a simulated keyboard — not the browser, whose page is resized for the
   keyboard, nor Qt's input method), `simulated` (and `simulate(overlap, animating, hiding)`: a
   slide frame by frame, `hiding` one going away — `shown` false from its first frame, as Android
-  reports it), `source`. Sources by priority: a simulated keyboard
+  reports it), `lastOverlap` (the last keyboard that settled up, kept once it went: the room a
+  dialog one types in leaves for it), `source`. Sources by priority: a simulated keyboard
   (`--keyboard <px>`, the self-tests), the platform's own report — Android's IME insets
   (`android/src/…/ImeInsets.kt`, every frame of the slide on Android 11+, where the window is drawn
   behind the system bars and keeps its size — Qt's expanded client area, set on Android 11–14 by
@@ -719,7 +721,14 @@ everything near the bottom, the same way on Android, in the browser and with a s
   a day's editor asks the journal list, `BlockEditor.scroller`), checked again when the view's
   height changes — not while the keyboard slides, once it has settled; the source's caret
   likewise.
-* **Popups**: bottom sheets (`BDialog`) sit on the keyboard and centred dialogs stay above it;
+* **Popups**: bottom sheets (`BDialog`) sit on the keyboard and centred dialogs stay above it —
+  except dialogs one types in (`BDialog.textEntry`: a field that takes text shown in it,
+  `EditorInput.takesText`, or the keyboard came up while it is open): on a touch UI they hang from
+  the window's top (`steady`; on phones a card instead of the bottom sheet, no drag handle) and,
+  once the keyboard is expected (the first focus takes text, or it came), end above the room the
+  last settled keyboard took (`KeyboardInsets.lastOverlap`) also while it is hidden or sliding
+  — the field and the buttons never move while the keyboard comes, grows a suggestion strip or
+  goes (a sheet that followed the keyboard's top jumped under the finger while typing);
   menus (`BMenu.bottomMargin`) stay above it, the editor's task status menu also above the
   toolbar, and below the status bar of an edge-to-edge window (`BMenu.topMargin`, the window's
   safe area: on Android a finger's tap there reaches the status bar, so a block menu opened
@@ -742,7 +751,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   source mode and a tap beside the bar's buttons, a table cell — a word being composed, undo and
   redo in the cell —, the tool rows kept between edits), the journal stream's self-test (`tst_content_journals_qml`: the
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
-  `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast; editing with the
+  `tst_shell_qml` (the bottom navigation, the view's end, quick capture at the top staying put
+  while the keyboard changes and goes, a toast; editing with the
   keyboard never up (a hardware one): the bottom navigation shown and the docked toolbar right on it, also over a
   system navigation bar — the shell's `SafeArea.additionalMargins` —, + on the top bar, a
   tap on it ending the editing and opening quick capture;

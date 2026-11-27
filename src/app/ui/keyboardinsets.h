@@ -116,6 +116,10 @@ class KeyboardInsets : public QObject {
     /// keyboard, or its readings come once they settle: `overlap` 0 while `shown` and
     /// `animating`) and Qt's input method (no slide reported).
     Q_PROPERTY(bool slidesOver READ slidesOver NOTIFY slidesOverChanged FINAL)
+    /// The overlap of the last keyboard that settled up, kept once it went (0 before the first
+    /// one): what a dialog one types in leaves for it from the start, so it keeps its place and
+    /// size while the keyboard comes, changes its height and goes (BDialog.textEntry).
+    Q_PROPERTY(qreal lastOverlap READ lastOverlap NOTIFY lastOverlapChanged FINAL)
     /// A simulated keyboard of this height (tests, screenshots: `--keyboard <px>`); -1 = off.
     Q_PROPERTY(qreal simulated READ simulated WRITE setSimulated NOTIFY simulatedChanged FINAL)
     /// Where the values come from: "none", "inputMethod", "platform" or "simulated".
@@ -137,6 +141,7 @@ public:
     bool shown() const { return m_current.shown; }
     bool animating() const { return m_current.animating; }
     bool slidesOver() const { return m_slidesOver; }
+    qreal lastOverlap() const { return m_lastOverlap; }
     qreal simulated() const { return m_simulated; }
     Source source() const { return m_source; }
     QString sourceName() const;
@@ -176,6 +181,7 @@ Q_SIGNALS:
     void shownChanged();
     void animatingChanged();
     void slidesOverChanged();
+    void lastOverlapChanged();
     void simulatedChanged();
     void sourceChanged();
     void markedChanged();
@@ -196,6 +202,7 @@ private:
     bool m_hasPlatform = false;
     bool m_platformSlides = false; // the platform's report came from setPlatformState (Android)
     bool m_slidesOver = false;
+    qreal m_lastOverlap = 0;
     ViewportKeyboard m_viewportKeyboard;
     ViewportSample m_viewportSample;
     bool m_hasViewportSample = false;

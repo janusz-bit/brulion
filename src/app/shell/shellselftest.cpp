@@ -10718,18 +10718,33 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
           }),
           "a toast sits above the keyboard");
 
-    // Quick capture (a bottom sheet on phones) sits on the keyboard.
+    // Quick capture (a dialog one types in) hangs from the window's top above the keyboard, and
+    // stays put — its place and its size — while the keyboard changes its height and goes.
     app->requestUiAction(u"capture"_s);
     capture = window->findChild<QObject *>(u"shellCapture"_s);
     if (!capture) {
         check(false, "asking for quick capture makes its dialog");
         return;
     }
+    const auto captureY = [&] { return capture->property("y").toReal(); };
+    const auto captureBottom = [&] { return captureY() + capture->property("height").toReal(); };
     check(waitFor([&] {
-              return capture->property("opened").toBool()
-                     && near(capture->property("y").toReal() + capture->property("height").toReal(), top);
+              return capture->property("opened").toBool() && capture->property("steady").toBool()
+                     && captureY() < window->height() / 4 && captureBottom() <= top + 1;
           }),
-          "quick capture's sheet sits on the keyboard");
+          "quick capture hangs from the top, above the keyboard");
+    const qreal captureTop = captureY();
+    const qreal captureEnd = captureBottom();
+    insets->setProperty("simulated", keyboard - 40);
+    settle(100);
+    insets->setProperty("simulated", keyboard);
+    check(waitFor([&] { return near(captureY(), captureTop) && near(captureBottom(), captureEnd); }),
+          "quick capture stays put while the keyboard's height changes");
+    insets->setProperty("simulated", 0);
+    settle(100);
+    check(near(captureY(), captureTop) && near(captureBottom(), captureEnd),
+          "quick capture stays put when the keyboard goes");
+    insets->setProperty("simulated", keyboard);
     // A word the keyboard is still composing (preedit, outside the field's text) counts: "Add"
     // is enabled under it and adds it.
     Workspace *ws = app->workspace();
