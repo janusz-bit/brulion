@@ -122,6 +122,7 @@ private Q_SLOTS:
     void findMatchesTintedAndSelected();
     void longPressSelects();
     void mouseDragSelectsBlocks();
+    void linkClickWithItsPlace();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -653,6 +654,27 @@ void TestAtramentEditing::mouseDragSelectsBlocks()
     h.tw.simulateClick(h.pointOf(3, 2));
     h.tw.settle();
     QCOMPARE(h.controller.editingRow(), 3);
+}
+
+void TestAtramentEditing::linkClickWithItsPlace()
+{
+    Harness h(u"- idź do [[Strona docelowa]] teraz\n"_s);
+    QString href;
+    at::Point at;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onLinkAt = [&](int, const QString &link, at::Point p) {
+            href = link;
+            at = p;
+        };
+    });
+    const auto *t = h.view().rowText(0);
+    QVERIFY(t);
+    const int k = int(str(t->layout()->text()).indexOf(u"docelowa"_s));
+    const at::Point p = h.pointOf(0, k + 2);
+    h.tw.simulateClick(p);
+    QVERIFY2(href.startsWith(u"page:"_s), qPrintable(href));
+    QCOMPARE(at.x, p.x);
+    QCOMPARE(h.controller.editingRow(), -1); // a link's click edits nothing
 }
 
 QTEST_MAIN(TestAtramentEditing)

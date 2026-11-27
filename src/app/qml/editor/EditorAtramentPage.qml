@@ -52,6 +52,14 @@ AtramentView {
         if (root.editor)
             root.editor.activateLink(row, link)
     }
+    // A click on a link of a block's text (BlockText's): a date chip opens the date dialog, a recurrence or
+    // a priority chip its menu at the chip, any other link opens.
+    onLinkClicked: (row, link, x, y) => {
+        if (!root.editor || root.editor.openDateDialogAt(row, link))
+            return
+        if (!root.editor.editsOnClick(link) || !root.editor.openDateMenu(row, link, root, x, y))
+            root.editor.activateLink(row, link)
+    }
     onTaskToggled: row => {
         if (root.editor && root.editor.controller)
             root.editor.controller.toggleTask(row)

@@ -131,6 +131,9 @@ public:
     // What a click asks of the editor: a link of row `row` (its href: `page:`, `tag:`, a URL…)
     // activated, a task's box toggled.
     std::function<void(int row, const QString &href)> onLink;
+    // The same with the click's window point (a chip's menu opens there); used instead of onLink
+    // for clicks when set.
+    std::function<void(int row, const QString &href, atrament::Point at)> onLinkAt;
     std::function<void(int row)> onToggleTask;
     // The outline's bullet clicked (zoom into the block); a right-click on a row at a window point
     // (the block menu). Unset: no bullet click, no menu.

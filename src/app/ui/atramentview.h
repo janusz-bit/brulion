@@ -111,6 +111,8 @@ Q_SIGNALS:
     void pageModelChanged();
     // "page": a link of row `row` clicked or tapped (BlockEditor.activateLink), a task's box.
     void linkActivated(int row, const QString &link);
+    // The same with the click's place in this item (a date chip's menu opens there).
+    void linkClicked(int row, const QString &link, qreal x, qreal y);
     void taskToggled(int row);
     void styleChanged();
     void pageControllerChanged();

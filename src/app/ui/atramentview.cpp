@@ -353,6 +353,10 @@ void AtramentView::attachView()
                         if (guard)
                             Q_EMIT guard->linkActivated(row, href);
                     };
+                    page.onLinkAt = [guard](int row, const QString &href, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->linkClicked(row, href, p.x, p.y);
+                    };
                     page.onToggleTask = [guard](int row) {
                         if (guard)
                             Q_EMIT guard->taskToggled(row);
