@@ -168,6 +168,11 @@ public:
     // The editText offset on the first (`lastLine` false) or last line of drawn row `row` nearest
     // to window x `x` (↑/↓ into the row); −1 when not known.
     int editCursorOnLine(int row, float x, bool lastLine) const;
+    // The page's height as the list knows it (measured rows exact, the others estimated), and a
+    // callback whenever a frame changed it (a journal day as tall as its blocks: the host sizes
+    // its item to it).
+    float contentHeight() const;
+    std::function<void(float height)> onContentHeight;
     // The rendered text of drawn row `row` as laid out in the last frame (nullptr: not drawn).
     const atrament::TextLayoutHandle *rowText(int row) const;
     // What the host does instead of the view's own handling (each unset: the view's default).
@@ -244,6 +249,7 @@ private:
     // The text of each drawn row in the last frame, by block uid (clicks, ↑/↓ into a row).
     std::unordered_map<quint64, atrament::TextLayoutHandle> m_rowText;
     std::unordered_map<quint64, std::uint64_t> m_rowTextFrame;
+    float m_reportedHeight = -1;
     atrament::Color m_editCaret = atrament::rgb(0x3b5bdb);
     atrament::Color m_editSelection = atrament::rgba(0x3b5bdb40);
     std::u16string m_editPlaceholder;

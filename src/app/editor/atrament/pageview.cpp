@@ -297,7 +297,23 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
                            .textSize(m_metrics.fontSize)
                            .lineHeight(m_metrics.lineHeight)
                            .textColor(m_palette.text)
-                           .fontFamily(m_palette.bodyFamily));
+                           .fontFamily(m_palette.bodyFamily))
+            // After the list's prepaint (its rows measured): the page's height, when it changed.
+            .child(at::canvas([self](at::Rect, at::Window &, at::App &) {
+                       const float h = self->contentHeight();
+                       if (std::abs(h - self->m_reportedHeight) < 0.5f)
+                           return;
+                       self->m_reportedHeight = h;
+                       if (self->onContentHeight)
+                           self->onContentHeight(h);
+                   })
+                           .absolute()
+                           .size(0));
+}
+
+float PageView::contentHeight() const
+{
+    return m_extents.offsetOf(m_extents.count());
 }
 
 at::AnyElement PageView::renderRow(std::size_t row)

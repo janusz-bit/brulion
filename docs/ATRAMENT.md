@@ -656,6 +656,14 @@ scrolling, `tst_atrament_editor`) before the next:
    handles.
 4. **Structure.** Folding, zoom into a block, drag to move, dates and reminders chips, the journal
    — a stream of days as sections of one list (what `JournalDayItem` draws today).
+   **Built so far** (2026-11-27): folding (the arrows, step 2's entry), the bullet's zoom, and the
+   journal's days drawn by Atrament as a first stage — each day's editor (`ContentJournalDay`'s
+   autoHeight `BlockEditor`) shows its blocks in an `AtramentView` as tall as they are
+   (`PageView::contentHeight` / `onContentHeight` after each frame's measuring →
+   `AtramentView.contentHeight` → `BlockEditor.atramentContentHeight` → the day's
+   `fitEditorHeight()`); the journal's list scrolls (a wheel Atrament does not take goes on to it)
+   and keeps the caret in view (`BlockEditor.ensureVisible` through its `scroller`). The stream as
+   one Atrament list (no item per day) is the next stage.
 5. **Blocks with views.** Code (the input with the code highlighter), tables, math (Brulion Math's
    glyphs through Atrament's text), charts and Mermaid (their core layouts painted as Atrament paths),
    pictures (`img`), queries, transclusions, properties. When nothing is foreign, M2's gate is

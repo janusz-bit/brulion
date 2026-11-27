@@ -9,6 +9,8 @@
 #include <QDebug>
 #include <QTimer>
 
+#include <cmath>
+
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
 #include "blocklistmodel.h"
 #include "editorhost.h"
@@ -354,6 +356,20 @@ void AtramentView::attachView()
                     page.onToggleTask = [guard](int row) {
                         if (guard)
                             Q_EMIT guard->taskToggled(row);
+                    };
+                    page.onContentHeight = [guard](float height) {
+                        // (Told in the frame's paint: the item changes size after it.)
+                        if (!guard)
+                            return;
+                        QMetaObject::invokeMethod(
+                                guard.data(),
+                                [guard, height] {
+                                    if (guard && std::abs(guard->m_contentHeight - height) >= 0.5) {
+                                        guard->m_contentHeight = height;
+                                        Q_EMIT guard->contentHeightChanged();
+                                    }
+                                },
+                                Qt::QueuedConnection);
                     };
                     page.onBulletClick = [guard](int row) {
                         if (guard)

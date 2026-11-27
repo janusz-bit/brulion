@@ -124,10 +124,13 @@ FocusScope {
     /// holder of the keyboard (docs/UI.md "One item per page (Z10 stage C)").
     readonly property bool usesPageItem: EditorInput.pageItem && !autoHeight && !DeviceInfo.screenReader
     /// The page's rows drawn by Atrament (Settings → Editor, AppSettings.editorAtrament; where
-    /// Atrament is built: DeviceInfo.atrament; docs/ATRAMENT.md M2, step 1: reading): pages only, as
-    /// for the PageItem. The list stays, without rows, as the holder of the keyboard.
-    readonly property bool usesAtrament: DeviceInfo.atrament && AppSettings.editorAtrament && !autoHeight
-                                         && !usesPageItem
+    /// Atrament is built: DeviceInfo.atrament; docs/ATRAMENT.md M2): pages and journal days (an
+    /// autoHeight editor: its Atrament page is as tall as its blocks, the journal list scrolls).
+    /// The list stays, without rows, as the holder of the keyboard.
+    readonly property bool usesAtrament: DeviceInfo.atrament && AppSettings.editorAtrament && !usesPageItem
+    /// The blocks' height in the page drawn by Atrament (EditorAtramentPage.contentHeight): an
+    /// autoHeight editor (a journal day) is as tall as them.
+    property real atramentContentHeight: 0
     /// The PageItemView while usesPageItem (null else).
     final property PageItemView pageView: pageViewLoader.item as PageItemView
 

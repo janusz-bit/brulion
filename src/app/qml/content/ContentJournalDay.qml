@@ -405,7 +405,7 @@ FocusScope {
         // blocks are laid out at their final width right away.
         controller: page
         // The rows are drawn by the day's JournalDayItem until something needs them (materialize()).
-        rowsDrawn: EditorInput.journalDayItem && !DeviceInfo.screenReader
+        rowsDrawn: EditorInput.journalDayItem && !DeviceInfo.screenReader && !dayEditor.usesAtrament
         focus: true
         onReadOnlyLeaveRequested: AppSettings.readingMode = false
         onMessage: (text, kind, action) => {
@@ -457,6 +457,8 @@ FocusScope {
         for (let i = 0; i < 4; ++i) {
             day._refit = false
             dayEditor.height = day.empty && page.editingRow < 0 ? 0
+                               : dayEditor.usesAtrament ? dayEditor.atramentContentHeight + dayEditor.bottomSpace
+                                                          + dayEditor.listView.y
                                : day.drawn ? day.drawnHeight + dayEditor.bottomSpace + dayEditor.listView.y
                                : dayEditor.listView.contentHeight + dayEditor.listView.y
             if (!day._refit)
@@ -466,6 +468,11 @@ FocusScope {
     }
     onEmptyChanged: day.fitEditorHeight()
     onDrawnHeightChanged: day.fitEditorHeight()
+    // The day's blocks drawn by Atrament (Settings → Editor): as tall as they are measured.
+    Connections {
+        target: dayEditor
+        function onAtramentContentHeightChanged() { day.fitEditorHeight() }
+    }
     Connections {
         target: page
         function onEditingRowChanged() { day.fitEditorHeight() }

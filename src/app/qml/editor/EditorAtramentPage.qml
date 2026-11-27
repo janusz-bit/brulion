@@ -78,8 +78,17 @@ AtramentView {
     // caret; their keys come back while the list is open.
     suggestionsOpen: editor ? editor.suggestionsOpen : false
     onEditStateChanged: {
-        if (root.editor && root.editRow >= 0)
-            root.editor.updateCompletionAt(root, root.editRow, root.editText, root.editCursor, root.editCaretRect)
+        if (!root.editor || root.editRow < 0)
+            return
+        root.editor.updateCompletionAt(root, root.editRow, root.editText, root.editCursor, root.editCaretRect)
+        // A journal day (autoHeight) does not scroll: the journal list keeps the caret in view.
+        if (root.editor.autoHeight && root.activeFocus)
+            root.editor.ensureVisible(root, root.editCaretRect)
+    }
+    // A journal day is as tall as its blocks (BlockEditor.atramentContentHeight, ContentJournalDay).
+    onContentHeightChanged: {
+        if (root.editor)
+            root.editor.atramentContentHeight = root.contentHeight
     }
     onBulletClicked: row => {
         if (root.editor && root.editor.controller && !root.editor.blockTapped(row))

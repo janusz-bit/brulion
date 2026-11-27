@@ -75,6 +75,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(bool suggestionsOpen MEMBER m_suggestionsOpen NOTIFY suggestionsOpenChanged FINAL)
     // The edited block's field (−1, "" while none): its row, text (a composition included), caret,
     // and the caret's rectangle in this item.
+    // "page": the blocks' height (measured rows exact, the others estimated): a journal day is as
+    // tall as its blocks (BlockEditor.autoHeight).
+    Q_PROPERTY(qreal contentHeight READ contentHeight NOTIFY contentHeightChanged FINAL)
     Q_PROPERTY(int editRow READ editRow NOTIFY editStateChanged FINAL)
     Q_PROPERTY(QString editText READ editText NOTIFY editStateChanged FINAL)
     Q_PROPERTY(int editCursor READ editCursor NOTIFY editStateChanged FINAL)
@@ -90,6 +93,7 @@ public:
     void setPageModel(QObject *model);
     QObject *pageController() const { return m_pageController.data(); }
     void setPageController(QObject *controller);
+    qreal contentHeight() const { return m_contentHeight; }
     int editRow() const;
     QString editText() const;
     int editCursor() const;
@@ -121,6 +125,7 @@ Q_SIGNALS:
     void followLinkRequested(int row, int cursor, bool newPane);
     void suggestionsOpenChanged();
     void findChanged();
+    void contentHeightChanged();
     // A block Atrament edits started being edited (a click, Enter, the QML around): the item takes
     // the keyboard unless the editor keeps it elsewhere (the find bar).
     void editingStarted();
@@ -172,6 +177,7 @@ private:
     QString m_placeholderText;
     QString m_editLabel;
     void applyFind();
+    qreal m_contentHeight = 0;
     QString m_findQuery;
     bool m_findMatchCase = false;
     bool m_findMatchDiacritics = false;
