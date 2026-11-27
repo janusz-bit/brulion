@@ -71,6 +71,8 @@ bool PageView::editsRow(int row) const
         return false;
     if (isCode(row))
         return true;
+    if (const std::optional<bool> media = drawsMediaRow(row); media && !*media)
+        return false; // its pictures, embeds or query drawn by the QML delegate: its row to edit
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
     return editableView(index.data(BlockListModel::ViewRole).toString(), text.drawable());

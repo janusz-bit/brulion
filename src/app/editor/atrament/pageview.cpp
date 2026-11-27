@@ -354,6 +354,8 @@ bool PageView::drawsRow(int row) const
         return false;
     if (isCode(row))
         return true;
+    if (const std::optional<bool> media = drawsMediaRow(row)) // pictures, embeds, queries (mediarows.cpp)
+        return *media;
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
     return text.drawable() && drawable(index.data(BlockListModel::ViewRole).toString());
@@ -549,6 +551,8 @@ at::AnyElement PageView::renderRow(std::size_t row)
                     });
         return codeRow;
     }
+    if (std::optional<at::AnyElement> media = m_mediaInner ? std::nullopt : mediaRow(row, index)) // (mediarows.cpp)
+        return std::move(*media);
     if (!rendered.drawable() || !drawable(view)) {
         // A foreign row: its QML delegate's place (foreignrows.cpp).
         m_foreign.push_back(row);

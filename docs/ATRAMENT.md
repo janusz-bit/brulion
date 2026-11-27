@@ -803,6 +803,61 @@ scrolling, `tst_atrament_editor`) before the next:
    editing it at the character (the code is shown as it is edited), Enter a line break and Tab a
    tab in the field, ↑/↓ across blocks. With line numbers on (the device's setting or the note's
    `line-numbers`) code blocks stay the QML view's (no numbers in Atrament yet).
+   **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
+   `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.
+   drawsPictures` / `drawsFiles` / `drawsTransclusions` / `drawsQueries`, all on, and `mediaLook`).
+   A row is Atrament's only when every part of it is drawable and its kind switched on
+   (`PageView::drawsMediaRow`), else the whole row stays foreign, its text too (before, such a
+   row's text was drawn and its pictures lost). A block's embeds go below its text as EmbedView
+   lays them out (from the text column's edge; no text line for a block of nothing but embedded
+   blocks, nor for a document's paragraph of nothing but pictures, unless edited — the edited row
+   keeps them under its field):
+   * **Pictures** at their natural size up to the column's width and 420 px high, their shape kept,
+     the frame's size from the file's header (the model's `embeds`): the row is as tall before the
+     picture is decoded as after; one without a size in its header is 320 × 180 until decoded, then
+     what it measured (once); rounded, the hairline frame by the note's or the device's setting or
+     while nothing is shown (loading, a format the device cannot decode — its frame names it, as the
+     picture view does), the light backing in a dark theme; its alt text (else its name) an image
+     node for screen readers. A click opens it (`AtramentView.embedClicked`: what EmbedView's
+     signals open — the picture, WebPictureViewer for one from the internet, the PDF viewer, a
+     file), a click beside it edits the block, a right-click or a finger held on a picture from the
+     internet its menu (`embedMenuRequested` → WebPictureMenu), elsewhere the block's menu. A
+     PDF's thumbnail is PdfEmbedTile's (white paper of the page's shape, the caption with the page
+     count), other files are BChip's chips (an icon of Atrament's own — a page, a picture — and the
+     name). Animated GIFs show their first frame.
+   * **PictureCache** (one per process, `PictureCache::shared()`): QImageReader on two worker
+     threads, from `file:` and `data:` URLs (a picture from the internet once cached), at the
+     frame's longer side in device pixels in PictureDecode's steps (never enlarged; an SVG rendered
+     at that size), premultiplied RGBA as `ImageData`. A 48 MB budget over what nobody holds — a
+     page keeps the pictures of its last two frames, so a screenful larger than the budget stays
+     whole and nothing is decoded twice per frame —, the least recently asked for first; one
+     picture per file, decoded again for another side while the old one is shown; a header of more
+     than 50 MP refused, a failure remembered until the file's size changes.
+   * **Embedded pages, sections and blocks** in TransclusionView's frame: the source's edge line,
+     the header (a link: opens the source), the blocks rendered read-only (their HTML read into
+     `RenderedText`: headings, quotes, closed tasks, code as plain text in the code face, rules,
+     nested embeds' lines and what stops them, guide lines by depth), links clickable
+     (`embeddedLinkActivated`: a date chip's dialog, a task's or a reminder's place, else the
+     link), a task's box changing the task in its own file (`PageController::toggleTaskAt`), a click
+     on the text editing the block, "N more blocks — open the page". A block with math or
+     preformatted text keeps the QML view.
+   * **Query results** (QueryBlockView, its `QueryResultModel` kept for the block while it is
+     drawn, run when it is first drawn): the header with the count, the filters as chips, group
+     headers, tasks with a working box (`QueryResultModel::toggleTask`), items rendered as text with
+     their links and their page as a quiet link (a daily note by its date), Dataview TABLE rows as
+     columns under their headers, at most 4 lines an item (clipped), "Show N more", the messages
+     (still indexing, nothing found, an error, no notebook). A click on an item opens it
+     (`queryAnswered` → BlockEditor.revealRow on this page), a link goes through
+     `queryLinkActivated` (a date chip's dialog, else `AtramentView.activateQueryLink`), a click on
+     the header or the filters edits the query — while edited the row is the QML delegate's (its
+     InlineEditor, the results following the typed query).
+   Tested by `tests/atrament/editor/tst_atrament_media` and `tst_atrament_picturecache`. **Not
+   yet** (the QML delegate's rows): drawings (their previews come from an image provider), sounds
+   and videos, Obsidian bases and database views (`view:`, ```base), a picture from the internet
+   not shown yet ("Show", "Save to notebook"), a PDF's thumbnail being drawn or failed. Nor: an
+   animation, the spinner while a picture loads, the menus of embedded blocks' and results' tokens
+   and links (a right-click opens the block's menu), link previews on hover, "…" after a result's
+   fourth line, a selected block's band under its pictures drawn as a second piece, BIcon's icons.
 
 ### Tests
 
