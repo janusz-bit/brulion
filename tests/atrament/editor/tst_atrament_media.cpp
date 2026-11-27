@@ -148,6 +148,9 @@ private Q_SLOTS:
     void transclusionDrawnWithLinksAndTasks();
     void queryResultsDrawn();
     void queryEditedIsTheDelegates();
+    void queryResultEndsWithAnEllipsis();
+    void selectedBandIsOnePiece();
+    void linkMenusInEmbedsAndResults();
 };
 
 void TestAtramentMedia::pictureKeepsItsSizeAndIsDrawn()
@@ -497,6 +500,125 @@ void TestAtramentMedia::queryEditedIsTheDelegates()
     h.controller.stopEditing();
     h.tw.settle();
     QVERIFY(h.view().drawsRow(1));
+}
+
+void TestAtramentMedia::queryResultEndsWithAnEllipsis()
+{
+    // QueryBlockView's items: at most 4 lines, "…" after the fourth (BRichText's maximumLineCount).
+    const QString longTask = u"Kupić mąkę, jajka, cukier, masło, drożdże, mleko, śmietanę, twaróg, rodzynki, "
+                             u"migdały, cynamon, wanilię, skórkę pomarańczową, mak, orzechy laskowe, miód "
+                             u"gryczany i żurawinę na świąteczne ciasta babci Żanety #zakupy"_s;
+    Harness h(u"```query\ntype:tasks tag:zakupy\n```\n"_s,
+              [&longTask](FakeEditorHost &host) { host.setFile(u"Listy/Święta.md"_s, u"- [ ] "_s + longTask + u"\n"_s); },
+              {360, 700});
+    QueryResultModel *results = h.view().queryResults(0);
+    QVERIFY(results);
+    QTRY_VERIFY(results->ready());
+    h.tw.settle();
+    QCOMPARE(results->itemCount(), 1);
+    const PageView::PartText *item = nullptr;
+    for (const PageView::PartText &t : h.view().partTexts())
+        if (t.row == 0 && t.item == 0)
+            item = &t;
+    QVERIFY(item && item->handle.layout());
+    const at::TextLayout *shown = item->handle.layout();
+    QCOMPARE(shown->lines().size(), std::size_t(4));
+    QCOMPARE(shown->text().back(), u'…');
+    QVERIFY(str(shown->text()).startsWith(u"Kupić mąkę, jajka"_s));
+}
+
+void TestAtramentMedia::selectedBandIsOnePiece()
+{
+    // BlockPartSelectionBand over the whole block: its text and the picture under it on one band.
+    Harness h(u"- Zdjęcie z wakacji ![[pies.png]]\n- drugi\n"_s,
+              [](FakeEditorHost &host) { host.saveAttachment(u"pies.png"_s, png(160, 120, Qt::yellow)); });
+    QVERIFY(h.view().drawsRow(0));
+    h.controller.selectRange(0, 0);
+    h.tw.settle();
+    const at::Color band = PageView::SelectionLook{}.band;
+    std::vector<at::Quad> quads;
+    for (const at::Primitive &p : h.tw.lastScene()->primitives())
+        if (const at::Quad *q = std::get_if<at::Quad>(&p); q && q->background.color == band)
+            quads.push_back(*q);
+    QCOMPARE(quads.size(), std::size_t(1));
+    const at::Rect row = *h.view().rowBounds(0);
+    const auto f = h.frames(0);
+    QCOMPARE(int(f.size()), 1);
+    QVERIFY2(quads[0].bounds.top() <= row.top() + 1.5f && quads[0].bounds.bottom() >= f[0].bounds.bottom(),
+             qPrintable(u"band %1–%2, row %3–%4, picture to %5"_s.arg(quads[0].bounds.top()).arg(quads[0].bounds.bottom())
+                                .arg(row.top()).arg(row.bottom()).arg(f[0].bounds.bottom())));
+}
+
+void TestAtramentMedia::linkMenusInEmbedsAndResults()
+{
+    // TransclusionView's and QueryBlockView's token and link menus: a right-click or a finger held
+    // on a link of an embedded block or of a query result opens its menu with its file, line and
+    // Markdown (BlockEditor.openTokenMenuIn / openLinkMenu), not the block's menu; the result's
+    // quiet page link has none.
+    Harness h(u"- ![[Przepisy#Zupa]]\n\n```query\ntype:tasks tag:zakupy\n```\n"_s, [](FakeEditorHost &host) {
+        host.setFile(u"Przepisy.md"_s, u"# Zupa\n- Pokrój marchew i [[Seler|seler]]\n"_s);
+        host.setFile(u"Listy/Sklep.md"_s, u"- [ ] Kupić chleb w [[Piekarnia]] #zakupy\n"_s);
+    });
+    QueryResultModel *results = h.view().queryResults(1);
+    QVERIFY(results);
+    QTRY_VERIFY(results->ready());
+    h.tw.settle();
+    int blockMenus = 0;
+    int heldRows = 0;
+    QStringList embedded;
+    QStringList queried;
+    at::Point menuAt;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onBlockMenu = [&](int, at::Point) { ++blockMenus; };
+        v.onLongPressRow = [&](int) { ++heldRows; };
+        v.onEmbeddedLinkMenu = [&](int row, const QString &link, const QString &path, int line, const QString &raw,
+                                   at::Point at) {
+            embedded.append(u"%1|%2|%3|%4|%5"_s.arg(row).arg(link).arg(path).arg(line).arg(raw));
+            menuAt = at;
+        };
+        v.onQueryLinkMenu = [&](int row, int item, const QString &link, const QString &path, int line, const QString &,
+                                at::Point at) {
+            queried.append(u"%1|%2|%3|%4|%5"_s.arg(row).arg(item).arg(link).arg(path).arg(line));
+            menuAt = at;
+        };
+    });
+    h.tw.settle();
+    // The embedded block's link: where the self-tests find it too (linkPoint).
+    const std::optional<at::Point> seler = h.view().linkPoint(0, u"Seler"_s);
+    QVERIFY(seler);
+    h.tw.simulateClick(*seler, at::MouseButton::Right);
+    QCOMPARE(embedded.size(), 1);
+    QVERIFY2(embedded[0].startsWith(u"0|"_s) && embedded[0].contains(u"Seler"_s)
+                     && embedded[0].contains(u"|Przepisy.md|1|"_s) && embedded[0].endsWith(u"Pokrój marchew i [[Seler|seler]]"_s),
+             qPrintable(embedded[0]));
+    QCOMPARE(menuAt.x, seler->x);
+    QCOMPARE(blockMenus, 0);
+    // Beside it, on the embedded text: the block's menu.
+    h.tw.simulateClick({seler->x - 60, seler->y}, at::MouseButton::Right);
+    QCOMPARE(blockMenus, 1);
+    QCOMPARE(embedded.size(), 1);
+    // A finger held on it: its menu, not the touch selection mode.
+    h.tw.simulateTouchDown(*seler);
+    h.tw.advance(std::chrono::milliseconds(600));
+    h.tw.simulateTouchUp(*seler);
+    h.tw.settle();
+    QCOMPARE(embedded.size(), 2);
+    QCOMPARE(heldRows, 0);
+    // A query result's link: its item, file and line.
+    const std::optional<at::Point> bakery = h.view().linkPoint(1, u"Piekarnia"_s);
+    QVERIFY(bakery);
+    h.tw.simulateClick(*bakery, at::MouseButton::Right);
+    QCOMPARE(queried.size(), 1);
+    QVERIFY2(queried[0].startsWith(u"1|0|"_s) && queried[0].contains(u"Piekarnia"_s)
+                     && queried[0].endsWith(u"|Listy/Sklep.md|0"_s),
+             qPrintable(queried[0]));
+    QCOMPARE(blockMenus, 1);
+    // The item's page as a quiet link ("· Sklep"): no menu of its own, the block's.
+    const std::optional<at::Point> page = h.view().linkPoint(1, u"open:"_s);
+    QVERIFY(page);
+    h.tw.simulateClick(*page, at::MouseButton::Right);
+    QCOMPARE(queried.size(), 1);
+    QCOMPARE(blockMenus, 2);
 }
 
 QTEST_MAIN(TestAtramentMedia)

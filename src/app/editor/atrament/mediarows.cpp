@@ -296,6 +296,7 @@ void PageView::mediaFrame()
         return;
     m_pictureFrame = m_frame;
     m_pictureFrames.clear();
+    m_partTexts.clear();
     if (!m_media)
         return;
     m_media->heldBefore = std::move(m_media->held);
@@ -313,6 +314,14 @@ void PageView::mediaFrame()
             ++it;
         }
     }
+}
+
+PageView::PartText &PageView::partText(std::size_t row, int item)
+{
+    PartText &t = m_partTexts.emplace_back();
+    t.row = int(row);
+    t.item = item;
+    return t;
 }
 
 void PageView::mediaClicked(std::size_t row, const at::ClickEvent &click)
@@ -386,18 +395,6 @@ std::optional<at::AnyElement> PageView::mediaRow(std::size_t row, const QModelIn
                            .pb(m.rowPad);
     if (m.contentWidth > 0)
         std::move(part).maxW(m.contentX + m.contentWidth);
-    const QString edge = index.data(BlockListModel::SelectionEdgeRole).toString();
-    if (!edge.isEmpty()) {
-        // The band goes on under the parts (BlockPartSelectionBand over the whole block).
-        const bool start = edge == u"single" || edge == u"first";
-        const bool end = edge == u"single" || edge == u"last";
-        const float r = m_selectionLook.radius;
-        std::move(part).bg(m_selectionLook.band).roundedB(end ? r : 0);
-        if (noText)
-            std::move(part).roundedT(start ? r : 0);
-        if (edge != u"single")
-            std::move(part).borderL(2).borderColor(m_selectionLook.ring.fadedBy(0.4f));
-    }
     if (!embeds.isEmpty())
         std::move(part).child(embedsPart(row, embeds, 0));
     if (!transclusions.isEmpty())
@@ -425,6 +422,10 @@ std::optional<at::AnyElement> PageView::mediaRow(std::size_t row, const QModelIn
                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) { v.mediaClicked(row, click); });
                 });
     at::Div whole = at::div().id(at::ElementId::number(uid)).flexCol();
+    // A selected block on one band under its text and its parts (BlockPartSelectionBand over the
+    // whole block; its grips at its ends), under them all (its first child).
+    if (std::optional<at::AnyElement> band = selectionBand(int(row)))
+        std::move(whole).child(std::move(*band));
     if (text)
         std::move(whole).child(std::move(*text));
     return at::AnyElement(std::move(whole).child(std::move(part)));
@@ -839,21 +840,34 @@ at::AnyElement PageView::transclusionsPart(std::size_t row, quint64 uid, const Q
                 const QString path = e.path;
                 const int line = e.line;
                 const QString raw = e.raw;
+                PartText &part = partText(row, -1);
                 for (qsizetype i = 0; i < rt.runs.size();) {
                     const QString &link = rt.runs[i].href;
                     qsizetype j = i + 1;
                     while (j < rt.runs.size() && rt.runs[j].href == link && rt.runs[j].from == rt.runs[j - 1].to)
                         ++j;
-                    if (!link.isEmpty())
-                        std::move(t).link(at::Range{int(rt.runs[i].from), int(rt.runs[j - 1].to)},
+                    if (!link.isEmpty()) {
+                        const at::Range range{int(rt.runs[i].from), int(rt.runs[j - 1].to)};
+                        // Its menu (a chip's in the block's own file, a link's): TransclusionView's.
+                        at::TextLink::MenuListener menu;
+                        if (onEmbeddedLinkMenu)
+                            menu = [self, row, link, path, line, raw](at::Point p, at::Window &, at::App &) {
+                                if (self->onEmbeddedLinkMenu)
+                                    self->onEmbeddedLinkMenu(int(row), link, path, line, raw, p);
+                            };
+                        std::move(t).link(range,
                                           [self, row, link, path, line, raw](const at::ClickEvent &, at::Window &, at::App &) {
                                               if (self->onEmbeddedLink)
                                                   self->onEmbeddedLink(int(row), link, path, line, raw);
                                               else if (self->onLink)
                                                   self->onLink(int(row), link);
-                                          });
+                                          },
+                                          std::move(menu));
+                        part.links.emplace_back(range, link);
+                    }
                     i = j;
                 }
+                std::move(t).trackLayout(part.handle);
                 std::move(body).child(std::move(t));
             }
             std::move(entry).flexRow().itemsStart().pl(textLeft).pt(1).pb(e.level > 0 ? look.spacing / 2 - 1 : 1);

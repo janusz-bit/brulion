@@ -276,7 +276,18 @@ at::AnyElement PageView::queryRow(std::size_t row, const QModelIndex &index, flo
                     }
                 };
             };
-            // A text of the item (its HTML read into rendered text), with each link a hit region.
+            // A link's menu (a chip's in the item's own file, a link's): QueryBlockView.resultMenu.
+            auto linkMenu = [self, row, i, path, line, raw](const QString &link) {
+                at::TextLink::MenuListener menu;
+                if (self->onQueryLinkMenu)
+                    menu = [self, row, i, path, line, raw, link](at::Point p, at::Window &, at::App &) {
+                        if (self->onQueryLinkMenu)
+                            self->onQueryLinkMenu(int(row), i, link, path, line, raw, p);
+                    };
+                return menu;
+            };
+            // A text of the item (its HTML read into rendered text), with each link a hit region, at
+            // most 4 lines with "…" after the fourth (QueryBlockView's maximumLineCount).
             auto itemText = [&](const markdown::RenderedText &rt, const QString &suffix) {
                 QString shown = rt.text;
                 std::vector<at::TextSpan> spans = renderedSpans(rt, m_palette);
@@ -288,18 +299,27 @@ at::AnyElement PageView::queryRow(std::size_t row, const QModelIndex &index, flo
                     faint.color = look.faint;
                     spans.push_back({at::Range{from, int(shown.size())}, faint});
                 }
-                at::Text t = at::text(u16View(shown)).spans(spans);
+                at::Text t = at::text(u16View(shown)).spans(spans).maxLines(4);
+                PartText &part = partText(row, i);
                 for (qsizetype a = 0; a < rt.runs.size();) {
                     const QString &href = rt.runs[a].href;
                     qsizetype b = a + 1;
                     while (b < rt.runs.size() && rt.runs[b].href == href && rt.runs[b].from == rt.runs[b - 1].to)
                         ++b;
-                    if (!href.isEmpty())
-                        std::move(t).link(at::Range{int(rt.runs[a].from), int(rt.runs[b - 1].to)}, linkClick(href));
+                    if (!href.isEmpty()) {
+                        const at::Range range{int(rt.runs[a].from), int(rt.runs[b - 1].to)};
+                        std::move(t).link(range, linkClick(href), linkMenu(href));
+                        part.links.emplace_back(range, href);
+                    }
                     a = b;
                 }
-                if (!suffix.isEmpty())
-                    std::move(t).link(at::Range{int(rt.text.size()) + 4, int(shown.size())}, linkClick(u"open:"_s));
+                if (!suffix.isEmpty()) {
+                    // (The item's page: no menu of its own, the block's.)
+                    const at::Range range{int(rt.text.size()) + 4, int(shown.size())};
+                    std::move(t).link(range, linkClick(u"open:"_s));
+                    part.links.emplace_back(range, u"open:"_s);
+                }
+                std::move(t).trackLayout(part.handle);
                 return t;
             };
             at::Div item = at::div()

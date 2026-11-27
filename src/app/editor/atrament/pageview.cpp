@@ -559,7 +559,8 @@ at::AnyElement PageView::renderRow(std::size_t row)
                                      });
         if (m.contentWidth > 0)
             std::move(d).maxW(m.contentX + m.contentWidth);
-        if (!edge.isEmpty()) {
+        // (A block with pictures or embedded blocks has one band under all of it: mediaRow()'s.)
+        if (!edge.isEmpty() && !m_mediaInner) {
             // (pageselection.cpp: the band and the touch selection mode's grips.)
             if (std::optional<at::AnyElement> band = selectionBand(int(row)))
                 std::move(d).child(std::move(*band));

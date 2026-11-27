@@ -689,6 +689,26 @@ public:
     std::function<void(int row, int item, const QString &link, const QString &path, int line, const QString &raw)>
             onQueryLink;
     std::function<void(int row, const QVariantMap &answer)> onQueryAnswer;
+    // A right-click or a finger held on a link of an embedded block's text (a chip, a tag, a page) /
+    // of a query result's text (not the item's quiet page link "open:"): its menu at window point
+    // `at` — the token's in the block's own file, else the link's (TransclusionView.linkMenu,
+    // QueryBlockView.resultMenu) — instead of the block's menu or the touch selection mode.
+    // Unset: those links have no menu of their own.
+    std::function<void(int row, const QString &link, const QString &path, int line, const QString &raw, atrament::Point at)>
+            onEmbeddedLinkMenu;
+    std::function<void(int row, int item, const QString &link, const QString &path, int line, const QString &raw,
+                       atrament::Point at)>
+            onQueryLinkMenu;
+    // The texts of embedded blocks and query results as the last frame laid them out — the row, a
+    // result's item (−1: an embedded block's text), the links given to it (their ranges and
+    // hrefs) and its layout: where their links are (linkPoint(), the self-tests' gestures; tests).
+    struct PartText {
+        int row = -1;
+        int item = -1;
+        std::vector<std::pair<atrament::Range, QString>> links;
+        atrament::TextLayoutHandle handle;
+    };
+    const std::vector<PartText> &partTexts() const { return m_partTexts; }
     // What QueryResultModel::activateLink answers for item `item` of query row `row`'s results.
     QVariantMap activateQueryLink(int row, int item, const QString &link);
     // The results of query row `row` drawn in the last frames (nullptr: none).
@@ -716,6 +736,9 @@ private:
     std::shared_ptr<Media> m_media;
     std::vector<PictureFrame> m_pictureFrames;
     std::uint64_t m_pictureFrame = 0;
+    std::vector<PartText> m_partTexts;
+    // A text of an embedded block or a query result recorded for the frame (partTexts()).
+    PartText &partText(std::size_t row, int item);
     // --- The edited text's spell marks, reminder chips and Vim keys; code blocks' line numbers
     // (pagespell.cpp, pagechips.cpp, pagevim.cpp, pagecode.cpp; docs/ATRAMENT.md M2 step 2's and
     // step 5's entries — what InlineEditor, MarkdownHighlighter, spellmarks.h and CodeBlockView do).

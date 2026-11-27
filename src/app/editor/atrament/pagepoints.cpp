@@ -11,22 +11,42 @@ namespace brulion::editor::atr {
 
 namespace at = brulion::atrament;
 
+namespace {
+
+// The middle of the first piece of `range` in a text laid out by the last frame.
+std::optional<at::Point> middleOf(const at::TextLayoutHandle &t, at::Range range)
+{
+    if (!t.layout() || range.end <= range.start)
+        return std::nullopt;
+    const std::vector<at::LineRect> rects = t.layout()->glyphRects(range);
+    if (rects.empty())
+        return std::nullopt;
+    const at::Rect r = rects.front().rect.translated(t.bounds().origin);
+    return at::Point{r.left() + r.width() / 2, r.top() + r.height() / 2};
+}
+
+} // namespace
+
 std::optional<at::Point> PageView::linkPoint(int row, const QString &hrefPart) const
 {
-    const at::TextLayoutHandle *t = rowText(row);
-    if (!t)
-        return std::nullopt;
-    const auto rendered = m_model->index(row, 0).data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
-    if (!rendered.d)
-        return std::nullopt;
-    for (const auto &run : rendered.d->runs) {
-        if (run.href.isEmpty() || !run.href.contains(hrefPart) || run.to <= run.from)
+    if (const at::TextLayoutHandle *t = rowText(row)) {
+        const auto rendered = m_model->index(row, 0).data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
+        if (rendered.d)
+            for (const auto &run : rendered.d->runs) {
+                if (run.href.isEmpty() || !run.href.contains(hrefPart) || run.to <= run.from)
+                    continue;
+                if (const std::optional<at::Point> p = middleOf(*t, at::Range{int(run.from), int(run.to)}))
+                    return p;
+            }
+    }
+    // A link of its embedded blocks or query results (the last laid out of a text drawn twice).
+    for (auto it = m_partTexts.rbegin(); it != m_partTexts.rend(); ++it) {
+        if (it->row != row)
             continue;
-        const std::vector<at::LineRect> rects = t->layout()->glyphRects(at::Range{int(run.from), int(run.to)});
-        if (rects.empty())
-            return std::nullopt;
-        const at::Rect r = rects.front().rect.translated(t->bounds().origin);
-        return at::Point{r.left() + r.width() / 2, r.top() + r.height() / 2};
+        for (const auto &[range, href] : it->links)
+            if (href.contains(hrefPart))
+                if (const std::optional<at::Point> p = middleOf(it->handle, range))
+                    return p;
     }
     return std::nullopt;
 }
