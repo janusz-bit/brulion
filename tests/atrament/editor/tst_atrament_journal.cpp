@@ -199,6 +199,7 @@ private Q_SLOTS:
     void anotherDayEditedStopsTheFirst();
     void enterAtTheBottomKeepsTheBlockInView();
     void tapUnderTheBlocksAddsOne();
+    void composedWordKeptWhenAnotherDayIsActivated();
 };
 
 void TestAtramentJournal::daysLaidOutInOrder()
@@ -542,6 +543,24 @@ void TestAtramentJournal::tapUnderTheBlocksAddsOne()
     QCOMPARE(first->blocks()->rowCount(), count + 1);
     QCOMPARE(first->editingRow(), count);
     QCOMPARE(h.view().activeDay(), 1);
+}
+
+void TestAtramentJournal::composedWordKeptWhenAnotherDayIsActivated()
+{
+    Harness h(4);
+    PageController *first = h.day(1);
+    h.clickInto(1, 0, 2);
+    QCOMPARE(first->editingRow(), 0);
+    h.tw.simulateKeystrokes(u"end");
+    h.tw.simulateComposition(u" zażółć");
+    h.tw.settle();
+    QVERIFY(!first->blocks()->editTextAt(0).contains(u"zażółć"_s)); // (the input method's still)
+    // Another day becomes the one written in (the find bar's next match there): the word being
+    // composed is the day's text before it stops editing.
+    h.journal.update(h.app, [](JournalView &j, at::Context<JournalView> &cx) { j.activateDay(2, cx); });
+    h.tw.settle();
+    QCOMPARE(first->editingRow(), -1);
+    QVERIFY2(first->blocks()->editTextAt(0).contains(u"zażółć"_s), qPrintable(first->blocks()->editTextAt(0)));
 }
 
 QTEST_MAIN(TestAtramentJournal)

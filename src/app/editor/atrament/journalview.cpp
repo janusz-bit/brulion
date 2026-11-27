@@ -578,6 +578,9 @@ void JournalView::activateDay(int day, at::Context<JournalView> &cx)
         // several days spans them (each keeps its part).
         m_applyingActive = true;
         if (!span && d.controller) {
+            // A word an input method is still composing there is the day's text first (it would go
+            // with the field: the controller never saw it).
+            d.page.update(cx.app(), [](PageView &v, at::Context<PageView> &pc) { v.commitComposition(pc); });
             d.controller->stopEditing();
             d.controller->setSelectedRow(-1);
         }
