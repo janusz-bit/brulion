@@ -2447,8 +2447,11 @@ conversation page whose frontmatter names the one it came from (`parent: "[[AI/�
 its conversations, a grant of the app's chat alone (`WorkspaceAgents::setChatGrants()` →
 `RemoteControl::chatGrant()`, the token in its tools' environment as `BRULION_APP_CHAT_TOKEN`), so its
 `brulion_app_chat_*` tools (docs/CLI.md "Conversations") reach the running app — also while the remote
-control's setting is off; the context tells it in a sentence (`WorkspaceAgents::context()`). The
-built-in assistant's tools do not change (docs/FINETUNE.md).
+control's setting is off; the context tells it in a sentence (`WorkspaceAgents::context()`). The app
+names itself to those tools (`WorkspaceAgents::setAppInstance()`: its single-instance key as
+`BRULION_APP_INSTANCE`), as an agent may not pass its environment on — Codex starts its MCP servers
+with `HOME`, `PATH`, `LANG` … alone, so its tools found no `XDG_RUNTIME_DIR` and looked for another
+socket than the app's. The built-in assistant's tools do not change (docs/FINETUNE.md).
 
 * **In the parent conversation** (`chatLineage`, `ChatLineageRow.qml` under the header): "Sub-conversations:"
   and a chip per sub-conversation (`chatSubConversation`: its name · who answers, an icon of its

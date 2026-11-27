@@ -54,6 +54,9 @@ int exitFor(const QString &code)
 
 QString singleInstanceKey(const Call &call)
 {
+    // (The app that started this program names itself: ipc::ControlClient::InstanceVariable.)
+    if (const QString named = qEnvironmentVariable(ipc::ControlClient::InstanceVariable).trimmed(); !named.isEmpty())
+        return named;
     return ipc::SingleInstance::keyFor(call.ctx.appDataDir());
 }
 

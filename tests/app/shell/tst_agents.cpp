@@ -359,6 +359,8 @@ private Q_SLOTS:
         AgentConfig agent = fake(true);
         agent.appAccess = true;
         chats->setAgents({agent});
+        const QString instance = m_tmp.filePath(u"run/brulion-0123456789abcdef"_s);
+        chats->agents()->setAppInstance(instance);
         const auto serverOf = [this](qsizetype session) {
             return logged(u"session/new"_s)
                     .at(session)
@@ -380,7 +382,8 @@ private Q_SLOTS:
         QVERIFY(!QJsonDocument(args).toJson().contains("token-1")); // (others can list a program's arguments)
         QCOMPARE(server.value(u"env"_s).toArray(),
                  (QJsonArray{QJsonObject{{u"name"_s, u"BRULION_APP_TOKEN"_s}, {u"value"_s, u"token-1"_s}},
-                             QJsonObject{{u"name"_s, u"BRULION_APP_CLIENT"_s}, {u"value"_s, u"Fałszywy"_s}}}));
+                             QJsonObject{{u"name"_s, u"BRULION_APP_CLIENT"_s}, {u"value"_s, u"Fałszywy"_s}},
+                             QJsonObject{{u"name"_s, u"BRULION_APP_INSTANCE"_s}, {u"value"_s, instance}}}));
         const QString context =
                 promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString();
         QVERIFY2(context.contains(u"brulion_app_eval"_s) && context.contains(u"undo"_s), qPrintable(context));
@@ -457,6 +460,10 @@ private Q_SLOTS:
         AgentConfig codex{u"codex"_s, u"Kodeks"_s, command(), true};
         codex.appAccess = true; // (let change the app — never in a sub-conversation)
         chats->setAgents({fake(true), codex});
+        // The app names itself to the tools: an agent may not pass on the environment its socket is
+        // found from (Codex gives its MCP servers HOME, PATH and a few more only).
+        const QString instance = m_tmp.filePath(u"run/brulion-0123456789abcdef"_s);
+        chats->agents()->setAppInstance(instance);
 
         // The user's conversation with an agent: its tools get the chat's grant for it.
         const QString path = chats->send(QString(), u"Zaplanuj wyjazd do Zakopanego"_s, QString(), {}, u"acp:fake"_s);
@@ -465,6 +472,7 @@ private Q_SLOTS:
         QCOMPARE(serverArgs(0).last(), u"--app-chat"_s);
         QCOMPARE(serverEnv(0).value(u"BRULION_APP_CHAT_TOKEN"_s), u"chat-1"_s);
         QCOMPARE(serverEnv(0).value(u"BRULION_APP_CLIENT"_s), u"Fałszywy"_s);
+        QCOMPARE(serverEnv(0).value(u"BRULION_APP_INSTANCE"_s), instance);
         QVERIFY(!serverEnv(0).contains(u"BRULION_APP_TOKEN"_s));
         const QString context =
                 promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString();
@@ -500,6 +508,7 @@ private Q_SLOTS:
         QVERIFY(!serverArgs(1).contains(u"--app-control"_s));
         QCOMPARE(serverArgs(1).last(), u"--app-chat"_s);
         QCOMPARE(serverEnv(1).value(u"BRULION_APP_CHAT_TOKEN"_s), u"chat-2"_s);
+        QCOMPARE(serverEnv(1).value(u"BRULION_APP_INSTANCE"_s), instance);
         QVERIFY(!serverEnv(1).contains(u"BRULION_APP_TOKEN"_s));
         QCOMPARE(chats->agents()->grantConversation(u"chat-2"_s), child);
         // The parent's view lists it.

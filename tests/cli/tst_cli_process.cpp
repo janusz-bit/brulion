@@ -135,6 +135,7 @@ class TestCliProcess : public QObject {
         env.remove(u"BRULION_APP_CLIENT"_s);
         env.remove(u"BRULION_APP_SOCKET"_s);
         env.remove(u"BRULION_APP_DEVICE"_s);
+        env.remove(u"BRULION_APP_INSTANCE"_s);
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
         // Messages for people follow the system's language (docs/CLI.md "Language"): English here,
         // whatever the developer's session says.
@@ -2458,6 +2459,27 @@ private Q_SLOTS:
                 reply.ok(QJsonObject{{u"method"_s, request.method}, {u"params"_s, request.params}});
         });
         QVERIFY(control.listen(brulion::ipc::controlKeyFor(key)));
+#ifndef Q_OS_WIN
+        // An AI agent's tools as Codex starts them: HOME, PATH, LANG, TMPDIR … of the environment only
+        // (codex-rs/rmcp-client: DEFAULT_ENV_VARS) — no XDG_RUNTIME_DIR, XDG_DATA_HOME, BRULION_PROFILE,
+        // where the app's socket is found from. The app that started them names itself instead.
+        {
+            const QProcessEnvironment full = environment();
+            QProcessEnvironment codex;
+            for (const QString &name : {u"HOME"_s, u"PATH"_s, u"LANG"_s, u"USER"_s, u"LOGNAME"_s})
+                if (full.contains(name))
+                    codex.insert(name, full.value(name));
+            QDir().mkpath(m_home + u"/tmp"_s);
+            codex.insert(u"TMPDIR"_s, m_home + u"/tmp"_s);
+            r = cliLive({u"app"_s, u"state"_s}, {}, codex);
+            QCOMPARE(r.code, 5);
+            QCOMPARE(r.errorCode(), u"app_not_running"_s);
+            codex.insert(u"BRULION_APP_INSTANCE"_s, key);
+            r = cliLive({u"app"_s, u"state"_s}, {}, codex);
+            QVERIFY2(r.code == 0, r.err.constData());
+            QCOMPARE(r.result().value(u"method"_s).toString(), u"state"_s);
+        }
+#endif
         r = cliLive({u"app"_s, u"key"_s, u"Ctrl+K"_s});
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"method"_s).toString(), u"key"_s);

@@ -1156,6 +1156,10 @@ acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Proce
             }
             server.env << std::pair{u"BRULION_APP_CHAT_TOKEN"_s, chatToken};
         }
+        // Which app they reach (setAppInstance()): the agent may not pass on the environment its
+        // socket is found from.
+        if ((live || !chatToken.isEmpty()) && !m_appInstance.isEmpty())
+            server.env << std::pair{u"BRULION_APP_INSTANCE"_s, m_appInstance};
         // (Without the notebook's tools and the app's, the server would have none.)
         if (!codeFolder.isEmpty() && !live && chatToken.isEmpty())
             server.command.clear();

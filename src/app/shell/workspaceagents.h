@@ -204,6 +204,12 @@ public:
     /// methods), one per conversation of an agent with Brulion's tools — so its tools may hand
     /// another partner a task as a sub-conversation of that conversation. Unset: no chat tools.
     void setChatGrants(GrantFunction grant, RevokeFunction revoke);
+    /// The running app's single-instance key (ipc::SingleInstance::keyFor(): its control socket is
+    /// ipc::controlKeyFor() of it), named in the environment of tools that reach the app
+    /// (BRULION_APP_INSTANCE: ipc::ControlClient::InstanceVariable) — an agent may not pass on the
+    /// environment the tools would find it from (Codex gives its MCP servers HOME, PATH, LANG … only:
+    /// no XDG_RUNTIME_DIR, XDG_DATA_HOME or BRULION_PROFILE). "" (Android, tests): not named.
+    void setAppInstance(const QString &key) { m_appInstance = key; }
     /// The running app answered in process, for agents on another computer whose tools reach this
     /// app through that computer's `acp serve` and the agent's stream (acp/apptunnel.h;
     /// RemoteControl::localGrant() and ::dispatch(): the desktop and Android). `grant` makes one for
@@ -563,6 +569,7 @@ private:
     RevokeFunction m_revoke;
     GrantFunction m_chatGrant;
     RevokeFunction m_chatRevoke;
+    QString m_appInstance;
     std::function<int(const QString &)> m_depth;
     std::function<bool(const QString &)> m_isChild;
     /// The chat grants: token → the agent whose process has it and its conversation (a rename
