@@ -136,6 +136,15 @@ public:
     }
     // An inline object over `range` (a span with only an object).
     Text &&inlineObject(Range range, InlineObjectSize size, InlineObjectPainter painter = {}) &&;
+    // At most `lines` lines (CSS's line-clamp; 0: no limit): the text past them is left out and the
+    // last line shown ends with "…" in the style of its last character, cut at a grapheme where
+    // the ellipsis fits the width (spaces before it dropped). The layout — carets, hit tests,
+    // links, trackLayout's handle — is of the text shown.
+    Text &&maxLines(int lines) &&
+    {
+        m_maxLines = lines > 0 ? lines : 0;
+        return std::move(*this);
+    }
     Text &&id(ElementId id) &&
     {
         m_id = id;
@@ -156,6 +165,7 @@ public:
 private:
     void buildRuns(Window &window);
     std::shared_ptr<const TextLayout> layoutAt(std::optional<float> wrapWidth);
+    std::shared_ptr<const TextLayout> clampedLayout(const TextLayout &full, const ParagraphStyle &style);
     void paintObjects(Rect bounds, Window &window);
 
     ArenaU16String m_text;
@@ -178,6 +188,7 @@ private:
     float m_lineHeight = 0;
     TextAlign m_align = TextAlign::Left;
     WhiteSpace m_whiteSpace = WhiteSpace::Normal;
+    int m_maxLines = 0;
     App *m_app = nullptr;
     std::shared_ptr<const TextLayout> m_layout;
     std::shared_ptr<TextLayoutHandle::State> m_layoutHandle;

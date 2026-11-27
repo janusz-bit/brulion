@@ -198,6 +198,11 @@ public:
   `style.baselineShift` (px) and `style.overline` (a line at the font's ascent over its glyphs,
   `TextPaintStyle::overline`). Tested by `tests/atrament/text/tst_atrament_text_shift` and
   `tests/atrament/ui/tst_atrament_vectorpaint`.
+* **At most N lines** (`Text::maxLines(n)`, CSS's line-clamp: a query result's four lines): the text
+  past the n-th line is left out and that line ends with "…" in the style of its last character,
+  cut at the last grapheme from which the ellipsis fits the width (spaces before it dropped). The
+  layout the element keeps — carets, hit tests, links, `trackLayout`'s handle — is of the text
+  shown; a screen reader still gets the whole text. Tested by `tests/atrament/ui/tst_atrament_inline`.
 * **A text field's caret, objects and read-only state** (`TextInput`, `ui/textinput.h`): the caret
   is a bar before the character (the default, blinking), a block over the character after it (as
   wide as that character on its line — its caret stop: an inline object whole —, half an em at a
